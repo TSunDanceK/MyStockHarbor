@@ -14,8 +14,16 @@
 # output goes to a file on the runner; no upload-artifact and no cache; the
 # token is sent as a masked header and never appears in a URL.
 #
-# STOP RULE. Every pre-check and both asserts come before the push, under
-# `set -e`: any failure ends the job with nothing pushed.
+# STOP RULE. Every pre-check and all three asserts come before the push,
+# under `set -e`: any failure ends the job with nothing pushed.
+#
+# SECOND PASS (#552 CODE-A #105, COWORK #106). The first run (a5b8cc7 ->
+# e50e6c5) passed --replace-text twice. git-filter-repo 2.47 declares that
+# flag without action='append', so the second file silently replaced the
+# first: only the vendor-label rules ran, and 7 blobs (5 paths) kept text the
+# fmp-values rules target. The two rule files are now concatenated into one
+# and passed once, and assert 3 scans every branch's blobs for any rule's
+# match side before the push.
 #
 # check: scripts/check-history-purge.mjs
 name: History purge (one-off)
@@ -124,10 +132,19 @@ jobs:
             echo "- main: \`$old_main\`, tree \`$old_tree\`"
             echo "- commits (all refs): $old_commits; branches: $heads"
           } >> "$GITHUB_STEP_SUMMARY"
-          # The rule files come from the mirror's own main, as in the runbook.
-          git show main:scripts/purge/replace-fmp-values.txt > "$RUNNER_TEMP/rules-fmp.txt"
-          git show main:scripts/purge/replace-vendor-labels.txt > "$RUNNER_TEMP/rules-vendor.txt"
-          echo "main=$old_main tree=$old_tree commits=$old_commits heads=$heads"
+          # The rule files come from the mirror's own main, as in the runbook,
+          # concatenated into ONE file: filter-repo keeps only the last
+          # --replace-text it is given. The echo guarantees a newline between
+          # them, so the last rule of one can't run into the first of the next.
+          {
+            git show main:scripts/purge/replace-fmp-values.txt
+            echo
+            git show main:scripts/purge/replace-vendor-labels.txt
+          } > "$RUNNER_TEMP/rules.txt"
+          rules=$(grep -c . "$RUNNER_TEMP/rules.txt")
+          echo "RULES=$rules" >> "$GITHUB_ENV"
+          echo "- rules (both files, combined into one): $rules" >> "$GITHUB_STEP_SUMMARY"
+          echo "main=$old_main tree=$old_tree commits=$old_commits heads=$heads rules=$rules"
 
       - name: Rewrite history
         working-directory: ${{ runner.temp }}/mirror.git
@@ -152,8 +169,7 @@ jobs:
           # filter-repo's output stays on the runner (public log).
           if ! git filter-repo --invert-paths \
               --paths-from-file "$RUNNER_TEMP/paths.txt" \
-              --replace-text "$RUNNER_TEMP/rules-fmp.txt" \
-              --replace-text "$RUNNER_TEMP/rules-vendor.txt" \
+              --replace-text "$RUNNER_TEMP/rules.txt" \
               > "$RUNNER_TEMP/filter-repo.log" 2>&1; then
             echo "::error::git filter-repo failed; nothing pushed"
             exit 1
@@ -195,6 +211,54 @@ jobs:
           echo "NEW_MAIN=$new_main" >> "$GITHUB_ENV"
           echo "## Assert 2: PASS (new main \`$new_main\` has tree \`$new_tree\`)" >> "$GITHUB_STEP_SUMMARY"
           echo "assert 2 PASS new_main=$new_main"
+
+      - name: Assert no rule matches remain
+        working-directory: ${{ runner.temp }}/mirror.git
+        run: |
+          set -euo pipefail
+          # Every blob reachable from a branch, scripts/purge/ itself excluded,
+          # against every rule's match side, parsed the way filter-repo parses
+          # it. Counts only: no path's contents and no rule text is printed.
+          python - <<'PY'
+          import os, re, subprocess, sys
+          rx, lit = [], []
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "rules.txt"), "rb") as f:
+              for line in f:
+                  line = line.rstrip(b"\r\n")
+                  if b"==>" in line:
+                      line = line.rsplit(b"==>", 1)[0]
+                  if line.startswith(b"regex:"):
+                      rx.append(re.compile(line[6:]))
+                  elif line.startswith(b"glob:"):
+                      sys.exit("assert 3: glob rules are not supported here")
+                  else:
+                      if line.startswith(b"literal:"):
+                          line = line[8:]
+                      if line:
+                          lit.append(line)
+          out = subprocess.run(["git", "rev-list", "--objects", "--branches"], check=True, capture_output=True).stdout
+          objs = [l.split(b" ", 1) for l in out.split(b"\n") if b" " in l]
+          cat = subprocess.Popen(["git", "cat-file", "--batch"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+          blobs = hits = 0
+          for oid, path in objs:
+              if path.startswith(b"scripts/purge/"):
+                  continue
+              cat.stdin.write(oid + b"\n"); cat.stdin.flush()
+              kind, size = cat.stdout.readline().split()[1:3]
+              data = cat.stdout.read(int(size)); cat.stdout.read(1)
+              if kind != b"blob":
+                  continue
+              blobs += 1
+              if any(l in data for l in lit) or any(r.search(data) for r in rx):
+                  hits += 1
+          print(f"assert 3: rules {len(rx) + len(lit)}, blobs scanned {blobs}, blobs matching {hits}")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
+              s.write(f"## Assert 3: {'PASS' if hits == 0 else 'FAIL'} ({len(rx) + len(lit)} rules, {blobs} blobs scanned, {hits} matching){'' if hits == 0 else '. Nothing pushed.'}\n")
+          if len(rx) + len(lit) != int(os.environ["RULES"]):
+              sys.exit("assert 3 FAIL: parsed rule count differs from rules.txt; nothing pushed")
+          if hits:
+              sys.exit("assert 3 FAIL; nothing pushed")
+          PY
 
       - name: Force-push branches (PAT)
         working-directory: ${{ runner.temp }}/mirror.git

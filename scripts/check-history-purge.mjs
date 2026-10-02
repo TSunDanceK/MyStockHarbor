@@ -9,7 +9,10 @@
 //     appears in a URL;
 //   - nothing from the runner leaves it (no upload-artifact, no cache), since
 //     the mirror holds the old history;
-//   - both asserts run before the push, under `set -e`;
+//   - all three asserts run before the push, under `set -e`;
+//   - ONE --replace-text, on both rule files concatenated: git-filter-repo
+//     2.47 keeps only the last --replace-text it is given, which is how the
+//     first run (CODE-A #105) skipped every fmp-values rule;
 //   - the push is branches only (refs/heads/*), never tags, refs/pull or
 //     --mirror;
 //   - the 12 paths are exactly the runbook's 12.
@@ -44,7 +47,7 @@ const RUNBOOK_PATHS = [
 
 const CLONE_STEP = "Mirror clone (PAT)";
 const PUSH_STEP = "Force-push branches (PAT)";
-const ASSERT_STEPS = ["Assert paths gone", "Assert main tree unchanged"];
+const ASSERT_STEPS = ["Assert paths gone", "Assert main tree unchanged", "Assert no rule matches remain"];
 
 // Steps: each block starts at a "      - " list item under `steps:`.
 function splitSteps(text) {
@@ -120,7 +123,7 @@ export function rules(raw) {
   rule("token sent as a masked header", (text.match(/::add-mask::\$auth/g) || []).length === 2);
   rule("clone fails fast without the secret", /-z "\$\{PURGE_TOKEN:-\}"[\s\S]*?exit 1/.test(steps[idx(CLONE_STEP)]?.body ?? ""));
 
-  // 6. Order: pre-checks, clone, rewrite, both asserts, then the push.
+  // 6. Order: pre-checks, clone, rewrite, the three asserts, then the push.
   const pushIdx = idx(PUSH_STEP);
   const order = ["Pre-checks", CLONE_STEP, "Record pre-purge state", "Rewrite history", ...ASSERT_STEPS].map(idx);
   rule("all expected steps exist", order.every((i) => i >= 0) && pushIdx >= 0);
@@ -141,7 +144,17 @@ export function rules(raw) {
   const here = rw.match(/<<'EOF'\n([\s\S]*?)\n\s*EOF/);
   const paths = here ? here[1].split("\n").map((l) => l.trim()).filter(Boolean) : [];
   rule("paths are exactly the runbook's 12", JSON.stringify(paths) === JSON.stringify(RUNBOOK_PATHS));
-  rule("filter-repo uses both rule files", /--replace-text "\$RUNNER_TEMP\/rules-fmp\.txt"/.test(rw) && /--replace-text "\$RUNNER_TEMP\/rules-vendor\.txt"/.test(rw));
+  rule("exactly one --replace-text in the workflow", (text.match(/--replace-text/g) || []).length === 1);
+  rule("filter-repo reads the combined rules file", /--replace-text "\$RUNNER_TEMP\/rules\.txt"/.test(rw));
+  const rec = steps[idx("Record pre-purge state")]?.body ?? "";
+  rule(
+    "rules.txt = both files, newline between",
+    /\{\s*\n\s*git show main:scripts\/purge\/replace-fmp-values\.txt\s*\n\s*echo\s*\n\s*git show main:scripts\/purge\/replace-vendor-labels\.txt\s*\n\s*\} > "\$RUNNER_TEMP\/rules\.txt"/.test(rec),
+  );
+  const a3 = steps[idx(ASSERT_STEPS[2])]?.body ?? "";
+  rule("assert 3 reads rules.txt and every branch", /"rules\.txt"/.test(a3) && /"--branches"/.test(a3));
+  rule("assert 3 excludes only scripts/purge/", /path\.startswith\(b"scripts\/purge\/"\)/.test(a3));
+  rule("assert 3 exits on a hit or a rule-count mismatch", /if hits:\s*\n\s*sys\.exit\(/.test(a3) && /!= int\(os\.environ\["RULES"\]\)/.test(a3));
   rule("filter-repo output stays on the runner", /> "\$RUNNER_TEMP\/filter-repo\.log" 2>&1/.test(rw));
   rule("rule files read from the mirror's main", /git show main:scripts\/purge\/replace-fmp-values\.txt/.test(text) && /git show main:scripts\/purge\/replace-vendor-labels\.txt/.test(text));
   rule("filter-repo pinned to 2.47.0", /git-filter-repo==2\.47\.0/.test(text));
@@ -193,7 +206,18 @@ const mutants = [
   ["push tags too", (t) => t.replace("push --quiet --force", "push --quiet --force --tags")],
   ["a path dropped", (t) => t.replace("          data/taxonomy.json\n", "")],
   ["filter-repo output in the log", (t) => t.replace(' \\\n              > "$RUNNER_TEMP/filter-repo.log" 2>&1; then', "; then")],
-  ["one rule file dropped", (t) => t.replace(' \\\n              --replace-text "$RUNNER_TEMP/rules-vendor.txt"', "")],
+  ["one rule file dropped", (t) => t.replace("            echo\n            git show main:scripts/purge/replace-vendor-labels.txt\n", "")],
+  ["two --replace-text flags", (t) => t.replace('--replace-text "$RUNNER_TEMP/rules.txt"', '--replace-text "$RUNNER_TEMP/rules-fmp.txt" \\\n              --replace-text "$RUNNER_TEMP/rules-vendor.txt"')],
+  ["no newline between the rule files", (t) => t.replace("            git show main:scripts/purge/replace-fmp-values.txt\n            echo\n", "            git show main:scripts/purge/replace-fmp-values.txt\n")],
+  ["assert 3 removed", (t) => t.replace(splitSteps(t).find((x) => x.name === ASSERT_STEPS[2]).body + "\n", "")],
+  ["assert 3 after the push", (t) => {
+    const s = splitSteps(t);
+    const a3 = s.find((x) => x.name === ASSERT_STEPS[2]).body;
+    const push = s.find((x) => x.name === PUSH_STEP).body;
+    return t.replace(a3 + "\n", "").replace(push, push + "\n" + a3);
+  }],
+  ["assert 3 no longer fails on a hit", (t) => t.replace("          if hits:\n              sys.exit(", "          if False:\n              sys.exit(")],
+  ["assert 3 skips more than scripts/purge/", (t) => t.replace('path.startswith(b"scripts/purge/")', 'path.startswith(b"scripts/")')],
   ["open-PR pre-check removed", (t) => t.replace('[ "$open_prs" -eq 0 ] || { echo "::error::pre-check FAIL: $open_prs open PRs"; exit 1; }', "true")],
   ["set -e dropped from the push", (t) => {
     const s = splitSteps(t).find((x) => x.name === PUSH_STEP).body;
