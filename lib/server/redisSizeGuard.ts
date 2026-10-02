@@ -10,14 +10,20 @@
 // every REST request -- single command, pipeline or multi-exec -- from A's, B's
 // and C's code without touching any of their files.
 //
-//   > REDIS_SIZE_LOG_BYTES (2 MB):     console.warn  [redis-size] <cmd|pipeline:n> <key prefix> <bytes>
+//   > REDIS_SIZE_LOG_BYTES (5 MB):     console.warn  [redis-size] <cmd|pipeline:n> <key prefix> <bytes>
 //   > REDIS_SIZE_REFUSE_BYTES (9.5 MB): console.error [redis-size] REFUSED ... and THROW,
 //                                        so the caller's own catch path runs. Never sent.
 //
 // The log carries the command name, a KEY PREFIX (the key up to its last ':')
 // and a byte count. Never a value, never a full key. Cost: zero Redis commands.
 
-export const REDIS_SIZE_LOG_BYTES = 2 * 1024 * 1024;
+import { REQUEST_BYTE_BUDGET } from "./chunkByBytes";
+
+// THE WARN LINE IS OUR OWN BUDGET (#553 COWORK #92, 2 Oct): at 2 MB it named
+// every Pickers build, whose one payload chunk sits at ~4 MB by design under
+// the 5 MB REQUEST_BYTE_BUDGET. Now it names only a request over the budget
+// our own writers chunk to -- which is the one worth a line.
+export const REDIS_SIZE_LOG_BYTES = REQUEST_BYTE_BUDGET;
 export const REDIS_SIZE_REFUSE_BYTES = 9.5 * 1024 * 1024;
 
 const GUARD_MARK = "__mshRedisSizeGuard";
