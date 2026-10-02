@@ -15,6 +15,10 @@
 // COLOUR IS NEVER ALONE (COWORK #26 rules). Profit and loss are also told apart
 // by side of the zero line, a +/− sign and the words "profit"/"loss"; the ghost
 // bar is named in the legend and the detail panel.
+//
+// SCALE WITHOUT A TAP (COWORK #36 ask 1): the newest sales bar and the newest
+// ¢-kept dot carry their values, and the margin chart has faint 0¢ / 50¢ / 100¢
+// guide lines, so the picture reads before anyone touches it.
 import { useState, type ReactNode } from "react";
 import type { GrowthVisualsData, GvPeriod, GvSeries } from "@/lib/growthVisuals";
 
@@ -32,6 +36,10 @@ const C = {
 
 const PLOT_H = 120;
 const MARGIN_H = 72;
+/** Room above the tallest sales bar for the newest bar's value label. */
+const SALES_HEADROOM = 0.84;
+/** The ¢-kept chart's guide lines, in cents of each $1. */
+const CENT_GUIDES = [0, 50, 100] as const;
 
 function DerivedTag({ note }: { note: string | null }) {
   if (!note) return null;
@@ -44,7 +52,7 @@ function DerivedTag({ note }: { note: string | null }) {
 
 /** One chart: a title, the plot as a grid of columns, and the shared axis labels. */
 function Chart({
-  title, legend, periods, active, setActive, height, render,
+  title, legend, periods, active, setActive, height, render, behind,
 }: {
   title: string;
   legend: ReactNode;
@@ -53,6 +61,8 @@ function Chart({
   setActive: (i: number) => void;
   height: number;
   render: (p: GvPeriod, i: number) => ReactNode;
+  /** Drawn across the whole plot, under the columns (guide lines). */
+  behind?: ReactNode;
 }) {
   return (
     <div className="gvChart">
@@ -60,7 +70,8 @@ function Chart({
         <span className="gvChartTitle">{title}</span>
         <span className="gvLegend">{legend}</span>
       </div>
-      <div className="gvGrid" style={{ gridTemplateColumns: `repeat(${periods.length}, minmax(0, 1fr))` }}>
+      <div className="gvGrid" style={{ gridTemplateColumns: `repeat(${periods.length}, minmax(0, 1fr))`, height }}>
+        {behind ? <span className="gvBehind" aria-hidden="true">{behind}</span> : null}
         {periods.map((p, i) => (
           <button
             type="button"
@@ -103,7 +114,8 @@ function Axis({ periods, active }: { periods: GvPeriod[]; active: number }) {
 }
 
 function SalesChart({ s, active, setActive, notReported }: { s: GvSeries; active: number; setActive: (i: number) => void; notReported: string }) {
-  const max = Math.max(1, ...s.periods.flatMap((p) => [p.sales?.val ?? 0, p.lastYear?.val ?? 0]));
+  const max = Math.max(1, ...s.periods.flatMap((p) => [p.sales?.val ?? 0, p.lastYear?.val ?? 0])) / SALES_HEADROOM;
+  const newest = s.periods.length - 1;
   const anyGhost = s.periods.some((p) => p.lastYear);
   return (
     <Chart
@@ -113,13 +125,18 @@ function SalesChart({ s, active, setActive, notReported }: { s: GvSeries; active
         {anyGhost ? <><i style={{ background: C.lastYear }} />Same {s.one} a year earlier</> : null}
       </>}
       periods={s.periods} active={active} setActive={setActive} height={PLOT_H}
-      render={(p) => (
-        <span className="gvBars">
-          {p.lastYear ? <span className="gvBar" style={{ height: `${(p.lastYear.val / max) * 100}%`, background: C.lastYear }} /> : <span className="gvBar" />}
-          {p.sales
-            ? <span className="gvBar" style={{ height: `${(Math.max(p.sales.val, 0) / max) * 100}%`, background: C.sales }} />
-            : <span className="gvBar gvNone" title={notReported} />}
-        </span>
+      render={(p, i) => (
+        <>
+          <span className="gvBars">
+            {p.lastYear ? <span className="gvBar" style={{ height: `${(p.lastYear.val / max) * 100}%`, background: C.lastYear }} /> : <span className="gvBar" />}
+            {p.sales
+              ? <span className="gvBar" style={{ height: `${(Math.max(p.sales.val, 0) / max) * 100}%`, background: C.sales }} />
+              : <span className="gvBar gvNone" title={notReported} />}
+          </span>
+          {i === newest && p.sales ? (
+            <span className="gvVal" style={{ bottom: `calc(${(Math.max(p.sales.val, 0) / max) * 100}% + 2px)` }}>{p.sales.text}</span>
+          ) : null}
+        </>
       )}
     />
   );
@@ -164,24 +181,41 @@ function ProfitChart({ s, active, setActive }: { s: GvSeries; active: number; se
 }
 
 function MarginChart({ s, active, setActive }: { s: GvSeries; active: number; setActive: (i: number) => void }) {
+  const newest = s.periods.length - 1;
   return (
     <Chart
       title="Of every $1 of sales, cents kept after the direct costs"
       legend={<><i style={{ background: C.margin, borderRadius: 999 }} />¢ kept per $1 (gross margin)</>}
       periods={s.periods} active={active} setActive={setActive} height={MARGIN_H}
-      render={(p) => (
-        <span className="gvDotWrap">
-          <span className="gvDotGuide" style={{ background: C.rule }} />
-          {p.keptCents !== null ? (
-            <span className="gvDot" style={{ bottom: `calc(${Math.min(p.keptCents, 100)}% - 5px)`, background: C.margin }} />
-          ) : null}
+      behind={CENT_GUIDES.map((c) => (
+        <span key={c} className="gvCentGuide" style={{ bottom: `${c}%`, background: C.rule }}>
+          {/* The top guide's label hangs below its line, inside the plot. */}
+          <span className="gvCentLabel" style={c === 100 ? { color: C.muted, top: 2 } : { color: C.muted, bottom: 2 }}>{c}¢</span>
         </span>
-      )}
+      ))}
+      render={(p, i) => {
+        if (p.keptCents === null) return <span className="gvDotWrap" />;
+        const at = Math.min(p.keptCents, 100);
+        return (
+          <span className="gvDotWrap">
+            <span className="gvDot" style={{ bottom: `calc(${at}% - 5px)`, background: C.margin }} />
+            {i === newest ? (
+              // Above the dot, or below it when the dot is near the top of the plot.
+              <span className="gvVal" style={at > 75 ? { top: `calc(${100 - at}% + 7px)` } : { bottom: `calc(${at}% + 7px)` }}>
+                {p.keptCents}¢
+              </span>
+            ) : null}
+          </span>
+        );
+      }}
     />
   );
 }
 
-function Detail({ p, one, notReported }: { p: GvPeriod; one: string; notReported: string }) {
+/** "operating margin: −85.1%", or the worded multiple as it stands ("operating costs were about 2.9× sales"). */
+const marginPhrase = (kind: "operating" | "net", text: string) => (/%$/.test(text) ? `${kind} margin: ${text}` : text);
+
+function Detail({ p, one, notReported, showProfit }: { p: GvPeriod; one: string; notReported: string; showProfit: boolean }) {
   const nr = <span style={{ color: C.muted }}>{notReported}</span>;
   return (
     <div className="gvDetail" aria-live="polite">
@@ -193,13 +227,19 @@ function Detail({ p, one, notReported }: { p: GvPeriod; one: string; notReported
           {p.lastYear ? <> · {p.lastYear.label}: {p.lastYear.text}<DerivedTag note={p.lastYear.derivedNote} /></> : null}
           {p.growth ? <> · {p.growth} on a year earlier</> : null}
         </dd>
-        <dt>Profit or loss</dt>
-        <dd>
-          {p.profit
-            ? <><strong>{p.profit.val >= 0 ? "Profit +" : "Loss −"}{p.profit.text.replace(/^-/, "")}</strong><DerivedTag note={p.profit.derivedNote} /></>
-            : nr}
-          {p.oneOff ? <div className="gvNote">{p.oneOff}</div> : null}
-        </dd>
+        {/* NO PROFIT ROW while the chart is off: an unmarked profit figure here
+            would be the same trap as an unmarked bar (COWORK #36 blocker). */}
+        {showProfit ? (
+          <>
+            <dt>Profit or loss</dt>
+            <dd>
+              {p.profit
+                ? <><strong>{p.profit.val >= 0 ? "Profit +" : "Loss −"}{p.profit.text.replace(/^-/, "")}</strong><DerivedTag note={p.profit.derivedNote} /></>
+                : nr}
+              {p.oneOff ? <div className="gvNote">{p.oneOff}</div> : null}
+            </dd>
+          </>
+        ) : null}
         <dt>Of every $1 of sales</dt>
         <dd>
           {p.keptCents !== null
@@ -210,9 +250,9 @@ function Detail({ p, one, notReported }: { p: GvPeriod; one: string; notReported
           <>
             <dt>All costs</dt>
             <dd>
-              {p.operating ? <>operating margin: {p.operating}</> : null}
+              {p.operating ? marginPhrase("operating", p.operating) : null}
               {p.operating && p.net ? " · " : null}
-              {p.net ? <>net margin: {p.net}</> : null}
+              {p.net ? marginPhrase("net", p.net) : null}
             </dd>
           </>
         ) : null}
@@ -262,7 +302,7 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
           * Not filed as a {s.one} of its own; worked out from the company&rsquo;s filings. Tap the {s.one} for how.
         </p>
       ) : null}
-      <Detail p={s.periods[at]} one={s.one} notReported={notReported} />
+      <Detail p={s.periods[at]} one={s.one} notReported={notReported} showProfit={!s.profitMissing} />
       <style>{`
         .gvRoot { display: grid; gap: 6px; margin: 4px 0 12px; }
         .gvSummary { margin: 0 0 4px; font-weight: 700; color: ${C.ink}; }
@@ -274,7 +314,11 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
         .gvChartTitle { font-weight: 800; color: ${C.ink}; }
         .gvLegend { color: ${C.muted}; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; }
         .gvLegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-        .gvGrid { display: grid; gap: 2px; }
+        .gvGrid { display: grid; gap: 2px; position: relative; }
+        .gvBehind { position: absolute; inset: 0; pointer-events: none; }
+        .gvCentGuide { position: absolute; left: 0; right: 0; height: 1px; opacity: 0.7; }
+        .gvCentLabel { position: absolute; left: 0; font-size: 9px; font-weight: 700; line-height: 1; }
+        .gvVal { position: absolute; left: -8px; right: -8px; text-align: center; font-size: 11px; font-weight: 800; color: ${C.ink}; white-space: nowrap; pointer-events: none; }
         .gvCol { position: relative; display: block; padding: 0; border: 0; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; }
         .gvCol:focus-visible { outline: 2px solid ${C.sales}; outline-offset: 1px; }
         .gvBars { position: absolute; inset: 0 12% 0; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
@@ -284,7 +328,6 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
         .gvZero { position: absolute; left: 0; right: 0; height: 1px; }
         .gvPlBar { position: absolute; left: 25%; right: 25%; max-width: 22px; margin: 0 auto; }
         .gvOneOff { position: absolute; left: 0; right: 0; text-align: center; font-size: 10px; font-weight: 800; color: ${C.ink}; text-decoration: none; cursor: help; white-space: nowrap; }
-        .gvDotGuide { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; }
         .gvDot { position: absolute; left: calc(50% - 5px); width: 10px; height: 10px; border-radius: 999px; box-shadow: 0 0 0 2px #0b1220; }
         .gvAxis { margin-top: 2px; }
         .gvTick { text-align: center; font-size: 11px; white-space: nowrap; overflow: hidden; }

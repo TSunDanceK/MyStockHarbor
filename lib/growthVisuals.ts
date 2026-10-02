@@ -18,6 +18,13 @@
 //                        period A computed it for, plus any per-period notes A
 //                        passes in `oneOffs`
 //
+// THE PROFIT CHART NEEDS EVERY PERIOD CHECKED FOR A ONE-OFF (COWORK #36 blocker).
+// A's view flags only the latest period today, so on ONDS as filed Q1 FY2026's
+// non-operating gain would draw as a large green bar with no tag. Until A passes
+// `oneOffs` (its per-period notes; an empty map means "checked, none"), the
+// quarterly profit figures are left out of the picture altogether: no bars, no
+// detail row, no summary clause. They stay in A's table under "See all the numbers".
+//
 // PLAIN DATA OUT, strings already formatted, so the interactive chart (a client
 // component) receives JSON and never imports server code.
 import type { Pct, SecEarningsView, ViewCell } from "./server/secEarningsView";
@@ -29,6 +36,9 @@ export const SMALL_BASE_ABOVE_PCT = 200;
 export const SMALL_BASE = "from a small base";
 /** Beyond ±this %, a margin is worded as a multiple of sales (COWORK #26 §4). */
 export const MARGIN_AS_MULTIPLE_BEYOND_PCT = 100;
+/** Shown in place of the quarterly profit chart until A's per-period one-off notes arrive. */
+export const profitWaitsForOneOffs = (one: string) =>
+  `Profit or loss for each ${one} is under “See all the numbers” for now, until one-off gains and losses are marked on every ${one}.`;
 
 export type GvAmount = {
   /** The filed value, for bar geometry only. */
@@ -94,19 +104,26 @@ export function keptCents(gross: number | null, refused: boolean): { cents: numb
   return { cents: Math.round(gross), note: null };
 }
 
-/** An operating/net margin, re-worded when it is beyond ±100% of sales. */
+/**
+ * An operating/net margin, re-worded when it is beyond ±100% of sales.
+ *
+ * ONE PATTERN FOR THE MULTIPLES (COWORK #36 ask 2): "<what> was/were about N× sales",
+ * with the "what" naming the measure, so the two read side by side as
+ * "operating costs were about 2.9× sales · the net loss was about 1.1× sales".
+ * Within ±100% it stays a percentage, and the panel labels it "operating margin".
+ */
 export function marginWords(m: number | null, kind: "operating" | "net", refused: boolean): string | null {
   if (refused || m == null || !Number.isFinite(m)) return null;
   if (Math.abs(m) <= MARGIN_AS_MULTIPLE_BEYOND_PCT) return `${m >= 0 ? "" : "−"}${Math.abs(m).toFixed(1)}%`;
   if (kind === "operating") {
     // Operating margin m = (sales − operating costs) / sales, so costs/sales = 1 − m/100.
     return m < 0
-      ? `costs were about ${(1 - m / 100).toFixed(1)}× sales`
-      : `operating profit was about ${(m / 100).toFixed(1)}× sales`;
+      ? `operating costs were about ${(1 - m / 100).toFixed(1)}× sales`
+      : `the operating profit was about ${(m / 100).toFixed(1)}× sales`;
   }
   return m < 0
-    ? `the loss was about ${(-m / 100).toFixed(1)}× sales`
-    : `the profit was about ${(m / 100).toFixed(1)}× sales`;
+    ? `the net loss was about ${(-m / 100).toFixed(1)}× sales`
+    : `the net profit was about ${(m / 100).toFixed(1)}× sales`;
 }
 
 /** One hedged sentence from the series. Never advice; null when there is too little to say. */
@@ -151,11 +168,14 @@ export function summaryLine(periods: GvPeriod[], growth: (Pct | undefined)[], on
  * `oneOffs`: per-period one-off notes keyed by A's label, for periods other than
  * the latest. A's view marks only the latest period today (largeNonOperating is
  * computed on the latest income statement); this is where A can pass the others.
+ * Passing it (even `{}`) says every period was checked, and turns the quarterly
+ * profit chart on; leaving it out keeps the chart off (see the header).
  */
 export function buildGrowthVisuals(
   view: SecEarningsView,
   opts: { oneOffs?: Record<string, string> } = {}
 ): GrowthVisualsData {
+  const profitChecked = opts.oneOffs !== undefined;
   const oneOffOf = (label: string): string | null =>
     opts.oneOffs?.[label] ??
     (label === view.latestLabel && view.largeNonOperating && view.largeNonOperatingNote ? view.largeNonOperatingNote : null);
@@ -179,8 +199,8 @@ export function buildGrowthVisuals(
         sales: amount(p.revenue),
         lastYear: priorAmount && prior ? { ...priorAmount, label: prior.label } : null,
         growth: growthWords(g?.revenueYoY),
-        profit: amount(p.netIncome),
-        oneOff: oneOffOf(p.label),
+        profit: profitChecked ? amount(p.netIncome) : null,
+        oneOff: profitChecked ? oneOffOf(p.label) : null,
         keptCents: kept.cents,
         grossNote: kept.note,
         operating: marginWords(m?.operating ?? null, "operating", m?.marginsRefused ?? false),
@@ -190,7 +210,7 @@ export function buildGrowthVisuals(
     // A's nouns for the table basis, not a second rule for them.
     const { one, many } = periodWords(view.tableBasis);
     quarters = {
-      one, many, periods, profitMissing: null,
+      one, many, periods, profitMissing: profitChecked ? null : profitWaitsForOneOffs(one),
       summary: summaryLine(periods, ordered.map((p) => growthOf.get(p.label)?.revenueYoY), one, many),
     };
   }

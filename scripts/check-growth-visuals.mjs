@@ -10,6 +10,13 @@
 //   3. THE ONE-OFF TAG on the wrong quarter, or missing where A's rule fired.
 //   4. "Not reported" replaced by a blank or a zero.
 //   5. THE COMPONENT FETCHES: it is presentation only (no fetch, no Redis).
+//   6. AN UNMARKED ONE-OFF PROFIT (COWORK #36 blocker): without A's per-period
+//      one-off notes, ONDS's Q1 FY2026 gain would draw as the biggest green bar
+//      with no tag. The profit chart, its detail row and its summary clause stay
+//      off until A passes `oneOffs`.
+//   7. NO SCALE BEFORE A TAP (#36 ask 1): the newest bar and dot lose their
+//      values, or the 0¢ / 50¢ / 100¢ guides go.
+//   8. TWO PATTERNS FOR THE MULTIPLES (#36 ask 2).
 //
 // Real data: ONDS's fact set (data/sec/factset-fixture-ONDS.json, captured by the
 // read-only sec-fixture relay, sha256 f76d9584…), run through A's view builder.
@@ -48,19 +55,25 @@ const lossOnly = (M) => {
 
 /** Everything the rules read, for one load of the modules. */
 async function measure(M) {
-  const onds = M.buildGrowthVisuals(M.buildSecEarningsView(full));
+  const ondsView = M.buildSecEarningsView(full);
+  const onds = M.buildGrowthVisuals(ondsView);
   const q1View = M.buildSecEarningsView(asOfQ1());
-  const q1 = M.buildGrowthVisuals(q1View);
-  const loss = M.buildGrowthVisuals(M.buildSecEarningsView(lossOnly(M)));
+  // `oneOffs: {}` = "A checked every period": only the latest carries a note here.
+  const q1 = M.buildGrowthVisuals(q1View, { oneOffs: {} });
+  // ONDS as filed once A supplies the per-period note: Q1 FY2026 tagged with A's
+  // own words for it (the note A's rule gives when Q1 is the latest period).
+  const ondsChecked = M.buildGrowthVisuals(ondsView, { oneOffs: { "Q1 FY2026": q1View.largeNonOperatingNote } });
+  const loss = M.buildGrowthVisuals(M.buildSecEarningsView(lossOnly(M)), { oneOffs: {} });
   const markup = (data) => html(React.createElement(M.GrowthVisuals, { data, notReported: "Not reported" }));
   const render = (data) => visibleText(markup(data));
   // "Not reported" survives: the newest quarter (the one the detail panel opens on) with no revenue.
   const blank = structuredClone(full);
   blank.quarters[0].v[M.SEC_FIELD_KEYS.indexOf("revenue")] = null;
   const blankData = M.buildGrowthVisuals(M.buildSecEarningsView(blank));
-  return { onds, q1, q1View, loss, render, markup, blankData, M };
+  return { onds, ondsChecked, q1, q1View, loss, render, markup, blankData, M };
 }
 
+let M_PROFIT_WAITS = "";
 const rules = {
   "ONDS: 8 quarters, oldest first": ({ onds }) =>
     onds.quarters.periods.length === 8 && onds.quarters.periods[0].label === "Q3 FY2024" && onds.quarters.periods[7].label === "Q2 FY2026",
@@ -77,17 +90,47 @@ const rules = {
     // Q3 FY2025's 25.79% is where rounding and truncating disagree (26 vs 25).
     onds.quarters.periods[7].keptCents === 43 && onds.quarters.periods[0].keptCents === 3 && onds.quarters.periods[4].keptCents === 26,
   "margins beyond ±100% are worded, within are percentages": ({ onds, M }) =>
-    onds.quarters.periods[7].operating === "costs were about 2.9× sales" &&
+    onds.quarters.periods[7].operating === "operating costs were about 2.9× sales" &&
     onds.quarters.periods[6].operating === "−85.1%" &&
-    onds.quarters.periods[6].net === "the profit was about 7.2× sales" &&
+    onds.quarters.periods[6].net === "the net profit was about 7.2× sales" &&
     M.marginWords(-100, "net", false) === "−100.0%",
-  "derived quarters keep A's derived note": ({ onds }) => {
-    const p = onds.quarters.periods;
+  "derived quarters keep A's derived note": ({ ondsChecked }) => {
+    const p = ondsChecked.quarters.periods;
     const q4 = p.filter((x) => /^Q4 /.test(x.label));
     return q4.length === 2 && q4.every((x) => x.sales?.derivedNote && x.profit?.derivedNote) && p[7].sales.derivedNote === null;
   },
-  "summary: six quarters up, seven of eight losses, no one-off claim": ({ onds }) =>
-    onds.quarters.summary === "Sales were higher than a year earlier in each of the last 6 quarters; it reported a net loss in 7 of the 8 quarters shown.",
+  "summary without A's notes: sales only, no profit clause": ({ onds }) =>
+    onds.quarters.summary === "Sales were higher than a year earlier in each of the last 6 quarters.",
+  "summary with A's notes: seven of eight losses, the one-off named": ({ ondsChecked }) =>
+    ondsChecked.quarters.summary ===
+      "Sales were higher than a year earlier in each of the last 6 quarters; it reported a net loss in 7 of the 8 quarters shown, and the profitable quarter includes a one-off gain.",
+  // THE #36 BLOCKER, on the data AND the markup: no profit bar, no profit row in
+  // the panel, and the words saying where the figures are instead.
+  "blocker: without A's per-period notes, no profit figure is drawn or listed": ({ onds, markup, render }) => {
+    const m = markup(onds), t = render(onds);
+    return onds.quarters.periods.every((x) => x.profit === null && x.oneOff === null) &&
+      onds.quarters.profitMissing === M_PROFIT_WAITS && !/class="gvPlBar"/.test(m) &&
+      !/<dt>Profit or loss<\/dt>/.test(m) && !/Profit or loss per /.test(t) &&
+      t.includes(M_PROFIT_WAITS);
+  },
+  "blocker: with A's per-period note, Q1 '26 draws tagged": ({ ondsChecked, q1View, markup }) => {
+    const p = ondsChecked.quarters.periods, m = markup(ondsChecked);
+    const q1 = p.find((x) => x.label === "Q1 FY2026");
+    return q1.profit.val > 0 && q1.oneOff === q1View.largeNonOperatingNote &&
+      p.filter((x) => x.oneOff).length === 1 && ondsChecked.quarters.profitMissing === null &&
+      (m.match(/class="gvPlBar"/g) ?? []).length === 8 && (m.match(/class="gvOneOff"/g) ?? []).length === 1;
+  },
+  "scale: the newest sales bar and the newest dot carry their values": ({ onds, markup }) => {
+    const vals = [...markup(onds).matchAll(/class="gvVal"[^>]*>([^<]+)</g)].map((x) => x[1]);
+    return vals.length === 2 && vals[0] === "$83.8M" && vals[1] === "43¢";
+  },
+  "scale: faint 0¢ / 50¢ / 100¢ guides on the margin chart": ({ onds, markup }) => {
+    const labels = [...markup(onds).matchAll(/class="gvCentLabel"[^>]*>([^<]+)</g)].map((x) => x[1]);
+    return labels.join(",") === "0¢,50¢,100¢" && (markup(onds).match(/class="gvCentGuide"/g) ?? []).length === 3;
+  },
+  "wording: one pattern for the multiples in the panel": ({ onds, render }) =>
+    render(onds).includes("operating costs were about 2.9× sales · the net loss was about 1.1× sales") &&
+    !/margin: (operating|the net)/.test(render(onds)),
   "marker: on the quarter A's rule fired for, with A's words": ({ q1, q1View }) => {
     const p = q1.quarters.periods;
     return q1View.largeNonOperating === true && p.at(-1).label === "Q1 FY2026" && p.at(-1).oneOff === q1View.largeNonOperatingNote &&
@@ -108,9 +151,9 @@ const rules = {
     onds.years.periods.length === 5 && onds.years.periods.every((x) => x.profit === null) && /isn’t shown here yet/.test(onds.years.profitMissing),
   "'Not reported' survives a missing figure": ({ blankData, render }) =>
     blankData.quarters.periods.at(-1).sales === null && /Sales\s*Not reported/.test(render(blankData)),
-  "the render carries the summary, the toggle and the legend words": ({ onds, render }) => {
-    const t = render(onds);
-    return t.includes(onds.quarters.summary) && /Quarters/.test(t) && /Years/.test(t) && /Profit \(\+\), above the line/.test(t) && /Loss \(−\), below/.test(t);
+  "the render carries the summary, the toggle and the legend words": ({ ondsChecked, render }) => {
+    const t = render(ondsChecked);
+    return t.includes(ondsChecked.quarters.summary) && /Quarters/.test(t) && /Years/.test(t) && /Profit \(\+\), above the line/.test(t) && /Loss \(−\), below/.test(t);
   },
 };
 
@@ -127,6 +170,7 @@ const staticRules = {
 
 console.log("\n=== 1. ONDS, loss-only and marker-fires, through A's view builder ===\n");
 const base = await measure(await load());
+M_PROFIT_WAITS = base.M.profitWaitsForOneOffs("quarter");
 for (const [name, rule] of Object.entries(rules)) check(name, rule(base));
 
 console.log("\n=== 2. Static rules ===\n");
@@ -141,7 +185,16 @@ const mutants = [
   ["gross margin is A's figure in whole cents", "b", (s) => s.replace("return { cents: Math.round(gross), note: null };", "return { cents: Math.floor(gross), note: null };")],
   ["margins beyond ±100% are worded, within are percentages", "b", (s) => s.replace("if (Math.abs(m) <= MARGIN_AS_MULTIPLE_BEYOND_PCT)", "if (true)")],
   ["derived quarters keep A's derived note", "b", (s) => s.replace("derivedNote: cell.derivedNote ?? null", "derivedNote: null")],
-  ["summary: six quarters up, seven of eight losses, no one-off claim", "b", (s) => s.replace("const losses = withProfit.filter((p) => p.profit!.val < 0).length;", "const losses = withProfit.filter((p) => p.profit!.val <= 0).length + 1;")],
+  ["summary with A's notes: seven of eight losses, the one-off named", "b", (s) => s.replace("const losses = withProfit.filter((p) => p.profit!.val < 0).length;", "const losses = withProfit.filter((p) => p.profit!.val <= 0).length + 1;")],
+  ["summary without A's notes: sales only, no profit clause", "b", (s) => s.replace("profit: profitChecked ? amount(p.netIncome) : null,", "profit: amount(p.netIncome),")],
+  ["blocker: without A's per-period notes, no profit figure is drawn or listed", "b", (s) => s.replace("const profitChecked = opts.oneOffs !== undefined;", "const profitChecked = true;")],
+  ["blocker: without A's per-period notes, no profit figure is drawn or listed", "c", (s) => s.replace("{showProfit ? (", "{true ? (")],
+  ["blocker: with A's per-period note, Q1 '26 draws tagged", "b", (s) => s.replace("opts.oneOffs?.[label] ??", "")],
+  ["scale: the newest sales bar and the newest dot carry their values", "c", (s) => s.replace("{i === newest && p.sales ? (", "{false && p.sales ? (")],
+  ["scale: the newest sales bar and the newest dot carry their values", "c", (s) => s.replace("{i === newest ? (", "{false ? (")],
+  ["scale: faint 0¢ / 50¢ / 100¢ guides on the margin chart", "c", (s) => s.replace("const CENT_GUIDES = [0, 50, 100] as const;", "const CENT_GUIDES = [0, 100] as const;")],
+  ["wording: one pattern for the multiples in the panel", "b", (s) => s.replace("`operating costs were about ${", "`costs were about ${")],
+  ["wording: one pattern for the multiples in the panel", "c", (s) => s.replace("(/%$/.test(text) ? `${kind} margin: ${text}` : text)", "`${kind} margin: ${text}`")],
   ["marker: on the quarter A's rule fired for, with A's words", "b", (s) => s.replace("(label === view.latestLabel && view.largeNonOperating", "(view.largeNonOperating")],
   ["marker: the tag renders", "c", (s) => s.replace("{p.oneOff ? (\n              <abbr", "{false ? (\n              <abbr")],
   ["loss-only: all losses, said plainly", "b", (s) => s.replace("losses === n ? `it reported a net loss in all", "false ? `it reported a net loss in all")],
