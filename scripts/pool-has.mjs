@@ -31,8 +31,13 @@ symbols.forEach((s, i) => {
 // Do the pool adds leak into Pickers or the warm targets? (#553 COWORK #85)
 const parse2 = (v) => (typeof v === "string" ? JSON.parse(v) : v);
 const pickers = new Set((parse2(await redis.get("msh:pickers:v10:symbols")) ?? []).map(String));
-const wt = parse2(await redis.get("msh:warm-targets:v1"));
-const targets = new Set(((wt && wt.symbols) || []).map(String));
 console.log(`in the Pickers symbol list (${pickers.size}): ${symbols.filter((s) => pickers.has(s)).join(", ") || "none"}`);
-console.log(`in the warm targets (${targets.size}): ${symbols.filter((s) => targets.has(s)).join(", ") || "none"}`);
-console.log(`Redis commands: ${4 + symbols.length} (read-only)`);
+// The fresh key has a 30-minute TTL (lib/server/warmTargets.ts), so between
+// warm runs it reads empty; the 7-day last-good copy is the durable list.
+for (const key of ["msh:warm-targets:v1", "msh:warm-targets:v1:last-good"]) {
+  const wt = parse2(await redis.get(key));
+  const targets = new Set(((wt && wt.symbols) || []).map(String));
+  const built = wt && Number.isFinite(wt.builtAt) ? `, built ${age(wt.builtAt)} ago` : "";
+  console.log(`in the warm targets ${key} (${targets.size}${built}): ${symbols.filter((s) => targets.has(s)).join(", ") || "none"}`);
+}
+console.log(`Redis commands: 6 (read-only)`);
