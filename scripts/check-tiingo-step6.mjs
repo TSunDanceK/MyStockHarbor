@@ -46,6 +46,7 @@ const FILES = {
   videoPage: "app/insights/videos/[videoId]/page.tsx",
   news: "app/stock/[symbol]/news/page.tsx",
   newsData: "lib/stock-news-data.ts",
+  newsTech: "lib/server/newsTechHistory.ts",
   aiMarket: "lib/ai-market.ts",
   aiNews: "lib/ai-news-briefs.ts",
   insightRoute: "app/api/stock-news/insight/route.ts",
@@ -113,6 +114,16 @@ check("the credit is the contract's words", S.TIINGO_CREDIT === "Market data fro
 check("the three surfaces are appended", ["SPX", "VIDEOS", "NEWS_HERO"].every((s) => P.PRICE_SURFACES.includes(s)));
 check("and are fmp unless set to tiingo",
   ["SPX", "VIDEOS", "NEWS_HERO"].every((s) => P.priceProviderFor(s, {}) === "fmp" && P.priceProviderFor(s, { [`PRICE_PROVIDER_${s}`]: "tiingo" }) === "tiingo"));
+// NEWS_TECH (#563 COWORK #31 (a)): the news page's technical history.
+const NT = await import(pathToFileURL(path.join(ROOT, FILES.newsTech)).href);
+check("NEWS_TECH is appended, and fmp unless set to tiingo",
+  P.PRICE_SURFACES.includes("NEWS_TECH") && P.priceProviderFor("NEWS_TECH", {}) === "fmp" &&
+  P.priceProviderFor("NEWS_TECH", { PRICE_PROVIDER_NEWS_TECH: "tiingo" }) === "tiingo");
+check("NEWS_TECH off: null without a read (the page keeps its path)", (await NT.readNewsTechHistory("AAPL", {})) === null);
+check("NEWS_TECH on, nothing stored: null (the page keeps its path), not a throw",
+  (await NT.readNewsTechHistory("AAPL", { PRICE_PROVIDER_NEWS_TECH: "tiingo" })) === null);
+check("NEWS_TECH keeps the Yahoo path's window", NT.NEWS_TECH_POINTS === 320);
+
 const readsNone = await S.readSurfacePrice("SPY");
 check("with no Redis configured, the read is null, not a throw", readsNone === null);
 
@@ -143,7 +154,21 @@ const rules = {
   "ai-market reads no price and takes no price argument": (src) =>
     !PRICE_READS.test(src) && /async function generateSpxMarketAnalysis\(\s*_timeBucket\?: number\s*\)/.test(src),
   "ai-news-briefs reads no price source": (src) => !PRICE_READS.test(src),
-  "the news data module never sees the Tiingo hero price": (src) => !TIINGO_READS.test(src),
+  // NARROWED FOR NEWS_TECH (PR 2): the module may take its technical history from
+  // newsTechHistory (gated, history only), never the pool or the hero price. The
+  // AI calls it makes are non-price by allow-list (check-news-ai-inputs).
+  "the news data module never sees the Tiingo hero price": (src) =>
+    !/readTiingoPool|readSurfacePrice|readSurfaceInputs|tiingoSurfacePrice|marketData\/read/.test(src),
+  "news tech: the Tiingo history only through the NEWS_TECH gate, Yahoo kept as the fallback": (src) =>
+    /import \{ readNewsTechHistory \} from "\.\/server\/newsTechHistory";/.test(src) &&
+    /const tiingo = await readNewsTechHistory\(symbol\);\s*if \(tiingo\) return \{ points: tiingo, source: "tiingo" \};\s*return \{ points: await fetchYahooHistory\(symbol\), source: "yahoo" \};/.test(src),
+  "news tech: the reader is gated and reads only the stored history": (src) =>
+    /if \(priceProviderFor\("NEWS_TECH", env\) !== "tiingo"\) return null;/.test(src) &&
+    /readTiingoHistory\(/.test(src) && !/readTiingoPool|fetch\(|tiingo\.com/.test(src),
+  "news tech: the linked credit, and one source for the technical text": (src) =>
+    /historySource === "tiingo" \? \(\s*<p[^>]*>\s*<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src) &&
+    /const technicalPrice = historySource === "tiingo" \? heroPrice\?\.price \?\? lastClose : quote\?\.price \?\? lastClose;/.test(src) &&
+    /buildTechnicalRead\(\{ symbol: upper, price: technicalPrice,/.test(src),
   "the AI routes read no price source": (src) => !PRICE_READS.test(src),
   "the news AI components get no hero price": (src) => {
     const blocks = [...src.matchAll(/<(AiInsightCard|WhyThisMatters)\b[\s\S]*?\/>/g)].map((m) => m[0]);
@@ -191,6 +216,9 @@ const sourceOf = {
   "ai-market reads no price and takes no price argument": FILES.aiMarket,
   "ai-news-briefs reads no price source": FILES.aiNews,
   "the news data module never sees the Tiingo hero price": FILES.newsData,
+  "news tech: the Tiingo history only through the NEWS_TECH gate, Yahoo kept as the fallback": FILES.newsData,
+  "news tech: the reader is gated and reads only the stored history": FILES.newsTech,
+  "news tech: the linked credit, and one source for the technical text": FILES.news,
   "the AI routes read no price source": [FILES.insightRoute, FILES.whyRoute],
   "the news AI components get no hero price": FILES.news,
   "SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept": FILES.spx,
@@ -219,6 +247,11 @@ const mutants = [
   ["ai-market reads no price and takes no price argument", (s) => `import { readTiingoHistory } from "@/lib/server/marketData/read";\n${s}`],
   ["ai-news-briefs reads no price source", (s) => `import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";\n${s}`],
   ["the news data module never sees the Tiingo hero price", (s) => `import { readTiingoPool } from "@/lib/server/marketData/read";\n${s}`],
+  ["the news data module never sees the Tiingo hero price", (s) => `import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";\n${s}`],
+  ["news tech: the Tiingo history only through the NEWS_TECH gate, Yahoo kept as the fallback", (s) => s.replace('return { points: await fetchYahooHistory(symbol), source: "yahoo" };', 'return { points: [], source: "yahoo" };')],
+  ["news tech: the reader is gated and reads only the stored history", (s) => s.replace('if (priceProviderFor("NEWS_TECH", env) !== "tiingo") return null;', "")],
+  ["news tech: the linked credit, and one source for the technical text", (s) => s.replace("price: technicalPrice,", "price: quote?.price ?? lastClose,")],
+  ["news tech: the linked credit, and one source for the technical text", (s) => s.replace(/historySource === "tiingo" \? \(\s*<p([^>]*)>\s*<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, 'historySource === "tiingo" ? (<p$1>{TIINGO_CREDIT}')],
   ["the AI routes read no price source", (s) => `${s}\nconst p = getDailyHistory("X");`],
   ["the news AI components get no hero price", (s) => s.replace("<AiInsightCard", "<AiInsightCard heroPrice={heroPrice}")],
   ["SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept", (s) => s.replace('priceProviderFor("SPX") === "tiingo"', "true")],
