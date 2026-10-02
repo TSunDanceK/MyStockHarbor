@@ -175,6 +175,17 @@ const rules = {
     /chartSeries === "SPY" \?/.test(src) &&
     src.includes("Chart shows the SPDR S&amp;P 500 ETF (SPY). Levels quoted in the text refer to the S&amp;P 500 index."),
   "SPX chart: the symbol is passed through, not fixed to SPX": (src) => /symbol=\{symbol\}/.test(src) && !/symbol="SPX"/.test(src),
+  // 6. PR 2 video items (#563 COWORK #33/#34, #553 COWORK #88)
+  "videos: the IFX -> IFNNY remap applies on the Tiingo path too": (src) =>
+    /IFX: "IFNNY"/.test(src) && /const symbol = TICKER_REMAP\[upper\] \?\? upper;/.test(src) &&
+    /readSurfaceInputs\(symbol\)/.test(src) && /getStockPageSecFacts\(symbol\)/.test(src),
+  "videos: the sector is A's resolver, SEC-only, imported": (src) =>
+    /import \{ resolveProfile \} from "@\/lib\/server\/staticProfile";/.test(src) && /sector: resolveProfile\(symbol, null\)\.sector,/.test(src),
+  "videos: an MA tile with a price but too few closes says why": (src) =>
+    /export const SHORT_HISTORY_NOTE = "Not enough price history stored yet";/.test(src) &&
+    /ma50Note: ma50 === null \? SHORT_HISTORY_NOTE : null/.test(src) && /ma200Note: ma200 === null \? SHORT_HISTORY_NOTE : null/.test(src),
+  "video page: the MA tiles carry the note as their hover text": (src) =>
+    /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /title=\{note \?\? undefined\}/.test(src),
 };
 const sourceOf = {
   "ai-market reads no price and takes no price argument": FILES.aiMarket,
@@ -191,6 +202,10 @@ const sourceOf = {
   "news hero: the label and the linked credit": FILES.news,
   "SPX: the approved caption, shown only for SPY": FILES.spx,
   "SPX chart: the symbol is passed through, not fixed to SPX": FILES.spxChart,
+  "videos: the IFX -> IFNNY remap applies on the Tiingo path too": FILES.video,
+  "videos: the sector is A's resolver, SEC-only, imported": FILES.video,
+  "videos: an MA tile with a price but too few closes says why": FILES.video,
+  "video page: the MA tiles carry the note as their hover text": FILES.videoPage,
 };
 const srcFor = (name) => [sourceOf[name]].flat().map((f) => (name.includes("caption") ? raw(f) : code(f))).join("\n");
 
@@ -216,6 +231,10 @@ const mutants = [
   ["news hero: the label and the linked credit", (s) => s.replace("{heroPrice.label}", "")],
   ["SPX: the approved caption, shown only for SPY", (s) => s.replace("Levels quoted in the text refer to the S&amp;P 500 index.", "")],
   ["SPX chart: the symbol is passed through, not fixed to SPX", (s) => s.replace("symbol={symbol}", 'symbol="SPX"')],
+  ["videos: the IFX -> IFNNY remap applies on the Tiingo path too", (s) => s.replace("readSurfaceInputs(symbol)", "readSurfaceInputs(upper)")],
+  ["videos: the sector is A's resolver, SEC-only, imported", (s) => s.replace("sector: resolveProfile(symbol, null).sector,", "sector: null,")],
+  ["videos: an MA tile with a price but too few closes says why", (s) => s.replace("ma200Note: ma200 === null ? SHORT_HISTORY_NOTE : null", "ma200Note: null")],
+  ["video page: the MA tiles carry the note as their hover text", (s) => s.replace("title={note ?? undefined}", "")],
 ];
 for (const [name, mutate] of mutants) {
   const before = srcFor(name);
