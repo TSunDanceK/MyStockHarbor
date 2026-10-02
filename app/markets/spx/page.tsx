@@ -491,7 +491,7 @@ export default async function SPXPage() {
                   opacity: 0.92,
                 }}
               >
-                The S&amp;P 500 closed at 7,744.64 on Friday, September 25 — up 0.53% on the day and about 2% for the week — leaving the index just 0.7% below its record closing high of 7,798.99 set on August 13. The rally came despite a sharp bond-market selloff that pushed the 10-year Treasury yield to roughly 5.2%, its highest level since 2007, after stronger-than-expected business-activity data lifted the odds of another Fed rate hike in October to about 70%. Stocks shrugged off the higher-yield backdrop as oil prices eased on reports of progress toward reopening the Strait of Hormuz, and President Trump's summit with China's Xi Jinping extended their trade truce into next year.
+                The S&amp;P 500 closed at 7,678.25 on Thursday, October 1 — up 0.34% on the day — leaving the index about 1.5% below its record closing high of 7,798.99 set on August 13. There's no single fresh catalyst behind the move: the index has spent the past several weeks consolidating just under its record as the 10-year Treasury yield pushed to roughly 5.3%, its highest level since 2002, and a federal government shutdown that began October 1 suspended the Labor Department's data releases, including the September jobs report. Markets have mostly treated the shutdown as noise rather than a growth shock, with chip and AI-linked stocks — lifted by OpenAI's roughly $500 billion valuation and a new Samsung/SK Hynix supply partnership — doing more to hold the index near its highs than any single policy decision.
               </div>
 
               <div
@@ -712,7 +712,7 @@ export default async function SPXPage() {
 
   <div>
     <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
-    the SPX closed at 7,744.64 on Friday, September 25 — a 0.53% gain that capped a roughly 2% weekly advance, leaving the index just 0.7% below its all-time high closing record of 7,798.99 set on Wednesday, August 13. The bigger story this week was the bond market, not a Fed meeting: the 10-year Treasury yield climbed to about 5.2%, its highest level since 2007, after S&amp;P Global's flash PMI showed the strongest business-activity growth in more than five years, lifting the market-implied odds of an October Fed rate hike to roughly 70% from about 55% a week earlier. Oil prices spiked on U.S.-Iran tension over the Strait of Hormuz before easing late in the week on reports both sides were discussing a phased deal, and President Trump's summit with China's Xi Jinping ended with their trade truce extended into January. Market breadth stayed narrow — only about a quarter of S&amp;P 500 members trade above their own 50-day moving average — even as the index itself closed the week within striking distance of a new record.
+    the SPX closed at 7,678.25 on Thursday, October 1 — a 0.34% gain that leaves the index about 1.5% below its all-time high closing record of 7,798.99 set on Wednesday, August 13. The bigger story continues to be the bond market, not any single headline: the 10-year Treasury yield has pushed to roughly 5.3%, its highest level since 2002, as a resilient economy and a tight labor market keep the Fed cautious about cutting further after its September 16 rate hike. A federal government shutdown that began October 1 has suspended official jobs and inflation data, but markets have largely shrugged it off as a procedural standoff rather than an economic threat. Market breadth has deteriorated further — only around 40% of S&amp;P 500 members now trade above their own 200-day moving average, down sharply from more than 70% in August — even as a handful of AI-linked mega-caps keep the index itself within striking distance of a new record.
   </div>
 </div>
           </section>
@@ -843,12 +843,12 @@ export default async function SPXPage() {
                     Rate pressure, not a rate decision
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Bond yields, not the Fed, drove this week's swings
+                    Bond yields keep climbing, not the Fed
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The SPX closed Friday, September 25 at 7,744.64, up 0.53% on the day and about 2% for the week, leaving it just 0.7% below its record close of 7,798.99 set on August 13. The catalyst wasn't a fresh Fed decision — it was the bond market. Strong PMI data pushed the 10-year Treasury yield to roughly 5.2%, its highest since 2007, and lifted the odds of an October rate hike to about 70%. Stocks absorbed the higher-yield backdrop better than bonds did, with easing oil prices and a calmer U.S.-China trade backdrop helping the index close the week near session highs.
+                The SPX closed Thursday, October 1 at 7,678.25, up 0.34% on the day, leaving it about 1.5% below its record close of 7,798.99 set on August 13. There was no FOMC meeting this week — the next one isn't until October 27-28 — so the catalyst is the bond market, not fresh Fed guidance. The 10-year Treasury yield has pushed to roughly 5.3%, its highest level since 2002, as resilient growth and a tight labor market keep rate-cut hopes in check. A government shutdown that began October 1 has frozen official data releases, adding uncertainty without, so far, triggering a real selloff.
               </div>
             </div>
 
@@ -877,7 +877,7 @@ export default async function SPXPage() {
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                Market breadth weakened again this week — only about 25% of S&amp;P 500 members were trading above their own 50-day moving average as of midweek, down from roughly a third a week earlier, while about 45% held above their 200-day average. The CNN Fear &amp; Greed Index sits at 36, still in &ldquo;Fear&rdquo; territory, though it has ticked up from around 30 a week ago. A rally led by a narrower slice of the index, even a strong one, tends to be less durable than one built on broad participation.
+                Market breadth has deteriorated sharply over the past six weeks — just over 40% of S&amp;P 500 members now trade above their own 200-day moving average, down from roughly 73% in mid-August, while only around a quarter hold above their 50-day average. The CNN Fear &amp; Greed Index sits at 27, in &ldquo;Fear&rdquo; territory and down from 30 the prior session. The index's resilience near its highs is increasingly a story about a handful of AI-linked mega-caps rather than broad-based strength, which historically makes a rally more vulnerable to a reversal.
               </div>
             </div>
 
@@ -894,7 +894,7 @@ export default async function SPXPage() {
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                On the daily chart, the 50-day and 200-day moving averages have nearly converged around 7,681 — an unusual setup after weeks where the two lines sat further apart — and Friday's close moved the index back above both. RSI(14) sits in the high-40s to low-50s, a neutral reading with room to run in either direction before it flags as overbought or oversold. The weekly chart remains constructive, with price comfortably above its rising 50-week and 200-week averages, and the index now sits just 0.7% below its record high — a much narrower gap than a week or two ago.
+                On the daily chart, the 50-day (around 7,696) and 200-day (around 7,676) moving averages sit within about 20 points of each other, and Thursday's close landed right between them. RSI(14) reads about 46, a neutral level with plenty of room to run before it would flag as overbought or oversold. The weekly chart remains constructive, with price still comfortably above its rising 50-week and 200-week averages, even as the daily chart spends this stretch consolidating only about 1.5% below the record high.
               </div>
             </div>
           </section>
@@ -928,11 +928,11 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The S&amp;P 500 spent this week fighting the bond market rather than the Fed. It closed at 7,744.64 on Friday, up 0.53% on the day and roughly 2% for the week, and it now sits just 0.7% below its record closing high of 7,798.99 set on Wednesday, August 13. Sell-side year-end targets are little changed from a week ago: JPMorgan and Goldman Sachs are still around 8,000, UBS is near 8,100, and Ed Yardeni's more cautious 7,900 call — trimmed from 8,400 on the day of the Fed's September rate hike — is now within about 2% of where the index sits.
+                The S&amp;P 500 has spent the past several weeks consolidating just under its record high rather than reacting to any single headline. It closed at 7,678.25 on Thursday, up 0.34% on the day, and now sits about 1.5% below its record closing high of 7,798.99 set on Wednesday, August 13. Sell-side year-end targets are little changed: JPMorgan and Goldman Sachs are still around 8,000, Citi and UBS sit near 8,100, and Ed Yardeni's more cautious 7,900 call — trimmed from 8,400 on September 16, the day of the Fed's last rate hike — is now within roughly 3% of where the index sits.
               </p>
 
               <p style={{ margin: 0 }}>
-                The real driver of this week's volatility was the 10-year Treasury yield's climb toward 5.2%, its highest level since 2007, after S&amp;P Global's flash composite PMI showed the fastest pace of business-activity growth in more than five years. Stronger growth data cuts both ways for stocks: it reduces recession risk, but it also lifted the market-implied odds of another Fed rate hike in October to roughly 70%, up from about 55% the week before. Oil added to the pressure early in the week as U.S.-Iran tension over the Strait of Hormuz pushed crude prices higher, before easing back on reports the two sides were discussing a phased deal to reopen the strait and resume nuclear talks. Separately, President Trump's meeting with China's Xi Jinping in Washington extended their trade truce into January, removing one source of uncertainty markets had been pricing in.
+                The real driver has continued to be the 10-year Treasury yield, which pushed to roughly 5.3% this week — its highest level since 2002 — as resilient economic growth, a tight labor market, and the Fed's own balance-sheet runoff keep upward pressure on long-term borrowing costs. A federal government shutdown that began October 1 compounded the uncertainty by suspending the Labor Department's data releases, including the September jobs report, leaving investors with a weaker read on the economy just as yields test multi-decade highs. Even so, chip and AI-infrastructure names have continued to rally on company-specific news — OpenAI's roughly $500 billion valuation round and a new Samsung/SK Hynix partnership tied to its Stargate data-center buildout chief among them — which has done more to hold the index near its highs than any macro data point this week.
               </p>
 
               <div
@@ -949,12 +949,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("red")}>⚠️</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#fca5a5" }}>Watch the bond market and the breadth:</strong> a 10-year Treasury yield at 5.2% — the highest since 2007 — is arguably a bigger swing factor for stocks right now than the Fed's own meeting calendar, since it raises the discount rate applied to future earnings and competes directly with equities for investor capital. Underneath the index-level gain, breadth remains a live concern: only about a quarter of S&amp;P 500 members trade above their own 50-day moving average, narrower than a week ago, while the daily 50-day and 200-day moving averages have converged to almost the same level near 7,681. RSI in the high-40s to low-50s is neutral, not stretched. From here, the path of long-term bond yields, any further easing in the Iran-related oil premium, and whether breadth can broaden out look more likely to move this market than any single headline.
+                  <strong style={{ color: "#fca5a5" }}>Watch the bond market and the breadth:</strong> a 10-year Treasury yield at 5.3% — the highest since 2002 — is a bigger swing factor for stocks right now than anything on the Fed's calendar, since it raises the discount rate applied to future earnings and competes directly with equities for investor capital. Underneath the index-level resilience, breadth is the clearest warning sign: just over 40% of S&amp;P 500 members trade above their own 200-day moving average, down from roughly 73% in mid-August, and only about a quarter hold above their 50-day average. RSI near 46 is neutral, not stretched. From here, the path of long-term bond yields, how long the government shutdown drags on, and whether breadth can broaden beyond a handful of AI names look more likely to move this market than any single headline.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                Zooming out to the <strong>weekly chart</strong>, the picture stays constructive: price sits comfortably above its rising 50-week and 200-week moving averages, both well below the current level, even though the daily chart spent much of the week testing its own 200-day average before Friday's rally moved back above it. This week's round trip — a bond-yield scare and an oil spike, followed by a broad Friday rally — is the kind of volatility a genuine uptrend can usually absorb, keeping the 7,900–8,100 range of targets from Yardeni, JPMorgan, Goldman Sachs and UBS as the more relevant markers for the rest of the year, provided long-term yields don't keep climbing and force a more serious reassessment.
+                Zooming out to the <strong>weekly chart</strong>, the picture stays constructive: price sits comfortably above its rising 50-week and 200-week moving averages, both well below the current level, even though the daily chart has spent the past couple of weeks consolidating just under its record high rather than extending it. This stretch of sideways trading — rising bond yields and a government shutdown, absorbed without a disorderly selloff — is the kind of test a genuine uptrend can usually handle, keeping the 7,900–8,100 range of targets from Yardeni, JPMorgan, Goldman Sachs and UBS/Citi as the more relevant markers for the rest of the year, provided long-term yields don't keep climbing and force a more serious reassessment.
               </p>
             </div>
           </section>
@@ -995,19 +995,19 @@ export default async function SPXPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  Coming off a week dominated by the bond market rather than a Fed decision, the daily chart alone doesn't tell the full story. The weekly chart shows an index that remains comfortably above both its 50-week and 200-week moving averages, levels that sit well below the current ~7,700–7,750 range — this week's yield-driven volatility still has plenty of support beneath it before the longer-term trend would be seriously threatened.
+                  Coming off a stretch dominated by the bond market and a government shutdown rather than any Fed decision, the daily chart alone doesn't tell the full story. The weekly chart shows an index that remains comfortably above both its 50-week and 200-week moving averages, levels that sit well below the current ~7,650–7,700 range — this pullback still has plenty of support beneath it before the longer-term uptrend would be seriously threatened.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The bigger picture: the S&amp;P 500 sits about 0.7% below the record closing high of 7,798.99 it set on August 13 — its closest approach to a new record since that day. Its daily 50-day and 200-day moving averages have converged to almost the same level, both near 7,681, after Friday's close moved the index back above both lines. The index remains within the range of year-end targets running from Yardeni's 7,900 up to UBS's 8,100.
+                  The bigger picture: the S&amp;P 500 sits about 1.5% below the record closing high of 7,798.99 it set on August 13 — a modest pullback rather than a correction. Its daily 50-day (around 7,696) and 200-day (around 7,676) moving averages sit within about 20 points of each other, with Thursday's close landing right between them. The index remains within the range of year-end targets running from Yardeni's 7,900 up to UBS and Citi's 8,100.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The real question isn't whether the August record was real — a run of strong earnings and cooling data made it real, and this week's bounce back toward that level reinforces that the market still wants to extend the uptrend. It's whether a 10-year Treasury yield near 5.2%, the highest since 2007, keeps climbing and starts to compete more seriously with equities for investor capital, and whether breadth can broaden out from here rather than staying concentrated in a handful of AI names.
+                  The real question isn't whether the August record was real — a run of strong earnings made it real, and the index's ability to hold within striking distance of it for six weeks reinforces that the market still wants to extend the uptrend. It's whether a 10-year Treasury yield near 5.3%, the highest since 2002, keeps climbing and starts to compete more seriously with equities for investor capital, and whether breadth can broaden out from here rather than staying concentrated in a handful of AI names while roughly 60% of the index trades below its 200-day average.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  <strong>With the index back within 1% of its all-time high but bond yields at their highest level in nearly two decades, the primary uptrend gets the benefit of the doubt for now — provided the bond market doesn't force a repricing of stocks alongside it.</strong>
+                  <strong>With the index still within 2% of its all-time high but bond yields at their highest level in roughly two decades, the primary uptrend gets the benefit of the doubt for now — provided the bond market doesn't force a repricing of stocks alongside it.</strong>
                 </p>
               </div>
             </div>
@@ -1029,10 +1029,10 @@ export default async function SPXPage() {
 
               <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
                 {[
-                  ["📈", "ATH", "record closing high of 7,798.99 set Wednesday, August 13, 2026 — the index dipped into the 7,600s in mid-September on the Fed's rate hike, then rallied back to close at 7,744.64 on Friday, September 25, just 0.7% below that record"],
-                  ["⚠️", "Risk", "the 10-year Treasury yield climbed to about 5.2% this week, its highest level since 2007, after strong PMI data lifted the odds of an October Fed rate hike to roughly 70%; oil prices also spiked on U.S.-Iran tension over the Strait of Hormuz before easing on reports of a possible deal"],
-                  ["🔎", "Weekly structure", "still bullish on the weekly chart, comfortably above its 50-week and 200-week moving averages; on the daily chart, the 50-day and 200-day moving averages have converged near 7,681, with RSI in the high-40s to low-50s (neutral)"],
-                  ["🟡", "Current stance", "up solidly for the year and within 1% of a new record after a week driven more by bond yields than by equities themselves; the path of long-term yields and any further easing in oil are the next big catalysts"],
+                  ["📈", "ATH", "record closing high of 7,798.99 set Wednesday, August 13, 2026 — the index has spent the six weeks since consolidating just below that record, closing at 7,678.25 on Thursday, October 1, about 1.5% below it"],
+                  ["⚠️", "Risk", "the 10-year Treasury yield has climbed to about 5.3%, its highest level since 2002, as resilient growth and a tight labor market push back against rate-cut hopes; a government shutdown that began October 1 has also suspended official jobs and inflation data"],
+                  ["🔎", "Weekly structure", "still bullish on the weekly chart, comfortably above its 50-week and 200-week moving averages; on the daily chart, the 50-day (~7,696) and 200-day (~7,676) moving averages sit close together, with RSI near 46 (neutral)"],
+                  ["🟡", "Current stance", "up solidly for the year and within 2% of a new record, with the index's resilience increasingly reliant on a handful of AI-linked mega-caps while broader breadth keeps thinning; the path of long-term yields and the shutdown's duration are the next big catalysts"],
                 ].map(([icon, label, text]) => (
                   <div
                     key={label}
@@ -1095,7 +1095,7 @@ export default async function SPXPage() {
                 maxWidth: 920,
               }}
             >
-              The weekly chart shows the S&amp;P 500 pushing back toward its all-time highs after touching a record close of 7,798.99 on Wednesday, August 13. The index spent early-to-mid September consolidating and then pulling back toward the 7,600s after the Fed's first rate hike since 2023, before this week's rally — driven more by easing oil prices and a calmer trade backdrop than by any Fed news — lifted it to 7,744.64 by Friday, September 25, just 0.7% below the record. The weekly trend structure remains bullish, with the index comfortably above its rising 50-week and 200-week moving averages. On the daily chart, the 50-day and 200-day moving averages have converged to nearly the same level, around 7,681, with Friday's close back above both. RSI(14) in the high-40s to low-50s is neutral, and breadth — with roughly a quarter of members above their 50-day average — remains a swing factor to watch, with leadership still tilted toward a handful of AI-linked mega-caps.
+              The weekly chart shows the S&amp;P 500 holding just below its all-time highs after touching a record close of 7,798.99 on Wednesday, August 13. The index has spent the six weeks since largely consolidating in a roughly 7,600–7,750 range rather than extending the record, with the latest leg lower coming as the 10-year Treasury yield pushed to its highest level since 2002 and a federal government shutdown that began October 1 froze the usual flow of economic data. The index closed at 7,678.25 on Thursday, October 1, about 1.5% below the record. The weekly trend structure remains bullish, with the index comfortably above its rising 50-week and 200-week moving averages. On the daily chart, the 50-day (around 7,696) and 200-day (around 7,676) moving averages sit within about 20 points of each other. RSI(14) near 46 is neutral, and breadth — with just over 40% of members above their 200-day average, down from roughly 73% in mid-August — remains the clearest swing factor to watch, with leadership still concentrated in a handful of AI-linked mega-caps.
             </div>
 
             <div style={{ marginTop: 18 }}>
@@ -1162,16 +1162,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    SPX closes a full week below its daily 200-day moving average (roughly 7,681), rather than briefly testing it as it did earlier this week
+                    SPX closes a full week below its daily 200-day moving average (roughly 7,676), rather than hovering around it as it has this week
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The 10-year Treasury yield pushes meaningfully above its current ~5.2% level — already the highest since 2007 — rather than stabilizing or easing back
+                    The 10-year Treasury yield pushes meaningfully above its current ~5.3% level — already the highest since 2002 — rather than stabilizing or easing back
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Market breadth (currently around 25% of members above their 50-day average) narrows further, or the CNN Fear &amp; Greed Index (currently 36, &ldquo;Fear&rdquo;) slides back toward its recent lows
+                    Market breadth (currently just over 40% of members above their 200-day average, down from roughly 73% in mid-August) narrows further, or the CNN Fear &amp; Greed Index (currently 27, &ldquo;Fear&rdquo;) slides toward &ldquo;Extreme Fear&rdquo;
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Progress toward reopening the Strait of Hormuz stalls and oil prices resume climbing, reviving the inflation and rate-hike concerns behind this week's bond selloff
+                    The government shutdown drags on long enough to meaningfully delay economic data or weigh on Q4 earnings guidance, rather than resolving as a short-lived standoff
                   </li>
                 </ul>
               </div>
@@ -1186,16 +1186,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Price clears its record closing high of 7,798.99 and pushes into the 7,900–8,100 range of year-end targets from Yardeni, JPMorgan, Goldman Sachs and UBS
+                    Price clears its record closing high of 7,798.99 and pushes into the 7,900–8,100 range of year-end targets from Yardeni, JPMorgan, Goldman Sachs, UBS and Citi
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The 10-year Treasury yield eases back from its ~5.2% multi-year high, taking pressure off equity valuations
+                    The 10-year Treasury yield eases back from its ~5.3% multi-decade high, taking pressure off equity valuations
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The U.S. and Iran make further progress toward a deal over the Strait of Hormuz and oil prices continue to ease from this week's spike
+                    The government shutdown is resolved quickly, restoring the normal flow of jobs and inflation data
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Breadth stops narrowing and Friday's broader participation carries into next week rather than fading
+                    Breadth stops narrowing and participation broadens out beyond a handful of AI-linked mega-caps
                   </li>
                 </ul>
               </div>
@@ -1231,7 +1231,7 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX closed at 7,744.64 on Friday, September 25, just 0.7% below its record close of 7,798.99 set on August 13 — and the index shrugged off a genuine bond-market scare to post a roughly 2% weekly gain. Sell-side calls are little changed from last week: JPMorgan and Goldman Sachs still hold 8,000 targets and UBS is at 8,100, while Ed Yardeni's more cautious 7,900 call, trimmed from 8,400 on the day of the Fed's hike, is now within about 2% of where the index sits.
+                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX closed at 7,678.25 on Thursday, October 1, about 1.5% below its record close of 7,798.99 set on August 13 — and the index has absorbed a genuine bond-market and political shock (a government shutdown) without a disorderly selloff. Sell-side calls are little changed: JPMorgan and Goldman Sachs still hold 8,000 targets, UBS and Citi sit near 8,100, while Ed Yardeni's more cautious 7,900 call, trimmed from 8,400 on the day of the Fed's September hike, is now within roughly 3% of where the index sits.
               </p>
 
               <div
@@ -1248,12 +1248,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("blue")}>🧭</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> this week showed how a rally can survive a real macro scare when it isn't really about the Fed. A 10-year Treasury yield at its highest level since 2007, driven by unexpectedly strong economic data rather than inflation fear alone, is arguably a bigger threat to valuations than one more rate hike would be on its own — yet stocks mostly shrugged it off, helped by easing oil prices and a calmer U.S.-China trade backdrop. Breadth remains narrow, with only about a quarter of members above their 50-day average, and leadership still concentrated in a handful of AI-linked mega-caps, even as the index itself closes in on a new record. None of that means the uptrend is over, but it's a reminder that a rally resting on a narrow base and rising bond yields has less margin for error than the index-level numbers alone suggest.
+                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> this stretch has shown how an index can hold near record highs even through a real bond-market and political shock. A 10-year Treasury yield at its highest level since 2002, driven by resilient growth rather than inflation fear alone, is arguably a bigger threat to valuations than the government shutdown itself — yet stocks have mostly absorbed both without a disorderly selloff, helped along by continued AI-infrastructure spending announcements. Breadth is the clearest warning sign: just over 40% of members trade above their 200-day average, down from roughly 73% in mid-August, and leadership remains concentrated in a handful of AI-linked mega-caps even as the index itself sits within striking distance of a new record. None of that means the uptrend is over, but it's a reminder that a rally resting on a narrowing base and rising bond yields has less margin for error than the index-level numbers alone suggest.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                The SPX near 7,700–7,750 is now closer to its all-time high than it has been in weeks, with sell-side targets still mostly pointing higher into next year. But with the 10-year Treasury yield at its highest level since 2007, breadth still narrow, and leadership concentrated in a handful of AI names, chasing a fresh record at this level looks less compelling than watching whether bond yields stabilize and participation broadens out first.
+                The SPX near 7,650–7,700 remains within striking distance of its all-time high, with sell-side targets still mostly pointing higher into next year. But with the 10-year Treasury yield at its highest level since 2002, breadth near its weakest point since the spring, and leadership concentrated in a handful of AI names, chasing a fresh record at this level looks less compelling than watching whether bond yields stabilize, the shutdown gets resolved, and participation broadens out first.
               </p>
             </div>
           </section>
