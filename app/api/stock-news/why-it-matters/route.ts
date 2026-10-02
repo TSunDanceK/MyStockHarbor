@@ -29,10 +29,11 @@ function strOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+// NON-PRICE ONLY (#563 COWORK #31 (b)): the trend label (from MA50/MA200) no
+// longer reaches the model; a client that still sends it is ignored.
 type CachedPayload = {
   symbol: string;
   companyName: string;
-  trend: string | null;
   newsScoreLabel: string | null;
   item: AiNewsBriefInputItem;
 };
@@ -50,7 +51,6 @@ const getCachedWhyItMatters = unstable_cache(
     const briefs = await getAiNewsBriefs({
       symbol: payload.symbol,
       companyName: payload.companyName,
-      trend: payload.trend,
       newsScoreLabel: payload.newsScoreLabel,
       items: [payload.item],
     });
@@ -58,7 +58,7 @@ const getCachedWhyItMatters = unstable_cache(
     const brief = briefs[0];
     return brief?.whyItMatters?.trim() ? brief.whyItMatters.trim() : null;
   },
-  ["msh-why-it-matters-v1"],
+  ["msh-why-it-matters-v2-non-price"],
   { revalidate: false }
 );
 
@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
   const payload: CachedPayload = {
     symbol,
     companyName: str(body.companyName),
-    trend: str(body.trend) || null,
     // null, not "Neutral": see the note in ../insight/route.ts. This payload is
     // also the cache key, so a fabricated default was cached as well as sent.
     newsScoreLabel: str(body.newsScoreLabel) || null,

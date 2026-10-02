@@ -58,18 +58,14 @@ type CleanItem = {
   whyItMatters: string | null;
 };
 
+// NON-PRICE ONLY (#563 COWORK #31 (b)): trend, RSI, MA distance and the range
+// still feed the deterministic fallback text below, never the model's payload.
 type CachedPayload = {
   symbol: string;
   companyName: string;
-  trend: string | null;
   newsScoreLabel: string | null;
   newsScoreValue: number | null;
   earningsTone: string;
-  rsi: number | null;
-  priceVs50: number | null;
-  priceVs200: number | null;
-  recentHigh: number | null;
-  recentLow: number | null;
   items: CleanItem[];
 };
 
@@ -86,7 +82,7 @@ const getCachedInsight = unstable_cache(
     const payload = JSON.parse(payloadJson) as CachedPayload;
     return getAiNewsInsight(payload);
   },
-  ["msh-news-insight-route-v1"],
+  ["msh-news-insight-route-v2-non-price"],
   { revalidate: false }
 );
 
@@ -127,7 +123,6 @@ export async function POST(request: NextRequest) {
   const earningsToneLabel = str(body.earningsScore?.label) || "Unavailable";
   const rsi = num(body.lastRsi);
   const priceVs50 = num(body.priceVs50);
-  const priceVs200 = num(body.priceVs200);
   const recentHigh = num(body.recentHigh);
   const recentLow = num(body.recentLow);
 
@@ -167,15 +162,9 @@ export async function POST(request: NextRequest) {
   const payload: CachedPayload = {
     symbol,
     companyName,
-    trend,
     newsScoreLabel,
     newsScoreValue,
     earningsTone: earningsToneLabel,
-    rsi,
-    priceVs50,
-    priceVs200,
-    recentHigh,
-    recentLow,
     items,
   };
 
