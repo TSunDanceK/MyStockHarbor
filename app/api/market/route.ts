@@ -12,6 +12,7 @@ import {
 } from "../../../lib/server/dynamicUniverseCache";
 import { refreshScreenerFundamentals } from "../../../lib/server/screenerFundamentals";
 import { seedColdPricePoolRows } from "../../../lib/server/pricePool";
+import { priceProviderFor } from "../../../lib/server/marketData/provider";
 
 export const runtime = "nodejs";
 
@@ -886,6 +887,21 @@ function buildRowsFromQuotes(quotes: Quote[]): Row[] {
 /* ----------------------------- GET ----------------------------- */
 
 export async function GET() {
+  // RETIRED ON PRICE_PROVIDER_POOL=tiingo (step 5, #553 COWORK #98 ruling 6).
+  // No page requests this route (nothing in the repo fetches it; the builders
+  // read msh:market:state in-process through lib/server/marketState.ts), and
+  // its FMP spend -- a stable/quote per discovery symbol, the history fills,
+  // the constituent lists -- buys rankings no reader sees as movers. The one
+  // place movers ARE shown, the dashboard ticker, now computes them from the
+  // Tiingo universe (lib/server/tiingoMovers.ts). The stored state is left as
+  // it is, so the builders' universe inputs do not change; it simply stops
+  // growing. Before the FMP key check, so the FMP-off test gets a 410, not a 500.
+  if (priceProviderFor("POOL") === "tiingo") {
+    return NextResponse.json(
+      { retired: true, provider: "tiingo", reason: "FMP discovery retired; movers are computed from the Tiingo universe" },
+      { status: 410 }
+    );
+  }
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) {
     return NextResponse.json(

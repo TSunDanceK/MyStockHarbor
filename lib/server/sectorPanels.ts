@@ -9,6 +9,9 @@ import { getCachedDailyHistoryBulk } from "./historyCache";
 import { getCachedDayItems, isDateInWindow, type EarningsListItem } from "./earningsCalendar";
 import { getCompanyNameMap } from "./companyNames";
 import { dayWindow as dayWindowAt, type DayBasis } from "./lastSession";
+import { priceProviderFor } from "./marketData/provider";
+import { readTiingoEodLast } from "./marketData/read";
+import { eodBreadth, eodDayMove, lastCloseRows, type EodLast } from "./marketData/eodLast";
 
 // ---------------------------------------------------------------------------
 // The four sector panels, all built from caches the site already fills.
@@ -59,10 +62,15 @@ const redis =
 
 // v2: rows carry dayBasis/sessionDate. A v1 row read by v2 code would render
 // with no basis, i.e. with the wrong label.
-export const PERFORMANCE_KEY = "msh:sector-performance:v2";
+// v3 (step 5, #553 COWORK #98): the basis can be "last-close" (Tiingo EOD), so
+// a v2 table must not be served under the new labels. Computed figures only
+// (weighted averages), so no raw Tiingo value sits in it.
+export const PERFORMANCE_KEY = "msh:sector-performance:v3";
 const PERFORMANCE_TTL_SECONDS = 15 * 60;
 
-const BREADTH_KEY_PREFIX = "msh:sector-breadth:v1:";
+// v2 (step 5): on Tiingo the flags come from the stored Tiingo bars; a cached
+// FMP-history count must not stand in for them for three hours.
+const BREADTH_KEY_PREFIX = "msh:sector-breadth:v2:";
 const BREADTH_TTL_SECONDS = 3 * 60 * 60;
 
 /** Names per sector used to compute performance. Top of the cap ladder. */
@@ -80,6 +88,27 @@ const MAX_QUOTE_AGE_MS = 30 * 60 * 1000;
 const dayWindow = (nowMs: number) => dayWindowAt(nowMs, MAX_QUOTE_AGE_MS);
 
 const EARNINGS_LOOKAHEAD_DAYS = 7;
+
+// --- Tiingo EOD (step 5, #553 COWORK #98 rulings 4 and 5) -------------------
+//
+// On PRICE_PROVIDER_POOL=tiingo the day move, the movers, week/month/YTD and
+// breadth all come from ONE Data Cache blob, readTiingoEodLast(): each
+// symbol's newest stored EOD bar and the figures the nightly job computed from
+// its stored bars (marketData/eodLast.ts). EOD only, all day, labelled "Last
+// close · <date>"; IEX in session is a later step. No per-symbol history read,
+// no FMP /stock-price-change, no FMP history. A miss (no blob yet) keeps the
+// FMP path below, unchanged.
+
+function poolOnTiingo(): boolean {
+  return priceProviderFor("POOL") === "tiingo";
+}
+
+async function eodLastOrNull(): Promise<Record<string, EodLast> | null> {
+  if (!poolOnTiingo()) return null;
+  const eod = await readTiingoEodLast().catch(() => null);
+  return eod && Object.keys(eod).length ? eod : null;
+}
+
 
 // --- Performance ------------------------------------------------------------
 
@@ -129,6 +158,12 @@ function weightedAverage(
 }
 
 async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
+  const eod = await eodLastOrNull();
+  if (eod) {
+    const built = await buildSectorPerformanceFromEod(eod);
+    if (built) return built;
+  }
+
   const index = await getSectorIndex();
 
   const bySector = new Map<string, string[]>();
@@ -197,12 +232,64 @@ async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
   return { rows, builtAt: Date.now() };
 }
 
+/**
+ * "Sector today" on Tiingo: the stored EOD move, week/month/YTD from the same
+ * stored bars, cap-weighted as before (the weight is the pool row's market cap,
+ * never computed from a Tiingo price here). Null when no constituent has a bar.
+ * Reads: the sector index, 1 pool HMGET (weights), and the EOD blob from the
+ * Data Cache (1 HGETALL per miss, nightly).
+ */
+async function buildSectorPerformanceFromEod(eod: Record<string, EodLast>): Promise<SectorPerformanceTable | null> {
+  const index = await getSectorIndex();
+  const bySector = new Map<string, string[]>();
+  const allSymbols: string[] = [];
+  for (const sector of SECTORS) {
+    const symbols = (index.bySlug[sector.slug] ?? []).slice(0, PERFORMANCE_SAMPLE);
+    bySector.set(sector.slug, symbols);
+    allSymbols.push(...symbols);
+  }
+  const { date, rows: fresh } = lastCloseRows(allSymbols, eod);
+  if (!date) return null;
+  const pool = await readPricePoolBulk(allSymbols).catch(() => new Map());
+
+  const rows: SectorPerformanceRow[] = SECTORS.map((sector) => {
+    const entries = (pick: (r: EodLast) => number | null) =>
+      (bySector.get(sector.slug) ?? []).map((symbol) => {
+        const r = fresh.get(symbol);
+        const cap = pool.get(symbol)?.marketCap;
+        return { value: r ? pick(r) : null, weight: typeof cap === "number" && cap > 0 ? cap : 1 };
+      });
+    const day = weightedAverage(entries(eodDayMove));
+    return {
+      slug: sector.slug,
+      name: sector.name,
+      day: day.value,
+      week: weightedAverage(entries((r) => r.w)).value,
+      month: weightedAverage(entries((r) => r.m)).value,
+      ytd: weightedAverage(entries((r) => r.y)).value,
+      sampled: day.count,
+      rank: null,
+      dayBasis: "last-close",
+      sessionDate: date,
+    };
+  });
+
+  const ranked = [...rows].filter((row) => typeof row.day === "number").sort((a, b) => (b.day ?? 0) - (a.day ?? 0));
+  ranked.forEach((row, i) => {
+    row.rank = i + 1;
+  });
+  return { rows, builtAt: Date.now() };
+}
+
 /** All 11 sectors' performance, cached for 15 minutes. Never throws. */
 export async function getSectorPerformanceTable(): Promise<SectorPerformanceTable> {
   if (redis) {
     try {
       const cached = await redis.get<SectorPerformanceTable>(PERFORMANCE_KEY);
-      if (cached && Array.isArray(cached.rows) && cached.rows.length) return cached;
+      // A table built on the other provider (the 15 minutes after an env flip)
+      // is rebuilt rather than served under the wrong label.
+      const basisMatches = !cached?.rows?.length || (cached.rows[0].dayBasis === "last-close") === poolOnTiingo();
+      if (cached && Array.isArray(cached.rows) && cached.rows.length && basisMatches) return cached;
     } catch {
       // rebuild
     }
@@ -261,6 +348,12 @@ export async function getSectorMovers(slug: string): Promise<SectorMovers> {
     const constituents = await getSectorConstituents(slug, MOVERS_SAMPLE);
     if (!constituents.length) return empty;
 
+    const eod = await eodLastOrNull();
+    if (eod) {
+      const fromEod = await sectorMoversFromEod(constituents, eod);
+      if (fromEod) return fromEod;
+    }
+
     const [pool, names] = await Promise.all([
       readPricePoolBulk(constituents).catch(() => new Map()),
       getCompanyNameMap().catch(() => new Map<string, string>()),
@@ -302,6 +395,28 @@ export async function getSectorMovers(slug: string): Promise<SectorMovers> {
   } catch {
     return empty;
   }
+}
+
+/** Movers on Tiingo: the stored EOD move, one session, labelled "Last close · <date>". */
+async function sectorMoversFromEod(constituents: string[], eod: Record<string, EodLast>): Promise<SectorMovers | null> {
+  const { date, rows: fresh } = lastCloseRows(constituents, eod);
+  if (!date) return null;
+  const names = await getCompanyNameMap().catch(() => new Map<string, string>());
+  const rows: SectorMover[] = [];
+  for (const symbol of constituents) {
+    const r = fresh.get(symbol);
+    const move = eodDayMove(r);
+    if (!r || move == null) continue;
+    rows.push({ symbol, name: names.get(symbol) ?? null, price: r.c, changePct: move });
+  }
+  const sorted = [...rows].sort((a, b) => b.changePct - a.changePct);
+  return {
+    gainers: sorted.filter((row) => row.changePct > 0).slice(0, MOVERS_SHOWN),
+    losers: sorted.filter((row) => row.changePct < 0).slice(-MOVERS_SHOWN).reverse(),
+    sampled: rows.length,
+    dayBasis: "last-close",
+    sessionDate: date,
+  };
 }
 
 // --- Earnings this week -----------------------------------------------------
@@ -407,6 +522,13 @@ async function buildSectorBreadth(slug: string): Promise<SectorBreadth> {
   const constituents = await getSectorConstituents(slug, BREADTH_SAMPLE);
   const empty: SectorBreadth = { sampled: 0, above50: 0, above200: 0, builtAt: Date.now() };
   if (!constituents.length) return empty;
+
+  // Tiingo: the MA50/MA200 flags the nightly job computed from the stored bars.
+  const eod = await eodLastOrNull();
+  if (eod) {
+    const fromEod = eodBreadth(constituents, eod);
+    if (fromEod.sampled > 0) return { ...fromEod, builtAt: Date.now() };
+  }
 
   const histories = await getCachedDailyHistoryBulk(constituents, "sector-panels");
   if (!histories.size) return empty;

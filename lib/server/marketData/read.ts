@@ -8,6 +8,7 @@
 //   what                 entry            tags                      safety TTL
 //   the quote pool       ONE blob          prices                    1 h
 //   one symbol's history one per symbol    eod, eod:<SYM>            24 h
+//   the newest bar each  ONE blob          eod                       24 h   (step 5)
 //
 // ONE POOL BLOB, not 844 entries: ~844 rows is ~100 KB, far under the item
 // limit, and it keeps data-cache writes to about one per region per hour.
@@ -22,8 +23,9 @@
 // Step 1: nothing calls these yet. Each surface switches in its own PR.
 import { unstable_cache } from "next/cache";
 import { Redis } from "@upstash/redis";
-import { EOD_TAG, PRICES_TAG, TIINGO_QUOTES_KEY, TIINGO_QUOTES_META_FIELD, eodSymbolTag, tiingoEodKey } from "./keys";
+import { EOD_TAG, PRICES_TAG, TIINGO_EOD_LAST_KEY, TIINGO_QUOTES_KEY, TIINGO_QUOTES_META_FIELD, eodSymbolTag, tiingoEodKey } from "./keys";
 import type { StoredEod, StoredQuote } from "./types";
+import { parseEodLast, type EodLast } from "./eodLast";
 import { toDashed } from "../../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "../redisCacheMode";
 
@@ -80,3 +82,31 @@ export function readTiingoHistory(symbol: string): Promise<StoredEod | null> {
     { tags: [EOD_TAG, eodSymbolTag(sym)], revalidate: EOD_CACHE_SECONDS }
   )();
 }
+
+export type TiingoEodLast = Record<string, EodLast>;
+
+/** Parse an HGETALL of TIINGO_EOD_LAST_KEY, dropping junk. Exported for the checks. */
+export function parseEodLastHash(raw: Record<string, unknown> | null): TiingoEodLast {
+  const rows: TiingoEodLast = {};
+  for (const [field, value] of Object.entries(raw ?? {})) {
+    const r = parseEodLast(value);
+    if (r) rows[field] = r;
+  }
+  return rows;
+}
+
+async function loadEodLast(): Promise<TiingoEodLast | null> {
+  if (!redis) return null;
+  const raw = await redis.hgetall<Record<string, unknown>>(TIINGO_EOD_LAST_KEY);
+  return raw ? parseEodLastHash(raw) : null;
+}
+
+/**
+ * Every symbol's newest stored bar and its summary (marketData/eodLast.ts), from
+ * the Data Cache. ONE blob, tagged eod so the nightly job's revalidateTag
+ * replaces it; 1 HGETALL per miss (step 5, #553 COWORK #98).
+ */
+export const readTiingoEodLast = unstable_cache(loadEodLast, ["tiingo-eod-last-v1"], {
+  tags: [EOD_TAG],
+  revalidate: EOD_CACHE_SECONDS,
+});

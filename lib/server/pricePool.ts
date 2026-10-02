@@ -22,6 +22,7 @@ import { isActiveMarketWindow } from "./marketHours";
 import { isPriceDue, readTier1, TIER1_TTL_MS, TIER2_TTL_MS } from "./priceTiers";
 import { JOBS, cronIntervalSeconds } from "./jobRuns";
 import { toDashed } from "../symbolSpellings.mjs";
+import { priceProviderFor } from "./marketData/provider";
 
 // A single Redis HASH holding a lightweight, rolling-fresh quote for every
 // symbol the screener can display: price, % change, volume, market cap and PE.
@@ -395,6 +396,16 @@ export type PricePoolRow = {
    * symbol on the strength of one bad afternoon.
    */
   failAt?: number;
+  /**
+   * PRICE_PROVIDER_POOL=tiingo only (step 5, #553 COWORK #98): what the price
+   * is -- "last IEX trade, 14:05 ET" or "close, 1 Oct 2026" (pickSurfacePrice)
+   * -- and, when there is a volume, "as of last close" (EOD consolidated volume
+   * only, COWORK #53 §3). Mapped at READ time by lib/server/tiingoPool.ts;
+   * never written to this hash. Absent on an FMP row.
+   */
+  priceLabel?: string;
+  volumeLabel?: string | null;
+  source?: "tiingo";
 };
 
 /** The symbol as a caller spelled it, trimmed and upper-cased. Not a pool field. */
@@ -437,9 +448,18 @@ function uniqueClean(symbols: string[]): string[] {
  * Redis-ONLY bulk read of the pooled quotes for the symbols a page shows, in a
  * single HMGET. Never touches FMP. Any symbol not in the pool is simply absent
  * from the returned map (caller falls back to the EOD close from chartPoints).
+ *
+ * EVERY READER SWITCHES HERE (step 5, #553 COWORK #98 ruling 1). With
+ * PRICE_PROVIDER_POOL=tiingo the rows handed back carry Tiingo's price, mapped
+ * at read time from the Tiingo pool and the stored EOD bars
+ * (lib/server/tiingoPool.ts overlayTiingoPool). A symbol Tiingo has nothing for
+ * keeps its FMP row unchanged. NOTHING TIINGO IS WRITTEN TO THIS HASH: the
+ * module's own writers (warmPricePool, seedColdPricePoolRows) read with
+ * `raw: true`, so they merge into FMP rows only.
  */
 export async function readPricePoolBulk(
-  symbols: string[]
+  symbols: string[],
+  opts: { raw?: boolean } = {}
 ): Promise<Map<string, PricePoolRow>> {
   const out = new Map<string, PricePoolRow>();
   if (!redis) return out;
@@ -499,6 +519,17 @@ export async function readPricePoolBulk(
     // fail open -- a read failure just means "no pooled quotes this render".
   }
 
+  if (!opts.raw && priceProviderFor("POOL") === "tiingo") {
+    // Loaded on the switch only, so a module that never reads Tiingo (and the
+    // bare-Node checks of this file) never loads the Data Cache layer.
+    try {
+      const { overlayTiingoPool } = await import("./tiingoPool");
+      return await overlayTiingoPool(out, symbols, Date.now());
+    } catch {
+      // fail open -- the FMP rows stand (COWORK #56: FMP stays the fallback).
+    }
+  }
+
   return out;
 }
 
@@ -544,7 +575,9 @@ export async function seedColdPricePoolRows(
     );
   if (!clean.length) return 0;
 
-  const existing = await readPricePoolBulk(clean.map((r) => r.symbol));
+  // RAW: the FMP rows only. A Tiingo-mapped row must never be read back into a
+  // write to this hash (step 5, contract §7).
+  const existing = await readPricePoolBulk(clean.map((r) => r.symbol), { raw: true });
 
   const payload: Record<string, PricePoolRow> = {};
   for (const row of clean) {
@@ -930,7 +963,13 @@ export async function keepPricePoolAlive(): Promise<boolean> {
   }
 }
 
-export async function warmPricePool(symbols: string[], nowMs: number) {
+export async function warmPricePool(
+  symbols: string[],
+  nowMs: number,
+  // moverBuckets false on PRICE_PROVIDER_POOL=tiingo (step 5): the three FMP
+  // bucket calls only pre-fill prices, which no page reads from FMP then.
+  opts: { moverBuckets?: boolean } = {}
+) {
   const apiKey = process.env.FMP_API_KEY;
   const clean = uniqueClean(symbols);
 
@@ -975,7 +1014,8 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     return { ok: true, skipped: true, reason: "market-closed", written: 0 };
   }
 
-  const existing = await readPricePoolBulk(clean);
+  // RAW: merged into rows written back below, so FMP's rows only (step 5).
+  const existing = await readPricePoolBulk(clean, { raw: true });
   const cleanSet = new Set(clean);
 
   // Tier 1 is derived in warmTargets.ts and parked in its own key. An
@@ -988,7 +1028,7 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // Free head start from the mover buckets. Only symbols already in our own
   // universe are used -- bucket rows for names outside `clean` are ignored, so
   // this never expands what the site analyzes/displays.
-  const moverHits = await fetchMoverBuckets(apiKey);
+  const moverHits = opts.moverBuckets === false ? new Map<string, MoverRow>() : await fetchMoverBuckets(apiKey);
   const payload: Record<string, PricePoolRow> = {};
   const bucketFreshened = new Set<string>();
   for (const [sym, row] of moverHits) {

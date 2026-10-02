@@ -29,9 +29,9 @@ import { pickSurfacePrice, readSurfaceInputs } from "./tiingoSurfacePrice";
 import { priceProviderFor } from "./marketData/provider";
 import { snapshotCompanyName } from "./companyNameSnapshot";
 import type { Quote } from "./quoteData";
+import { fiftyTwoWeekRange } from "./fiftyTwoWeek";
 
 export const VOLUME_LABEL = "as of last close";
-const YEAR_SESSIONS = 252;
 const AVG_VOLUME_SESSIONS = 50;
 
 export function stockPageOnTiingo(env: Record<string, string | undefined> = process.env): boolean {
@@ -48,17 +48,33 @@ export function closeBefore(bars: EodBar[], date: string): number | null {
   return null;
 }
 
-/** Low and high over the last 252 stored sessions, plus a newer IEX row's range. */
-export function yearRange(bars: EodBar[], row: StoredQuote | null, rowIsNewer: boolean): { low: number | null; high: number | null } {
-  const recent = bars.slice(-YEAR_SESSIONS);
-  const lows = recent.map((b) => b[3]).filter(pos);
-  const highs = recent.map((b) => b[2]).filter(pos);
-  if (rowIsNewer && row) {
-    if (pos(row.low)) lows.push(row.low);
-    if (pos(row.high)) highs.push(row.high);
-    if (pos(row.price)) { lows.push(row.price); highs.push(row.price); }
+/**
+ * The points the 52-week range is taken over: every stored bar, plus the IEX
+ * row as today's partial bar when it is newer than the last bar. The stock page
+ * hands the SAME points to its profile row (step 5, #553 COWORK #80 §1).
+ */
+export function rangePoints(bars: EodBar[], row: StoredQuote | null, rowIsNewer: boolean): { close: number; high?: number; low?: number }[] {
+  const pts: { close: number; high?: number; low?: number }[] = bars
+    .filter((b) => pos(b[4]))
+    .map((b) => ({ close: b[4], high: pos(b[2]) ? b[2] : undefined, low: pos(b[3]) ? b[3] : undefined }));
+  if (rowIsNewer && row && pos(row.price)) {
+    pts.push({
+      close: row.price,
+      high: Math.max(row.price, pos(row.high) ? row.high : row.price),
+      low: Math.min(row.price, pos(row.low) ? row.low : row.price),
+    });
   }
-  return { low: lows.length ? Math.min(...lows) : null, high: highs.length ? Math.max(...highs) : null };
+  return pts;
+}
+
+/**
+ * The 52-week range, by THE helper the profile row uses (fiftyTwoWeek.ts):
+ * the last 252 points, at least 20 of them, so the header and the profile row
+ * cannot disagree (KO, COWORK #80 §1).
+ */
+export function yearRange(bars: EodBar[], row: StoredQuote | null, rowIsNewer: boolean): { low: number | null; high: number | null } {
+  const r = fiftyTwoWeekRange(rangePoints(bars, row, rowIsNewer));
+  return { low: r?.low ?? null, high: r?.high ?? null };
 }
 
 /**

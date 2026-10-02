@@ -1104,6 +1104,9 @@ async function getPickerData(config: PickerResultConfig) {
     // is a real state (a cold pool) and must not render as a fabricated range.
     let priceOldestTs: number | null = null;
     let priceNewestTs: number | null = null;
+    // Step 5 (#553 COWORK #98): on PRICE_PROVIDER_POOL=tiingo the Volume column
+    // is the last EOD bar's consolidated volume, and the footer says so.
+    let volumeLabel: string | null = null;
 
     // Merge in category-membership flags (Buy Signals, Sell Signals, Best
     // Trend, Divergence, ATH Breakouts, 3-Month Highs, Macro S/R) so
@@ -1189,6 +1192,7 @@ async function getPickerData(config: PickerResultConfig) {
           if (p.price != null) entry.price = p.price;
           if (p.changePct != null) entry.changePct = p.changePct;
           if (p.volume != null) entry.volume = p.volume;
+          if (p.volume != null && p.volumeLabel) volumeLabel = p.volumeLabel;
           if (p.marketCap != null && !secMarketCap) entry.marketCap = p.marketCap;
           if (p.pe != null) entry.peRatio = p.pe;
           // THE SPREAD, NOT A SINGLE MOMENT. Rows on one page are refreshed on
@@ -1349,6 +1353,7 @@ async function getPickerData(config: PickerResultConfig) {
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
       priceOldestTs,
       priceNewestTs,
+      volumeLabel,
       universeSize: typeof payload.universeSize === "number" ? payload.universeSize : null,
       dynamicUniverseCount: typeof payload.dynamicUniverseCount === "number" ? payload.dynamicUniverseCount : null,
       entries,
@@ -1456,7 +1461,12 @@ const ORDERED_PICKER_HREFS = new Set<string>([
 ]);
 
 export default async function PickerResultPage({ config }: { config: PickerResultConfig }) {
-  const { entries, seoEntries, updatedAt, priceOldestTs, priceNewestTs, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
+  const { entries, seoEntries, updatedAt, priceOldestTs, priceNewestTs, volumeLabel, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
+  // The price column is Tiingo's when either switch is on: PICKERS (the
+  // history and signals, step 2) or POOL (the price, % change and volume,
+  // step 5). Either way the footer carries the linked credit (COWORK #92).
+  const tiingoPrices = priceProviderFor("PICKERS") === "tiingo" || priceProviderFor("POOL") === "tiingo";
+  const priceWindow = formatPriceWindow(priceOldestTs, priceNewestTs);
   const initialVisibleCount = config.maxItems ?? 36;
 
   // THE ROWS THIS PAGE ACTUALLY PUTS ON SCREEN, recorded for the price-tier
@@ -1878,9 +1888,9 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                   universeSize={universeSize}
                   poolSize={dynamicUniverseCount}
                   updatedLabel={formatUpdatedAt(updatedAt)}
-                  priceLabel={formatPriceWindow(priceOldestTs, priceNewestTs)}
-                  marketDataCredit={priceProviderFor("PICKERS") === "tiingo" ? TIINGO_CREDIT : null}
-                  marketDataHref={priceProviderFor("PICKERS") === "tiingo" ? TIINGO_URL : null}
+                  priceLabel={priceWindow && volumeLabel ? `${priceWindow} · volume ${volumeLabel}` : priceWindow}
+                  marketDataCredit={tiingoPrices ? TIINGO_CREDIT : null}
+                  marketDataHref={tiingoPrices ? TIINGO_URL : null}
                 />
 
                 <HideWatermarksBar />

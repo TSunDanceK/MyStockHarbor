@@ -174,8 +174,9 @@ export default async function DashboardPage({ searchParams }: Props) {
   // STEP 4 (#553 COWORK #71/#92): the linked credit, rendered here and handed
   // down, shown by the client beside any figure that came from Tiingo (a quote
   // with a priceLabel, a benchmark payload with provider "tiingo").
+  // Step 5 (#553 COWORK #98): also when the ticker's movers are Tiingo's (POOL).
   const tiingoCredit =
-    priceProviderFor("STOCK_PAGE") === "tiingo" ? (
+    priceProviderFor("STOCK_PAGE") === "tiingo" || priceProviderFor("POOL") === "tiingo" ? (
       <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
     ) : null;
 

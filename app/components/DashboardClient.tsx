@@ -1404,7 +1404,7 @@ export default function DashboardClient({
 
         <div className="msh-mobile-only">{isMobile ? MobileHero() : null}</div>
 
-        <DashboardTicker />
+        <DashboardTicker credit={tiingoCredit} />
 
         {err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null}
 

@@ -91,10 +91,13 @@ async function suite(L, T, code) {
   ok("the performance builder counts quotes through the rule", /const counts = quote && dayRule\.counts\(quote\.ts\)/.test(code.panels));
   ok("the movers count quotes through the same rule", /if \(!dayRule\.counts\(quote\.ts\)\) continue;/.test(code.panels));
   ok("rows and movers carry the basis and date", (code.panels.match(/dayBasis: dayRule\.basis/g) ?? []).length >= 2);
-  ok("the cached table's key moved to v2 (old rows have no basis)", /"msh:sector-performance:v2"/.test(code.panels));
+  // v3 since step 5 (#553 COWORK #98): the basis can be "last-close" (Tiingo
+  // EOD), so neither a v1 row (no basis) nor a v2 table may be served.
+  ok("the cached table's key moved past v2 (old rows have no or another basis)", /"msh:sector-performance:v3"/.test(code.panels));
   ok("the card's title and rank line follow the basis",
-    /const dayTitle = lastSession \? "Last Session" : "Sector Today";/.test(code.news) && /\{dayTitle\}/.test(code.news) && /\{rankLine\}/.test(code.news));
-  ok("the lead is told when the move is the last session's", /lastSession: lastSession \? sessionDateLabel\(performance\?\.sessionDate\) : null/.test(code.news));
+    /const dayTitle = lastClose \? "Last Close" : lastSession \? "Last Session" : "Sector Today";/.test(code.news) && /\{dayTitle\}/.test(code.news) && /\{rankLine\}/.test(code.news));
+  ok("the lead is told when the move is the last session's",
+    /lastSession: lastClose \? closeDayLabel\(performance\?\.sessionDate\) : lastSession \? sessionDateLabel\(performance\?\.sessionDate\) : null/.test(code.news));
   ok("the overview labels the column from the basis", /row\?\.dayBasis === "last-session"/.test(code.overview));
   return fails;
 }

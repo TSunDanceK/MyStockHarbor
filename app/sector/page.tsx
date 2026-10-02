@@ -9,6 +9,9 @@ import {
   type SectorPerformanceRow,
 } from "@/lib/server/sectorPanels";
 import { getSectorConstituentCounts } from "@/lib/server/sectorUniverse";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { lastCloseLabel } from "@/lib/server/marketData/eodLast";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
 export const runtime = "nodejs";
 // ISR, same interval as /headlines and the per-sector news pages. See the note
@@ -124,9 +127,11 @@ export default async function SectorIndexPage() {
                 <div style={cardStatsStyle}>
                   <div>
                     <div style={statLabelStyle}>
-                      {row?.dayBasis === "last-session"
-                        ? `Last session${sessionDateLabel(row.sessionDate) ? ` · ${sessionDateLabel(row.sessionDate)}` : ""}`
-                        : "Today"}
+                      {row?.dayBasis === "last-close"
+                        ? lastCloseLabel(row.sessionDate) ?? "Last close"
+                        : row?.dayBasis === "last-session"
+                          ? `Last session${sessionDateLabel(row.sessionDate) ? ` · ${sessionDateLabel(row.sessionDate)}` : ""}`
+                          : "Today"}
                     </div>
                     <div style={{ ...statValueStyle, color: moveColour(row?.day) }}>
                       {formatPercent(row?.day)}
@@ -153,6 +158,13 @@ export default async function SectorIndexPage() {
         <p style={footnoteStyle}>
           Performance figures are constituent-weighted across the largest names we track in each
           sector, not index prints. This page refreshes every 30 minutes, so they are not live.
+          {/* Step 5 (#553 COWORK #98): on Tiingo the figures are consolidated closes from the nightly end-of-day data. */}
+          {priceProviderFor("POOL") === "tiingo" ? (
+            <>
+              {" "}On the last close: consolidated end-of-day prices.{" "}
+              <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+            </>
+          ) : null}
         </p>
       </div>
 

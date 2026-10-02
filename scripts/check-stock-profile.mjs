@@ -60,6 +60,9 @@ async function loadComposer(mutate = (s) => s) {
     // The composer's attribution helper; the committed rows are not read here.
     "const descriptionsFile = { rows: {}, misses: {} };",
     strip("lib/server/filingDescription.ts"),
+    // The 52-week helper moved to its own module (step 5) so the Tiingo header
+    // shares it; stockProfile re-exports it (export * is stripped above).
+    strip("lib/server/fiftyTwoWeek.ts"),
     strip("lib/server/stockProfile.ts"),
   ].join("\n");
   const js = ts.transpileModule(mutate(unit), {

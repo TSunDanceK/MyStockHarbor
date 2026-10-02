@@ -535,6 +535,13 @@ export default async function StockPage({ params }: Props) {
     valuation: secFacts.profileFacts.valuation,
     price: quote.price,
     points,
+    // ONE PRICE BASIS, ONE 52-WEEK SOURCE (step 5, #553 COWORK #80): on a
+    // Tiingo quote (it carries a priceLabel) the profile row takes the header's
+    // own range -- the same bars, through the same helper (fiftyTwoWeek.ts) --
+    // and the cap names the price it was computed at. The FMP path is unchanged.
+    ...(quote.priceLabel
+      ? { range: quote.yearLow != null && quote.yearHigh != null ? { low: quote.yearLow, high: quote.yearHigh } : null, priceLabel: quote.priceLabel }
+      : {}),
     exchange: exchangeFor(upper),
     registrant: registrantFor(upper),
   });
@@ -563,7 +570,8 @@ export default async function StockPage({ params }: Props) {
       priceToBookRatio: why(multiples?.pb),
       evToEbitda: why(multiples?.evEbitda),
     },
-    sourceNote: valuationSourceNote(secFacts.profileFacts.multiples, secFacts.profileFacts.valuation),
+    // The multiples use the header's price; on Tiingo the note says which one.
+    sourceNote: `${valuationSourceNote(secFacts.profileFacts.multiples, secFacts.profileFacts.valuation)}${quote.priceLabel ? ` Price: ${quote.priceLabel}.` : ""}`,
     // WHICH TWELVE MONTHS, said on the label (#552 COWORK #8/#9): "TTM to …"
     // or "FY2025", never a bare "TTM" over a fiscal-year figure.
     peBasis: peBasisLabel(secFacts.profileFacts.valuation?.eps),
