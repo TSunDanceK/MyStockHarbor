@@ -146,7 +146,6 @@ check("with no Redis configured, the read is null, not a throw", readsNone === n
 }
 
 // ── the static rules, each a function of source so section 5 can mutate it ──
-const TIINGO_READS = /readTiingoPool|readTiingoHistory|readSurfacePrice|readSurfaceInputs|tiingoSurfacePrice|marketData\/read/;
 const PRICE_READS = /readTiingo|tiingoSurfacePrice|marketData\/|pricePool|historyCache|getDailyHistory|fetchQuote|quoteData/;
 
 const rules = {
