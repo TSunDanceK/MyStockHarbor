@@ -1296,6 +1296,14 @@ const TASKS = {
   // 3 Redis reads.
   // WHY PICKERS' MARKET CAP IS REFUSED, after the archive backfill (#552).
   // Read-only, no price read; ~3 + refused-count Redis reads.
+  // TWO READ-ONLY COUNTS for #86b (CODE-A #93): 20-F/40-F cover sentences
+  // (SEC, <=4/s, ~2 requests a name) and Pickers banks showing P/S (price-free).
+  "write-foreign-cover-bank-ps": {
+    script: "scripts/foreign-cover-bank-ps-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-marketcap-refusal-census": {
     script: "scripts/marketcap-refusal-census.mjs",
     args: () => [],
