@@ -42,8 +42,10 @@ check("no prior set → false (the job's `prior ? … : true` writes it anyway)"
 
 // Wiring: the job's `changed` includes it.
 const route = readCodeOnly("app/api/jobs/sec-facts/route.ts");
-check("sec-facts: changed = hash moved || conversionGained(prior, set)",
-  /prior\.contentHash !== set\.contentHash \|\| conversionGained\(prior, set\)/.test(route));
+// Since #552 COWORK #132 the rule lives in secFactBuild's mustWriteOver, which the route calls.
+check("sec-facts: changed = hash moved || conversionGained(prior, set), via mustWriteOver",
+  /prior\.contentHash !== set\.contentHash \|\| conversionGained\(prior, set\)/.test(readCodeOnly("lib/server/secFactBuild.ts"))
+  && /prior \? mustWriteOver\(prior, set\) : true/.test(route));
 
 // MUTATION: the helper stops looking at refusals → CHT stays unwritten.
 {

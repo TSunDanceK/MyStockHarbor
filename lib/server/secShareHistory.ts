@@ -70,7 +70,14 @@ export type ShareHistory = {
    * cover page by more than SHARE_UNITS_MAX_FACTOR, or a >100× step was cut
    * with no cover count to say which side is right. `points` is empty.
    */
-  withheld?: { reason: "units-unconfirmed"; factor: number | null };
+  withheld?:
+    | { reason: "units-unconfirmed"; factor: number | null }
+    /**
+     * NO SILENT HIDES (#552 COWORK #132 (d)): the corrections cut a drawable
+     * raw series below MIN_SHARE_POINTS. `cut` says which rule cut it, and
+     * `since` where the kept counts begin; absent `cut` means drops alone.
+     */
+    | { reason: "cut-too-short"; factor: null; cut?: NonNullable<ShareHistory["startedAfter"]>["reason"]; since?: string };
   /** The 3-year change, or null with the reason (rule 5). */
   threeYear?: { pct: number; base: ShareHistoryPoint; end: ShareHistoryPoint } | { pct: null; reason: "too-short" };
 };
@@ -334,7 +341,19 @@ export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?
   // the reason is shown. A count we can't confirm is never charted.
   const withheld = sharesUnconfirmed(fixed, set.cover?.val ?? null);
   if (withheld) return { points: [], basis: raw.basis, withheld };
-  if (fixed.points.length < MIN_SHARE_POINTS) return null;
+  // rawShareSeries only returns a series of MIN_SHARE_POINTS or more, so
+  // fewer here means the corrections cut it: said, never a silent hide.
+  if (fixed.points.length < MIN_SHARE_POINTS) {
+    return {
+      points: [],
+      basis: raw.basis,
+      withheld: {
+        reason: "cut-too-short",
+        factor: null,
+        ...(fixed.startedAfter ? { cut: fixed.startedAfter.reason, since: fixed.startedAfter.date } : {}),
+      },
+    };
+  }
   const gaps = shareGaps(fixed.points, fixed.dropped);
   return {
     points: fixed.points,

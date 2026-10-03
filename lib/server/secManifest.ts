@@ -126,6 +126,8 @@ export type SecManifestEntry = {
    * because neither of those can see a labelling change — see SEC_LABEL_VERSION.
    */
   lv?: number;
+  /** The SHARE-SERIES shape, absent = 1. Selects like `lv`; see SEC_SHARE_VERSION. */
+  sv?: number;
   w?: number;
   /**
    * `y` is the YEAR retention window the set was written under. Absent means 5,
