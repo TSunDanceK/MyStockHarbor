@@ -207,7 +207,8 @@ console.log("\n6. the share-dilution series is SEC's");
     const h = M.buildShareHistory(fixture(sym));
     counts[sym] = h ? `${h.points.length} ${h.basis}` : "none";
   }
-  check("AAPL gets a quarterly series from sharesBasic", /^\d+ quarter$/.test(counts.AAPL), JSON.stringify(counts));
+  // QUARTERS PLUS FISCAL YEARS since #552 COWORK #136: the year-ends no quarter covers are the years'.
+  check("AAPL gets quarters plus fiscal years from sharesBasic", /^\d+ annual\+quarters$/.test(counts.AAPL), JSON.stringify(counts));
   const s = M.buildShareHistory(fixture("AAPL"));
   check("ascending by date", s.points.every((p, i, a) => i === 0 || a[i - 1].date < p.date));
   const dil = read("app/components/DilutionHistory.tsx");
@@ -354,35 +355,38 @@ console.log("\n9. the long share history: fiscal years from the payload, then re
   check("the codec stores it as `as`, about 20 bytes a year",
     enc.as?.length === 15 && JSON.stringify(enc.as).length < 15 * 25, `${JSON.stringify(enc.as).length} bytes`);
 
-  // THE CHART: years up to the first stored quarter, then every stored quarter.
+  // THE CHART (#552 COWORK #136, replacing #517's shape): every fiscal year the
+  // set carries, every filed quarter, and a year-end only where no quarter was
+  // filed on that date (the fourth quarter, whose count is never filed alone).
   const set = fixture("AAPL");
   const lastFy = set.years[0].e;
-  const qs = set.quarters.filter((q) => q.v && M.buildShareHistory({ ...set, as: undefined }).points.some((p) => p.date === q.e)).map((q) => q.e).sort();
-  const firstQ = qs[0];
+  const SI = M.SEC_FIELD_KEYS.indexOf("sharesBasic");
+  const qs = set.quarters.filter((q) => typeof q.v?.[SI] === "number").map((q) => q.e).sort();
   const withAs = { ...set, as: [["2012-09-29", 26e9], ["2018-09-29", 19e9], [lastFy, 15e9]] };
   const h = M.buildShareHistory(withAs);
-  const quarterOnly = M.buildShareHistory(set);
-  check("the chart draws the yearly points before the first stored quarter, then EVERY stored quarter",
-    h.basis === "annual+quarters" && h.points[0].date === "2012-09-29" &&
-      h.points.length === 2 + quarterOnly.points.length &&
-      h.points.slice(2).every((p, i) => p.date === quarterOnly.points[i].date),
-    `${h.points.length} points, first quarter ${firstQ}`);
-  check("a year ending inside the stored quarters is left to the quarters",
-    !h.points.some((p) => p.date === lastFy && p.shares === 15e9));
-  check("a set without `as` keeps the quarterly fallback", M.buildShareHistory(set).basis === "quarter");
+  const dates = new Set(h.points.map((p) => p.date));
+  check("the chart draws the earlier fiscal years, every filed quarter, and the year-ends no quarter covers",
+    h.basis === "annual+quarters" && h.points[0].date === "2012-09-29" && dates.has("2018-09-29") &&
+      qs.every((q) => dates.has(q)) && h.points.some((p) => p.date === lastFy && p.shares === 15e9),
+    `${h.points.length} points, quarters ${qs.length}`);
+  // PLAUSIBLE ON PURPOSE (2% off the quarter), so only the same-date rule can keep it out.
+  const qVal = set.quarters.find((q) => q.e === qs[2]).v[SI];
+  const onQuarter = { ...set, as: [["2012-09-29", 26e9], [qs[2], qVal * 1.02]] };
+  check("a year ending on a filed quarter's date is left to the quarter",
+    !M.buildShareHistory(onQuarter).points.some((p) => p.shares === qVal * 1.02));
+  check("a set without `as` takes its stored fiscal years", (M.buildShareHistory(set).yearEnds ?? []).length > 0);
   const dil = read("app/components/DilutionHistory.tsx");
-  check("the footer uses the owner's wording", /Annual share counts from SEC filings, latest quarters appended/.test(dil));
+  check("the footer names the basis: quarterly averages plus fiscal-year averages", /quarterly averages plus/.test(dil));
   const overlap = await loadComposer(once(
-    ".filter(([date, v]) => typeof v === \"number\" && v > 0 && date < firstQuarter)",
-    ".filter(([, v]) => typeof v === \"number\" && v > 0)"
+    "    if (quarterDates.has(y.date)) continue;\n",
+    ""
   ));
-  check("...and CATCHES a yearly point plotted inside the quarters' span",
-    overlap.buildShareHistory(withAs).points.some((p) => p.date === lastFy && p.shares === 15e9));
+  check("...and CATCHES a yearly point plotted on a filed quarter's date",
+    overlap.buildShareHistory(onQuarter).points.some((p) => p.shares === qVal * 1.02));
   const dropQuarters = await loadComposer(once(
-    "const points = [...years, ...quarters];",
-    "const points = [...years, ...quarters.filter((p) => p.date > (set.as?.at(-1)?.[0] ?? \"\"))];"
+    "const points = [...years, ...quarters].sort((a, b) => a.date.localeCompare(b.date));",
+    "const points = [...years, ...quarters.filter((p) => p.date > (set.as?.at(-1)?.[0] ?? \"\"))].sort((a, b) => a.date.localeCompare(b.date));"
   ));
-  // The first shape (#517 round 1): quarters only after the last fiscal year.
   check("...and CATCHES quarters dropped from the combined series",
     dropQuarters.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length <
       M.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length);
