@@ -215,6 +215,12 @@ export type StoredFactSet = {
    */
   as?: [string, number][];
   /**
+   * The filer's split evidence, `[periodEnd, restated ÷ originally filed]`
+   * (ExtractResult.shareRestated). Optional, and NOT in contentHashOf for the
+   * reason `as` is not: it fills in as each set is refreshed.
+   */
+  asr?: [string, number][];
+  /**
    * Field keys the payload published NO chain concept for, in any period.
    * See ExtractResult.untagged. OPTIONAL: absent means "written before the
    * marker existed", which is UNKNOWN — a reader must never treat it as
@@ -332,6 +338,7 @@ export function encodeFactSet(
     cu: result.refusedUnits,
     cc: result.conceptChoice,
     ...(result.annualShares?.length ? { as: result.annualShares } : {}),
+    ...(result.shareRestated?.length ? { asr: result.shareRestated } : {}),
     ...(result.untagged ? { nt: result.untagged } : {}),
     ...(result.readNamespaces ? { rns: result.readNamespaces } : {}),
     ...(result.summedSga?.length ? { sg: result.summedSga } : {}),

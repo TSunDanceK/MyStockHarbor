@@ -21,6 +21,24 @@
 // the quarters after the last fiscal year-end — gave ONDS and ABVX fewer
 // points than quarters alone, relay 35780595913).
 //
+// ── THE SERIES IS CORRECTED BEFORE IT IS DRAWN (#552 COWORK #88/#89) ──────
+// The points are as filed, and CODE-A #94 measured 164 of 916 charted series
+// mixing bases: AMZN 494M → 10,005M at its 20:1 split, PAC ×1000 from 2017
+// ("+96,037%"), GDDY's 2013–2014 pre-listing points and a 7-year hole drawn as
+// a straight "rise". The rulings, in the order applied:
+//   1. SPLITS from the filer's own restated comparatives (StoredFactSet.asr):
+//      a step at a whole split ratio is scaled away only when a restatement
+//      by that ratio is on file. With none, the chart STARTS AFTER the step.
+//   2. A STEP OVER 100× either way is never drawn across: the clean (latest)
+//      segment is kept.
+//   3. PRE-LISTING POINTS are dropped (before the first periodic report's own
+//      period, data/sec/first-periodic.json via the caller).
+//   4. GAPS over 15 months break the line ("no filing data"); never a straight
+//      line across a hole.
+//   5. THE TREND is the last 3 years: the base is the newest point at or
+//      before the cut, and must lie within 6 months before it; otherwise
+//      there is no 3-year figure ("Recent history too short").
+//
 // PURE — no I/O — so the check suite can run it on committed fixtures.
 import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
 import { valueOf } from "./secFactCodec";
@@ -36,10 +54,41 @@ export type ShareHistory = {
    * set written before `as` existed.
    */
   basis: "annual+quarters" | "quarter" | "year";
+  /** The line breaks between these consecutive points (more than SHARE_GAP_MAX_DAYS apart). */
+  gaps?: { from: string; to: string }[];
+  /** Splits scaled away, from the filer's restated comparatives: points before `date` × `ratio`. */
+  splits?: { date: string; ratio: number }[];
+  /** The series starts later than the data because of an unexplained step, or the listing. */
+  startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" };
+  /** The 3-year change, or null with the reason (rule 5). */
+  threeYear?: { pct: number; base: ShareHistoryPoint } | { pct: null; reason: "too-short" };
 };
 
 /** The chart needs a spread to draw a trend; fewer than this is no chart. */
 export const MIN_SHARE_POINTS = 3;
+/** Whole split ratios recognised, either way, within SHARE_SPLIT_TOLERANCE. */
+export const SHARE_SPLIT_RATIOS = [2, 3, 4, 5, 8, 10, 15, 20, 25, 40, 50];
+export const SHARE_SPLIT_TOLERANCE = 0.03;
+/** A step bigger than this either way is a unit or scale error, never dilution. */
+export const SHARE_SCALE_MAX_STEP = 100;
+/** Consecutive points further apart than this (15 months) break the line. */
+export const SHARE_GAP_MAX_DAYS = 460;
+/** The trend window, and how far before its cut the base may sit. */
+export const SHARE_TREND_YEARS = 3;
+export const SHARE_TREND_BASE_MAX_DAYS = 183;
+
+const DAY = 86_400_000;
+const days = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / DAY;
+
+/** The whole split ratio `r` matches (as k or 1/k), or null. */
+export function splitRatioOf(r: number): number | null {
+  if (!Number.isFinite(r) || r <= 0) return null;
+  for (const k of SHARE_SPLIT_RATIOS) {
+    if (Math.abs(r / k - 1) < SHARE_SPLIT_TOLERANCE) return k;
+    if (Math.abs(r * k - 1) < SHARE_SPLIT_TOLERANCE) return 1 / k;
+  }
+  return null;
+}
 
 const seriesOf = (periods: StoredPeriod[]): ShareHistoryPoint[] =>
   periods
@@ -47,12 +96,8 @@ const seriesOf = (periods: StoredPeriod[]): ShareHistoryPoint[] =>
     .filter((p): p is ShareHistoryPoint => typeof p.shares === "number" && p.shares > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-/**
- * Quarters first (finer-grained), fiscal years when quarters give too few
- * points — the same preference fetchShareHistory had against FMP.
- */
-export function buildShareHistory(set: StoredFactSet | null): ShareHistory | null {
-  if (!set) return null;
+/** The raw series, as before: the long history where the set carries it, else quarters, else years. */
+function rawSeries(set: StoredFactSet): { points: ShareHistoryPoint[]; basis: ShareHistory["basis"] } | null {
   // ── THE LONG HISTORY, WHERE THE SET CARRIES IT ────────────────────────────
   // Yearly points back as far as companyfacts goes UP TO THE FIRST STORED
   // QUARTER, then every stored quarter — the owner's shape (2026-09-22, #517),
@@ -72,4 +117,89 @@ export function buildShareHistory(set: StoredFactSet | null): ShareHistory | nul
   const years = seriesOf(set.years ?? []);
   if (years.length >= MIN_SHARE_POINTS) return { points: years, basis: "year" };
   return null;
+}
+
+/**
+ * Rules 1–3 on a raw series. Walks the steps NEWEST FIRST, so the latest
+ * segment is the one kept: a split proven by the filer's restatements scales
+ * every earlier point; an unproven split step or a >100× step cuts the series
+ * there, and the walk stops.
+ */
+export function correctShareSeries(
+  raw: ShareHistoryPoint[],
+  restated: [string, number][] = [],
+  listedFrom: string | null = null,
+): { points: ShareHistoryPoint[]; splits: { date: string; ratio: number }[]; startedAfter?: ShareHistory["startedAfter"] } {
+  let pts = raw.map((p) => ({ ...p }));
+  const splits: { date: string; ratio: number }[] = [];
+  let startedAfter: ShareHistory["startedAfter"];
+  // Rule 3 first: nothing before the listing is this company's public record.
+  if (listedFrom) {
+    const kept = pts.filter((p) => p.date >= listedFrom);
+    if (kept.length < pts.length) { startedAfter = { date: kept[0]?.date ?? listedFrom, reason: "listing" }; pts = kept; }
+  }
+  const proven = restated.map(([, r]) => splitRatioOf(r)).filter((k): k is number => k !== null);
+  for (let i = pts.length - 1; i >= 1; i--) {
+    const r = pts[i].shares / pts[i - 1].shares;
+    if (!Number.isFinite(r) || r <= 0) continue;
+    if (r > SHARE_SCALE_MAX_STEP || r < 1 / SHARE_SCALE_MAX_STEP) {
+      startedAfter = { date: pts[i].date, reason: "scale-step" };
+      pts = pts.slice(i);
+      break;
+    }
+    const k = splitRatioOf(r);
+    if (k === null) continue;
+    if (proven.some((p) => Math.abs(p / k - 1) < SHARE_SPLIT_TOLERANCE)) {
+      // Scale every earlier point onto the post-split basis.
+      for (let j = 0; j < i; j++) pts[j] = { ...pts[j], shares: pts[j].shares * k };
+      splits.push({ date: pts[i].date, ratio: k });
+    } else {
+      startedAfter = { date: pts[i].date, reason: "unexplained-split-step" };
+      pts = pts.slice(i);
+      break;
+    }
+  }
+  return { points: pts, splits: splits.reverse(), ...(startedAfter ? { startedAfter } : {}) };
+}
+
+/** Rule 4: the consecutive pairs more than SHARE_GAP_MAX_DAYS apart. */
+export function shareGaps(points: ShareHistoryPoint[]): { from: string; to: string }[] {
+  const out: { from: string; to: string }[] = [];
+  for (let i = 1; i < points.length; i++) {
+    if (days(points[i - 1].date, points[i].date) > SHARE_GAP_MAX_DAYS) out.push({ from: points[i - 1].date, to: points[i].date });
+  }
+  return out;
+}
+
+/** Rule 5: the change over the last SHARE_TREND_YEARS, from a base within SHARE_TREND_BASE_MAX_DAYS before the cut. */
+export function threeYearChange(points: ShareHistoryPoint[]): NonNullable<ShareHistory["threeYear"]> {
+  const last = points[points.length - 1];
+  if (!last) return { pct: null, reason: "too-short" };
+  const cut = new Date(Date.parse(last.date) - SHARE_TREND_YEARS * 365.25 * DAY).toISOString().slice(0, 10);
+  const base = [...points].reverse().find((p) => p.date <= cut);
+  if (!base || days(base.date, cut) > SHARE_TREND_BASE_MAX_DAYS || base.shares <= 0) return { pct: null, reason: "too-short" };
+  return { pct: ((last.shares - base.shares) / base.shares) * 100, base };
+}
+
+/**
+ * Quarters first (finer-grained), fiscal years when quarters give too few
+ * points — the same preference fetchShareHistory had against FMP — then the
+ * corrections above. `listedFrom`: the first periodic report's own period end
+ * (data/sec/first-periodic.json), or null when unknown.
+ */
+export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?: string | null } = {}): ShareHistory | null {
+  if (!set) return null;
+  const raw = rawSeries(set);
+  if (!raw) return null;
+  const fixed = correctShareSeries(raw.points, set.asr ?? [], opts.listedFrom ?? null);
+  if (fixed.points.length < MIN_SHARE_POINTS) return null;
+  const gaps = shareGaps(fixed.points);
+  return {
+    points: fixed.points,
+    basis: raw.basis,
+    ...(gaps.length ? { gaps } : {}),
+    ...(fixed.splits.length ? { splits: fixed.splits } : {}),
+    ...(fixed.startedAfter ? { startedAfter: fixed.startedAfter } : {}),
+    threeYear: threeYearChange(fixed.points),
+  };
 }
