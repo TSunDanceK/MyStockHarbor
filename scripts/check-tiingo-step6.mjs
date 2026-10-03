@@ -208,6 +208,14 @@ const rules = {
   "videos: an MA tile with a price but too few closes says why": (src) =>
     /export const SHORT_HISTORY_NOTE = "Not enough price history stored yet";/.test(src) &&
     /ma50Note: ma50 === null \? SHORT_HISTORY_NOTE : null/.test(src) && /ma200Note: ma200 === null \? SHORT_HISTORY_NOTE : null/.test(src),
+  // 7. PR 2 follow-ups (#563 COWORK #45)
+  "videos: a withheld market cap says why, in A's words": (src) =>
+    /import \{ marketCap, peRatio, REFUSAL_WORDS \} from "@\/lib\/server\/secValuation";/.test(src) &&
+    /cap && cap\.ok \? null\s*: cap && !cap\.ok \? capitalise\(cap\.detail \?\? REFUSAL_WORDS\[cap\.why\]\)\s*: NO_SEC_SHARE_COUNT_NOTE/.test(src),
+  "video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows": (src) =>
+    /label: "Market cap", value: stockData\.marketCap \?\? "—", note: stockData\.marketCap \? null : stockData\.marketCapNote \?\? null/.test(src) &&
+    /\{stockData\.marketCap \? " Market cap is the SEC cover-page share count times that price\." : null\}/.test(src) &&
+    !/\. Market cap is the SEC cover-page share count times that price\. Figures/.test(src),
   "video page: the MA tiles carry the note as their hover text": (src) =>
     /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /title=\{note \?\? undefined\}/.test(src),
 };
@@ -233,6 +241,8 @@ const sourceOf = {
   "videos: the sector is A's resolver, SEC-only, imported": FILES.video,
   "videos: an MA tile with a price but too few closes says why": FILES.video,
   "video page: the MA tiles carry the note as their hover text": FILES.videoPage,
+  "videos: a withheld market cap says why, in A's words": FILES.video,
+  "video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows": FILES.videoPage,
 };
 const srcFor = (name) => [sourceOf[name]].flat().map((f) => (name.includes("caption") ? raw(f) : code(f))).join("\n");
 
@@ -267,6 +277,9 @@ const mutants = [
   ["videos: the sector is A's resolver, SEC-only, imported", (s) => s.replace("sector: resolveProfile(symbol, null).sector,", "sector: null,")],
   ["videos: an MA tile with a price but too few closes says why", (s) => s.replace("ma200Note: ma200 === null ? SHORT_HISTORY_NOTE : null", "ma200Note: null")],
   ["video page: the MA tiles carry the note as their hover text", (s) => s.replace("title={note ?? undefined}", "")],
+  ["videos: a withheld market cap says why, in A's words", (s) => s.replace("capitalise(cap.detail ?? REFUSAL_WORDS[cap.why])", "null")],
+  ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace(", note: stockData.marketCap ? null : stockData.marketCapNote ?? null", "")],
+  ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace('{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null}', " Market cap is the SEC cover-page share count times that price.")],
 ];
 for (const [name, mutate] of mutants) {
   const before = srcFor(name);
