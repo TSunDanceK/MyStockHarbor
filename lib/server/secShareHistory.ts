@@ -75,7 +75,7 @@ export const SHARE_SPLIT_TOLERANCE = 0.03;
  * reads 3.80 against its proven 4:1). The scale applied is the proven ratio.
  */
 export const SHARE_PROVEN_SPLIT_TOLERANCE = 0.1;
-/** How far after a step its restated comparatives may lie (a 10-K restates up to three prior years). */
+/** How far from a step its restated comparatives may lie, either way (a 10-K restates up to three prior years). */
 export const SHARE_PROVEN_SPLIT_YEARS = 3;
 /** A step bigger than this either way is a unit or scale error, never dilution. */
 export const SHARE_SCALE_MAX_STEP = 100;
@@ -149,13 +149,15 @@ export function correctShareSeries(
     if (kept.length < pts.length) { startedAfter = { date: kept[0]?.date ?? listedFrom, reason: "listing" }; pts = kept; }
   }
   // A restatement proves a split AT A STEP only if the restated period lies
-  // after the step's earlier point and within SHARE_PROVEN_SPLIT_YEARS of its
-  // later one (the comparatives a 10-K restates): an old split never explains
-  // a new step.
+  // within SHARE_PROVEN_SPLIT_YEARS of the step either way: the comparatives
+  // restated after a split can sit before the step's earlier point (a recent
+  // split restates last year's same quarter) or after it (a 10-K restates its
+  // prior years). An old split never explains a new step.
   const proven = restated
     .map(([e, r]) => ({ e, k: splitRatioOf(r) }))
     .filter((x): x is { e: string; k: number } => x.k !== null);
   const plusYears = (iso: string, n: number) => `${Number(iso.slice(0, 4)) + n}${iso.slice(4)}`;
+  const nearStep = (e: string, at: string) => e >= plusYears(at, -SHARE_PROVEN_SPLIT_YEARS) && e <= plusYears(at, SHARE_PROVEN_SPLIT_YEARS);
   for (let i = pts.length - 1; i >= 1; i--) {
     const r = pts[i].shares / pts[i - 1].shares;
     if (!Number.isFinite(r) || r <= 0) continue;
@@ -165,8 +167,7 @@ export function correctShareSeries(
       break;
     }
     // A SPLIT THE FILER PROVED, matched loosely; scaled by the proven ratio.
-    const p = proven.find((x) => x.e > pts[i - 1].date && x.e <= plusYears(pts[i].date, SHARE_PROVEN_SPLIT_YEARS)
-      && Math.abs(r / x.k - 1) < SHARE_PROVEN_SPLIT_TOLERANCE)?.k;
+    const p = proven.find((x) => nearStep(x.e, pts[i].date) && Math.abs(r / x.k - 1) < SHARE_PROVEN_SPLIT_TOLERANCE)?.k;
     if (p !== undefined) {
       for (let j = 0; j < i; j++) pts[j] = { ...pts[j], shares: pts[j].shares * p };
       splits.push({ date: pts[i].date, ratio: p });
