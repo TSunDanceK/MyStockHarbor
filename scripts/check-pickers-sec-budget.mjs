@@ -117,7 +117,7 @@ const MUTANTS = [
   ["the budget check removed", `    if (clock() - startedAt >= budgetMs) {`, `    if (false) {`],
   ["the clock not injectable (wall clock)", `  const clock = deps.clock ?? Date.now;`, `  const clock = Date.now;`],
   ["the last batch dropped on an early stop", `  if (!(await flush())) return done();\n\n  // Drop`, `  if (result.stoppedEarly !== "time-budget" && !(await flush())) return done();\n\n  // Drop`],
-  ["no EXPIRE after an early stop", `    await store.expire(key, PICKERS_SEC_TTL_SECONDS);`, `    if (result.stoppedEarly) throw new Error("skip");\n    await store.expire(key, PICKERS_SEC_TTL_SECONDS);`],
+  ["no EXPIRE after an early stop", `    await redis.expire(key, PICKERS_SEC_TTL_SECONDS);`, `    if (result.stoppedEarly) throw new Error("skip");\n    await redis.expire(key, PICKERS_SEC_TTL_SECONDS);`],
   ["the prune runs after an early stop", `  if (result.stoppedEarly === "time-budget") {\n    result.pruneSkipped = "time-budget";`, `  if (false) {\n    result.pruneSkipped = "time-budget";`],
   ["the duration not reported", `    result.durationMs = Math.max(0, clock() - startedAt);`, `    result.durationMs = 0;`],
   ["the budget doubled", `export const WARM_PICKERS_SEC_BUDGET_MS = 240_000;`, `export const WARM_PICKERS_SEC_BUDGET_MS = 480_000;`],

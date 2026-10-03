@@ -722,6 +722,9 @@ export type WarmPickersSecResult = {
  */
 export const WARM_PICKERS_SEC_BUDGET_MS = 240_000;
 
+/** The module's client, read through a function so warmPickersSec can name its local `redis`. */
+const moduleRedis = (): WarmPickersSecRedis | null => redis;
+
 /** What warmPickersSec needs from Redis, so a check can stub it. */
 export type WarmPickersSecRedis = Pick<Redis, "hset" | "hkeys" | "hdel" | "expire">;
 
@@ -784,7 +787,9 @@ export async function warmPickersSec(
 ): Promise<WarmPickersSecResult> {
   const clock = deps.clock ?? Date.now;
   const budgetMs = deps.budgetMs ?? WARM_PICKERS_SEC_BUDGET_MS;
-  const store: WarmPickersSecRedis | null = deps.redis !== undefined ? deps.redis : redis;
+  // Named `redis` on purpose: the write-site registry (scripts/check-redis-write-sites.mjs)
+  // finds this job's HSET/EXPIRE/HDEL by that name.
+  const redis: WarmPickersSecRedis | null = deps.redis !== undefined ? deps.redis : moduleRedis();
   const readSet = deps.readFactSet ?? readFactSet;
   const startedAt = clock();
   const result: WarmPickersSecResult = {
@@ -794,7 +799,7 @@ export async function warmPickersSec(
     result.durationMs = Math.max(0, clock() - startedAt);
     return result;
   };
-  if (!store) return { ...done(), ok: false, stoppedEarly: "no-redis" };
+  if (!redis) return { ...done(), ok: false, stoppedEarly: "no-redis" };
 
   const list = [...new Set(symbols.filter(Boolean))].slice(0, MAX_SYMBOLS_PER_RUN);
   result.symbols = list.length;
@@ -805,7 +810,7 @@ export async function warmPickersSec(
     const n = Object.keys(batch).length;
     if (!n) return true;
     try {
-      await store.hset(key, batch);
+      await redis.hset(key, batch);
       result.commands++;
       result.written += n;
       batch = {};
@@ -840,13 +845,13 @@ export async function warmPickersSec(
     result.pruneSkipped = "time-budget";
     console.warn("[warm-pickers-sec] prune skipped: time-budget");
   } else try {
-    const stored = ((await store.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
+    const stored = ((await redis.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
     result.commands++;
     const { drop, skipped } = rowsToPrune(stored, list);
     result.pruneSkipped = skipped;
     if (skipped) console.warn(`[warm-pickers-sec] prune skipped: ${skipped}`);
     if (drop.length) {
-      result.pruned = await store.hdel(PICKERS_SEC_KEY, ...drop);
+      result.pruned = await redis.hdel(PICKERS_SEC_KEY, ...drop);
       result.commands++;
     } else {
       result.pruned = 0;
@@ -857,7 +862,7 @@ export async function warmPickersSec(
   }
 
   try {
-    await store.expire(key, PICKERS_SEC_TTL_SECONDS);
+    await redis.expire(key, PICKERS_SEC_TTL_SECONDS);
     result.commands++;
   } catch {
     // The rows carry their own `at`; a missed EXPIRE is not a correctness issue.

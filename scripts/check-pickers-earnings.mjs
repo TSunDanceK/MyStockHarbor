@@ -190,7 +190,7 @@ const MUTANTS = [
   ["a TTM row shows the fiscal-year payout (labelled only)", () => [mut("withhold", src, `const payout = periodsDiffer ? null : filed;`, `const payout = filed;`), code]],
   ["withheld with no reason", () => [mut("reason", src, `: periodsDiffer ? PAYOUT_PERIODS_DIFFER : null,`, `: null,`), code]],
   ["the withheld dash has no tooltip", () => [src, { ...code, grid: mut("tip", code.grid, `return basis ? <span className="muted" title={basis}>–</span> : MUTED;`, `return MUTED;`) }]],
-  ["the row drops A's refusals (raw per-ordinary FY EPS gets a P/E)", () => [mut("refusals", src, `    inputs: { shares: inputs.shares, refusals: inputs.refusals },\n    m: multipleInputs(set),`, `    inputs: { shares: inputs.shares, refusals: [] },\n    m: multipleInputs(set),`), code]],
+  ["the row drops A's refusals (raw per-ordinary FY EPS gets a P/E)", () => [mut("refusals", src, `    inputs: { shares: inputs.shares, refusals: inputs.refusals, ...(inputs.sic ? { sic: inputs.sic } : {}) },\n    m: multipleInputs(set),`, `    inputs: { shares: inputs.shares, refusals: [], ...(inputs.sic ? { sic: inputs.sic } : {}) },\n    m: multipleInputs(set),`), code]],
   ["an unconverted currency keeps its EPS (and so a P/E)", () => [mut("usd", mut("usd-read", src, `const pe = usd ? ok(peRatio(inputs, price)) : null;`, `const pe = ok(peRatio(inputs, price));`), `      eps: null,\n      payout: null,`, `      eps: inputs.eps,\n      payout: null,`), code]],
   ["no FY marker", () => [src, { ...code, grid: mut("fy", code.grid, `return <BasisCell value={value} basis={basis} inert={inert} />;`, `return value;`) }]],
 ];
