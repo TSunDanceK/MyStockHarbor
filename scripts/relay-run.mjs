@@ -980,8 +980,6 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
-  // THE DILUTION CHART BEFORE/AFTER #552 COWORK #136, across the store. Read-only.
-  "write-share-history-census": { script: "scripts/share-history-census.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-manifest-stamp-census": {
     script: "scripts/manifest-stamp-census.mjs",
     args: () => [],
