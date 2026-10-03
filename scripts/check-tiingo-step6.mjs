@@ -46,6 +46,7 @@ const FILES = {
   videoPage: "app/insights/videos/[videoId]/page.tsx",
   news: "app/stock/[symbol]/news/page.tsx",
   newsData: "lib/stock-news-data.ts",
+  newsTech: "lib/server/newsTechHistory.ts",
   aiMarket: "lib/ai-market.ts",
   aiNews: "lib/ai-news-briefs.ts",
   insightRoute: "app/api/stock-news/insight/route.ts",
@@ -81,6 +82,28 @@ check("after the close, before the EOD job: still the IEX trade, never yesterday
 r = S.pickSurfacePrice(row(Date.UTC(2026, 11, 1, 19, 5)), [], Date.UTC(2026, 11, 1, 19, 6));
 check("ET across the DST change (EST in December)", r?.label === "last IEX trade, 14:05 ET", JSON.stringify(r));
 
+// THE SESSION SUFFIX (#563 COWORK #35), from the trade's own ET time.
+const labelAt = (utcMs, nowMs = utcMs + 60_000) => S.pickSurfacePrice(row(utcMs), [bar("2026-09-28", 99)], nowMs)?.label;
+const SESSION_CASES = [
+  ["08:40 EDT is pre-market", Date.UTC(2026, 8, 29, 12, 40), "last IEX trade, 08:40 ET (pre-market)"],
+  ["10:00 EDT is in session: no suffix", Date.UTC(2026, 8, 29, 14, 0), "last IEX trade, 10:00 ET"],
+  ["16:30 EDT is after hours", Date.UTC(2026, 8, 29, 20, 30), "last IEX trade, 16:30 ET (after hours)"],
+  ["09:30 and 16:00 themselves are in session", Date.UTC(2026, 8, 29, 13, 30), "last IEX trade, 09:30 ET"],
+  ["16:00 EDT is in session", Date.UTC(2026, 8, 29, 20, 0), "last IEX trade, 16:00 ET"],
+  // DST: 13:40 UTC is 09:40 EDT on 30 Oct but 08:40 EST on 3 Nov (US clocks change 1 Nov 2026).
+  ["across DST, 13:40 UTC on 30 Oct is 09:40 EDT, in session", Date.UTC(2026, 9, 30, 13, 40), "last IEX trade, 09:40 ET"],
+  ["across DST, 13:40 UTC on 3 Nov is 08:40 EST, pre-market", Date.UTC(2026, 10, 3, 13, 40), "last IEX trade, 08:40 ET (pre-market)"],
+  ["an earlier day's after-hours trade names its date and session",
+    Date.UTC(2026, 8, 29, 21, 5), "last IEX trade, 17:05 ET, 29 Sep (after hours)", Date.UTC(2026, 8, 30, 12, 0)],
+];
+/** Every session case, against a given pickSurfacePrice. */
+const sessionLabelsHold = (pick) =>
+  SESSION_CASES.every(([, at, want, now]) => pick(row(at), [bar("2026-09-28", 99)], now ?? at + 60_000)?.label === want);
+for (const [name, at, want, now] of SESSION_CASES) {
+  const got = labelAt(at, now);
+  check(`session label: ${name}`, got === want, got);
+}
+
 check("no row, no bars: null (the caller keeps FMP), never a zero", S.pickSurfacePrice(null, null, TUE_1405_EDT) === null);
 check("a zero or negative price is not a price",
   S.pickSurfacePrice(row(TUE_1405_EDT, 0), [bar("2026-09-28", -1)], TUE_1405_EDT) === null);
@@ -91,11 +114,38 @@ check("the credit is the contract's words", S.TIINGO_CREDIT === "Market data fro
 check("the three surfaces are appended", ["SPX", "VIDEOS", "NEWS_HERO"].every((s) => P.PRICE_SURFACES.includes(s)));
 check("and are fmp unless set to tiingo",
   ["SPX", "VIDEOS", "NEWS_HERO"].every((s) => P.priceProviderFor(s, {}) === "fmp" && P.priceProviderFor(s, { [`PRICE_PROVIDER_${s}`]: "tiingo" }) === "tiingo"));
+// NEWS_TECH (#563 COWORK #31 (a)): the news page's technical history.
+const NT = await import(pathToFileURL(path.join(ROOT, FILES.newsTech)).href);
+check("NEWS_TECH is appended, and fmp unless set to tiingo",
+  P.PRICE_SURFACES.includes("NEWS_TECH") && P.priceProviderFor("NEWS_TECH", {}) === "fmp" &&
+  P.priceProviderFor("NEWS_TECH", { PRICE_PROVIDER_NEWS_TECH: "tiingo" }) === "tiingo");
+check("NEWS_TECH off: null without a read (the page keeps its path)", (await NT.readNewsTechHistory("AAPL", {})) === null);
+check("NEWS_TECH on, nothing stored: null (the page keeps its path), not a throw",
+  (await NT.readNewsTechHistory("AAPL", { PRICE_PROVIDER_NEWS_TECH: "tiingo" })) === null);
+check("NEWS_TECH keeps the Yahoo path's window", NT.NEWS_TECH_POINTS === 320);
+
 const readsNone = await S.readSurfacePrice("SPY");
 check("with no Redis configured, the read is null, not a throw", readsNone === null);
 
+// THE SUFFIX MUTANT (COWORK #35): the same module with the suffix dropped must
+// fail the session cases. The copy sits beside the original so its relative
+// imports resolve, and is removed straight after.
+{
+  const src = raw(FILES.surface);
+  const mutated = src.replace("${sessionSuffix(iex.time)}`", "`");
+  const copy = path.join(ROOT, "lib/server", `.tiingoSurfacePrice.mutant-${process.pid}.ts`);
+  let bites = false;
+  if (mutated !== src) {
+    fs.writeFileSync(copy, mutated);
+    try { bites = !sessionLabelsHold((await import(pathToFileURL(copy).href)).pickSurfacePrice); }
+    catch { bites = true; }
+    finally { fs.rmSync(copy, { force: true }); }
+  }
+  check("mutant bites: dropping the session suffix fails the session labels", mutated !== src && bites,
+    mutated === src ? "the mutation did not apply" : "");
+}
+
 // ── the static rules, each a function of source so section 5 can mutate it ──
-const TIINGO_READS = /readTiingoPool|readTiingoHistory|readSurfacePrice|readSurfaceInputs|tiingoSurfacePrice|marketData\/read/;
 const PRICE_READS = /readTiingo|tiingoSurfacePrice|marketData\/|pricePool|historyCache|getDailyHistory|fetchQuote|quoteData/;
 
 const rules = {
@@ -103,7 +153,21 @@ const rules = {
   "ai-market reads no price and takes no price argument": (src) =>
     !PRICE_READS.test(src) && /async function generateSpxMarketAnalysis\(\s*_timeBucket\?: number\s*\)/.test(src),
   "ai-news-briefs reads no price source": (src) => !PRICE_READS.test(src),
-  "the news data module never sees the Tiingo hero price": (src) => !TIINGO_READS.test(src),
+  // NARROWED FOR NEWS_TECH (PR 2): the module may take its technical history from
+  // newsTechHistory (gated, history only), never the pool or the hero price. The
+  // AI calls it makes are non-price by allow-list (check-news-ai-inputs).
+  "the news data module never sees the Tiingo hero price": (src) =>
+    !/readTiingoPool|readSurfacePrice|readSurfaceInputs|tiingoSurfacePrice|marketData\/read/.test(src),
+  "news tech: the Tiingo history only through the NEWS_TECH gate, Yahoo kept as the fallback": (src) =>
+    /import \{ readNewsTechHistory \} from "\.\/server\/newsTechHistory";/.test(src) &&
+    /const tiingo = await readNewsTechHistory\(symbol\);\s*if \(tiingo\) return \{ points: tiingo, source: "tiingo" \};\s*return \{ points: await fetchYahooHistory\(symbol\), source: "yahoo" \};/.test(src),
+  "news tech: the reader is gated and reads only the stored history": (src) =>
+    /if \(priceProviderFor\("NEWS_TECH", env\) !== "tiingo"\) return null;/.test(src) &&
+    /readTiingoHistory\(/.test(src) && !/readTiingoPool|fetch\(|tiingo\.com/.test(src),
+  "news tech: the linked credit, and one source for the technical text": (src) =>
+    /historySource === "tiingo" \? \(\s*<p[^>]*>\s*<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src) &&
+    /const technicalPrice = historySource === "tiingo" \? heroPrice\?\.price \?\? lastClose : quote\?\.price \?\? lastClose;/.test(src) &&
+    /buildTechnicalRead\(\{ symbol: upper, price: technicalPrice,/.test(src),
   "the AI routes read no price source": (src) => !PRICE_READS.test(src),
   "the news AI components get no hero price": (src) => {
     const blocks = [...src.matchAll(/<(AiInsightCard|WhyThisMatters)\b[\s\S]*?\/>/g)].map((m) => m[0]);
@@ -135,11 +199,25 @@ const rules = {
     /chartSeries === "SPY" \?/.test(src) &&
     src.includes("Chart shows the SPDR S&amp;P 500 ETF (SPY). Levels quoted in the text refer to the S&amp;P 500 index."),
   "SPX chart: the symbol is passed through, not fixed to SPX": (src) => /symbol=\{symbol\}/.test(src) && !/symbol="SPX"/.test(src),
+  // 6. PR 2 video items (#563 COWORK #33/#34, #553 COWORK #88)
+  "videos: the IFX -> IFNNY remap applies on the Tiingo path too": (src) =>
+    /IFX: "IFNNY"/.test(src) && /const symbol = TICKER_REMAP\[upper\] \?\? upper;/.test(src) &&
+    /readSurfaceInputs\(symbol\)/.test(src) && /getStockPageSecFacts\(symbol\)/.test(src),
+  "videos: the sector is A's resolver, SEC-only, imported": (src) =>
+    /import \{ resolveProfile \} from "@\/lib\/server\/staticProfile";/.test(src) && /sector: resolveProfile\(symbol, null\)\.sector,/.test(src),
+  "videos: an MA tile with a price but too few closes says why": (src) =>
+    /export const SHORT_HISTORY_NOTE = "Not enough price history stored yet";/.test(src) &&
+    /ma50Note: ma50 === null \? SHORT_HISTORY_NOTE : null/.test(src) && /ma200Note: ma200 === null \? SHORT_HISTORY_NOTE : null/.test(src),
+  "video page: the MA tiles carry the note as their hover text": (src) =>
+    /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /title=\{note \?\? undefined\}/.test(src),
 };
 const sourceOf = {
   "ai-market reads no price and takes no price argument": FILES.aiMarket,
   "ai-news-briefs reads no price source": FILES.aiNews,
   "the news data module never sees the Tiingo hero price": FILES.newsData,
+  "news tech: the Tiingo history only through the NEWS_TECH gate, Yahoo kept as the fallback": FILES.newsData,
+  "news tech: the reader is gated and reads only the stored history": FILES.newsTech,
+  "news tech: the linked credit, and one source for the technical text": FILES.news,
   "the AI routes read no price source": [FILES.insightRoute, FILES.whyRoute],
   "the news AI components get no hero price": FILES.news,
   "SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept": FILES.spx,
@@ -151,6 +229,10 @@ const sourceOf = {
   "news hero: the label and the linked credit": FILES.news,
   "SPX: the approved caption, shown only for SPY": FILES.spx,
   "SPX chart: the symbol is passed through, not fixed to SPX": FILES.spxChart,
+  "videos: the IFX -> IFNNY remap applies on the Tiingo path too": FILES.video,
+  "videos: the sector is A's resolver, SEC-only, imported": FILES.video,
+  "videos: an MA tile with a price but too few closes says why": FILES.video,
+  "video page: the MA tiles carry the note as their hover text": FILES.videoPage,
 };
 const srcFor = (name) => [sourceOf[name]].flat().map((f) => (name.includes("caption") ? raw(f) : code(f))).join("\n");
 
@@ -164,6 +246,11 @@ const mutants = [
   ["ai-market reads no price and takes no price argument", (s) => `import { readTiingoHistory } from "@/lib/server/marketData/read";\n${s}`],
   ["ai-news-briefs reads no price source", (s) => `import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";\n${s}`],
   ["the news data module never sees the Tiingo hero price", (s) => `import { readTiingoPool } from "@/lib/server/marketData/read";\n${s}`],
+  ["the news data module never sees the Tiingo hero price", (s) => `import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";\n${s}`],
+  ["news tech: the Tiingo history only through the NEWS_TECH gate, Yahoo kept as the fallback", (s) => s.replace('return { points: await fetchYahooHistory(symbol), source: "yahoo" };', 'return { points: [], source: "yahoo" };')],
+  ["news tech: the reader is gated and reads only the stored history", (s) => s.replace('if (priceProviderFor("NEWS_TECH", env) !== "tiingo") return null;', "")],
+  ["news tech: the linked credit, and one source for the technical text", (s) => s.replace("price: technicalPrice,", "price: quote?.price ?? lastClose,")],
+  ["news tech: the linked credit, and one source for the technical text", (s) => s.replace(/historySource === "tiingo" \? \(\s*<p([^>]*)>\s*<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, 'historySource === "tiingo" ? (<p$1>{TIINGO_CREDIT}')],
   ["the AI routes read no price source", (s) => `${s}\nconst p = getDailyHistory("X");`],
   ["the news AI components get no hero price", (s) => s.replace("<AiInsightCard", "<AiInsightCard heroPrice={heroPrice}")],
   ["SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept", (s) => s.replace('priceProviderFor("SPX") === "tiingo"', "true")],
@@ -176,6 +263,10 @@ const mutants = [
   ["news hero: the label and the linked credit", (s) => s.replace("{heroPrice.label}", "")],
   ["SPX: the approved caption, shown only for SPY", (s) => s.replace("Levels quoted in the text refer to the S&amp;P 500 index.", "")],
   ["SPX chart: the symbol is passed through, not fixed to SPX", (s) => s.replace("symbol={symbol}", 'symbol="SPX"')],
+  ["videos: the IFX -> IFNNY remap applies on the Tiingo path too", (s) => s.replace("readSurfaceInputs(symbol)", "readSurfaceInputs(upper)")],
+  ["videos: the sector is A's resolver, SEC-only, imported", (s) => s.replace("sector: resolveProfile(symbol, null).sector,", "sector: null,")],
+  ["videos: an MA tile with a price but too few closes says why", (s) => s.replace("ma200Note: ma200 === null ? SHORT_HISTORY_NOTE : null", "ma200Note: null")],
+  ["video page: the MA tiles carry the note as their hover text", (s) => s.replace("title={note ?? undefined}", "")],
 ];
 for (const [name, mutate] of mutants) {
   const before = srcFor(name);
