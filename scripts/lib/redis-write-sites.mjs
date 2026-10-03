@@ -55,6 +55,9 @@ export const WRITE_SITES = [
   // Step 5: the Tiingo jobs' symbols-only universe (~6 B a symbol), one SET per in-session warm-price-pool run,
   // and off hours only when the key is absent or older than 6 h (#553 COWORK #120).
   { file: "lib/server/tiingoUniverse.ts", key: "TIINGO_UNIVERSE_KEY", cls: "small" },
+  // The stock-page cold fill (#553 COWORK #121): one symbol's history per SET (the nightly job's row shape), and its per-symbol lock.
+  { file: "lib/server/marketData/coldFill.ts", key: "tiingoEodKey(sym", cls: "row" },
+  { file: "lib/server/tiingoColdState.ts", key: "coldLockKey(coldSymbol(symbol", cls: "small" },
   { file: "lib/server/news/secFilingsStore.ts", key: "secFilingsNewsKey(symbol", cls: "row" },
   { file: "lib/server/newsStore.ts", key: "key", cls: "row" },
   { file: "lib/server/pickerChartsCache.ts", key: "PICKER_CHARTS_KEY", cls: "listed", candidate: "PICKER_CHARTS_KEY" },

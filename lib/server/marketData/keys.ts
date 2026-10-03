@@ -62,3 +62,27 @@ export const TIINGO_EOD_LAST_KEY = `${TIINGO_PREFIX}eod-last:v1`;
 export const TIINGO_UNIVERSE_KEY = `${TIINGO_PREFIX}universe:v1`;
 /** Outlives a weekend (63 h with no in-session run) and a long weekend. */
 export const TIINGO_UNIVERSE_TTL_SECONDS = 4 * 24 * 60 * 60;
+
+// ── THE STOCK-PAGE COLD FILL (#553 COWORK #121/#122/#123) ───────────────────
+// A stock page for a real ticker we hold no Tiingo data for is filled on
+// demand, by one guarded server action (lib/server/marketData/coldFill.ts),
+// or queued for the tiingo-cold-queue job. Every key is under msh:tiingo: so
+// the purge covers it. See lib/server/tiingoColdState.ts.
+
+/**
+ * Set: Tiingo's supported US tickers (our dashed spelling), plus the
+ * TIINGO_SUPPORTED_MARKER member, replaced daily by the tiingo-supported job.
+ * The marker is how one SMISMEMBER tells "not supported" from "no list".
+ */
+export const TIINGO_SUPPORTED_KEY = `${TIINGO_PREFIX}supported:v1`;
+export const TIINGO_SUPPORTED_MARKER = "__list__";
+/** Outlives three missed daily refreshes, then lapses: cold fills then refuse. */
+export const TIINGO_SUPPORTED_TTL_SECONDS = 4 * 24 * 60 * 60;
+/** ZSET: symbols cold-filled for a visitor, scored by their last view (ms). The jobs include them. */
+export const TIINGO_REQUESTED_KEY = `${TIINGO_PREFIX}requested:v1`;
+/** ZSET: symbols waiting for the tiingo-cold-queue job, scored by when they were queued (ms). */
+export const TIINGO_COLD_QUEUE_KEY = `${TIINGO_PREFIX}cold-queue:v1`;
+/** Set: supported symbols Tiingo answered short or empty for; cleared with each supported-list refresh. */
+export const TIINGO_COLD_NODATA_KEY = `${TIINGO_PREFIX}cold-nodata:v1`;
+/** Counters and the per-symbol lock: `${TIINGO_COLD_COUNTER_PREFIX}<name>:<period>`. */
+export const TIINGO_COLD_COUNTER_PREFIX = `${TIINGO_PREFIX}cold:v1:`;

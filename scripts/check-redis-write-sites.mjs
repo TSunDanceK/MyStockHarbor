@@ -109,7 +109,8 @@ const EOD_ROW_BYTES_MEASURED = 81_492;
 const jobs = code("lib/server/marketData/jobs.ts");
 const helper = code("lib/server/chunkByBytes.ts");
 const chunk = Number((jobs.match(/const EOD_WRITE_CHUNK = (\d+);/) ?? [])[1]);
-const bars = Number((jobs.match(/export const EOD_WINDOW_BARS = (\d+);/) ?? [])[1]);
+// The window moved to eodWindow.ts (shared with the stock-page cold fill, #553 COWORK #121).
+const bars = Number((code("lib/server/marketData/eodWindow.ts").match(/export const EOD_WINDOW_BARS = (\d+);/) ?? [])[1]);
 const escaping = Number((helper.match(/MEASURED_ESCAPING_INFLATION = ([0-9.]+)/) ?? [])[1]);
 const budget = 5 * 1024 * 1024;
 check("REQUEST_BYTE_BUDGET is still 5 MB", /REQUEST_BYTE_BUDGET = 5 \* 1024 \* 1024;/.test(helper));

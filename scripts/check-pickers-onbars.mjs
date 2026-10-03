@@ -118,7 +118,8 @@ check("the builder's rules hold", b.length === 0);
 // The nightly window must hold what the build slices: `const days = N` bars.
 {
   const jobs = stripComments(read("lib/server/marketData/jobs.ts"), { file: "lib/server/marketData/jobs.ts" });
-  const bars = Number(/export const EOD_WINDOW_BARS = (\d+);/.exec(jobs)?.[1]);
+  // The window moved to eodWindow.ts (shared with the stock-page cold fill, #553 COWORK #121).
+  const bars = Number(/export const EOD_WINDOW_BARS = (\d+);/.exec(read("lib/server/marketData/eodWindow.ts"))?.[1]);
   const days = Number(/const days = (\d+);/.exec(stripComments(builderSrc, { file: BUILDER }))?.[1]);
   check("the nightly window (bars) holds every bar the build slices", bars >= days && days > 0, `${bars} >= ${days}`);
 }
