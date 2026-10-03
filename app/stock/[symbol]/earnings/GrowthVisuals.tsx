@@ -235,7 +235,7 @@ function Detail({ p, one, notReported, showProfit }: { p: GvPeriod; one: string;
             <dd>
               {p.profit
                 ? <><strong>{p.profit.val >= 0 ? "Profit +" : "Loss −"}{p.profit.text.replace(/^-/, "")}</strong><DerivedTag note={p.profit.derivedNote} /></>
-                : nr}
+                : p.profitUnchecked ? <span className="gvNote">{p.profitUnchecked}</span> : nr}
               {p.oneOff ? <div className="gvNote">{p.oneOff}</div> : null}
             </dd>
           </>

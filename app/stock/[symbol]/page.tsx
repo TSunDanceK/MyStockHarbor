@@ -20,7 +20,7 @@ import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import { composeCompanyProfile, exchangeFor, peBasisLabel, peBasisNote, registrantFor } from "@/lib/server/stockProfile";
 import { filingDescriptionFor } from "@/lib/server/filingDescription";
 import {
-  REFUSAL_CELL_WORD, REFUSAL_WORDS, fyPeRatio, valuationMultiples, type EpsBasis, type MultipleInputs, type ValuationFigure, type ValuationInputs,
+  REFUSAL_CELL_WORD, REFUSAL_WORDS, fyPeNote, fyPeRatio, valuationMultiples, type EpsBasis, type MultipleInputs, type ValuationFigure, type ValuationInputs,
 } from "@/lib/server/secValuation";
 import { readableDate } from "@/lib/server/secEstimates";
 import { symbolSpellings } from "@/lib/symbolSpellings.mjs";
@@ -403,10 +403,6 @@ function valuationSourceNote(m: MultipleInputs | null, v: ValuationInputs | null
   );
 }
 
-/** Under an FY-basis P/E (#552 COWORK #98 §2). */
-function fyPeNote(eps: EpsBasis): string {
-  return `Twelve months of diluted EPS aren't on file, so this P/E uses the latest full year (to ${readableDate(eps.periodEnd)}).`;
-}
 
 // ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
 
