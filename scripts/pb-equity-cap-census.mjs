@@ -8,18 +8,20 @@
 // the tickers in the buckets a threshold would refuse. SEC reads: none.
 //
 //   relay task: write-pb-equity-cap-census
-//   Redis: 1 GET (universe) + 1 HMGET (stored rows) + the pool bulk read,
+//   Redis: 1 GET (universe; +1 payload GET if the symbol key has lapsed) + 1 HMGET (stored rows) + the pool bulk read,
 //   read-only.
 import "./lib/register-ts-app.mjs";
 import { Redis } from "@upstash/redis";
 
 const P = await import("../lib/server/pickersSecFundamentals.ts");
+const B = await import("../lib/server/pickersBuilder.ts");
 const POOL = await import("../lib/server/pricePool.ts");
 const redis = Redis.fromEnv();
 let commands = 0;
 
-const raw = await redis.get("msh:pickers:v10:symbols"); commands++;
-const list = Array.isArray(raw) ? raw : Array.isArray(raw?.symbols) ? raw.symbols : [];
+// The builder's own reader: the symbol key has a 3 h TTL, and the reader falls
+// back to the payload when it has lapsed (the first run read an empty key).
+const list = (await B.readPickersSymbolsIfCached()) ?? []; commands++;
 const universe = [...new Set(list.map((x) => String(typeof x === "string" ? x : x?.symbol ?? "").toUpperCase()).filter(Boolean))];
 const rows = await P.readSecPickerRows(universe); commands++;
 const pool = await POOL.readPricePoolBulk(universe); commands++;
