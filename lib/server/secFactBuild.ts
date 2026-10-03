@@ -128,6 +128,35 @@ export async function toStoredSet(
 
 
 /**
+ * DID toStoredSet DROP THE PERIODS FOR WANT OF A RATE SERIES? (#552 COWORK #132 (b))
+ *
+ * True when the filer reports in a non-USD currency, the extraction had
+ * periods, and the stored form has none and no conversion. That is exactly
+ * withoutPeriods' output: no source carries the currency, or every source that
+ * does failed to answer (ECB timing out on INR and MXN, 3 Oct 20:22 UTC).
+ *
+ * A JOB MUST NOT WRITE SUCH A SET OVER ONE THAT HAS PERIODS. Its hash is taken
+ * on no periods, so it always reads as "changed", and the write blanked the
+ * filer's figures until a later run's fetch succeeded. Over a set with no
+ * periods it changes nothing, so the guard keys on the prior having some.
+ * PURE, so a check can pin it without a network.
+ */
+export function periodsDroppedForFx(
+  extracted: Pick<ExtractResult, "reportingCurrency" | "quarters" | "years" | "instants">,
+  fresh: Pick<StoredFactSet, "quarters" | "years" | "instants" | "fx">,
+): boolean {
+  if (!extracted.reportingCurrency || extracted.reportingCurrency === "USD") return false;
+  const hadPeriods = extracted.quarters.length + extracted.years.length + extracted.instants.length > 0;
+  const hasPeriods = fresh.quarters.length + fresh.years.length + fresh.instants.length > 0;
+  return hadPeriods && !hasPeriods && !fresh.fx;
+}
+
+/** A stored set that has figures to lose. */
+export function setHasPeriods(set: Pick<StoredFactSet, "quarters" | "years" | "instants"> | null | undefined): boolean {
+  return Boolean(set && set.quarters.length + set.years.length + set.instants.length > 0);
+}
+
+/**
  * A PERIOD THAT HAD NO RATE NOW HAS ONE (#552 COWORK #50, CHT).
  *
  * contentHash is taken on the REPORTED figures, deliberately: a rate revision

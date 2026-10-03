@@ -22,12 +22,12 @@ import { Redis } from "@upstash/redis";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import type { FilingRef, StoredFactSet, StoredPeriod } from "./secFactCodec";
 import type { Submissions } from "./secReportDates";
-import type { CompanyFacts } from "./secExtract";
+import type { CompanyFacts, ExtractResult } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
 import { withPredecessorFacts } from "./secSuccession";
 import { withClassCover } from "./secCoverClasses";
 import { withInstanceEps } from "./secInstanceEps";
-import { toStoredSet } from "./secFactBuild";
+import { periodsDroppedForFx, setHasPeriods, toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { sicChangeOf, type SicChange } from "./secSicChange";
 import { instanceToFacts, isLagging, mergeFillOnly, newestPeriodicFiling, newestStoredEnd } from "./secFilingFill";
@@ -223,6 +223,18 @@ export async function checkAndFill(
   return { ...(await checkAndFillFrom(symbol, cik, stored, prior, fetch, fxSeries, subs)), sicChange, subs };
 }
 
+/**
+ * A RATE SERIES THAT FAILED TO LOAD NEVER BLANKS A STORED SET (#552 COWORK
+ * #132 (b)), the same rule as sec-facts. Thrown, so the route counts the
+ * symbol failed, stamps it, and a later run with a rate fills it.
+ */
+function keptFromFx(stored: StoredFactSet, extracted: ExtractResult, fresh: StoredFactSet): StoredFactSet {
+  if (setHasPeriods(stored) && periodsDroppedForFx(extracted, fresh)) {
+    throw new Error(`fx unavailable for ${extracted.reportingCurrency}: stored set kept`);
+  }
+  return fresh;
+}
+
 async function checkAndFillFrom(
   symbol: string,
   cik: string,
@@ -252,7 +264,7 @@ async function checkAndFillFrom(
   if (baseNewest !== null && baseNewest >= f.reportDate) {
     // TWELVE MONTHS OF EPS FROM THE 10-K AND 10-Q where the periods cannot give it. See secInstanceEps.
     base.ttmEps = await withInstanceEps(symbol, cik, base, fetch.get);
-    return { kind: "caught-up", set: await toStoredSet(base, defaultSources(), fxSeries), lag: null };
+    return { kind: "caught-up", set: keptFromFx(stored, base, await toStoredSet(base, defaultSources(), fxSeries)), lag: null };
   }
   if (stored.lg?.accn === f.accn) return { kind: "noted", lag: prior?.lag ?? { accn: f.accn, reportDate: f.reportDate, kind: "notice" } };
   const xml = await fetch.instance(cik, f);
@@ -261,7 +273,7 @@ async function checkAndFillFrom(
     : { merged: cf, added: 0 };
   const filled = added ? { ...extractForSymbol(symbol, merged), coverShares: base.coverShares } : base;
   filled.ttmEps = await withInstanceEps(symbol, cik, filled, fetch.get);
-  const next = await toStoredSet(filled, defaultSources(), fxSeries);
+  const next = keptFromFx(stored, filled, await toStoredSet(filled, defaultSources(), fxSeries));
   const noticeOnly = isLagging(next, f);
   const lag = { accn: f.accn, reportDate: f.reportDate, kind: noticeOnly ? "notice" as const : "filled" as const };
   return noticeOnly

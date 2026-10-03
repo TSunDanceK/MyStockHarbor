@@ -15,7 +15,7 @@
 // whose own hash differs treats the record as UNREADABLE and refetches. An order
 // change becomes a cache miss instead of a wrong number.
 import { SEC_FIELD_KEYS, secChainsHash, secFieldsHash } from "./secFields";
-import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION } from "./secExtract";
+import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION, SEC_SHARE_VERSION } from "./secExtract";
 import type { CoverShares, ExtractResult, PeriodRecord } from "./secExtract";
 import type { FxConversion } from "./secCurrency";
 
@@ -166,6 +166,8 @@ export type StoredFactSet = {
    * SEC_LABEL_VERSION; `h` and `c` cannot see a labelling change.
    */
   lv?: number;
+  /** The SHARE-SERIES shape this set was written under. Absent = 1. See SEC_SHARE_VERSION. */
+  sv?: number;
   /**
    * The QUARTER RETENTION WINDOW this set was written under.
    *
@@ -348,6 +350,7 @@ export function encodeFactSet(
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
     lv: SEC_LABEL_VERSION,
+    sv: SEC_SHARE_VERSION,
     cur: result.reportingCurrency,
     fx: fx?.conversion,
     notes: result.notes,
