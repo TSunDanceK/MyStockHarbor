@@ -384,8 +384,12 @@ const INCOME: FieldDef[] = ([
   // got into both chains.
   { key: "epsBasic", chain: ["EarningsPerShareBasic", "EarningsPerShareBasicAndDiluted"], unit: "USD/shares" },
   { key: "epsDiluted", chain: ["EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted"], unit: "USD/shares" },
-  { key: "sharesBasic", chain: ["WeightedAverageNumberOfSharesOutstandingBasic"], unit: "shares" },
-  { key: "sharesDiluted", chain: ["WeightedAverageNumberOfDilutedSharesOutstanding"], unit: "shares" },
+  // THE COMBINED TAG AS A FALLBACK, as EPS already does (#552 COWORK #89 §4):
+  // a filer with no dilutive securities may tag one "basic and diluted" count
+  // for some years. The dilution chart's gaps traced to it (LYV 2013–2020,
+  // LNT, SCCO, PM, INCY, MO, HAS, MARA...): the years were filed, under this tag.
+  { key: "sharesBasic", chain: ["WeightedAverageNumberOfSharesOutstandingBasic", "WeightedAverageNumberOfShareOutstandingBasicAndDiluted"], unit: "shares" },
+  { key: "sharesDiluted", chain: ["WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfShareOutstandingBasicAndDiluted"], unit: "shares" },
 ] satisfies Seed[]).map((f) => ({
   ...f,
   singleValued: true as const,

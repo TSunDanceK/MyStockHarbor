@@ -67,8 +67,16 @@ export type ShareHistory = {
 /** The chart needs a spread to draw a trend; fewer than this is no chart. */
 export const MIN_SHARE_POINTS = 3;
 /** Whole split ratios recognised, either way, within SHARE_SPLIT_TOLERANCE. */
-export const SHARE_SPLIT_RATIOS = [2, 3, 4, 5, 8, 10, 15, 20, 25, 40, 50];
+export const SHARE_SPLIT_RATIOS = [1.5, 2, 3, 4, 5, 6, 7, 8, 10, 15, 20, 25, 30, 40, 50];
 export const SHARE_SPLIT_TOLERANCE = 0.03;
+/**
+ * A STEP MATCHES A PROVEN SPLIT within this: the period the step crosses
+ * mixes the split with that year's buybacks or issuance (AAPL 2017 -> 2018
+ * reads 3.80 against its proven 4:1). The scale applied is the proven ratio.
+ */
+export const SHARE_PROVEN_SPLIT_TOLERANCE = 0.1;
+/** How far after a step its restated comparatives may lie (a 10-K restates up to three prior years). */
+export const SHARE_PROVEN_SPLIT_YEARS = 3;
 /** A step bigger than this either way is a unit or scale error, never dilution. */
 export const SHARE_SCALE_MAX_STEP = 100;
 /** Consecutive points further apart than this (15 months) break the line. */
@@ -129,6 +137,8 @@ export function correctShareSeries(
   raw: ShareHistoryPoint[],
   restated: [string, number][] = [],
   listedFrom: string | null = null,
+  /** Period ends re-filed unchanged (StoredFactSet.asf): a split-like step after one is real issuance. */
+  refiled: string[] = [],
 ): { points: ShareHistoryPoint[]; splits: { date: string; ratio: number }[]; startedAfter?: ShareHistory["startedAfter"] } {
   let pts = raw.map((p) => ({ ...p }));
   const splits: { date: string; ratio: number }[] = [];
@@ -138,7 +148,14 @@ export function correctShareSeries(
     const kept = pts.filter((p) => p.date >= listedFrom);
     if (kept.length < pts.length) { startedAfter = { date: kept[0]?.date ?? listedFrom, reason: "listing" }; pts = kept; }
   }
-  const proven = restated.map(([, r]) => splitRatioOf(r)).filter((k): k is number => k !== null);
+  // A restatement proves a split AT A STEP only if the restated period lies
+  // after the step's earlier point and within SHARE_PROVEN_SPLIT_YEARS of its
+  // later one (the comparatives a 10-K restates): an old split never explains
+  // a new step.
+  const proven = restated
+    .map(([e, r]) => ({ e, k: splitRatioOf(r) }))
+    .filter((x): x is { e: string; k: number } => x.k !== null);
+  const plusYears = (iso: string, n: number) => `${Number(iso.slice(0, 4)) + n}${iso.slice(4)}`;
   for (let i = pts.length - 1; i >= 1; i--) {
     const r = pts[i].shares / pts[i - 1].shares;
     if (!Number.isFinite(r) || r <= 0) continue;
@@ -147,13 +164,20 @@ export function correctShareSeries(
       pts = pts.slice(i);
       break;
     }
+    // A SPLIT THE FILER PROVED, matched loosely; scaled by the proven ratio.
+    const p = proven.find((x) => x.e > pts[i - 1].date && x.e <= plusYears(pts[i].date, SHARE_PROVEN_SPLIT_YEARS)
+      && Math.abs(r / x.k - 1) < SHARE_PROVEN_SPLIT_TOLERANCE)?.k;
+    if (p !== undefined) {
+      for (let j = 0; j < i; j++) pts[j] = { ...pts[j], shares: pts[j].shares * p };
+      splits.push({ date: pts[i].date, ratio: p });
+      continue;
+    }
     const k = splitRatioOf(r);
     if (k === null) continue;
-    if (proven.some((p) => Math.abs(p / k - 1) < SHARE_SPLIT_TOLERANCE)) {
-      // Scale every earlier point onto the post-split basis.
-      for (let j = 0; j < i; j++) pts[j] = { ...pts[j], shares: pts[j].shares * k };
-      splits.push({ date: pts[i].date, ratio: k });
-    } else {
+    // RE-FILED UNCHANGED: the earlier period was reported again, as it was,
+    // so no split restated it. The step is real issuance (or buybacks).
+    if (refiled.includes(pts[i - 1].date)) continue;
+    {
       startedAfter = { date: pts[i].date, reason: "unexplained-split-step" };
       pts = pts.slice(i);
       break;
@@ -193,7 +217,7 @@ export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?
   if (!set) return null;
   const raw = rawShareSeries(set);
   if (!raw) return null;
-  const fixed = correctShareSeries(raw.points, set.asr ?? [], opts.listedFrom ?? null);
+  const fixed = correctShareSeries(raw.points, set.asr ?? [], opts.listedFrom ?? null, set.asf ?? []);
   if (fixed.points.length < MIN_SHARE_POINTS) return null;
   const gaps = shareGaps(fixed.points);
   return {

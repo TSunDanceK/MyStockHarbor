@@ -220,6 +220,8 @@ export type StoredFactSet = {
    * reason `as` is not: it fills in as each set is refreshed.
    */
   asr?: [string, number][];
+  /** Period ends re-filed unchanged (ExtractResult.shareRefiled). Optional; not in contentHashOf. */
+  asf?: string[];
   /**
    * Field keys the payload published NO chain concept for, in any period.
    * See ExtractResult.untagged. OPTIONAL: absent means "written before the
@@ -339,6 +341,7 @@ export function encodeFactSet(
     cc: result.conceptChoice,
     ...(result.annualShares?.length ? { as: result.annualShares } : {}),
     ...(result.shareRestated?.length ? { asr: result.shareRestated } : {}),
+    ...(result.shareRefiled?.length ? { asf: result.shareRefiled } : {}),
     ...(result.untagged ? { nt: result.untagged } : {}),
     ...(result.readNamespaces ? { rns: result.readNamespaces } : {}),
     ...(result.summedSga?.length ? { sg: result.summedSga } : {}),
