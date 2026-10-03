@@ -173,6 +173,8 @@ function rules(srcs) {
   want("the dashboard shows the quote's price label and the credit", /quote\?\.priceLabel \?/.test(code[FILES.dashClient]) && /tiingoCredit=\{tiingoCredit\}/.test(code[FILES.dashPage]));
   want("the dashboard seed carries the price label", /priceLabel: q\.priceLabel/.test(code[FILES.dashPage]));
   want("a benchmark tile shows its own price label", /it\.priceLabel \?\?/.test(code[FILES.dashClient]));
+  want("an FMP tile's time is readable, not the raw date and time (COWORK #101)",
+    /as of \$\{utcStamp\(/.test(code[FILES.dashClient]) && !/\? `\$\{it\.date\} \$\{it\.time\}` :/.test(code[FILES.dashClient]));
 
   // stock page
   const fq = fnBody(code[FILES.stockPage], "fetchQuote");
@@ -198,6 +200,7 @@ const MUTANTS = [
   ["the old \"(via SPY)\" label", FILES.bench, /"SPY · S&P 500 ETF"/, '"S&P 500 (via SPY)"'],
   ["the ETF note dropped", FILES.dashClient, / · ETF prices, not index levels/, ""],
   ["the stock page seeds from FMP only", FILES.stockPage, /if \(priceProviderFor\("STOCK_PAGE"\) === "tiingo"\) \{\n\s*const t = await readTiingoQuote\(symbol\);/, "if (false) {\n    const t = null as any;"],
+  ["the FMP tile shows the raw time again", FILES.dashClient, /`as of \$\{utcStamp\(`\$\{it\.date\}T\$\{it\.time\}Z`\) \?\? `\$\{it\.date\} \$\{it\.time\}`\}`/, "`${it.date} ${it.time}`"],
   ["the header drops the volume label", FILES.stockClient, /quote\?\.volumeLabel \?/, "false ?"],
 ];
 for (const [label, file, from, to] of MUTANTS) {

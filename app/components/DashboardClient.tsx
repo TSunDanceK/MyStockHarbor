@@ -1233,7 +1233,7 @@ export default function DashboardClient({
           <div style={{ fontSize: isMobile ? 19 : 20, fontWeight: 800, marginTop: 9, fontVariantNumeric: "tabular-nums", color: ac, whiteSpace: "nowrap" }}>{pt != null ? `${isUp ? "▲" : "▼"} ${pt}` : "—"}</div>
           <div style={{ marginTop: 6, display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{pr}</span>
-            <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{it.priceLabel ?? (it.date && it.time ? `${it.date} ${it.time}` : "—")}</span>
+            <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{/* #553 COWORK #101 nit: the FMP tiles read "as of 3 Oct 2026, 00:12 UTC", not the raw "2026-10-03 00:12:06". */}{it.priceLabel ?? (it.date && it.time ? `as of ${utcStamp(`${it.date}T${it.time}Z`) ?? `${it.date} ${it.time}`}` : "—")}</span>
           </div>
         </button>
       );
