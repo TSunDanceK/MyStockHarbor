@@ -297,7 +297,8 @@ console.log("\n4. A6 + A7 — nothing internal reaches the reader");
       hit ? `…${text.slice(Math.max(0, hit.index - 50), hit.index + 60)}…` : "");
   }
   check("the filing DATE is still shown — only the key went",
-    /filed\s+\d{4}-\d{2}-\d{2}/.test(text), text.slice(0, 0) || "");
+    // Read as "13 Aug 2026" since #552 COWORK #97, never ISO.
+    /filed\s+\d{1,2} [A-Z][a-z]{2} \d{4}/.test(text) && !/filed\s+\d{4}-\d{2}-\d{2}/.test(text), text.slice(0, 0) || "");
 }
 
 console.log("\n5. A3 — a blank Q4 EPS says why");
@@ -340,7 +341,7 @@ console.log("\n6. KGC renders a real page, and never a pending one");
   // year-end once and the exact date sits on each FY label.
   check("every annual row names its period end, not only its label",
     vKgc.annual.every((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.end)) &&
-      /title="Ended 2025-12-31"/.test(html(React.createElement(M.SecAnnualCard, { view: vKgc, sole: true }))),
+      /title="Ended 31 Dec 2025"/.test(html(React.createElement(M.SecAnnualCard, { view: vKgc, sole: true }))),
     "two filers' FY2025 can be nine months apart");
   check("the cash card is labelled as annual, not as a quarter",
     vKgc.cashQuality.basis === "year" && vKgc.cashQuality.period === "FY2025",
@@ -1158,7 +1159,7 @@ console.log("\n16. AVAV — the earnings-page cleanup brief, on the filer it was
   // $8.35B, not $8.4B: the market cap now uses the page's one amount rule
   // (scaledAmount, 2dp in B) rather than a second 1dp formatter (PR #531).
   check("B: valuation reads Market cap $8.35B and P/E Not meaningful, each with a one-line caption",
-    /Market cap \$8\.35B 50\.8M shares × \$164\.31 close, 2026-09-21/.test(val) &&
+    /Market cap \$8\.35B 50\.8M shares × \$164\.31 close, 21 Sep 2026/.test(val) &&
       /P\/E \(GAAP, trailing\) Not meaningful Loss over/.test(val) && !/never an adjusted figure/.test(val),
     val);
   // TREND: the median beside the newest period (owner review, #522). AVAV's
@@ -1201,7 +1202,7 @@ console.log("\n17. round 2 — fiscal-year ends said once, a horizon not reached
   const annualText = visibleText(html(React.createElement(M.SecAnnualCard, { view: vAvav2 })));
   const annualMarkup = html(React.createElement(M.SecAnnualCard, { view: vAvav2 }));
   check("the five-year table drops the 'ended' line and keeps the date as the label's tooltip",
-    !/ended \d{4}-\d{2}-\d{2}/.test(annualText) && /title="Ended 2026-04-30"/.test(annualMarkup) &&
+    !/ended \d{4}-\d{2}-\d{2}/.test(annualText) && /title="Ended 30 Apr 2026"/.test(annualMarkup) &&
       /Each fiscal year as filed, compared with the year before\. Fiscal years end 30 April\./.test(annualText),
     annualText.slice(0, 160));
 

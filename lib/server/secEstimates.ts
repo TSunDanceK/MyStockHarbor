@@ -61,11 +61,29 @@ export const ESTIMATE_METHODS: Record<EstimateKey, { kind: Estimate["kind"]; met
   },
 };
 
-const EST_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const EST_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "30 Jun 2026". */
 export function readableDate(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   return m ? `${Number(m[3])} ${EST_MONTH_ABBR[Number(m[2]) - 1]} ${m[1]}` : iso;
+}
+
+/**
+ * THE NEXT-REPORT WINDOW'S MARK (#552 COWORK #96): an estimated window, not a
+ * figure, so it carries the outlook's own hedge as its note. Built here, like
+ * every estimate mark, so no surface invents one.
+ */
+export function reportWindowMark(note: string): { kind: "estimate"; note: string } {
+  return { kind: "estimate", note };
+}
+
+/**
+ * Every yyyy-mm-dd in a sentence, read as "30 Jun 2026" (#552 COWORK #96/#97).
+ * For sentences composed elsewhere (the outlook's evidence lines) that a card
+ * prints as they are: the words stay theirs, only the date format changes.
+ */
+export function readableIsoDates(text: string): string {
+  return text.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (iso) => readableDate(iso));
 }
 
 export function estimateOf(key: EstimateKey, asOf: string): Estimate {

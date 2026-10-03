@@ -396,7 +396,7 @@ return lift(
    unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), "toneForGrowth")),
    unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), "toneForMarginDelta")),
    // THE SMALL-BASE / NOT-MEANINGFUL RULES (#535 COWORK #20), from their source.
-   ...["MARGIN_MEANINGFUL_FLOOR_PCT", "MARGIN_MEANINGFUL_MOVE_PP", "MARGIN_NOT_MEANINGFUL", "REVENUE_BASE_FLOOR_USD", "SMALL_REVENUE_BASE"].map((n) =>
+   ...["MARGIN_MEANINGFUL_FLOOR_PCT", "MARGIN_MEANINGFUL_MOVE_PP", "MARGIN_NOT_MEANINGFUL", "MARGIN_NOT_MEANINGFUL_HERE", "REVENUE_BASE_FLOOR_USD", "SMALL_REVENUE_BASE"].map((n) =>
      (readCodeOnly("lib/server/secPresentation.ts").match(new RegExp(`export const ${n} = [^;]+;`)) ?? [""])[0].replace("export const", "const")),
    ...["marginMoveMeaningful", "priorRevenueFrom", "revenueBaseTooSmall", "marginMoveVerb"].map((n) =>
      unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), n))),

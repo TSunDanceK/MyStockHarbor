@@ -9,6 +9,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import { loadSnapshot, html, visibleText, React } from "./render-snapshot.mjs";
 import { OLD_CARD_TSX } from "./next-report-legacy.mjs";
+import { loadNextReportCard } from "./render-cards.mjs";
 
 /** Transpile a .tsx source and import it from a real path (so react/jsx-runtime resolves). */
 export async function importTsx(src, name) {
@@ -30,8 +31,15 @@ export async function importTsx(src, name) {
 
 export const CARD_FILE = "app/stock/[symbol]/earnings/NextReportCard.tsx";
 
-/** The shipped card. NextReportCard imports only a type, so it loads alone. */
-export const loadCard = (mutate = (s) => s) => importTsx(mutate(fs.readFileSync(CARD_FILE, "utf8")), "card");
+/**
+ * The shipped card. It now imports the shared estimate mark and secEstimates'
+ * date words (#552 COWORK #96), so it loads through render-cards' unit; the
+ * default export is kept so callers read `C.default` as before.
+ */
+export const loadCard = async (mutate = (s) => s) => {
+  const m = await loadNextReportCard(mutate);
+  return { default: m.NextReportCard };
+};
 /** The removed card, for mutants and the "before" column. */
 export const loadOldCard = () => importTsx(OLD_CARD_TSX, "oldcard");
 

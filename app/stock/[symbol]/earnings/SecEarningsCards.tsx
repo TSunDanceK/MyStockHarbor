@@ -15,10 +15,12 @@ import {
   STALE_PRICE_WORDS, growthToneWord, marginToneWord, priceIsCurrent,
   GROWTH_BAND_PCT, MARGIN_BAND_PP, fiscalYearEndNote, stalePriceNote, toneBg, toneColor, toneTint,
   toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate, waterfallGeometry,
-  TREND_MIN_PERIODS, coverageIsInformative, partialScoreLabel, partialScoreNote, scaledAmount,
+  TREND_MIN_PERIODS, coverageIsInformative, partialScoreLabel, partialScoreNote, scaledAmount, scoreSummaryLine,
   type EarningsTone, type ScoreCoverage,
 } from "@/lib/server/secPresentation";
 import { SCORE_BANDS, scoreBandNote, toneLabel, type SecEarningsScore } from "@/lib/server/secEarningsScore";
+import { readableDate, readableIsoDates } from "@/lib/server/secEstimates";
+import { ReasonedValue } from "@/app/components/EstimatedValue";
 import {
   REFUSAL_WORDS, epsUnitWords, marketCap, peRatio, sharesBasisWords, type ValuationInputs,
 } from "@/lib/server/secValuation";
@@ -83,9 +85,9 @@ export function ToneChip({ tone, word }: { tone: EarningsTone | null; word: stri
  * secPresentation: a mark on the axis reads as a measured zero.
  */
 function HBar({ value, max, tone }: { value: number | null; max: number; tone: EarningsTone | null }) {
-  if (value === null || !Number.isFinite(value) || max <= 0) {
-    return <div className="hbarTrack" aria-hidden="true" />;
-  }
+  // NO TRACK FOR A ROW WITH NO VALUE (#552 COWORK #97): an empty track
+  // beside "Not available" reads as a bar at zero.
+  if (value === null || !Number.isFinite(value) || max <= 0) return null;
   const pct = Math.max(0, Math.min(100, (Math.abs(value) / max) * 100));
   return (
     <div className="hbarTrack" aria-hidden="true">
@@ -435,12 +437,16 @@ export function DerivedValue(
   { value, missing, compact = true }: { value: number | null; missing: string | null; compact?: boolean }
 ) {
   if (value !== null) return <>{money(value, compact)}</>;
-  return (
-    <span style={{ color: "#94a3b8", fontWeight: 600 }}>
-      {missing ? cantCalculate(missing) : NOT_REPORTED}
-    </span>
-  );
+  // "NOT AVAILABLE" IN THE CELL, THE REASON ON HOVER/TAP (#552 COWORK #97):
+  // "Can't calculate — short-term debt and long-term d…" ran off a phone.
+  return missing
+    ? <ReasonedValue text={NOT_AVAILABLE} reason={cantCalculate(missing)} style={MUTED_VALUE} />
+    : <span style={MUTED_VALUE}>{NOT_REPORTED}</span>;
 }
+
+/** A refusal's short word in a narrow cell; the reason rides in its note. */
+const NOT_AVAILABLE = "Not available";
+const MUTED_VALUE = { color: "#94a3b8", fontWeight: 600 } as const;
 
 /**
  * A card whose source went away.
@@ -526,8 +532,8 @@ export function SecSnapshotCard({
       <h2>{view.symbol} latest earnings snapshot</h2>
       <p>
         Most recent {w.one} filed: <strong>{view.latestLabel}</strong> (period ending{" "}
-        <strong>{view.latestEnd}</strong>)
-        {view.latestFiled ? <>, filed <strong>{view.latestFiled}</strong></> : null}.
+        <strong>{view.latestEnd ? readableDate(view.latestEnd) : "—"}</strong>)
+        {view.latestFiled ? <>, filed <strong>{readableDate(view.latestFiled)}</strong></> : null}.
       </p>
       {/* ── WHY THIS PAGE IS A QUARTER BEHIND, WHEN IT IS ──────────────────
           ABT announced its June quarter on 16 July 2026 and filed the 10-Q on
@@ -541,15 +547,15 @@ export function SecSnapshotCard({
           data feed yet. No estimate, no third-party number, nothing about what
           the results were. */}
       {view.latestFromFiling ? (
-        <p className="earningsDataNote" style={{ marginTop: -4 }}>{filingCreditText(view.latestFromFiling)}</p>
+        <p className="earningsDataNote" style={{ marginTop: -4 }}>{readableIsoDates(filingCreditText(view.latestFromFiling))}</p>
       ) : null}
       {view.filedNotInFeed ? (
-        <p className="earningsDataNote" style={{ marginTop: -4 }}>{filingNoticeText(view.filedNotInFeed)}</p>
+        <p className="earningsDataNote" style={{ marginTop: -4 }}>{readableIsoDates(filingNoticeText(view.filedNotInFeed))}</p>
       ) : null}
       {pendingShown ? (
         <p className="earningsDataNote" style={{ marginTop: -4 }}>
-          Results for the quarter ended <strong>{pendingShown.periodEnd}</strong> were announced on{" "}
-          <strong>{pendingShown.announcedOn}</strong>. The SEC has not yet published the figures in its
+          Results for the quarter ended <strong>{readableDate(pendingShown.periodEnd)}</strong> were announced on{" "}
+          <strong>{readableDate(pendingShown.announcedOn)}</strong>. The SEC has not yet published the figures in its
           data feed, so this page still shows the previous quarter.
         </p>
       ) : null}
@@ -883,7 +889,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
                       line under every label; the intro now says it once
                       (fiscalYearEndNote) and the exact date is one hover or
                       tap away — two filers' "FY2025" can be nine months apart. */}
-                  <abbr className="cellShort" title={`Ended ${r.end}`} tabIndex={0}>{r.label}</abbr>
+                  <abbr className="cellShort" title={`Ended ${readableDate(r.end)}`} tabIndex={0}>{r.label}</abbr>
                 </td>
                 {/* NO "COMPARED WITH" COLUMN. The intro says each year is
                     compared with the year before, so the column only repeated
@@ -1155,7 +1161,7 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
   return (
     <section className="card">
       <div className="eyebrow">Balance sheet</div>
-      <h3>Financial position as at {b.asOf}</h3>
+      <h3>Financial position at {readableDate(b.asOf)}</h3>
       {/* THREE PERIODS, ONE LEDE. The page's opening line says "latest reported
           quarter" while the income statement, the cash-flow statement and this
           balance sheet can each be a different period — every one correctly
@@ -1165,7 +1171,7 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
       {apart ? (
         <p style={{ marginTop: 8, marginBottom: 0 }}>
           This is a <strong>different date</strong> from the income statement above, which covers{" "}
-          {view.latestLabel} ending {view.latestEnd}. A balance sheet is a position on one day and a
+          {view.latestLabel} ending {view.latestEnd ? readableDate(view.latestEnd) : "—"}. A balance sheet is a position on one day and a
           filer&apos;s most recent one is not always the end of its most recent reported period —
           these are {Math.abs(spread!)} days apart.
         </p>
@@ -1180,10 +1186,10 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
             BalanceSheetBars). */}
         <Row label="Short-term investments"><CellValue cell={b.shortTermInvestments} compact /></Row>
         <Row label="Current ratio">
-          {b.currentRatio !== null ? ratio(b.currentRatio) : (
-            <span style={{ color: "#94a3b8", fontWeight: 600 }}>
-              {b.currentRatioMissing ? cantCalculate(b.currentRatioMissing) : NOT_REPORTED}
-            </span>
+          {b.currentRatio !== null ? ratio(b.currentRatio) : b.currentRatioMissing ? (
+            <ReasonedValue text={NOT_AVAILABLE} reason={cantCalculate(b.currentRatioMissing)} style={MUTED_VALUE} />
+          ) : (
+            <span style={MUTED_VALUE}>{NOT_REPORTED}</span>
           )}
         </Row>
         <Row label="Total assets"><CellValue cell={b.totalAssets} compact /></Row>
@@ -1204,11 +1210,23 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
           the ABSENCE of a mark, which no reader goes looking for; the sentence
           kept is the one that explains words on this card — AVAV shows "Not
           reported" against total liabilities and equity. */}
+      {/* THE "NOT REPORTED" SENTENCE ONLY WHERE A ROW SAYS IT (#552 COWORK
+          #97): explaining words that aren't on the card is noise. */}
       <p className="earningsDataNote">
-        {NOT_REPORTED_NOTE} Source: {SEC_ATTRIBUTION}.
+        {balanceShowsNotReported(b) ? `${NOT_REPORTED_NOTE} ` : ""}Source: {SEC_ATTRIBUTION}.
       </p>
     </section>
   );
+}
+
+/** Whether any row of the balance sheet card prints NOT_REPORTED. */
+function balanceShowsNotReported(b: NonNullable<SecEarningsView["balance"]>): boolean {
+  return b.cash?.val == null
+    || (b.totalDebt === null && !b.totalDebtMissing)
+    || (b.netCash === null && !b.netCashMissing)
+    || b.shortTermInvestments?.val == null
+    || (b.currentRatio === null && !b.currentRatioMissing)
+    || b.totalAssets?.val == null;
 }
 
 
@@ -1332,7 +1350,7 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
             {view.recentPeriods.map((r) => (
               <tr key={r.end}>
                 <td data-label={w.One}>{r.label}</td>
-                <td data-label="Period ending">{r.end}</td>
+                <td data-label="Period ending">{readableDate(r.end)}</td>
                 <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
                 <td data-label={`Diluted EPS (${epsStandardWord(view.accounting)})`}>
                   <CellValue cell={r.epsDiluted} short empty={epsEmpty(view, r.label)} emptyTitle={q4EpsNotReported(r) ? Q4_EPS_NOTE : undefined} />
@@ -1833,11 +1851,11 @@ export function SecValuationCard({
   const sentence = (t: string) => `${t[0].toUpperCase()}${t.slice(1)}.`;
   const capValue = !current ? STALE_PRICE_WORDS : cap === null ? NOT_REPORTED : cap.ok ? shortMoney(cap.val) : "Not available";
   const capSub = !current
-    ? stalePriceNote(price, priceAsOf ?? "an unknown date")
+    ? readableIsoDates(stalePriceNote(price, priceAsOf ?? "an unknown date"))
     : cap !== null && !cap.ok
       ? sentence(REFUSAL_WORDS[cap.why])
       : inputs.shares
-        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} ${priceLabel ?? `close${priceAsOf ? `, ${priceAsOf}` : ""}`}`
+        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} ${priceLabel ?? `close${priceAsOf ? `, ${readableDate(priceAsOf)}` : ""}`}`
         : null;
   const peValue = !current ? STALE_PRICE_WORDS
     : pe === null ? NOT_REPORTED
@@ -1845,10 +1863,10 @@ export function SecValuationCard({
         : pe.why === "eps-is-zero-or-negative" || pe.why === "eps-near-zero" ? "Not meaningful" : "Not available";
   // WHICH TWELVE MONTHS, and a derived Q4 said so (#552 COWORK #8/#9).
   const epsSpan = inputs.eps?.basis === "four-quarters"
-    ? `the four quarters to ${inputs.eps.periodEnd}${inputs.eps.derivedQ4 ? " (Q4 is the fiscal year less Q1–Q3)" : ""}`
+    ? `the four quarters to ${readableDate(inputs.eps.periodEnd)}${inputs.eps.derivedQ4 ? " (Q4 is the fiscal year less Q1–Q3)" : ""}`
     : inputs.eps?.basis === "year-to-date" && inputs.eps.ytd
-      ? `the twelve months to ${inputs.eps.periodEnd} (the fiscal year to ${inputs.eps.ytd.yearEnd} plus ${inputs.eps.ytd.months} months, less the same ${inputs.eps.ytd.months} months a year earlier)`
-      : `${inputs.eps?.fiscalYear ? `fiscal year ${inputs.eps.fiscalYear}` : "the latest fiscal year"}, to ${inputs.eps?.periodEnd}`;
+      ? `the twelve months to ${readableDate(inputs.eps.periodEnd)} (the fiscal year to ${readableDate(inputs.eps.ytd.yearEnd)} plus ${inputs.eps.ytd.months} months, less the same ${inputs.eps.ytd.months} months a year earlier)`
+      : `${inputs.eps?.fiscalYear ? `fiscal year ${inputs.eps.fiscalYear}` : "the latest fiscal year"}, to ${inputs.eps?.periodEnd ? readableDate(inputs.eps.periodEnd) : "its year-end"}`;
   const peSub = !current ? null
     : pe !== null && !pe.ok
       ? pe.why === "eps-is-zero-or-negative"
@@ -1928,18 +1946,35 @@ export function SecScoreCard({
             {watermark}
           </div>
           <div className="scoreBar" aria-hidden="true">
-            {/* THE REACHABLE RANGE, DRAWN — ONLY WHEN IT IS A RANGE. A
-                shaded span across the whole bar (AVAV: 0 to 100) says
-                nothing and looks like a highlight, so it is drawn only
-                when it is narrower than the scale. */}
+            {/* THE REACHABLE RANGE, OUTLINED — ONLY WHEN IT IS A RANGE
+                (#552 COWORK #95). The gradient stays at full strength inside
+                it; the ends the score CAN'T reach are dimmed. It used to be
+                the other way round, which lit up exactly where the score
+                could not land. The outline is a shape, and the range is in
+                the visible line, so colour is never the only signal. */}
             {coverage && coverageIsInformative(coverage) ? (
-              <div
-                className="scoreReach"
-                style={{ left: `${coverage.low}%`, width: `${Math.max(coverage.high - coverage.low, 1)}%` }}
-              />
+              <>
+                <div className="scoreOut" data-score-out="" style={{ left: 0, width: `${coverage.low}%` }} />
+                <div className="scoreOut" data-score-out="" style={{ left: `${coverage.high}%`, width: `${100 - coverage.high}%` }} />
+                <div
+                  className="scoreReach"
+                  data-score-reach=""
+                  style={{ left: `${coverage.low}%`, width: `${Math.max(coverage.high - coverage.low, 1)}%` }}
+                />
+              </>
             ) : null}
             <div className="scoreNeedle" />
           </div>
+          {coverage && coverageIsInformative(coverage) ? (
+            <div className="scoreReachLabelRow" aria-hidden="true">
+              <span
+                className="scoreReachLabel"
+                style={{ left: `${coverage.low}%`, width: `${Math.max(coverage.high - coverage.low, 1)}%` }}
+              >
+                possible range
+              </span>
+            </div>
+          ) : null}
           {/* THE AXIS IS LABELLED FROM THE BAND TABLE, and the thresholds
               sit behind the info mark beside it rather than in a paragraph
               under it. A tooltip that only hovers is invisible on a phone, so
@@ -1955,25 +1990,44 @@ export function SecScoreCard({
               </span>
             ))}
           </div>
+          {/* ONE LINE, ALWAYS VISIBLE (#552 COWORK #95): how much was
+              measured and, when it says something, the range. */}
+          {scoreSummaryLine(coverage, coverage?.pinned ? toneLabel("neutral") : null) ? (
+            <p className="scoreSummary" data-score-summary="">
+              {scoreSummaryLine(coverage, coverage?.pinned ? toneLabel("neutral") : null)}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+      {/* ── ABOUT THIS SCORE: A NATIVE <details>, IN THE SERVER HTML ──────
+          (#552 COWORK #95). Closed by default, so the card is short on a
+          phone; the text is in the page Google reads and works without JS.
+          An unavailable score keeps its reason visible: there is no score
+          above it for the reason to explain. */}
+      {score.available ? (
+        <details className="cardDetails scoreAbout">
+          <summary>About this score</summary>
           {coverage?.partial ? (
             <p className="earningsDataNote scoreReachNote" style={{ marginTop: 8 }}>
               {partialScoreNote(coverage, score.unavailableWhy, coverage.pinned ? toneLabel("neutral") : null)}
             </p>
           ) : null}
-        </>
-      ) : null}
-      <p style={{ marginTop: 14 }}>{score.explanation}</p>
-      {/* WHICH KIND OF PERIOD THE SCORE READ — point 5 of the scope.
-          Every term of this score is measured over the anchor period,
-          and a reader comparing an annual filer's score with a 10-Q
-          filer's has to be told they are not the same measurement. */}
-      {score.available && score.basis === "year" ? (
-        <p className="earningsDataNote" style={{ marginTop: 10 }}>
-          <strong>{symbol} files annually</strong>, so this score is built on its fiscal
-          years — growth is year against prior year, and there are no quarterly figures
-          behind it.
-        </p>
-      ) : null}
+          <p style={{ marginTop: 10 }}>{score.explanation}</p>
+          {/* WHICH KIND OF PERIOD THE SCORE READ — point 5 of the scope.
+              Every term of this score is measured over the anchor period,
+              and a reader comparing an annual filer's score with a 10-Q
+              filer's has to be told they are not the same measurement. */}
+          {score.basis === "year" ? (
+            <p className="earningsDataNote" style={{ marginTop: 10 }}>
+              <strong>{symbol} files annually</strong>, so this score is built on its fiscal
+              years — growth is year against prior year, and there are no quarterly figures
+              behind it.
+            </p>
+          ) : null}
+        </details>
+      ) : (
+        <p style={{ marginTop: 14 }}>{score.explanation}</p>
+      )}
     </aside>
   );
 }

@@ -22,7 +22,7 @@ import {
 import type { ColdResult } from "./secColdFetch";
 import type { EarningsTone as PresentationTone } from "./secPresentation";
 import {
-  MARGIN_NOT_MEANINGFUL, SMALL_REVENUE_BASE, marginMoveMeaningful, marginMoveVerb,
+  MARGIN_NOT_MEANINGFUL, MARGIN_NOT_MEANINGFUL_HERE, SMALL_REVENUE_BASE, marginMoveMeaningful, marginMoveVerb,
   pinCoverage, revenueBaseTooSmall, scoreCoverage, toneForGrowth, toneForMarginDelta, type ScoreCoverage,
 } from "./secPresentation";
 
@@ -202,15 +202,15 @@ function scoreExplanation(view: SecEarningsView, basis: PeriodBasis = "quarter")
   // 658.1pp" was that. The words say so and the tone stays out of "though".
   const meaningful = pair !== null && marginMoveMeaningful(pair.prior, pair.latest);
   const mTone = meaningful ? toneForMarginDelta(pp) : null;
-  if (pair && pp !== null) {
+  // A MARGIN THAT ISN'T MEANINGFUL GETS ITS OWN SENTENCE (#552 COWORK #95):
+  // "…is not meaningful — revenue is too small relative to costs, though the
+  // quarter was loss-making" read as if the loss were a surprise against it.
+  const marginNotMeaningful = pair !== null && pp !== null && !meaningful;
+  if (pair && pp !== null && meaningful) {
     // "Widened"/"narrowed" only where both margins are positive; a negative
     // margin moving towards zero "improved" (rule 3).
-    const verb = meaningful ? marginMoveVerb(pair.prior, pair.latest, mTone) : null;
-    clauses.push(
-      !meaningful ? `operating margin is ${MARGIN_NOT_MEANINGFUL}`
-        : verb ? `operating margin ${verb} ${Math.abs(pp).toFixed(1)}pp`
-          : "operating margin held steady"
-    );
+    const verb = marginMoveVerb(pair.prior, pair.latest, mTone);
+    clauses.push(verb ? `operating margin ${verb} ${Math.abs(pp).toFixed(1)}pp` : "operating margin held steady");
   }
   const ni = s?.netIncome?.val ?? null;
   const opInc = s?.operatingIncome?.val ?? null;
@@ -220,6 +220,11 @@ function scoreExplanation(view: SecEarningsView, basis: PeriodBasis = "quarter")
   const profit = ni === null ? null
     : ni > 0 ? (opInc !== null && opInc < 0 ? `the ${w.one} was profitable after non-operating items` : `the ${w.one} was profitable`)
       : `the ${w.one} was loss-making`;
+  if (marginNotMeaningful) {
+    const lead = clauses.length ? `${clauses.join(" and ")}. ` : "";
+    const sentence = `${lead[0]?.toUpperCase() ?? ""}${lead.slice(1)}Operating margin is ${MARGIN_NOT_MEANINGFUL_HERE}${profit ? `, and ${profit}` : ""}.`;
+    return `${sentence} Later filings may show whether that continues.`;
+  }
   if (!clauses.length) {
     return profit
       ? `${profit[0].toUpperCase()}${profit.slice(1)}; later filings may show more.`
