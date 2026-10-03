@@ -133,6 +133,10 @@ const RULES = {
     return p && p.points.length === 0 && p.withheld?.reason === "units-unconfirmed" && p.withheld.factor > 900
       && /data-share-withheld="">Not drawn: the share counts in this company/.test(html) && !/505\.28B|525\.58B/.test(html) && !/<svg/.test(html);
   },
+  "3h. a cover naming one class (SHOP-like, ×33) is not a units slip: still drawn": (b) => {
+    const h = b.buildShareHistory(set(DILUTER, undefined, undefined, 125e6 / 33));
+    return h && h.points.length === 5 && !h.withheld;
+  },
   "3e. a >100× step cut with no cover count -> not drawn; no step and no cover -> drawn as before": (b, c) => {
     const p = b.buildShareHistory(set(PAC)), d = b.buildShareHistory(set(DILUTER));
     return p?.withheld?.factor === null && /no cover-page count to confirm/.test(render(c, p)) && d && d.points.length === 5 && !d.withheld;
@@ -205,6 +209,7 @@ const MUTANTS = [
   ["the same split noted twice", (s) => once(s, "if (!splits.some((x) => x.ratio === p && nearStep(x.date, pts[i].date))) splits.push", "splits.push"), null],
   ["a dropped filing counted as a gap", (s) => once(s, "    if (dropped.some((d) => d > from && d < to)) continue;\n", ""), null],
   ["the dropped filing not named", null, (s) => once(s, "  if (dropped.length === 1) out.push(", "  if (false) out.push(")],
+  ["the units bar back at 10×", (s) => once(s, "export const SHARE_UNITS_MAX_FACTOR = 300;", "export const SHARE_UNITS_MAX_FACTOR = 10;"), null],
   ["the units check removed", (s) => once(s, "  if (withheld) return { points: [], basis: raw.basis, withheld };", ""), null],
   ["the units check against the cover only, not the uncovered cut", (s) => once(s, '  return fixed.startedAfter?.reason === "scale-step" ? { reason: "units-unconfirmed", factor: null } : null;', "  return null;"), null],
   ["an unmatched split drawn across", (s) => once(s, '      startedAfter = { date: pts[j].date, reason: "unmatched-split", ratio: k };\n      pts = pts.slice(j);', ""), null],

@@ -92,8 +92,16 @@ export const SHARE_PROVEN_SPLIT_YEARS = 3;
 export const SHARE_SCALE_MAX_STEP = 100;
 /** A step at least this big either way, next to an unmatched split, is not drawn across. */
 export const SHARE_UNMATCHED_SPLIT_STEP = 1.5;
-/** The kept counts must agree with the cover page within this factor either way. */
-export const SHARE_UNITS_MAX_FACTOR = 10;
+/**
+ * The kept counts must agree with the cover page within this factor either way.
+ *
+ * NOT 10, MEASURED (seventh archive run): at 10× the check also withheld 10
+ * sound charts whose cover names ONE class or counts depositary shares (SHOP
+ * ×33, C3.ai ×44, SATA ×45, VNET ×22, OWL ×100, BNT ×13, RR ×10.5…). A units
+ * slip is a factor of 1,000 or more (PAC, MCD, NMR, NTNX, NVMI, VALE, CHWY…).
+ * 300 sits between the two on a log scale.
+ */
+export const SHARE_UNITS_MAX_FACTOR = 300;
 /** Consecutive points further apart than this (15 months) break the line. */
 export const SHARE_GAP_MAX_DAYS = 460;
 /** The trend window, and how far before its cut the base may sit. */
@@ -320,8 +328,8 @@ export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?
   const fixed = correctShareSeries(raw.points, set.asr ?? [], opts.listedFrom ?? null, set.asf ?? []);
   // THE UNITS CHECK (#552 COWORK #121). PAC's kept segment read 505.28B
   // shares; the cover page says 505.28M. The newest counts must agree with the
-  // cover-page count within SHARE_UNITS_MAX_FACTOR (wide enough for a class
-  // or two the cover leaves out); where they don't, or where a >100× step was
+  // cover-page count within SHARE_UNITS_MAX_FACTOR (wide enough for a cover
+  // that names one class, or depositary shares); where they don't, or where a >100× step was
   // cut and no cover count can say which side is right, nothing is drawn and
   // the reason is shown. A count we can't confirm is never charted.
   const withheld = sharesUnconfirmed(fixed, set.cover?.val ?? null);

@@ -111,7 +111,7 @@ export function splitWords(ratio: number): string {
  */
 export function withheldWords(w: NonNullable<DilutionHistoryData["withheld"]>): string {
   return w.factor !== null
-    ? `Not drawn: the share counts in this company's filings don't agree with the count on its latest cover page (they differ by more than 10 times), so we can't confirm which units they're in.`
+    ? `Not drawn: the share counts in this company's filings don't agree with the count on its latest cover page (they differ by a factor of 300 or more), so we can't confirm which units they're in.`
     : "Not drawn: the filed share counts jump by more than 100 times at one point, and there's no cover-page count to confirm which side is in the right units.";
 }
 
