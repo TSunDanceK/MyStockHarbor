@@ -41,7 +41,7 @@ const RULES = {
       && /onTiingo \? readSurfacePrice\(symbol\)/.test(p)
       && /const latestClose = onTiingo\s*\? surfacePrice\?\.price \?\? null/.test(p),
   "the price's own label reaches the card": (p, c) => /priceLabel=\{data\.latestPriceLabel\}/.test(p)
-    && /\$\{priceLabel \?\? `close\$\{priceAsOf \? `, \$\{priceAsOf\}` : ""\}`\}/.test(c),
+    && /\$\{priceLabel \?\? `close\$\{priceAsOf \? `, \$\{readableDate\(priceAsOf\)\}` : ""\}`\}/.test(c),
   "the title's price follows the gate": (p) => /historyForSurface\("CHARTS", clean, \(\) => getDailyHistory\(clean, \{ caller: "stock-earnings-meta" \}\)\)/.test(p),
   "the linked credit shows whenever a figure is Tiingo's":
     (p) => /const pricesFromTiingo = chartHistory\.provider === "tiingo" \|\| \(onTiingo && surfacePrice !== null\);/.test(p)
@@ -53,7 +53,7 @@ const MUTANTS = [
   ["the reaction chart back on the bare FMP read", PAGE, "historyForSurface(\"CHARTS\", symbol, () =>", "((_f) => _f())(() =>"],
   ["the partial bar kept", PAGE, "!p.partial && ", ""],
   ["the FMP valuation read kept on Tiingo", PAGE, "onTiingo ? Promise.resolve([] as Point[]) : getDailyHistory(symbol", "getDailyHistory(symbol"],
-  ["an IEX trade printed as a \"close\"", CARD, "${priceLabel ?? `close${priceAsOf ? `, ${priceAsOf}` : \"\"}`}", "close${priceAsOf ? `, ${priceAsOf}` : \"\"}"],
+  ["an IEX trade printed as a \"close\"", CARD, "${priceLabel ?? `close${priceAsOf ? `, ${readableDate(priceAsOf)}` : \"\"}`}", "close${priceAsOf ? `, ${readableDate(priceAsOf)}` : \"\"}"],
   ["the title off the gate", PAGE, "historyForSurface(\"CHARTS\", clean, () => getDailyHistory(clean, { caller: \"stock-earnings-meta\" }))", "getDailyHistory(clean, { caller: \"stock-earnings-meta\" }).then((p) => ({ points: p }))"],
   ["the credit only for the chart", PAGE, " || (onTiingo && surfacePrice !== null)", ""],
 ];
