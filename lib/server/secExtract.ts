@@ -345,6 +345,14 @@ export type ExtractResult = {
    */
   shareRestated?: [string, number][];
   /**
+   * PERIODS RE-FILED UNCHANGED (#552 COWORK #89 §1): year and recent-quarter
+   * ends whose basic share count a later filing reported again within 1%.
+   * The other half of the split evidence: a doubling between two periods
+   * whose earlier one was re-reported unchanged AFTER it is real issuance, not
+   * a split (a split restates the comparatives). Optional.
+   */
+  shareRefiled?: string[];
+  /**
    * THE BALANCE-SHEET NONCONTROLLING INTEREST (us-gaap MinorityInterest) on the
    * stored instants' dates, `[date, USD]`, newest first. An extra, not a field:
    * see minorityInterestAt (below). Absent when the filer tags none, or
@@ -1550,6 +1558,7 @@ function extractCompanyFactsWith(
     ),
     annualShares: annualShareSeries(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null, naming.yearEnd),
     ...(() => { const r = shareRestatements(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null); return r.length ? { shareRestated: r } : {}; })(),
+    ...(() => { const r = shareRefiledUnchanged(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null); return r.length ? { shareRefiled: r } : {}; })(),
     ...(ytd ? { ytd } : {}),
     ...(nci.length ? { nci } : {}),
     untagged: SEC_FIELDS.filter((f) => !fieldIsTagged(facts, f)).map((f) => f.key),
@@ -1607,6 +1616,31 @@ function shareRestatements(bucket: Bucket | undefined, preferred: string | null)
     if (ratio >= SHARE_RESTATED_MIN_RATIO || ratio <= 1 / SHARE_RESTATED_MIN_RATIO) out.set(best.row.end, ratio);
   }
   return [...out].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+/**
+ * See ExtractResult.shareRefiled. Fiscal years, and quarters ending within
+ * SHARE_REFILED_QUARTER_YEARS of the newest quarter (the span the chart draws
+ * as quarters), whose concept was filed by two or more accessions all within
+ * 1% of one another.
+ */
+export const SHARE_REFILED_QUARTER_YEARS = 4;
+function shareRefiledUnchanged(bucket: Bucket | undefined, preferred: string | null): string[] {
+  if (!bucket) return [];
+  const found: { end: string; q: number }[] = [];
+  for (const [, cands] of bucket) {
+    const best = resolve(cands, preferred);
+    if (!best?.row.start || !best.row.end || typeof best.row.val !== "number" || best.row.val <= 0) continue;
+    const q = quartersCovered(spanDays(best.row.start, best.row.end));
+    if (q !== 1 && q !== 4) continue;
+    const same = cands.filter((c) => conceptKey(c) === conceptKey(best) && typeof c.row.val === "number" && c.row.val > 0);
+    if (new Set(same.map((c) => c.row.accn)).size < 2) continue;
+    if (!same.every((c) => Math.abs((c.row.val as number) / (best.row.val as number) - 1) <= 0.01)) continue;
+    found.push({ end: best.row.end, q });
+  }
+  const newestQuarter = found.filter((f) => f.q === 1).map((f) => f.end).sort().at(-1) ?? null;
+  const floor = newestQuarter ? `${Number(newestQuarter.slice(0, 4)) - SHARE_REFILED_QUARTER_YEARS}${newestQuarter.slice(4)}` : "";
+  return [...new Set(found.filter((f) => f.q === 4 || f.end >= floor).map((f) => f.end))].sort();
 }
 
 /**
