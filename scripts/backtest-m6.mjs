@@ -32,6 +32,14 @@ const WANT = new Set([EQ, EQ_ALL, NCI, SPLIT, COVER]);
 const days = (a, b) => (Date.parse(b) - Date.parse(a)) / 86400000;
 
 const symbols = ((await redis(["SMEMBERS", INDEX])) ?? []).map(String);
+// Cells (a) could fill: Pickers symbols whose NEWEST balance-sheet date has
+// equity incl. NCI but no parent equity (the "equity only incl. minority"
+// refusal), split by whether MinorityInterest is filed on that date.
+const PICKERS_KEY = keyOf("PICKERS_SEC_KEY");
+const pickers = new Set(((await redis(["HKEYS", PICKERS_KEY])) ?? []).map((x) => String(x).toUpperCase()));
+const inclOnly = [], fillable = [];
+const symsByCik = new Map();
+for (const s of symbols) { const k = REG[s]?.cik; if (k) { const c = String(k).padStart(10, "0"); (symsByCik.get(c) ?? symsByCik.set(c, []).get(c)).push(s.toUpperCase()); } }
 const errA = [], errB = [];
 let filers = 0, filersA = 0, filersB = 0, splitsSeen = 0;
 const seen = new Set();
@@ -62,6 +70,10 @@ for (const s of symbols) {
     errA.push(Math.abs(all.get(d) - nci.get(d) - t) / t);
   }
   if (anyA) filersA++;
+  const newest = [...new Set([...eq.keys(), ...all.keys()])].sort().at(-1);
+  if (newest && all.has(newest) && !eq.has(newest)) {
+    for (const sym of symsByCik.get(c) ?? []) if (pickers.has(sym)) { inclOnly.push(sym); if (nci.has(newest)) fillable.push(sym); }
+  }
 
   // (b) split-adjusted cover count
   const covers = [...at(COVER)].filter(([, x]) => x > 0).sort((a, b) => a[0].localeCompare(b[0]));
@@ -86,5 +98,6 @@ const pct = (x) => (x === null ? "-" : `${(x * 100).toFixed(2)}%`);
 const line = (name, e) => { const w = e.filter((x) => x <= 0.05).length / (e.length || 1); return `  ${name}: n ${e.length}; median ${pct(q(e, 0.5))}; p90 ${pct(q(e, 0.9))}; within ±5% ${(w * 100).toFixed(1)}% -> ${e.length >= 50 && w >= 0.9 ? "PASS" : e.length < 50 ? "FAIL (too few cases)" : "FAIL"}`; };
 console.log(`M6 back-test. Filers read ${filers}; with all three equity lines on one date ${filersA}; with a split ratio and covers either side ${filersB} (split periods seen ${splitsSeen})`);
 console.log(line("(a) parent equity = equity incl. NCI - NCI", errA));
+console.log(`  (a) Pickers rows refused "equity only incl. minority" (newest date): ${inclOnly.length} ${inclOnly.join(" ")}; MinorityInterest filed that date: ${fillable.length} ${fillable.join(" ")}`);
 console.log(line("(b) pre-split cover count x filed split ratio", errB));
 console.log(`Redis commands ${cmds} (read-only) · R2 reads ${r2reads} · SEC requests 0 · no price`);
