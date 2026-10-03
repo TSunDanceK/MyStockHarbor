@@ -124,7 +124,7 @@ export async function loadCards(mutate = (src) => src) {
 }
 
 /** C's builder and component, stripped and joined the way check-growth-visuals joins them. */
-function growthVisualsUnit() {
+export function growthVisualsUnit() {
   const builder = stripImports("lib/growthVisuals.ts");
   const component = stripImports("app/stock/[symbol]/earnings/GrowthVisuals.tsx")
     .replace("export default function GrowthVisuals", "export function GrowthVisuals");
