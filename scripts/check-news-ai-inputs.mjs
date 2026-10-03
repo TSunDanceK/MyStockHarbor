@@ -112,7 +112,9 @@ const rules = {
     [insight?.system, briefs?.system].every((s) => {
       const useOnly = /Use only the provided [^.]*\./.exec(s ?? "")?.[0] ?? "";
       return useOnly && !/trend|RSI|moving average|range|chart|price/i.test(useOnly) &&
-        /You are given no price or chart data/.test(s) && !/combine that with the chart context|or the chart\./.test(s);
+        /You are given no price or chart data/.test(s) && !/combine that with the chart context|or the chart\./.test(s) &&
+        // No vendor named in model-only text either (#563 COWORK #42/#45 nit).
+        !/\bFMP\b/.test(s);
     }),
 };
 
@@ -167,6 +169,7 @@ const mutants = [
   ["briefs: exactly the non-price fields reach the model", (s) => s.replace("JSON.stringify(briefsAiPayload(input))", "JSON.stringify(input)")],
   ["no price-derived key anywhere in either payload", (s) => s.replace("    earningsTone: input.earningsTone,\n", "    earningsTone: input.earningsTone,\n    ...({ rsi: (input as Record<string, unknown>).rsi } as object),\n")],
   ["neither prompt asks for price or chart context", (s) => s.replace("company name, news score, earnings tone, and the provided", "company name, trend, news score, earnings tone, RSI, and the provided")],
+  ["neither prompt asks for price or chart context", (s) => s.replace("original headline and feed excerpt,", "original headline and FMP feed excerpt,")],
 ];
 for (const [name, mutate] of mutants) {
   const m = mutate(AI_SRC);
