@@ -77,8 +77,8 @@ export const SHARE_GAP_MAX_DAYS = 460;
 export const SHARE_TREND_YEARS = 3;
 export const SHARE_TREND_BASE_MAX_DAYS = 183;
 
-const DAY = 86_400_000;
-const days = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / DAY;
+const SHARE_DAY_MS = 86_400_000;
+const days = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / SHARE_DAY_MS;
 
 /** The whole split ratio `r` matches (as k or 1/k), or null. */
 export function splitRatioOf(r: number): number | null {
@@ -175,7 +175,9 @@ export function shareGaps(points: ShareHistoryPoint[]): { from: string; to: stri
 export function threeYearChange(points: ShareHistoryPoint[]): NonNullable<ShareHistory["threeYear"]> {
   const last = points[points.length - 1];
   if (!last) return { pct: null, reason: "too-short" };
-  const cut = new Date(Date.parse(last.date) - SHARE_TREND_YEARS * 365.25 * DAY).toISOString().slice(0, 10);
+  // THE SAME CALENDAR DATE, SHARE_TREND_YEARS EARLIER: a day count (3 × 365.25)
+  // lands a day short of a year-end and pushes the base back a whole year.
+  const cut = `${Number(last.date.slice(0, 4)) - SHARE_TREND_YEARS}${last.date.slice(4)}`;
   const base = [...points].reverse().find((p) => p.date <= cut);
   if (!base || days(base.date, cut) > SHARE_TREND_BASE_MAX_DAYS || base.shares <= 0) return { pct: null, reason: "too-short" };
   return { pct: ((last.shares - base.shares) / base.shares) * 100, base };

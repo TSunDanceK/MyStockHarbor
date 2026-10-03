@@ -21,6 +21,11 @@ export type DilutionHistoryData = {
    * names no basis.
    */
   basis?: "annual+quarters" | "quarter" | "year";
+  /** The series' corrections and its 3-year figure (lib/server/secShareHistory.ts, #552 COWORK #89). */
+  gaps?: { from: string; to: string }[];
+  splits?: { date: string; ratio: number }[];
+  startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" };
+  threeYear?: { pct: number; base: SharePoint } | { pct: null; reason: "too-short" };
 };
 
 function fmtShares(value: number | null) {
@@ -72,42 +77,36 @@ export function formatShareChange(changePercent: number | null): string {
 }
 
 /**
- * A SERIES THE CHART CANNOT SUMMARISE YET (#552 COWORK #89, interim guard).
- *
- * The annual points are as filed, so a split leaves older years on the old
- * basis: AMZN reads 494M then 10,005M at its 20:1 split, and PAC's count goes
- * x1000 from 2017 ("+96,037%"). Measured over 916 charted series (CODE-A #94):
- * 99 step at a whole split ratio, 65 step by more than 100x, 33 have a gap of
- * more than 15 months (GDDY 2016 -> 2023, drawn as a straight "rise").
- *
- * DETECTION ONLY, the probe's own rules: a step within 3% of a whole split
- * ratio either way, a step over 100x either way, or consecutive points more
- * than SHARE_GAP_MAX_DAYS apart. The line is still drawn; the "Since" and
- * Trend figures are withheld. The full fix (restated comparatives, broken
- * lines, the 3-year trend) replaces this after the purge. A real one-year
- * doubling also matches the 2x ratio and is withheld with the rest: hiding a
- * true figure for a week is the cheaper error than printing a false one.
+ * THE TREND, FROM THE LAST 3 YEARS (#552 COWORK #88/#89 §5). The colour and
+ * the words come from the 3-year figure, never first-vs-last: GDDY rose to its
+ * IPO and has shrunk its count ever since. Hedged: a description of the count,
+ * never a judgement. Within ±SHARE_FLAT_PCT it is "roughly unchanged".
  */
-export const SHARE_SPLIT_RATIOS = [2, 3, 4, 5, 8, 10, 15, 20, 25, 40, 50];
-export const SHARE_SPLIT_TOLERANCE = 0.03;
-export const SHARE_SCALE_MAX_STEP = 100;
-export const SHARE_GAP_MAX_DAYS = 460;
-
-export function shareHistoryDefect(points: SharePoint[]): "scale-step" | "split-step" | "gap" | null {
-  let found: "split-step" | "gap" | null = null;
-  for (let i = 1; i < points.length; i++) {
-    const r = points[i].shares / points[i - 1].shares;
-    if (!Number.isFinite(r) || r <= 0) continue;
-    if (r > SHARE_SCALE_MAX_STEP || r < 1 / SHARE_SCALE_MAX_STEP) return "scale-step";
-    if (!found && SHARE_SPLIT_RATIOS.some((k) => Math.abs(r / k - 1) < SHARE_SPLIT_TOLERANCE || Math.abs(r * k - 1) < SHARE_SPLIT_TOLERANCE)) found = "split-step";
-    const days = (Date.parse(points[i].date) - Date.parse(points[i - 1].date)) / 86_400_000;
-    if (!found && days > SHARE_GAP_MAX_DAYS) found = "gap";
-  }
-  return found;
+export const SHARE_FLAT_PCT = 1;
+export function threeYearWords(pct: number | null): { label: string; tone: "up" | "down" | "flat" | "none" } {
+  if (pct === null || !Number.isFinite(pct)) return { label: "Recent history too short", tone: "none" };
+  if (pct > SHARE_FLAT_PCT) return { label: "Share count has risen over the last 3 years", tone: "up" };
+  if (pct < -SHARE_FLAT_PCT) return { label: "Share count has fallen over the last 3 years", tone: "down" };
+  return { label: "Share count roughly unchanged over the last 3 years", tone: "flat" };
 }
 
-/** What the two withheld cells say instead. */
-export const SHARE_HISTORY_WITHHELD = "Share history needs a correction; figures hidden for now";
+/** "20-for-1" / "1-for-10". */
+export function splitWords(ratio: number): string {
+  return ratio >= 1 ? `${Math.round(ratio)}-for-1` : `1-for-${Math.round(1 / ratio)}`;
+}
+
+/** The notes the source line carries for a corrected series (#552 COWORK #89 §1–4). */
+export function seriesNotes(data: DilutionHistoryData): string[] {
+  const out: string[] = [];
+  for (const s of data.splits ?? []) {
+    out.push(`Earlier counts are adjusted for a ${splitWords(s.ratio)} split (${fmtDateShort(s.date)}), using the company's own restated figures.`);
+  }
+  const st = data.startedAfter;
+  if (st?.reason === "listing") out.push("Starts at the company's first report after listing.");
+  else if (st) out.push(`Starts ${fmtDateShort(st.date)}: an earlier step in the filed counts couldn't be matched to a split the company restated, so the chart doesn't draw across it.`);
+  if (data.gaps?.length) out.push("A break in the line marks more than 15 months with no filing data.");
+  return out;
+}
 
 const GREEN = "#22c55e";
 const RED = "#ef4444";
@@ -137,15 +136,11 @@ export default function DilutionHistory({
   const last = points[points.length - 1];
   const changePercent =
     first.shares > 0 ? ((last.shares - first.shares) / first.shares) * 100 : null;
-  const defect = shareHistoryDefect(points);
-  const isDilution = !defect && typeof changePercent === "number" && changePercent > 0.05;
-  const isBuyback = !defect && typeof changePercent === "number" && changePercent < -0.05;
-  const trendColor = isDilution ? RED : isBuyback ? GREEN : BLUE;
-  const trendLabel = isDilution
-    ? "More shares outstanding"
-    : isBuyback
-    ? "Fewer shares outstanding (buybacks)"
-    : "Roughly flat";
+  // THE 3-YEAR FIGURE DRIVES THE COLOUR AND THE WORDS (#552 COWORK #89 §5).
+  // A payload built before it existed reads as "too short": no colour claim.
+  const threePct = data?.threeYear && data.threeYear.pct !== null ? data.threeYear.pct : null;
+  const trend = threeYearWords(threePct);
+  const trendColor = trend.tone === "up" ? RED : trend.tone === "down" ? GREEN : BLUE;
 
   // -- Chart geometry (server-rendered SVG, no client JS) --------------------
   // viewBox is a fixed aspect ratio; actual rendered size always scales to
@@ -165,19 +160,35 @@ export default function DilutionHistory({
   const { lo: minV, hi: maxV } = shareAxis(values);
   const span = maxV - minV;
   const axisTicks = [maxV, (maxV + minV) / 2, minV].map((v, i) => ({ v, y: padTop + (i / 2) * plotH }));
-  const denom = points.length > 1 ? points.length - 1 : 1;
+  // X IS TIME, NOT THE POINT'S INDEX: a 7-year hole (GDDY 2016 -> 2023) used
+  // to take the same width as one quarter, which hid it.
+  const t0 = Date.parse(first.date), t1 = Date.parse(last.date);
+  const tSpan = t1 > t0 ? t1 - t0 : 1;
 
-  const coords = points.map((p, i) => {
-    const x = padX + (i / denom) * plotW;
+  const coords = points.map((p) => {
+    const x = padX + ((Date.parse(p.date) - t0) / tSpan) * plotW;
     const y = padTop + (1 - (p.shares - minV) / span) * plotH;
     return { x, y, p };
   });
 
-  const polyline = coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
-  const areaPath =
-    `M ${coords[0].x.toFixed(1)} ${(padTop + plotH).toFixed(1)} ` +
-    coords.map((c) => `L ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" ") +
-    ` L ${coords[coords.length - 1].x.toFixed(1)} ${(padTop + plotH).toFixed(1)} Z`;
+  // THE LINE BREAKS AT EVERY GAP (#552 COWORK #89 §4): one segment per run of
+  // points with no gap between them, and never a straight line across a hole.
+  const gapStarts = new Set((data?.gaps ?? []).map((g) => g.from));
+  const segments: (typeof coords)[] = [[]];
+  for (const c of coords) {
+    segments[segments.length - 1].push(c);
+    if (gapStarts.has(c.p.date)) segments.push([]);
+  }
+  const drawn = segments.filter((seg) => seg.length > 0);
+  const baseY = (padTop + plotH).toFixed(1);
+  const lineOf = (seg: typeof coords) => seg.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
+  const areaOf = (seg: typeof coords) =>
+    `M ${seg[0].x.toFixed(1)} ${baseY} ` + seg.map((c) => `L ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" ") + ` L ${seg[seg.length - 1].x.toFixed(1)} ${baseY} Z`;
+  const gapLabels = (data?.gaps ?? []).map((g) => {
+    const a = coords.find((c) => c.p.date === g.from), b = coords.find((c) => c.p.date === g.to);
+    return a && b ? { x: (a.x + b.x) / 2, key: g.from } : null;
+  }).filter((g): g is { x: number; key: string } => g !== null);
+  const notes = data ? seriesNotes(data) : [];
 
   const gradientId = `dilutionArea-${symbol}${embedded ? "-embedded" : ""}`;
 
@@ -207,15 +218,24 @@ export default function DilutionHistory({
               <stop offset="100%" stopColor={trendColor} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <path d={areaPath} fill={`url(#${gradientId})`} />
-          <polyline
-            points={polyline}
-            fill="none"
-            stroke={trendColor}
-            strokeWidth={2.25}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
+          {drawn.map((seg, i) => (
+            <g key={`seg-${i}`} data-share-segment="">
+              {seg.length > 1 ? <path d={areaOf(seg)} fill={`url(#${gradientId})`} /> : null}
+              <polyline
+                points={lineOf(seg)}
+                fill="none"
+                stroke={trendColor}
+                strokeWidth={2.25}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            </g>
+          ))}
+          {gapLabels.map((g) => (
+            <text key={`gap-${g.key}`} x={g.x} y={padTop + plotH / 2} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="middle" data-share-gap="">
+              no filing data
+            </text>
+          ))}
           {coords.map((c, i) => (
             <circle key={i} cx={c.x} cy={c.y} r={i === coords.length - 1 ? 3.5 : 2} fill={trendColor}>
               {/* ONE STRING: React renders an array child of <title> with a warning. */}
@@ -241,27 +261,20 @@ export default function DilutionHistory({
           <div style={cellLabelStyle}>Shares outstanding (latest)</div>
           <div style={cellValueStyle}>{fmtShares(last.shares)}</div>
         </div>
-        {defect ? (
-          // THE TWO CELLS GO TOGETHER: a Trend label read from the same broken
-          // first-vs-last comparison would be the same wrong figure in words.
-          <div className="dh-withheld" style={cellStyle} data-share-history-defect={defect}>
-            <div style={cellLabelStyle}>Since {fmtDateShort(first.date)} · Trend</div>
-            <div style={{ ...cellValueStyle, fontSize: 13 }}>{SHARE_HISTORY_WITHHELD}</div>
+        {/* THE TWO FIGURES SIDE BY SIDE (#552 COWORK #89 §5): the last 3
+            years, which carries the colour and the words, and since the first
+            point, in plain ink. */}
+        <div style={cellStyle} data-share-three-year="">
+          <div style={cellLabelStyle}>Over the last 3 years</div>
+          <div style={{ ...cellValueStyle, color: trendColor }}>
+            {threePct === null ? "—" : formatShareChange(threePct)}
           </div>
-        ) : (
-          <>
-            <div style={cellStyle}>
-              <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
-              <div style={{ ...cellValueStyle, color: trendColor }}>
-                {formatShareChange(changePercent)}
-              </div>
-            </div>
-            <div style={cellStyle}>
-              <div style={cellLabelStyle}>Trend</div>
-              <div style={{ ...cellValueStyle, color: trendColor, fontSize: 13 }}>{trendLabel}</div>
-            </div>
-          </>
-        )}
+          <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4, color: "rgba(203,213,225,0.72)" }}>{trend.label}</div>
+        </div>
+        <div style={cellStyle}>
+          <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
+          <div style={cellValueStyle}>{formatShareChange(changePercent)}</div>
+        </div>
       </div>
 
       <div style={sourceStyle}>
@@ -281,6 +294,7 @@ export default function DilutionHistory({
         {data?.basis === "quarter"
           ? " Covers the last 12 quarters on file; fourth quarters have no separately filed share count and are not plotted."
           : data?.basis === "year" ? " Covers the fiscal years on file." : ""}
+        {notes.length ? <> {notes.join(" ")}</> : null}
       </div>
 
       <style>{`
@@ -290,10 +304,8 @@ export default function DilutionHistory({
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 10px;
         }
-        .dh-withheld { grid-column: span 2; }
         @media (max-width: 640px) {
           .dh-stats-row { grid-template-columns: 1fr !important; }
-          .dh-withheld { grid-column: auto; }
         }
       `}</style>
     </>

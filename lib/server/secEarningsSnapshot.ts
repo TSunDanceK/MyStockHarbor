@@ -39,6 +39,7 @@ import {
   multipleInputs, valuationInputs, type MultipleInputs, type ValuationInputs,
 } from "./secValuation";
 import { buildShareHistory, type ShareHistory } from "./secShareHistory";
+import { listedFromFor } from "./secFirstPeriodic";
 import { registrantFor } from "./stockProfile";
 import { adsRatioFor } from "./secAdsMap";
 import { nonEquityListingOf, citedCoverFor } from "./secPrimaryListing";
@@ -543,7 +544,8 @@ export async function getStockPageSecFacts(symbol: string): Promise<{
             sic: registrantFor(clean)?.sic ?? null,
           })
         : null,
-      shareHistory: buildShareHistory(set),
+      // PRE-LISTING POINTS DROPPED (#552 COWORK #89 §3), from the archived submissions.
+      shareHistory: buildShareHistory(set, { listedFrom: listedFromFor(clean) }),
       entityName: set?.entityName ?? null,
       // The Valuation section's filed inputs — revenue, EBITDA and the latest
       // balance sheet (owner addendum, brief 2026-09-22 PR 2).
