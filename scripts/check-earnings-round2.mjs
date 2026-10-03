@@ -73,14 +73,15 @@ console.log("\nc. the balance sheet on AVAV");
 console.log("\nd. the income statement on AVAV (fixture predates any chain change)");
 {
   const d = card(M, "SecIncomeStatementCard", vAvav);
-  check("both ends filed: 'Other income (net) $3.5M derived', interest 'Included in other income (net) below' (COWORK #47)",
-    /Interest expense Included in other income \(net\) below/.test(d) && /Other income \(net\) derived \$3\.5M/.test(d) && !d.includes(NOT_CAPTURED), d);
+  // THE SHORT WORD IN THE CELL, THE SENTENCE ITS NOTE (#552 COWORK #124).
+  check("both ends filed: 'Other income (net) derived $3.5M', interest 'In other income' (COWORK #47)",
+    /Interest expense In other income/.test(d) && /Other income \(net\) derived \$3\.5M/.test(d) && !d.includes(NOT_CAPTURED), d);
   const t = card(M, "SecIncomeStatementCard", M.buildSecEarningsView(AVAV_NO_PRETAX));
   // THE SHORT WORD IN THE CELL, THE SENTENCE ITS NOTE (#552 COWORK #124).
   check("one end missing: interest expense and other income say 'Not captured' (the full reason on tap)",
     /Interest expense Not captured/.test(t) && /Other income \/ expense Not captured/.test(t), t);
   check("...and never 'Not found in the filing's tagged data' (AVAV tags both, outside our chains)",
-    !t.includes(NOT_FOUND), t);
+    !t.includes(NOT_FOUND) && !/Not tagged/.test(t), t);
   check("the site's existing words are the ones used", M.EMPTY_REASONS.notCaptured === NOT_CAPTURED);
   check("other absent lines keep 'Not reported' (the shared word is unchanged)",
     /Other operating expense Not reported/.test(t) && /Less: noncontrolling interest Not reported/.test(t));
@@ -89,7 +90,7 @@ console.log("\nd. the income statement on AVAV (fixture predates any chain chang
     (mod) => card(mod, "SecIncomeStatementCard", mod.buildSecEarningsView(AVAV_NO_PRETAX)).includes(`Interest expense ${NOT_CAPTURED}`));
   await underMutation("interest/other income back on the tagged-data wording",
     "TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED", "TAG_GAP_LINES.has(c.key) ? NOT_IN_TAGGED_DATA : NOT_REPORTED",
-    (mod) => !card(mod, "SecIncomeStatementCard", mod.buildSecEarningsView(AVAV_NO_PRETAX)).includes(NOT_FOUND));
+    (mod) => { const x = card(mod, "SecIncomeStatementCard", mod.buildSecEarningsView(AVAV_NO_PRETAX)); return !x.includes(NOT_FOUND) && !/Not tagged/.test(x); });
 }
 
 console.log("\ng. the trend card's skew line");

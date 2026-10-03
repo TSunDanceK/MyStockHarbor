@@ -7,7 +7,7 @@ import Link from "next/link";
 import GrowthVisuals, { SeeAllTheNumbers } from "./GrowthVisuals";
 import { anyDerived, buildGrowthVisuals, GROSS_MARGIN_MEANS } from "@/lib/growthVisuals";
 import {
-  CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
+  CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, INTEREST_IN_OTHER_INCOME, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
   filingCreditText, filingNoticeText, isCrossing, periodWords, retiredSource,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
@@ -230,6 +230,10 @@ const EMPTY_SHORT: Record<string, string> = {
   [EMPTY_REASONS.epsPerUnit]: "Per unit",
   [EMPTY_REASONS.noRevenueLine]: "No revenue line",
   [NOT_REPORTED]: NOT_REPORTED,
+  // SENTENCES THAT WERE CELL VALUES (#552 COWORK #124): the short word in the
+  // cell, the sentence its note. AVAV's interest row overflowed a 360 px card.
+  [INTEREST_IN_OTHER_INCOME]: "In other income",
+  ["Not found in the filing\u2019s tagged data"]: "Not tagged",
 };
 const EMPTY_FULL: Record<string, string> = {
   [EMPTY_REASONS.notCaptured]: `${EMPTY_REASONS.notCaptured}: the figure may be filed under a concept this page does not read yet.`,
@@ -237,6 +241,8 @@ const EMPTY_FULL: Record<string, string> = {
   [EMPTY_REASONS.epsPerUnit]: `${EMPTY_REASONS.epsPerUnit}: the partnership files its earnings per unit rather than per share.`,
   [EMPTY_REASONS.noRevenueLine]: `${EMPTY_REASONS.noRevenueLine}: the company publishes no revenue figure this page reads.`,
   [NOT_REPORTED]: "The company\u2019s SEC filing has no figure for that line. It may be zero, or included under another heading.",
+  [INTEREST_IN_OTHER_INCOME]: "The company files interest inside other income (net), shown below, not on its own line.",
+  ["Not found in the filing\u2019s tagged data"]: "Not found in the filing\u2019s tagged data: the company\u2019s filing doesn\u2019t tag this total, so there is no figure to show.",
 };
 
 /**
@@ -1401,7 +1407,7 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
 function Row({ label, children, sub, strong }: { label: string; children: React.ReactNode; sub?: string; strong?: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderBottom: "1px solid rgba(148,163,184,0.14)" }}>
-      <div style={{ fontSize: 13.5, fontWeight: strong ? 800 : 600, color: strong ? undefined : "#cbd5e1" }}>
+      <div style={{ fontSize: 13.5, fontWeight: strong ? 800 : 600, color: strong ? undefined : "#cbd5e1", minWidth: 0 }}>
         <NotedLabel label={label} note={sub} />
       </div>
       <div style={{ fontSize: 13.5, fontWeight: strong ? 800 : 700, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{children}</div>
