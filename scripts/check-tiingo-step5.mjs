@@ -437,7 +437,7 @@ function staticRules(srcs) {
   const page = code[FILES.stockPage];
   want("on a Tiingo quote the profile row takes the header's range and names the price",
     /\.\.\.\(quote\.priceLabel\s*\?\s*\{ range: quote\.yearLow != null && quote\.yearHigh != null \? \{ low: quote\.yearLow, high: quote\.yearHigh \} : null, priceLabel: quote\.priceLabel \}/.test(page));
-  want("cap and multiples use the header's price", /price: quote\.price,/.test(page) && /valuationMultiples\(secFacts\.profileFacts\.valuation, secFacts\.profileFacts\.multiples, quote\.price\)/.test(page));
+  want("cap and multiples use the header's price", /price: quote\.price,/.test(page) && /valuationMultiples\(secFacts\.profileFacts\.valuation, secFacts\.profileFacts\.multiples, quote\.price(?:, \{ withEstimates: true \})?\)/.test(page));
   want("the valuation note names that price on Tiingo", /quote\.priceLabel \? ` Price: \$\{quote\.priceLabel\}\.` : ""/.test(page));
 
   // FAQ
