@@ -8,6 +8,7 @@ import html from "remark-html";
 import InsightPostClient from "./InsightPostClient";
 import { submitInsightToIndexNowOnce } from "@/lib/indexnowAuto";
 import RelatedInsights from "@/app/components/RelatedInsights";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
 // Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
 // forced a full serverless render of a frozen article on every single crawl.
@@ -340,6 +341,18 @@ export default async function InsightPostPage({ params }: Props) {
         }}
         snapshot={snapshot}
       />
+
+      {/* What the snapshot's price is and where it is from (#553 CODE-B #94
+          B2): on the Tiingo path the price, MA levels and chart are read at
+          render from the stored bars, never persisted, and the credit is
+          linked (#563 COWORK #31 §5). FMP-era snapshots show no credit. */}
+      {snapshot?.source === "tiingo" && snapshot.priceLabel ? (
+        <div style={{ background: "#06080d" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto", padding: "12px 20px 0", boxSizing: "border-box", fontSize: 12, opacity: 0.7, color: "#cbd5e1", lineHeight: 1.4 }}>
+            Snapshot price: {snapshot.priceLabel} · <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+          </div>
+        </div>
+      ) : null}
 
       {/* -- View full stock analysis -----------------------------------
              Small, single, real <Link> to this post's own stock page.
