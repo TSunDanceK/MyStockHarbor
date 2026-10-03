@@ -47,7 +47,9 @@ console.log("\n1. marketCap and P/E are read, not fetched");
 
 check(
   "warm-fundamentals reads the price pool",
-  /readPricePoolBulk\(cleanSymbols\)/.test(fund),
+  // `raw: true` since #690 Q2 (#553 COWORK #103): the FMP rows, never the
+  // Tiingo overlay -- check-fmpoff-sec-cap.mjs asserts that part.
+  /readPricePoolBulk\(cleanSymbols(?:, \{ raw: true \})?\)/.test(fund),
   "one HMGET for the two fields the quote stage exists to produce"
 );
 
@@ -72,7 +74,12 @@ check(
 const cap = Number((fund.match(/QUOTE_FALLBACK_MAX_PER_RUN = (\d+)/) ?? [])[1]);
 check(
   "the fallback is capped so a cold pool degrades visibly",
-  cap > 0 && /poolMisses\.slice\(0, QUOTE_FALLBACK_MAX_PER_RUN\)/.test(fund),
+  // Since #621 the misses pass the failure memory first (retryable = the
+  // misses not deferred), then the cap: either form is the property.
+  cap > 0 &&
+    (/poolMisses\.slice\(0, QUOTE_FALLBACK_MAX_PER_RUN\)/.test(fund) ||
+      (/const retryable = poolMisses\.filter\(/.test(fund) &&
+        /const fallbackOrder = retryable\.slice\(0, QUOTE_FALLBACK_MAX_PER_RUN\)/.test(fund))),
   cap
     ? `${cap}/run — uncapped, an empty pool silently becomes the old rotation ` +
       `and the run still reports success`
@@ -100,7 +107,7 @@ check(
 // threshold here would re-fetch the universe every morning to receive the same
 // numbers back.
 const poolReadBlock = (fund.match(
-  /const pool = await readPricePoolBulk\(cleanSymbols\);[\s\S]*?const poolHits = quoteMap\.size;/
+  /const pool = await readPricePoolBulk\(cleanSymbols(?:, \{ raw: true \})?\);[\s\S]*?const poolHits = quoteMap\.size;/
 ) ?? [])[0];
 if (!poolReadBlock) {
   console.error("FAIL: could not extract the pool-read block — measuring nothing.");

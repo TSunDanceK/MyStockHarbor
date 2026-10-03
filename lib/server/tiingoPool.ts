@@ -36,7 +36,10 @@
 //
 // NEVER WRITTEN BACK. These rows exist only in the reader's memory; the pool
 // hash's own writers read raw (contract §7: raw Tiingo data stays under
-// msh:tiingo:, where the purge finds it).
+// msh:tiingo:, where the purge finds it). So does the fundamentals warm: a SEC
+// x Tiingo cap or P/E is Tiingo-derived (the close is cap / shares), so it is
+// never persisted outside msh:tiingo: either -- the fundamentals rows get it at
+// read time (overlaySecTiingoFundamentals; #553 COWORK #103, #690 Q2).
 import type { PricePoolRow } from "./pricePool";
 import type { EodBar, StoredQuote } from "./marketData/types";
 import type { EodLast } from "./marketData/eodLast";
@@ -164,10 +167,31 @@ export async function overlayTiingoPool(
 }
 
 /**
- * Pure. Each symbol's SEC x Tiingo market cap, from the overlay's own row with
- * NO FMP row under it: null where Tiingo has no price or the SEC inputs refuse.
- * The sector ranking (B7) and the sector weights use this, so they rank and
- * weigh on exactly the cap the pool readers show.
+ * Pure. Each Tiingo-priced symbol's SEC x Tiingo market cap and P/E, from the
+ * overlay's own row with NO FMP row under it. A symbol Tiingo has no price for
+ * is ABSENT (its reader keeps what it had, as the pool overlay keeps the FMP
+ * row); a refused or missing SEC input is null.
+ */
+export function secTiingoValuations(
+  symbols: string[],
+  pool: Record<string, StoredQuote> | null,
+  eodLast: Record<string, EodLast> | null,
+  secRows: Record<string, SecCapRow> | null,
+  nowMs: number
+): Map<string, { marketCap: number | null; pe: number | null }> {
+  const out = new Map<string, { marketCap: number | null; pe: number | null }>();
+  for (const s of symbols) {
+    const field = toDashed(s);
+    const row = mapTiingoPoolRow(null, pool?.[field], eodLast?.[field], nowMs, secRowFor(secRows, s, field));
+    if (row) out.set(s, { marketCap: row.marketCap, pe: row.pe });
+  }
+  return out;
+}
+
+/**
+ * Pure. Each symbol's SEC x Tiingo market cap: null where Tiingo has no price
+ * or the SEC inputs refuse. The sector ranking (B7) and the sector weights use
+ * this, so they rank and weigh on exactly the cap the pool readers show.
  */
 export function secTiingoCaps(
   symbols: string[],
@@ -176,21 +200,49 @@ export function secTiingoCaps(
   secRows: Record<string, SecCapRow> | null,
   nowMs: number
 ): Map<string, number | null> {
+  const vals = secTiingoValuations(symbols, pool, eodLast, secRows, nowMs);
   const out = new Map<string, number | null>();
-  for (const s of symbols) {
-    const field = toDashed(s);
-    const row = mapTiingoPoolRow(null, pool?.[field], eodLast?.[field], nowMs, secRowFor(secRows, s, field));
-    out.set(s, row?.marketCap ?? null);
-  }
+  for (const s of symbols) out.set(s, vals.get(s)?.marketCap ?? null);
   return out;
 }
 
-/** The same three Data Cache reads, for secTiingoCaps. Never throws: a failed read is an empty map. */
-export async function readSecTiingoCaps(symbols: string[], nowMs: number): Promise<Map<string, number | null>> {
+/** The three Data Cache reads (1 HGETALL per miss each, shared with the overlay). Never throws: a failed read is null. */
+async function readValuationBlobs() {
   const [pool, eodLast, secRows] = await Promise.all([
     readTiingoPool().catch(() => null),
     readTiingoEodLast().catch(() => null),
     readSecCapRows().catch(() => null),
   ]);
-  return secTiingoCaps(symbols, pool?.rows ?? null, eodLast, secRows, nowMs);
+  return { pool: pool?.rows ?? null, eodLast, secRows };
+}
+
+/** The same three Data Cache reads, for secTiingoCaps. Never throws: a failed read is an empty map. */
+export async function readSecTiingoCaps(symbols: string[], nowMs: number): Promise<Map<string, number | null>> {
+  const b = await readValuationBlobs();
+  return secTiingoCaps(symbols, b.pool, b.eodLast, b.secRows, nowMs);
+}
+
+/**
+ * THE FUNDAMENTALS ROWS' CAP AND P/E, AT READ TIME (#553 COWORK #103, #690 Q2).
+ *
+ * The warm writes msh:pickers:fundamentals:v1:* from the RAW (FMP) pool rows
+ * only: a SEC x Tiingo cap stored there would let the Tiingo close be backed
+ * out (cap / shares) of an FMP-named key the msh:tiingo: purge never reaches.
+ * Readers on the POOL gate get the overlay's figures here instead, from the
+ * same three Data Cache blobs -- no Redis read of its own on a hit. A symbol
+ * Tiingo cannot price keeps its stored row unchanged. Never throws.
+ */
+export async function overlaySecTiingoFundamentals<T extends { marketCap: number | null; peRatio: number | null }>(
+  rows: Map<string, T>,
+  nowMs: number
+): Promise<Map<string, T>> {
+  if (!rows.size) return rows;
+  const b = await readValuationBlobs();
+  const vals = secTiingoValuations([...rows.keys()], b.pool, b.eodLast, b.secRows, nowMs);
+  const out = new Map(rows);
+  for (const [s, v] of vals) {
+    const row = rows.get(s);
+    if (row) out.set(s, { ...row, marketCap: v.marketCap, peRatio: v.pe });
+  }
+  return out;
 }

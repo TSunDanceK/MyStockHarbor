@@ -114,7 +114,9 @@ async function buildSectorIndex(): Promise<SectorIndex> {
   // fundamentals rows are fresher. Prefer whichever actually has a sector, and
   // fall through to the SEC classification leg when neither does — see below.
   const [fundamentals, screener] = await Promise.all([
-    readCachedFundamentalsBulk(symbols).catch(() => new Map()),
+    // RAW: the stored FMP caps only, so the "fmp" basis never holds a SEC x
+    // Tiingo cap from the read-time overlay (#690 Q2; sectorCapRank: never mixed).
+    readCachedFundamentalsBulk(symbols, { raw: true }).catch(() => new Map()),
     readCachedScreenerFundamentals(symbols).catch(() => new Map()),
   ]);
 
