@@ -318,7 +318,7 @@ checks.push(
   checks.push(["the loader exposes A's citedCoverFor and nonEquityListingOf from one module", typeof L.citedCoverFor === "function" && typeof L.nonEquityListingOf === "function"]);
 
   const jobPasses = (c) => /import \{ citedCoverFor, nonEquityListingOf \} from "[./]+lib\/server\/secPrimaryListing";/.test(c) &&
-    /nonEquity: nonEquityListingOf\(s\),[\s\S]{0,400}?citedCover: citedCoverFor\(s\),\s*\}\)\)/.test(c);
+    /nonEquity: nonEquityListingOf\(s\),[\s\S]{0,400}?citedCover: citedCoverFor\(s\),\s*\}\)(?:\)|,)/.test(c);
   checks.push(["the daily job passes A's cited cover, imported", jobPasses(job)]);
   checks.push(["mutant caught: the job drops citedCover", !jobPasses(job.replace(/\s*citedCover: citedCoverFor\(s\),/, ""))]);
   checks.push(["mutant caught: the job passes null instead", !jobPasses(job.replace("citedCover: citedCoverFor(s),", "citedCover: null,"))]);

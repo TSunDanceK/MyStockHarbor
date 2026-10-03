@@ -189,7 +189,14 @@ async function runAll({ graph = g, S, C }) {
   return out;
 }
 
-const S = await loadSnapshot();
+// ── THE TILE NO LONGER SHOWS THE NEXT REPORT (#552 COWORK #134, 2026-10-03).
+// The cell is hidden, not removed (SHOW_NEXT_REPORT_IN_TILE). Sections 1–2 and
+// the mutants still run on the tile WITH THE CELL RESTORED, so the hidden code
+// stays correct for the day it comes back; section 1b checks the shipped tile
+// shows none of it.
+const SHOW_NEXT = once("const SHOW_NEXT_REPORT_IN_TILE = false;", "const SHOW_NEXT_REPORT_IN_TILE = true;");
+const S = await loadSnapshot(SHOW_NEXT);
+const SHIPPED = await loadSnapshot();
 const C = await loadCard();
 
 console.log("\n1. NEITHER COMPONENT PRINTS AN ESTIMATED DATE OR MONTH");
@@ -203,6 +210,18 @@ for (const r of shipped) {
 const kinds = new Set(shipped.map((r) => r.outlook.kind));
 check("the cases cover expected, beyond-window and due",
   ["expected", "beyond-window", "due"].every((k) => kinds.has(k)), [...kinds].join(","));
+
+console.log("\n1b. THE SHIPPED TILE SHOWS NO NEXT REPORT (#552 COWORK #134)");
+{
+  const hidden = await runAll({ S: SHIPPED, C });
+  for (const r of hidden) {
+    const leaked = /Next earnings/i.test(r.tile.text) || r.tile.text.includes(r.outlook.headline) || (r.outlook.hedge && r.tile.text.includes(r.outlook.hedge));
+    check(`tile, ${r.c.name}: no "Next earnings", headline or hedge`, !leaked);
+  }
+  // NOT VACUOUS: the same cases on the restored tile do show it.
+  const restored = await runAll({ S, C });
+  check("…and the restored tile does show it (the check can fail)", restored.every((r) => /Next earnings/i.test(r.tile.text)));
+}
 
 console.log("\n2. THE SEARCH, THE CARD AND THE TILE SAY THE SAME SENTENCE");
 for (const r of shipped) {
@@ -282,7 +301,7 @@ const bit = (label, problems) =>
 // `rec.next` (scripts/lib/next-report-legacy.mjs). This is the path that
 // printed "22 Oct 2026" on /stock/TSLA.
 {
-  const S1 = await loadSnapshot(oldTileMutation);
+  const S1 = await loadSnapshot((src) => oldTileMutation(SHOW_NEXT(src)));
   const t1 = tileText(S1, "TSLA", oldTileNext(DATED));
   bit("M1a old tile on the dated record (\"22 Oct 2026\")", scan(t1.text, DATED, t1.facts));
   const t2 = tileText(S1, "AVAV", oldTileNext(MONTHLY));

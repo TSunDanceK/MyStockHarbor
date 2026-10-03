@@ -60,7 +60,7 @@ const BUILDER = "lib/growthVisuals.ts";
 const COMPONENT = "app/stock/[symbol]/earnings/GrowthVisuals.tsx";
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 const appended = (builder, component) =>
-  `\n${reasonedValueUnit()}\n${strip(builder)}\n${strip(component).replace("export default function GrowthVisuals", "export function GrowthVisuals")}\n`;
+  `\n${reasonedValueUnit()}\n${strip(fs.readFileSync("lib/growthPalette.ts", "utf8"))}\n${strip(builder)}\n${strip(component).replace("export default function GrowthVisuals", "export function GrowthVisuals")}\n`;
 
 /** A's view stack plus C's two files, one transpiled unit (render-cards' method). */
 const load = (builder = fs.readFileSync(BUILDER, "utf8"), component = fs.readFileSync(COMPONENT, "utf8"), card = (src) => src) => {
@@ -412,8 +412,10 @@ const staticRules = {
     ![b, c].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory|resolveFactSet/.test(s)),
   "the client component imports only React and the builder's types": (b, c) => {
     const imports = [...c.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
-    // Plus A's ReasonedValue for the one-off tag's note (#563 COWORK #52), by name only.
-    return imports.every((i) => i === "react" || i === "@/lib/growthVisuals" || i === "@/app/components/EstimatedValue") &&
+    // Plus A's ReasonedValue for the one-off tag's note (#563 COWORK #52), by name only,
+    // and the shared palette module (#552 COWORK #134), which imports nothing.
+    return imports.every((i) => i === "react" || i === "@/lib/growthVisuals" || i === "@/app/components/EstimatedValue" || i === "@/lib/growthPalette") &&
+      !/^import\b/m.test(fs.readFileSync("lib/growthPalette.ts", "utf8")) &&
       /^import type \{[^}]*\} from "@\/lib\/growthVisuals";$/m.test(c) &&
       (!/@\/app\/components\/EstimatedValue/.test(c) || /^import \{ ReasonedValue \} from "@\/app\/components\/EstimatedValue";$/m.test(c));
   },
@@ -461,7 +463,7 @@ const mutants = [
   ["wider bars: the sales pair and the profit bar fill about two thirds of each slot", "c", (s) => s.replace(".gvBar { flex: 1 1 0; border-radius", ".gvBar { flex: 1 1 0; max-width: 18px; border-radius")],
   ["wider bars: the sales pair and the profit bar fill about two thirds of each slot", "c", (s) => s.replace(".gvPlBar { position: absolute; left: ${BAR_INSET_PCT}%; right: ${BAR_INSET_PCT}%; }", ".gvPlBar { position: absolute; left: 25%; right: 25%; }")],
   ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace('        <MarginLine periods={s.periods} kind={kind} floor={floor} className="gvDeskLine" />\n', "")],
-  ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace("export const MARGIN_LINE = { width: 1.5, opacity: 0.7 } as const;", "export const MARGIN_LINE = { width: 1.5, opacity: 1 } as const;")],
+  ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace("export const MARGIN_LINE = GROWTH_MARGIN_LINE;", "export const MARGIN_LINE = { width: 1.5, opacity: 1 } as const;")],
   ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace("strokeWidth={MARGIN_LINE.width}", "strokeWidth={3}")],
   ["phone: a period with no margin breaks the line", "c", (s) => s.replace("const a = marginPct(periods[i - 1], kind), b = marginPct(periods[i], kind);", "const a = marginPct(periods[i - 1], kind) ?? 0, b = marginPct(periods[i], kind) ?? 0;")],
   ["phone: a tap scrolls the panel into view; desktop never scrolls", "c", (s) => s.replace("if (typeof window === \"undefined\" || !window.matchMedia?.(PHONE).matches) return;", "if (typeof window === \"undefined\") return;")],

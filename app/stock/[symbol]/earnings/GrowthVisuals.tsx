@@ -35,18 +35,11 @@
 import { useRef, useState, type ReactNode } from "react";
 import type { GrowthVisualsData, GvMargin, GvMarginKind, GvPeriod, GvSeries } from "@/lib/growthVisuals";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
+import { GROWTH_COLORS, GROWTH_MARGIN_LINE } from "@/lib/growthPalette";
 
-const C = {
-  sales: "#3987e5",
-  lastYear: "#184f95",
-  profit: "#0ca30c",
-  loss: "#d03b3b",
-  margin: "#9085e9",
-  ink: "#e2e8f0",
-  muted: "#94a3b8",
-  rule: "rgba(148,163,184,0.35)",
-  active: "rgba(255,255,255,0.06)",
-};
+// The palette lives in lib/growthPalette.ts, shared with the stock page's
+// Earnings snapshot tile (#552 COWORK #134).
+const C = GROWTH_COLORS;
 
 /** The phone breakpoint: the margin line over the sales chart at or below this width. */
 export const PHONE_MAX_PX = 480;
@@ -220,7 +213,7 @@ export function marginSegments(periods: GvPeriod[], kind: GvMarginKind = "gross"
  * the dots stay the figures and the line only shows the trend. A period with
  * no margin breaks it (marginSegments); its panel says why.
  */
-export const MARGIN_LINE = { width: 1.5, opacity: 0.7 } as const;
+export const MARGIN_LINE = GROWTH_MARGIN_LINE;
 function MarginLine({ periods, kind, floor, className }: { periods: GvPeriod[]; kind: GvMarginKind; floor: number; className: string }) {
   return (
     <svg className={`${className} gvMarginLine`} viewBox={`0 0 ${periods.length} 100`} preserveAspectRatio="none" aria-hidden="true">
