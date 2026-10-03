@@ -25,7 +25,7 @@ export type DilutionHistoryData = {
   gaps?: { from: string; to: string }[];
   splits?: { date: string; ratio: number }[];
   startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" };
-  threeYear?: { pct: number; base: SharePoint; end: SharePoint } | { pct: null; reason: "too-short" };
+  threeYear?: { pct: number; base: SharePoint; end?: SharePoint } | { pct: null; reason: "too-short" };
 };
 
 function fmtShares(value: number | null) {
@@ -35,6 +35,13 @@ function fmtShares(value: number | null) {
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return value.toFixed(0);
+}
+
+/** "27 Dec 2025": the 3-year window's own ends, to the day (#552 COWORK #120). */
+function fmtDateDay(value: string) {
+  const d = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return value;
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
 }
 
 function fmtDateShort(value: string | null) {
@@ -139,6 +146,11 @@ export default function DilutionHistory({
   // THE 3-YEAR FIGURE DRIVES THE COLOUR AND THE WORDS (#552 COWORK #89 §5).
   // A payload built before it existed reads as "too short": no colour claim.
   const threePct = data?.threeYear && data.threeYear.pct !== null ? data.threeYear.pct : null;
+  // THE WINDOW'S ACTUAL ENDS, NEVER "LATEST" (#552 COWORK #120): the end may
+  // step back up to 6 months from the newest point to find a base.
+  const threeWindow = data?.threeYear && data.threeYear.pct !== null && data.threeYear.end
+    ? `${fmtDateDay(data.threeYear.base.date)} to ${fmtDateDay(data.threeYear.end.date)}`
+    : null;
   const trend = threeYearWords(threePct);
   const trendColor = trend.tone === "up" ? RED : trend.tone === "down" ? GREEN : BLUE;
 
@@ -270,6 +282,11 @@ export default function DilutionHistory({
             {threePct === null ? "—" : formatShareChange(threePct)}
           </div>
           <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4, color: "rgba(203,213,225,0.72)" }}>{trend.label}</div>
+          {threeWindow ? (
+            <div style={{ marginTop: 2, fontSize: 12, lineHeight: 1.4, color: "rgba(203,213,225,0.55)" }} data-share-three-window="">
+              {threeWindow}
+            </div>
+          ) : null}
         </div>
         <div style={cellStyle}>
           <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
