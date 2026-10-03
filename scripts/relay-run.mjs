@@ -1336,6 +1336,13 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #552 COWORK #93/#99 back-test M2 (EV from filed parts): read-only, no SEC.
+  "write-backtest-m2-ev": {
+    script: "scripts/backtest-m2-ev.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-pickers-marketcap-census": {
     script: "scripts/pickers-marketcap-census.mjs",
     args: () => [],
