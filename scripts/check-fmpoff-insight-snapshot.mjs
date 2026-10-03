@@ -19,6 +19,10 @@
 //   5. FMP-era snapshots are served as stored.
 //   6. The server page renders the label and the LINKED credit, Tiingo path only.
 //   7. Mutants: each rule broken once, and caught.
+//   8. The client prop carries only the point fields the post's indicators
+//      read (rendered for real, full vs trimmed must match), and a Tiingo
+//      snapshot (no snapshotTime) labels "Last price" with its priceLabel.
+//      With mutants of its own.
 //
 //   node scripts/check-fmpoff-insight-snapshot.mjs
 import { register } from "node:module";
@@ -41,17 +45,39 @@ const STUBS = {
     "export const readTiingoHistory = (...a) => globalThis.__insStub.readTiingoHistory(...a);\n" +
     "export const readTiingoPool = () => { globalThis.__insStub.calls.pool++; return Promise.resolve(null); };",
 };
+// The client (InsightPostClient.tsx -> PriceChart.tsx, ShareButton.tsx,
+// TradingViewChartEmbed.tsx) is rendered for real (section 8): .tsx is
+// transpiled here with the repo's TypeScript, and next/link is an <a>.
 const HOOKS = `
+import { createRequire } from "node:module";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+const ts = createRequire(path.join(process.cwd(), "package.json"))("typescript");
 const STUBS = ${JSON.stringify(STUBS)};
+const LINK = 'import { jsx } from "react/jsx-runtime"; export default function Link({ href, children, prefetch, ...rest }) { return jsx("a", { href, ...rest, children }); }';
 export async function resolve(specifier, context, nextResolve) {
   if (specifier === "@upstash/redis") return { url: "stub:upstash", shortCircuit: true };
+  if (specifier === "next/link") return { url: "stub:next-link", shortCircuit: true };
+  if (context.parentURL === "stub:next-link") return nextResolve(specifier, { ...context, parentURL: pathToFileURL(path.join(process.cwd(), "package.json")).href });
+  const tsxBase = specifier.startsWith("@/") ? path.join(process.cwd(), specifier.slice(2))
+    : specifier.startsWith(".") && context.parentURL?.startsWith("file:") ? path.resolve(path.dirname(fileURLToPath(context.parentURL)), specifier) : null;
+  if (tsxBase && !fs.existsSync(tsxBase) && !fs.existsSync(tsxBase + ".ts") && fs.existsSync(tsxBase + ".tsx"))
+    return { url: pathToFileURL(tsxBase + ".tsx").href, shortCircuit: true };
   const r = await nextResolve(specifier, context);
   for (const end of Object.keys(STUBS)) if (r.url.endsWith(end)) return { url: "stub:" + end, shortCircuit: true };
   return r;
 }
 export async function load(url, context, nextLoad) {
   if (url === "stub:upstash") return { format: "module", shortCircuit: true, source: "export class Redis { static fromEnv() { return globalThis.__insStub.redis; } }" };
+  if (url === "stub:next-link") return { format: "module", shortCircuit: true, source: LINK };
   if (url.startsWith("stub:")) return { format: "module", shortCircuit: true, source: STUBS[url.slice(5)] };
+  if (url.startsWith("file:") && url.split("?")[0].endsWith(".tsx")) {
+    const src = fs.readFileSync(fileURLToPath(url.split("?")[0]), "utf8");
+    const js = ts.transpileModule(src, { fileName: "x.tsx", compilerOptions: {
+      target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText;
+    return { format: "module", shortCircuit: true, source: js };
+  }
   return nextLoad(url, context);
 }`;
 register(`data:text/javascript,${encodeURIComponent(HOOKS)}`);
@@ -299,6 +325,128 @@ for (const [name, from, to] of STATIC_MOD_MUTANTS) {
   if (!MOD_SRC.includes(from)) { check(`mutant "${name}" applies`, false, "anchor not found"); continue; }
   const fails = statics(PAGE_SRC, MOD_SRC.replace(from, to));
   check(`mutant caught: ${name}`, fails.length > 0, fails.join("; "));
+}
+
+// ── 8. What the client is sent, and its as-of label (#553 COWORK #103) ──
+//   a. Rendered for real (InsightPostClient -> PriceChart), per indicator and
+//      timeframe: full points and trimChartPointsForClient's points give the
+//      SAME markup -- so nothing dropped is read.
+//   b. On the Tiingo path the prop carries only the fields read: date + close,
+//      plus high/low for Stochastic/ATR, plus volume for VWMA/Volume.
+//   c. The page passes the trimmed points; the client draws no candles.
+//   d. A Tiingo snapshot has no snapshotTime: "Last price" reads its
+//      priceLabel, no "undefined"/"Invalid Date"/"NaN", and the snapshot date
+//      is the bar's calendar date even in a zone west of UTC.
+console.log("\n=== 8. Client prop and as-of label (real render) ===\n");
+const CLIENT = "app/insights/[slug]/InsightPostClient.tsx";
+const CLIENT_SRC = raw(CLIENT);
+const React = (await import("react")).default;
+const { renderToStaticMarkup } = await import("react-dom/server");
+
+async function loadClient(src) {
+  // A real path under the repo, so the transpiled module's bare "react" resolves.
+  const f = path.join(ROOT, "scripts", `.ins-client-${process.pid}-${n++}.tsx`);
+  fs.writeFileSync(f, src);
+  try { return (await import(pathToFileURL(f).href)).default; } finally { fs.rmSync(f, { force: true }); }
+}
+const postFor = (chartIndicators, timeframe = "d") => ({
+  slug: "acme-sep-29-2026", title: "Acme setup", date: "2026-09-29", excerpt: "Acme excerpt.", symbol: "ACME",
+  timeframe, chartBars: timeframe === "w" ? 150 : 250, chartIndicators,
+  overallBreakdown: "", latestNews: "", latestEarnings: "", investorUsefulInfo: "", contentHtml: "<p>Body.</p>",
+});
+const INDICATOR_SETS = [[], ["MA50", "MA200"], ["MA200"], ["EMA20"], ["Bollinger(20,2)"], ["RSI(14)"], ["MACD(12,26,9)"],
+  ["Stochastic(14,3)"], ["ATR(14)"], ["VWMA(20)"], ["Volume"], ["MA200", "Volume"], ["VWMA(20)", "ATR(14)"]];
+const fieldsFor = (inds) => ["date", "close",
+  ...(inds.some((i) => i === "Stochastic(14,3)" || i === "ATR(14)") ? ["high", "low"] : []),
+  ...(inds.some((i) => i === "VWMA(20)" || i === "Volume") ? ["volume"] : [])].sort().join(",");
+
+async function clientRules(M, Client, pageSrc, clientSrc) {
+  const fails = [];
+  const want = (label, ok) => { if (!ok) fails.push(label); };
+  const html = (post, snapshot) => { try { return renderToStaticMarkup(React.createElement(Client, { post, snapshot })); } catch (e) { return `__threw ${e}`; } };
+  const tiingo = M.hydrateTiingoSnapshot(M.buildTiingoRecord("ACME", BARS, "Acme Corp"), BARS, Date.UTC(2026, 9, 3));
+  const fmpEra = { symbol: "ACME", companyName: "Acme Corp", snapshotDate: "2026-09-29", snapshotTime: "15:59", price: 123.45, trend: "Uptrend",
+    chartPoints: FMP_HISTORY.slice(-2000) };
+  want("fixture: the Tiingo snapshot hydrates with no snapshotTime", tiingo?.source === "tiingo" && tiingo.snapshotTime === undefined);
+  if (!tiingo) return fails;
+
+  // a + b
+  for (const inds of INDICATOR_SETS) {
+    const trimmed = M.trimChartPointsForClient(tiingo.chartPoints, inds);
+    want(`tiingo ${inds.join("+") || "default"}: only the fields read are sent (${fieldsFor(inds)})`,
+      trimmed.length === tiingo.chartPoints.length && trimmed.every((p) => Object.keys(p).sort().join(",") === fieldsFor(inds)));
+    for (const tf of ["d", "w"]) {
+      for (const [name, snap] of [["tiingo", tiingo], ["fmp-era", fmpEra]]) {
+        const full = html(postFor(inds, tf), snap);
+        const cut = html(postFor(inds, tf), { ...snap, chartPoints: M.trimChartPointsForClient(snap.chartPoints, inds) });
+        want(`${name} ${tf} ${inds.join("+") || "default"}: trimmed points render identically`,
+          !full.startsWith("__threw") && full.includes("<svg") && full === cut);
+      }
+    }
+  }
+  // c
+  const page = stripComments(pageSrc, { file: PAGE });
+  const client = stripComments(clientSrc, { file: CLIENT });
+  want("page: the client is sent trimChartPointsForClient's points",
+    page.includes("{ ...snapshot, chartPoints: trimChartPointsForClient(snapshot.chartPoints, post.chartIndicators) }") &&
+      !/snapshot=\{snapshot\}/.test(page));
+  want("client: no chartType passed (candle reads of high/low never run)", !/chartType=/.test(client));
+
+  // d
+  const prevTZ = process.env.TZ;
+  process.env.TZ = "America/Los_Angeles";
+  try {
+    for (const [name, snap, lastPriceText] of [
+      // en-GB's short September is "Sep" or "Sept" depending on the ICU build.
+      ["tiingo", { ...tiingo, chartPoints: M.trimChartPointsForClient(tiingo.chartPoints, []) }, /^close, 29 Sep 2026$/],
+      ["fmp-era", fmpEra, /^29 Sept? 2026$/],
+    ]) {
+      const out = html(postFor([]), snap);
+      const card = out.match(/Last price<\/div><strong>([^<]*)<\/strong><span>([^<]*)<\/span>/);
+      want(`${name}: "Last price" reads ${lastPriceText}`, lastPriceText.test(card?.[2] ?? "") && card?.[1] === `$${snap.price.toFixed(2)}`);
+      want(`${name}: no undefined / Invalid Date / NaN in the page`, !/undefined|Invalid Date|NaN/.test(out));
+      want(`${name}: snapshot date is the bar's date west of UTC`, /Snapshot date: 29 Sept? 2026</.test(out));
+    }
+  } finally {
+    if (prevTZ === undefined) delete process.env.TZ; else process.env.TZ = prevTZ;
+  }
+  return fails;
+}
+
+const realMod = await load(MOD_SRC);
+const realClient = await loadClient(CLIENT_SRC);
+const cr = await clientRules(realMod, realClient, PAGE_SRC, CLIENT_SRC);
+check("every client rule holds", cr.length === 0, cr.slice(0, 4).join("; "));
+{
+  const t = realMod.hydrateTiingoSnapshot(realMod.buildTiingoRecord("ACME", BARS, "Acme Corp"), BARS, Date.UTC(2026, 9, 3));
+  const full = JSON.stringify(t.chartPoints);
+  const cut = JSON.stringify(realMod.trimChartPointsForClient(t.chartPoints, []));
+  // The RSC payload carries the props as a JSON string inside a script, so quotes are escaped once more.
+  const esc = (x) => JSON.stringify(x).length - 2;
+  console.log(`  info  ${t.chartPoints.length} points, default indicators: ${full.length} -> ${cut.length} bytes JSON (${esc(full)} -> ${esc(cut)} as RSC-escaped), saves ${esc(full) - esc(cut)}`);
+}
+
+const CLIENT_MUTANTS = [
+  ["client", "Last price shows the bare date, not priceLabel", "const lastPriceAsOfText = snapshot?.priceLabel\n    ? snapshot.priceLabel\n", "const lastPriceAsOfText = false\n    ? snapshot.priceLabel\n"],
+  ["client", "date + snapshotTime joined when there is no snapshotTime", "const lastPriceAsOfText = snapshot?.priceLabel\n    ? snapshot.priceLabel\n", "const lastPriceAsOfText = snapshot?.priceLabel\n    ? `${snapshot.snapshotDate} ${snapshot.snapshotTime}`\n"],
+  ["client", "dates formatted in the viewer's zone", '    timeZone: "UTC",\n', ""],
+  ["client", "candles drawn (reads high/low)", "                      hideSourceToggle\n", "                      hideSourceToggle\n                      chartType=\"candles\"\n"],
+  ["module", "every field sent", "const out: InsightSnapshotPoint = { date: p.date, close: p.close };", "const out: InsightSnapshotPoint = { ...p };"],
+  ["module", "the Volume panel loses volume", 'new Set(["VWMA(20)", "Volume"])', 'new Set(["VWMA(20)"])'],
+  ["module", "ATR loses high/low", 'new Set(["Stochastic(14,3)", "ATR(14)"])', 'new Set(["Stochastic(14,3)"])'],
+  ["page", "the page sends the untrimmed points", "{ ...snapshot, chartPoints: trimChartPointsForClient(snapshot.chartPoints, post.chartIndicators) }", "snapshot"],
+];
+for (const [where, name, from, to] of CLIENT_MUTANTS) {
+  const src = where === "client" ? CLIENT_SRC : where === "module" ? MOD_SRC : PAGE_SRC;
+  if (!src.includes(from)) { check(`mutant "${name}" applies`, false, "anchor not found"); continue; }
+  const mutated = src.replace(from, to);
+  const fails = await clientRules(
+    where === "module" ? await load(mutated) : realMod,
+    where === "client" ? await loadClient(mutated) : realClient,
+    where === "page" ? mutated : PAGE_SRC,
+    where === "client" ? mutated : CLIENT_SRC,
+  );
+  check(`mutant caught: ${name}`, fails.length > 0, fails.slice(0, 2).join("; "));
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });

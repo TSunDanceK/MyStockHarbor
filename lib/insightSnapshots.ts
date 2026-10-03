@@ -528,6 +528,39 @@ export async function resolveInsightSnapshot(
   return shown;
 }
 
+// ---------------------------------------------------------------------------
+// WHAT THE CLIENT IS SENT (#553 COWORK #103, a #693 nit). Up to 2000 points go
+// to InsightPostClient in the page's RSC payload. The client reads date and
+// close for every chart; it reads high and low ONLY in stochastic() and atr()
+// (Stochastic(14,3), ATR(14)) and volume ONLY in vwma() and the Volume panel
+// (VWMA(20), Volume). Its weekly aggregation folds high/low/volume too, but
+// only those same indicators read the result, and PriceChart draws a line
+// chart here (no chartType is passed), so its candle reads never run. So each
+// post is sent the fields its own indicators read, nothing else. Applied at
+// render, after the snapshot is resolved: no stored record (FMP-era or
+// Tiingo) is changed. scripts/check-fmpoff-insight-snapshot.mjs renders the
+// client with full and trimmed points, per indicator, and needs them equal.
+// ---------------------------------------------------------------------------
+const READS_HIGH_LOW: ReadonlySet<string> = new Set(["Stochastic(14,3)", "ATR(14)"]);
+const READS_VOLUME: ReadonlySet<string> = new Set(["VWMA(20)", "Volume"]);
+
+/** Pure: the chart points with only the fields this post's indicators read. */
+export function trimChartPointsForClient(
+  points: readonly InsightSnapshotPoint[] | null | undefined,
+  indicators: readonly string[] | null | undefined
+): InsightSnapshotPoint[] {
+  const list = indicators ?? [];
+  const highLow = list.some((i) => READS_HIGH_LOW.has(i));
+  const volume = list.some((i) => READS_VOLUME.has(i));
+  return (points ?? []).map((p) => {
+    const out: InsightSnapshotPoint = { date: p.date, close: p.close };
+    if (highLow && p.high !== undefined) out.high = p.high;
+    if (highLow && p.low !== undefined) out.low = p.low;
+    if (volume && p.volume !== undefined) out.volume = p.volume;
+    return out;
+  });
+}
+
 async function companyNameFor(symbol: string): Promise<string> {
   const rows = (await searchSymbols(symbol, "")) as SymbolRow[];
   return rows.find((r) => (r.symbol ?? "").toUpperCase() === symbol)?.name ?? "";

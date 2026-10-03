@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPostBySlug, getRelatedPosts } from "@/lib/blog";
-import { getOrCreateInsightSnapshot } from "@/lib/insightSnapshots";
+import { getOrCreateInsightSnapshot, trimChartPointsForClient } from "@/lib/insightSnapshots";
 import { remark } from "remark";
 import html from "remark-html";
 import InsightPostClient from "./InsightPostClient";
@@ -339,7 +339,14 @@ export default async function InsightPostPage({ params }: Props) {
           investorUsefulInfo: post.investorUsefulInfo,
           contentHtml,
         }}
-        snapshot={snapshot}
+        snapshot={
+          // Only the point fields this post's indicators read (#553 COWORK
+          // #103): date + close unless Stochastic/ATR (high, low) or
+          // VWMA/Volume (volume). Render-time only; nothing stored changes.
+          snapshot
+            ? { ...snapshot, chartPoints: trimChartPointsForClient(snapshot.chartPoints, post.chartIndicators) }
+            : null
+        }
       />
 
       {/* What the snapshot's price is and where it is from (#553 CODE-B #94
