@@ -49,7 +49,8 @@ import {
 import {
   coverageOf, scoreFromSec, toneLabel, type EarningsTone,
 } from "./secEarningsScore";
-import { partialScoreLabel, partialScoreShortNote } from "./secPresentation";
+import { partialScoreLabel, partialScoreShortNote, scaledAmount } from "./secPresentation";
+import { PROFIT_UNCHECKED } from "../growthVisuals";
 
 /**
  * ── FIELDS DROPPED FROM THIS CARD. HIDDEN, NOT REMOVED. ───────────────────
@@ -218,6 +219,38 @@ export type SnapshotPct =
  */
 export type SnapshotNextReport = CompactOutlook;
 
+/** Why a bar is missing: a few words on the chart, the full reason on tap. */
+export type SnapshotGap = { words: string; note: string };
+
+/** One fiscal year of the tile's small annual chart (#552 COWORK #134). */
+export type SnapshotAnnualYear = {
+  /** A's label, "FY2025". */
+  label: string;
+  /** The axis label, "'25". */
+  short: string;
+  /** Filed revenue, or null with `revenueGap` saying why. */
+  revenue: number | null;
+  revenueText: string | null;
+  revenueGap: SnapshotGap | null;
+  /** Filed net income (a loss is negative), or null with `profitGap` saying why. */
+  netIncome: number | null;
+  netIncomeText: string | null;
+  profitGap: SnapshotGap | null;
+  /** Net margin %, A's own; null where refused or not computable. */
+  netMargin: number | null;
+  /** A's one-off note for this year, or null. */
+  oneOff: string | null;
+  /** A's derived notes for this year's figures, where any was not filed as is. */
+  derivedNotes: string[];
+};
+
+export type SnapshotAnnualChart = {
+  /** Oldest first, at most SNAPSHOT_CHART_YEARS. */
+  years: SnapshotAnnualYear[];
+  /** Set when fewer than 2 years can be drawn: the chart is replaced by this line. */
+  reason: string | null;
+};
+
 export type SecEarningsSnapshot = {
   symbol: string;
   /**
@@ -310,7 +343,71 @@ export type SecEarningsSnapshot = {
    */
   filingNotice: string | null;
   sourceNote: string;
+  /**
+   * THE SMALL ANNUAL CHART (#552 COWORK #134): the last four fiscal years'
+   * revenue, net income and net margin, from the same view. Null when
+   * unavailable.
+   */
+  annualChart: SnapshotAnnualChart | null;
 };
+
+/** The tile's chart shows this many fiscal years (#552 COWORK #134: four, not five). */
+export const SNAPSHOT_CHART_YEARS = 4;
+
+const finiteOrNull = (v: number | null | undefined): number | null =>
+  typeof v === "number" && Number.isFinite(v) ? v : null;
+
+/**
+ * THE TILE'S ANNUAL CHART, FROM A's VIEW — pure, no new read (#552 COWORK #134).
+ *
+ * view.annual is the earnings page's own five-year history (oldest first), so
+ * the tile and C's Years chart read the same filed figures. Nothing is
+ * derived here and nothing is filled in:
+ *   - a year whose revenue line is incomplete (marginsRefused) or absent gets
+ *     no revenue bar and a reason, never a value;
+ *   - a year the one-off rule could not run on gets no net income bar, the
+ *     same gate as C's profit chart (view.oneOffUnchecked);
+ *   - a loss is drawn below zero, with its negative margin.
+ */
+export function annualChartOf(view: SecEarningsView): SnapshotAnnualChart {
+  const unchecked = new Set(view.oneOffUnchecked ?? []);
+  const years: SnapshotAnnualYear[] = view.annual.slice(-SNAPSHOT_CHART_YEARS).map((a) => {
+    const fy = /^FY(\d{4})$/.exec(a.label);
+    const revenueVal = finiteOrNull(a.revenue.val);
+    const revenue = a.marginsRefused ? null : revenueVal;
+    const revenueGap: SnapshotGap | null = a.marginsRefused
+      ? { words: "Revenue not fully tagged", note: EMPTY_REASONS.revenueIncomplete }
+      : revenue === null ? { words: "No revenue on file", note: EMPTY_REASONS.notCaptured } : null;
+    const filedProfit = finiteOrNull(a.netIncome.val);
+    const netIncome = unchecked.has(a.label) ? null : filedProfit;
+    const profitGap: SnapshotGap | null = unchecked.has(a.label)
+      ? { words: "Profit not drawn", note: PROFIT_UNCHECKED }
+      : netIncome === null ? { words: "No net income on file", note: EMPTY_REASONS.notCaptured } : null;
+    return {
+      label: a.label,
+      short: fy ? `'${fy[1].slice(2)}` : a.label,
+      revenue,
+      revenueText: revenue === null ? null : scaledAmount(revenue),
+      revenueGap,
+      netIncome,
+      netIncomeText: netIncome === null ? null : scaledAmount(netIncome),
+      profitGap,
+      netMargin: a.marginsRefused ? null : finiteOrNull(a.net),
+      oneOff: netIncome === null ? null : view.oneOffs?.[a.label] ?? null,
+      derivedNotes: [
+        revenue !== null ? a.revenue.derivedNote : null,
+        netIncome !== null ? a.netIncome.derivedNote : null,
+      ].filter((n): n is string => Boolean(n)),
+    };
+  });
+  const drawable = years.filter((y) => y.revenue !== null || y.netIncome !== null).length;
+  return {
+    years,
+    reason: drawable < 2
+      ? `Not enough filed annual figures to chart yet: ${drawable} of the last ${SNAPSHOT_CHART_YEARS} fiscal years can be drawn.`
+      : null,
+  };
+}
 
 const pct = (p: Pct, crossingWords: (p: Pct) => string | null): SnapshotPct => {
   if (isPct(p)) return { kind: "pct", value: p };
@@ -385,6 +482,7 @@ export function buildSecEarningsSnapshot(args: {
       filingCredit: null,
       filingNotice: null,
       sourceNote: snapshotSourceNote(null),
+      annualChart: null,
     };
   }
 
@@ -441,6 +539,7 @@ export function buildSecEarningsSnapshot(args: {
     filingCredit: view.latestFromFiling ? filingCreditText(view.latestFromFiling) : null,
     filingNotice: view.filedNotInFeed ? filingNoticeText(view.filedNotInFeed) : null,
     sourceNote: snapshotSourceNote(view.accounting),
+    annualChart: annualChartOf(view),
   };
 }
 
