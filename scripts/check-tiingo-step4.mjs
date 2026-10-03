@@ -179,8 +179,14 @@ function rules(srcs) {
   const route = code[FILES.quoteRoute];
   const read = route.indexOf("await fetchQuoteSnapshot(");
   const keyCheck = route.search(/!\s*(process\.env\.FMP_API_KEY|apiKey)\b/);
-  want("/api/quote reads the quote (Tiingo first) before any missing-FMP-key 500",
+  want("/api/quote reads the quote (Tiingo first) before any missing-FMP-key answer",
     read >= 0 && keyCheck > read);
+  // ...and that answer is a 404 "no-data", never a 500 (#553 COWORK #103)
+  const noKey = route.slice(keyCheck, keyCheck + 400);
+  want("/api/quote with no price and no key answers 404 no-data, not 500",
+    /status: 404/.test(noKey) && /outcome: "no-data"/.test(noKey) && !/status: 500/.test(noKey));
+  want("the dashboard words a 404 quote as No data available",
+    /qR\.status === 404\)[^\n]*setErr\(`No data available for/.test(code[FILES.dashClient]));
 
   // stock page
   const fq = fnBody(code[FILES.stockPage], "fetchQuote");
@@ -207,6 +213,8 @@ const MUTANTS = [
   ["the ETF note dropped", FILES.dashClient, / · ETF prices, not index levels/, ""],
   ["the stock page seeds from FMP only", FILES.stockPage, /if \(priceProviderFor\("STOCK_PAGE"\) === "tiingo"\) \{\n\s*const t = await readTiingoQuote\(symbol\);/, "if (false) {\n    const t = null as any;"],
   ["/api/quote returns 500 before the Tiingo read again", FILES.quoteRoute, /  const payload = await fetchQuoteSnapshot\(symbol\);/, "  if (!process.env.FMP_API_KEY) return NextResponse.json(emptyQuote(symbol), { status: 500 });\n  const payload = await fetchQuoteSnapshot(symbol);"],
+  ["/api/quote answers 500 again with no price and no key", FILES.quoteRoute, /status: 404, headers/, "status: 500, headers"],
+  ["the dashboard words a 404 as a load failure", FILES.dashClient, /setErr\(`No data available for \$\{symbol\.toUpperCase\(\)\}\.`\)/, 'setErr("Failed to load data (try another ticker).")'],
   ["the header drops the volume label", FILES.stockClient, /quote\?\.volumeLabel \?/, "false ?"],
 ];
 for (const [label, file, from, to] of MUTANTS) {
