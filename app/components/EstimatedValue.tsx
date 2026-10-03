@@ -113,20 +113,38 @@ function Noted({ children, note, style, label }: { children: ReactNode; note: st
   );
 }
 
-/** A figure, marked when (and only when) it carries an estimate. */
+/**
+ * Digits of equal width, so figures in a column line up (#552 COWORK #125).
+ * Exported for the cards that print plain figures beside marked ones.
+ */
+export const TABULAR: CSSProperties = { fontVariantNumeric: "tabular-nums" };
+
+/** The "derived" word, set before the figure (#552 COWORK #125). */
+export const DERIVED_TAG_STYLE: CSSProperties = {
+  marginRight: 6, fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", opacity: 0.85, verticalAlign: "middle",
+};
+
+/**
+ * A figure, marked when (and only when) it carries an estimate.
+ *
+ * THE MARK GOES BEFORE THE FIGURE, AND THE FIGURE IS THE LAST CHILD (#552
+ * COWORK #125): "Total liabilities $1.33B derived" pushed that figure out of
+ * a right-aligned column. "derived $1.33B" and "≈17.5×" keep every figure's
+ * right edge where the plain ones are, wherever the mark appears.
+ */
 export function EstimatedValue({ text, est, style }: { text: string; est?: EstimateMark | null; style?: CSSProperties }) {
-  if (!est) return <span style={style}>{text}</span>;
+  if (!est) return <span style={{ ...TABULAR, ...style }}>{text}</span>;
   if (est.kind === "derived") {
     return (
-      <Noted note={est.note} label={`${text}, derived`} style={style}>
+      <Noted note={est.note} label={`${text}, derived`} style={{ ...TABULAR, ...style }}>
+        <span style={DERIVED_TAG_STYLE} data-mark="derived">derived</span>
         {text}
-        <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", opacity: 0.85, verticalAlign: "middle" }}>derived</span>
       </Noted>
     );
   }
   return (
-    <Noted note={est.note} label={`${text}, estimated`} style={{ color: ESTIMATE_COLOUR, ...style }}>
-      {ESTIMATE_SIGN}
+    <Noted note={est.note} label={`${text}, estimated`} style={{ color: ESTIMATE_COLOUR, ...TABULAR, ...style }}>
+      <span data-mark="estimate">{ESTIMATE_SIGN}</span>
       {text}
     </Noted>
   );

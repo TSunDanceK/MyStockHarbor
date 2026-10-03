@@ -97,6 +97,31 @@ function HBar({ value, max, tone }: { value: number | null; max: number; tone: E
 }
 
 /**
+ * "ABOUT THESE FIGURES" (#552 COWORK #124): a card's method, sources and
+ * footnotes, behind a tap. A native <details> in the server HTML, closed, as
+ * with "About this score": indexed, and it works without JS. The card itself
+ * keeps only the figures and one short line.
+ */
+export const CARD_DETAILS_SUMMARY = "About these figures";
+export function CardDetails({ children }: { children: React.ReactNode }) {
+  return (
+    <details className="cardDetails">
+      <summary>{CARD_DETAILS_SUMMARY}</summary>
+      <div className="cardDetailsBody">{children}</div>
+    </details>
+  );
+}
+
+/**
+ * A LABEL WITH ITS EXPLANATION ON TAP (#552 COWORK #124/#125), in place of a
+ * line of small print under it ("More debt than cash. Cash and short-term
+ * investments less total debt.").
+ */
+function NotedLabel({ label, note }: { label: string; note?: string | null }) {
+  return note ? <ReasonedValue text={label} reason={note} /> : <>{label}</>;
+}
+
+/**
  * A LIST OF LABELLED MAGNITUDES, each with its bar.
  *
  * The rows carry their own figures as text — the bar is a second encoding of a
@@ -110,11 +135,10 @@ function HBarList({ rows }: { rows: { label: string; value: number | null; tone:
       {rows.map((r) => (
         <div className="hbarRow" key={r.label}>
           <div className="hbarHead">
-            <span className="hbarLabel">{r.label}</span>
+            <span className="hbarLabel"><NotedLabel label={r.label} note={r.sub} /></span>
             <span className="hbarValue">{r.text}</span>
           </div>
           <HBar value={r.value} max={max} tone={r.tone} />
-          {r.sub ? <span className="hbarSub">{r.sub}</span> : null}
         </div>
       ))}
     </div>
@@ -306,15 +330,12 @@ const Q4_EPS_NOTE =
  * on the element, so a reader who meets the word far from the footnote is
  * one hover or one tap away from why there is no percentage.
  */
-function PctCell({ v }: { v: Pct | undefined }) {
-  if (v != null && isCrossing(v)) {
-    return (
-      <abbr className="crossTip" title={CROSSING_NOTE} tabIndex={0}>
-        {CROSSING_WORDS[v]}
-      </abbr>
-    );
-  }
-  return <>{pct(v)}</>;
+function PctCell({ v, missing, note }: { v: Pct | undefined; missing?: string | null; note?: string | null }) {
+  // EVERY DOTTED WORD OPENS ITS NOTE (#552 COWORK #124 item 3): this was an
+  // <abbr title> with a dotted underline, which a tap or click never opened.
+  if (v != null && isCrossing(v)) return <ReasonedValue text={CROSSING_WORDS[v]} reason={CROSSING_NOTE} />;
+  if (v == null && missing) return <ReasonedValue text="—" reason={missing} style={MUTED_VALUE} />;
+  return note ? <ReasonedValue text={pct(v)} reason={note} /> : <>{pct(v)}</>;
 }
 
 /**
@@ -360,12 +381,7 @@ const signTone = (v: number | null | undefined): EarningsTone | null =>
  * pattern as EMPTY_SHORT.
  */
 function NotMeaningful() {
-  return (
-    <abbr className="cellShort" title={EMPTY_REASONS.revenueIncomplete} tabIndex={0}
-      style={{ textDecoration: "none", cursor: "help", color: "#94a3b8" }}>
-      Not meaningful
-    </abbr>
-  );
+  return <ReasonedValue text="Not meaningful" reason={EMPTY_REASONS.revenueIncomplete} style={MUTED_VALUE} />;
 }
 
 const pctLevel = (v: number | null | undefined, digits = 1) =>
@@ -381,15 +397,18 @@ const ratio = (v: number | null | undefined) =>
  */
 export function DerivedMark({ cell }: { cell: ViewCell }) {
   if (!cell.derivedNote) return null;
-  return (
-    <abbr
-      title={cell.derivedNote}
-      style={{ marginLeft: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8", textDecoration: "none", cursor: "help" }}
-    >
-      derived
-    </abbr>
-  );
+  return <CardDerivedWord note={cell.derivedNote} />;
 }
+
+/**
+ * "derived", BEFORE THE FIGURE, ITS NOTE ON TAP (#552 COWORK #124/#125).
+ * After the figure it pushed that figure out of a right-aligned column, and
+ * as an <abbr title> a tap never opened it.
+ */
+function CardDerivedWord({ note }: { note: string }) {
+  return <ReasonedValue text="derived" reason={note} style={DERIVED_MARK_STYLE} />;
+}
+const DERIVED_MARK_STYLE = { marginRight: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8" } as const;
 
 /** A cell's value, with its derived mark. `—` when the filer did not publish it. */
 export function CellValue(
@@ -406,19 +425,15 @@ export function CellValue(
   // and that is a fact about the filing worth stating. A filed ZERO still
   // renders ("$0.0M") — money() is only reached when there is a value. `empty`
   // lets a caller that KNOWS the reason say it (see revenueEmpty).
+  // THE SHORT WORD, ITS REASON ON TAP (#552 COWORK #124): never a sentence
+  // in the cell, and never a dotted word that opens nothing.
   if (cell.val == null) {
-    if (short) {
-      return (
-        <abbr className="cellShort" title={emptyTitle ?? EMPTY_FULL[empty] ?? empty} tabIndex={0}
-          style={{ color: "#94a3b8", fontWeight: 600 }}>
-          {EMPTY_SHORT[empty] ?? empty}
-        </abbr>
-      );
-    }
-    return <span style={{ color: "#94a3b8", fontWeight: 600 }}>{empty}</span>;
+    const word = short || EMPTY_SHORT[empty] ? (EMPTY_SHORT[empty] ?? empty) : empty;
+    return <ReasonedValue text={word} reason={emptyTitle ?? EMPTY_FULL[empty] ?? null} style={MUTED_VALUE} />;
   }
   return (
     <>
+      <DerivedMark cell={cell} />
       {/* PER-SHARE PRECISION TRAVELS WITH THE CELL, not with the call site —
           EPS renders in four places and one of them is a loop over field keys
           that no one writes out by hand. See ViewCell.perShare. */}
@@ -427,7 +442,6 @@ export function CellValue(
         // A SHARE COUNT TAKES THE SAME SCALE, WITHOUT THE $: "49.8M", not
         // "49,822,595" — nine digits in a column of 1dp M figures.
         : compact ? scaledAmount(cell.val, false) : cell.val.toLocaleString("en-US")}
-      <DerivedMark cell={cell} />
     </>
   );
 }
@@ -441,7 +455,7 @@ export function DerivedValue(
   // "Can't calculate — short-term debt and long-term d…" ran off a phone.
   return missing
     ? <ReasonedValue text={NOT_AVAILABLE} reason={cantCalculate(missing)} style={MUTED_VALUE} />
-    : <span style={MUTED_VALUE}>{NOT_REPORTED}</span>;
+    : <ReasonedValue text={NOT_REPORTED} reason={EMPTY_FULL[NOT_REPORTED]} style={MUTED_VALUE} />;
 }
 
 /** A refusal's short word in a narrow cell; the reason rides in its note. */
@@ -587,9 +601,9 @@ export function SecSnapshotCard({
         <Metric
           label="YoY revenue growth"
           tone={toneForGrowth(s.revenueYoY)}
-          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
+          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : undefined}
         >
-          <PctCell v={s.revenueYoY} />
+          <PctCell v={s.revenueYoY} missing={s.comparedWith ? null : `Prior-year ${w.one} not on file.`} />
         </Metric>
         <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)}>
           <CellValue cell={s.epsDiluted} empty={epsEmpty(view, view.latestLabel)} />
@@ -600,14 +614,13 @@ export function SecSnapshotCard({
         <Metric
           label="YoY EPS growth"
           tone={toneForGrowth(s.epsYoY)}
-          sub={
-            <>
-              {s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
-              {view.largeNonOperatingNote && s.epsYoY != null ? <div className="metricSubNote">{view.largeNonOperatingNote}</div> : null}
-            </>
-          }
+          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : undefined}
         >
-          <PctCell v={s.epsYoY} />
+          <PctCell
+            v={s.epsYoY}
+            missing={s.comparedWith ? null : `Prior-year ${w.one} not on file.`}
+            note={view.largeNonOperatingNote && s.epsYoY != null ? view.largeNonOperatingNote : null}
+          />
         </Metric>
         <Metric label="Operating income" tone={signTone(s.operatingIncome.val)}>
           <CellValue cell={s.operatingIncome} compact />
@@ -619,14 +632,16 @@ export function SecSnapshotCard({
       {/* ON THE SNAPSHOT, WHICH IS THE CARD EVERY READER SEES. A conversion
           note further down the page is a note most readers never reach, and
           the figures it explains are the ones at the top. */}
-      {view.currency ? <p className="earningsDataNote">{conversionNote(view.currency)}</p> : null}
-      {/* PERIOD LABELS ARE THE FILER'S OWN FISCAL PERIOD, NOT THE CALENDAR. The
-          probe set's year-ends are 31 Mar, 26 Sep, 3 Sep, 31 Oct and 31 Dec, so
-          two companies' "2026" can be nine months apart. */}
-      <p className="earningsDataNote">{w.labelled}</p>
-      {crossingNoteHome(view) === "snapshot" ? <p className="earningsDataNote">{CROSSING_NOTE}</p> : null}
-      {/* THE GAAP/IFRS NOTE IS STATED ONCE, IN THE HERO — see EpsBasisLine. */}
-      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
+      {/* THE FINE PRINT, BEHIND A TAP (#552 COWORK #124): the conversion, the
+          fiscal-calendar note, the crossing note and the source. PERIOD LABELS
+          ARE THE FILER'S OWN FISCAL PERIOD — two companies' "2026" can be nine
+          months apart. The GAAP/IFRS note is stated once, in the hero. */}
+      <CardDetails>
+        {view.currency ? <p>{conversionNote(view.currency)}</p> : null}
+        <p>{w.labelled}</p>
+        {crossingNoteHome(view) === "snapshot" ? <p>{CROSSING_NOTE}</p> : null}
+        <p>Source: {SEC_ATTRIBUTION}.</p>
+      </CardDetails>
     </section>
   );
 }
@@ -776,10 +791,11 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                       because `margins` is reversed to oldest-first for display
                       while gapAfter was computed newest-first. */}
                   {m.gapAfter ? (
-                    <abbr
-                      title="No filing on file for the period immediately before this one — these rows are the periods the company published, not a consecutive run."
-                      style={{ marginLeft: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8", textDecoration: "none", cursor: "help" }}
-                    >gap</abbr>
+                    <ReasonedValue
+                      text="gap"
+                      reason="No filing on file for the period immediately before this one — these rows are the periods the company published, not a consecutive run."
+                      style={{ marginLeft: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8" }}
+                    />
                   ) : null}
                 </td>
                 {/* THE BASE, DISCLOSED PER ROW. The snapshot card named its
@@ -794,9 +810,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                     reason is one hover and one footnote away instead. */}
                 <td data-label="EPS YoY">
                   {view.growth[i]?.epsYoY == null && /^Q4 /.test(m.label) ? (
-                    <abbr title={Q4_EPS_NOTE} style={{ textDecoration: "none", cursor: "help", color: "#94a3b8" }}>
-                      {NOT_REPORTED}
-                    </abbr>
+                    <ReasonedValue text={NOT_REPORTED} reason={Q4_EPS_NOTE} style={MUTED_VALUE} />
                   ) : (
                     <PctCell v={view.growth[i]?.epsYoY} />
                   )}
@@ -810,8 +824,10 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
         </table>
       </div>
       </SeeAllTheNumbers>
-      {crossingNoteHome(view) === "growth" ? <p className="earningsDataNote">{CROSSING_NOTE}</p> : null}
-      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
+      <CardDetails>
+        {crossingNoteHome(view) === "growth" ? <p>{CROSSING_NOTE}</p> : null}
+        <p>Source: {SEC_ATTRIBUTION}.</p>
+      </CardDetails>
     </section>
   );
 }
@@ -850,7 +866,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
           <strong>{view.symbol}</strong> has fewer — a recent listing or spin-off has no earlier
           year to measure against yet.
         </p>
-        <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
+        <CardDetails><p>Source: {SEC_ATTRIBUTION}.</p></CardDetails>
       </section>
     );
   }
@@ -889,7 +905,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
                       line under every label; the intro now says it once
                       (fiscalYearEndNote) and the exact date is one hover or
                       tap away — two filers' "FY2025" can be nine months apart. */}
-                  <abbr className="cellShort" title={`Ended ${readableDate(r.end)}`} tabIndex={0}>{r.label}</abbr>
+                  <ReasonedValue text={r.label} reason={`Ended ${readableDate(r.end)}`} />
                 </td>
                 {/* NO "COMPARED WITH" COLUMN. The intro says each year is
                     compared with the year before, so the column only repeated
@@ -908,8 +924,10 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
           </tbody>
         </table>
       </div>
-      {crossingNoteHome(view) === "annual" ? <p className="earningsDataNote">{CROSSING_NOTE}</p> : null}
-      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
+      <CardDetails>
+        {crossingNoteHome(view) === "annual" ? <p>{CROSSING_NOTE}</p> : null}
+        <p>Source: {SEC_ATTRIBUTION}.</p>
+      </CardDetails>
     </section>
   );
 }
@@ -958,18 +976,15 @@ function CashQualityBars({ view }: { view: SecEarningsView }) {
         { label: c.capex.label, value: capex, tone: "weak",
           text: capex === null
             ? <CellValue cell={c.capex} compact />
-            : <>{shortMoney(Math.abs(capex))}<DerivedMark cell={c.capex} /></>,
+            : <><DerivedMark cell={c.capex} />{shortMoney(Math.abs(capex))}</>,
           sub: capex === null ? undefined : "cash spent on productive assets" },
         { label: "Free cash flow", value: fcf, tone: fcf === null ? null : fcf >= 0 ? "good" : "weak",
           text: (
             <>
-              <DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />
               {c.freeCashFlowDerived ? (
-                <abbr
-                  title={`Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this ${w.one} is the difference between two cumulative figures.`}
-                  style={{ marginLeft: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8", textDecoration: "none", cursor: "help" }}
-                >derived</abbr>
+                <CardDerivedWord note={`Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this ${w.one} is the difference between two cumulative figures.`} />
               ) : null}
+              <DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />
             </>
           ) },
       ]}
@@ -1106,19 +1121,21 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           sentences (owner review, TSLA/AVAV). The year-to-date sentence stays
           because it is why a figure here says "derived"; the Not-reported
           sentence is carried by the income statement and balance sheet. */}
-      <p className="earningsDataNote">
-        {c.basis === "year" ? (
-          <>Annual cash-flow figures as filed, for {c.period}. Source: {SEC_ATTRIBUTION}.</>
-        ) : c.basis === "year-to-date" ? (
-          <>Cash-flow figures as filed, for the {lcFirst(c.period)}. Source: {SEC_ATTRIBUTION}.</>
-        ) : (
-          <>
-            Cash-flow figures are filed year-to-date, so every {w.one} except the first is the
-            difference between two cumulative figures — those are marked <em>derived</em>.{" "}
-            Source: {SEC_ATTRIBUTION}.
-          </>
-        )}
-      </p>
+      <CardDetails>
+        <p>
+          {c.basis === "year" ? (
+            <>Annual cash-flow figures as filed, for {c.period}. Source: {SEC_ATTRIBUTION}.</>
+          ) : c.basis === "year-to-date" ? (
+            <>Cash-flow figures as filed, for the {lcFirst(c.period)}. Source: {SEC_ATTRIBUTION}.</>
+          ) : (
+            <>
+              Cash-flow figures are filed year-to-date, so every {w.one} except the first is the
+              difference between two cumulative figures — those are marked <em>derived</em>.{" "}
+              Source: {SEC_ATTRIBUTION}.
+            </>
+          )}
+        </p>
+      </CardDetails>
     </section>
   );
 }
@@ -1212,9 +1229,10 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
           reported" against total liabilities and equity. */}
       {/* THE "NOT REPORTED" SENTENCE ONLY WHERE A ROW SAYS IT (#552 COWORK
           #97): explaining words that aren't on the card is noise. */}
-      <p className="earningsDataNote">
-        {balanceShowsNotReported(b) ? `${NOT_REPORTED_NOTE} ` : ""}Source: {SEC_ATTRIBUTION}.
-      </p>
+      <CardDetails>
+        {balanceShowsNotReported(b) ? <p>{NOT_REPORTED_NOTE}</p> : null}
+        <p>Source: {SEC_ATTRIBUTION}.</p>
+      </CardDetails>
     </section>
   );
 }
@@ -1250,12 +1268,14 @@ function PlWaterfall({ view }: { view: SecEarningsView }) {
         totalLabel="Operating income"
         format={(n) => shortMoney(n)}
       />
-      <p className="earningsDataNote">
-        Each bar starts where the one above it ended, so the drop from revenue to operating income
-        is the sum of the costs between them. Shown only where the filed expense lines actually
-        reach the filed operating income for this {w.one}; where they do not, the table below says
-        so instead.
-      </p>
+      <CardDetails>
+        <p>
+          Each bar starts where the one above it ended, so the drop from revenue to operating income
+          is the sum of the costs between them. Shown only where the filed expense lines actually
+          reach the filed operating income for this {w.one}; where they do not, the table below says
+          so instead.
+        </p>
+      </CardDetails>
     </div>
   );
 }
@@ -1293,14 +1313,16 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
           impairments, amortisation of intangibles. Operating income is taken as
           filed and is right; it is the BREAKDOWN that is partial, and the card
           must not imply otherwise. */}
-      <p className="earningsDataNote">{NOT_REPORTED_NOTE}</p>
-      {!view.incomeStatementComplete ? (
-        <p className="earningsDataNote">
-          The expense lines above do not add up to operating income for this {w.one}: this company
-          reports costs that these categories do not cover. Operating income is as filed.
-        </p>
-      ) : null}
-      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
+      <CardDetails>
+        <p>{NOT_REPORTED_NOTE}</p>
+        {!view.incomeStatementComplete ? (
+          <p>
+            The expense lines above do not add up to operating income for this {w.one}: this company
+            reports costs that these categories do not cover. Operating income is as filed.
+          </p>
+        ) : null}
+        <p>Source: {SEC_ATTRIBUTION}.</p>
+      </CardDetails>
     </section>
   );
 }
@@ -1369,9 +1391,9 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
           reader "those cells read Not reported" under a table where none did.
           It is gated on q4EpsNotReported, the same test the cell uses, so the
           note and the cells cannot disagree. */}
-      <p className="earningsDataNote">
-        {view.recentPeriods.some(q4EpsNotReported) ? <>{Q4_EPS_NOTE} </> : null}Source: {SEC_ATTRIBUTION}.
-      </p>
+      <CardDetails>
+        <p>{view.recentPeriods.some(q4EpsNotReported) ? <>{Q4_EPS_NOTE} </> : null}Source: {SEC_ATTRIBUTION}.</p>
+      </CardDetails>
     </section>
   );
 }
@@ -1380,10 +1402,9 @@ function Row({ label, children, sub, strong }: { label: string; children: React.
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderBottom: "1px solid rgba(148,163,184,0.14)" }}>
       <div style={{ fontSize: 13.5, fontWeight: strong ? 800 : 600, color: strong ? undefined : "#cbd5e1" }}>
-        {label}
-        {sub ? <div style={{ fontSize: 11.5, fontWeight: 500, color: "#94a3b8" }}>{sub}</div> : null}
+        <NotedLabel label={label} note={sub} />
       </div>
-      <div style={{ fontSize: 13.5, fontWeight: strong ? 800 : 700, whiteSpace: "nowrap" }}>{children}</div>
+      <div style={{ fontSize: 13.5, fontWeight: strong ? 800 : 700, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{children}</div>
     </div>
   );
 }
@@ -1743,60 +1764,64 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
     <section className="card">
       <div className="eyebrow">Trend</div>
       <h3>What does a typical {w.one} look like?</h3>
-      <p>Middle value across the {w.many} on file.</p>
+      {/* ── THREE TILES, ONE PER MEASURE (#552 COWORK #124 item 2, #125) ──────
+          The stock page's tile style: the label, one big figure (the typical
+          value, or the word with its reason on tap), one "Latest" line and the
+          pills. Every tile has the same four rows, so the figures sit on the
+          same baselines and left edge across all three, a word ("Not
+          meaningful") shifts nothing, and the pills share the bottom row. */}
       <div className="trendGrid">
         {t.lines.map((l) => {
           // THE KIND, NOT THE LABEL'S SPELLING. trendSummary says which lines
-          // are rates and which are levels; a /margin/i over the wording was a
-          // second copy of that rule, one rename away from disagreeing.
+          // are rates and which are levels.
           const word = l.kind === "level" ? marginToneWord(l.tone) : growthToneWord(l.tone);
+          const total = l.counted + l.skipped;
           return (
-            <div className="trendCell" key={l.label}>
-              <span className="metricLabel">{l.label}</span>
-              {/* TYPICAL · LATEST, when both are figures. The median alone can
-                  sit a long way from now (AVAV: +133.3% typical, +5.7% latest),
-                  so the newest period is printed beside it in smaller type, by
-                  the same colour rule. NO SIGN ON A LEVEL: 32% is not "+32%". */}
-              <span className="metricValue" style={{ color: toneColor(l.tone) }}>
-                {l.value === null ? "—" : (
-                  <>
-                    <span className="trendTag">Typical </span>
-                    {fmtTrend(l.kind, l.value)}
-                  </>
+            <div className="metricCard trendTile" key={l.label} data-trend-tile="">
+              <div className="metricLabel trendTileLabel">{l.label}</div>
+              {/* TYPICAL. NO SIGN ON A LEVEL: 32% is not "+32%". */}
+              <div className="metricValue trendTileValue" style={{ color: l.value === null ? undefined : toneColor(l.tone) }}>
+                {l.value === null ? (
+                  <ReasonedValue
+                    text={l.reason ? "Not meaningful" : `Too few ${w.many}`}
+                    reason={l.reason ?? `Needs ${TREND_MIN_PERIODS} ${w.many} on file; has ${l.counted}.`}
+                    style={MUTED_VALUE}
+                  />
+                ) : (
+                  <><span className="trendTag">Typical </span>{fmtTrend(l.kind, l.value)}</>
                 )}
-              </span>
-              {l.value !== null && l.latest !== null ? (
-                <span className="trendLatest" style={{ color: toneColor(l.latestTone) }}>
-                  <span className="trendTag">Latest </span>{fmtTrend(l.kind, l.latest)}
-                </span>
-              ) : null}
-              {/* THE NEWEST CROSSING, in the snapshot's words (#552 COWORK #47):
-                  AXTI's EPS growth is refused, but its latest quarter turned
-                  profitable, and that is the news. */}
-              {l.latestWords ? <span className="trendLatest">{l.latestWords}</span> : null}
+              </div>
+              {/* LATEST, the newest period beside the median (AVAV: +133.3%
+                  typical, +5.7% latest), or the newest crossing in the
+                  snapshot's words (#552 COWORK #47). A blank row keeps the
+                  pills level when there is neither. */}
+              <div className="trendLatest" style={{ color: l.value !== null && l.latest !== null ? toneColor(l.latestTone) : undefined }}>
+                {l.value !== null && l.latest !== null ? (
+                  <><span className="trendTag">Latest </span>{fmtTrend(l.kind, l.latest)}</>
+                ) : l.latestWords ? l.latestWords : "\u00a0"}
+              </div>
               <div className="trendChipRow">
-                {/* A LEVEL GETS NO VERDICT CHIP ON ITS VALUE — whether 6% is
-                    good depends on the industry. Its DIRECTION does get one
-                    (latest against typical, the Growth & Margins band): l.move. */}
+                {/* A LEVEL GETS NO VERDICT CHIP ON ITS VALUE; its DIRECTION does
+                    (latest against typical): l.move. */}
                 {l.kind === "level"
                   ? (l.move ? <ToneChip tone={l.move.tone} word={l.move.word} /> : null)
                   : l.value === null ? null : <ToneChip tone={l.tone} word={word} />}
-                <span className="trendCount">
-                  {l.value === null
-                    ? (l.reason ?? `needs ${TREND_MIN_PERIODS}, has ${l.counted}`)
-                    : `${l.counted} of ${l.counted + l.skipped} ${l.counted + l.skipped === 1 ? w.one : w.many}`}
-                </span>
+                {l.value !== null ? (
+                  <span className="trendCount">{`${l.counted} of ${total} ${total === 1 ? w.one : w.many}`}</span>
+                ) : null}
               </div>
             </div>
           );
         })}
       </div>
-      {/* NO EXCLUSION PARAGRAPH AND NO SECOND COPY OF THE BANDS. Each line's
-          "N of M" already says how many periods it counted, the thresholds
-          are in the growth chart's footnote, and the crossing sentence is
-          printed once per page. */}
-      {t.skewNote ? <p className="earningsDataNote">{t.skewNote}</p> : null}
-      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
+      {/* THE METHOD, THE SKEW NOTE AND THE SOURCE, behind a tap (#552 COWORK
+          #124/#125). No exclusion paragraph and no second copy of the bands:
+          each tile's "N of M" says how many periods it counted. */}
+      <CardDetails>
+        <p>Typical is the middle value across the {w.many} on file; Latest is the newest {w.one}.</p>
+        {t.skewNote ? <p>{t.skewNote}</p> : null}
+        <p>Source: {SEC_ATTRIBUTION}.</p>
+      </CardDetails>
     </section>
   );
 }
@@ -1867,6 +1892,9 @@ export function SecValuationCard({
     : inputs.eps?.basis === "year-to-date" && inputs.eps.ytd
       ? `the twelve months to ${readableDate(inputs.eps.periodEnd)} (the fiscal year to ${readableDate(inputs.eps.ytd.yearEnd)} plus ${inputs.eps.ytd.months} months, less the same ${inputs.eps.ytd.months} months a year earlier)`
       : `${inputs.eps?.fiscalYear ? `fiscal year ${inputs.eps.fiscalYear}` : "the latest fiscal year"}, to ${inputs.eps?.periodEnd ? readableDate(inputs.eps.periodEnd) : "its year-end"}`;
+  // A FIGURE, as opposed to a word standing in for one.
+  const capOk = current && cap !== null && cap.ok;
+  const peOk = current && pe !== null && pe.ok;
   const peSub = !current ? null
     : pe !== null && !pe.ok
       ? pe.why === "eps-is-zero-or-negative"
@@ -1880,16 +1908,23 @@ export function SecValuationCard({
       <div className="eyebrow">Valuation</div>
       <h3>What the market is paying for these earnings</h3>
       <div className="metricGrid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-        <Metric label="Market cap" sub={capSub}>{capValue}</Metric>
-        <Metric label={`P/E (${epsStandardWord(view.accounting)}, trailing)`} sub={peSub}>{peValue}</Metric>
+        {/* THE WORD OR THE FIGURE; ITS REASON OR ITS METHOD BEHIND A TAP
+            (#552 COWORK #124). A refusal ("Not meaningful", "Not available")
+            opens its reason; a figure's inputs go in the card's details. */}
+        <Metric label="Market cap">{capOk ? capValue : <ReasonedValue text={capValue} reason={capSub} />}</Metric>
+        <Metric label={`P/E (${epsStandardWord(view.accounting)}, trailing)`}>{peOk ? peValue : <ReasonedValue text={peValue} reason={peSub} />}</Metric>
       </div>
-      {view.currency ? (
-        <p className="earningsDataNote">
-          Earnings are converted from {view.currency.reporting}; the share price is already in US
-          dollars, so both sides of these figures are dollars.
-        </p>
-      ) : null}
-      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}; share price from market data.</p>
+      <CardDetails>
+        {capOk && capSub ? <p>Market cap: {capSub}.</p> : null}
+        {peOk && peSub ? <p>P/E: {peSub}.</p> : null}
+        {view.currency ? (
+          <p>
+            Earnings are converted from {view.currency.reporting}; the share price is already in US
+            dollars, so both sides of these figures are dollars.
+          </p>
+        ) : null}
+        <p>Source: {SEC_ATTRIBUTION}; share price from market data.</p>
+      </CardDetails>
     </section>
   );
 }
