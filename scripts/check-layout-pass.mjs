@@ -133,7 +133,7 @@ console.log("\n7. AVAV (COWORK #54): P/B on NCI-inclusive equity, EV/EBITDA reas
   check("NCI tagged as 0 → the inclusive total is used", VAL.bookEquityAt(ZERO, ZERO.instants[0]).equity === 4.40 * B);
   const PARENT = set({ stockholdersEquity: 4.1 * B, totalEquity: 4.40 * B });
   check("parent equity present → parent wins", VAL.bookEquityAt(PARENT, PARENT.instants[0]).equity === 4.1 * B);
-  const Mn = await loadMutant(VAL_FILE, once(VALS, "  return nciTagged\n", "  return false && nciTagged\n"));
+  const Mn = await loadMutant(VAL_FILE, once(VALS, "  const today = nciTagged\n", "  const today = false && nciTagged\n"));
   check("MUTATION: NCI test removed → an NCI filer gets a P/B on the inclusive total (caught)", Mn.bookEquityAt(NCI, NCI.instants[0]).equity === 4.40 * B);
   const Mp = await loadMutant(VAL_FILE, once(VALS, "  if (parent !== null) return { equity: parent, equityIncludesNci: false, equityOnlyInclNci: false };\n", ""));
   check("MUTATION: parent-first removed → the inclusive total replaces parent equity (caught)", Mp.bookEquityAt(PARENT, PARENT.instants[0]).equity === 4.40 * B);

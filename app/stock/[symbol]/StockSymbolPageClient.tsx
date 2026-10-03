@@ -1,4 +1,7 @@
 "use client";
+import { EstimatedValue, ReasonedValue } from "@/app/components/EstimatedValue";
+import { EstimateKey } from "@/app/components/EstimateKey";
+import type { EstimateMark } from "@/app/components/estimateMark";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -74,7 +77,12 @@ type StockValuationData = {
   peBasis?: string | null;
   /** The derived-Q4 caveat, when the TTM includes one. */
   peBasisNote?: string | null;
+  /** "Loss", "Not meaningful", "Neg." in place of a dash (#552 COWORK #98 §1); its reason is `reasons`. */
+  words?: Partial<Record<ValuationKey, string | null>>;
+  /** The estimate/derived mark on a figure (lib/server/secEstimates); absent on a filed figure. */
+  estimates?: Partial<Record<ValuationKey, EstimateMark | null>>;
 };
+type ValuationKey = "peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda";
 
 type AnalystRatingData = {
   consensusRating: string | null;
@@ -1026,7 +1034,11 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               {!valuationLoading && valuation ? (
                 <div className="stock-stat-cell">
                   <div className="stock-stat-label">P/E ({valuation.peBasis ?? "TTM"})</div>
-                  <div className="stock-stat-value">{formatValuationMultiple(valuation.peRatio)}</div>
+                  <div className="stock-stat-value">
+                    {valuation.peRatio != null
+                      ? formatValuationMultiple(valuation.peRatio)
+                      : <ReasonedValue text={valuation.words?.peRatio ?? "—"} reason={valuation.reasons?.peRatio} />}
+                  </div>
                   <div className="stock-stat-sub">See valuation ↓</div>
                 </div>
               ) : null}
@@ -1151,27 +1163,41 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 <div style={sectionLabelStyle}>Valuation</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>{symbol} valuation multiples (TTM)</h2>
                 <div className="valuationGrid">
-                  {[
-                    { label: valuation?.peBasis ? `P/E Ratio (${valuation.peBasis})` : "P/E Ratio", value: valuation?.peRatio, reason: valuation?.reasons?.peRatio ?? (valuation?.peRatio != null ? valuation?.peBasisNote : null) },
-                    { label: "P/S Ratio", value: valuation?.priceToSalesRatio, reason: valuation?.reasons?.priceToSalesRatio },
-                    { label: "P/B Ratio", value: valuation?.priceToBookRatio, reason: valuation?.reasons?.priceToBookRatio },
-                    { label: "EV/EBITDA", value: valuation?.evToEbitda, reason: valuation?.reasons?.evToEbitda },
-                  ].map((item) => (
+                  {([
+                    { key: "peRatio", label: valuation?.peBasis ? `P/E Ratio (${valuation.peBasis})` : "P/E Ratio", value: valuation?.peRatio, reason: valuation?.reasons?.peRatio ?? (valuation?.peRatio != null ? valuation?.peBasisNote : null) },
+                    { key: "priceToSalesRatio", label: "P/S Ratio", value: valuation?.priceToSalesRatio, reason: valuation?.reasons?.priceToSalesRatio },
+                    { key: "priceToBookRatio", label: "P/B Ratio", value: valuation?.priceToBookRatio, reason: valuation?.reasons?.priceToBookRatio },
+                    { key: "evToEbitda", label: "EV/EBITDA", value: valuation?.evToEbitda, reason: valuation?.reasons?.evToEbitda },
+                  ] as { key: ValuationKey; label: string; value: number | null | undefined; reason: string | null | undefined }[]).map((item) => (
                     <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                       <div style={miniLabelStyle}>{item.label}</div>
                       <div style={{ marginTop: 4, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
-                        {valuationLoading ? "—" : formatValuationMultiple(item.value)}
+                        {valuationLoading ? "—" : item.value != null
+                          ? <EstimatedValue text={formatValuationMultiple(item.value)} est={valuation?.estimates?.[item.key]} />
+                          : <ReasonedValue text={valuation?.words?.[item.key] ?? "—"} reason={item.reason} />}
                       </div>
-                      {/* WHY IT IS BLANK, where the filings say why. A missing
-                          input stays a bare "—" (owner: no approximation), but a
-                          refusal with a reason names it. */}
-                      {item.reason ? (
+                      {/* A FIGURE'S NOTE (its basis, NCI-inclusive equity) is
+                          printed; a REFUSAL'S reason is on hover/tap of the dash
+                          or word instead (#552 COWORK #98 §1). */}
+                      {item.value != null && item.reason ? (
                         <div style={{ marginTop: 4, fontSize: 11, lineHeight: 1.4, opacity: 0.55 }}>{item.reason}</div>
                       ) : null}
                     </div>
                   ))}
                 </div>
-                <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{valuation?.sourceNote ?? "Computed from the company's own filings on SEC EDGAR; none are on file for this symbol."}</div>
+                <EstimateKey
+                  marks={[valuation?.estimates?.priceToSalesRatio, valuation?.estimates?.priceToBookRatio, valuation?.estimates?.evToEbitda]}
+                  style={{ marginTop: 12 }}
+                />
+                <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>
+                  {valuation?.sourceNote ? "From the company's SEC filings and this page's share price." : "Computed from the company's own filings on SEC EDGAR; none are on file for this symbol."}
+                </div>
+                {valuation?.sourceNote ? (
+                  <details style={{ marginTop: 6, fontSize: 12, lineHeight: 1.6, opacity: 0.6 }}>
+                    <summary style={{ cursor: "pointer" }}>How these are calculated</summary>
+                    <div style={{ marginTop: 6 }}>{valuation.sourceNote}</div>
+                  </details>
+                ) : null}
               </section>
 
               {/* -- Analyst ratings & price targets (FMP) ------------ */}

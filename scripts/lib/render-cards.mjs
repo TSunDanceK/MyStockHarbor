@@ -105,6 +105,8 @@ export async function loadCards(mutate = (src) => src) {
     // may declare too.
     grabConst("lib/server/annualOnly.ts", "ANNUAL_ONLY_QUARTER_MONTHS"),
     grabFunction(fs.readFileSync("lib/server/annualOnly.ts", "utf8"), "annualOnlyForm"),
+    // THE ESTIMATE LAYER, which secValuation reads (#552 COWORK #112).
+    stripImports("lib/server/secEstimates.ts"),
     stripImports("lib/server/secValuation.ts"),
   ].join("\n");
   const cards = fs
