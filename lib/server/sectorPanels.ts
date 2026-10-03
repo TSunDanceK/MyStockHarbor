@@ -363,7 +363,10 @@ export async function getSectorEarningsThisWeek(
     );
     // THE CAPS, LIVE, IN ONE POOL READ for every date (the stored rows carry
     // none for pool-priced names, #552 COWORK #113): only the order uses them.
-    const live = await overlayLivePoolPrices(days.flat()).catch(() => days.flat());
+    // ONLY THE SECTOR'S OWN NAMES (#552 COWORK #115): a full window is ~4,200
+    // rows, and the overlay would read the pool for every one of them.
+    const mine = days.flat().filter((it) => constituentSet.has(String(it.symbol ?? "").toUpperCase()));
+    const live = await overlayLivePoolPrices(mine).catch(() => mine);
     const capOf = new Map(live.map((it) => [String(it.symbol ?? "").toUpperCase(), it.marketCap]));
 
     const out: SectorEarningsEntry[] = [];
