@@ -47,6 +47,7 @@ const FILES = {
   dashClient: "app/components/DashboardClient.tsx",
   stockPage: "app/stock/[symbol]/page.tsx",
   stockClient: "app/stock/[symbol]/StockSymbolPageClient.tsx",
+  quoteRoute: "app/api/quote/route.ts",
 };
 
 // ── 1. The quote, on the real module ──────────────────────────────────────
@@ -174,6 +175,13 @@ function rules(srcs) {
   want("the dashboard seed carries the price label", /priceLabel: q\.priceLabel/.test(code[FILES.dashPage]));
   want("a benchmark tile shows its own price label", /it\.priceLabel \?\?/.test(code[FILES.dashClient]));
 
+  // /api/quote: the missing-key 500 never pre-empts the Tiingo read (FMP-off test)
+  const route = code[FILES.quoteRoute];
+  const read = route.indexOf("await fetchQuoteSnapshot(");
+  const keyCheck = route.search(/!\s*(process\.env\.FMP_API_KEY|apiKey)\b/);
+  want("/api/quote reads the quote (Tiingo first) before any missing-FMP-key 500",
+    read >= 0 && keyCheck > read);
+
   // stock page
   const fq = fnBody(code[FILES.stockPage], "fetchQuote");
   want("the stock page's SSR quote switches on the same gate, before its FMP call",
@@ -198,6 +206,7 @@ const MUTANTS = [
   ["the old \"(via SPY)\" label", FILES.bench, /"SPY · S&P 500 ETF"/, '"S&P 500 (via SPY)"'],
   ["the ETF note dropped", FILES.dashClient, / · ETF prices, not index levels/, ""],
   ["the stock page seeds from FMP only", FILES.stockPage, /if \(priceProviderFor\("STOCK_PAGE"\) === "tiingo"\) \{\n\s*const t = await readTiingoQuote\(symbol\);/, "if (false) {\n    const t = null as any;"],
+  ["/api/quote returns 500 before the Tiingo read again", FILES.quoteRoute, /  const payload = await fetchQuoteSnapshot\(symbol\);/, "  if (!process.env.FMP_API_KEY) return NextResponse.json(emptyQuote(symbol), { status: 500 });\n  const payload = await fetchQuoteSnapshot(symbol);"],
   ["the header drops the volume label", FILES.stockClient, /quote\?\.volumeLabel \?/, "false ?"],
 ];
 for (const [label, file, from, to] of MUTANTS) {

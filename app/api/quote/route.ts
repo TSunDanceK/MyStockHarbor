@@ -122,17 +122,21 @@ export async function GET(req: Request) {
     }
   }
 
-  const apiKey = process.env.FMP_API_KEY;
-
-  if (!apiKey) {
-    return NextResponse.json(emptyQuote(symbol), { status: 500 });
-  }
-
   // Fetch/parse logic lives in lib/server/quoteData.ts so it can also be
   // called in-process (no HTTP self-fetch, no BotID header needed) by
   // server-rendered callers like lib/insightSnapshots.ts. See that module's
   // fetchQuoteSnapshot doc comment for the full reasoning.
+  //
+  // THE MISSING-KEY 500 COMES AFTER THE READ, not before it (the FMP-off test,
+  // #553 COWORK #97 item 6). Step 4 puts the Tiingo quote inside
+  // fetchQuoteSnapshot behind PRICE_PROVIDER_STOCK_PAGE; a 500 returned before
+  // the call answered every dashboard ticker change with "Failed to load data"
+  // the day FMP_API_KEY is removed, Tiingo row or not. Now only a quote with no
+  // price AND no key is the 500 it always was.
   const payload = await fetchQuoteSnapshot(symbol);
+  if (payload.price == null && !process.env.FMP_API_KEY) {
+    return NextResponse.json(emptyQuote(symbol), { status: 500 });
+  }
 
   return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
 }
