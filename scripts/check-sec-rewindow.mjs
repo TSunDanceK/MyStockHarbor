@@ -583,6 +583,27 @@ check("the census exits with a FATAL rather than throwing when a lift fails",
   /if \(!needs \|\| !queues\)/.test(CENSUS) && /FATAL: could not lift/.test(CENSUS),
   "an undefined match should report itself, not surface as .replace of undefined");
 
+// THE PRIORITY ORDER (#552 COWORK #121 follow-up 2): the symbols whose page
+// the re-read changes go first; order only, the same allowance and members.
+{
+  const man = bulkManifest({ reverify: 0, populate: 0, rewindow: 60 });
+  const pri = new Set(["RW59", "RW41"]);
+  const plain = M.populationQueues(man, { reverify: 0, populate: 0, rewindow: 5 }, CEILING);
+  const first = M.populationQueues(man, { reverify: 0, populate: 0, rewindow: 5 }, CEILING, pri);
+  const rule = (q, p) => q.rewindow.slice(0, 2).sort().join() === "RW41,RW59" && p.rewindow.length === q.rewindow.length
+    && q.rewindowBacklog === p.rewindowBacklog;
+  check("the priority symbols are re-read first, within the same allowance", rule(first, plain),
+    `first five: ${first.rewindow.join(" ")}`);
+  check("without a priority list the order is unchanged (alphabetical)", plain.rewindow.join() === [...plain.rewindow].sort().join());
+  const Mx = await loadRewindow((src) => {
+    const from = ".sort((a, b) => Number(priority.has(b)) - Number(priority.has(a)) || (a < b ? -1 : a > b ? 1 : 0));";
+    if (src.split(from).length !== 2) throw new Error("priority mutation anchor missing");
+    return src.replace(from, ".sort();");
+  });
+  const firstX = Mx.populationQueues(man, { reverify: 0, populate: 0, rewindow: 5 }, CEILING, pri);
+  check("MUTATION: the priority ignored -> caught", !rule(firstX, plain));
+}
+
 console.log(
   failures
     ? `\n${failures} assertion(s) failed.\n`

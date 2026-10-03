@@ -21,6 +21,7 @@ import type { Submissions } from "@/lib/server/secReportDates";
 import { newestStoredEnd } from "@/lib/server/secFilingFill";
 import { buildAndWriteReportDates, carryEventQueued, reportDatesQueue, withPredecessorSubmissions } from "@/lib/server/secReportDatesWrite";
 import dueStripCut from "@/data/due-strip.json";
+import rewindowPriorityFile from "@/data/sec/rewindow-priority.json";
 import { makeJobBudget, FETCH_TIMEOUT_MS, JOB_BUDGET_MS, REPORT_DATES_RESERVE_MS } from "@/lib/server/jobBudget";
 
 export const runtime = "nodejs";
@@ -177,6 +178,18 @@ export const SEC_REPORT_DATES_BACKFILL_SLICE = 100;
 export const SEC_REWINDOW_PER_RUN = 25;
 
 /**
+ * RE-READ FIRST (#552 COWORK #121 follow-up 2). The dilution fix moves
+ * secChainsHash, so every stored set joins the rewindow queue; the charts that
+ * depend on the new restatement extras (asr/asf) read wrong or "too short"
+ * until their set is re-read. Those symbols, measured on the archive
+ * (scripts/dilution-series-probe.mjs, probe branch), go to the front. A symbol
+ * already current is never selected, so the list goes inert as the queue drains.
+ */
+const REWINDOW_PRIORITY: ReadonlySet<string> = new Set(
+  (rewindowPriorityFile as { symbols: string[] }).symbols.map((s) => s.toUpperCase())
+);
+
+/**
  * THE POPULATE BACKLOG ABOVE WHICH REWINDOW STOPS BORROWING SLACK.
  *
  * Below this, rewindow may take whatever reverify and populate leave unused in
@@ -313,7 +326,13 @@ export function populationQueues(
    * The backlog above which rewindow stops borrowing. A parameter so the check
    * can drive both sides of the boundary without editing the constant.
    */
-  slackCeiling = SEC_POPULATE_SLACK_CEILING
+  slackCeiling = SEC_POPULATE_SLACK_CEILING,
+  /**
+   * Symbols the rewindow re-reads FIRST (#552 COWORK #121 follow-up 2): the
+   * ones whose page changes when the re-read lands. Order only: the same
+   * symbols, the same allowance, no extra requests.
+   */
+  priority: ReadonlySet<string> = new Set()
 ) {
   const entries = Object.entries(manifest.symbols).filter(([, e]) => e.cik);
 
@@ -343,7 +362,7 @@ export function populationQueues(
   const rewindow = entries
     .filter(([, e]) => !e.needsReverify && e.contentHash !== null && needsReread(e))
     .map(([s]) => s)
-    .sort();
+    .sort((a, b) => Number(priority.has(b)) - Number(priority.has(a)) || (a < b ? -1 : a > b ? 1 : 0));
 
   // ── REWINDOW BORROWS WHAT THE OTHER TWO QUEUES DO NOT USE ────────────────
   //
@@ -504,7 +523,7 @@ export async function GET(req: NextRequest) {
   const requested = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());
   if (requested.length) console.log(`[sec-facts] re-read requested: ${requested.join(", ")}`);
 
-  const q = populationQueues(manifest);
+  const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY);
   // CAPTURED BEFORE THE FACT-SET LOOP CLEARS IT. A symbol queued for a re-read
   // by an 8-K or 6-K ("unconfirmed") filed since Sep 20 has no lastEventFiled
   // yet (the field is new), and the loop sets needsReverify false as it goes.
