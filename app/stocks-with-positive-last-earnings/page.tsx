@@ -47,7 +47,7 @@ const config: PickerResultConfig = {
   explainerBody:
     "This page focuses on the latest reported quarter. The strongest names tend to have positive EPS surprise, positive revenue surprise, profitable EPS and a recent report that supports the current earnings read.",
   emptyText:
-    "No positive last-earnings results are available yet. Use the Fetch Earnings button on the main Pickers page or wait for the earnings cache to warm.",
+    "No positive last-earnings results are available right now. The list is built from reported earnings data and may stay empty until newer results have been processed.",
   tone: "green",
   kind: "preset",
   presetFilters: ["positiveLastEarnings"],

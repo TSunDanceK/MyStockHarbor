@@ -134,5 +134,40 @@ console.log("\n5. filing-stated rates (V)");
     (() => { try { const r = Rm.withFilingRates(MAP.V, noB2); return r.ok; } catch { return true; } })());
 }
 
+// ── 5. AN UNRESOLVED MULTI-CLASS COVER READS AS AMBIGUOUS (#552 COWORK #86b) ──
+// Where the classes can't be totalled and the extractor's own cover is stale
+// or absent, the classes come back as `candidates`, so secValuation refuses
+// for the true reason (multi-class) instead of "stale" / "no cover count".
+{
+  const usable = (c, today, max) => !!c && typeof c.val === "number" && c.val > 0 && !!c.asOf && (Date.parse(today) - Date.parse(c.asOf)) / 86400000 <= max;
+  const loadAmb = (src) => lift([
+    "const COVER_SHARES_MAX_AGE_DAYS = 548;",
+    `const coverIsUsable = ${usable.toString()};`,
+    grabFunction(src, "unresolvedClassCover"), grabFunction(src, "keepOrAmbiguous"),
+    "export { unresolvedClassCover, keepOrAmbiguous };"].join("\n"));
+  const A = await loadAmb(SRC);
+  const two = [{ asOf: "2026-07-20", member: "CommonClassAMember", val: 100e6 }, { asOf: "2026-07-20", member: "CommonClassBMember", val: 20e6 },
+    { asOf: "2025-07-20", member: "CommonClassAMember", val: 90e6 }];
+  const filing = { accession: "0000000000-26-000001", filed: "2026-08-01" };
+  const amb = A.unresolvedClassCover(two, filing);
+  check("two classes on the newest date → val null, the two counts as candidates, dated to that cover",
+    amb && amb.val === null && amb.derived === "ambiguous" && amb.asOf === "2026-07-20" && JSON.stringify(amb.candidates) === JSON.stringify([100e6, 20e6]), JSON.stringify(amb));
+  check("one class on the newest date is not ambiguous (null)", A.unresolvedClassCover([two[0], two[2]], filing) === null);
+  const stale = { asOf: "2023-01-01", accession: null, filed: null, val: 50e6, derived: "as-filed" };
+  const fresh = { asOf: "2026-06-30", accession: null, filed: null, val: 120e6, derived: "as-filed" };
+  check("a STALE extractor cover with two classes on file → ambiguous", A.keepOrAmbiguous(stale, two, filing, "2026-10-03")?.candidates?.length === 2);
+  check("NO extractor cover with two classes on file → ambiguous", A.keepOrAmbiguous(null, two, filing, "2026-10-03")?.candidates?.length === 2);
+  check("a USABLE extractor cover is never replaced by the ambiguous form", A.keepOrAmbiguous(fresh, two, filing, "2026-10-03") === fresh);
+  const Am = await loadAmb(once(SRC, "if (coverIsUsable(cover, today, COVER_SHARES_MAX_AGE_DAYS)) return cover;\n  return unresolvedClassCover", "return unresolvedClassCover"));
+  check("MUTATION: the usable-cover guard removed → caught", Am.keepOrAmbiguous(fresh, two, filing, "2026-10-03") !== fresh);
+
+  // The three exits that used to fall back to the old cover now go through it.
+  const exits = (src) => (src.match(/return keepOrAmbiguous\(cover, facts, filing, today\);/g) || []).length;
+  check("all three unresolved exits (needs review, no filing rate, map refusal) return keepOrAmbiguous", exits(SRC) === 3, `found ${exits(SRC)}`);
+  check("MUTATION: the needs-review exit back to `return cover` → caught",
+    exits(once(SRC, "await recordCoverReview(symbol, { why: auto.why, classes: auto.classes, accession });\n      return keepOrAmbiguous(cover, facts, filing, today);",
+      "await recordCoverReview(symbol, { why: auto.why, classes: auto.classes, accession });\n      return cover;")) !== 3);
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

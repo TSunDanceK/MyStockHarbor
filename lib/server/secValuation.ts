@@ -61,6 +61,7 @@ export type ValuationRefusal =
   | "no-balance-sheet-equity"
   | "equity-tagged-only-incl-nci"
   | "equity-is-zero-or-negative"
+  | "equity-too-small-for-pb"
   | "enterprise-value-input-missing"
   | "ebitda-is-zero-or-negative";
 
@@ -100,6 +101,9 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "equity is tagged only including noncontrolling interests, so a P/B for shareholders is not computed",
   "equity-is-zero-or-negative":
     "shareholders' equity on the latest balance sheet is not positive, so a P/B is not meaningful",
+  // GDDY's P/B 1,813 (#552 COWORK #86b): arithmetically right, meaningless.
+  "equity-too-small-for-pb":
+    "book equity is under 1% of market cap, so a P/B is not meaningful",
   "enterprise-value-input-missing":
     "one of the enterprise-value or EBITDA inputs is not on file, and it is not approximated",
   "ebitda-is-zero-or-negative":
@@ -637,6 +641,17 @@ export const PB_INCL_NCI_NOTE = "Book value incl. noncontrolling interests (the 
 /** Positive trailing EPS below this (in the price's unit, per share or per ADS) gives no P/E. */
 export const PE_MIN_EPS = 0.05;
 
+/**
+ * POSITIVE BOOK EQUITY BELOW THIS SHARE OF MARKET CAP GIVES NO P/B (#552
+ * COWORK #86b). GDDY printed 1,813x: tiny positive equity, so the division is
+ * right and the figure tells a reader nothing. The census (CODE-A #112, 577
+ * P/Bs shown): 1% refuses 8, all over 100x (buyback-shrunk or accumulated-
+ * deficit equity: CL, CLX, MTD, LYV, RBLX, AXSM, ONC, GDDY); 2% would reach
+ * MA, FTNT and CRWD, whose high P/B is still a figure. The words say "1%", so
+ * a change here changes REFUSAL_WORDS too (check-sec-valuation pins both).
+ */
+export const PB_MIN_EQUITY_SHARE = 0.01;
+
 /** A debt ticker's refusal, naming its class and the equity's listing (#552 COWORK #48). */
 export function debtRefusal(d: { cls: string; primary: string }): ValuationFigure {
   return { ok: false, why: "ticker-is-a-debt-security",
@@ -885,6 +900,23 @@ export type MultipleInputs = {
 };
 
 /**
+ * BANKS WHOSE REVENUE LINE IS FEE INCOME ONLY (#552 COWORK #86b, ruled COWORK
+ * #92): ZION showed P/S 16.79. Measured from the R2 archive (CODE-A #113): for
+ * each Pickers filer with SIC 6000-6299 that showed a P/S, the concept that
+ * fills revenue in its newest annual period. These 8 fill it with ASC 606
+ * "revenue from contracts with customers" while also tagging interest income,
+ * so the line is fee income and the net interest income is missing -- a P/S on
+ * it overstates the multiple several-fold. (NTRS even tags a total Revenues,
+ * which the chain ranks after 606.) Their revenue is treated as incomplete,
+ * so P/S and Pickers' Revenue cell take the existing refusal. Asset managers
+ * and exchanges filing 606 with no interest income (BLK, TROW, ICE, NDAQ, BEN,
+ * JEF) and banks whose revenue comes from a total concept keep theirs.
+ * INTERIM, 3 Oct 2026: retire it when the bank-revenue chain (COWORK #81/#83)
+ * reads the total, and re-measure then.
+ */
+export const BANK_REVENUE_IS_FEES_ONLY: ReadonlySet<string> = new Set(["AXP", "CFG", "CFR", "COF", "KEY", "NTRS", "SOFI", "ZION"]);
+
+/**
  * BOOK EQUITY FOR P/B (#552 COWORK #54, AVAV).
  *
  * Parent-only StockholdersEquity when tagged. Where it is not, the NCI-inclusive
@@ -915,7 +947,7 @@ export function multipleInputs(set: StoredFactSet): MultipleInputs {
   const periods = revenue?.basis === "four-quarters" ? set.quarters.slice(0, 4) : set.years.slice(0, 1);
   return {
     revenue,
-    revenueIncomplete: Boolean(revenue && periods.some((p) => revenueLineIncomplete(p))),
+    revenueIncomplete: Boolean(revenue && (periods.some((p) => revenueLineIncomplete(p)) || BANK_REVENUE_IS_FEES_ONLY.has(set.symbol))),
     ebitda: twelveMonthsOf(set, ["operatingIncome", "depreciationAndAmortization"]),
     ebitdaMissing: [
       ...(twelveMonthsOf(set, ["operatingIncome"]) ? [] : ["operating income"]),
@@ -970,7 +1002,9 @@ export function valuationMultiples(
       ? { ok: false, why: m.balanceSheet?.equityOnlyInclNci ? "equity-tagged-only-incl-nci" : "no-balance-sheet-equity" }
       : equity <= 0
         ? { ok: false, why: "equity-is-zero-or-negative" }
-        : { ok: true, val: cap.val / equity,
+        : equity < cap.val * PB_MIN_EQUITY_SHARE
+          ? { ok: false, why: "equity-too-small-for-pb" }
+          : { ok: true, val: cap.val / equity,
             ...(m.balanceSheet?.equityIncludesNci ? { note: PB_INCL_NCI_NOTE } : {}) };
 
   const bs = m.balanceSheet;

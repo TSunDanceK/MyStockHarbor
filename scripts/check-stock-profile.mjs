@@ -268,6 +268,38 @@ console.log("\n8. the valuation multiples are the filings', one period basis eac
 
   check("non-positive equity refuses P/B",
     M.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity: -5 } }, 200).pb?.why === "equity-is-zero-or-negative");
+
+  // P/B ON A SLIVER OF EQUITY (#552 COWORK #86b, census CODE-A #112): GDDY's
+  // 1,813x refused as not meaningful; MA's ~70x (equity ~1.4% of cap) still a
+  // figure; exactly 1% is the edge and is kept.
+  const capAt200 = inputs.shares.val * 200;
+  const pbWith = (mod, equity) => mod.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity } }, 200).pb;
+  check("a GDDY-shaped P/B (equity 1/1813 of cap) is refused as not meaningful",
+    pbWith(M, capAt200 / 1813)?.why === "equity-too-small-for-pb");
+  check("an MA-shaped P/B (equity 1.4% of cap) is still shown",
+    pbWith(M, capAt200 * 0.014)?.ok === true);
+  check("equity at exactly 1% of cap is still shown (the rule is strictly under)",
+    pbWith(M, capAt200 * 0.01)?.ok === true);
+  check("the threshold is 1% and the reader's words say so",
+    M.PB_MIN_EQUITY_SHARE === 0.01 && /under 1% of market cap/.test(M.REFUSAL_WORDS["equity-too-small-for-pb"] ?? ""));
+  const noFloor = await loadComposer(once("equity < cap.val * PB_MIN_EQUITY_SHARE", "false"));
+  check("...and CATCHES the floor removed (GDDY's 1,813x shown again)",
+    pbWith(noFloor, capAt200 / 1813)?.ok === true);
+  const twoPct = await loadComposer(once("export const PB_MIN_EQUITY_SHARE = 0.01;", "export const PB_MIN_EQUITY_SHARE = 0.02;"));
+  check("...and CATCHES the floor raised to 2% (MA refused)",
+    pbWith(twoPct, capAt200 * 0.014)?.ok === false);
+  // A BANK WHOSE REVENUE LINE IS FEE INCOME ONLY (#552 COWORK #86b/#92): the
+  // same filed revenue under ZION refuses P/S; under JPM (a total concept) it
+  // stays. The list is named, so a mutation that empties it must show ZION.
+  const asBank = (sym) => M.valuationMultiples(inputs, M.multipleInputs({ ...set, symbol: sym }), 200).ps;
+  check("ZION (fee-only revenue line) refuses P/S as revenue-line-incomplete", asBank("ZION")?.why === "revenue-line-incomplete", JSON.stringify(asBank("ZION")));
+  check("the same filed revenue under JPM keeps its P/S", asBank("JPM")?.ok === true);
+  check("the list is exactly the 8 measured (CODE-A #113)",
+    [...M.BANK_REVENUE_IS_FEES_ONLY].sort().join(" ") === "AXP CFG CFR COF KEY NTRS SOFI ZION");
+  const noBankList = await loadComposer(once("|| BANK_REVENUE_IS_FEES_ONLY.has(set.symbol)", ""));
+  check("...and CATCHES the bank list unwired (ZION's P/S shown again)",
+    noBankList.valuationMultiples(inputs, noBankList.multipleInputs({ ...set, symbol: "ZION" }), 200).ps?.ok === true);
+
   check("no twelve months of revenue refuses P/S",
     M.valuationMultiples(inputs, { ...mi, revenue: null }, 200).ps?.why === "no-twelve-month-revenue");
 

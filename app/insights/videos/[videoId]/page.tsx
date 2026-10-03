@@ -182,7 +182,8 @@ export default async function VideoPage({ params }: Props) {
 
   const statItems: { label: string; value: string; note?: string | null }[] | null = stockData ? [
     { label: "Price", value: fmtPrice(stockData.price) },
-    { label: "Market cap", value: stockData.marketCap ?? "—" },
+    // A WITHHELD CAP SAYS WHY (#563 COWORK #45): every dash explains itself.
+    { label: "Market cap", value: stockData.marketCap ?? "—", note: stockData.marketCap ? null : stockData.marketCapNote ?? null },
     // The Tiingo path says why an MA tile is empty with a price on screen (#553 COWORK #88).
     { label: "vs MA50", value: fmtPct(stockData.ma50Pct), note: stockData.ma50Note ?? null },
     { label: "vs MA200", value: fmtPct(stockData.ma200Pct), note: stockData.ma200Note ?? null },
@@ -244,7 +245,7 @@ export default async function VideoPage({ params }: Props) {
                 close, and the contract asks for the linked credit on each figure. */}
             {stockData?.priceLabel ? (
               <p style={{ fontSize: 11, opacity: 0.5, marginBottom: 0, fontStyle: "italic" }}>
-                Price: {stockData.priceLabel}. Market cap is the SEC cover-page share count times that price. Figures will differ from those in the video. <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                Price: {stockData.priceLabel}.{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null} Figures will differ from those in the video. <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
               </p>
             ) : stockData ? (
               <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 0, fontStyle: "italic" }}>Price and market cap update live &mdash; figures will differ from those in the video.</p>
