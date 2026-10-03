@@ -1,6 +1,7 @@
-// THE "KEY LEVELS" CARD (#563 COWORK #64, on #552 CODE-A #137 §1): C's new files
-// lib/ta/keyLevels.ts and app/stock/[symbol]/KeyLevelsCard.tsx, plus the one
-// insertion in the stock page's sidebar.
+// THE "KEY LEVELS" CARD (#563 COWORK #64, on #552 CODE-A #137 §1; range bars,
+// #66/#67): C's files lib/ta/keyLevels.ts, lib/ta/keyLevelBars.ts and
+// app/stock/[symbol]/KeyLevelsCard.tsx, plus the one insertion in the stock
+// page's sidebar.
 //
 // WHAT IS AT RISK, none of which breaks a build:
 //   1. THE OWNER'S DEFINITIONS DRIFT: the week starting on a Sunday, a Monday
@@ -14,6 +15,10 @@
 //   4. THE WORDS: distances the wrong way round, "0.0% above", advice wording,
 //      the as-of date gone, the credit shown on bars that aren't Tiingo's.
 //   5. COST: the module or the card fetching or reading Redis.
+//   7. THE BARS (#66): three rows on separate scales (the nesting is the point),
+//      a scale that drops the last price, a tick or dot off its price, the
+//      colour backwards or alone (the dot against the tick and the note's words
+//      must say the same), a bar with no tap note, labels too wide for 320 px.
 //   6. PLACEMENT: the card out of the sidebar, below the earnings snapshot, or
 //      fed something other than the bars the page already holds. The credit
 //      gate ends ": undefined", not ": null", so check-tiingo-step3's chart
@@ -37,13 +42,14 @@ const check = (label, ok, detail = "") => {
 };
 
 const LIB = "lib/ta/keyLevels.ts";
+const BARS = "lib/ta/keyLevelBars.ts";
 const CARD = "app/stock/[symbol]/KeyLevelsCard.tsx";
 const PAGE = "app/stock/[symbol]/StockSymbolPageClient.tsx";
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 
-/** The lib and the card (with A's ReasonedValue), one transpiled unit. */
-async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8")) {
-  const unit = `${reasonedValueUnit()}\n${strip(lib)}\n${strip(card).replace("export default function KeyLevelsCard", "export function KeyLevelsCard")}\n`;
+/** The two modules and the card (with A's ReasonedValue), one transpiled unit. */
+async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8"), barsLib = fs.readFileSync(BARS, "utf8")) {
+  const unit = `${reasonedValueUnit()}\n${strip(lib)}\n${strip(barsLib)}\n${strip(card).replace("export default function KeyLevelsCard", "export function KeyLevelsCard")}\n`;
   const js = ts.transpileModule(unit, {
     fileName: "keylevels.tsx",
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" },
@@ -111,14 +117,22 @@ async function measure(M) {
   const K = Object.fromEntries(Object.entries(F).map(([n, b]) => [n, M.keyLevels(b)]));
   const render = (props) => renderToStaticMarkup(React.createElement(M.KeyLevelsCard, props));
   const fullHtml = render({ bars: F.monthMidWeek, lastPrice: null });
-  const priced = render({ bars: F.monthMidWeek, lastPrice: 250 });
+  const pricedHtml = render({ bars: F.monthMidWeek, lastPrice: 250 });
+  const priced = visibleText(pricedHtml);
+  const close = K.monthMidWeek.lastClose;
+  const big = F.monthMidWeek.map((b) => ({ ...b, open: b.open * 120, high: b.high * 120, low: b.low * 120, close: b.close * 120 }));
   return {
     M, K,
+    rows: M.barRows(K.monthMidWeek, close),
+    midRows: M.barRows(K.midWeek, K.midWeek.lastClose),
+    outside: M.barRows(K.monthMidWeek, 400),
+    bigRows: M.barRows(M.keyLevels(big), big[big.length - 1].close),
+    pricedHtml,
     partial: M.keyLevels(withPartial),
     noHigh: M.keyLevels(noHigh),
     none: M.keyLevels([]),
     fullHtml, full: visibleText(fullHtml),
-    priced: visibleText(priced),
+    priced,
     shortHtml: render({ bars: F.oneBar, lastPrice: 100 }),
     emptyText: visibleText(render({ bars: [], lastPrice: 100 })),
     credited: visibleText(render({ bars: F.monthMidWeek, credit: React.createElement("a", { href: "#" }, "Tiingo credit") })),
@@ -180,33 +194,75 @@ const rules = {
   "dates and prices in words": ({ M }) =>
     M.dateWords("2026-10-02") === "Fri 2 Oct 2026" && M.dateWords("2026-09-28") === "Mon 28 Sep 2026" &&
     M.priceWords(1234.5) === "$1,234.50" && M.priceWords(0.12345) === "$0.1235" && M.priceWords(25012.5) === "$25,013",
-  "the card: twelve values, the as-of close, a distance on each": ({ fullHtml, full }) =>
-    (fullHtml.match(/class="klValue"/g) ?? []).length === 12 && (fullHtml.match(/class="klDist"/g) ?? []).length === 12 &&
-    /As of the close on Fri 2 Oct 2026\./.test(full) && /Distances are from that close, \$/.test(full),
-  "the card measures from the page's last price when it has one": ({ priced }) =>
-    /Distances are from the last price, \$250\.00\./.test(priced) && !/at the last price/.test(priced) && /% below/.test(priced),
-  "the card: a withheld level is a dash with its reason, and a reason line under the grid": ({ shortHtml, M }) => {
+  "one shared scale: day inside week inside month, every mark at its own price": ({ rows, midRows, K, M }) => {
+    const right = (b) => b.left + b.width;
+    const inside = (a, b) => a.left >= b.left - 1e-9 && right(a) <= right(b) + 1e-9;
+    // A slight pad either side: 4% of the span, written out here so the constant can't drift silently.
+    const pad = (0.04 / 1.08) * 100;
+    // Wed 30 Sep: the week sits inside September, so day ⊂ week ⊂ month, the month at the padded edges.
+    const [d2, w2, m2] = midRows.map((r) => r.bar);
+    const nested = inside(d2, w2) && inside(w2, m2) && near(m2.left, pad) && near(right(m2), 100 - pad);
+    // Fri 2 Oct: the week (from Mon 28 Sep) reaches back past the month (from Thu 1 Oct), so the
+    // scale spans both: the day inside each, the widest edges at the padding.
+    const [d, w, m] = rows.map((r) => r.bar);
+    const union = inside(d, w) && inside(d, m) && near(Math.min(w.left, m.left), pad) && near(Math.max(right(w), right(m)), 100 - pad);
+    const k = K.monthMidWeek, s = M.sharedScale(k, k.lastClose);
+    return rows.every((r) => r.bar) && nested && union &&
+      ["day", "week", "month"].every((key, i) => near(rows[i].bar.open, M.toPct(lv(k, key).levels.open.value, s)) &&
+        near(rows[i].bar.left, M.toPct(lv(k, key).levels.low.value, s)) && near(rows[i].bar.dot, M.toPct(k.lastClose, s)));
+  },
+  "the scale takes in a last price outside every range": ({ outside }) =>
+    outside.every((r) => r.bar.dot > r.bar.left + r.bar.width && r.bar.dot <= 100 && r.bar.dot >= 90),
+  "colour: green above the open, red below, neutral within a hair": ({ M }) =>
+    M.toneOf(101, 100) === "up" && M.toneOf(99, 100) === "down" && M.toneOf(100.04, 100) === "flat" && M.toneOf(100, null) === "flat",
+  "never colour alone: the dot sits right of the tick when green, left when red, and the note says so": ({ rows, outside, M }) =>
+    [...rows, ...outside].every((r) => {
+      const b = r.bar;
+      return b.tone === "flat" ? b.note.includes(M.TONE_WORDS.flat)
+        : (b.tone === "up" ? b.dot > b.open : b.dot < b.open) && b.note.includes(M.TONE_WORDS[b.tone]);
+    }) && outside.every((r) => r.bar.tone === "up"),
+  "each bar has its tap note: open, high and low against the last price, and the open's day": ({ rows, outside, fullHtml, K }) => {
+    const w = rows[1].bar.note, wo = outside[1].bar.note, open = lv(K.monthMidWeek, "week").levels.open.value;
+    return /Opened at \$[\d,.]+ on Mon 28 Sep\./.test(w) && w.includes(`Opened at $${open.toFixed(2)}`) &&
+      /^Open \$[\d,.]+, [\d.]+% below the last price\. High \$[\d,.]+, [\d.]+% below the last price\. Low \$[\d,.]+, [\d.]+% below the last price\./.test(wo) &&
+      (fullHtml.match(/<span class="klRange"[^>]*><span[^>]*><span role="button"/g) ?? []).length === 3;
+  },
+  "low–high labels, whole dollars from $10,000": ({ rows, bigRows, K, M }) => {
+    const w = lv(K.monthMidWeek, "week").levels;
+    return rows[1].bar.range === `${M.bare(w.low.value)} – ${M.bare(w.high.value)}` && /^\d+\.\d\d – \d+\.\d\d$/.test(rows[1].bar.range) &&
+      bigRows.every((r) => /^\d{2},\d{3} – \d{2},\d{3}$/.test(r.bar.range));
+  },
+  "the card: three bars, one line with the last price and the as-of close, no Close row": ({ fullHtml, full }) =>
+    (fullHtml.match(/class="klTrack"/g) ?? []).length === 3 && (fullHtml.match(/class="klDot"/g) ?? []).length === 3 &&
+    (fullHtml.match(/class="klOpen"/g) ?? []).length === 3 &&
+    /Last close \$[\d,.]+ · as of the close on Fri 2 Oct 2026/.test(full) && !/\bClose\b/.test(full.replace("Last close", "")),
+  "the card measures from the page's last price, coloured by tone": ({ priced, pricedHtml }) =>
+    /Last price \$250\.00 · as of the close on Fri 2 Oct 2026/.test(priced) &&
+    (pricedHtml.match(/data-tone="up"/g) ?? []).length === 3 &&
+    (pricedHtml.match(/class="klDot" style="[^"]*background:#22c55e/g) ?? []).length === 3,
+  "a period that can't be built keeps its row, with its reason in place of the bar": ({ shortHtml, M }) => {
     const t = visibleText(shortHtml);
-    return (shortHtml.match(/class="klValue"/g) ?? []).length === 4 && (shortHtml.match(/class="klReason"/g) ?? []).length === 2 &&
-      t.includes(M.SHORT_REASON.week) && t.includes(M.SHORT_REASON.month) &&
-      (shortHtml.match(/role="button"[^>]*aria-label="[^"]*—/g) ?? []).length >= 8;
+    return (shortHtml.match(/class="klRow"/g) ?? []).length === 3 && (shortHtml.match(/class="klTrack"/g) ?? []).length === 1 &&
+      (shortHtml.match(/class="klReason"/g) ?? []).length === 2 && t.includes(M.SHORT_REASON.week) && t.includes(M.SHORT_REASON.month);
   },
   "the card is never blank: no bars still gives the reason": ({ emptyText, M }) =>
     emptyText.includes("Key levels") && emptyText.includes(M.NO_BARS_REASON),
-  "the note says what the levels are, and nothing reads as advice": ({ fullHtml, full, M }) =>
+  "the notes say what the levels are, and nothing reads as advice": ({ fullHtml, full, rows, M }) =>
     /What are these\?/.test(full) && M.KEY_LEVELS_NOTE.startsWith("Levels some traders watch") && fullHtml.includes("Levels some traders watch") &&
-    !/\b(buy|sell|bullish|bearish|support|resistance|target|should|recommend)\b/i.test(`${full} ${M.KEY_LEVELS_NOTE}`),
+    /Bar: low to high · tick: the open · dot: the last price\./.test(full) &&
+    !/\b(buy|sell|bullish|bearish|support|resistance|target|should|recommend)\b/i.test(`${full} ${M.KEY_LEVELS_NOTE} ${rows.map((r) => r.bar.note).join(" ")}`),
   "the Tiingo credit only when it is passed": ({ full, credited }) =>
     !/Daily prices:/.test(full) && /Daily prices: Tiingo credit/.test(credited),
 };
 
 const staticRules = {
-  "no fetch, no Redis, no provider reads in either file": (l, c) =>
-    ![l, c].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory|historyForSurface|readSurfaceInputs/.test(s)),
-  "the module imports nothing; the card only React's types, A's ReasonedValue and the module": (l, c) => {
+  "no fetch, no Redis, no provider reads in any file": (l, c, _p, b) =>
+    ![l, c, b].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory|historyForSurface|readSurfaceInputs/.test(s)),
+  "the modules import only each other; the card only React's types, A's ReasonedValue and the modules": (l, c, _p, b) => {
     const imports = [...c.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
-    return !/^import\b/m.test(l) &&
-      imports.every((i) => i === "react" || i === "@/app/components/EstimatedValue" || i === "@/lib/ta/keyLevels") &&
+    const barImports = [...b.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
+    return !/^import\b/m.test(l) && barImports.length === 1 && barImports[0] === "./keyLevels" &&
+      imports.every((i) => i === "react" || i === "@/app/components/EstimatedValue" || i === "@/lib/ta/keyLevels" || i === "@/lib/ta/keyLevelBars") &&
       /^import type \{[^}]*\} from "react";$/m.test(c) && /^import \{ ReasonedValue \} from "@\/app\/components\/EstimatedValue";$/m.test(c);
   },
   "placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars": (_l, _c, p) => {
@@ -214,6 +270,12 @@ const staticRules = {
     return /<KeyLevelsCard bars=\{history\} lastPrice=\{quote\?\.price \?\? null\} credit=\{shownProvider === "tiingo" \? historyCredit : undefined\} \/>[\s{}]*<LatestEarningsCard /.test(side) &&
       (p.match(/<KeyLevelsCard /g) ?? []).length === 1 && /^import KeyLevelsCard from "\.\/KeyLevelsCard";$/m.test(p);
   },
+  "a tap on the bar opens its row's note": (_l, c) =>
+    /<div className="klTrack" data-tone=\{r\.bar\.tone\} onClick=\{openRowNote\}/.test(c) &&
+    /e\.currentTarget\.closest\("\.klRow"\)\?\.querySelector<HTMLElement>\("\.klRange \[role=\\"button\\"\]"\)\?\.click\(\);/.test(c),
+  "the tick and the dot both stay visible where they meet: the tick is taller, the dot on top": (_l, c) =>
+    /className="klOpen" style=\{\{ position: "absolute", top: 0, height: 18,[^\n]*?zIndex: 1 \}\}/.test(c) &&
+    /className="klDot" style=\{\{ position: "absolute", top: 4, width: 10, height: 10,[^\n]*?zIndex: 2 \}\}/.test(c),
 };
 
 console.log("\n=== 1. Fixtures through lib/ta/keyLevels.ts and the card ===\n");
@@ -221,9 +283,9 @@ const base = await measure(await load());
 for (const [name, rule] of Object.entries(rules)) check(name, rule(base));
 
 console.log("\n=== 2. Static rules ===\n");
-const L = fs.readFileSync(LIB, "utf8"), Cd = fs.readFileSync(CARD, "utf8"), P = fs.readFileSync(PAGE, "utf8");
+const L = fs.readFileSync(LIB, "utf8"), Cd = fs.readFileSync(CARD, "utf8"), P = fs.readFileSync(PAGE, "utf8"), Bs = fs.readFileSync(BARS, "utf8");
 const code = (s, f) => stripComments(s, { file: f });
-for (const [name, rule] of Object.entries(staticRules)) check(name, rule(code(L, LIB), code(Cd, CARD), code(P, PAGE)));
+for (const [name, rule] of Object.entries(staticRules)) check(name, rule(code(L, LIB), code(Cd, CARD), code(P, PAGE), code(Bs, BARS)));
 
 console.log("\n=== 3. Mutants: each must FAIL its rule ===\n");
 const mutants = [
@@ -244,34 +306,57 @@ const mutants = [
   ["dates and prices in words", "l", (s) => s.replace("${WEEKDAYS[d.getUTCDay()]}", "${WEEKDAYS[(d.getUTCDay() + 1) % 7]}")],
   ["dates and prices in words", "l", (s) => s.replace("const dp = Math.abs(v) < 1 ? 4 : Math.abs(v) >= WHOLE_DOLLARS_FROM ? 0 : 2;", "const dp = Math.abs(v) < 1 ? 4 : 2;")],
   ["dates and prices in words", "l", (s) => s.replace("const dp = Math.abs(v) < 1 ? 4 : Math.abs(v) >= WHOLE_DOLLARS_FROM ? 0 : 2;", "const dp = Math.abs(v) >= WHOLE_DOLLARS_FROM ? 0 : 2;")],
-  ["the card: twelve values, the as-of close, a distance on each", "c", (s) => s.replace("As of the close on {k.asOfWords}.", "As of {k.asOfWords}.")],
-  ["the card: twelve values, the as-of close, a distance on each", "c", (s) => s.replace('{dist ? <div className="klDist" style={distStyle}>{dist}</div> : null}', "")],
-  ["the card measures from the page's last price when it has one", "c", (s) => s.replace("const reference = hasPrice ? lastPrice : k.lastClose;", "const reference = k.lastClose;")],
-  ["the card: a withheld level is a dash with its reason, and a reason line under the grid", "c", (s) => s.replace('<ReasonedValue text="—" reason={lv.reason} />', "<span>—</span>")],
-  ["the card: a withheld level is a dash with its reason, and a reason line under the grid", "c", (s) => s.replace('<p key={r} className="klReason" style={noteStyle}>{r}</p>', "null")],
-  ["the card is never blank: no bars still gives the reason", "c", (s) => s.replace("{k.reasons.map((r) => (", "{k.reasons.slice(1).map((r) => (")],
-  ["the note says what the levels are, and nothing reads as advice", "c", (s) => s.replace('"Levels some traders watch: ', '"Levels where traders buy: ')],
-  ["the note says what the levels are, and nothing reads as advice", "c", (s) => s.replace('<ReasonedValue text="What are these?" reason={KEY_LEVELS_NOTE} />', "")],
+  ["one shared scale: day inside week inside month, every mark at its own price", "b", (s) => s.replace("const spans = k.periods.map(span)", "const spans = k.periods.slice(0, 1).map(span)")],
+  ["one shared scale: day inside week inside month, every mark at its own price", "b", (s) => s.replace("width: toPct(sp.high, s) - toPct(sp.low, s),", "width: toPct(sp.high, s),")],
+  ["one shared scale: day inside week inside month, every mark at its own price", "b", (s) => s.replace("open: isNum(open) ? toPct(open, s) : null,", "open: isNum(open) ? toPct(sp.low, s) : null,")],
+  ["one shared scale: day inside week inside month, every mark at its own price", "b", (s) => s.replace("export const SCALE_PAD = 0.04;", "export const SCALE_PAD = 0;")],
+  ["the scale takes in a last price outside every range", "b", (s) => s.replace("  if (isNum(last)) vals.push(last);\n", "")],
+  ["the scale takes in a last price outside every range", "b", (s) => s.replace("dot: toPct(last, s),", "dot: toPct(k.lastClose ?? last, s),")],
+  ["colour: green above the open, red below, neutral within a hair", "b", (s) => s.replace('return pct > 0 ? "up" : "down";', 'return pct > 0 ? "down" : "up";')],
+  ["colour: green above the open, red below, neutral within a hair", "b", (s) => s.replace('  if (Math.abs(pct) < LEVEL_WITH_OPEN_PCT) return "flat";\n', "")],
+  ["never colour alone: the dot sits right of the tick when green, left when red, and the note says so", "b", (s) => s.replace("on ${dayWords(p.from)}. ${TONE_WORDS[tone]}`", "on ${dayWords(p.from)}.`")],
+  ["never colour alone: the dot sits right of the tick when green, left when red, and the note says so", "b", (s) => s.replace("const tone = toneOf(last, open);", "const tone = toneOf(open ?? last, last);")],
+  ["each bar has its tap note: open, high and low against the last price, and the open's day", "b", (s) => s.replace("`Opened at ${priceWords(open)} on ${dayWords(p.from)}.", "`Opened at ${priceWords(open)}.")],
+  ["each bar has its tap note: open, high and low against the last price, and the open's day", "b", (s) => s.replace("`High ${against(sp.high, last)}.`", "`High ${priceWords(sp.high)}.`")],
+  ["each bar has its tap note: open, high and low against the last price, and the open's day", "c", (s) => s.replace("<ReasonedValue text={r.bar.range} reason={r.bar.note} />", "{r.bar.range}")],
+  ["low–high labels, whole dollars from $10,000", "b", (s) => s.replace('priceWords(v).replace(/^\\$/, "")', "v.toFixed(2)")],
+  ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace('{hasPrice ? "Last price" : "Last close"}', '{"Last price"}')],
+  ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace("· as of the close on {k.asOfWords}", "· as of {k.asOfWords}")],
+  ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace("              {r.bar.open !== null ? (", "              {false ? (")],
+  ["the card measures from the page's last price, coloured by tone", "c", (s) => s.replace("const last = hasPrice ? lastPrice : k.lastClose;", "const last = k.lastClose;")],
+  ["the card measures from the page's last price, coloured by tone", "c", (s) => s.replace('up: "#22c55e", down: "#ef4444"', 'up: "#ef4444", down: "#22c55e"')],
+  ["a period that can't be built keeps its row, with its reason in place of the bar", "c", (s) => s.replace('<p className="klReason" style={{ ...noteStyle, marginTop: 4 }}>{r.reason}</p>', "null")],
+  ["the card is never blank: no bars still gives the reason", "c", (s) => s.replace("{k.reasons.length && !rows.length ? k.reasons.map(", "{false ? k.reasons.map(")],
+  ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace('"Levels some traders watch: ', '"Levels where traders buy: ')],
+  ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace("Green when the last price is above the open, red when below.", "Green means buy, red means sell.")],
+  ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace('<ReasonedValue text="What are these?" reason={KEY_LEVELS_NOTE} />', "")],
   ["the Tiingo credit only when it is passed", "c", (s) => s.replace("{credit ? <p style={noteStyle}>Daily prices: {credit}</p> : null}", "<p style={noteStyle}>Daily prices: {credit ?? \"Tiingo\"}</p>")],
 ];
 for (const [name, which, mutate] of mutants) {
   const l2 = which === "l" ? mutate(L) : L;
   const c2 = which === "c" ? mutate(Cd) : Cd;
-  const changed = l2 !== L || c2 !== Cd;
+  const b2 = which === "b" ? mutate(Bs) : Bs;
+  const changed = l2 !== L || c2 !== Cd || b2 !== Bs;
   let bites = false;
-  try { bites = !rules[name](await measure(await load(l2, c2))); } catch { bites = true; }
+  try { bites = !rules[name](await measure(await load(l2, c2, b2))); } catch { bites = true; }
   check(`mutant bites: ${name}`, changed && bites, changed ? "" : "the mutation did not apply");
 }
 const staticMutants = [
-  ["no fetch, no Redis, no provider reads in either file", (l, c, p) => [`${l}\nconst x = fetch("/api/history");`, c, p]],
-  ["the module imports nothing; the card only React's types, A's ReasonedValue and the module", (l, c, p) => [`import { readTiingoHistoryPoints } from "@/lib/server/tiingoHistory";\n${l}`, c, p]],
-  ["the module imports nothing; the card only React's types, A's ReasonedValue and the module", (l, c, p) => [l, `import { getDailyHistory } from "@/lib/server/historyCache";\n${c}`, p]],
+  ["no fetch, no Redis, no provider reads in any file", (l, c, p, b) => [`${l}\nconst x = fetch("/api/history");`, c, p, b]],
+  ["no fetch, no Redis, no provider reads in any file", (l, c, p, b) => [l, c, p, `${b}\nconst x = fetch("/api/history");`]],
+  ["the modules import only each other; the card only React's types, A's ReasonedValue and the modules", (l, c, p, b) => [l, c, p, `import { getDailyHistory } from "@/lib/server/historyCache";\n${b}`]],
+  ["a tap on the bar opens its row's note", (l, c, p, b) => [l, c.replace(" onClick={openRowNote}", ""), p, b]],
+  ["a tap on the bar opens its row's note", (l, c, p, b) => [l, c.replace('.querySelector<HTMLElement>(".klRange [role=\\"button\\"]")?.click();', ';'), p, b]],
+  ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top", (l, c, p, b) => [l, c.replace("top: 0, height: 18, width: 2,", "top: 5, height: 8, width: 2,"), p, b]],
+  ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top", (l, c, p, b) => [l, c.replace("zIndex: 2 }}", "zIndex: 0 }}"), p, b]],
+  ["the modules import only each other; the card only React's types, A's ReasonedValue and the modules", (l, c, p, b) => [`import { readTiingoHistoryPoints } from "@/lib/server/tiingoHistory";\n${l}`, c, p, b]],
+  ["the modules import only each other; the card only React's types, A's ReasonedValue and the modules", (l, c, p, b) => [l, `import { getDailyHistory } from "@/lib/server/historyCache";\n${c}`, p, b]],
   ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace('credit={shownProvider === "tiingo" ? historyCredit : undefined} />', "credit={historyCredit} />")]],
   ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace(/\s*<KeyLevelsCard [^\n]*\n/, "\n")]],
   ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace("<KeyLevelsCard bars={history}", "<KeyLevelsCard bars={history.slice(-5)}")]],
 ];
 for (const [name, mutate] of staticMutants) {
-  const args = [code(L, LIB), code(Cd, CARD), code(P, PAGE)];
+  const args = [code(L, LIB), code(Cd, CARD), code(P, PAGE), code(Bs, BARS)];
   const out = mutate(...args);
   const changed = out.some((s, i) => s !== args[i]);
   check(`mutant bites: ${name}`, changed && !staticRules[name](...out), changed ? "" : "the mutation did not apply");

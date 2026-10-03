@@ -1,38 +1,44 @@
-// THE "KEY LEVELS" CARD (#563 COWORK #64): the day's, this week's and this
-// month's open / high / low / close, each with its distance from the last price,
-// in the stock page's sidebar directly above the earnings snapshot.
+// THE "KEY LEVELS" CARD (#563 COWORK #64; range bars, #66/#67): the day's,
+// this week's and this month's range, in the stock page's sidebar directly
+// above the earnings snapshot.
 //
-// Presentation only: the levels come from lib/ta/keyLevels.ts over the daily
-// bars the page already holds. No fetch, no Redis, no hooks of its own, so it
-// renders in the server HTML with the rest of the page.
+// Each period is one bar from its low (left) to its high (right), with a tick
+// where it opened and a dot at the last price, all three on one shared scale so
+// the day sits inside the week and the week inside the month. The geometry is
+// lib/ta/keyLevelBars.ts; the levels are lib/ta/keyLevels.ts over the daily bars
+// the page already holds. No fetch, no Redis, no hooks of its own, so it renders
+// in the server HTML with the rest of the page.
 //
-// COPY IS DESCRIPTIVE. What the levels are sits behind one ReasonedValue note
-// ("levels some traders watch"); nothing says what a level means for the price
-// or what a reader should do.
-import type { CSSProperties, ReactNode } from "react";
+// COPY IS DESCRIPTIVE. The colour says where the last price is against the
+// period's open, like a candle on its side, and never alone: the dot against the
+// tick says the same, and the tap note says it in words. Nothing says what a
+// level means for the price or what a reader should do.
+//
+// THE TAP NOTE IS A's ReasonedValue on the row's low–high label. A tap on the
+// bar itself clicks that label, so the whole bar opens the same note.
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
-import {
-  keyLevels, distanceWords, priceWords, shortDate, LEVEL_FIELDS, PERIOD_WORDS,
-  type KeyBar, type LevelField, type PeriodLevels,
-} from "@/lib/ta/keyLevels";
+import { keyLevels, priceWords, type KeyBar } from "@/lib/ta/keyLevels";
+import { barRows, type Tone } from "@/lib/ta/keyLevelBars";
 
 export const KEY_LEVELS_NOTE =
   "Levels some traders watch: the open, high, low and close of the latest session, of this week so far and of this month so far, " +
   "taken from daily prices. They describe where the price has been, not where it will go.";
 
-const FIELD_WORDS: Record<LevelField, string> = { open: "Open", high: "High", low: "Low", close: "Close" };
+/** The bar, tick and dot colours. Green/red describe the last price against the open; never a call. */
+export const TONE_COLOUR: Record<Tone, string> = { up: "#22c55e", down: "#ef4444", flat: "#94a3b8" };
 
 const C = {
   label: "rgba(147,197,253,0.82)",
   muted: "rgba(203,213,225,0.62)",
   value: "rgba(241,245,249,0.94)",
-  rule: "rgba(255,255,255,0.07)",
+  track: "rgba(255,255,255,0.06)",
+  tick: "#f1f5f9",
 };
 
-/** A column's sub-heading: the day's date, or where the week or month starts. */
-function since(p: PeriodLevels): string {
-  if (!p.from) return "—";
-  return p.key === "day" ? shortDate(p.from) : `from ${shortDate(p.from)}`;
+/** A tap on the bar opens the row's note: it clicks the label's ReasonedValue trigger. */
+function openRowNote(e: MouseEvent<HTMLElement>) {
+  e.currentTarget.closest(".klRow")?.querySelector<HTMLElement>(".klRange [role=\"button\"]")?.click();
 }
 
 export default function KeyLevelsCard({
@@ -48,7 +54,8 @@ export default function KeyLevelsCard({
 }) {
   const k = keyLevels(bars);
   const hasPrice = typeof lastPrice === "number" && Number.isFinite(lastPrice) && lastPrice > 0;
-  const reference = hasPrice ? lastPrice : k.lastClose;
+  const last = hasPrice ? lastPrice : k.lastClose;
+  const rows = k.asOf && last != null ? barRows(k, last) : [];
   return (
     <section className="klCard" style={cardStyle}>
       <div style={eyebrowStyle}>Price levels</div>
@@ -58,71 +65,45 @@ export default function KeyLevelsCard({
           <ReasonedValue text="What are these?" reason={KEY_LEVELS_NOTE} />
         </span>
       </div>
-      {k.asOf ? (
+      {k.asOf && last != null ? (
         <p className="klAsOf" style={noteStyle}>
-          As of the close on {k.asOfWords}.{" "}
-          {reference != null
-            ? hasPrice
-              ? <>Distances are from the last price, {priceWords(reference)}.</>
-              : <>Distances are from that close, {priceWords(reference)}.</>
-            : null}
+          {hasPrice ? "Last price" : "Last close"} <strong style={{ color: C.value }}>{priceWords(last)}</strong> · as of the close on {k.asOfWords}
         </p>
       ) : null}
 
-      {k.asOf ? (
-        <table className="klGrid" style={tableStyle}>
-          <thead>
-            <tr>
-              <th scope="col" style={{ ...headStyle, width: "16%", textAlign: "left" }}><span className="klSr">Level</span></th>
-              {k.periods.map((p) => (
-                <th key={p.key} scope="col" style={headStyle}>
-                  <div>{PERIOD_WORDS[p.key].title}</div>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, letterSpacing: 0, textTransform: "none" }}>{since(p)}</div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {LEVEL_FIELDS.map((f) => (
-              <tr key={f}>
-                <th scope="row" style={rowHeadStyle}>{FIELD_WORDS[f]}</th>
-                {k.periods.map((p) => {
-                  const lv = p.levels[f];
-                  if (lv.value == null) {
-                    return (
-                      <td key={p.key} className="klCell" style={cellStyle}>
-                        <ReasonedValue text="—" reason={lv.reason} />
-                      </td>
-                    );
-                  }
-                  const dist = reference != null ? distanceWords(lv.value, reference) : null;
-                  const said = `${PERIOD_WORDS[p.key].possessive} ${f}: ${priceWords(lv.value)}${dist ? `, ${dist === "at the last price" ? dist : `${dist} the last price`}` : ""}`;
-                  return (
-                    <td key={p.key} className="klCell" style={cellStyle} title={said}>
-                      <div className="klValue" style={valueStyle}>{priceWords(lv.value)}</div>
-                      {dist ? <div className="klDist" style={distStyle}>{dist}</div> : null}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : null}
-
-      {k.reasons.map((r) => (
-        <p key={r} className="klReason" style={noteStyle}>{r}</p>
+      {rows.map((r) => (
+        <div key={r.key} className="klRow" style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: C.value }}>
+              {r.title}{r.since ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, color: C.muted }}>{r.since}</span> : null}
+            </span>
+            {r.bar ? (
+              <span className="klRange" style={{ fontSize: 11, color: C.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                <ReasonedValue text={r.bar.range} reason={r.bar.note} />
+              </span>
+            ) : null}
+          </div>
+          {r.bar ? (
+            <div className="klTrack" data-tone={r.bar.tone} onClick={openRowNote} style={trackStyle} aria-hidden="true">
+              <div className="klBar" style={{ position: "absolute", top: 5, height: 8, left: `${r.bar.left}%`, width: `${r.bar.width}%`, minWidth: 2, borderRadius: 4, background: TONE_COLOUR[r.bar.tone], opacity: 0.45 }} />
+              {r.bar.open !== null ? (
+                <div className="klOpen" style={{ position: "absolute", top: 0, height: 18, width: 2, marginLeft: -1, left: `${r.bar.open}%`, background: C.tick, borderRadius: 1, zIndex: 1 }} />
+              ) : null}
+              <div className="klDot" style={{ position: "absolute", top: 4, width: 10, height: 10, marginLeft: -5, left: `${r.bar.dot}%`, borderRadius: 999, background: TONE_COLOUR[r.bar.tone], border: "1.5px solid #f8fafc", boxSizing: "border-box", zIndex: 2 }} />
+            </div>
+          ) : (
+            <p className="klReason" style={{ ...noteStyle, marginTop: 4 }}>{r.reason}</p>
+          )}
+        </div>
       ))}
-      {credit ? <p style={noteStyle}>Daily prices: {credit}</p> : null}
 
-      <style>{`
-        .klSr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-        .klGrid td.klCell, .klGrid th { overflow-wrap: anywhere; }
-        @media (max-width: 360px) {
-          .klGrid .klValue { font-size: 12px !important; }
-          .klGrid .klDist { font-size: 10px !important; }
-        }
-      `}</style>
+      {rows.some((r) => r.bar) ? (
+        <p className="klKey" style={noteStyle}>
+          Bar: low to high · tick: the open · dot: the last price. Green when the last price is above the open, red when below.
+        </p>
+      ) : null}
+      {k.reasons.length && !rows.length ? k.reasons.map((r) => <p key={r} className="klReason" style={noteStyle}>{r}</p>) : null}
+      {credit ? <p style={noteStyle}>Daily prices: {credit}</p> : null}
     </section>
   );
 }
@@ -138,12 +119,4 @@ const cardStyle: CSSProperties = {
 const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: C.label };
 const titleStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.12, letterSpacing: "-0.03em" };
 const noteStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: 11, lineHeight: 1.5, color: C.muted };
-const tableStyle: CSSProperties = { width: "100%", marginTop: 12, borderCollapse: "collapse", tableLayout: "fixed", fontVariantNumeric: "tabular-nums" };
-const headStyle: CSSProperties = {
-  padding: "0 2px 6px", fontSize: 11, fontWeight: 850, letterSpacing: "0.04em", textTransform: "uppercase",
-  color: "rgba(226,232,240,0.78)", textAlign: "right", borderBottom: `1px solid ${C.rule}`,
-};
-const rowHeadStyle: CSSProperties = { padding: "7px 0", fontSize: 12, fontWeight: 700, color: C.muted, textAlign: "left", borderBottom: `1px solid ${C.rule}` };
-const cellStyle: CSSProperties = { padding: "7px 1px 7px 4px", textAlign: "right", verticalAlign: "top", borderBottom: `1px solid ${C.rule}` };
-const valueStyle: CSSProperties = { fontSize: 13, fontWeight: 800, color: C.value, whiteSpace: "nowrap" };
-const distStyle: CSSProperties = { marginTop: 2, fontSize: 10.5, lineHeight: 1.3, color: C.muted };
+const trackStyle: CSSProperties = { position: "relative", height: 18, marginTop: 5, borderRadius: 4, background: `linear-gradient(${C.track}, ${C.track}) center / 100% 8px no-repeat`, cursor: "help" };
