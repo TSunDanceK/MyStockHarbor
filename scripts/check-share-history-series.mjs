@@ -11,6 +11,10 @@
 //      "Recent history too short".
 //   5. a steady diluter / a buyback -> the 3-year figure, its colour and its
 //      hedged words; "Since" in plain ink beside it.
+//   1f. BKNG as stored: a quarter re-reported after the split is already
+//      restated; scaling stops there, and the split is noted once.
+//   3b. ONDS: single filings mis-scaled ×1000 between agreeing neighbours are
+//      dropped, not cut at (the chart was lost to them).
 //   5b. AAPL as stored (no fiscal Q4 quarters, years stop at the first
 //      quarter): the end steps back up to 6 months to find a base; never more.
 //   plus MUTATIONS, one per rule.
@@ -63,6 +67,11 @@ const AMZN = [["2017-12-31", 480e6], ["2018-12-31", 487e6], ["2019-12-31", 494e6
 const PAC = [["2015-12-31", 525575547], ["2016-12-31", 525575547], ["2017-12-31", 525575547000], ["2018-12-31", 525575547000], ["2019-12-31", 525575547000]];
 const NVDA = [["2008-01-27", 550108], ["2009-01-25", 548126], ["2010-01-31", 549574000], ["2011-01-30", 575177000], ["2012-01-29", 602000000]];
 const GDDY = [["2013-12-31", 38826000], ["2014-12-31", 38826000], ["2015-12-31", 58676000], ["2016-12-31", 79835000], ["2023-12-31", 148296000], ["2024-06-30", 141269000], ["2024-09-30", 140523000]];
+// BKNG's stored quarters around its 25:1 (2026): Q1/Q2 2025 restated by the
+// 2026 10-Qs' comparatives, Q3 2025 still as first filed.
+const BKNG = [["2024-03-31", 33.9e6], ["2024-06-30", 33.4e6], ["2024-09-30", 33.1e6], ["2025-03-31", 816e6], ["2025-06-30", 812e6], ["2025-09-30", 32.38e6], ["2026-03-31", 790e6], ["2026-06-30", 768e6]];
+// ONDS as archived (fourth probe run), from 2021: two single-filing ×1000 slips.
+const ONDS = [["2021-12-31", 34180897], ["2022-12-31", 42242525], ["2023-09-30", 53892848], ["2024-03-31", 63035122], ["2024-06-30", 66377505], ["2024-09-30", 70741662], ["2025-03-31", 105005], ["2025-06-30", 150653000], ["2025-09-30", 259909415], ["2026-03-31", 445089], ["2026-06-30", 500709000]];
 // AAPL's stored tail (third probe run): the years stop at 2022-09-24, and the
 // quarters skip each fiscal Q4. From the latest quarter the cut lands in the hole.
 const AAPL_TAIL = [["2021-09-25", 16701272000], ["2022-09-24", 16215963000], ["2023-09-30", 15744231000], ["2023-12-30", 15509763000], ["2024-03-30", 15405856000], ["2024-06-29", 15287521000], ["2024-12-28", 15081724000], ["2025-03-29", 14994082000], ["2025-06-28", 14902886000], ["2025-12-27", 14748158000], ["2026-03-28", 14673278000], ["2026-06-27", 14656110000]];
@@ -95,6 +104,11 @@ const RULES = {
     const h = b.buildShareHistory(set([["2024-03-31", 100e6], ["2024-06-30", 101e6], ["2025-03-31", 102e6], ["2025-12-31", 103e6], ["2026-03-31", 2575e6], ["2026-06-30", 2580e6]], [["2025-03-31", 25]]));
     return h && h.splits?.[0]?.ratio === 25 && h.points.length === 6 && !h.startedAfter;
   },
+  "1f. BKNG: scaling stops at the already-restated quarter; one 25-for-1 note; no false start": (b) => {
+    const h = b.buildShareHistory(set(BKNG, [["2025-03-31", 24.996], ["2025-06-30", 24.989]]));
+    return h && h.points.length === 8 && !h.startedAfter && h.splits?.length === 1 && h.splits[0].ratio === 25
+      && h.points.slice(1).every((p, i) => p.shares / h.points[i].shares > 0.9 && p.shares / h.points[i].shares < 1.1);
+  },
   "1d. a doubling whose earlier year was re-filed unchanged is real issuance: kept": (b) => {
     const h = b.buildShareHistory(set(ISSUER, undefined, ["2021-12-31"]));
     return h && h.points.length === 5 && !h.startedAfter && !h.splits;
@@ -107,6 +121,11 @@ const RULES = {
     const p = b.buildShareHistory(set(PAC)), n = b.buildShareHistory(set(NVDA));
     return p && p.points[0].date === "2017-12-31" && p.startedAfter?.reason === "scale-step"
       && n && n.points[0].date === "2010-01-31" && n.startedAfter?.reason === "scale-step";
+  },
+  "3b. ONDS: two single filings off ×1000 are dropped; the rest of the series is kept": (b) => {
+    const h = b.buildShareHistory(set(ONDS));
+    const dates = h?.points.map((p) => p.date) ?? [];
+    return h && !h.startedAfter && dates.length === 9 && dates[0] === "2021-12-31" && !dates.includes("2025-03-31") && !dates.includes("2026-03-31");
   },
   "4a. GDDY: pre-listing points dropped (first report 2015-03-31)": (b) => {
     const h = b.buildShareHistory(set(GDDY), { listedFrom: "2015-03-31" });
@@ -149,6 +168,9 @@ const MUTANTS = [
   ["the proven-split date window removed", (s) => once(s, "nearStep(x.e, pts[i].date) && ", ""), null],
   ["the loose match for a proven split removed", (s) => once(s, "Math.abs(r / x.k - 1) < SHARE_PROVEN_SPLIT_TOLERANCE", "Math.abs(r / x.k - 1) < SHARE_SPLIT_TOLERANCE"), null],
   ["re-filed periods ignored", (s) => once(s, "    if (refiled.includes(pts[i - 1].date)) continue;\n", ""), null],
+  ["isolated mis-scaled filings kept (cut at instead)", (s) => once(s, "    return !(up !== 0 && up === off(p.shares, a[i + 1].shares) && off(a[i + 1].shares, a[i - 1].shares) === 0);", "    return true;"), null],
+  ["a proven split scales every earlier point again", (s) => once(s, "while (j0 > 0 && Math.abs((pts[j0].shares / pts[j0 - 1].shares) * p - 1) >= SHARE_PROVEN_SPLIT_TOLERANCE) j0--;", "j0 = 0;"), null],
+  ["the same split noted twice", (s) => once(s, "if (!splits.some((x) => x.ratio === p && nearStep(x.date, pts[i].date))) splits.push", "splits.push"), null],
   ["the >100× guard removed", (s) => once(s, "if (r > SHARE_SCALE_MAX_STEP || r < 1 / SHARE_SCALE_MAX_STEP) {", "if (false) {"), null],
   ["pre-listing points kept", (s) => once(s, "  if (listedFrom) {", "  if (false) {"), null],
   ["the end never steps back", (s) => once(s, "i >= 0 && days(points[i].date, last.date) <= SHARE_TREND_BASE_MAX_DAYS; i--", "i >= points.length - 1; i--"), null],
