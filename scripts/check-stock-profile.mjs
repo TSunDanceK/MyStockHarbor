@@ -268,6 +268,26 @@ console.log("\n8. the valuation multiples are the filings', one period basis eac
 
   check("non-positive equity refuses P/B",
     M.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity: -5 } }, 200).pb?.why === "equity-is-zero-or-negative");
+
+  // P/B ON A SLIVER OF EQUITY (#552 COWORK #86b, census CODE-A #112): GDDY's
+  // 1,813x refused as not meaningful; MA's ~70x (equity ~1.4% of cap) still a
+  // figure; exactly 1% is the edge and is kept.
+  const capAt200 = inputs.shares.val * 200;
+  const pbWith = (mod, equity) => mod.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity } }, 200).pb;
+  check("a GDDY-shaped P/B (equity 1/1813 of cap) is refused as not meaningful",
+    pbWith(M, capAt200 / 1813)?.why === "equity-too-small-for-pb");
+  check("an MA-shaped P/B (equity 1.4% of cap) is still shown",
+    pbWith(M, capAt200 * 0.014)?.ok === true);
+  check("equity at exactly 1% of cap is still shown (the rule is strictly under)",
+    pbWith(M, capAt200 * 0.01)?.ok === true);
+  check("the threshold is 1% and the reader's words say so",
+    M.PB_MIN_EQUITY_SHARE === 0.01 && /under 1% of market cap/.test(M.REFUSAL_WORDS["equity-too-small-for-pb"] ?? ""));
+  const noFloor = await loadComposer(once("equity < cap.val * PB_MIN_EQUITY_SHARE", "false"));
+  check("...and CATCHES the floor removed (GDDY's 1,813x shown again)",
+    pbWith(noFloor, capAt200 / 1813)?.ok === true);
+  const twoPct = await loadComposer(once("export const PB_MIN_EQUITY_SHARE = 0.01;", "export const PB_MIN_EQUITY_SHARE = 0.02;"));
+  check("...and CATCHES the floor raised to 2% (MA refused)",
+    pbWith(twoPct, capAt200 * 0.014)?.ok === false);
   check("no twelve months of revenue refuses P/S",
     M.valuationMultiples(inputs, { ...mi, revenue: null }, 200).ps?.why === "no-twelve-month-revenue");
 
