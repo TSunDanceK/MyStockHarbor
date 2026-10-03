@@ -10,6 +10,10 @@
 // showing, how much of each period's slot its bars fill (#60: about two
 // thirds) with no bar crossing into the next slot, and the card's height.
 //
+// With ORCL=1 the same fact set is reshaped as a filer with no cost of sales
+// line (#563 COWORK #71), so the margin chart and the phone line show operating
+// margin; the same measures apply, and the chart note must not be clipped.
+//
 // NOT IN check-all: it needs a browser, and the suite must run without one
 // (the same rule as layout-overlap-measure.mjs).
 //
@@ -26,7 +30,19 @@ const PAGE = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
 const open = PAGE.indexOf("<style>{`"), close = PAGE.indexOf("`}</style>", open);
 const CSS = open >= 0 && close > open ? PAGE.slice(open + 9, close) : "";
 const M = await loadCards();
-const view = M.buildSecEarningsView(JSON.parse(fs.readFileSync("data/sec/factset-fixture-ONDS.json", "utf8")));
+const set = JSON.parse(fs.readFileSync("data/sec/factset-fixture-ONDS.json", "utf8"));
+// ORCL=1 (#563 COWORK #71): ONDS reshaped as a filer with no cost of sales line
+// and a positive operating margin, so the third chart is operating margin.
+if (process.env.ORCL) {
+  const k = (f) => M.SEC_FIELD_KEYS.indexOf(f);
+  set.entityName = "ORACLE CORP";
+  for (const p of [...set.quarters, ...set.years]) {
+    p.v[k("grossProfit")] = null; p.v[k("costOfRevenue")] = null;
+    // Oracle-like: operating 30% and net 22% of sales, so no quarter reads as a one-off.
+    if (typeof p.v[k("revenue")] === "number") { p.v[k("operatingIncome")] = p.v[k("revenue")] * 0.3; p.v[k("netIncome")] = p.v[k("revenue")] * 0.22; }
+  }
+}
+const view = M.buildSecEarningsView(set);
 const card = html(React.createElement(M.SecGrowthMarginsCard, { view }));
 const doc = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;background:#06080d;color:#e2e8f0;font-family:system-ui,sans-serif}${CSS}</style></head><body><main style="padding:0 16px">${card}</main></body></html>`;
 
@@ -59,7 +75,8 @@ for (const width of [360, 1280]) {
     return { clipped, tags, phoneLine: shown(".gvPhoneOnly"), marginChart: shown(".gvDesktopOnly"), cardH: Math.round(c?.height ?? 0),
       fill, barsInside: fills.every((f) => f.inside), deskLine: shown(".gvDeskLine") };
   });
-  const tagsOk = r.tags.length > 0 && r.tags.every((t) => t.inView && t.onTop);
+  // ORCL=1 has no one-off quarter, so no tag is expected there.
+  const tagsOk = (process.env.ORCL ? true : r.tags.length > 0) && r.tags.every((t) => t.inView && t.onTop);
   const layoutOk = (width < 481 ? r.phoneLine && !r.marginChart : !r.phoneLine && r.marginChart && r.deskLine) &&
     !!r.fill && r.fill.min >= 0.6 && r.fill.max <= 0.7 && r.barsInside && r.clipped.length === 0;
   if (!tagsOk || !layoutOk) failures++;

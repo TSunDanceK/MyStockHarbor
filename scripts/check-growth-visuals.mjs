@@ -32,6 +32,11 @@
 //  10. CENTS-PER-DOLLAR WORDING BACK ON A MARGIN (owner ruling, #563 COWORK #55:
 //      margins in %, under the standard terms), or a missing gross-margin dot
 //      with no reason behind it.
+//  14. NO GROSS MARGIN FILED AT ALL (#563 COWORK #71, ORCL): the third chart
+//      becomes operating margin for the whole series, said so with the filer's
+//      name; never gross for some periods and operating for others; partial
+//      gaps keep gross with a broken line; neither (or operating losses
+//      throughout) hides the chart with a reason, never an empty grid.
 //   9. THE YEARS PROFIT CHART (#563 COWORK #51 (a), on A's #552 COWORK #117
 //      annual one-offs): each year's FILED net income, behind the same gate as
 //      the quarters, with no bar for a year the one-off rule can't run on.
@@ -75,6 +80,35 @@ const lossOnly = (M) => {
   return s;
 };
 
+/**
+ * ONDS with no gross-profit or cost-of-revenue figure in any period (ORCL's
+ * shape), named as Oracle. `op`: "positive" sets operating income to 30% of
+ * revenue; "none" removes it; "loss" leaves ONDS's own operating losses.
+ */
+const noGross = (M, op, only = null) => {
+  const s = structuredClone(full);
+  s.entityName = "ORACLE CORP";
+  const k = (f) => M.SEC_FIELD_KEYS.indexOf(f);
+  for (const p of [...s.quarters, ...s.years]) {
+    if (only && !only.includes(p)) continue;
+    p.v[k("grossProfit")] = null;
+    p.v[k("costOfRevenue")] = null;
+    if (op === "none") p.v[k("operatingIncome")] = null;
+    if (op === "positive" && typeof p.v[k("revenue")] === "number") p.v[k("operatingIncome")] = p.v[k("revenue")] * 0.3;
+  }
+  return s;
+};
+/** Gross gone from two quarters only, which do have a positive operating margin: a partial gap. */
+const partialGross = (M) => {
+  const t = structuredClone(full), k = M.SEC_FIELD_KEYS;
+  for (const i of [2, 3]) {
+    const v = t.quarters[i].v;
+    v[k.indexOf("grossProfit")] = null; v[k.indexOf("costOfRevenue")] = null;
+    if (typeof v[k.indexOf("revenue")] === "number") v[k.indexOf("operatingIncome")] = v[k.indexOf("revenue")] * 0.3;
+  }
+  return t;
+};
+
 /** Everything the rules read, for one load of the modules. */
 async function measure(M) {
   const ondsView = M.buildSecEarningsView(full);
@@ -97,13 +131,45 @@ async function measure(M) {
   // One year the rule couldn't run on, one year tagged: the gate on years, not just quarters.
   const yearsMarked = M.buildGrowthVisuals(ondsView, { oneOffs: { FY2024: "A note for FY2024." }, unchecked: ["FY2023"] });
   const cardMarkup = html(React.createElement(M.SecGrowthMarginsCard, { view: ondsView }));
-  return { onds, ondsChecked, ondsCard, ondsView, yearsMarked, q1, q1View, loss, render, markup, blankData, cardMarkup, M };
+  const orcl = M.buildGrowthVisuals(M.buildSecEarningsView(noGross(M, "positive")), { oneOffs: {} });
+  const neither = M.buildGrowthVisuals(M.buildSecEarningsView(noGross(M, "none")), { oneOffs: {} });
+  const lossNoGross = M.buildGrowthVisuals(M.buildSecEarningsView(noGross(M, "loss")), { oneOffs: {} });
+  const partial = M.buildGrowthVisuals(M.buildSecEarningsView(partialGross(M)), { oneOffs: {} });
+  return { onds, ondsChecked, ondsCard, ondsView, yearsMarked, q1, q1View, loss, render, markup, blankData, cardMarkup, M,
+    orcl, orclMarkup: markup(orcl), neither, neitherMarkup: markup(neither), lossNoGross, partial, partialMarkup: markup(partial) };
 }
 
 let M_PROFIT_WAITS = "";
 /** The two files' source as loaded for this measure, for the wording rule. */
 let SRC_B = { src: "", file: BUILDER }, SRC_C = { src: "", file: COMPONENT };
+const ORCL_NOTE = "Oracle's filings don't state a cost of sales line, so gross margin can't be worked out; operating margin is shown instead.";
 const rules = {
+  "no gross margin in any period: operating margin for the whole series, said so with the filer's name": ({ orcl, orclMarkup }) => {
+    const t = visibleText(orclMarkup);
+    return ["quarters", "years"].every((m) => orcl[m].margin.kind === "operating" && orcl[m].margin.note === ORCL_NOTE &&
+        orcl[m].periods.every((p) => p.grossPct === null && (p.sales ? p.opPct === 30 : p.opPct === null))) &&
+      /Operating margin per quarter/.test(t) && /Operating margin \(% of sales\)/.test(t) && /Operating margin % \(right scale\)/.test(t) &&
+      !/Gross margin per/.test(t) && (orclMarkup.match(/class="gvChartNote"/g) ?? []).length === 2 && t.includes(ORCL_NOTE) &&
+      /Gross margin\s*Not stated in Oracle's filings/.test(t) && /class="gvDot"/.test(orclMarkup);
+  },
+  "partial gaps keep gross margin, the line broken, never mixed with operating": ({ partial, partialMarkup, M }) => {
+    const q = partial.quarters;
+    const drawn = q.periods.filter((p) => p.grossPct !== null).length;
+    return q.margin.kind === "gross" && q.margin.grossAbsent === null && drawn < q.periods.length &&
+      q.periods.some((p) => p.grossPct === null && p.opPct !== null) && M.marginSegments(q.periods, "gross").length >= 2 &&
+      // desktop dots + phone dots: one of each per drawn period, none for the gap
+      (partialMarkup.match(/class="gvDot"/g) ?? []).length === 2 * drawn;
+  },
+  "neither margin: no chart and no empty grid, the reason instead": ({ neither, neitherMarkup }) =>
+    ["quarters", "years"].every((m) => neither[m].margin.kind === "none" && /operating margin isn't available/.test(neither[m].margin.note)) &&
+    // Class attributes only: the inlined <style> names every class.
+    !/class="gvDot"|class="[^"]*gvMarginLine|class="[^"]*gvRightScale|class="gvPctGuide"|class="gvChartNote"/.test(neitherMarkup) &&
+    /class="gvMissing gvNoMargin">No margin chart: Oracle&#x27;s filings don&#x27;t state a cost of sales line/.test(neitherMarkup),
+  "operating losses throughout: no chart, and the losses said": ({ lossNoGross }) =>
+    lossNoGross.quarters.margin.kind === "none" && /operating margin was a loss in each of these quarters/.test(lossNoGross.quarters.margin.note),
+  "the filer's name from its SEC name": ({ M }) =>
+    M.filerName("ORACLE CORP") === "Oracle" && M.filerName("BANK OF AMERICA CORP /DE/") === "Bank of America" &&
+    M.filerName("Ondas Holdings Inc.") === "Ondas" && M.filerName(null) === null && M.filerName("Apple Inc.") === "Apple",
   "ONDS: 8 quarters, oldest first": ({ onds }) =>
     onds.quarters.periods.length === 8 && onds.quarters.periods[0].label === "Q3 FY2024" && onds.quarters.periods[7].label === "Q2 FY2026",
   "ghost bars are A's comparator, looked up by label, never derived": ({ onds }) => {
@@ -348,16 +414,16 @@ const mutants = [
   ["wider bars: the sales pair and the profit bar fill about two thirds of each slot", "c", (s) => s.replace("          .gvTick { overflow: visible; }\n", "")],
   ["wider bars: the sales pair and the profit bar fill about two thirds of each slot", "c", (s) => s.replace(".gvBar { flex: 1 1 0; border-radius", ".gvBar { flex: 1 1 0; max-width: 18px; border-radius")],
   ["wider bars: the sales pair and the profit bar fill about two thirds of each slot", "c", (s) => s.replace(".gvPlBar { position: absolute; left: ${BAR_INSET_PCT}%; right: ${BAR_INSET_PCT}%; }", ".gvPlBar { position: absolute; left: 25%; right: 25%; }")],
-  ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace('        <MarginLine periods={s.periods} className="gvDeskLine" />\n', "")],
+  ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace('        <MarginLine periods={s.periods} kind={kind} className="gvDeskLine" />\n', "")],
   ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace("export const MARGIN_LINE = { width: 1.5, opacity: 0.7 } as const;", "export const MARGIN_LINE = { width: 1.5, opacity: 1 } as const;")],
   ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace("strokeWidth={MARGIN_LINE.width}", "strokeWidth={3}")],
-  ["phone: a period with no margin breaks the line", "c", (s) => s.replace("if (p.grossPct === null) { if (run.length) runs.push(run.join(\" \")); run = []; return; }", "if (p.grossPct === null) return;")],
+  ["phone: a period with no margin breaks the line", "c", (s) => s.replace("if (v === null) { if (run.length) runs.push(run.join(\" \")); run = []; return; }", "if (v === null) return;")],
   ["phone: a tap scrolls the panel into view; desktop never scrolls", "c", (s) => s.replace("if (typeof window === \"undefined\" || !window.matchMedia?.(PHONE).matches) return;", "if (typeof window === \"undefined\") return;")],
   ["phone: a tap scrolls the panel into view; desktop never scrolls", "c", (s) => s.replace("onClick={() => { setActive(i); onTap?.(); }}", "onClick={() => setActive(i)}")],
   ["about these figures: one intro line; the basis, the margin sentence and the * footnote in a server-rendered <details>", "k", (s) => s.replace("<p>{GROSS_MARGIN_MEANS}</p>", "")],
   ["about these figures: one intro line; the basis, the margin sentence and the * footnote in a server-rendered <details>", "k", (s) => s.replace('<details className="gvAbout">', '<div className="gvAbout">').replace("      </details>\n      <MarginDelta", "      </div>\n      <MarginDelta")],
-  ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace('legend={<><i style={{ background: C.margin, borderRadius: 999 }} />Gross margin (% of sales)</>}', 'legend={<><i style={{ background: C.margin, borderRadius: 999 }} />¢ kept per $1 (gross margin)</>}')],
-  ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace("{p.grossPct}%", "{p.grossPct}¢")],
+  ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace("{MARGIN_NAME[kind]} (% of sales)</>}", "¢ kept per $1 (gross margin)</>}")],
+  ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace("                {v}%\n", "                {v}¢\n")],
   ["no cents-per-dollar wording on a margin, in the picture or its source", "b", (s) => s.replace('"The direct costs of sales were more than the sales"', '"Under 0 cents kept per $1 of sales"')],
   ["marker: on the quarter A's rule fired for, with A's words", "b", (s) => s.replace("(label === view.latestLabel && view.largeNonOperating", "(view.largeNonOperating")],
   ["marker: the tag renders", "c", (s) => s.replace("        if (!p.oneOff) return null;\n", "        return null;\n")],
@@ -371,6 +437,17 @@ const mutants = [
   ["years: a year the rule can't run on gets no bar and the reason; a noted year is tagged", "b", (s) => s.replace("        ...profitOf(a.label, a.netIncome),\n", "        ...profitOf(a.label, a.netIncome),\n        oneOff: null,\n")],
   ["years: the summary counts the yearly losses", "b", (s) => s.replace("summary: summaryLine(periods, view.annual.map((a) => a.revenueYoY), yw.one, yw.many),", "summary: summaryLine(periods.map((p) => ({ ...p, profit: null })), view.annual.map((a) => a.revenueYoY), yw.one, yw.many),")],
   ["'Not reported' survives a missing figure", "c", (s) => s.replace("const nr = <span style={{ color: C.muted }}>{notReported}</span>;", "const nr = <span>$0.0M</span>;")],
+  ["no gross margin in any period: operating margin for the whole series, said so with the filer's name", "b", (s) => s.replace("if (grossFiled > 0) return { kind: \"gross\"", "if (grossFiled >= 0) return { kind: \"gross\"")],
+  ["no gross margin in any period: operating margin for the whole series, said so with the filer's name", "c", (s) => s.replace("            : margin.grossAbsent ? <span style={{ color: C.muted }}>{margin.grossAbsent}</span>\n", "")],
+  ["no gross margin in any period: operating margin for the whole series, said so with the filer's name", "c", (s) => s.replace('note={kind === "operating" ? s.margin.note : null}', "note={null}")],
+  ["no gross margin in any period: operating margin for the whole series, said so with the filer's name", "b", (s) => s.replace("corporation|corp|incorporated", "corporation|incorporated")],
+  ["partial gaps keep gross margin, the line broken, never mixed with operating", "c", (s) => s.replace('return kind === "gross" ? p.grossPct :', 'return kind === "gross" ? p.grossPct ?? p.opPct :')],
+  ["partial gaps keep gross margin, the line broken, never mixed with operating", "b", (s) => s.replace('const grossFiled = ordered.filter((p) => isFiniteNum(marginOf.get(p.label)?.gross)).length;', "const grossFiled = ordered.every((p) => isFiniteNum(marginOf.get(p.label)?.gross)) ? 1 : 0;")],
+  ["neither margin: no chart and no empty grid, the reason instead", "c", (s) => s.replace('{s.margin.kind === "none" ? (', "{false ? (")],
+  ["neither margin: no chart and no empty grid, the reason instead", "c", (s) => s.replace('overlay={kind === "none" ? null : <MarginLine', "overlay={<MarginLine")],
+  ["operating losses throughout: no chart, and the losses said", "b", (s) => s.replace("  if (opDrawn > 0) {", "  if (opFiled > 0) {")],
+  ["operating losses throughout: no chart, and the losses said", "b", (s) => s.replace("  if (m < 0) return { pct: null, text: null, note: `An operating loss: ${marginWords(m, \"operating\", false)}` };\n", "")],
+  ["the filer's name from its SEC name", "b", (s) => s.replace('.replace(/\\s*\\/[A-Z]{2,}\\/?\\s*$/i, "")', "")],
   ["the render carries the summary, the toggle and the legend words", "c", (s) => s.replace("Profit (+), above the line", "Profit")],
 ];
 const CARDS = "app/stock/[symbol]/earnings/SecEarningsCards.tsx";

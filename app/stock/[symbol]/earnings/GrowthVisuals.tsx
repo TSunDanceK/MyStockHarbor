@@ -33,7 +33,7 @@
 // THE PANEL FOLLOWS THE TAP ON A PHONE (#56 item 3): a tapped period scrolls the
 // detail panel into view, so the change is seen without hunting for it.
 import { useRef, useState, type ReactNode } from "react";
-import type { GrowthVisualsData, GvPeriod, GvSeries } from "@/lib/growthVisuals";
+import type { GrowthVisualsData, GvMargin, GvMarginKind, GvPeriod, GvSeries } from "@/lib/growthVisuals";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
 
 const C = {
@@ -73,10 +73,12 @@ function DerivedTag({ note }: { note: string | null }) {
 
 /** One chart: a title, the plot as a grid of columns, and the shared axis labels. */
 function Chart({
-  title, legend, periods, active, setActive, height, render, behind, over, overlay, onTap,
+  title, legend, note, periods, active, setActive, height, render, behind, over, overlay, onTap,
 }: {
   title: string;
   legend: ReactNode;
+  /** One line under the title: why the margin chart shows operating margin (#563 COWORK #71). */
+  note?: ReactNode;
   periods: GvPeriod[];
   active: number;
   setActive: (i: number) => void;
@@ -101,6 +103,7 @@ function Chart({
         <span className="gvChartTitle">{title}</span>
         <span className="gvLegend">{legend}</span>
       </div>
+      {note ? <p className="gvChartNote">{note}</p> : null}
       <div className="gvGrid" style={{ gridTemplateColumns: `repeat(${periods.length}, minmax(0, 1fr))`, height }}>
         {behind ? <span className="gvBehind" aria-hidden="true">{behind}</span> : null}
         {periods.map((p, i) => (
@@ -152,13 +155,24 @@ function Axis({ periods, active }: { periods: GvPeriod[]; active: number }) {
 
 type ChartProps = { s: GvSeries; active: number; setActive: (i: number) => void; onTap?: () => void };
 
+/**
+ * THE MARGIN THE CHART DRAWS for a period (#563 COWORK #71): its gross margin,
+ * or its operating margin when the whole series falls back to operating; none
+ * when the series has neither. ONE MEASURE PER SERIES, never mixed.
+ */
+export function marginPct(p: GvPeriod, kind: GvMarginKind): number | null {
+  return kind === "gross" ? p.grossPct : kind === "operating" ? p.opPct : null;
+}
+export const MARGIN_NAME: Record<Exclude<GvMarginKind, "none">, string> = { gross: "Gross margin", operating: "Operating margin" };
+
 /** The phone's margin line: one segment per run of periods with a margin; a period without one breaks it. */
-export function marginSegments(periods: GvPeriod[]): string[] {
+export function marginSegments(periods: GvPeriod[], kind: GvMarginKind = "gross"): string[] {
   const runs: string[] = [];
   let run: string[] = [];
   periods.forEach((p, i) => {
-    if (p.grossPct === null) { if (run.length) runs.push(run.join(" ")); run = []; return; }
-    run.push(`${run.length ? "L" : "M"}${i + 0.5} ${100 - Math.min(p.grossPct, 100)}`);
+    const v = marginPct(p, kind);
+    if (v === null) { if (run.length) runs.push(run.join(" ")); run = []; return; }
+    run.push(`${run.length ? "L" : "M"}${i + 0.5} ${100 - Math.min(v, 100)}`);
   });
   if (run.length) runs.push(run.join(" "));
   return runs;
@@ -171,10 +185,10 @@ export function marginSegments(periods: GvPeriod[]): string[] {
  * no margin breaks it (marginSegments); its panel says why.
  */
 export const MARGIN_LINE = { width: 1.5, opacity: 0.7 } as const;
-function MarginLine({ periods, className }: { periods: GvPeriod[]; className: string }) {
+function MarginLine({ periods, kind, className }: { periods: GvPeriod[]; kind: GvMarginKind; className: string }) {
   return (
     <svg className={`${className} gvMarginLine`} viewBox={`0 0 ${periods.length} 100`} preserveAspectRatio="none" aria-hidden="true">
-      {marginSegments(periods).map((d) => (
+      {marginSegments(periods, kind).map((d) => (
         <path key={d} d={d} fill="none" stroke={C.margin} strokeWidth={MARGIN_LINE.width} strokeOpacity={MARGIN_LINE.opacity} vectorEffect="non-scaling-stroke" />
       ))}
     </svg>
@@ -185,7 +199,10 @@ function SalesChart({ s, active, setActive, onTap, notReported }: ChartProps & {
   const max = Math.max(1, ...s.periods.flatMap((p) => [p.sales?.val ?? 0, p.lastYear?.val ?? 0])) / SALES_HEADROOM;
   const newest = s.periods.length - 1;
   const anyGhost = s.periods.some((p) => p.lastYear);
-  const lastMargin = s.periods.map((p) => p.grossPct !== null).lastIndexOf(true);
+  // THE SERIES' ONE MARGIN (#563 COWORK #71): gross, operating for the whole
+  // series, or none (then no line, no dots, no scale on the phone).
+  const kind = s.margin.kind;
+  const lastMargin = s.periods.map((p) => marginPct(p, kind) !== null).lastIndexOf(true);
   return (
     <Chart
       title={`Sales per ${s.one}`}
@@ -193,24 +210,25 @@ function SalesChart({ s, active, setActive, onTap, notReported }: ChartProps & {
         <i style={{ background: C.sales }} />This {s.one}
         {anyGhost ? <><i style={{ background: C.lastYear }} />Same {s.one} a year earlier</> : null}
         {/* PHONE ONLY: the margin line's legend entry names its scale (right, %). */}
-        <span className="gvPhoneOnly"><i style={{ background: C.margin, borderRadius: 999 }} />Gross margin % (right scale)</span>
+        {kind !== "none" ? <span className="gvPhoneOnly"><i style={{ background: C.margin, borderRadius: 999 }} />{MARGIN_NAME[kind]} % (right scale)</span> : null}
       </>}
+      note={kind === "operating" ? <span className="gvPhoneOnly">{s.margin.note}</span> : null}
       periods={s.periods} active={active} setActive={setActive} onTap={onTap} height={PLOT_H}
-      behind={
+      behind={kind === "none" ? null :
         // PHONE ONLY: the % scale, on the right-hand side, outside the bars.
         <span className="gvPhoneOnly gvRightScale" style={{ color: C.margin }}>
           {PCT_GUIDES.map((c) => <span key={c} style={{ bottom: `${c}%` }}>{c}%</span>)}
         </span>
       }
-      overlay={<MarginLine periods={s.periods} className="gvPhoneOnly" />}
-      over={(p, i) => p.grossPct === null ? null : (
+      overlay={kind === "none" ? null : <MarginLine periods={s.periods} kind={kind} className="gvPhoneOnly" />}
+      over={(p, i) => { const v = marginPct(p, kind); return v === null ? null : (
         <span className="gvPhoneOnly">
-          <span className="gvDot" style={{ bottom: `calc(${Math.min(p.grossPct, 100)}% - 5px)`, background: C.margin }} />
+          <span className="gvDot" style={{ bottom: `calc(${Math.min(v, 100)}% - 5px)`, background: C.margin }} />
           {i === lastMargin ? (
-            <span className="gvVal gvPill" style={{ bottom: `calc(${Math.min(p.grossPct, 100)}% + 7px)`, color: C.ink }}>{p.grossPct}%</span>
+            <span className="gvVal gvPill" style={{ bottom: `calc(${Math.min(v, 100)}% + 7px)`, color: C.ink }}>{v}%</span>
           ) : null}
         </span>
-      )}
+      ); }}
       render={(p, i) => (
         <>
           <span className="gvBars">
@@ -273,10 +291,12 @@ function ProfitChart({ s, active, setActive, onTap }: ChartProps) {
 
 function MarginChart({ s, active, setActive, onTap }: ChartProps) {
   const newest = s.periods.length - 1;
+  const kind = s.margin.kind === "operating" ? "operating" : "gross";
   return (
     <Chart
-      title={`Gross margin per ${s.one}`}
-      legend={<><i style={{ background: C.margin, borderRadius: 999 }} />Gross margin (% of sales)</>}
+      title={`${MARGIN_NAME[kind]} per ${s.one}`}
+      legend={<><i style={{ background: C.margin, borderRadius: 999 }} />{MARGIN_NAME[kind]} (% of sales)</>}
+      note={kind === "operating" ? s.margin.note : null}
       periods={s.periods} active={active} setActive={setActive} onTap={onTap} height={MARGIN_H}
       behind={<>
         {PCT_GUIDES.map((c) => (
@@ -286,18 +306,19 @@ function MarginChart({ s, active, setActive, onTap }: ChartProps) {
           </span>
         ))}
         {/* UNDER the columns, so the dots (drawn in them) sit on top of it. */}
-        <MarginLine periods={s.periods} className="gvDeskLine" />
+        <MarginLine periods={s.periods} kind={kind} className="gvDeskLine" />
       </>}
       render={(p, i) => {
-        if (p.grossPct === null) return <span className="gvDotWrap" />;
-        const at = Math.min(p.grossPct, 100);
+        const v = marginPct(p, kind);
+        if (v === null) return <span className="gvDotWrap" />;
+        const at = Math.min(v, 100);
         return (
           <span className="gvDotWrap">
             <span className="gvDot" style={{ bottom: `calc(${at}% - 5px)`, background: C.margin }} />
             {i === newest ? (
               // Above the dot, or below it when the dot is near the top of the plot.
               <span className="gvVal" style={at > 75 ? { top: `calc(${100 - at}% + 7px)` } : { bottom: `calc(${at}% + 7px)` }}>
-                {p.grossPct}%
+                {v}%
               </span>
             ) : null}
           </span>
@@ -307,7 +328,7 @@ function MarginChart({ s, active, setActive, onTap }: ChartProps) {
   );
 }
 
-function Detail({ p, one, notReported, showProfit }: { p: GvPeriod; one: string; notReported: string; showProfit: boolean }) {
+function Detail({ p, one, notReported, showProfit, margin }: { p: GvPeriod; one: string; notReported: string; showProfit: boolean; margin: GvMargin }) {
   const nr = <span style={{ color: C.muted }}>{notReported}</span>;
   return (
     <div className="gvDetail" aria-live="polite">
@@ -336,11 +357,15 @@ function Detail({ p, one, notReported, showProfit }: { p: GvPeriod; one: string;
         <dd>
           {p.grossText !== null
             ? <strong>{p.grossText}</strong>
-            : p.grossNote ? <span style={{ color: C.muted }}>{p.grossNote}</span> : nr}
+            // NOT IN THE FILINGS AT ALL (#563 COWORK #71): said as the filer's, not as a gap of ours.
+            : margin.grossAbsent ? <span style={{ color: C.muted }}>{margin.grossAbsent}</span>
+              : p.grossNote ? <span style={{ color: C.muted }}>{p.grossNote}</span> : nr}
         </dd>
         {/* A margin beyond ±100% reads as a multiple ("operating costs were about
-            2.9× sales"); within, a percentage. Both under the standard term. */}
-        {p.operating ? <><dt>Operating margin</dt><dd>{p.operating}</dd></> : null}
+            2.9× sales"); within, a percentage. Both under the standard term.
+            When the chart draws operating margin, a period without a dot says why. */}
+        {p.operating ? <><dt>Operating margin</dt><dd>{p.operating}</dd></>
+          : margin.kind === "operating" && p.opNote ? <><dt>Operating margin</dt><dd><span style={{ color: C.muted }}>{p.opNote}</span></dd></> : null}
         {p.net ? <><dt>Net margin</dt><dd>{p.net}</dd></> : null}
       </dl>
       <div className="gvHint">Tap or hover another {one} to see its figures.</div>
@@ -390,15 +415,20 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
           <Axis periods={s.periods} active={at} />
         </>
       )}
-      {/* DESKTOP ONLY (#563 COWORK #58): on a phone the margin is the line over the sales chart. */}
-      <div className="gvDesktopOnly">
-        <MarginChart s={s} active={at} setActive={setActive} onTap={tapped} />
-        <Axis periods={s.periods} active={at} />
-      </div>
+      {/* DESKTOP ONLY (#563 COWORK #58): on a phone the margin is the line over the sales chart.
+          No margin at all (#563 COWORK #71): no empty grid, the reason instead, on every screen. */}
+      {s.margin.kind === "none" ? (
+        <p className="gvMissing gvNoMargin">{s.margin.note}</p>
+      ) : (
+        <div className="gvDesktopOnly">
+          <MarginChart s={s} active={at} setActive={setActive} onTap={tapped} />
+          <Axis periods={s.periods} active={at} />
+        </div>
+      )}
       {/* The "*" footnote and the gross-margin sentence are under the card's
           "About these figures" (#56 item 2), server-rendered with the card. */}
       <div ref={detailRef}>
-        <Detail p={s.periods[at]} one={s.one} notReported={notReported} showProfit={!s.profitMissing} />
+        <Detail p={s.periods[at]} one={s.one} notReported={notReported} showProfit={!s.profitMissing} margin={s.margin} />
       </div>
       <style>{`
         .gvRoot { display: grid; gap: 6px; margin: 4px 0 12px; }
@@ -444,6 +474,7 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
         .gvDetail dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
         .gvDetail dt { color: ${C.muted}; font-weight: 700; }
         .gvDetail dd { margin: 0; }
+        .gvChartNote { margin: 0 0 6px; font-size: 12px; color: ${C.muted}; }
         .gvNote { font-size: 12px; color: ${C.muted}; margin-top: 2px; }
         .gvHint { margin-top: 6px; font-size: 12px; color: ${C.muted}; }
         @media ${PHONE} {
