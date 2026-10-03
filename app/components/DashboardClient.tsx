@@ -747,6 +747,8 @@ export default function DashboardClient({
       setLoading(true); setErr(null);
       try {
         const [qR, hR] = await Promise.all([fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined), fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${selectedTimeframe.fetchBars}&interval=${chartInterval}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined)]);
+        // 404 = no data for this ticker (no price, no FMP key: #553 COWORK #103), worded, not "Failed to load".
+        if (qR.status === 404) { if (c) return; setErr(`No data available for ${symbol.toUpperCase()}.`); setQuote(null); setHistoryAll([]); setHistoryProvider(null); return; }
         if (!qR.ok) throw new Error("q"); if (!hR.ok) throw new Error("h");
         const q = (await qR.json()) as Quote, h = (await hR.json()) as { points: any[]; provider?: string }; if (c) return; const prov = typeof h.provider === "string" ? h.provider : null;
         const pts: Point[] = (Array.isArray(h.points) ? h.points : []).map((p: any) => ({ date: String(p?.date ?? ""), open: p?.open == null ? undefined : Number(p.open), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume), label: typeof p?.label === "string" ? p.label : undefined })).filter(p => p.date && Number.isFinite(p.close));
