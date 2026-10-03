@@ -165,6 +165,13 @@ export async function fillTiingoColdSymbol(
 /** Queued symbols one run fills: 100 Tiingo requests at most, far inside the 300 s function. */
 export const COLD_QUEUE_PER_RUN = 100;
 const DRAIN_CONCURRENCY = 4;
+/**
+ * No new symbol is started after this much of the run: 100 symbols over 4
+ * workers at a 15 s timeout each could take ~375 s, past the route's 300 s
+ * maxDuration, and a killed run would drop the batch's ZREM. The rest stay
+ * queued for the next run, 10 minutes later.
+ */
+export const COLD_DRAIN_BUDGET_MS = 200_000;
 
 /**
  * Every 10 minutes: drop requested symbols unviewed for REQUESTED_IDLE_DAYS,
@@ -188,9 +195,11 @@ export async function drainColdQueue(
   out.queued = queued.length;
   if (!queued.length) return out;
   const done: string[] = [];
+  const startedAt = Date.now();
   let next = 0;
   const worker = async () => {
     while (next < queued.length) {
+      if (Date.now() - startedAt >= COLD_DRAIN_BUDGET_MS) return;
       const sym = queued[next++];
       // The visitor's own fill may be running: leave it to them.
       if (!(await takeColdLock(sym))) continue;

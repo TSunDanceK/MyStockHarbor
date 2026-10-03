@@ -304,6 +304,9 @@ check("the requested set joins the quote and EOD universe (1 ZRANGE)",
   /const requestedRaw = await mustRedis\(\)\.zrange<string\[\]>\(TIINGO_REQUESTED_KEY, 0, -1\)/.test(jobsSrc) && /\[\.\.\.keys, \.\.\.requested\]/.test(jobsSrc));
 check("the queue job drops symbols unviewed for 30 days, then fills at most 100 queued, oldest first",
   /zremrangebyscore\(TIINGO_REQUESTED_KEY, 0, nowMs - REQUESTED_IDLE_DAYS \* 86_400_000\)/.test(coldSrc) && /zrange<string\[\]>\(TIINGO_COLD_QUEUE_KEY, 0, COLD_QUEUE_PER_RUN - 1\)/.test(coldSrc) && C.COLD_QUEUE_PER_RUN === 100);
+check("the queue drain starts no symbol past its time budget, well inside the route's 300 s",
+  C.COLD_DRAIN_BUDGET_MS > 0 && C.COLD_DRAIN_BUDGET_MS + 15_000 <= 240_000 &&
+  /if \(Date\.now\(\) - startedAt >= COLD_DRAIN_BUDGET_MS\) return;/.test(coldSrc) && /export const maxDuration = 300;/.test(raw(FILES.queueRoute)));
 check("the requested set is capped, least recently viewed evicted", /const over = Number\(card\) - REQUESTED_CAP;\s*if \(over > 0\) await r\.zpopmin\(TIINGO_REQUESTED_KEY, over\);/.test(coldSrc));
 check("a cold fill stores exactly what the nightly job stores (same key, window, TTL)",
   /await redis\.set\(tiingoEodKey\(sym\), JSON\.stringify\(value\), \{ ex: TIINGO_EOD_TTL_SECONDS \}\);/.test(coldSrc) && /got\.bars\.slice\(-EOD_WINDOW_BARS\)/.test(coldSrc));
