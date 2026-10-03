@@ -256,7 +256,7 @@ function wiringRules(srcs) {
   const pool = code[FILES.pool];
   const uni = code[FILES.universe];
   const panels = code[FILES.panels];
-  want("the SEC inputs are a Data Cache blob (unstable_cache around the one HGETALL)", /export const readSecCapRows = unstable_cache\(loadSecCapRows, \["pool-sec-cap-v1", pickersSecKey\(\)\]/.test(pool));
+  want("the SEC inputs are a Data Cache blob (unstable_cache around the one HGETALL)", /export const readSecCapRows = unstable_cache\(loadSecCapRows, \["pool-sec-cap-v1", PICKERS_SEC_KEY\]/.test(pool));
   want("the overlay reads them through the cache, beside the two Tiingo blobs", /readSecCapRows\(\)\.catch\(\(\) => null\),/.test(fnBody(pool, "overlayTiingoPool")) && /overlayRows\(fmpRows, symbols, pool\?\.rows \?\? null, eodLast, nowMs, secRows\)/.test(fnBody(pool, "overlayTiingoPool")));
   want("nothing calls the uncached loader or the per-page HMGET on these paths",
     !/\bloadSecCapRows\(\)/.test(pool + uni + panels) && !/\breadSecPickerRows\(/.test(pool + uni + panels));
@@ -518,6 +518,26 @@ for (const [name, rel, from, to] of [
     Pn: rel === FILES.panels ? mod : Pn6,
   });
   check(`persistence mutant "${name}" is caught`, fails.length > 0, fails[0] ?? "no assertion failed");
+}
+
+// ── 7. COVERAGE (#553 COWORK #110, 2026-10-03) ──────────────────────────────
+// The calendar showed "—" for ordinary filers on a POOL-on preview: the overlay
+// read the preview-only hash, and the job only covered the ~850 warm targets.
+{
+  const secMod = stripComments(raw("lib/server/pickersSecFundamentals.ts"), { file: "lib/server/pickersSecFundamentals.ts" });
+  const job = stripComments(raw("app/api/jobs/warm-pickers-sec/route.ts"), { file: "app/api/jobs/warm-pickers-sec/route.ts" });
+  const uni = stripComments(raw("lib/server/tiingoUniverse.ts"), { file: "lib/server/tiingoUniverse.ts" });
+  const loadReadsProd = (c) => /export async function loadSecCapRows\(\)[^{]*\{[\s\S]{0,600}?\.hgetall[^(]*\(PICKERS_SEC_KEY\)/.test(c);
+  const jobUnion = (c) => /const symbols = \[\.\.\.new Set\(\[\.\.\.warm, \.\.\.\(await readTiingoUniverseSymbols\(\)\)\]\)\];/.test(c) && /await warmPickersSec\(symbols,/.test(c);
+  const capFits = (c) => { const m = /export const MAX_SYMBOLS_PER_RUN = ([\d_]+);/.exec(c); return m ? Number(m[1].replace(/_/g, "")) >= 3000 : false; };
+  const uniReader = (c) => /export async function readTiingoUniverseSymbols\(\)[\s\S]{0,300}?parseTiingoUniverse\(await redis\.get<unknown>\(TIINGO_UNIVERSE_KEY\)\)/.test(c);
+  check("the cap blob reads the production hash on every deployment (read-only)", loadReadsProd(secMod));
+  check("warm-pickers-sec targets the warm list plus the Tiingo universe, warm first", jobUnion(job));
+  check("the run cap fits the Tiingo universe (>= 3,000)", capFits(secMod));
+  check("the universe reader parses the stored key (1 GET)", uniReader(uni));
+  check("mutant caught: the cap blob reads the preview key again", !loadReadsProd(secMod.replace(/(\.hgetall[^(]*\()PICKERS_SEC_KEY\)/, "$1pickersSecKey())")));
+  check("mutant caught: the job drops the Tiingo universe", !jobUnion(job.replace("...(await readTiingoUniverseSymbols())", "")));
+  check("mutant caught: the run cap back at 2,000", !capFits(secMod.replace(/MAX_SYMBOLS_PER_RUN = [\d_]+;/, "MAX_SYMBOLS_PER_RUN = 2_000;")));
 }
 
 console.log(failures ? `\n${failures} CHECK(S) FAILED` : "\nALL CHECKS PASSED");

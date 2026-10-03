@@ -607,7 +607,11 @@ export function parseSecCapHash(raw: Record<string, unknown> | null, nowMs: numb
  */
 export async function loadSecCapRows(): Promise<Record<string, SecCapRow> | null> {
   if (!redis) return null;
-  const raw = await redis.hgetall<Record<string, unknown>>(pickersSecKey());
+  // READ-ONLY, SO THE PRODUCTION HASH ON EVERY DEPLOYMENT (#553 COWORK #110,
+  // 2026-10-03). The preview-only key exists to keep a PR's job WRITES apart;
+  // it fills only from an explicit seed and goes stale in 3 days, so a preview
+  // reading it showed "—" for every cap. Only cap/P/E inputs are projected.
+  const raw = await redis.hgetall<Record<string, unknown>>(PICKERS_SEC_KEY);
   return raw ? parseSecCapHash(raw, Date.now()) : null;
 }
 
@@ -650,14 +654,17 @@ export function rowsToPrune(stored: string[], targets: string[]): { drop: string
 
 /**
  * The daily job's work. RUNAWAY GUARDS, stated as numbers:
- *   - at most MAX_SYMBOLS_PER_RUN symbols (the universe is ~850 today);
+ *   - at most MAX_SYMBOLS_PER_RUN symbols (warm targets ~850 plus the Tiingo
+ *     universe ~2,580, overlapping; ~2,600 distinct);
  *   - one GET per symbol (readFactSet) + one HSET per 100 symbols + one EXPIRE;
  *   - the FIRST Redis write error stops the run -- a failing store is not
  *     retried 850 times.
  *   - then 1 HKEYS + 1 HDEL to drop rows no longer targeted (rowsToPrune).
- * So a run costs about 850 + 9 + 1 + 2 ≈ 862 commands, and cannot exceed ~2,052.
+ * So a run costs about 2,600 + 26 + 1 + 2 ≈ 2,630 commands, and cannot exceed ~3,033.
  */
-export const MAX_SYMBOLS_PER_RUN = 2_000;
+// 3,000 (#553 COWORK #110, 2026-10-03): the targets now include the Tiingo
+// universe (~2,580) so the pool overlay can cap every row it prices.
+export const MAX_SYMBOLS_PER_RUN = 3_000;
 
 export async function warmPickersSec(
   symbols: string[],

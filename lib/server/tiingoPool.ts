@@ -49,17 +49,17 @@ import { easternCloseMs } from "./lastSession";
 import { VOLUME_LABEL } from "./tiingoQuote";
 import { toDashed, toDotted } from "../symbolSpellings.mjs";
 import { unstable_cache } from "next/cache";
-import { loadSecCapRows, pickersSecKey, secCapAndPe, type SecCapRow } from "./pickersSecFundamentals";
+import { loadSecCapRows, PICKERS_SEC_KEY, secCapAndPe, type SecCapRow } from "./pickersSecFundamentals";
 
 /** The SEC inputs change once a day (warm-pickers-sec, 05:35 UTC); six hours bounds the lag. */
 export const SEC_CAP_CACHE_SECONDS = 6 * 60 * 60;
 
 /**
  * The pickers SEC hash, projected to cap/P/E inputs, from the Data Cache: 1
- * HGETALL per miss. Keyed by the hash name so a preview never serves
- * production's entry or the reverse.
+ * HGETALL per miss. Keyed by the hash name it reads, which is the production
+ * hash on every deployment (read-only; #553 COWORK #110).
  */
-export const readSecCapRows = unstable_cache(loadSecCapRows, ["pool-sec-cap-v1", pickersSecKey()], {
+export const readSecCapRows = unstable_cache(loadSecCapRows, ["pool-sec-cap-v1", PICKERS_SEC_KEY], {
   revalidate: SEC_CAP_CACHE_SECONDS,
 });
 
