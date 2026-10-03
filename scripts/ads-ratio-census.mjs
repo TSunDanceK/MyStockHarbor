@@ -22,7 +22,7 @@ const mine = only.length ? only : Object.keys(REG).sort()
   .filter((s) => /^20-F/.test(REG[s]?.annualForm ?? "") && REG[s]?.cik).filter((_, i) => i % N === K - 1);
 let lastAt = 0;
 async function get(url, as = "json") {
-  const wait = Math.max(0, lastAt + 130 - Date.now());
+  const wait = Math.max(0, lastAt + Number(process.env.GAP_MS || 130) - Date.now());
   if (wait) await new Promise((r) => setTimeout(r, wait));
   lastAt = Date.now();
   const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(90_000) });

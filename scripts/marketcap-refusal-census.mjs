@@ -22,8 +22,8 @@ const ADSFILE = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).
 const redis = Redis.fromEnv();
 let commands = 0;
 
-const raw = await redis.get("msh:pickers:v10:symbols"); commands++;
-const list = Array.isArray(raw) ? raw : Array.isArray(raw?.symbols) ? raw.symbols : [];
+// The stored SEC Pickers rows' own fields (the 3 h symbol key can lapse).
+const list = (await redis.hkeys(P.PICKERS_SEC_KEY)) ?? []; commands++;
 const universe = [...new Set(list.map((x) => String(typeof x === "string" ? x : x?.symbol ?? "").toUpperCase()).filter(Boolean))];
 const rows = await P.readSecPickerRows(universe); commands++;
 const today = new Date().toISOString().slice(0, 10);
