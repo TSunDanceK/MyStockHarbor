@@ -667,9 +667,20 @@ export default async function StockEarningsPage({ params }: Props) {
         /* A PARTIAL SCORE READS AS INK, NOT AS A VERDICT — see the card. */
         .scorePillPartial { background: rgba(148,163,184,0.14); border-color: rgba(148,163,184,0.38); color: #cbd5e1; letter-spacing: 0.01em; }
         .scoreNumberPartial { color: rgba(226,232,240,0.62); }
-        /* The span the score could actually have landed in, under the needle. */
-        .scoreReach { position: absolute; top: 0; bottom: 0; background: rgba(2,6,23,0.55); border-left: 1px solid rgba(226,232,240,0.45); border-right: 1px solid rgba(226,232,240,0.45); }
+        /* The span the score could actually have landed in: OUTLINED at full
+           strength, the unreachable ends dimmed (#552 COWORK #95). */
+        .scoreReach { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: transparent; border: 2px solid #f8fafc; border-radius: 999px; }
+        .scoreOut { position: absolute; top: 0; bottom: 0; background: rgba(2,6,23,0.62); }
+        .scoreReachLabelRow { position: relative; height: 16px; margin-top: 4px; }
+        .scoreReachLabel { position: absolute; top: 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(226,232,240,0.80); white-space: nowrap; }
+        .scoreSummary { margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: rgba(226,232,240,0.86); }
         .scoreReachNote { color: rgba(226,232,240,0.78); }
+        /* A NATIVE DROPDOWN FOR THE DETAIL (#552 COWORK #95/#96/#97): in the
+           server HTML, keyboard-operable, with a visible focus ring. */
+        .cardDetails { margin-top: 12px; }
+        .cardDetails > summary { cursor: pointer; font-size: 13px; font-weight: 800; color: #93c5fd; list-style-position: inside; border-radius: 6px; }
+        .cardDetails > summary:focus-visible { outline: 2px solid #93c5fd; outline-offset: 3px; }
+        .nextEstimateWord { font-size: 14px; font-weight: 700; color: rgba(226,232,240,0.72); letter-spacing: 0; }
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
         .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
         .metricCard { padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.02); }
@@ -772,13 +783,16 @@ export default async function StockEarningsPage({ params }: Props) {
         .toneChip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid; font-size: 11px; font-weight: 900; letter-spacing: 0.02em; white-space: nowrap; }
         .toneChip i { display: inline-block; width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto; }
 
-        .hbarList { margin-top: 14px; display: grid; gap: 12px; }
-        .hbarRow { display: grid; gap: 6px; }
-        .hbarHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-        .hbarLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); }
+        /* NOTHING WIDER THAN THE CARD (#552 COWORK #97): grid and flex
+           children get min-width: 0, the track is the content box's width,
+           and a long label wraps instead of pushing its figure off the edge. */
+        .hbarList { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+        .hbarRow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
+        .hbarHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: 12px; row-gap: 2px; min-width: 0; }
+        .hbarLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; overflow-wrap: anywhere; }
         .hbarValue { font-size: 14px; font-weight: 950; color: #f1f5f9; letter-spacing: -0.02em; white-space: nowrap; }
         .hbarSub { font-size: 11px; color: rgba(148,163,184,0.72); }
-        .hbarTrack { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.05); overflow: hidden; }
+        .hbarTrack { box-sizing: border-box; width: 100%; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.05); overflow: hidden; }
         .hbarFill { display: block; height: 100%; border-radius: 999px; }
 
         .gmChart { margin-top: 10px; display: flex; align-items: stretch; gap: 2px; height: 148px; }
@@ -792,8 +806,8 @@ export default async function StockEarningsPage({ params }: Props) {
         .gmTick { margin-top: 7px; font-size: 10px; font-weight: 800; color: rgba(148,163,184,0.72); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .waterfall { margin-top: 12px; display: grid; gap: 8px; }
-        .wfRow { display: grid; grid-template-columns: minmax(96px, 22%) 1fr minmax(64px, auto); align-items: center; gap: 10px; }
-        .wfLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); }
+        .wfRow { display: grid; grid-template-columns: minmax(96px, 22%) minmax(0, 1fr) minmax(64px, auto); align-items: center; gap: 10px; min-width: 0; }
+        .wfLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; overflow-wrap: anywhere; }
         .wfTrack { position: relative; height: 12px; border-radius: 4px; background: rgba(255,255,255,0.04); overflow: hidden; }
         .wfZero { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 1px solid rgba(226,232,240,0.55); }
         .wfBar { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
@@ -805,7 +819,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .trendCell { display: grid; gap: 4px; align-content: start; }
         .trendChipRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
         .trendCount { font-size: 11px; color: rgba(148,163,184,0.75); }
-        @media (max-width: 520px) { .gmChart { height: 120px; } .wfRow { grid-template-columns: minmax(74px, 30%) 1fr minmax(56px, auto); } }
+        @media (max-width: 520px) { .gmChart { height: 120px; } .wfRow { grid-template-columns: minmax(74px, 30%) minmax(0, 1fr) minmax(56px, auto); } }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }
         .chartBlockSub { font-size: 12px; color: rgba(148,163,184,0.85); margin-bottom: 8px; }

@@ -96,6 +96,8 @@ export function marginMoveMeaningful(older: number | null, newer: number | null)
 }
 
 export const MARGIN_NOT_MEANINGFUL = "not meaningful — revenue is too small relative to costs";
+/** The score explanation's own sentence for it (#552 COWORK #95). */
+export const MARGIN_NOT_MEANINGFUL_HERE = "not meaningful here: revenue is too small relative to costs";
 
 /**
  * Revenue growth off a prior-period revenue under this (USD) is shown but not
@@ -465,6 +467,20 @@ export function partialScoreNote(
       ? ` With these inputs it could only land between ${c.low} and ${c.high}, inside ${pinnedBand} either way.`
       : ` With these inputs it could only land between ${c.low} and ${c.high}.`;
   return `${head}${range} Not directly comparable with a full score.`;
+}
+
+/**
+ * THE SCORE CARD'S ONE VISIBLE LINE (#552 COWORK #95). The rest (what could
+ * not be measured and why, the explanation) sits in "About this score". The
+ * range is stated only when it is narrower than the scale, as the note does.
+ * Null without a coverage reading: no claim either way.
+ */
+export function scoreSummaryLine(c: ScoreCoverage | null, pinnedBand: string | null = null): string | null {
+  if (!c) return null;
+  if (!c.partial) return `Full score: all ${c.total} measures available.`;
+  const base = `Partial score: ${c.measured} of ${c.total} measures available`;
+  if (!(c.low > 0 || c.high < 100)) return `${base}.`;
+  return `${base}, so the full score could fall between ${c.low} and ${c.high}${c.pinned && pinnedBand ? `, inside ${pinnedBand} either way` : ""}.`;
 }
 
 /** True when the reachable range is narrower than the whole scale — worth drawing. */

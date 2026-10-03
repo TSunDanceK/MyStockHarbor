@@ -107,7 +107,9 @@ function filedFacts(rec, extra = []) {
     for (const e of rec.events) { days.add(e.announcedOn); days.add(e.periodEnd); }
     if (rec.nextPeriodEnd) days.add(rec.nextPeriodEnd);
   }
-  return [...days].flatMap((d) => [d, gb(d)]);
+  // BOTH SPELLINGS of a filed day: en-GB's "30 Sept 2026" and the cards'
+  // readableDate "30 Sep 2026" (#552 COWORK #96).
+  return [...days].flatMap((d) => [d, gb(d), gb(d).replace("Sept", "Sep")]);
 }
 
 const ISO_DAY = /\b\d{4}-\d{2}-\d{2}\b/;
@@ -137,6 +139,20 @@ function scan(text, rec, extraFacts = []) {
   return problems;
 }
 
+/**
+ * The card's window line: a third of a month, "Expected around now" or
+ * "Later than usual…", never a day; an estimate says "estimate" beside it.
+ */
+function windowProblems(card, w) {
+  if (!w) return ["no window line"];
+  const p = [];
+  if (!/^(Early|Mid|Late)-(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$|^Expected around now$|^Later than usual; no report filed yet$/.test(w.line)) p.push(`not a window: "${w.line}"`);
+  if (ISO_DAY.test(w.line) || GB_DAY.test(w.line)) p.push(`a single day: "${w.line}"`);
+  if (!card.includes(w.line)) p.push("the line is not on the card");
+  if (w.estimate && !/\(estimate\)/.test(card)) p.push("no word 'estimate' beside it");
+  return p;
+}
+
 // ── The renderers ─────────────────────────────────────────────────────────
 const snapshotFixture = JSON.parse(fs.readFileSync("data/sec/factset-fixture-TSLA.json", "utf8"));
 
@@ -157,10 +173,17 @@ async function runAll({ graph = g, S, C }) {
     const outlook = graph.mod.outlookFromRead(c.rec.symbol, read(c.rec), c.today);
     const tile = tileText(S, c.rec.symbol, graph.mod.compactOutlook(outlook));
     const card = cardText(C, graph.mod.outlookForEarningsCard(c.rec.symbol, read(c.rec), false, c.today));
+    // THE CARD'S WINDOW LINE IS THE ONE ESTIMATE IT MAY PRINT (#552 COWORK
+    // #96): "≈ Mid-November 2026 (estimate)", a third of a month and never a
+    // day. It is checked on its own (windowProblems) and taken out before the
+    // rest of the card is scanned, which must still carry no estimated date.
+    const cardOutlook = graph.mod.outlookForEarningsCard(c.rec.symbol, read(c.rec), false, c.today);
+    const line = cardOutlook?.window?.line ?? null;
     out.push({
-      c, outlook, tile, card,
+      c, outlook, tile, card, line,
       tileProblems: scan(tile.text, c.rec, tile.facts),
-      cardProblems: scan(card, c.rec),
+      cardProblems: scan(line ? card.split(line).join(" ") : card, c.rec),
+      windowProblems: windowProblems(card, cardOutlook?.window ?? null),
     });
   }
   return out;
@@ -173,7 +196,8 @@ console.log("\n1. NEITHER COMPONENT PRINTS AN ESTIMATED DATE OR MONTH");
 const shipped = await runAll({ S, C });
 for (const r of shipped) {
   check(`tile, ${r.c.name}: no estimated date`, r.tileProblems.length === 0, r.tileProblems.join("; "));
-  check(`card, ${r.c.name}: no estimated date`, r.cardProblems.length === 0, r.cardProblems.join("; "));
+  check(`card, ${r.c.name}: no estimated date outside its window line`, r.cardProblems.length === 0, r.cardProblems.join("; "));
+  check(`card, ${r.c.name}: the window line is a window, never a day, and says "estimate"`, r.windowProblems.length === 0, r.windowProblems.join("; "));
 }
 // NOT VACUOUS: the fixtures produced every forward answer the band can give.
 const kinds = new Set(shipped.map((r) => r.outlook.kind));
@@ -183,7 +207,10 @@ check("the cases cover expected, beyond-window and due",
 console.log("\n2. THE SEARCH, THE CARD AND THE TILE SAY THE SAME SENTENCE");
 for (const r of shipped) {
   const o = r.outlook;
-  check(`${r.c.name}: the card carries the search's headline`, r.card.includes(o.headline), o.headline);
+  // THE CARD LEADS WITH ITS WINDOW; the search's sentence is the tile's and
+  // the search's (#552 COWORK #96). A due filer's sentence moves into the
+  // card's detail, its dates read "30 Jun 2026".
+  check(`${r.c.name}: the card leads with the window line`, Boolean(r.line) && r.card.includes(r.line), r.line ?? "none");
   check(`${r.c.name}: the tile carries the search's headline`, r.tile.text.includes(o.headline));
   if (o.hedge) {
     check(`${r.c.name}: the hedge is on the card AND in the tile's small line`,
@@ -194,13 +221,13 @@ for (const r of shipped) {
 }
 {
   const dated = shipped[0];
-  check("the dated record reads as the band, in #513's words",
-    dated.outlook.kind === "expected" && /expected to report in roughly 22 to 30 days/.test(dated.card), dated.outlook.headline);
-  check("the monthly record, before its window, reads 'not expected to report in the next 30 days'",
-    /not expected to report in the next 30 days/.test(shipped[1].card) && /not expected to report in the next 30 days/.test(shipped[1].tile.text));
-  check("a due filer keeps its filed-fact wording (dueRowLabel), period end and all",
+  check("the dated record reads as the band in the search and the tile, in #513's words",
+    dated.outlook.kind === "expected" && /expected to report in roughly 22 to 30 days/.test(dated.tile.text), dated.outlook.headline);
+  check("the monthly record, before its window: the tile reads 'not expected…', the card its month-third window",
+    /not expected to report in the next 30 days/.test(shipped[1].tile.text) && /^(Early|Mid|Late)-/.test(shipped[1].line ?? ""), shipped[1].line ?? "none");
+  check("a due filer keeps its filed-fact wording (dueRowLabel) in the search, and in the card's detail with a readable date",
     shipped[3].outlook.kind === "due" && /^Period ended 2026-06-30 · results have not yet been filed/.test(shipped[3].outlook.headline) &&
-      shipped[3].card.includes(shipped[3].outlook.headline));
+      shipped[3].card.includes("Period ended 30 Jun 2026 · results have not yet been filed"));
 }
 
 console.log("\n3. REFUSALS ARE NAMED, AND FMP'S DATE NEVER STANDS IN");
@@ -285,8 +312,28 @@ const bit = (label, problems) =>
   });
   const r3 = await runAll({ graph: g3, S, C });
   bit("M3a a dated headline on the tile", r3[0].tileProblems);
-  bit("M3b a dated headline on the card", r3[0].cardProblems);
   g3.cleanup();
+}
+// M3b — THE CARD'S WINDOW AS A SINGLE DAY (#552 COWORK #96): the card leads
+// with its window line now, not the headline, so the day goes there.
+{
+  const g3b = await loadOutlookGraph({
+    patch: {
+      "lib/server/symbolOutlook.ts": once(
+        "return `${third}-${MONTH_NAMES[m - 1]} ${y}`;",
+        "return iso;",
+      ),
+    },
+  });
+  const r3b = await runAll({ graph: g3b, S, C });
+  bit("M3b the card's window line as an exact day", r3b[0].windowProblems);
+  g3b.cleanup();
+}
+// M3c — THE WORD "estimate" DROPPED from beside the window (#552 COWORK #96).
+{
+  const C3 = await loadCard((src) => once("<span className=\"nextEstimateWord\"> (estimate)</span>", "")(src));
+  const r3c = await runAll({ S, C: C3 });
+  bit("M3c the word 'estimate' dropped from the card", r3c[0].windowProblems);
 }
 
 // M4 — the FMP-with-no-record branch HIDES the card instead of refusing.

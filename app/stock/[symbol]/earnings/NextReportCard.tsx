@@ -1,46 +1,64 @@
 import type { SymbolOutlook } from "@/lib/server/symbolOutlook";
+import { readableIsoDates, reportWindowMark } from "@/lib/server/secEstimates";
+import { EstimatedValue } from "@/app/components/EstimatedValue";
 
 /**
  * "Next report" on /stock/[symbol]/earnings.
  *
- * ── THE 30-DAY BAND, NOT A DAY (owner decision, 2026-09-23) ────────────────
- * This card printed estimateNextReport's day ("<strong>2026-10-22</strong>,
- * results filed after the close if it follows its usual pattern"), its month
- * ("Expected in December 2026", AVAV) or, before the filer's record was read,
- * FMP's calendar date. All three are now one answer: the outlook
- * lib/server/symbolOutlook.ts composes for the /earnings-calendar search, word
- * for word, so the search, this card and the stock page's snapshot tile cannot
- * disagree about the same company.
+ * ── ONE HEADING, ONE LINE, THE DETAIL BEHIND A DROPDOWN (#552 COWORK #96) ──
+ * The card said "Next report" twice, then a bold negative ("ONDS is not
+ * expected to report in the next 30 days."), a two-line disclaimer and two
+ * grey lines of ISO dates. Now:
+ *   - one heading;
+ *   - one line: the estimated window ("≈ Mid-November 2026 (estimate)"), or
+ *     "Expected around now", or "Later than usual; no report filed yet",
+ *     composed by lib/server/symbolOutlook.ts from the filer's own record;
+ *   - "How this is estimated" in a native <details>, closed, in the server
+ *     HTML so it is indexed and works without JS: the hedge and the evidence.
+ * Dates read "13 Aug 2026", never ISO (readableIsoDates).
  *
- * PRESENTATIONAL ONLY. Every sentence arrives finished; nothing here formats a
- * date or chooses words, which is what lets scripts/check-next-report-band.mjs
- * render it and assert on the bytes a reader gets.
- *
- * The evidence lines are filed facts (the last results filing, the period the
- * next report would cover) and the filer's own median lag with its sample
- * size -- never a predicted date.
+ * The window is a third of a month, never a day: the filer's median lag added
+ * to the period end, as the estimator decides it. The search and the stock
+ * page's tile keep the outlook's own sentences.
  */
+export const NEXT_REPORT_DETAILS_SUMMARY = "How this is estimated";
+
 export default function NextReportCard({ outlook }: { outlook: SymbolOutlook }) {
+  const w = outlook.window;
+  const detail = [outlook.hedge, ...outlook.evidence, ...(w && outlook.kind === "due" ? [outlook.headline] : [])]
+    .filter((x): x is string => Boolean(x));
   return (
     <section className="card">
-      <div className="eyebrow">Next report</div>
-      <h3>Next expected report</h3>
-      {outlook.value ? (
+      <h3>Next report</h3>
+      {w ? (
+        <div className="metricValue" data-next-window="">
+          {w.estimate ? (
+            <>
+              <EstimatedValue text={w.line} est={reportWindowMark(outlook.hedge ?? "Estimated from this company's own filing history.")} />
+              <span className="nextEstimateWord"> (estimate)</span>
+            </>
+          ) : (
+            w.line
+          )}
+        </div>
+      ) : outlook.value ? (
         // A SHORT VALUE WHERE THE ANSWER HAS ONE ("Est. April", annual-only
         // filers, #535 COWORK #22 §5), styled like the page's other values.
         <div className="metricValue">{outlook.value}</div>
       ) : (
         <p style={{ marginBottom: 0 }}>
-          <strong>{outlook.headline}</strong>
+          <strong>{readableIsoDates(outlook.headline)}</strong>
         </p>
       )}
-      {outlook.hedge ? <p style={{ marginBottom: 0 }}>{outlook.hedge}</p> : null}
-      {outlook.evidence.length ? (
-        <ul className="earningsDataNote" style={{ marginBottom: 0 }}>
-          {outlook.evidence.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
+      {detail.length ? (
+        <details className="cardDetails">
+          <summary>{NEXT_REPORT_DETAILS_SUMMARY}</summary>
+          <ul className="earningsDataNote" style={{ marginBottom: 0 }}>
+            {detail.map((line) => (
+              <li key={line}>{readableIsoDates(line)}</li>
+            ))}
+          </ul>
+        </details>
       ) : null}
     </section>
   );
