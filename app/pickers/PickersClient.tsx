@@ -861,8 +861,10 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
   .picker-row-link:hover { color:#93c5fd !important; }
   .pickers-see-all { display:inline-flex !important;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease;white-space:nowrap; }
   .pickers-see-all:hover { background:rgba(255,255,255,0.07);color:#86efac !important;filter:none !important;transform:none !important; }
-  .pickers-section-footer { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:nowrap; }
-  .pickers-section-footer-left { display:flex;align-items:center;gap:8px;flex:1;min-width:0; }
+  /* 2026-10-03 (#553 COWORK #103): the empty .pickers-section-footer-left
+     spacer (left behind when #692 removed the earnings button) is gone, so the
+     footer right-aligns "See all" itself rather than via space-between. */
+  .pickers-section-footer { display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px;flex-wrap:nowrap; }
   .pattern-plays-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
   .pattern-play-card { min-width:0;overflow:hidden; }
   .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
@@ -1146,8 +1148,9 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
                             {/* The "Fetch Earnings" button that sat here was removed
                                 (#553 CODE-B #94 B11): it ran the FMP warm-earnings
                                 cron from the browser, which errors once FMP is off.
-                                The earnings rows refresh on the job's own schedule. */}
-                            <div className="pickers-section-footer-left" />
+                                The earnings rows refresh on the job's own schedule.
+                                Its empty left spacer went too (2026-10-03, #553
+                                COWORK #103); the footer's CSS right-aligns the link. */}
                             {seeAllHref ? <a href={seeAllHref} className="pickers-see-all">See all →</a> : null}
                           </div>
                         ) : null}

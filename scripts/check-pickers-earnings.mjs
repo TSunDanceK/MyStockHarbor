@@ -148,9 +148,12 @@ async function suite(mod, code) {
     /const earnings = applySecEarnings\(row, [^)]*\);\s*if \(earnings\) \{\s*for \(const field of SEC_EARNINGS_FIELDS\) \{\s*const v = earnings\[field\];\s*if \(v === null\) delete rec\[field\];/.test(code.page));
   ok("the page carries the basis to the grid", /entry\.epsBasis = earnings\.epsBasis/.test(code.page) && /entry\.payoutBasis = earnings\.payoutBasis/.test(code.page));
   ok("the grid takes a filings row's payout as filed", /if \(e\.fundamentalsFrom === "sec"\) return num\(e\.payoutRatio\);/.test(code.grid));
-  ok("P/E and EPS cells carry their basis", /basisCell\(numCell\(num\(e\.peRatio\)\), num\(e\.peRatio\), e\.epsBasis\)/.test(code.grid) && /basisCell\(numCell\(num\(e\.epsTtm\)\), num\(e\.epsTtm\), e\.epsBasis\)/.test(code.grid));
+  ok("P/E and EPS cells carry their basis", /basisCell\(numCell\(num\(e\.peRatio\)\), num\(e\.peRatio\), e\.epsBasis, inert\)/.test(code.grid) && /basisCell\(numCell\(num\(e\.epsTtm\)\), num\(e\.epsTtm\), e\.epsBasis, inert\)/.test(code.grid));
   ok("a withheld figure shows its reason on hover", /return basis \? <span className="muted" title=\{basis\}>–<\/span> : MUTED;/.test(code.grid));
-  ok("a fiscal-year figure is marked FY", /basis\.startsWith\("FY"\) \? <span className="basisFy">FY<\/span>/.test(code.grid));
+  // #553 COWORK #90: the marker moved into PickerCellMarks.tsx, BEFORE the
+  // figure; check-pickers-cell-why.mjs renders it and asserts the order.
+  ok("a fiscal-year figure is marked FY", /return <BasisCell value=\{value\} basis=\{basis\} inert=\{inert\} \/>;/.test(code.grid) &&
+    /\{fy \? \(\s*<TipMark text=\{fyMarkWords\(basis\)\}[^>]*className="basisFy"/.test(fs.readFileSync("app/components/PickerCellMarks.tsx", "utf8")));
   ok("the header explains the column", /title=\{col\.tip\}/.test(code.grid));
   // 5. The preview reads and writes its own copy (#553 COWORK #60), so the
   // production job's 05:35 rewrite cannot erase a seeded preview.
@@ -189,7 +192,7 @@ const MUTANTS = [
   ["the withheld dash has no tooltip", () => [src, { ...code, grid: mut("tip", code.grid, `return basis ? <span className="muted" title={basis}>–</span> : MUTED;`, `return MUTED;`) }]],
   ["the row drops A's refusals (raw per-ordinary FY EPS gets a P/E)", () => [mut("refusals", src, `    inputs: { shares: inputs.shares, refusals: inputs.refusals },\n    m: multipleInputs(set),`, `    inputs: { shares: inputs.shares, refusals: [] },\n    m: multipleInputs(set),`), code]],
   ["an unconverted currency keeps its EPS (and so a P/E)", () => [mut("usd", mut("usd-read", src, `const pe = usd ? ok(peRatio(inputs, price)) : null;`, `const pe = ok(peRatio(inputs, price));`), `      eps: null,\n      payout: null,`, `      eps: inputs.eps,\n      payout: null,`), code]],
-  ["no FY marker", () => [src, { ...code, grid: mut("fy", code.grid, `<span className="basisFy">FY</span>`, `null`) }]],
+  ["no FY marker", () => [src, { ...code, grid: mut("fy", code.grid, `return <BasisCell value={value} basis={basis} inert={inert} />;`, `return value;`) }]],
 ];
 
 let survived = 0;
