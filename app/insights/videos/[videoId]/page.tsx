@@ -188,7 +188,8 @@ export default async function VideoPage({ params }: Props) {
     // The Tiingo path says why an MA tile is empty with a price on screen (#553 COWORK #88).
     { label: "vs MA50", value: fmtPct(stockData.ma50Pct), note: stockData.ma50Note ?? null },
     { label: "vs MA200", value: fmtPct(stockData.ma200Pct), note: stockData.ma200Note ?? null },
-    ...(stockData.peRatio ? [{ label: "P/E (TTM)", value: stockData.peRatio.toFixed(1) }] : []),
+    // THE FY FALLBACK (#563 COWORK #50): labelled for the year, with its note on tap/hover.
+    ...(stockData.peRatio ? [{ label: stockData.peLabel ?? "P/E (TTM)", value: stockData.peRatio.toFixed(1), note: stockData.peNote ?? null }] : []),
     ...(stockData.trend ? [{ label: "Trend", value: stockData.trend }] : []),
   ] : null;
 
