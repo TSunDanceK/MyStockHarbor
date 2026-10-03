@@ -155,6 +155,28 @@ export function coverFromClasses(
 }
 
 /**
+ * THE CLASSES, KEPT AS AMBIGUOUS (#552 COWORK #86b, CODE-A #93). Where the
+ * newest cover states two or more classes and none of the routes below can
+ * total them, the reader was told the wrong thing: the set fell back to the
+ * extractor's old undivided dei count, so 21 Pickers names read "stale" or
+ * "no cover count" (SHOP, CME, LEN, HRL...). The per-class counts ARE on file;
+ * what is missing is a cited way to add them. Returned with `candidates`, the
+ * cover gets secValuation's own refusal, multi-class-share-count-is-ambiguous,
+ * exactly as an extractor-ambiguous cover does. No value is invented: `val` is
+ * null, and the classes are never summed here.
+ */
+export function unresolvedClassCover(
+  facts: ClassCoverFact[],
+  filing: { accession: string | null; filed: string | null },
+): CoverShares | null {
+  if (!facts.length) return null;
+  const asOf = facts.map((f) => f.asOf).sort().at(-1)!;
+  const onDate = facts.filter((f) => f.asOf === asOf);
+  if (new Set(onDate.map((f) => f.member)).size < 2) return null;
+  return { asOf, accession: filing.accession, filed: filing.filed, val: null, derived: "ambiguous", candidates: onDate.map((f) => f.val) };
+}
+
+/**
  * THE ONE CALL a companyfacts reader makes after extracting.
  *
  *   - A cited map entry: the per-class count from the newest 10-Q/10-K,
@@ -169,8 +191,22 @@ export function coverFromClasses(
  *     clears it.
  *
  * Any failure keeps the extractor's cover, so the page is never worse than
- * before.
+ * before -- EXCEPT where that cover is itself unusable (stale or absent) and
+ * the filing states two or more classes: then the classes are returned as
+ * ambiguous (unresolvedClassCover), so the reason the reader sees is the true
+ * one. A usable extractor cover is never replaced by the ambiguous form.
  */
+/** The extractor's cover where it is usable; else the classes as ambiguous, if the filing states two or more. */
+export function keepOrAmbiguous(
+  cover: CoverShares | null,
+  facts: ClassCoverFact[],
+  filing: { accession: string | null; filed: string | null },
+  today: string,
+): CoverShares | null {
+  if (coverIsUsable(cover, today, COVER_SHARES_MAX_AGE_DAYS)) return cover;
+  return unresolvedClassCover(facts, filing) ?? cover;
+}
+
 export async function withClassCover(
   symbol: string,
   cik: string,
@@ -217,18 +253,18 @@ export async function withClassCover(
       }
       console.warn(`[sec-cover-classes] ${symbol}: needs review — ${auto.why}`);
       await recordCoverReview(symbol, { why: auto.why, classes: auto.classes, accession });
-      return cover;
+      return keepOrAmbiguous(cover, facts, filing, today);
     }
 
     const rated = withFilingRates(entry, xml);
     if (!rated.ok) {
       console.warn(`[sec-cover-classes] ${symbol}: ${rated.why}`);
-      return cover;
+      return keepOrAmbiguous(cover, facts, filing, today);
     }
     const out = coverFromClasses(facts, rated.entry, filing);
     if (!out.ok) {
       console.warn(`[sec-cover-classes] ${symbol}: ${out.why}`);
-      return cover;
+      return keepOrAmbiguous(cover, facts, filing, today);
     }
     await clearCoverReview(symbol);
     return out.cover;
