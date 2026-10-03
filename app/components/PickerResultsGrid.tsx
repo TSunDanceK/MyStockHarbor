@@ -1652,10 +1652,16 @@ export default function PickerResultsGrid({
         .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
 
         .mRows { margin-top: 12px; display: grid; gap: 8px; }
+        /* 2026-10-03 (#553 COWORK #107/#109): was overflow: hidden, which clipped
+           a why-popover (or A's estimate note) opened on an expanded row's
+           bottom fields. The row's own background and border follow
+           border-radius without clipping; the only child that paints to the
+           edge is the toggle's tap highlight, so IT carries the corners
+           (13px = the row's 14px less its 1px border). */
         .mRow {
           border: 1px solid rgba(255,255,255,0.09); border-radius: 14px;
           background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-          overflow: hidden;
+          overflow: visible;
         }
         .mRow.open { border-color: rgba(96,165,250,0.4); }
         .mRowTop { display: flex; }
@@ -1664,7 +1670,9 @@ export default function PickerResultsGrid({
           flex: 1 1 auto; display: flex; width: 100%; align-items: center; gap: 10px;
           padding: 11px 12px; border: none; background: none;
           font-family: inherit; color: inherit; cursor: pointer; text-align: left;
+          border-radius: 13px;
         }
+        .mRow.open .mRowToggle { border-radius: 13px 13px 0 0; }
         .mRowToggle:active { background: rgba(255,255,255,0.03); }
         .mRowId { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
         .mRowId .dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }

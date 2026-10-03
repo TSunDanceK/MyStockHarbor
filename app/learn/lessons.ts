@@ -313,7 +313,9 @@ export const LESSONS: Lesson[] = [
         body: [
           "A stock trades at $150 with ATR(14) = $3. You buy a support bounce at $150.",
           "Stop: 2 ATR below entry = $144. Risk per share = $6.",
-          "If your account risks $200 per trade, position size = $200 ÷ $6 ≈ 33 shares. A calmer stock with ATR $1 would get a $2 stop and 100 shares — identical dollar risk, different share counts.",
+          // 2026-10-03 (#553 COWORK #107/#109): "≈" now means "estimate" site-wide
+          // (A's ESTIMATE_SIGN). Was: "... position size = $200 ÷ $6 ≈ 33 shares. ..."
+          "If your account risks $200 per trade, position size = $200 ÷ $6 = 33.3, so 33 shares. A calmer stock with ATR $1 would get a $2 stop and 100 shares — identical dollar risk, different share counts.",
           "Targets can also be framed in ATR: expecting a $9 move (3 ATR) in a couple of days from a stock that moves $3 a day is realistic; expecting it from a stock with ATR $0.80 is fantasy.",
         ],
       },

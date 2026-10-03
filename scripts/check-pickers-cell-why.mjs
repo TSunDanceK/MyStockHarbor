@@ -351,6 +351,15 @@ function noteRules(gridSource, M, words, mod = SEC_MOD) {
     /\.cellWhyTap \{ display: none; \}/.test(gridSource));
   want("#103 CSS: (hover: none) / (pointer: coarse) swaps hover for tap",
     /@media \(hover: none\), \(pointer: coarse\) \{\s*\.cellWhyHover \{ display: none; \}\s*\.cellWhyTap \{ display: inline; \}\s*\}/.test(gridSource));
+  // Static CSS: the phone row does not clip an open popover (#553 COWORK
+  // #107/#109); the toggle's tap highlight keeps the rounded corners instead.
+  const mRowCss = /\n\s*\.mRow \{([^}]*)\}/.exec(gridSource)?.[1] ?? "";
+  want("#109 CSS: .mRow is found", mRowCss.length > 0);
+  want("#109 CSS: .mRow does not clip (a why-popover under an expanded row's bottom fields stays visible)",
+    !/overflow(?:-[xy])?:\s*(hidden|clip|auto|scroll)/.test(mRowCss) && !/clip-path|contain:\s*(paint|strict|content)/.test(mRowCss), mRowCss.replace(/\s+/g, " ").trim());
+  const toggleCss = /\n\s*\.mRowToggle \{([^}]*)\}/.exec(gridSource)?.[1] ?? "";
+  want("#109 CSS: the toggle's highlight keeps the row's rounded corners", /border-radius:\s*13px;/.test(toggleCss) &&
+    /\.mRow\.open \.mRowToggle \{ border-radius: 13px 13px 0 0; \}/.test(gridSource), toggleCss.replace(/\s+/g, " ").trim());
   // Static CSS: the popover.
   const pop = /\.whyPop \{([^}]*)\}/.exec(gridSource)?.[1] ?? "";
   const decl = (prop) => new RegExp(`(?:^|;|\\s)${prop}:\\s*([^;]+);`).exec(pop)?.[1]?.trim();
@@ -499,6 +508,8 @@ for (const [label, from, to] of WORD_MUTANTS) {
     ["#103: the tap line is always shown", "grid", `.cellWhyTap { display: none; }`, `.cellWhyTap { display: inline; }`],
     ["#103: the popover centred again", "grid", `right: 0; left: auto; top: calc(100% + 6px); transform: translateX(var(--why-shift, 0px));`, `left: 50%; top: calc(100% + 6px); transform: translateX(-50%);`],
     ["#103: the popover wider than a small screen", "grid", `max-width: min(260px, calc(100vw - 16px));`, `max-width: min(260px, 120vw);`],
+    ["#109: the phone row clips the popover again", "grid", `          overflow: visible;\n        }\n        .mRow.open {`, `          overflow: hidden;\n        }\n        .mRow.open {`],
+    ["#109: the toggle's highlight loses the rounded corners", "grid", `          border-radius: 13px;\n        }\n        .mRow.open .mRowToggle`, `        }\n        .mRow.open .mRowToggle`],
     ["#103: the grid prints the one note again", "grid", `<CellWhyNote tab={activeTab} />`, `<p className="cellWhyNote">{CELL_WHY_TABLE_NOTE}</p>`],
   ];
   for (const [label, where, from, to] of NOTE_MUTANTS) {
