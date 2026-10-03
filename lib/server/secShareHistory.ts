@@ -97,7 +97,7 @@ const seriesOf = (periods: StoredPeriod[]): ShareHistoryPoint[] =>
     .sort((a, b) => a.date.localeCompare(b.date));
 
 /** The raw series, as before: the long history where the set carries it, else quarters, else years. */
-function rawSeries(set: StoredFactSet): { points: ShareHistoryPoint[]; basis: ShareHistory["basis"] } | null {
+export function rawShareSeries(set: StoredFactSet): { points: ShareHistoryPoint[]; basis: ShareHistory["basis"] } | null {
   // ── THE LONG HISTORY, WHERE THE SET CARRIES IT ────────────────────────────
   // Yearly points back as far as companyfacts goes UP TO THE FIRST STORED
   // QUARTER, then every stored quarter — the owner's shape (2026-09-22, #517),
@@ -189,7 +189,7 @@ export function threeYearChange(points: ShareHistoryPoint[]): NonNullable<ShareH
  */
 export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?: string | null } = {}): ShareHistory | null {
   if (!set) return null;
-  const raw = rawSeries(set);
+  const raw = rawShareSeries(set);
   if (!raw) return null;
   const fixed = correctShareSeries(raw.points, set.asr ?? [], opts.listedFrom ?? null);
   if (fixed.points.length < MIN_SHARE_POINTS) return null;
