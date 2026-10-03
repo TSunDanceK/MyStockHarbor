@@ -900,6 +900,23 @@ export type MultipleInputs = {
 };
 
 /**
+ * BANKS WHOSE REVENUE LINE IS FEE INCOME ONLY (#552 COWORK #86b, ruled COWORK
+ * #92): ZION showed P/S 16.79. Measured from the R2 archive (CODE-A #113): for
+ * each Pickers filer with SIC 6000-6299 that showed a P/S, the concept that
+ * fills revenue in its newest annual period. These 8 fill it with ASC 606
+ * "revenue from contracts with customers" while also tagging interest income,
+ * so the line is fee income and the net interest income is missing -- a P/S on
+ * it overstates the multiple several-fold. (NTRS even tags a total Revenues,
+ * which the chain ranks after 606.) Their revenue is treated as incomplete,
+ * so P/S and Pickers' Revenue cell take the existing refusal. Asset managers
+ * and exchanges filing 606 with no interest income (BLK, TROW, ICE, NDAQ, BEN,
+ * JEF) and banks whose revenue comes from a total concept keep theirs.
+ * INTERIM, 3 Oct 2026: retire it when the bank-revenue chain (COWORK #81/#83)
+ * reads the total, and re-measure then.
+ */
+export const BANK_REVENUE_IS_FEES_ONLY: ReadonlySet<string> = new Set(["AXP", "CFG", "CFR", "COF", "KEY", "NTRS", "SOFI", "ZION"]);
+
+/**
  * BOOK EQUITY FOR P/B (#552 COWORK #54, AVAV).
  *
  * Parent-only StockholdersEquity when tagged. Where it is not, the NCI-inclusive
@@ -930,7 +947,7 @@ export function multipleInputs(set: StoredFactSet): MultipleInputs {
   const periods = revenue?.basis === "four-quarters" ? set.quarters.slice(0, 4) : set.years.slice(0, 1);
   return {
     revenue,
-    revenueIncomplete: Boolean(revenue && periods.some((p) => revenueLineIncomplete(p))),
+    revenueIncomplete: Boolean(revenue && (periods.some((p) => revenueLineIncomplete(p)) || BANK_REVENUE_IS_FEES_ONLY.has(set.symbol))),
     ebitda: twelveMonthsOf(set, ["operatingIncome", "depreciationAndAmortization"]),
     ebitdaMissing: [
       ...(twelveMonthsOf(set, ["operatingIncome"]) ? [] : ["operating income"]),
