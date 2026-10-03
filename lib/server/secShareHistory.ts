@@ -58,6 +58,11 @@ export type ShareHistory = {
   gaps?: { from: string; to: string }[];
   /** Splits scaled away, from the filer's restated comparatives: points before `date` × `ratio`. */
   splits?: { date: string; ratio: number }[];
+  /**
+   * Single filings left out as mis-scaled (off by more than SHARE_SCALE_MAX_STEP
+   * from both neighbours). A hole they leave is not a gap: a figure was filed.
+   */
+  dropped?: string[];
   /** The series starts later than the data because of an unexplained step, or the listing. */
   startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" };
   /** The 3-year change, or null with the reason (rule 5). */
@@ -139,7 +144,7 @@ export function correctShareSeries(
   listedFrom: string | null = null,
   /** Period ends re-filed unchanged (StoredFactSet.asf): a split-like step after one is real issuance. */
   refiled: string[] = [],
-): { points: ShareHistoryPoint[]; splits: { date: string; ratio: number }[]; startedAfter?: ShareHistory["startedAfter"] } {
+): { points: ShareHistoryPoint[]; splits: { date: string; ratio: number }[]; dropped: string[]; startedAfter?: ShareHistory["startedAfter"] } {
   let pts = raw.map((p) => ({ ...p }));
   const splits: { date: string; ratio: number }[] = [];
   let startedAfter: ShareHistory["startedAfter"];
@@ -165,10 +170,13 @@ export function correctShareSeries(
   // The point is dropped and the series runs on. Only interior points: the
   // first and last have one neighbour, and a run of two or more is a segment.
   const off = (a: number, b: number) => a / b > SHARE_SCALE_MAX_STEP ? 1 : b / a > SHARE_SCALE_MAX_STEP ? -1 : 0;
+  const slips: string[] = [];
   pts = pts.filter((p, i, a) => {
     if (i === 0 || i === a.length - 1) return true;
     const up = off(p.shares, a[i - 1].shares);
-    return !(up !== 0 && up === off(p.shares, a[i + 1].shares) && off(a[i + 1].shares, a[i - 1].shares) === 0);
+    const slip = up !== 0 && up === off(p.shares, a[i + 1].shares) && off(a[i + 1].shares, a[i - 1].shares) === 0;
+    if (slip) slips.push(p.date);
+    return !slip;
   });
   for (let i = pts.length - 1; i >= 1; i--) {
     const r = pts[i].shares / pts[i - 1].shares;
@@ -203,14 +211,22 @@ export function correctShareSeries(
       break;
     }
   }
-  return { points: pts, splits: splits.reverse(), ...(startedAfter ? { startedAfter } : {}) };
+  // Only the slips inside the series as drawn: one before a later cut is moot.
+  const dropped = slips.filter((d) => pts.length > 0 && d > pts[0].date);
+  return { points: pts, splits: splits.reverse(), dropped, ...(startedAfter ? { startedAfter } : {}) };
 }
 
-/** Rule 4: the consecutive pairs more than SHARE_GAP_MAX_DAYS apart. */
-export function shareGaps(points: ShareHistoryPoint[]): { from: string; to: string }[] {
+/**
+ * Rule 4: the consecutive pairs more than SHARE_GAP_MAX_DAYS apart. A pair
+ * straddling a `dropped` filing is not a gap: the figure was filed, only
+ * mis-scaled, so "no filing data" would be false there.
+ */
+export function shareGaps(points: ShareHistoryPoint[], dropped: string[] = []): { from: string; to: string }[] {
   const out: { from: string; to: string }[] = [];
   for (let i = 1; i < points.length; i++) {
-    if (days(points[i - 1].date, points[i].date) > SHARE_GAP_MAX_DAYS) out.push({ from: points[i - 1].date, to: points[i].date });
+    const from = points[i - 1].date, to = points[i].date;
+    if (dropped.some((d) => d > from && d < to)) continue;
+    if (days(from, to) > SHARE_GAP_MAX_DAYS) out.push({ from, to });
   }
   return out;
 }
@@ -254,12 +270,13 @@ export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?
   if (!raw) return null;
   const fixed = correctShareSeries(raw.points, set.asr ?? [], opts.listedFrom ?? null, set.asf ?? []);
   if (fixed.points.length < MIN_SHARE_POINTS) return null;
-  const gaps = shareGaps(fixed.points);
+  const gaps = shareGaps(fixed.points, fixed.dropped);
   return {
     points: fixed.points,
     basis: raw.basis,
     ...(gaps.length ? { gaps } : {}),
     ...(fixed.splits.length ? { splits: fixed.splits } : {}),
+    ...(fixed.dropped.length ? { dropped: fixed.dropped } : {}),
     ...(fixed.startedAfter ? { startedAfter: fixed.startedAfter } : {}),
     threeYear: threeYearChange(fixed.points),
   };
