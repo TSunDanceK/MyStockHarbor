@@ -41,6 +41,8 @@ import Link from "next/link";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import StockSymbolPageClient, { type InitialQuote } from "./StockSymbolPageClient";
+import TiingoColdFill, { TiingoRequestedTouch } from "./TiingoColdFill";
+import { inCommittedUniverse, isColdTiingoCandidate, preparingWords } from "@/lib/server/tiingoColdState";
 
 type Props = {
   params: Promise<{ symbol: string }>;
@@ -66,13 +68,31 @@ type Props = {
 // changes the wording on the page, never whether it renders. A real
 // outage/circuit-breaker signal needs state across requests; see the note on
 // the no-data branch in the page component.
-type QuoteOutcome = "ok" | "no-data" | "unavailable";
+// "cold-tiingo" (#553 COWORK #121): a real ticker with no stored Tiingo data
+// yet, on the Tiingo path. The page shows "being prepared" and the cold fill
+// stores it within seconds (TiingoColdFill.tsx); no FMP call is made for it.
+type QuoteOutcome = "ok" | "no-data" | "unavailable" | "cold-tiingo";
 
 // toDashed AT THE VENDOR BOUNDARY, as in lib/stock-news-data.ts's fetchFmpQuote.
 // The route parameter is the reader's spelling; FMP's is the dash. Without it
 // /stock/BRK.B asked FMP for "BRK.B", got the empty row, and scored the page
 // "no-data" -- which reads as "this symbol has no data", the one outcome above
 // that is supposed to be legitimate. The displayed symbol is left alone.
+const EMPTY_QUOTE: InitialQuote = {
+  price: null,
+  date: null,
+  open: null,
+  previousClose: null,
+  change: null,
+  changePercentage: null,
+  dayLow: null,
+  dayHigh: null,
+  yearLow: null,
+  yearHigh: null,
+  volume: null,
+  avgVolume: null,
+};
+
 async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcome: QuoteOutcome }> {
   // STEP 4 (#553 COWORK #71), behind PRICE_PROVIDER_STOCK_PAGE, the same switch
   // as the client's /api/quote refresh, so the header never seeds from FMP and
@@ -81,6 +101,13 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
   if (priceProviderFor("STOCK_PAGE") === "tiingo") {
     const t = await readTiingoQuote(symbol);
     tiingoAsked = true;
+    // A COLD SYMBOL TAKES THE TIINGO COLD FILL, NOT THE FMP LEG (#553 COWORK
+    // #121 §6), so the path is proven while FMP is still there for everything
+    // the cold fill does not cover (a ticker off Tiingo's list, or one Tiingo
+    // answered empty for). The page then renders "being prepared".
+    if ((!t || t.price == null) && (await isColdTiingoCandidate(symbol))) {
+      return { quote: EMPTY_QUOTE, outcome: "cold-tiingo" };
+    }
     if (t && t.price != null) {
       return {
         quote: {
@@ -104,20 +131,7 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
     }
   }
   const apiKey = process.env.FMP_API_KEY;
-  const empty: InitialQuote = {
-    price: null,
-    date: null,
-    open: null,
-    previousClose: null,
-    change: null,
-    changePercentage: null,
-    dayLow: null,
-    dayHigh: null,
-    yearLow: null,
-    yearHigh: null,
-    volume: null,
-    avgVolume: null,
-  };
+  const empty: InitialQuote = EMPTY_QUOTE;
   // NO FMP KEY AFTER A TIINGO MISS IS "NO DATA" (#553 CODE-B #94 B12). Tiingo
   // was asked and had nothing, and there is no fallback left to ask, so an
   // unknown or delisted ticker reads "No data available" rather than
@@ -418,7 +432,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // History follows PRICE_PROVIDER_CHARTS exactly as the page body does (step 3,
   // #553 COWORK #71), so the title's MA/RSI read and the page agree.
   const [rawHistory, quoteResult] = await Promise.all([
-    historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page" })).then(
+    historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page" }), {
+      // A cold Tiingo symbol reads no FMP history: the page says "being
+      // prepared" and the cold fill stores its bars (#553 COWORK #121 §6).
+      skipFmp: () => isColdTiingoCandidate(upper),
+    }).then(
       (h) => h.points,
       () => [] as Point[]
     ),
@@ -436,10 +454,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const hasData = points.length > 0 || quote.price != null;
 
   const seed = computeIndicatorSeed(points, "", quote.price, quote.date);
-  const title = hasData ? buildSeoTitle(upper, seed) : `${upper} | No data available | MyStockHarbor`;
+  const preparing = !hasData && quoteResult.outcome === "cold-tiingo";
+  const title = hasData
+    ? buildSeoTitle(upper, seed)
+    : preparing
+      ? `${upper} | Price data being prepared | MyStockHarbor`
+      : `${upper} | No data available | MyStockHarbor`;
   const description = hasData
     ? buildSeoDescription(upper, seed)
-    : `We do not currently have market data for ${upper}.`;
+    : preparing
+      ? preparingWords(upper)
+      : `We do not currently have market data for ${upper}.`;
 
   return {
     title,
@@ -516,7 +541,9 @@ export default async function StockPage({ params }: Props) {
       // Tiingo bars + today's labelled partial bar, whole, or this FMP read
       // whole on a Tiingo miss (lib/server/tiingoHistory.ts). The chart, the
       // indicator seed and the 52-week range all read this one series.
-      historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page-meta" })).then(
+      historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page-meta" }), {
+        skipFmp: () => isColdTiingoCandidate(upper),
+      }).then(
         (h) => ({ points: h.points as Point[], failed: false, provider: h.provider }),
         () => ({ points: [] as Point[], failed: true, provider: "none" as const })
       ),
@@ -676,6 +703,27 @@ export default async function StockPage({ params }: Props) {
     // across requests (consecutive-failure count or a circuit breaker in Redis)
     // and is its own change; until it exists, a hard failure here would be a
     // guess with a 5xx attached.
+    // A REAL TICKER WE HOLD NO TIINGO DATA FOR YET (#553 COWORK #121/#122):
+    // "being prepared", and the cold fill stores it after hydration, then the
+    // page refreshes into the full analysis with the Tiingo credit. A crawler
+    // keeps this state (noindex) and the symbol is queued for the job.
+    if (quoteResult.outcome === "cold-tiingo") {
+      const name = companyName || snapshotCompanyName(upper) || "";
+      return (
+        <main style={{ maxWidth: 720, margin: "0 auto", padding: "48px 20px 96px" }}>
+          <h1 style={{ fontSize: "1.6rem", marginBottom: 12 }}>
+            {name ? `${name} (${upper})` : upper}
+          </h1>
+          <TiingoColdFill symbol={upper} token={mintQuoteToken()} />
+          <p style={{ opacity: 0.8, lineHeight: 1.6 }}>
+            Meanwhile, try <Link href="/">searching for another symbol</Link>, or browse the{" "}
+            <Link href="/pickers">stock screeners</Link>.
+          </p>
+          <RelatedStocks currentSymbol={upper} symbols={getRelatedSymbols(upper)} />
+        </main>
+      );
+    }
+
     const couldNotReach = quoteResult.outcome === "unavailable" || historyResult.failed;
 
     // No JSON-LD on this branch on purpose: emitting FinancialProduct data for
@@ -798,6 +846,12 @@ export default async function StockPage({ params }: Props) {
           }),
         }}
       />
+
+      {/* A symbol outside the committed universe, shown from Tiingo's bars:
+          a view keeps it in the requested set (#553 COWORK #121 §4). */}
+      {historyResult.provider === "tiingo" && !inCommittedUniverse(upper) ? (
+        <TiingoRequestedTouch symbol={upper} token={mintQuoteToken()} />
+      ) : null}
 
       <StockSymbolPageClient
         symbol={upper}

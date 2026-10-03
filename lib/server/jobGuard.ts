@@ -42,7 +42,7 @@ import { JOB_RUN_PREFIX, type JobKey } from "./jobRuns";
 export type GuardedJob = Extract<
   JobKey,
   "warm-stock-data" | "warm-fundamentals" | "warm-screener-fundamentals" | "warm-picker-universe" | "warm-pickers-sec" | "ipo-refresh"
-  | "tiingo-quotes" | "tiingo-eod"
+  | "tiingo-quotes" | "tiingo-eod" | "tiingo-supported" | "tiingo-cold-queue"
 >;
 
 /**
@@ -81,6 +81,12 @@ export const JOB_LIMITS: Record<GuardedJob, { perRun: number; perDay: number }> 
   // stopped the first widened night (#553 CODE-B #116); check-tiingo-step5
   // holds this to 2x / 3x the planned universe.
   "tiingo-eod": { perRun: 8_000, perDay: 12_000 },
+  // Supported list (#553 COWORK #121): ~12 a run (DEL, ~6 SADD chunks, marker,
+  // RENAME, EXPIRE, DEL, limiter 4), 1 run a day.
+  "tiingo-supported": { perRun: 60, perDay: 180 },
+  // Cold queue: 2 a run when empty (144 runs/day ~ 300); ~10 per queued symbol,
+  // at most 100 a run and 500 queued a day (~5,000).
+  "tiingo-cold-queue": { perRun: 2_000, perDay: 12_000 },
 };
 
 export const JOB_COMMANDS_PREFIX = "msh:jobs:commands:v1";
