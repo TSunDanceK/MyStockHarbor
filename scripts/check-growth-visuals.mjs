@@ -25,6 +25,10 @@
 //  12. "About these figures" (#56): a server-rendered <details> under one short
 //      intro line, holding the basis, the gross-margin sentence and the "*"
 //      footnote.
+//  13. READABILITY (#563 COWORK #60): bars that fill about two thirds of their
+//      slot (the profit bar as wide as the sales pair), and a thin, lighter line
+//      joining the margin dots on desktop too, under the dots, broken where a
+//      period has no margin. Quarters and years alike.
 //  10. CENTS-PER-DOLLAR WORDING BACK ON A MARGIN (owner ruling, #563 COWORK #55:
 //      margins in %, under the standard terms), or a missing gross-margin dot
 //      with no reason behind it.
@@ -259,6 +263,32 @@ const rules = {
       /<p>Sales, profit or loss and gross margin each quarter, as filed\. Tap a quarter for its figures\.<\/p>/.test(cardMarkup) &&
       !/class="gvMissing"[^>]*>\* Not filed/.test(cardMarkup);
   },
+  "wider bars: the sales pair and the profit bar fill about two thirds of each slot": ({ ondsChecked, markup, M }) => {
+    const css = (markup(ondsChecked).match(/<style>([\s\S]*?)<\/style>/) ?? [])[1] ?? "";
+    const inset = M.BAR_INSET_PCT, fill = 100 - 2 * inset;
+    return fill >= 60 && fill <= 70 &&
+      css.includes(`.gvBars { position: absolute; inset: 0 ${inset}% 0;`) &&
+      /\.gvBar \{ flex: 1 1 0; border-radius/.test(css) && !/\.gvBar \{[^}]*max-width/.test(css) &&
+      css.includes(`.gvPlBar { position: absolute; left: ${inset}%; right: ${inset}%; }`) &&
+      // On a phone a shown axis label spills into its hidden neighbour's slot, never clipped.
+      /@media \(max-width: 480px\) \{[\s\S]*\.gvTickAlt \{ visibility: hidden; \}[\s\S]*\.gvTick \{ overflow: visible; \}/.test(css);
+  },
+  "desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing": ({ ondsChecked, ondsCard, markup, M }) => {
+    const lineOf = (m, cls) => [...m.matchAll(new RegExp(`<svg class="${cls} gvMarginLine"[\\s\\S]*?<\\/svg>`, "g"))].map((x) => x[0]);
+    const pathsOk = (svg, periods) => {
+      const paths = [...svg.matchAll(/<path [^>]*>/g)].map((x) => x[0]);
+      return paths.length === M.marginSegments(periods).length && paths.every((p) =>
+        /stroke="#9085e9"/.test(p) && new RegExp(`stroke-width="${M.MARGIN_LINE.width}"`).test(p) &&
+        new RegExp(`stroke-opacity="${M.MARGIN_LINE.opacity}"`).test(p));
+    };
+    const q = markup(ondsChecked), y = markup({ quarters: null, years: ondsCard.years });
+    const desk = q.slice(q.indexOf('<div class="gvDesktopOnly">'));
+    const behind = desk.slice(desk.indexOf('<span class="gvBehind"'), desk.indexOf('<button'));
+    return M.MARGIN_LINE.width <= 2 && M.MARGIN_LINE.opacity < 1 &&
+      lineOf(behind, "gvDeskLine").length === 1 && pathsOk(lineOf(behind, "gvDeskLine")[0], ondsChecked.quarters.periods) &&
+      lineOf(q, "gvPhoneOnly").length === 1 && pathsOk(lineOf(q, "gvPhoneOnly")[0], ondsChecked.quarters.periods) &&
+      lineOf(y, "gvDeskLine").length === 1 && pathsOk(lineOf(y, "gvDeskLine")[0], ondsCard.years.periods);
+  },
   "the render carries the summary, the toggle and the legend words": ({ ondsChecked, render }) => {
     const t = render(ondsChecked);
     return t.includes(ondsChecked.quarters.summary) && /Quarters/.test(t) && /Years/.test(t) && /Profit \(\+\), above the line/.test(t) && /Loss \(−\), below/.test(t);
@@ -314,6 +344,13 @@ const mutants = [
   ["phone: the margin line over the sales chart, in the margin dot's purple, only below the breakpoint", "c", (s) => s.replace("          .gvDesktopOnly { display: none; }\n", "")],
   ["phone: the margin line over the sales chart, in the margin dot's purple, only below the breakpoint", "c", (s) => s.replace("        .gvPhoneOnly { display: none; }\n", "")],
   ["phone: the margin line over the sales chart, in the margin dot's purple, only below the breakpoint", "c", (s) => s.replace("{PCT_GUIDES.map((c) => <span key={c} style={{ bottom: `${c}%` }}>{c}%</span>)}", "")],
+  ["wider bars: the sales pair and the profit bar fill about two thirds of each slot", "c", (s) => s.replace("export const BAR_INSET_PCT = 16;", "export const BAR_INSET_PCT = 25;")],
+  ["wider bars: the sales pair and the profit bar fill about two thirds of each slot", "c", (s) => s.replace("          .gvTick { overflow: visible; }\n", "")],
+  ["wider bars: the sales pair and the profit bar fill about two thirds of each slot", "c", (s) => s.replace(".gvBar { flex: 1 1 0; border-radius", ".gvBar { flex: 1 1 0; max-width: 18px; border-radius")],
+  ["wider bars: the sales pair and the profit bar fill about two thirds of each slot", "c", (s) => s.replace(".gvPlBar { position: absolute; left: ${BAR_INSET_PCT}%; right: ${BAR_INSET_PCT}%; }", ".gvPlBar { position: absolute; left: 25%; right: 25%; }")],
+  ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace('        <MarginLine periods={s.periods} className="gvDeskLine" />\n', "")],
+  ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace("export const MARGIN_LINE = { width: 1.5, opacity: 0.7 } as const;", "export const MARGIN_LINE = { width: 1.5, opacity: 1 } as const;")],
+  ["desktop too: a thin, lighter line joins the margin dots, under them, broken where a margin is missing", "c", (s) => s.replace("strokeWidth={MARGIN_LINE.width}", "strokeWidth={3}")],
   ["phone: a period with no margin breaks the line", "c", (s) => s.replace("if (p.grossPct === null) { if (run.length) runs.push(run.join(\" \")); run = []; return; }", "if (p.grossPct === null) return;")],
   ["phone: a tap scrolls the panel into view; desktop never scrolls", "c", (s) => s.replace("if (typeof window === \"undefined\" || !window.matchMedia?.(PHONE).matches) return;", "if (typeof window === \"undefined\") return;")],
   ["phone: a tap scrolls the panel into view; desktop never scrolls", "c", (s) => s.replace("onClick={() => { setActive(i); onTap?.(); }}", "onClick={() => setActive(i)}")],
