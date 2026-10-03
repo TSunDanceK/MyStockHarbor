@@ -1326,6 +1326,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #86b: trace why V's cited share-classes row reads stale (read-only; SEC
+  // 3 requests, outside the job windows).
+  "write-v-class-trace": {
+    script: "scripts/v-class-cover-trace.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-pickers-marketcap-census": {
     script: "scripts/pickers-marketcap-census.mjs",
     args: () => [],
