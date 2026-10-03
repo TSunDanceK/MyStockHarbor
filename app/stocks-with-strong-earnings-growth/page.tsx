@@ -45,7 +45,7 @@ const config: PickerResultConfig = {
   explainerBody:
     "This page is designed to highlight companies with improving earnings patterns. It gives more weight to year-over-year EPS growth, revenue growth, recent positive EPS consistency and a history of beating expectations.",
   emptyText:
-    "No strong earnings-growth results are available yet. Use the Fetch Earnings button on the main Pickers page or wait for the earnings cache to warm.",
+    "No strong earnings-growth results are available right now. The list is built from reported earnings data and may stay empty until newer results have been processed.",
   tone: "green",
   kind: "preset",
   presetFilters: ["strongEarningsGrowth"],
