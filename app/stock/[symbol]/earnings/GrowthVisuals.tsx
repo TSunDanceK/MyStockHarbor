@@ -53,6 +53,8 @@ export const PHONE_MAX_PX = 480;
 const PHONE = `(max-width: ${PHONE_MAX_PX}px)`;
 
 const PLOT_H = 120;
+/** Each side of a period's slot left empty by its bars: 16% + 16% leaves the bars 68% (#563 COWORK #60). */
+export const BAR_INSET_PCT = 16;
 const MARGIN_H = 72;
 /** Room above the tallest sales bar for the newest bar's value label. */
 const SALES_HEADROOM = 0.84;
@@ -161,6 +163,23 @@ export function marginSegments(periods: GvPeriod[]): string[] {
   return runs;
 }
 
+/**
+ * THE LINE JOINING THE MARGIN DOTS (#563 COWORK #58 on phones, #60 on every
+ * screen): the dots' own purple, thin and a little lighter than the dots, so
+ * the dots stay the figures and the line only shows the trend. A period with
+ * no margin breaks it (marginSegments); its panel says why.
+ */
+export const MARGIN_LINE = { width: 1.5, opacity: 0.7 } as const;
+function MarginLine({ periods, className }: { periods: GvPeriod[]; className: string }) {
+  return (
+    <svg className={`${className} gvMarginLine`} viewBox={`0 0 ${periods.length} 100`} preserveAspectRatio="none" aria-hidden="true">
+      {marginSegments(periods).map((d) => (
+        <path key={d} d={d} fill="none" stroke={C.margin} strokeWidth={MARGIN_LINE.width} strokeOpacity={MARGIN_LINE.opacity} vectorEffect="non-scaling-stroke" />
+      ))}
+    </svg>
+  );
+}
+
 function SalesChart({ s, active, setActive, onTap, notReported }: ChartProps & { notReported: string }) {
   const max = Math.max(1, ...s.periods.flatMap((p) => [p.sales?.val ?? 0, p.lastYear?.val ?? 0])) / SALES_HEADROOM;
   const newest = s.periods.length - 1;
@@ -182,13 +201,7 @@ function SalesChart({ s, active, setActive, onTap, notReported }: ChartProps & {
           {PCT_GUIDES.map((c) => <span key={c} style={{ bottom: `${c}%` }}>{c}%</span>)}
         </span>
       }
-      overlay={
-        <svg className="gvPhoneOnly gvMarginLine" viewBox={`0 0 ${s.periods.length} 100`} preserveAspectRatio="none">
-          {marginSegments(s.periods).map((d) => (
-            <path key={d} d={d} fill="none" stroke={C.margin} strokeWidth={2} vectorEffect="non-scaling-stroke" />
-          ))}
-        </svg>
-      }
+      overlay={<MarginLine periods={s.periods} className="gvPhoneOnly" />}
       over={(p, i) => p.grossPct === null ? null : (
         <span className="gvPhoneOnly">
           <span className="gvDot" style={{ bottom: `calc(${Math.min(p.grossPct, 100)}% - 5px)`, background: C.margin }} />
@@ -264,12 +277,16 @@ function MarginChart({ s, active, setActive, onTap }: ChartProps) {
       title={`Gross margin per ${s.one}`}
       legend={<><i style={{ background: C.margin, borderRadius: 999 }} />Gross margin (% of sales)</>}
       periods={s.periods} active={active} setActive={setActive} onTap={onTap} height={MARGIN_H}
-      behind={PCT_GUIDES.map((c) => (
-        <span key={c} className="gvPctGuide" style={{ bottom: `${c}%`, background: C.rule }}>
-          {/* The top guide's label hangs below its line, inside the plot. */}
-          <span className="gvPctLabel" style={c === 100 ? { color: C.muted, top: 2 } : { color: C.muted, bottom: 2 }}>{c}%</span>
-        </span>
-      ))}
+      behind={<>
+        {PCT_GUIDES.map((c) => (
+          <span key={c} className="gvPctGuide" style={{ bottom: `${c}%`, background: C.rule }}>
+            {/* The top guide's label hangs below its line, inside the plot. */}
+            <span className="gvPctLabel" style={c === 100 ? { color: C.muted, top: 2 } : { color: C.muted, bottom: 2 }}>{c}%</span>
+          </span>
+        ))}
+        {/* UNDER the columns, so the dots (drawn in them) sit on top of it. */}
+        <MarginLine periods={s.periods} className="gvDeskLine" />
+      </>}
       render={(p, i) => {
         if (p.grossPct === null) return <span className="gvDotWrap" />;
         const at = Math.min(p.grossPct, 100);
@@ -400,12 +417,14 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
         .gvVal { position: absolute; left: -8px; right: -8px; text-align: center; font-size: 11px; font-weight: 800; color: ${C.ink}; white-space: nowrap; pointer-events: none; }
         .gvCol { position: relative; display: block; padding: 0; border: 0; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; }
         .gvCol:focus-visible { outline: 2px solid ${C.sales}; outline-offset: 1px; }
-        .gvBars { position: absolute; inset: 0 12% 0; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
-        .gvBar { flex: 1 1 0; max-width: 18px; border-radius: 4px 4px 0 0; min-height: 0; }
+        /* WIDER BARS, SMALLER GAPS (#563 COWORK #60): the pair fills about two
+           thirds of its period's slot at every width, and the profit bar matches it. */
+        .gvBars { position: absolute; inset: 0 ${BAR_INSET_PCT}% 0; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+        .gvBar { flex: 1 1 0; border-radius: 4px 4px 0 0; min-height: 0; }
         .gvNone { height: 2px; border-top: 2px dashed ${C.muted}; }
         .gvPl, .gvDotWrap { position: absolute; inset: 0; }
         .gvZero { position: absolute; left: 0; right: 0; height: 1px; }
-        .gvPlBar { position: absolute; left: 25%; right: 25%; max-width: 22px; margin: 0 auto; }
+        .gvPlBar { position: absolute; left: ${BAR_INSET_PCT}%; right: ${BAR_INSET_PCT}%; }
         .gvOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
         .gvMarginLine { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
         .gvOver { position: absolute; inset: 0; display: grid; gap: 2px; pointer-events: none; z-index: 2; }
@@ -432,6 +451,9 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
           .gvDesktopOnly { display: none; }
           .gvSalesWrap .gvGrid { margin-right: 32px; }
           .gvTickAlt { visibility: hidden; }
+          /* Every other label is hidden here, so a shown one may spill into its
+             empty neighbour's slot rather than be clipped to "Q4 '2" (#60). */
+          .gvTick { overflow: visible; }
           .gvDetail dl { grid-template-columns: 1fr; gap: 0 0; }
           .gvDetail dd { margin-bottom: 6px; }
         }

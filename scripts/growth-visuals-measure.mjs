@@ -7,7 +7,8 @@
 // the page's own <style> block, at 360 px and 1280 px, and reports for each:
 // whether every one-off tag is inside the viewport and is the topmost element
 // at its centre (not covered or clipped), which of the two margin layouts is
-// showing, and the card's height.
+// showing, how much of each period's slot its bars fill (#60: about two
+// thirds) with no bar crossing into the next slot, and the card's height.
 //
 // NOT IN check-all: it needs a browser, and the suite must run without one
 // (the same rule as layout-overlap-measure.mjs).
@@ -43,12 +44,26 @@ for (const width of [360, 1280]) {
     });
     const shown = (sel) => [...document.querySelectorAll(sel)].some((e) => getComputedStyle(e).display !== "none" && e.getBoundingClientRect().height > 0);
     const c = document.querySelector("section.card")?.getBoundingClientRect();
-    return { tags, phoneLine: shown(".gvPhoneOnly"), marginChart: shown(".gvDesktopOnly"), cardH: Math.round(c?.height ?? 0) };
+    // Bars per slot: the sales pair (.gvBars) and the profit bar, against their column.
+    const fills = [...document.querySelectorAll(".gvCol")].flatMap((col) => {
+      const w = col.getBoundingClientRect();
+      return [...col.querySelectorAll(".gvBars, .gvPlBar")].map((b) => {
+        const r = b.getBoundingClientRect();
+        return { fill: r.width / w.width, inside: r.left >= w.left - 0.5 && r.right <= w.right + 0.5 };
+      });
+    });
+    const fill = fills.length ? { min: Math.min(...fills.map((f) => f.fill)), max: Math.max(...fills.map((f) => f.fill)) } : null;
+    // Every shown axis label whole: its text no wider than what is painted.
+    const ticks = [...document.querySelectorAll(".gvTick")].filter((t) => getComputedStyle(t).visibility !== "hidden" && t.offsetParent);
+    const clipped = ticks.filter((t) => t.scrollWidth > t.clientWidth + 0.5 && getComputedStyle(t).overflow === "hidden").map((t) => t.textContent);
+    return { clipped, tags, phoneLine: shown(".gvPhoneOnly"), marginChart: shown(".gvDesktopOnly"), cardH: Math.round(c?.height ?? 0),
+      fill, barsInside: fills.every((f) => f.inside), deskLine: shown(".gvDeskLine") };
   });
   const tagsOk = r.tags.length > 0 && r.tags.every((t) => t.inView && t.onTop);
-  const layoutOk = width < 481 ? r.phoneLine && !r.marginChart : !r.phoneLine && r.marginChart;
+  const layoutOk = (width < 481 ? r.phoneLine && !r.marginChart : !r.phoneLine && r.marginChart && r.deskLine) &&
+    !!r.fill && r.fill.min >= 0.6 && r.fill.max <= 0.7 && r.barsInside && r.clipped.length === 0;
   if (!tagsOk || !layoutOk) failures++;
-  console.log(`${width}px: tags ${JSON.stringify(r.tags)} · margin line over sales ${r.phoneLine} · separate margin chart ${r.marginChart} · card ${r.cardH}px — ${tagsOk && layoutOk ? "OK" : "FAIL"}`);
+  console.log(`${width}px: tags ${JSON.stringify(r.tags)} · margin line over sales ${r.phoneLine} · separate margin chart ${r.marginChart} · bars fill ${r.fill ? `${Math.round(r.fill.min * 100)}–${Math.round(r.fill.max * 100)}%` : "none"} of a slot, inside it ${r.barsInside} · clipped labels ${JSON.stringify(r.clipped)} · card ${r.cardH}px — ${tagsOk && layoutOk ? "OK" : "FAIL"}`);
   await page.close();
 }
 await browser.close();
