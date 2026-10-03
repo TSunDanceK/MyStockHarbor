@@ -158,6 +158,18 @@ export function correctShareSeries(
     .filter((x): x is { e: string; k: number } => x.k !== null);
   const plusYears = (iso: string, n: number) => `${Number(iso.slice(0, 4)) + n}${iso.slice(4)}`;
   const nearStep = (e: string, at: string) => e >= plusYears(at, -SHARE_PROVEN_SPLIT_YEARS) && e <= plusYears(at, SHARE_PROVEN_SPLIT_YEARS);
+  // AN ISOLATED MIS-SCALED FILING (ONDS 2025-03-31 = 105,005 between
+  // 70.7M and 150.7M): one point more than SHARE_SCALE_MAX_STEP off BOTH
+  // neighbours, the same way, while the neighbours agree with each other, is a
+  // units slip on that one filing, not a segment, so rule 2 does not cut there.
+  // The point is dropped and the series runs on. Only interior points: the
+  // first and last have one neighbour, and a run of two or more is a segment.
+  const off = (a: number, b: number) => a / b > SHARE_SCALE_MAX_STEP ? 1 : b / a > SHARE_SCALE_MAX_STEP ? -1 : 0;
+  pts = pts.filter((p, i, a) => {
+    if (i === 0 || i === a.length - 1) return true;
+    const up = off(p.shares, a[i - 1].shares);
+    return !(up !== 0 && up === off(p.shares, a[i + 1].shares) && off(a[i + 1].shares, a[i - 1].shares) === 0);
+  });
   for (let i = pts.length - 1; i >= 1; i--) {
     const r = pts[i].shares / pts[i - 1].shares;
     if (!Number.isFinite(r) || r <= 0) continue;
@@ -169,8 +181,15 @@ export function correctShareSeries(
     // A SPLIT THE FILER PROVED, matched loosely; scaled by the proven ratio.
     const p = proven.find((x) => nearStep(x.e, pts[i].date) && Math.abs(r / x.k - 1) < SHARE_PROVEN_SPLIT_TOLERANCE)?.k;
     if (p !== undefined) {
-      for (let j = 0; j < i; j++) pts[j] = { ...pts[j], shares: pts[j].shares * p };
-      splits.push({ date: pts[i].date, ratio: p });
+      // ONLY THE POINTS STILL AT THE PRE-SPLIT SCALE. Stored quarters carry
+      // the newest filed value, so a quarter re-reported as a comparative after
+      // the split is already restated while a later one may not be yet (BKNG:
+      // Q2 2025 restated ×25, Q3 2025 as first filed). Scaling stops at the
+      // inverse step that marks an already-restated point.
+      let j0 = i - 1;
+      while (j0 > 0 && Math.abs((pts[j0].shares / pts[j0 - 1].shares) * p - 1) >= SHARE_PROVEN_SPLIT_TOLERANCE) j0--;
+      for (let j = j0; j < i; j++) pts[j] = { ...pts[j], shares: pts[j].shares * p };
+      if (!splits.some((x) => x.ratio === p && nearStep(x.date, pts[i].date))) splits.push({ date: pts[i].date, ratio: p });
       continue;
     }
     const k = splitRatioOf(r);
