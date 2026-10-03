@@ -59,8 +59,11 @@ async function handleGET(req: NextRequest) {
       // stock and earnings pages pass them; used only when newer than dei.
       citedCover: citedCoverFor(s),
     }));
-    console.log("[warm-pickers-sec]", JSON.stringify(result));
+    // durationMs (#553 COWORK #113/#114): the run's own time, beside its
+    // stoppedEarly ("time-budget" when WARM_PICKERS_SEC_BUDGET_MS ran out).
+    console.log("[warm-pickers-sec]", `durationMs=${result.durationMs ?? null}`, JSON.stringify(result));
     await recordJobRun("warm-pickers-sec", result.ok, {
+      durationMs: result.durationMs ?? null,
       targets: result.symbols,
       written: result.written,
       noFactSet: result.noFactSet,

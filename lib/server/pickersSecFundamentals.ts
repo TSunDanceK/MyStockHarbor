@@ -704,8 +704,34 @@ export type WarmPickersSecResult = {
   commands: number;
   /** Rows for symbols no longer targeted, removed after the write (COWORK #60). */
   pruned?: number;
-  /** Why the prune was skipped, when it was. */
+  /** Why the prune was skipped, when it was ("time-budget" after an early stop). */
   pruneSkipped?: string | null;
+  /** How long the run took, ms (#553 COWORK #113/#114), by the run's clock. */
+  durationMs?: number;
+};
+
+/**
+ * THE RUN'S TIME BUDGET (#553 COWORK #113/#114, 2026-10-03). The route's
+ * maxDuration is 300 s; ~2,600 sequential GETs can approach it, and a run
+ * killed by the platform writes neither its last batch nor the EXPIRE. So the
+ * job stops READING once this much time has passed, then still flushes what
+ * it has, sets the EXPIRE, and reports stoppedEarly: "time-budget". The prune
+ * is SKIPPED on an early stop (pruneSkipped: "time-budget"): it would compare
+ * the stored rows against the full target list, and nothing was wrong with the
+ * rows of the symbols this run simply did not reach.
+ */
+export const WARM_PICKERS_SEC_BUDGET_MS = 240_000;
+
+/** What warmPickersSec needs from Redis, so a check can stub it. */
+export type WarmPickersSecRedis = Pick<Redis, "hset" | "hkeys" | "hdel" | "expire">;
+
+/** Injectable for checks only; production passes nothing. */
+export type WarmPickersSecDeps = {
+  /** ms clock; default Date.now. */
+  clock?: () => number;
+  budgetMs?: number;
+  redis?: WarmPickersSecRedis | null;
+  readFactSet?: (symbol: string) => Promise<StoredFactSet | null>;
 };
 
 /** Below this share of the hash's current rows, today's targets look like a bad read. */
@@ -753,12 +779,22 @@ export async function warmPickersSec(
   // A callback, so this module stays free of JSON imports like secValuation.
   filerFor: (symbol: string) => FilerFacts,
   nowMs = Date.now(),
-  key = pickersSecKey()
+  key = pickersSecKey(),
+  deps: WarmPickersSecDeps = {}
 ): Promise<WarmPickersSecResult> {
+  const clock = deps.clock ?? Date.now;
+  const budgetMs = deps.budgetMs ?? WARM_PICKERS_SEC_BUDGET_MS;
+  const store: WarmPickersSecRedis | null = deps.redis !== undefined ? deps.redis : redis;
+  const readSet = deps.readFactSet ?? readFactSet;
+  const startedAt = clock();
   const result: WarmPickersSecResult = {
     ok: true, symbols: 0, written: 0, noFactSet: 0, stoppedEarly: null, commands: 0,
   };
-  if (!redis) return { ...result, ok: false, stoppedEarly: "no-redis" };
+  const done = () => {
+    result.durationMs = Math.max(0, clock() - startedAt);
+    return result;
+  };
+  if (!store) return { ...done(), ok: false, stoppedEarly: "no-redis" };
 
   const list = [...new Set(symbols.filter(Boolean))].slice(0, MAX_SYMBOLS_PER_RUN);
   result.symbols = list.length;
@@ -769,7 +805,7 @@ export async function warmPickersSec(
     const n = Object.keys(batch).length;
     if (!n) return true;
     try {
-      await redis.hset(key, batch);
+      await store.hset(key, batch);
       result.commands++;
       result.written += n;
       batch = {};
@@ -782,26 +818,35 @@ export async function warmPickersSec(
   };
 
   for (const symbol of list) {
-    const set = await readFactSet(symbol).catch(() => null);
+    // THE TIME BUDGET: no new read once it is spent; what was read is kept.
+    if (clock() - startedAt >= budgetMs) {
+      result.stoppedEarly = "time-budget";
+      break;
+    }
+    const set = await readSet(symbol).catch(() => null);
     result.commands++;
     if (!set) {
       result.noFactSet++;
       continue;
     }
     batch[symbol] = buildSecPickerRow(set, today, filerFor(symbol), nowMs);
-    if (Object.keys(batch).length >= 100 && !(await flush())) return result;
+    if (Object.keys(batch).length >= 100 && !(await flush())) return done();
   }
-  if (!(await flush())) return result;
+  if (!(await flush())) return done();
 
   // Drop the rows of symbols no longer targeted: 1 HKEYS + 1 multi-key HDEL.
-  try {
-    const stored = ((await redis.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
+  // Not after an early stop: the unread symbols' rows are not stale.
+  if (result.stoppedEarly === "time-budget") {
+    result.pruneSkipped = "time-budget";
+    console.warn("[warm-pickers-sec] prune skipped: time-budget");
+  } else try {
+    const stored = ((await store.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
     result.commands++;
     const { drop, skipped } = rowsToPrune(stored, list);
     result.pruneSkipped = skipped;
     if (skipped) console.warn(`[warm-pickers-sec] prune skipped: ${skipped}`);
     if (drop.length) {
-      result.pruned = await redis.hdel(PICKERS_SEC_KEY, ...drop);
+      result.pruned = await store.hdel(PICKERS_SEC_KEY, ...drop);
       result.commands++;
     } else {
       result.pruned = 0;
@@ -812,10 +857,10 @@ export async function warmPickersSec(
   }
 
   try {
-    await redis.expire(key, PICKERS_SEC_TTL_SECONDS);
+    await store.expire(key, PICKERS_SEC_TTL_SECONDS);
     result.commands++;
   } catch {
     // The rows carry their own `at`; a missed EXPIRE is not a correctness issue.
   }
-  return result;
+  return done();
 }
