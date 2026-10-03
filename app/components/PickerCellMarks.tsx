@@ -13,7 +13,28 @@
 // scripts/check-pickers-cell-why.mjs can RENDER these and assert on the markup
 // a reader gets, rather than grepping the grid's JSX.
 import { useState, type ReactNode } from "react";
-import { FY_MARK, fyMarkWords, isFiscalYearBasis } from "@/lib/pickerCellWhy";
+import {
+  CELL_WHY_ACTION,
+  CELL_WHY_TABLE_NOTE_BY_TAB,
+  FY_MARK,
+  fyMarkWords,
+  isFiscalYearBasis,
+  whyPopShift,
+  type PickerNoteTab,
+} from "@/lib/pickerCellWhy";
+
+/**
+ * Pull an open popover back inside the viewport (#553 COWORK #103). The CSS
+ * already fits it to a 360 px screen; this callback ref measures it once it is
+ * on screen and sets --why-shift for whatever still pokes past an edge. A ref
+ * callback, not an effect: it runs only in the browser, after the tap.
+ */
+function clampPop(el: HTMLSpanElement | null) {
+  if (!el || typeof window === "undefined") return;
+  const r = el.getBoundingClientRect();
+  const shift = whyPopShift(r.left, r.right, document.documentElement.clientWidth || window.innerWidth);
+  if (shift) el.style.setProperty("--why-shift", `${shift}px`);
+}
 
 /**
  * A mark that explains itself. `inert`: inside the phone row's toggle button,
@@ -52,7 +73,7 @@ export function TipMark({
       onBlur={() => setOpen(false)}
     >
       {children}
-      {open ? <span className="whyPop" role="tooltip">{text}</span> : null}
+      {open ? <span className="whyPop" role="tooltip" ref={clampPop}>{text}</span> : null}
     </span>
   );
 }
@@ -89,5 +110,21 @@ export function BasisCell({ value, basis, inert }: { value: ReactNode; basis: st
       </span>
       <span className="basisVal">{value}</span>
     </span>
+  );
+}
+
+/**
+ * THE LINE UNDER THE TABLE (#553 COWORK #103): the tab's own note, then the
+ * action. Both "Hover for why." and "Tap for why." are rendered, and the
+ * grid's CSS shows one by (hover: none) / (pointer: coarse) -- the server and
+ * the browser render the same markup, so there is no hydration mismatch.
+ */
+export function CellWhyNote({ tab }: { tab: PickerNoteTab }) {
+  return (
+    <p className="cellWhyNote">
+      {CELL_WHY_TABLE_NOTE_BY_TAB[tab]}{" "}
+      <span className="cellWhyHover">{CELL_WHY_ACTION.hover}</span>
+      <span className="cellWhyTap">{CELL_WHY_ACTION.tap}</span>
+    </p>
   );
 }
