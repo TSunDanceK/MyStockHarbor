@@ -204,8 +204,11 @@ function useIsNarrowScreen() {
 
 export default function PlaysClient({
   initialPayload,
+  marketDataCredit,
 }: {
   initialPayload?: PlaysPayload | null;
+  /** The linked Tiingo credit, rendered by the server page when the scan is on Tiingo (#553 B4). */
+  marketDataCredit?: React.ReactNode;
 } = {}) {
   const initial = normalizeInitialPayload(initialPayload);
 
@@ -357,6 +360,7 @@ export default function PlaysClient({
         <>
           Current scan · Universe {universeSize == null ? "Live" : universeSize}
           {dynamicUniverseCount == null ? "" : ` (+${dynamicUniverseCount} dynamic)`} · Macro {macroCount} · Weekly {weeklyCount} · Daily {dailyCount} · Short-term {shortTermCount} · Top score {topScore == null ? "—" : topScore} · Updated {formatDate(updatedAt)}
+          {marketDataCredit ? <> · {marketDataCredit}</> : null}
         </>
       }
     >

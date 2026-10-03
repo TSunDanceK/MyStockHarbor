@@ -26,6 +26,7 @@ import { getDailyHistoryBulk } from "./historyCache";
 import { priceProviderFor, type PriceProvider } from "./marketData/provider";
 import { tiingoPickerHistory, type PickerHistoryStats } from "./marketData/pickerHistory";
 import type { EodBar } from "./marketData/types";
+import { computePerfFromBars, perfRowRefused, type PerfRow } from "../pickerPerf";
 import { recordRedisRead, flushRedisReadMeter } from "./redisBandwidth";
 import {
   chunkByBytes,
@@ -278,6 +279,12 @@ type SignalRecord = {
   // from the preset mega-cap list or the day's market activity. Carried on the
   // payload so the All Stocks / pickers UI can badge or group these later.
   isPopularSearch?: boolean;
+  // THE PERFORMANCE TAB FROM STORED BARS (#553 CODE-B #94 B6): 1W/1M/6M/YTD/1Y
+  // computed here, at build time, from this symbol's Tiingo bars, with the
+  // close they run to and a true reason for each refused period
+  // (lib/pickerPerf.ts). Only with PRICE_PROVIDER_PICKERS=tiingo; absent on
+  // the FMP path, where the page keeps stockDataCache's figures.
+  perf?: PerfRow;
 };
 
 type TickerEarningsGrowthItem = {
@@ -3425,6 +3432,9 @@ async function buildPickersPayload(
   // registering only the fallback symbols would be a truncated list, which
   // reconcileToList refuses by design.
   let historyBySymbol: ReadonlyMap<string, Point[]>;
+  // B6: which symbols' series are Tiingo's, so the Performance tab is computed
+  // from Tiingo bars only. Null off the Tiingo path (no `perf` is written).
+  let perfFromTiingo: ReadonlySet<string> | null = null;
   if (opts.historyOverride && dryRun) {
     historyBySymbol = opts.historyOverride;
     lastHistoryStats = null;
@@ -3435,6 +3445,7 @@ async function buildPickersPayload(
         : null,
     });
     historyBySymbol = got.bySymbol;
+    perfFromTiingo = got.fromTiingo;
     lastHistoryStats = { provider: "tiingo", universe: universe.length, ...got.stats };
   } else {
     historyBySymbol = await getDailyHistoryBulk(universe, {
@@ -3494,6 +3505,13 @@ async function buildPickersPayload(
           }
 
           const earningsRows = earningsBySymbol.get(symbol) ?? [];
+          // B6: on the Tiingo path, a series the FMP fallback supplied gets no
+          // returns (they would be FMP figures); it says why instead.
+          const perf: PerfRow | undefined = perfFromTiingo
+            ? perfFromTiingo.has(symbol)
+              ? computePerfFromBars(pts)
+              : perfRowRefused("noBars")
+            : undefined;
 
           const dynamicName = isDynamicUniverse(symbol);
           const popularName = isPopularSearch(symbol);
@@ -4093,6 +4111,7 @@ async function buildPickersPayload(
               : undefined,
             isDynamicUniverse: dynamicName,
             isPopularSearch: popularName,
+            perf,
           });
         } catch {
           failedSymbolCount++;

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import PlaysClient, { type PlaysPayload } from "./PlaysClient";
 import { getPlaysData } from "@/lib/server/playsBuilder";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
 // ISR rather than force-dynamic. `force-dynamic` shipped Cache-Control:
 // no-store, so every visit and every crawl paid a full serverless render of
@@ -88,7 +90,16 @@ export default async function PlaysPage() {
           __html: JSON.stringify(jsonLd),
         }}
       />
-      <PlaysClient initialPayload={initialPayload} />
+      {/* THE LINKED CREDIT (#553 B4): the scan reads stored Tiingo bars when the
+          Pickers surface is on Tiingo, so the page carries the same credit. */}
+      <PlaysClient
+        initialPayload={initialPayload}
+        marketDataCredit={
+          priceProviderFor("PICKERS") === "tiingo" ? (
+            <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+          ) : null
+        }
+      />
     </>
   );
 }

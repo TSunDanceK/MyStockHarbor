@@ -212,8 +212,11 @@ function useIsNarrowScreen() {
 
 export default function BullFlagsClient({
   initialPayload,
+  marketDataCredit,
 }: {
   initialPayload?: PlaysPayload | null;
+  /** The linked Tiingo credit, rendered by the server page when the scan is on Tiingo (#553 B4). */
+  marketDataCredit?: React.ReactNode;
 } = {}) {
   const initial = normalizeInitialPayload(initialPayload);
 
@@ -362,6 +365,7 @@ export default function BullFlagsClient({
         <>
           Current scan · Universe {universeSize == null ? "Live" : universeSize}
           {dynamicUniverseCount == null ? "" : ` (+${dynamicUniverseCount} dynamic)`} · Macro {macroCount} · Weekly {weeklyCount} · Daily {dailyCount} · Top score {topScore == null ? "—" : topScore} · Updated {formatDate(updatedAt)}
+          {marketDataCredit ? <> · {marketDataCredit}</> : null}
         </>
       }
     >
