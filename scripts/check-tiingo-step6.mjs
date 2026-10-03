@@ -220,12 +220,14 @@ const rules = {
     /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /import \{ ReasonedValue \} from "@\/app\/components\/EstimatedValue";/.test(src) &&
     /<ReasonedValue text=\{value\} reason=\{note\} \/>/.test(src) && !/title=\{note/.test(src),
   // 9. FY P/E fallback (#563 COWORK #50): only on "not on file", A's gate, labelled
+  //    with A's one copy of the FY wording (#552 COWORK #117), never a local one
   "videos: the P/E falls back to the full year only when twelve months aren't on file": (src) =>
-    /import \{ fyPeRatio, marketCap, peRatio, REFUSAL_WORDS, type EpsBasis \} from "@\/lib\/server\/secValuation";/.test(src) &&
+    /import \{ fyPeLabel, fyPeNote, fyPeRatio, marketCap, peRatio, REFUSAL_WORDS \} from "@\/lib\/server\/secValuation";/.test(src) &&
     /ttmPe && !ttmPe\.ok && ttmPe\.why === "no-twelve-month-eps" \? fyPeRatio\(valuation, surface\.price\) : null/.test(src) &&
     /const pe = usesFy \? fyPe : ttmPe;/.test(src) &&
-    /eps\.fiscalYear \? `P\/E \(FY\$\{eps\.fiscalYear\}\)` : "P\/E \(FY\)"/.test(src) &&
-    /peNote: usesFy && valuation\?\.fyEps \? fyPeNote\(valuation\.fyEps\) : null/.test(src),
+    /peLabel: usesFy && valuation\?\.fyEps \? fyPeLabel\(valuation\.fyEps\) : null/.test(src) &&
+    /peNote: usesFy && valuation\?\.fyEps \? fyPeNote\(valuation\.fyEps\) : null/.test(src) &&
+    !/function fyPe(Label|Note)\(|P\/E \(FY|aren't on file/.test(src),
   "video page: the P/E tile takes the FY label and note": (src) =>
     /label: stockData\.peLabel \?\? "P\/E \(TTM\)"/.test(src) && /note: stockData\.peNote \?\? null/.test(src),
   // 8. B13 (#563 COWORK #46): the news price never falls back to Yahoo
@@ -306,6 +308,8 @@ const mutants = [
   ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace('ttmPe.why === "no-twelve-month-eps" ? fyPeRatio', "true ? fyPeRatio")],
   ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace("const pe = usesFy ? fyPe : ttmPe;", "const pe = ttmPe;")],
   ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace("peNote: usesFy && valuation?.fyEps ? fyPeNote(valuation.fyEps) : null", "peNote: null")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace("? fyPeLabel(valuation.fyEps) : null", "? null : null")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => `${s}\nexport function fyPeNote(e: unknown) { return "local copy"; }\n`],
   ["video page: the P/E tile takes the FY label and note", (s) => s.replace('label: stockData.peLabel ?? "P/E (TTM)"', 'label: "P/E (TTM)"')],
   ["news data: the quote is FMP only, with no Yahoo quote left", (s) => s.replace("  return fetchFmpQuote(symbol);\n}", "  return (await fetchFmpQuote(symbol)) ?? fetchYahooQuote(symbol);\n}")],
   ["news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close", (s) => s.replace("<div style={heroMetricValueStyle}>{formatMoney(quote.price)}</div>", "<div style={heroMetricValueStyle}>{formatMoney(quote?.price ?? lastClose)}</div>")],

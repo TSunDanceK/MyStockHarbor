@@ -65,7 +65,7 @@ const RULES = {
   "view.annual carries each year's net income as filed":
     ({ view }) => view.annual.length > 0 && view.annual.every((a) => a.netIncome && "val" in a.netIncome) && view.annual.some((a) => typeof a.netIncome.val === "number"),
   "the card draws the profit chart, with Q1 FY2026's one-off tag":
-    ({ markup, text }) => /Profit \(\+\), above the line/.test(text) && /class="gvOneOff"[^>]*>\s*one-off/.test(markup),
+    ({ markup, text }) => /Profit \(\+\), above the line/.test(text) && /class="gvOneOff"[^>]*>(?:<span[^>]*>)*one-off</.test(markup),
   "the fiscal years are checked too: a year with a large non-operating gain carries its note (#552 COWORK #117)":
     ({ yearView }) => { const fy = yearView.annual.at(-1)?.label; return Boolean(fy && /large non-operating gain/.test(yearView.oneOffs[fy] ?? "")); },
   "a period the rule cannot run on is listed unchecked, never \"checked, none\"":
