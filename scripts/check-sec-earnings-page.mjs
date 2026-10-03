@@ -805,6 +805,8 @@ console.log("\n7i. the meta description describes the page, not the price chart"
       [
         "const cleanSymbol = (s) => String(s).toUpperCase();",
         "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
+        // B3: the title reads through historyForSurface; gate unset, it is the FMP read.
+        "const historyForSurface = async (_surface, _symbol, fmp) => ({ points: await fmp(), provider: \"fmp\" });",
         "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
         // A SEED WITH A TREND IN IT. The point is that one is AVAILABLE and
         // still does not reach the description — a stub returning null would
@@ -929,6 +931,7 @@ console.log("\n7i. the meta description describes the page, not the price chart"
     [
       "const cleanSymbol = (s) => String(s).toUpperCase();",
       "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
+      "const historyForSurface = async (_surface, _symbol, fmp) => ({ points: await fmp(), provider: \"fmp\" });",
       "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
       "const computeIndicatorSeed = () => ({ lastClose: 200, trend: \"Uptrend\" });",
       // Same stub and same reason as runMeta above — the mutation harness lifts
