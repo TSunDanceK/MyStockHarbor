@@ -10,6 +10,7 @@ import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
+import KeyLevelsCard from "./KeyLevelsCard";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
 import type { ProfileDividend } from "@/lib/server/secDividend";
 import { isRetiredBlock } from "./retiredBlocks";
@@ -1103,6 +1104,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                   <StockTickerJump currentSymbol={symbol} />
                 </div>
               </div>
+
+              {/* Key levels (#563 COWORK #64): C's card, from the bars already held. */}
+              <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
 
               {/* Earnings snapshot — sidebar */}
               <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} />
