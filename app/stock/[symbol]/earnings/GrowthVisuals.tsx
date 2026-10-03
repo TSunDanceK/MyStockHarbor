@@ -275,12 +275,15 @@ function ProfitChart({ s, active, setActive, onTap }: ChartProps) {
           </span>
         );
       }}
-      over={(p) => {
+      over={(p, i) => {
         if (!p.oneOff) return null;
         const v = p.profit?.val ?? null;
         // The note opens on tap, keyboard and hover: A's ReasonedValue (#563 COWORK #51/#52).
+        // THE OUTER COLUMNS' TAGS HUG THEIR OUTER EDGE: centred, the newest
+        // column's tag overran a 360 px screen by a pixel (#563 COWORK #56 rule).
+        const edge = i === 0 ? " gvOneOffStart" : i === s.periods.length - 1 ? " gvOneOffEnd" : "";
         return (
-          <span className="gvOneOff" style={{ top: v !== null && v >= 0 ? `calc(${zero - (v / span) * 100}% - 16px)` : `calc(${zero}% - 16px)` }}>
+          <span className={`gvOneOff${edge}`} style={{ top: v !== null && v >= 0 ? `calc(${zero - (v / span) * 100}% - 16px)` : `calc(${zero}% - 16px)` }}>
             <ReasonedValue text="one-off" reason={p.oneOff} />
           </span>
         );
@@ -460,6 +463,8 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
         .gvMarginLine { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
         .gvOver { position: absolute; inset: 0; display: grid; gap: 2px; pointer-events: none; z-index: 2; }
         .gvOverCol { position: relative; }
+        .gvOneOffStart { left: 0 !important; transform: none !important; }
+        .gvOneOffEnd { left: auto !important; right: 0; transform: none !important; }
         .gvOneOff { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 800; color: ${C.ink}; white-space: nowrap; pointer-events: auto; z-index: 2; background: rgba(11,18,32,0.85); border-radius: 4px; padding: 0 3px; }
         .gvPill { left: 50%; right: auto; transform: translateX(-50%); background: rgba(11,18,32,0.85); border-radius: 4px; padding: 0 3px; }
         .gvPhoneOnly { display: none; }

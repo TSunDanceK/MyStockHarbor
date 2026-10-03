@@ -167,6 +167,10 @@ const rules = {
     /class="gvMissing gvNoMargin">No margin chart: Oracle&#x27;s filings don&#x27;t state a cost of sales line/.test(neitherMarkup),
   "operating losses throughout: no chart, and the losses said": ({ lossNoGross }) =>
     lossNoGross.quarters.margin.kind === "none" && /operating margin was a loss in each of these quarters/.test(lossNoGross.quarters.margin.note),
+  "the newest column's one-off tag hugs the right edge, so a phone shows it whole": ({ q1, markup }) => {
+    const m = markup(q1);
+    return /class="gvOneOff gvOneOffEnd"/.test(m) && /\.gvOneOffEnd \{ left: auto !important; right: 0; transform: none !important; \}/.test(m);
+  },
   "the filer's name from its SEC name": ({ M }) =>
     M.filerName("ORACLE CORP") === "Oracle" && M.filerName("BANK OF AMERICA CORP /DE/") === "Bank of America" &&
     M.filerName("Ondas Holdings Inc.") === "Ondas" && M.filerName(null) === null && M.filerName("Apple Inc.") === "Apple",
@@ -260,10 +264,11 @@ const rules = {
   // ON TAP, NOT HOVER ONLY (#563 COWORK #51/#52): A's ReasonedValue, and outside
   // every column <button> (a button inside a button can't take the tap).
   "marker: the tag renders": ({ q1, markup }) => {
-    const m = markup(q1), at = m.indexOf('class="gvOneOff"');
+    // The class may carry an edge modifier (gvOneOffStart / gvOneOffEnd) on the outer columns.
+    const m = markup(q1), at = m.search(/class="gvOneOff( gvOneOff(Start|End))?"/);
     const tag = at < 0 ? "" : m.slice(at, m.indexOf("one-off</span>", at) + 7);
     const before = m.slice(0, at);
-    return (m.match(/class="gvOneOff"/g) ?? []).length === 1 &&
+    return (m.match(/class="gvOneOff( gvOneOff(Start|End))?"/g) ?? []).length === 1 &&
       /role="button"/.test(tag) && /tabindex="0"/.test(tag) &&
       /title="Includes a large non-operating gain; see the filing\."/.test(tag) && tag.endsWith("one-off") &&
       before.lastIndexOf("<button") < before.lastIndexOf("</button>") && !/<abbr class="gvOneOff"/.test(m);
@@ -447,6 +452,7 @@ const mutants = [
   ["neither margin: no chart and no empty grid, the reason instead", "c", (s) => s.replace('overlay={kind === "none" ? null : <MarginLine', "overlay={<MarginLine")],
   ["operating losses throughout: no chart, and the losses said", "b", (s) => s.replace("  if (opDrawn > 0) {", "  if (opFiled > 0) {")],
   ["operating losses throughout: no chart, and the losses said", "b", (s) => s.replace("  if (m < 0) return { pct: null, text: null, note: `An operating loss: ${marginWords(m, \"operating\", false)}` };\n", "")],
+  ["the newest column's one-off tag hugs the right edge, so a phone shows it whole", "c", (s) => s.replace('i === s.periods.length - 1 ? " gvOneOffEnd"', 'false ? " gvOneOffEnd"')],
   ["the filer's name from its SEC name", "b", (s) => s.replace('.replace(/\\s*\\/[A-Z]{2,}\\/?\\s*$/i, "")', "")],
   ["the render carries the summary, the toggle and the legend words", "c", (s) => s.replace("Profit (+), above the line", "Profit")],
 ];
