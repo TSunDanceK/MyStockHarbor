@@ -539,6 +539,8 @@ export async function getStockPageSecFacts(symbol: string): Promise<{
             // A NOTE'S TICKER on a shared CIK (BIPI): refused, not valued (#552 COWORK #48).
             nonEquity: nonEquityListingOf(clean),
             citedCover: citedCoverFor(clean),
+            // THE BANK GATE for estimates (secEstimates, #552 COWORK #113).
+            sic: registrantFor(clean)?.sic ?? null,
           })
         : null,
       shareHistory: buildShareHistory(set),

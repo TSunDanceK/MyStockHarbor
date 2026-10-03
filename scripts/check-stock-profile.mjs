@@ -49,6 +49,8 @@ async function loadComposer(mutate = (s) => s) {
     // may declare too.
     grabConst("lib/server/annualOnly.ts", "ANNUAL_ONLY_QUARTER_MONTHS"),
     grabFunction(fs.readFileSync("lib/server/annualOnly.ts", "utf8"), "annualOnlyForm"),
+    // THE ESTIMATE LAYER, which secValuation reads (#552 COWORK #112).
+    strip("lib/server/secEstimates.ts"),
     strip("lib/server/secValuation.ts"),
     strip("lib/server/secShareHistory.ts"),
     read("lib/symbolSpellings.mjs").replace(/^export /gm, ""),
@@ -255,16 +257,23 @@ console.log("\n8. the valuation multiples are the filings', one period basis eac
   check("...and CATCHES four non-consecutive quarters summed as a year",
     mixed.multipleInputs(fixture("AZN")).revenue?.basis === "four-quarters");
 
-  // NOT APPROXIMATED: one missing debt line refuses EV/EBITDA outright.
+  // NOT APPROXIMATED unless the surface renders the estimate mark (#552
+  // COWORK #112): by default one missing debt line refuses EV/EBITDA outright.
+  // An opted-in surface gets the back-tested M2 estimate for short-term debt
+  // ONLY; long-term debt or cash missing is still refused (check-estimates).
   const noDebt = { ...mi, balanceSheet: { ...mi.balanceSheet, shortTermDebt: null } };
   check("a missing debt line refuses EV/EBITDA rather than assuming zero",
     M.valuationMultiples(inputs, noDebt, 200).evEbitda?.why === "enterprise-value-input-missing");
+  const noLtd = { ...mi, balanceSheet: { ...mi.balanceSheet, longTermDebt: null } };
+  check("...and, opted in, a missing long-term debt line is still refused",
+    M.valuationMultiples(inputs, noLtd, 200, { withEstimates: true }).evEbitda?.why === "enterprise-value-input-missing");
   const zeroed = await loadComposer(once(
-    "if (!bs || bs.shortTermDebt === null || bs.longTermDebt === null || bs.cash === null || !m.ebitda) {",
-    "if (!bs || !m.ebitda) {"
+    "evAny.val !== null && evAny.est && !opts.withEstimates",
+    "false"
   ));
-  check("...and CATCHES a missing debt line treated as zero",
-    zeroed.valuationMultiples(inputs, noDebt, 200).evEbitda?.ok !== false);
+  check("...and CATCHES a missing debt line treated as zero on a surface that has not opted in",
+    // A non-bank SIC, so only the opt-in gate stands between the fixture and an estimate.
+    zeroed.valuationMultiples({ ...inputs, sic: "3826" }, noDebt, 200).evEbitda?.ok !== false);
 
   check("non-positive equity refuses P/B",
     M.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity: -5 } }, 200).pb?.why === "equity-is-zero-or-negative");
