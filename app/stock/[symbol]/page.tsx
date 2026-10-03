@@ -75,8 +75,10 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
   // STEP 4 (#553 COWORK #71), behind PRICE_PROVIDER_STOCK_PAGE, the same switch
   // as the client's /api/quote refresh, so the header never seeds from FMP and
   // then flips to Tiingo on hydration. A Tiingo miss keeps the FMP path below.
+  let tiingoAsked = false;
   if (priceProviderFor("STOCK_PAGE") === "tiingo") {
     const t = await readTiingoQuote(symbol);
+    tiingoAsked = true;
     if (t && t.price != null) {
       return {
         quote: {
@@ -114,7 +116,12 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
     volume: null,
     avgVolume: null,
   };
-  if (!apiKey) return { quote: empty, outcome: "unavailable" };
+  // NO FMP KEY AFTER A TIINGO MISS IS "NO DATA" (#553 CODE-B #94 B12). Tiingo
+  // was asked and had nothing, and there is no fallback left to ask, so an
+  // unknown or delisted ticker reads "No data available" rather than
+  // "temporarily unavailable". "unavailable" stays for the FMP path failing
+  // below, and for no provider having been asked at all.
+  if (!apiKey) return { quote: empty, outcome: tiingoAsked ? "no-data" : "unavailable" };
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
       toDashed(symbol)
