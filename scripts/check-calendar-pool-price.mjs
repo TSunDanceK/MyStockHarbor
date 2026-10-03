@@ -80,6 +80,17 @@ console.log("\n4. a cap dash beside a price says why, once (#552 COWORK #117)");
   const pageRule = (s) => /\{dayData\.items\.some\(capRefusedBesidePrice\) \? \(\s*<p[^>]*>\s*\{CAP_REFUSED_NOTE\}/.test(s);
   check("the calendar prints CAP_REFUSED_NOTE under the grid only when such a row is on the page", pageRule(PAGE));
   check("MUTATION: the note printed on every day → caught", !pageRule(once(PAGE, "{dayData.items.some(capRefusedBesidePrice) ? (", "{true ? (")));
+  // HEDGED (#552 COWORK #119): the row carries no reason for its dash, so the
+  // note may not state the filings as THE cause, nor promise the stock page
+  // explains it. Read from the source text, comments stripped.
+  const noteRule = (s) => {
+    const m = s.match(/CAP_REFUSED_NOTE =\s*((?:"[^"]*"\s*\+?\s*)+);/);
+    const text = m ? [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]).join("") : "";
+    return /isn't available/.test(text) && /for some\b/.test(text) && !/means the company's own filings/.test(text) && !/says why/.test(text);
+  };
+  check("the cap note is hedged: not available here, and for SOME the filings don't support one", noteRule(COV));
+  check("MUTATION: the note states the filings as the cause → caught",
+    !noteRule(once(COV, "means a market cap isn't available for that company here; ", "means the company's own filings don't support a market cap here; ")));
 }
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);

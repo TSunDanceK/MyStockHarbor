@@ -178,7 +178,7 @@ export function summaryLine(periods: GvPeriod[], growth: (Pct | undefined)[], on
  */
 /** Said in place of a profit figure the one-off rule could not check (#552 COWORK #117). */
 export const PROFIT_UNCHECKED =
-  "Not drawn: the filing doesn’t give enough to check this period for one-off gains or losses.";
+  "Not drawn: this period can’t be checked for one-off gains or losses (the filing reports no revenue, operating income or non-operating figure for it).";
 
 export function buildGrowthVisuals(
   view: SecEarningsView,

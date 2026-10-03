@@ -12,7 +12,7 @@
 //
 //   node scripts/check-growth-wiring.mjs
 import fs from "node:fs";
-import { loadCards, html, visibleText, React } from "./lib/render-cards.mjs";
+import { loadCards, growthVisualsUnit, html, visibleText, React } from "./lib/render-cards.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -21,7 +21,9 @@ const check = (name, ok, detail = "") => {
 };
 const once = (src, from, to) => {
   const n = src.split(from).length - 1;
-  if (n !== 1) throw new Error(`mutation anchor matched ${n} times: ${from.slice(0, 60)}`);
+  // A missing or doubled anchor is a broken mutant, never a caught one
+  // (#552 COWORK #119): it is flagged here and failed below.
+  if (n !== 1) throw Object.assign(new Error(`mutation anchor matched ${n} times: ${from.slice(0, 60)}`), { anchor: true });
   return src.replace(from, to);
 };
 
@@ -80,22 +82,26 @@ const real = await measure(await loadCards());
 for (const [name, rule] of Object.entries(RULES)) check(name, rule(real));
 
 const MUTANTS = [
-  ["the card passes no notes (profit chart stays off)", (s) => once(s, "buildGrowthVisuals(view, { oneOffs: view.oneOffs })", "buildGrowthVisuals(view)")],
-  ["the notes computed for the latest period only", (s) => once(s, "q.map((p) => [periodLabel(p), largeNonOperatingNote(", "q.slice(0, 1).map((p) => [periodLabel(p), largeNonOperatingNote(")],
+  ["the card passes no notes (profit chart stays off)", (s) => once(s, "buildGrowthVisuals(view, { oneOffs: view.oneOffs, unchecked:", "buildGrowthVisuals(view, { unchecked:")],
+  ["the notes computed for the latest period only", (s) => once(s, "oneOffRows.map(([label, rows]) => [label, largeNonOperatingNote(rows)]", "oneOffRows.slice(0, 1).map(([label, rows]) => [label, largeNonOperatingNote(rows)]")],
   ["annual net income dropped", (s) => once(s, "      ...marginsOf(p),\n      netIncome: view(p, \"netIncome\", \"Net income\"),\n", "      ...marginsOf(p),\n")],
   ["the rule treated as always runnable", (s) => once(s, "  return nonOp !== null && op !== null && rev !== null && rev > 0;\n}", "  return true || (nonOp !== null && op !== null && rev !== null && rev > 0);\n}")],
   ["the fiscal years left out of the check", (s) => once(s, "[...q, ...set.years].map((p) => [periodLabel(p)", "[...q].map((p) => [periodLabel(p)")],
-  ["the builder ignores the unchecked list", (s) => once(s, "const unchecked = new Set(opts.unchecked ?? []);", "const unchecked = new Set();")],
+  ["the builder ignores the unchecked list", (s) => s + once(growthVisualsUnit(), "const unchecked = new Set(opts.unchecked ?? []);", "const unchecked = new Set();")],
   ["the card drops the unchecked list", (s) => once(s, "{ oneOffs: view.oneOffs, unchecked: view.oneOffUnchecked }", "{ oneOffs: view.oneOffs }")],
   ["the table no longer collapsed", (s) => once(s, "<SeeAllTheNumbers>", "<>").replace("</SeeAllTheNumbers>", "</>")],
 ];
 for (const [label, mutate] of MUTANTS) {
   let caught;
+  let why = "";
   try {
     const m = await measure(await loadCards(mutate));
     caught = Object.values(RULES).some((r) => !r(m));
-  } catch { caught = true; }
-  check(`MUTATION: ${label} → caught`, caught);
+  } catch (e) {
+    caught = !e?.anchor;
+    if (e?.anchor) why = e.message;
+  }
+  check(`MUTATION: ${label} → caught`, caught, why);
 }
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
