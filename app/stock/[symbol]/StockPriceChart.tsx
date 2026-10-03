@@ -5,6 +5,9 @@ import React, { useMemo } from "react";
 type Point = {
   date: string;
   close: number;
+  // Tiingo's newest point when it is today's partial bar (step 3, #553 COWORK
+  // #57 §2): "today so far (IEX), hh:mm ET".
+  label?: string;
 };
 
 type Props = {
@@ -13,7 +16,14 @@ type Props = {
   ma50: (number | null)[];
   ma200: (number | null)[];
   height?: number;
+  // The linked "Market data from Tiingo.com", rendered by page.tsx when the
+  // series is Tiingo's (step 3, COWORK #71/#92).
+  credit?: React.ReactNode;
 };
+
+// SAY WHY, NOT A BARE "—" (#553 COWORK #88, applied to B's chart MAs): a young
+// listing (KRMN, ~410 stored bars) cannot have an MA200 over the shown window.
+export const SHORT_HISTORY_NOTE = "Not enough price history stored yet";
 
 function fmtMoney(v: number) {
   if (!Number.isFinite(v)) return "—";
@@ -37,6 +47,7 @@ export default function StockPriceChart({
   ma50,
   ma200,
   height = 360,
+  credit,
 }: Props) {
   const width = 920;
   const padL = 38;
@@ -112,6 +123,8 @@ export default function StockPriceChart({
 
   const ma50Path = useMemo(() => pathFrom(series.map((p) => p.ma50)), [series, x, y]);
   const ma200Path = useMemo(() => pathFrom(series.map((p) => p.ma200)), [series, x, y]);
+  const has50 = series.some((p) => typeof p.ma50 === "number");
+  const has200 = series.some((p) => typeof p.ma200 === "number");
 
   const yTicks = useMemo(() => {
     if (!hasData) return [];
@@ -278,6 +291,8 @@ export default function StockPriceChart({
       >
         <div>
           {symbol} • {series[0].date} → {series[series.length - 1].date}
+          {series[series.length - 1].label ? ` (${series[series.length - 1].label})` : null}
+          {credit ? <> · {credit}</> : null}
         </div>
 
         <div
@@ -301,7 +316,10 @@ export default function StockPriceChart({
             Price
           </span>
 
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, opacity: has50 ? 1 : 0.55 }}
+            title={has50 ? undefined : SHORT_HISTORY_NOTE}
+          >
             <span
               style={{
                 width: 10,
@@ -311,10 +329,13 @@ export default function StockPriceChart({
                 display: "inline-block",
               }}
             />
-            MA50
+            MA50{has50 ? null : " (n/a)"}
           </span>
 
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, opacity: has200 ? 1 : 0.55 }}
+            title={has200 ? undefined : SHORT_HISTORY_NOTE}
+          >
             <span
               style={{
                 width: 10,
@@ -324,7 +345,7 @@ export default function StockPriceChart({
                 display: "inline-block",
               }}
             />
-            MA200
+            MA200{has200 ? null : " (n/a)"}
           </span>
         </div>
       </div>
