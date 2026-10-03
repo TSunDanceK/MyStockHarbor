@@ -139,7 +139,7 @@ jobs:
           node-version: 24
       - run: npm ci
       - name: "#86b bank P/S concepts + M1 back-test (reads only)"
-        run: node scripts/a86b-archive-probe.mjs
+        run: node --max-old-space-size=6144 scripts/a86b-archive-probe.mjs
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}

@@ -35,14 +35,12 @@ async function redis(cmd) {
 const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
 const reg = (s) => REG[s] ?? REG[s.replace(".", "-")] ?? REG[s.replace("-", ".")];
 const r2 = r2Client();
-const factsCache = new Map();
-async function facts(cik) {
+// NOT CACHED: 964 filers' decoded facts exhausted a 4 GB heap on the first run.
+// `keep` filters rows as they are decoded, so only what is used is held.
+async function facts(cik, keep = () => true) {
   const c = String(cik).padStart(10, "0");
-  if (factsCache.has(c)) return factsCache.get(c);
   const buf = await r2.get(`facts/${c}.ndjson.br`); r2reads++;
-  const out = buf ? decodeFacts(buf).rows : null;
-  factsCache.set(c, out);
-  return out;
+  return buf ? decodeFacts(buf).rows.filter(keep) : null;
 }
 // ROW_COLUMNS: taxonomy concept unit start end val accn fy fp form filed frame
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -94,8 +92,7 @@ const lastPoint = new Map(); // symbol -> newest single-class point (for cells f
 for (const s of indexSyms) {
   const r = reg(s);
   if (!r?.cik) { none++; continue; }
-  const f = await facts(r.cik);
-  const pts = (f ?? []).filter((x) => x[0] === "dei" && x[1] === "EntityCommonStockSharesOutstanding" && x[2] === "shares" && x[4] && x[5] > 0);
+  const pts = (await facts(r.cik, (x) => x[0] === "dei" && x[1] === "EntityCommonStockSharesOutstanding" && x[2] === "shares" && x[4] && x[5] > 0)) ?? [];
   if (!pts.length) { none++; continue; }
   const byEnd = new Map();
   for (const x of pts) { if (!byEnd.has(x[4])) byEnd.set(x[4], new Set()); byEnd.get(x[4]).add(x[5]); }
