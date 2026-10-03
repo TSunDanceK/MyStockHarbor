@@ -13,7 +13,8 @@
 // computes; lib/ta/priceLadder.ts places and words them. No fetch, no Redis.
 import type { CSSProperties, ReactNode } from "react";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
-import { dateWords } from "@/lib/ta/keyLevels";
+import { dateWords, shortDate } from "@/lib/ta/keyLevels";
+import { macdSeries, runWords, type MacdSeries } from "@/lib/ta/macdSeries";
 import {
   LABEL_OFFSET, LADDER_HEIGHT, LEADER_GAP, MACD_WORDS, ladderMarks, macdState, rsiPct, rsiZone,
   type LadderItem, type LadderMark, type LadderSide,
@@ -62,7 +63,43 @@ export type LevelsSignalsProps = {
    * for up to 8 markers). The page passes none yet; the measure script does.
    */
   extraLevels?: LadderItem[];
+  /** The bars the page's MACD reading comes from, for the mini chart (#563 COWORK #74). */
+  macdBars?: readonly { date: string; close: number }[];
 };
+
+/** The histogram's colours: the pill's own "above" blue and "below" amber. */
+export const MACD_COLOUR = { above: "rgb(56,189,248)", below: "rgb(245,158,11)", line: "rgba(241,245,249,0.85)", signal: "rgba(203,213,225,0.7)" } as const;
+export const MACD_CHART_H = 64;
+
+/**
+ * THE MINI MACD CHART (#563 COWORK #74): the histogram (MACD − signal) as bars
+ * either side of a zero line, MACD solid and signal dotted over them, and a
+ * marker on the session they last crossed. One shared vertical scale: the
+ * largest absolute value of the three in the window.
+ */
+function MacdChart({ s }: { s: MacdSeries }) {
+  const n = s.points.length;
+  const r = Math.max(1e-9, ...s.points.flatMap((p) => [Math.abs(p.hist), Math.abs(p.macd), Math.abs(p.signal)]));
+  const y = (v: number) => ((r - v) / (2 * r)) * 100;
+  const path = (k: "macd" | "signal") => s.points.map((p, i) => `${i ? "L" : "M"}${i + 0.5} ${y(p[k])}`).join(" ");
+  const cross = s.crossIndex;
+  return (
+    <div className="lsMacdChart" style={{ position: "relative", height: MACD_CHART_H, marginTop: 8 }}>
+      <svg viewBox={`0 0 ${n} 100`} preserveAspectRatio="none" width="100%" height={MACD_CHART_H} aria-hidden="true" style={{ display: "block", overflow: "visible" }}>
+        <line x1={0} x2={n} y1={50} y2={50} stroke="rgba(255,255,255,0.18)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        {s.points.map((p, i) => (
+          <rect key={p.date} className="lsMacdBar" data-sign={p.hist >= 0 ? "above" : "below"} x={i + 0.2} width={0.6}
+            y={Math.min(50, y(p.hist))} height={Math.max(0.5, Math.abs(y(p.hist) - 50))} fill={p.hist >= 0 ? MACD_COLOUR.above : MACD_COLOUR.below} fillOpacity={0.55} />
+        ))}
+        <path className="lsMacdLineMacd" d={path("macd")} fill="none" stroke={MACD_COLOUR.line} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+        <path className="lsMacdLineSignal" d={path("signal")} fill="none" stroke={MACD_COLOUR.signal} strokeWidth={1.25} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+      </svg>
+      {cross !== null ? (
+        <span className="lsMacdCross" style={{ position: "absolute", top: 0, bottom: 0, left: `${((cross + 0.5) / n) * 100}%`, width: 0, borderLeft: "1px dashed rgba(241,245,249,0.55)" }} />
+      ) : null}
+    </div>
+  );
+}
 
 function asOfWords(asOf: string | null, partial?: boolean): string {
   if (!asOf) return "";
@@ -86,6 +123,7 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
     p.zone == null ? `Macro support: ${p.zoneMissing}` : null,
   ].filter((x): x is string => !!x);
   const macd = p.macdTone ? macdState(p.macdTone) : null;
+  const ms = p.macdBars && macd ? macdSeries(p.macdBars) : null;
   return (
     <div className="lsGrid">
       <div className="lsPart">
@@ -162,7 +200,17 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
             <span style={{ fontWeight: 800, color: C.value }}><ReasonedValue text="MACD" reason={`${NOTES.macd} ${when}`} /></span>
             {macd ? <span className="lsMacdPill" data-state={macd} style={pillStyle(macd)}>{macd === "above" ? "▲ " : macd === "below" ? "▼ " : "– "}{MACD_WORDS[macd].pill}</span> : <span>—</span>}
           </div>
-          <div className="lsMacdLine" style={{ marginTop: 6, fontSize: 13, color: C.muted }}>{macd ? MACD_WORDS[macd].line : "Momentum unavailable: not enough daily prices on file."}</div>
+          {ms ? <MacdChart s={ms} /> : null}
+          {ms ? (
+            <div className="lsMacdKey" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 3, fontSize: 10.5, color: C.muted }}>
+              <span>— MACD ┄ Signal</span>
+              {ms.crossIndex !== null ? <span className="lsMacdCrossed">crossed {shortDate(ms.points[ms.crossIndex].date)}</span> : null}
+            </div>
+          ) : null}
+          {/* THE RUN, NOT A CALL (#74): "below its signal line for 6 sessions". */}
+          <div className="lsMacdLine" style={{ marginTop: 6, fontSize: 13, color: C.muted }}>
+            {macd ? (macd !== "near" && ms ? `${MACD_WORDS[macd].line} ${runWords(ms)}` : MACD_WORDS[macd].line) : "Momentum unavailable: not enough daily prices on file."}
+          </div>
         </div>
       </div>
       {p.credit ? <p className="lsCredit" style={{ ...noteStyle, gridColumn: "1 / -1" }}>Daily prices: {p.credit}</p> : null}

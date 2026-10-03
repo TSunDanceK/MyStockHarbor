@@ -11,6 +11,8 @@
 // section, whether the gauges stack under the ladder on a phone, and the
 // section's height. With an output path it saves a 360 px screenshot.
 //
+// Each also carries the mini MACD chart (#74): it must span the RSI bar's width.
+//
 // NOT IN check-all: it needs a browser (the same rule as key-levels-measure.mjs).
 //
 //   node scripts/levels-signals-measure.mjs [screenshot.png]
@@ -26,14 +28,16 @@ let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("/opt/node22/lib/node_modules/playwright")); }
 
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
-const unit = `${reasonedValueUnit()}\n${strip(fs.readFileSync("lib/ta/keyLevels.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/priceLadder.ts", "utf8"))}\n${strip(fs.readFileSync("app/stock/[symbol]/LevelsSignals.tsx", "utf8")).replace("export default function LevelsSignals", "export function LevelsSignals")}\n`;
+const unit = `${reasonedValueUnit()}\n${strip(fs.readFileSync("lib/ta/keyLevels.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/priceLadder.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/macdSeries.ts", "utf8"))}\n${strip(fs.readFileSync("app/stock/[symbol]/LevelsSignals.tsx", "utf8")).replace("export default function LevelsSignals", "export function LevelsSignals")}\n`;
 const tmp = `scripts/.levels-signals-measure-${process.pid}.mjs`;
 fs.writeFileSync(tmp, ts.transpileModule(unit, { fileName: "l.tsx", compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText);
 let M;
 try { M = await import(`${process.cwd()}/${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
 
 const credit = React.createElement("a", { href: "#" }, "Market data from Tiingo.com");
-const base = { zoneMissing: "No repeated weekly support zone found", asOf: "2026-10-02", credit };
+// A wave of closes for the mini MACD chart (#563 COWORK #74): it crosses inside the window.
+const macdBars = Array.from({ length: 220 }, (_, i) => ({ date: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10), close: 100 + 10 * Math.sin(i / 8) }));
+const base = { zoneMissing: "No repeated weekly support zone found", asOf: "2026-10-02", credit, macdBars };
 const shapes = [
   ["AAPL", { last: 333.69, ma50: 322.42, ma200: 290.1, zone: { lower: 255.4, upper: 268.9, touches: 3, volumeRatio: 1.1 }, rsi: 54.7, macdTone: "red" }],
   ["MA200 above, no zone", { last: 100, ma50: 104, ma200: 120, zone: null, rsi: 31.2, macdTone: "green" }],
@@ -85,6 +89,11 @@ for (const width of [320, 360, 390, 414, 430, 1280]) {
       const centred = !!axis && Math.abs((axis.left + axis.right) / 2 - (part.left + part.right) / 2) < 1.5;
       const parts = [...p.querySelectorAll(".lsPart")].map((x) => x.getBoundingClientRect());
       const stacked = parts.length === 2 && parts[1].top >= parts[0].bottom - 1;
+      // The MACD chart spans the RSI bar's width (#74), and its key isn't clipped.
+      const rsi = p.querySelector(".lsRsi")?.getBoundingClientRect(), mc = p.querySelector(".lsMacdChart")?.getBoundingClientRect();
+      if (!mc || !rsi || Math.abs(mc.width - rsi.width) > 1 || Math.abs(mc.left - rsi.left) > 1) bad.push("macd chart not the RSI bar's width");
+      const key = p.querySelector(".lsMacdKey");
+      if (key && key.scrollWidth > key.clientWidth + 0.5) bad.push("macd key clipped");
       return { name: p.dataset.name, h: Math.round(box.height), bad, stacked, centred, signalsW: Math.round(parts[1]?.width ?? 0) };
     }),
   }));

@@ -22,6 +22,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { reasonedValueUnit, visibleText } from "./lib/render-cards.mjs";
 import { stripComments } from "./lib/source-code.mjs";
+import { grabFunction } from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -32,11 +33,22 @@ const check = (label, ok, detail = "") => {
 const KL = "lib/ta/keyLevels.ts";
 const LIB = "lib/ta/priceLadder.ts";
 const CARD = "app/stock/[symbol]/LevelsSignals.tsx";
+const MACD = "lib/ta/macdSeries.ts";
 const PAGE = "app/stock/[symbol]/StockSymbolPageClient.tsx";
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 
-async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8")) {
-  const unit = `${reasonedValueUnit()}\n${strip(fs.readFileSync(KL, "utf8"))}\n${strip(lib)}\n${strip(card).replace("export default function LevelsSignals", "export function LevelsSignals")}\n`;
+/**
+ * THE PAGE'S OWN buildMacd (and the helpers it calls), lifted from
+ * StockSymbolPageClient.tsx, so the mini chart's series is checked against the
+ * reading the pill shows, not against a copy of it (#563 COWORK #74).
+ */
+const PAGE_MACD = ["avg", "ema", "lastNum", "buildMacd"]
+  .map((n) => grabFunction(fs.readFileSync("app/stock/[symbol]/StockSymbolPageClient.tsx", "utf8"), n))
+  .map((f, i) => (f ?? `/* missing ${i} */`).replace(/^function (\w+)/, "function page_$1"))
+  .join("\n").replace(/\b(avg|ema|lastNum)\(/g, "page_$1(").replace(/function page_page_/g, "function page_");
+
+async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8"), macd = fs.readFileSync(MACD, "utf8")) {
+  const unit = `${reasonedValueUnit()}\n${strip(fs.readFileSync(KL, "utf8"))}\n${strip(lib)}\n${strip(macd)}\n${PAGE_MACD}\nexport { page_buildMacd };\n${strip(card).replace("export default function LevelsSignals", "export function LevelsSignals")}\n`;
   const js = ts.transpileModule(unit, {
     fileName: "ls.tsx",
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" },
@@ -64,8 +76,12 @@ async function measure(M) {
   const render = (p) => renderToStaticMarkup(React.createElement(M.LevelsSignals, p));
   const aaplHtml = render(props(AAPL));
   const aboveHtml = render(props(ABOVE, { macdTone: "green", rsi: 74.2 }));
+  // #74 fixtures: a wave (crosses often) and an accelerating rise (no cross in the window).
+  const wave = Array.from({ length: 220 }, (_, i) => ({ date: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10), close: 100 + 10 * Math.sin(i / 8) }));
+  const climb = wave.map((b, i) => ({ ...b, close: 100 + 0.01 * i * i }));
+  const waveHtml = render(props(AAPL, { macdTone: "red", macdBars: wave }));
   return {
-    M,
+    M, wave, climb, waveHtml, waveText: visibleText(waveHtml), climbText: visibleText(render(props(AAPL, { macdTone: "green", macdBars: climb }))),
     aapl: M.ladderMarks(AAPL), above: M.ladderMarks(ABOVE), crowd: M.ladderMarks(CROWD),
     // Eight markers inside ~4% of the price (#73: the ladder must hold up to 8 without overlaps).
     eight: M.layoutLadder([
@@ -156,13 +172,37 @@ const rules = {
     !/Daily prices:/.test(aaplText) && /Daily prices: Tiingo credit/.test(credited),
 };
 
+Object.assign(rules, {
+  "MACD series: its last point is the page's own reading": ({ M, wave, climb }) => [wave, climb].every((b) => {
+    const page = M.page_buildMacd(b.map((x) => x.close)), s = M.macdSeries(b), last = s.points.at(-1);
+    return page && Math.abs(last.macd - page.macd) < 1e-9 && Math.abs(last.signal - page.signal) < 1e-9 && Math.abs(last.hist - page.histogram) < 1e-9 && s.points.length === 30;
+  }),
+  "MACD histogram: above zero in the pill's blue, below in its amber": ({ M, wave, waveHtml }) => {
+    const s = M.macdSeries(wave), bars = [...waveHtml.matchAll(/class="lsMacdBar" data-sign="(above|below)"[^>]*fill="([^"]+)"/g)];
+    return bars.length === 30 && bars.every((b, i) => (s.points[i].hist >= 0 ? "above" : "below") === b[1] && b[2] === M.MACD_COLOUR[b[1]]) &&
+      bars.some((b) => b[1] === "above") && bars.some((b) => b[1] === "below") && /class="lsMacdLineSignal"[^>]*stroke-dasharray="3 3"/.test(waveHtml);
+  },
+  "MACD crossover: the last change of side in the window, dated; none in a steady climb": ({ M, wave, climb, waveText, climbText }) => {
+    const s = M.macdSeries(wave), c = M.macdSeries(climb), i = s.crossIndex, sign = (h) => Math.sign(h);
+    return i !== null && sign(s.points[i].hist) !== sign(s.points[i - 1].hist) && s.points.slice(i).every((p) => sign(p.hist) === sign(s.points.at(-1).hist)) &&
+      waveText.includes(`crossed ${M.shortDate(s.points[i].date)}`) &&
+      c.crossIndex === null && c.runFillsWindow && !/crossed/.test(climbText) && /Momentum above its signal line for 30\+ sessions/.test(climbText);
+  },
+  "MACD run length: the sessions since the cross, said in words": ({ M, wave, waveText }) => {
+    const s = M.macdSeries(wave);
+    return s.run === s.points.length - s.crossIndex && waveText.includes(`Momentum below its signal line ${M.runWords(s)}`) &&
+      /^for \d+ sessions?$/.test(M.runWords(s)) && M.runWords({ ...s, run: 1, runFillsWindow: false }) === "for 1 session" &&
+      !/bullish|bearish/i.test(waveText);
+  },
+});
+
 const staticRules = {
   "no fetch, no Redis, no reads in either file": (l, c) => ![l, c].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory/.test(s)),
   "the module imports only keyLevels; the card only React's types, A's ReasonedValue and the modules": (l, c) => {
     const li = [...l.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
     const ci = [...c.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
     return li.length === 1 && li[0] === "./keyLevels" &&
-      ci.every((i) => ["react", "@/app/components/EstimatedValue", "@/lib/ta/keyLevels", "@/lib/ta/priceLadder"].includes(i));
+      ci.every((i) => ["react", "@/app/components/EstimatedValue", "@/lib/ta/keyLevels", "@/lib/ta/priceLadder", "@/lib/ta/macdSeries"].includes(i));
   },
   "the page hands over what it already computes, and the old rows are gone": (_l, _c, p) => {
     const from = p.indexOf("Price levels &amp; signals</h2>");
@@ -223,12 +263,24 @@ const mutants = [
   ["the notes describe, and nothing reads as advice", "c", (s) => s.replace("return partial ? `As of today's trading so far (${dateWords(asOf)}).` : `As of the close on ${dateWords(asOf)}.`;", "return \"\";")],
   ["the Tiingo credit only when it is passed", "c", (s) => s.replace("{p.credit ? <p className=\"lsCredit\" style={{ ...noteStyle, gridColumn: \"1 / -1\" }}>Daily prices: {p.credit}</p> : null}", "<p className=\"lsCredit\">Daily prices: {p.credit ?? \"Tiingo\"}</p>")],
 ];
+const MS = fs.readFileSync(MACD, "utf8");
+mutants.push(
+  ["MACD series: its last point is the page's own reading", "m", (s) => s.replace("let cur = avg(values.slice(0, period));", "let cur = values[0];")],
+  ["MACD series: its last point is the page's own reading", "m", (s) => s.replace("const sig = emaSeries(macdVals, 9);", "const sig = emaSeries(macdVals, 10);")],
+  ["MACD histogram: above zero in the pill's blue, below in its amber", "c", (s) => s.replace("fill={p.hist >= 0 ? MACD_COLOUR.above : MACD_COLOUR.below}", "fill={MACD_COLOUR.above}")],
+  ["MACD histogram: above zero in the pill's blue, below in its amber", "c", (s) => s.replace('strokeDasharray="3 3" ', "")],
+  ["MACD crossover: the last change of side in the window, dated; none in a steady climb", "m", (s) => s.replace("for (let i = points.length - 1; i >= 1; i--) {", "for (let i = 1; i < points.length; i++) {")],
+  ["MACD crossover: the last change of side in the window, dated; none in a steady climb", "c", (s) => s.replace("<span className=\"lsMacdCrossed\">crossed {shortDate(ms.points[ms.crossIndex].date)}</span>", "<span>crossed</span>")],
+  ["MACD run length: the sessions since the cross, said in words", "m", (s) => s.replace("for (let i = all.length - 1; i >= 0 && sideOf(all[i].hist) === now && now !== 0; i--) run++;", "for (let i = all.length - 1; i >= 0 && sideOf(all[i].hist) === now && now !== 0; i--) run += 2;")],
+  ["MACD run length: the sessions since the cross, said in words", "c", (s) => s.replace("`${MACD_WORDS[macd].line} ${runWords(ms)}`", "MACD_WORDS[macd].line")],
+);
 for (const [name, which, mutate] of mutants) {
   const l2 = which === "l" ? mutate(L) : L;
   const c2 = which === "c" ? mutate(Cd) : Cd;
-  const changed = l2 !== L || c2 !== Cd;
+  const m2 = which === "m" ? mutate(MS) : MS;
+  const changed = l2 !== L || c2 !== Cd || m2 !== MS;
   let bites = false;
-  try { bites = !rules[name](await measure(await load(l2, c2))); } catch { bites = true; }
+  try { bites = !rules[name](await measure(await load(l2, c2, m2))); } catch { bites = true; }
   check(`mutant bites: ${name}`, changed && bites, changed ? "" : "the mutation did not apply");
 }
 const staticMutants = [

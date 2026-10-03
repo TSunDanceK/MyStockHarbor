@@ -1167,6 +1167,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                   ma200Missing={closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : null}
                   rsi={typeof lastRsi === "number" ? lastRsi : null}
                   macdTone={macdSignal?.tone ?? null}
+                  macdBars={history}
                   asOf={history.length ? history[history.length - 1].date : null}
                   asOfPartial={!!(history[history.length - 1] as { partial?: boolean } | undefined)?.partial}
                   credit={shownProvider === "tiingo" ? historyCredit : undefined}
