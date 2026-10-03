@@ -19,15 +19,20 @@
 //                       day; IEX's own prevClose only when no bar is stored
 //   volume              the newest EOD bar's consolidated volume ONLY, labelled
 //                       "as of last close". IEX volume is never day volume.
-//   marketCap, pe       NOT COMPUTED HERE. Carried unchanged from the FMP row
-//                       when one exists (null otherwise); each reader keeps its
-//                       own SEC path (Pickers' cover-shares cap wins already).
+//   marketCap, pe       SEC x THIS ROW'S PRICE (#553 CODE-B #94 B8, #683 Q1):
+//                       the pickers SEC hash's cover-page shares and twelve-
+//                       month EPS through A's marketCap()/peRatio()
+//                       (pickersSecFundamentals.secCapAndPe). A refusal, or a
+//                       symbol the hash does not hold, is null ("—" on every
+//                       reader). NEVER the FMP row's: that figure froze when FMP
+//                       ended and sat unlabelled beside a Tiingo price.
 //   peTs, failStreak,   the FMP row's own bookkeeping, carried, so the warm
 //   failAt              jobs' rotation and eviction rules read what they did.
 //
-// COST: no per-symbol read. Both blobs are ONE Data Cache entry each (1
-// HGETALL per miss: hourly for the pool, nightly for the bars), shared by
-// every reader and region. The FMP HMGET readPricePoolBulk already did stays.
+// COST: no per-symbol read. The three blobs are ONE Data Cache entry each (1
+// HGETALL per miss: hourly for the pool, nightly for the bars, six-hourly for
+// the SEC cap inputs), shared by every reader and region. The FMP HMGET
+// readPricePoolBulk already did stays.
 //
 // NEVER WRITTEN BACK. These rows exist only in the reader's memory; the pool
 // hash's own writers read raw (contract §7: raw Tiingo data stays under
@@ -39,7 +44,27 @@ import { pickSurfacePrice } from "./tiingoSurfacePrice";
 import { readTiingoEodLast, readTiingoPool } from "./marketData/read";
 import { easternCloseMs } from "./lastSession";
 import { VOLUME_LABEL } from "./tiingoQuote";
-import { toDashed } from "../symbolSpellings.mjs";
+import { toDashed, toDotted } from "../symbolSpellings.mjs";
+import { unstable_cache } from "next/cache";
+import { loadSecCapRows, pickersSecKey, secCapAndPe, type SecCapRow } from "./pickersSecFundamentals";
+
+/** The SEC inputs change once a day (warm-pickers-sec, 05:35 UTC); six hours bounds the lag. */
+export const SEC_CAP_CACHE_SECONDS = 6 * 60 * 60;
+
+/**
+ * The pickers SEC hash, projected to cap/P/E inputs, from the Data Cache: 1
+ * HGETALL per miss. Keyed by the hash name so a preview never serves
+ * production's entry or the reverse.
+ */
+export const readSecCapRows = unstable_cache(loadSecCapRows, ["pool-sec-cap-v1", pickersSecKey()], {
+  revalidate: SEC_CAP_CACHE_SECONDS,
+});
+
+/** A symbol's SEC row under the caller's spelling, the pool field, or the dotted form. */
+function secRowFor(rows: Record<string, SecCapRow> | null, asked: string, field: string): SecCapRow | null {
+  if (!rows) return null;
+  return rows[asked] ?? rows[field] ?? rows[toDotted(field)] ?? null;
+}
 
 const pos = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 
@@ -51,7 +76,8 @@ export function mapTiingoPoolRow(
   fmp: PricePoolRow | null | undefined,
   iex: StoredQuote | null | undefined,
   last: EodLast | null | undefined,
-  nowMs: number
+  nowMs: number,
+  sec: SecCapRow | null = null
 ): PricePoolRow | null {
   const bars: EodBar[] = last ? [[last.d, last.o, last.h, last.l, last.c, last.v]] : [];
   const surface = pickSurfacePrice(iex ?? null, bars, nowMs);
@@ -71,16 +97,17 @@ export function mapTiingoPoolRow(
       : null;
   const volume = last && pos(last.v) ? last.v : null;
   const num = (n: number | null | undefined) => (pos(n) ? n : null);
+  const valuation = secCapAndPe(sec, surface.price);
 
   return {
     price: surface.price,
     changePct: base != null ? ((surface.price - base) / base) * 100 : null,
     volume,
-    marketCap: fmp?.marketCap ?? null,
+    marketCap: valuation.marketCap,
     open: num(isIex ? iex?.open : last?.o),
     dayHigh: num(isIex ? iex?.high : last?.h),
     dayLow: num(isIex ? iex?.low : last?.l),
-    pe: fmp?.pe ?? null,
+    pe: valuation.pe,
     ts: isIex ? iex!.at : easternCloseMs(surface.date),
     peTs: fmp?.peTs ?? 0,
     failStreak: fmp?.failStreak ?? 0,
@@ -101,7 +128,8 @@ export function overlayRows(
   symbols: string[],
   pool: Record<string, StoredQuote> | null,
   eodLast: Record<string, EodLast> | null,
-  nowMs: number
+  nowMs: number,
+  secRows: Record<string, SecCapRow> | null = null
 ): Map<string, PricePoolRow> {
   const out = new Map(fmpRows);
   if (!pool && !eodLast) return out;
@@ -111,7 +139,7 @@ export function overlayRows(
     if (!asked) continue;
     const field = toDashed(asked);
     if (!mapped.has(field)) {
-      mapped.set(field, mapTiingoPoolRow(fmpRows.get(field), pool?.[field], eodLast?.[field], nowMs));
+      mapped.set(field, mapTiingoPoolRow(fmpRows.get(field), pool?.[field], eodLast?.[field], nowMs, secRowFor(secRows, asked, field)));
     }
     const row = mapped.get(field);
     if (!row) continue;
@@ -121,15 +149,48 @@ export function overlayRows(
   return out;
 }
 
-/** The two Data Cache reads + overlayRows. Never throws; on a read failure the FMP rows stand. */
+/** The three Data Cache reads + overlayRows. Never throws; on a read failure the FMP rows stand. */
 export async function overlayTiingoPool(
   fmpRows: Map<string, PricePoolRow>,
   symbols: string[],
   nowMs: number
 ): Promise<Map<string, PricePoolRow>> {
-  const [pool, eodLast] = await Promise.all([
+  const [pool, eodLast, secRows] = await Promise.all([
     readTiingoPool().catch(() => null),
     readTiingoEodLast().catch(() => null),
+    readSecCapRows().catch(() => null),
   ]);
-  return overlayRows(fmpRows, symbols, pool?.rows ?? null, eodLast, nowMs);
+  return overlayRows(fmpRows, symbols, pool?.rows ?? null, eodLast, nowMs, secRows);
+}
+
+/**
+ * Pure. Each symbol's SEC x Tiingo market cap, from the overlay's own row with
+ * NO FMP row under it: null where Tiingo has no price or the SEC inputs refuse.
+ * The sector ranking (B7) and the sector weights use this, so they rank and
+ * weigh on exactly the cap the pool readers show.
+ */
+export function secTiingoCaps(
+  symbols: string[],
+  pool: Record<string, StoredQuote> | null,
+  eodLast: Record<string, EodLast> | null,
+  secRows: Record<string, SecCapRow> | null,
+  nowMs: number
+): Map<string, number | null> {
+  const out = new Map<string, number | null>();
+  for (const s of symbols) {
+    const field = toDashed(s);
+    const row = mapTiingoPoolRow(null, pool?.[field], eodLast?.[field], nowMs, secRowFor(secRows, s, field));
+    out.set(s, row?.marketCap ?? null);
+  }
+  return out;
+}
+
+/** The same three Data Cache reads, for secTiingoCaps. Never throws: a failed read is an empty map. */
+export async function readSecTiingoCaps(symbols: string[], nowMs: number): Promise<Map<string, number | null>> {
+  const [pool, eodLast, secRows] = await Promise.all([
+    readTiingoPool().catch(() => null),
+    readTiingoEodLast().catch(() => null),
+    readSecCapRows().catch(() => null),
+  ]);
+  return secTiingoCaps(symbols, pool?.rows ?? null, eodLast, secRows, nowMs);
 }

@@ -380,7 +380,10 @@ export const SEC_EARNINGS_FIELDS: ("peRatio" | "epsTtm" | "payoutRatio")[] = ["p
  * before they moved: the page then leaves the stored values, exactly as for a
  * symbol with no row. Pure.
  */
-export function applySecEarnings(row: SecPickerRow, price: number | null): SecEarningsFigures | null {
+export function applySecEarnings(
+  row: Pick<SecPickerRow, "unit" | "inputs" | "eps" | "payout">,
+  price: number | null
+): SecEarningsFigures | null {
   if (!("eps" in row)) return null;
   const usd = moneyIsUsd(row.unit);
   const eps = row.eps ?? null;
@@ -440,6 +443,72 @@ export async function readSecPickerRows(symbols: string[]): Promise<Map<string, 
     // Absent, not an error the reader sees.
   }
   return out;
+}
+
+// ── THE POOL OVERLAY'S CAP AND P/E (#553 CODE-B #94 B8, #683 Q1) ─────────────
+//
+// On PRICE_PROVIDER_POOL=tiingo the pool rows' price is Tiingo's, and their
+// market cap and P/E used to be the FMP row's, frozen once FMP stops. They are
+// now this hash's cover-page shares and twelve-month EPS against the ROW'S OWN
+// price -- A's marketCap() and, through applySecEarnings, A's peRatio(), with
+// their named refusals. A refusal, or no row, is null: never the FMP figure.
+//
+// THE BULK SOURCE IS THIS HASH, READ WHOLE. The overlay is read for hundreds of
+// symbols per render, so it does not HMGET per page: tiingoPool.ts wraps
+// loadSecCapRows in the Data Cache (one HGETALL per miss, like the Tiingo pool
+// and EOD blobs beside it), and the projection below keeps only what a cap and
+// a P/E need, so the cached entry stays small.
+
+/** The price-independent cap and P/E inputs of one row. JSON-safe. */
+export type SecCapRow = Pick<SecPickerRow, "v" | "unit" | "at" | "inputs" | "eps">;
+
+/** Pure. `eps` stays absent on a row written before P/E moved (see applySecEarnings). */
+export function toSecCapRow(row: SecPickerRow): SecCapRow {
+  const out: SecCapRow = { v: 1, unit: row.unit, at: row.at, inputs: { shares: row.inputs.shares, refusals: row.inputs.refusals } };
+  if ("eps" in row) out.eps = row.eps ?? null;
+  return out;
+}
+
+/**
+ * Pure. Market cap and P/E at `price`, or null for each refused or missing
+ * figure. The cap is A's marketCap() on the cover-page shares (as
+ * applySecPickerRow does); the P/E is applySecEarnings's, so a row that predates
+ * P/E, or is not in dollars, has none.
+ */
+export function secCapAndPe(
+  row: SecCapRow | null | undefined,
+  price: number | null
+): { marketCap: number | null; pe: number | null } {
+  if (!row) return { marketCap: null, pe: null };
+  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: null, refusals: row.inputs.refusals };
+  return {
+    marketCap: ok(marketCap(inputs, price)),
+    pe: applySecEarnings(row, price)?.peRatio ?? null,
+  };
+}
+
+/** Pure. An HGETALL of the hash -> the projected rows, stale and malformed rows dropped. */
+export function parseSecCapHash(raw: Record<string, unknown> | null, nowMs: number): Record<string, SecCapRow> {
+  const out: Record<string, SecCapRow> = {};
+  const staleBefore = nowMs - PICKERS_SEC_TTL_SECONDS * 1000;
+  for (const [field, value] of Object.entries(raw ?? {})) {
+    let v: unknown = value;
+    if (typeof v === "string") {
+      try { v = JSON.parse(v); } catch { continue; }
+    }
+    if (isRow(v) && v.at >= staleBefore) out[field] = toSecCapRow(v);
+  }
+  return out;
+}
+
+/**
+ * ONE HGETALL of this deployment's hash. Only ever called through the Data
+ * Cache wrapper in tiingoPool.ts (readSecCapRows), never per page view.
+ */
+export async function loadSecCapRows(): Promise<Record<string, SecCapRow> | null> {
+  if (!redis) return null;
+  const raw = await redis.hgetall<Record<string, unknown>>(pickersSecKey());
+  return raw ? parseSecCapHash(raw, Date.now()) : null;
 }
 
 export type WarmPickersSecResult = {
