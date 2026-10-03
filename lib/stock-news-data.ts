@@ -15,6 +15,7 @@ import { unstable_cache } from "next/cache";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { beginTiming } from "./server/timing";
+import { readNewsTechHistory } from "./server/newsTechHistory";
 import {
   getAiNewsBriefs,
   getAiNewsInsight,
@@ -85,6 +86,8 @@ export type StockNewsBaseData = {
   companyName: string;
   quote: Quote | null;
   history: Point[];
+  /** Where `history` came from: "tiingo" behind PRICE_PROVIDER_NEWS_TECH, else "yahoo". */
+  historySource: "tiingo" | "yahoo";
   news: NewsItem[];
   // null when the trend could not be established (see trendLabel below).
   trend: string | null;
@@ -300,10 +303,14 @@ async function fetchYahooQuote(symbol: string): Promise<Quote | null> {
   };
 }
 
-// Daily history: Yahoo Finance's chart endpoint, the same one fetchYahooQuote
-// reads with a shorter range.
-async function fetchHistory(symbol: string): Promise<Point[]> {
-  return fetchYahooHistory(symbol);
+// Daily history. Behind PRICE_PROVIDER_NEWS_TECH=tiingo, the stored Tiingo EOD
+// bars (#563 COWORK #31 (a): Yahoo is not a licensed source); otherwise, and on
+// any Tiingo miss, Yahoo Finance's chart endpoint, the same one fetchYahooQuote
+// reads with a shorter range, until the flip.
+async function fetchHistory(symbol: string): Promise<{ points: Point[]; source: "tiingo" | "yahoo" }> {
+  const tiingo = await readNewsTechHistory(symbol);
+  if (tiingo) return { points: tiingo, source: "tiingo" };
+  return { points: await fetchYahooHistory(symbol), source: "yahoo" };
 }
 
 async function fetchYahooHistory(symbol: string): Promise<Point[]> {
@@ -2602,7 +2609,7 @@ async function buildStockNewsBaseData(
   // their own value.
   const maxDetailedItems = Math.max(1, Math.min(options.maxDetailedItems ?? 5, 5));
 
-  const [quote, history, companyName] = await Promise.all([
+  const [quote, { points: history, source: historySource }, companyName] = await Promise.all([
     fetchQuote(upper),
     fetchHistory(upper),
     fetchCompanyName(upper),
@@ -2759,6 +2766,7 @@ async function buildStockNewsBaseData(
     companyName,
     quote,
     history,
+    historySource,
     news,
     trend,
     lastClose,
