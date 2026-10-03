@@ -114,7 +114,21 @@ export async function loadCards(mutate = (src) => src) {
     .replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
   // `mutate` is how a check breaks the shipped source on purpose and re-renders
   // — the mutation harness. Identity by default.
-  return importTsxSource(mutate(`${view}\n${cards}`));
+  const unit = mutate(`${view}\n${cards}`);
+  // THE GROWTH & MARGINS PICTURE (#563 COWORK #36): SecGrowthMarginsCard draws
+  // C's GrowthVisuals from buildGrowthVisuals, so both join the unit, after the
+  // cards (hoisted; the card calls them at render). ONLY WHEN THE CALLER HAS NOT
+  // ALREADY APPENDED THEM: check-growth-visuals appends its own (mutated) copy
+  // through `mutate`, and a second copy would be a duplicate declaration.
+  return importTsxSource(/function buildGrowthVisuals\(/.test(unit) ? unit : unit + growthVisualsUnit());
+}
+
+/** C's builder and component, stripped and joined the way check-growth-visuals joins them. */
+function growthVisualsUnit() {
+  const builder = stripImports("lib/growthVisuals.ts");
+  const component = stripImports("app/stock/[symbol]/earnings/GrowthVisuals.tsx")
+    .replace("export default function GrowthVisuals", "export function GrowthVisuals");
+  return `\nimport { useState } from "react";\n${builder}\n${component}\n`;
 }
 
 /**
