@@ -2788,14 +2788,8 @@ export async function getStockNewsAiData(
   const {
     symbol,
     companyName,
-    trend,
     newsScore,
     earningsScore,
-    lastRsi,
-    priceVs50,
-    priceVs200,
-    recentHigh,
-    recentLow,
     detailedNews,
     isInvalidTicker,
   } = baseData;
@@ -2803,9 +2797,9 @@ export async function getStockNewsAiData(
   const aiBriefsPromise = isInvalidTicker
     ? Promise.resolve([])
     : getAiNewsBriefs({
+        // Non-price inputs only (#563 COWORK #31 (b)): no trend, RSI, MA distance or range.
         symbol,
         companyName,
-        trend,
         newsScoreLabel: newsScore.label,
         items: detailedNews.map((item) => ({
           title: item.title,
@@ -2821,15 +2815,9 @@ export async function getStockNewsAiData(
       : getAiNewsInsight({
           symbol,
           companyName,
-          trend,
           newsScoreLabel: newsScore.label,
           newsScoreValue: newsScore.score,
           earningsTone: earningsScore.label,
-          rsi: lastRsi,
-          priceVs50,
-          priceVs200,
-          recentHigh,
-          recentLow,
           items: detailedNews.map((item) => ({
             title: item.title,
             source: item.source,

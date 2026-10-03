@@ -40,10 +40,15 @@ async function suite(G) {
   target.fetch.__nextPatched = true;
   G.installRedisSizeGuard(target, URL, { warn: (m) => logs.warn.push(m), error: (m) => logs.error.push(m) });
 
-  // 1. a 3 MB pipeline: 3 SETs of ~1 MB under msh:tiingo:eod:v2:
-  const pipe = JSON.stringify([["set", "msh:tiingo:eod:v2:AAPL", big(1_050_000)], ["set", "msh:tiingo:eod:v2:MSFT", big(1_050_000)], ["set", "msh:tiingo:eod:v2:NVDA", big(1_050_000)]]);
+  // 0. a ~4 MB SET, the size of one Pickers payload chunk: under the budget, silent.
+  await target.fetch(URL, { method: "POST", body: JSON.stringify(["set", "msh:pickers:v10:chunk:x", big(4 * 1024 * 1024)]) });
+  want("a 4 MB request (one Pickers chunk) is sent and not logged", sent.length === 1 && logs.warn.length === 0, logs.warn[0]);
+  sent.length = 0;
+
+  // 1. a 6 MB pipeline: 3 SETs of ~2 MB under msh:tiingo:eod:v2:
+  const pipe = JSON.stringify([["set", "msh:tiingo:eod:v2:AAPL", big(2_100_000)], ["set", "msh:tiingo:eod:v2:MSFT", big(2_100_000)], ["set", "msh:tiingo:eod:v2:NVDA", big(2_100_000)]]);
   await target.fetch(`${URL}/pipeline`, { method: "POST", body: pipe });
-  want("a 3 MB pipeline is sent", sent.length === 1);
+  want("a 6 MB pipeline is sent", sent.length === 1);
   want("...and logged with its count, command and key prefix", logs.warn.length === 1 && /^\[redis-size\] pipeline:3 SET msh:tiingo:eod:v2: \d+ bytes$/.test(logs.warn[0] ?? ""), logs.warn[0]);
   want("...without a full key or a value", !/AAPL|xxxx/.test(logs.warn[0] ?? ""));
 
@@ -68,7 +73,7 @@ async function suite(G) {
 
   // prefix helper
   want("keyPrefix: up to the last ':'; a bare key shows 3 characters", G.keyPrefix("msh:a:b:SYM") === "msh:a:b:" && G.keyPrefix("secretkey") === "sec…");
-  want("thresholds: log over 2 MB, refuse over 9.5 MB", G.REDIS_SIZE_LOG_BYTES === 2 * 1024 * 1024 && G.REDIS_SIZE_REFUSE_BYTES === 9.5 * 1024 * 1024);
+  want("thresholds: log over 5 MB (REQUEST_BYTE_BUDGET), refuse over 9.5 MB", G.REDIS_SIZE_LOG_BYTES === 5 * 1024 * 1024 && G.REDIS_SIZE_REFUSE_BYTES === 9.5 * 1024 * 1024);
   return fails;
 }
 
@@ -87,6 +92,11 @@ const mutant = src.replace(/throw new Error\(`\[redis-size\] request refused[^;]
 check("mutant applies", mutant !== src);
 const m = await suite(await load(mutant));
 check("mutant caught: a guard without the refusal sends the 11 MB SET", m.some((f) => /never sent|throws/.test(f)), m[0] ?? "no assertion failed");
+// #553 COWORK #92: the warn line back at 2 MB would name every Pickers chunk again.
+const mutant2 = src.replace("export const REDIS_SIZE_LOG_BYTES = REQUEST_BYTE_BUDGET;", "export const REDIS_SIZE_LOG_BYTES = 2 * 1024 * 1024;");
+check("mutant 2 applies", mutant2 !== src);
+const m2 = await suite(await load(mutant2));
+check("mutant caught: a 2 MB warn line logs a 4 MB Pickers chunk", m2.some((f) => /4 MB request/.test(f)), m2[0] ?? "no assertion failed");
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL CHECKS PASSED");
 process.exit(failures ? 1 : 0);

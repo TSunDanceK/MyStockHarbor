@@ -22,13 +22,13 @@ import NewsCardArt from "@/app/components/NewsCardArt";
 import { utcDay, utcStamp } from "@/lib/utcDate";
 import { browserStorage, readWideChoice, WIDE_ARROW_LEFT, WIDE_ARROW_RIGHT, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
 
-export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; };
+export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; priceLabel?: string | null; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
 type ChartInterval = "d" | "w" | "m";
 type ChartMode = "basic" | "interactive" | "tradingview";
 type SymbolResult = { symbol: string; name: string; exchange: string };
-type BenchItem = { key: string; label: string; symbol: string; date: string | null; time: string | null; close: number | null; prevClose: number | null; changePct: number | null; };
-export type BenchPayload = { updatedAt: string; scope: string; items: BenchItem[]; };
+type BenchItem = { key: string; label: string; symbol: string; date: string | null; time: string | null; close: number | null; prevClose: number | null; changePct: number | null; priceLabel?: string | null; };
+export type BenchPayload = { updatedAt: string; scope: string; items: BenchItem[]; provider?: "tiingo"; };
 // Mirrors lib/server/internalNews.ts. `art` is resolved SERVER-SIDE and arrives
 // as four strings: the bucket, the manifest and the no-repeat rule all stay out
 // of this bundle, and there is one implementation of the selection rule rather
@@ -360,6 +360,7 @@ export default function DashboardClient({
   initialNews = null,
   initialEarningsSummary = null,
   pageToken = "",
+  tiingoCredit = null,
 }: {
   defaultSymbol?: string;
   initialQuote?: Quote | null;
@@ -372,6 +373,9 @@ export default function DashboardClient({
   // echoed back on the /api/quote fetch below. Session-scoped, so it stays
   // valid across chooseSymbol() switches. "" means unconfigured -> no header.
   pageToken?: string;
+  // The linked "Market data from Tiingo.com", rendered by the server page when
+  // PRICE_PROVIDER_STOCK_PAGE=tiingo (step 4). Shown beside a Tiingo figure only.
+  tiingoCredit?: React.ReactNode;
 }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [assetType, setAssetType] = useState<AssetType>("stock");
@@ -751,7 +755,7 @@ export default function DashboardClient({
     const t = setTimeout(async () => { try { const typeParam = assetType === "crypto" ? "&type=crypto" : ""; const r = await fetch(`/api/symbols?q=${encodeURIComponent(q)}${typeParam}`); const d = (await r.json()) as { results: SymbolResult[] }; if (c) return; setResults(Array.isArray(d.results) ? d.results : []); } catch { if (c) return; setResults([]); } }, 250);
     return () => { c = true; clearTimeout(t); };
   }, [query, assetType]);
-  useEffect(() => { let c = false; async function lb() { if (seededBenchRef.current) { seededBenchRef.current = false; return; } try { const scope = assetType === "crypto" ? "crypto" : "stock"; const r = await fetch(`/api/benchmarks?scope=${scope}`); if (!r.ok) throw new Error(""); const raw = (await r.json()) as any; if (!c) setBench({ updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(), scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks", items: Array.isArray(raw?.items) ? raw.items : [] }); } catch { if (!c) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] }); } } lb(); return () => { c = true; }; }, [assetType]);
+  useEffect(() => { let c = false; async function lb() { if (seededBenchRef.current) { seededBenchRef.current = false; return; } try { const scope = assetType === "crypto" ? "crypto" : "stock"; const r = await fetch(`/api/benchmarks?scope=${scope}`); if (!r.ok) throw new Error(""); const raw = (await r.json()) as any; if (!c) setBench({ updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(), scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks", items: Array.isArray(raw?.items) ? raw.items : [], ...(raw?.provider === "tiingo" ? { provider: "tiingo" as const } : {}) }); } catch { if (!c) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] }); } } lb(); return () => { c = true; }; }, [assetType]);
   useEffect(() => { const h = typeof window !== "undefined" ? window.location.hash : ""; if (h !== "#chart" || !historyAll.length) return; const t = window.setTimeout(() => { chartSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); setHighlightChart(true); setTimeout(() => setHighlightChart(false), 1200); }, 80); return () => window.clearTimeout(t); }, [historyAll, symbol]);
   useEffect(() => { if (assetType === "crypto") { setNews(null); return; } if (seededNewsRef.current) { seededNewsRef.current = false; return; } let c = false; async function ln() { try { const r = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`); if (!r.ok) throw new Error(""); if (!c) setNews((await r.json()) as NewsPayload); } catch { if (!c) setNews(null); } } ln(); return () => { c = true; }; }, [symbol, assetType]);
   useEffect(() => { if (assetType === "crypto") { setEarningsSummary(null); return; } if (seededEarningsRef.current) { seededEarningsRef.current = false; return; } let c = false; async function le() { setEarningsSummary(null); try { const r = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" }); if (!r.ok) throw new Error(""); if (!c) setEarningsSummary((await r.json()) as StockEarningsSummary); } catch { if (!c) setEarningsSummary(null); } } le(); return () => { c = true; }; }, [symbol, assetType]);
@@ -1026,7 +1030,7 @@ export default function DashboardClient({
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{[{ label: `Regime: ${overviewMeta.trend ?? "Not enough history yet"}`, hi: false }, { label: `Volatility: ${overviewMeta.vol}`, hi: false }, { label: overviewMeta.toneTag, hi: true }].map(t => <span key={t.label} style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 9px", borderRadius: 7, background: t.hi ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${t.hi ? COLORS.amberBorder : COLORS.borderSoft}`, color: t.hi ? COLORS.amber : COLORS.mutedFg }}>{t.label}</span>)}</div>
         <div style={{ background: customMode ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${customMode ? COLORS.amberBorder : COLORS.borderSoft}`, borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 1.55, color: customMode ? COLORS.amber : COLORS.mutedFg }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: customMode ? COLORS.amber : COLORS.cardFg, marginBottom: 5 }}>{customMode ? "Selected Indicator Summary" : "Chart Summary"}</div>{chartSummaryText}</div>
-        <div style={{ paddingTop: 10, borderTop: `1px solid ${COLORS.borderSoft}`, fontSize: 11, color: COLORS.mutedFg2, fontWeight: 600 }}>As of {quote?.date ?? "—"} {quote?.time ?? ""}{/* No fallback source name (2026-09-23, #553 COWORK #1): the "financialmodelingprep.com" default credited FMP even on an empty quote. */}{quote?.source ? ` · Source: ${quote.source}` : ""}</div>
+        <div style={{ paddingTop: 10, borderTop: `1px solid ${COLORS.borderSoft}`, fontSize: 11, color: COLORS.mutedFg2, fontWeight: 600 }}>{/* Step 4 (#553 COWORK #56): a Tiingo quote says what its price is, and carries the linked credit. */}{quote?.priceLabel ? <>Price: {quote.priceLabel}{tiingoCredit ? <> · {tiingoCredit}</> : null}</> : <>As of {quote?.date ?? "—"} {quote?.time ?? ""}</>}{/* No fallback source name (2026-09-23, #553 COWORK #1): the "financialmodelingprep.com" default credited FMP even on an empty quote. */}{quote?.source ? ` · Source: ${quote.source}` : ""}</div>
       </div>
     </SectionCard>);
   }
@@ -1224,18 +1228,19 @@ export default function DashboardClient({
       return (
         <button type="button" onClick={() => chooseSymbol(cs, undefined, assetType)}
           style={{ border: `1px solid ${COLORS.border}`, borderRadius: 13, padding: "13px 14px", background: COLORS.cardBg2, color: COLORS.cardFg, textAlign: "left", cursor: "pointer", ...(isMobile ? { flex: "0 0 148px" } : { width: "100%" }) }}>
+          {/* #553 COWORK #32 §3: the ETF's name, its % change as the headline (it tracks the index closely), then its price. Never an index level. */}
           <div style={{ fontWeight: 800, fontSize: isMobile ? 13 : 14 }}>{it.label}</div>
-          <div style={{ fontSize: isMobile ? 19 : 20, fontWeight: 800, marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{pr}</div>
+          <div style={{ fontSize: isMobile ? 19 : 20, fontWeight: 800, marginTop: 9, fontVariantNumeric: "tabular-nums", color: ac, whiteSpace: "nowrap" }}>{pt != null ? `${isUp ? "▲" : "▼"} ${pt}` : "—"}</div>
           <div style={{ marginTop: 6, display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
-            {pt != null ? <span style={{ fontSize: 12, fontWeight: 700, color: ac, whiteSpace: "nowrap" }}>{isUp ? "▲" : "▼"} {pt}</span> : <span style={{ fontSize: 11, opacity: 0.5 }}>—</span>}
-            <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{it.date && it.time ? `${it.date} ${it.time}` : "—"}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{pr}</span>
+            <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{it.priceLabel ?? (it.date && it.time ? `${it.date} ${it.time}` : "—")}</span>
           </div>
         </button>
       );
     };
     return (
       <SectionCard title={assetType === "crypto" ? "Crypto Benchmarks" : "Market Benchmarks"} right={assetType === "stock" ? <Link href="/markets/spx" style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>S&P 500 Detail →</Link> : null}>
-        <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {(bench?.updatedAt && utcStamp(bench.updatedAt)) || "—"} · {bench?.scope ?? "Benchmarks"}</div>
+        <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {(bench?.updatedAt && utcStamp(bench.updatedAt)) || "—"} · {bench?.scope ?? "Benchmarks"}{assetType === "stock" ? " · ETF prices, not index levels" : ""}{bench?.provider === "tiingo" && tiingoCredit ? <> · {tiingoCredit}</> : null}</div>
         {isMobile ? (
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
             {items.map(it => <BenchCard key={it.key} it={it} />)}

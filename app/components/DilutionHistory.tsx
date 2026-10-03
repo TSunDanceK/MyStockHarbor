@@ -71,6 +71,44 @@ export function formatShareChange(changePercent: number | null): string {
   return `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`;
 }
 
+/**
+ * A SERIES THE CHART CANNOT SUMMARISE YET (#552 COWORK #89, interim guard).
+ *
+ * The annual points are as filed, so a split leaves older years on the old
+ * basis: AMZN reads 494M then 10,005M at its 20:1 split, and PAC's count goes
+ * x1000 from 2017 ("+96,037%"). Measured over 916 charted series (CODE-A #94):
+ * 99 step at a whole split ratio, 65 step by more than 100x, 33 have a gap of
+ * more than 15 months (GDDY 2016 -> 2023, drawn as a straight "rise").
+ *
+ * DETECTION ONLY, the probe's own rules: a step within 3% of a whole split
+ * ratio either way, a step over 100x either way, or consecutive points more
+ * than SHARE_GAP_MAX_DAYS apart. The line is still drawn; the "Since" and
+ * Trend figures are withheld. The full fix (restated comparatives, broken
+ * lines, the 3-year trend) replaces this after the purge. A real one-year
+ * doubling also matches the 2x ratio and is withheld with the rest: hiding a
+ * true figure for a week is the cheaper error than printing a false one.
+ */
+export const SHARE_SPLIT_RATIOS = [2, 3, 4, 5, 8, 10, 15, 20, 25, 40, 50];
+export const SHARE_SPLIT_TOLERANCE = 0.03;
+export const SHARE_SCALE_MAX_STEP = 100;
+export const SHARE_GAP_MAX_DAYS = 460;
+
+export function shareHistoryDefect(points: SharePoint[]): "scale-step" | "split-step" | "gap" | null {
+  let found: "split-step" | "gap" | null = null;
+  for (let i = 1; i < points.length; i++) {
+    const r = points[i].shares / points[i - 1].shares;
+    if (!Number.isFinite(r) || r <= 0) continue;
+    if (r > SHARE_SCALE_MAX_STEP || r < 1 / SHARE_SCALE_MAX_STEP) return "scale-step";
+    if (!found && SHARE_SPLIT_RATIOS.some((k) => Math.abs(r / k - 1) < SHARE_SPLIT_TOLERANCE || Math.abs(r * k - 1) < SHARE_SPLIT_TOLERANCE)) found = "split-step";
+    const days = (Date.parse(points[i].date) - Date.parse(points[i - 1].date)) / 86_400_000;
+    if (!found && days > SHARE_GAP_MAX_DAYS) found = "gap";
+  }
+  return found;
+}
+
+/** What the two withheld cells say instead. */
+export const SHARE_HISTORY_WITHHELD = "Share history needs a correction; figures hidden for now";
+
 const GREEN = "#22c55e";
 const RED = "#ef4444";
 const BLUE = "#60a5fa";
@@ -99,8 +137,9 @@ export default function DilutionHistory({
   const last = points[points.length - 1];
   const changePercent =
     first.shares > 0 ? ((last.shares - first.shares) / first.shares) * 100 : null;
-  const isDilution = typeof changePercent === "number" && changePercent > 0.05;
-  const isBuyback = typeof changePercent === "number" && changePercent < -0.05;
+  const defect = shareHistoryDefect(points);
+  const isDilution = !defect && typeof changePercent === "number" && changePercent > 0.05;
+  const isBuyback = !defect && typeof changePercent === "number" && changePercent < -0.05;
   const trendColor = isDilution ? RED : isBuyback ? GREEN : BLUE;
   const trendLabel = isDilution
     ? "More shares outstanding"
@@ -202,16 +241,27 @@ export default function DilutionHistory({
           <div style={cellLabelStyle}>Shares outstanding (latest)</div>
           <div style={cellValueStyle}>{fmtShares(last.shares)}</div>
         </div>
-        <div style={cellStyle}>
-          <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
-          <div style={{ ...cellValueStyle, color: trendColor }}>
-            {formatShareChange(changePercent)}
+        {defect ? (
+          // THE TWO CELLS GO TOGETHER: a Trend label read from the same broken
+          // first-vs-last comparison would be the same wrong figure in words.
+          <div className="dh-withheld" style={cellStyle} data-share-history-defect={defect}>
+            <div style={cellLabelStyle}>Since {fmtDateShort(first.date)} · Trend</div>
+            <div style={{ ...cellValueStyle, fontSize: 13 }}>{SHARE_HISTORY_WITHHELD}</div>
           </div>
-        </div>
-        <div style={cellStyle}>
-          <div style={cellLabelStyle}>Trend</div>
-          <div style={{ ...cellValueStyle, color: trendColor, fontSize: 13 }}>{trendLabel}</div>
-        </div>
+        ) : (
+          <>
+            <div style={cellStyle}>
+              <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
+              <div style={{ ...cellValueStyle, color: trendColor }}>
+                {formatShareChange(changePercent)}
+              </div>
+            </div>
+            <div style={cellStyle}>
+              <div style={cellLabelStyle}>Trend</div>
+              <div style={{ ...cellValueStyle, color: trendColor, fontSize: 13 }}>{trendLabel}</div>
+            </div>
+          </>
+        )}
       </div>
 
       <div style={sourceStyle}>
@@ -240,8 +290,10 @@ export default function DilutionHistory({
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 10px;
         }
+        .dh-withheld { grid-column: span 2; }
         @media (max-width: 640px) {
           .dh-stats-row { grid-template-columns: 1fr !important; }
+          .dh-withheld { grid-column: auto; }
         }
       `}</style>
     </>
