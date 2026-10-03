@@ -15,7 +15,7 @@
 // ReasonedValue is the same popover for a word in place of a dash ("Loss",
 // "Not meaningful"), whose reason is on hover/tap rather than printed under
 // the tile (#552 COWORK #98 §1).
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { ESTIMATE_COLOUR, ESTIMATE_SIGN, type EstimateMark } from "./estimateMark";
 
@@ -38,20 +38,22 @@ export function notePlacement(trigger: { left: number; bottom: number }, viewpor
 }
 
 function Noted({ children, note, style, label }: { children: ReactNode; note: string; style?: CSSProperties; label: string }) {
-  const [open, setOpen] = useState(false);
+  // OPEN IS WHERE IT IS: null is closed. Measured when it opens, in the event.
   const [place, setPlace] = useState<{ left: number; top: number; width: number } | null>(null);
-  const id = useId();
-  const ref = useRef<HTMLSpanElement>(null);
-  useLayoutEffect(() => {
-    if (!open || !ref.current) { setPlace(null); return; }
+  const open = place !== null;
+  const setOpen = (next: boolean | ((was: boolean) => boolean)) => {
+    const want = typeof next === "function" ? next(open) : next;
+    if (!want || !ref.current) { setPlace(null); return; }
     const r = ref.current.getBoundingClientRect();
     setPlace(notePlacement({ left: r.left, bottom: r.bottom }, document.documentElement.clientWidth));
-  }, [open]);
+  };
+  const id = useId();
+  const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
-    const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setPlace(null); };
     // Fixed to the viewport, so a scroll or resize would leave it behind: close instead.
-    const close = () => setOpen(false);
+    const close = () => setPlace(null);
     document.addEventListener("pointerdown", away);
     window.addEventListener("scroll", close, { passive: true });
     window.addEventListener("resize", close);
