@@ -33,6 +33,7 @@ import { gridCompanyName } from "@/lib/server/secTickerNames";
 import { toDotted } from "@/lib/symbolSpellings.mjs";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { applyPerf, type PerfFields, type PerfRow } from "@/lib/pickerPerf";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
@@ -186,6 +187,8 @@ type PickerSection = {
 
 type SignalRecord = {
   symbol?: string;
+  /** B6: the build's 1W..1Y returns from stored Tiingo bars (lib/pickerPerf.ts). */
+  perf?: PerfRow;
   note?: string;
   tone?: PickerTone;
   chartPoints?: MiniCandlePoint[];
@@ -343,6 +346,9 @@ export type ResultEntry = ResultEntryFlags & {
   perf6m?: number;
   perfYtd?: number;
   perf1y?: number;
+  /** B6 (#553 CODE-B #94): the close the returns run to, and why each empty one is empty. */
+  perfAsOf?: PerfFields["perfAsOf"];
+  perfWhy?: PerfFields["perfWhy"];
   /**
    * "sec" when this row's Market Cap / PS / PB / EV / P/FCF / Revenue /
    * Op. Income / Net Income / FCF / Div ($) / Div Yield / Div Growth came from
@@ -1237,6 +1243,10 @@ async function getPickerData(config: PickerResultConfig) {
     // for the list-view tabs. Redis-ONLY read (see stockDataCache) -- warmed by
     // the warm-stock-data cron, so a page render never spends an FMP call. Any
     // symbol not yet warmed just shows "--" in those tab columns.
+    // THE PERFORMANCE TAB ON TIINGO (#553 CODE-B #94 B6). With the Pickers on
+    // Tiingo the five returns come from the build (signalRecords[].perf,
+    // computed from the stored EOD bars), never from FMP's stockDataCache.
+    const perfOnTiingo = priceProviderFor("PICKERS") === "tiingo";
     try {
       const extra = await readCachedStockDataBulk(entries.map((e) => e.symbol));
       if (extra.size) {
@@ -1261,15 +1271,25 @@ async function getPickerData(config: PickerResultConfig) {
           if (d.rating) entry.rating = d.rating;
           if (d.analystCount != null) entry.analystCount = d.analystCount;
           if (d.priceTarget != null) entry.priceTarget = d.priceTarget;
-          if (d.perf1w != null) entry.perf1w = d.perf1w;
-          if (d.perf1m != null) entry.perf1m = d.perf1m;
-          if (d.perf6m != null) entry.perf6m = d.perf6m;
-          if (d.perfYtd != null) entry.perfYtd = d.perfYtd;
-          if (d.perf1y != null) entry.perf1y = d.perf1y;
+          if (!perfOnTiingo) {
+            if (d.perf1w != null) entry.perf1w = d.perf1w;
+            if (d.perf1m != null) entry.perf1m = d.perf1m;
+            if (d.perf6m != null) entry.perf6m = d.perf6m;
+            if (d.perfYtd != null) entry.perfYtd = d.perfYtd;
+            if (d.perf1y != null) entry.perf1y = d.perf1y;
+          }
         }
       }
     } catch {
       // extended data is optional
+    }
+    {
+      const perfBySymbol = new Map<string, PerfRow>();
+      for (const record of signalRecords) {
+        const symbol = cleanSymbol(record.symbol);
+        if (symbol && record.perf) perfBySymbol.set(symbol, record.perf);
+      }
+      for (const entry of entries) applyPerf(entry, perfBySymbol.get(entry.symbol), perfOnTiingo);
     }
 
     // HIDDEN FIELDS ARE NOT SHIPPED (lib/pickerHiddenFields.ts, 2026-09-23).

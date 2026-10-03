@@ -35,10 +35,14 @@ function formatPostDate(dateString: string) {
 
   if (Number.isNaN(date.getTime())) return dateString;
 
+  // Post and snapshot dates are bare "YYYY-MM-DD" (UTC midnight). Formatted in
+  // the viewer's zone they read a day early west of UTC, and differ from the
+  // server-rendered HTML; in UTC they read as the calendar date written.
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   }).format(date);
 }
 
@@ -593,6 +597,16 @@ export default function InsightPostClient({
       ? `Snapshot from ${post.date}`
       : "Archived snapshot";
 
+  // What the "Last price" figure is as of. A Tiingo-path snapshot carries no
+  // snapshotTime, only the as-of bar; its priceLabel ("close, 29 Sep 2026")
+  // says both what the price is and when (#553 COWORK #103). FMP-era
+  // snapshots keep showing their snapshot date, as before.
+  const lastPriceAsOfText = snapshot?.priceLabel
+    ? snapshot.priceLabel
+    : snapshot?.snapshotDate
+    ? formatPostDate(snapshot.snapshotDate)
+    : snapshotDateText;
+
   const overallBreakdown =
     post.overallBreakdown ||
     post.excerpt ||
@@ -698,9 +712,7 @@ export default function InsightPostClient({
                 <strong>{typeof lastPrice === "number" ? `$${lastPrice.toFixed(2)}` : "—"}</strong>
                 <span>
                   {hasSnapshot
-                    ? snapshot?.snapshotDate
-                      ? formatPostDate(snapshot.snapshotDate)
-                      : snapshotDateText
+                    ? lastPriceAsOfText
                     : symbol
                     ? "Snapshot unavailable"
                     : "No ticker linked"}

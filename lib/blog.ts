@@ -52,6 +52,10 @@ export type InsightSnapshot = {
   ma50Pct?: number | null;
   ma200Pct?: number | null;
   weeklyMA200Pct?: number | null;
+  /** Tiingo path only: what the price is ("close, 29 Sep 2026"), read at render. */
+  priceLabel?: string;
+  /** Set when the priced fields were read at render from stored Tiingo bars. */
+  source?: "tiingo";
   chartPoints: InsightSnapshotPoint[];
 };
 

@@ -11,6 +11,7 @@ import { valueSatisfies } from "@/lib/screenerFields";
 import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
 import { NOT_APPLICABLE_CODES, cellMark, cellWhyWords, compareForSort } from "@/lib/pickerCellWhy";
 import { BasisCell, CellWhyNote, WhyMark } from "@/app/components/PickerCellMarks";
+import { perfAsOfLabel, perfWhyText, type PerfKey } from "@/lib/pickerPerf";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -450,6 +451,19 @@ function pctCell(v: number | null): ReactNode {
   const up = v >= 0;
   return <span className={up ? "chgUp" : "chgDown"}>{up ? "+" : ""}{v.toFixed(2)}%</span>;
 }
+// A PERFORMANCE CELL SAYS WHY IT IS EMPTY, AND THE WHY IS TRUE (#553 CODE-B
+// #94 B6). The reason is the row's own code (lib/pickerPerf.ts): "Not enough
+// price history for this period" only where the stored history really starts
+// after the period does. A computed return names the close it runs to.
+function perfCell(e: ResultEntry, key: PerfKey): ReactNode {
+  const v = num(e[key]);
+  if (v == null || !Number.isFinite(v)) {
+    const why = perfWhyText(e.perfWhy?.[key]);
+    return why ? <span className="muted" title={why}>–</span> : MUTED;
+  }
+  const asOf = perfAsOfLabel(e.perfAsOf);
+  return asOf ? <span title={asOf}>{pctCell(v)}</span> : pctCell(v);
+}
 function plainPctCell(v: number | null): ReactNode {
   if (v == null || !Number.isFinite(v)) return MUTED;
   return `${v.toFixed(2)}%`;
@@ -590,18 +604,22 @@ const COLUMN_DASH_WHY: Record<string, string> = {
   change: "No current price for this stock",
   volume: "No volume for the latest session",
   ma200: "Not enough price history for a 200-day average",
-  perf1w: "Not enough price history for this period",
-  perf1m: "Not enough price history for this period",
-  perf6m: "Not enough price history for this period",
-  perfYtd: "Not enough price history for this period",
-  perf1y: "Not enough price history for this period",
 };
+
+const PERF_KEYS = new Set<string>(["perf1w", "perf1m", "perf6m", "perfYtd", "perf1y"]);
 
 /**
  * The reason for an empty cell in column `key`, the mark it shows ("–", or a
  * word cell: "Loss", "Neg.", "n/a" -- #553 COWORK #94), and whether it is "n/a".
  */
-export function cellWhyFor(e: Pick<ResultEntry, "cellWhy">, key: string): { text: string; mark: string; word: boolean; na: boolean } {
+export function cellWhyFor(e: Pick<ResultEntry, "cellWhy" | "perfWhy">, key: string): { text: string; mark: string; word: boolean; na: boolean } {
+  // The Performance columns carry their own TRUE reason, computed from the
+  // stored bars at build time (lib/pickerPerf.ts, #553 CODE-B #94 B6), never a
+  // blanket "not enough history".
+  if (PERF_KEYS.has(key)) {
+    const text = perfWhyText(e.perfWhy?.[key as PerfKey]) ?? cellWhyWords(null);
+    return { text, ...cellMark(key, null), na: false };
+  }
   const code = (e.cellWhy as Record<string, string> | undefined)?.[key];
   if (code) return { text: cellWhyWords(code), ...cellMark(key, code), na: NOT_APPLICABLE_CODES.has(code) };
   return { text: COLUMN_DASH_WHY[key] ?? cellWhyWords(null), ...cellMark(key, null), na: false };
@@ -942,11 +960,11 @@ export default function PickerResultsGrid({
     const pe: Col = { key: "pe", label: "PE Ratio", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.peRatio), cell: (e, _d, inert) => basisCell(numCell(num(e.peRatio)), num(e.peRatio), e.epsBasis, inert) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
 
-    const perf1w: Col = { key: "perf1w", label: "1W", sortType: "num", get: (e) => num(e.perf1w), cell: (e) => pctCell(num(e.perf1w)) };
-    const perf1m: Col = { key: "perf1m", label: "1M", sortType: "num", get: (e) => num(e.perf1m), cell: (e) => pctCell(num(e.perf1m)) };
-    const perf6m: Col = { key: "perf6m", label: "6M", sortType: "num", get: (e) => num(e.perf6m), cell: (e) => pctCell(num(e.perf6m)) };
-    const perfYtd: Col = { key: "perfYtd", label: "YTD", sortType: "num", get: (e) => num(e.perfYtd), cell: (e) => pctCell(num(e.perfYtd)) };
-    const perf1y: Col = { key: "perf1y", label: "1Y", sortType: "num", get: (e) => num(e.perf1y), cell: (e) => pctCell(num(e.perf1y)) };
+    const perf1w: Col = { key: "perf1w", label: "1W", sortType: "num", get: (e) => num(e.perf1w), cell: (e) => perfCell(e, "perf1w") };
+    const perf1m: Col = { key: "perf1m", label: "1M", sortType: "num", get: (e) => num(e.perf1m), cell: (e) => perfCell(e, "perf1m") };
+    const perf6m: Col = { key: "perf6m", label: "6M", sortType: "num", get: (e) => num(e.perf6m), cell: (e) => perfCell(e, "perf6m") };
+    const perfYtd: Col = { key: "perfYtd", label: "YTD", sortType: "num", get: (e) => num(e.perfYtd), cell: (e) => perfCell(e, "perfYtd") };
+    const perf1y: Col = { key: "perf1y", label: "1Y", sortType: "num", get: (e) => num(e.perf1y), cell: (e) => perfCell(e, "perf1y") };
 
     const ev: Col = { key: "ev", label: "Ent. Value", sortType: "num", get: (e) => num(e.enterpriseValue), cell: (e) => capCell(num(e.enterpriseValue)) };
     const fwdpe: Col = { key: "fwdpe", label: "Forward PE", sortType: "num", get: (e, d) => forwardPe(e, d), cell: (e, d) => numCell(forwardPe(e, d)) };

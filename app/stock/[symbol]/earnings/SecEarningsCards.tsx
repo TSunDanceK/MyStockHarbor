@@ -1795,12 +1795,17 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
  * end, and the price is today's close.
  */
 export function SecValuationCard({
-  view, inputs, price, priceAsOf, today,
+  view, inputs, price, priceAsOf, priceLabel = null, today,
 }: {
   view: SecEarningsView;
   inputs: ValuationInputs;
   price: number | null;
   priceAsOf: string | null;
+  /**
+   * What the price IS, where the source says ("close, 29 Sep 2026" / "last IEX
+   * trade, 14:05 ET", tiingoSurfacePrice). Absent: "close, <priceAsOf>", as before.
+   */
+  priceLabel?: string | null;
   /** The render date, passed in rather than read from the clock — see priceIsCurrent. */
   today: string;
 }) {
@@ -1829,7 +1834,7 @@ export function SecValuationCard({
     : cap !== null && !cap.ok
       ? sentence(REFUSAL_WORDS[cap.why])
       : inputs.shares
-        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} close${priceAsOf ? `, ${priceAsOf}` : ""}`
+        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} ${priceLabel ?? `close${priceAsOf ? `, ${priceAsOf}` : ""}`}`
         : null;
   const peValue = !current ? STALE_PRICE_WORDS
     : pe === null ? NOT_REPORTED
