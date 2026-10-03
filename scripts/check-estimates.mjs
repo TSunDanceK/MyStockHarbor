@@ -21,6 +21,7 @@ import "./lib/register-ts-app.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import ts from "typescript";
 import { readCodeOnly, stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
@@ -119,6 +120,16 @@ check("with withEstimates: P/B = 1000 ÷ (455 − 55), marked derived", on.pb.ok
 check("filed figures never carry an est (P/E, P/S)", on.pe.ok && !on.pe.est && on.ps.ok && !on.ps.est);
 const neg = V.valuationMultiples(inputs, m({ derivedEquity: { val: -5, est: derivedEq.est } }), 10, { withEstimates: true });
 check("a non-positive derived equity is refused like a filed one (\"Neg.\")", !neg.pb.ok && neg.pb.why === "equity-is-zero-or-negative" && V.REFUSAL_CELL_WORD[neg.pb.why] === "Neg.");
+// THE 1% FLOOR (#691) ON THE DERIVED EQUITY TOO (#552 COWORK #113): cap 1000,
+// derived equity 5 = 0.5% of cap → "Not meaningful", never a 200× derived P/B.
+const tiny = V.valuationMultiples(inputs, m({ derivedEquity: { val: 5, est: derivedEq.est } }), 10, { withEstimates: true });
+check("a derived equity under 1% of market cap is refused by #691's floor (\"Not meaningful\")",
+  !tiny.pb.ok && tiny.pb.why === "equity-too-small-for-pb" && V.REFUSAL_CELL_WORD[tiny.pb.why] === "Not meaningful");
+{
+  const Mf = await mutated(VAL, "        : equity < cap.val * PB_MIN_EQUITY_SHARE\n", "        : !derivedEq && equity < cap.val * PB_MIN_EQUITY_SHARE\n");
+  check("MUTATION: the floor skipped for a derived equity → caught",
+    Mf.valuationMultiples(inputs, m({ derivedEquity: { val: 5, est: derivedEq.est } }), 10, { withEstimates: true }).pb.ok === true);
+}
 const filedAll = V.valuationMultiples(inputs, m({ equity: 200, equityOnlyInclNci: false, shortTermDebt: 10 }), 10, { withEstimates: true });
 check("all filed, opted in: no est at all", [filedAll.pb, filedAll.evEbitda].every((f) => f.ok && !f.est));
 {
@@ -162,6 +173,22 @@ check("EstimatedValue: plain text with no est; \"≈\" + colour for an estimate;
 check("MUTATION: the \"≈\" dropped (colour alone) → caught", !markRules(once(CSRC, "{ESTIMATE_SIGN}\n      {text}", "{text}")).every(Boolean));
 check("MUTATION: a filed figure rendered in the estimate colour → caught",
   !markRules(once(CSRC, "if (!est) return <span style={style}>{text}</span>;", "if (!est) return <span style={{ color: ESTIMATE_COLOUR }}>{text}</span>;")).every(Boolean));
+
+// THE NOTE STAYS ON SCREEN (#552 COWORK #113): at 360 px a right-hand cell's
+// note used to run off the edge and push the page sideways.
+const notePlacementSrc = CSRC.match(/export function notePlacement[\s\S]*?\n\}/)?.[0] ?? "";
+const placeFrom = (src) => {
+  const js = ts.transpileModule(src.replace("export function", "function"), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  return new Function("NOTE_MAX_WIDTH", "NOTE_GUTTER", `${js}\nreturn notePlacement;`)(280, 16);
+};
+const placeOk = (fn) => [[300, 360], [20, 360], [200, 1280], [0, 320]].every(([left, vw]) => {
+  const p = fn({ left, bottom: 100 }, vw);
+  return p.left >= 16 && p.left + p.width <= vw - 16 && p.width > 0;
+});
+check("the note's box stays inside the viewport with a 16 px gutter (360 px, 320 px and desktop; right-hand cells)", notePlacementSrc !== "" && placeOk(placeFrom(notePlacementSrc)));
+check("MUTATION: the note anchored at the trigger's left again → caught",
+  !placeOk(placeFrom(once(notePlacementSrc, "Math.max(NOTE_GUTTER, Math.min(trigger.left, viewportWidth - NOTE_GUTTER - width))", "trigger.left"))));
+check("the note is position:fixed (escapes the hero row's clipping) and closes on scroll", /position: "fixed", left: place\.left, top: place\.top/.test(CSRC) && /addEventListener\("scroll", close/.test(CSRC));
 
 // Every surface that opts in renders the mark AND the key. Map: the file that
 // passes { withEstimates: true } → the file that renders its figures.
