@@ -61,7 +61,7 @@ export type ShareHistory = {
   /** The series starts later than the data because of an unexplained step, or the listing. */
   startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" };
   /** The 3-year change, or null with the reason (rule 5). */
-  threeYear?: { pct: number; base: ShareHistoryPoint } | { pct: null; reason: "too-short" };
+  threeYear?: { pct: number; base: ShareHistoryPoint; end: ShareHistoryPoint } | { pct: null; reason: "too-short" };
 };
 
 /** The chart needs a spread to draw a trend; fewer than this is no chart. */
@@ -196,16 +196,31 @@ export function shareGaps(points: ShareHistoryPoint[]): { from: string; to: stri
   return out;
 }
 
-/** Rule 5: the change over the last SHARE_TREND_YEARS, from a base within SHARE_TREND_BASE_MAX_DAYS before the cut. */
+/**
+ * Rule 5: the change over the last SHARE_TREND_YEARS, from a base within
+ * SHARE_TREND_BASE_MAX_DAYS before the cut.
+ *
+ * THE END MAY STEP BACK BY THE SAME TOLERANCE. Stored quarters skip each fiscal
+ * Q4 and the long history's years stop at the first stored quarter, so a cut
+ * taken from the latest quarter can fall in a year-wide hole with no base near
+ * it (AAPL, MSFT: "too short" with 19 years on file). When it does, the next
+ * newer end within SHARE_TREND_BASE_MAX_DAYS of the latest is tried, newest
+ * first: both ends stay within the rule's own 6 months, and the span is still
+ * three calendar years.
+ */
 export function threeYearChange(points: ShareHistoryPoint[]): NonNullable<ShareHistory["threeYear"]> {
   const last = points[points.length - 1];
   if (!last) return { pct: null, reason: "too-short" };
-  // THE SAME CALENDAR DATE, SHARE_TREND_YEARS EARLIER: a day count (3 × 365.25)
-  // lands a day short of a year-end and pushes the base back a whole year.
-  const cut = `${Number(last.date.slice(0, 4)) - SHARE_TREND_YEARS}${last.date.slice(4)}`;
-  const base = [...points].reverse().find((p) => p.date <= cut);
-  if (!base || days(base.date, cut) > SHARE_TREND_BASE_MAX_DAYS || base.shares <= 0) return { pct: null, reason: "too-short" };
-  return { pct: ((last.shares - base.shares) / base.shares) * 100, base };
+  for (let i = points.length - 1; i >= 0 && days(points[i].date, last.date) <= SHARE_TREND_BASE_MAX_DAYS; i--) {
+    const end = points[i];
+    // THE SAME CALENDAR DATE, SHARE_TREND_YEARS EARLIER: a day count (3 × 365.25)
+    // lands a day short of a year-end and pushes the base back a whole year.
+    const cut = `${Number(end.date.slice(0, 4)) - SHARE_TREND_YEARS}${end.date.slice(4)}`;
+    const base = points.slice(0, i).reverse().find((p) => p.date <= cut);
+    if (!base || days(base.date, cut) > SHARE_TREND_BASE_MAX_DAYS || base.shares <= 0) continue;
+    return { pct: ((end.shares - base.shares) / base.shares) * 100, base, end };
+  }
+  return { pct: null, reason: "too-short" };
 }
 
 /**

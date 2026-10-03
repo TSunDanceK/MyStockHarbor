@@ -11,6 +11,8 @@
 //      "Recent history too short".
 //   5. a steady diluter / a buyback -> the 3-year figure, its colour and its
 //      hedged words; "Since" in plain ink beside it.
+//   5b. AAPL as stored (no fiscal Q4 quarters, years stop at the first
+//      quarter): the end steps back up to 6 months to find a base; never more.
 //   plus MUTATIONS, one per rule.
 //
 //   node scripts/check-share-history-series.mjs
@@ -61,6 +63,11 @@ const AMZN = [["2017-12-31", 480e6], ["2018-12-31", 487e6], ["2019-12-31", 494e6
 const PAC = [["2015-12-31", 525575547], ["2016-12-31", 525575547], ["2017-12-31", 525575547000], ["2018-12-31", 525575547000], ["2019-12-31", 525575547000]];
 const NVDA = [["2008-01-27", 550108], ["2009-01-25", 548126], ["2010-01-31", 549574000], ["2011-01-30", 575177000], ["2012-01-29", 602000000]];
 const GDDY = [["2013-12-31", 38826000], ["2014-12-31", 38826000], ["2015-12-31", 58676000], ["2016-12-31", 79835000], ["2023-12-31", 148296000], ["2024-06-30", 141269000], ["2024-09-30", 140523000]];
+// AAPL's stored tail (third probe run): the years stop at 2022-09-24, and the
+// quarters skip each fiscal Q4. From the latest quarter the cut lands in the hole.
+const AAPL_TAIL = [["2021-09-25", 16701272000], ["2022-09-24", 16215963000], ["2023-09-30", 15744231000], ["2023-12-30", 15509763000], ["2024-03-30", 15405856000], ["2024-06-29", 15287521000], ["2024-12-28", 15081724000], ["2025-03-29", 14994082000], ["2025-06-28", 14902886000], ["2025-12-27", 14748158000], ["2026-03-28", 14673278000], ["2026-06-27", 14656110000]];
+// Only an end 184 days back would find a base: one day past the tolerance.
+const SHORT_END = [["2020-03-31", 100e6], ["2022-12-31", 110e6], ["2023-06-30", 112e6], ["2023-12-31", 115e6]];
 const DILUTER = [["2019-12-31", 100e6], ["2020-12-31", 106e6], ["2021-12-31", 112e6], ["2022-12-31", 118e6], ["2023-12-31", 125e6]];
 const BUYBACK = [["2019-12-31", 125e6], ["2020-12-31", 120e6], ["2021-12-31", 115e6], ["2022-12-31", 110e6], ["2023-12-31", 105e6]];
 
@@ -120,6 +127,13 @@ const RULES = {
     return Math.abs(d.threeYear.pct - ((125 - 106) / 106) * 100) < 1e-9 && /Share count has risen over the last 3 years/.test(hd) && /color:#ef4444/.test(hd)
       && /Share count has fallen over the last 3 years/.test(hk) && /color:#22c55e/.test(hk) && /Since Dec 2019/.test(hd);
   },
+  "5b. AAPL as stored: the end steps back to 2025-12-27 (182 days) for a base at 2022-09-24; 184 days back is too far": (b, c) => {
+    const h = b.buildShareHistory(set(AAPL_TAIL)), s = b.buildShareHistory(set(SHORT_END));
+    return h?.threeYear?.pct !== null && h.threeYear.end.date === "2025-12-27" && h.threeYear.base.date === "2022-09-24"
+      && Math.abs(h.threeYear.pct - ((14748158000 - 16215963000) / 16215963000) * 100) < 1e-9
+      && /Share count has fallen over the last 3 years/.test(render(c, h))
+      && s?.threeYear?.pct === null;
+  },
 };
 for (const [name, rule] of Object.entries(RULES)) {
   let ok = false; try { ok = Boolean(rule(B, C)); } catch (e) { ok = false; }
@@ -137,6 +151,8 @@ const MUTANTS = [
   ["re-filed periods ignored", (s) => once(s, "    if (refiled.includes(pts[i - 1].date)) continue;\n", ""), null],
   ["the >100× guard removed", (s) => once(s, "if (r > SHARE_SCALE_MAX_STEP || r < 1 / SHARE_SCALE_MAX_STEP) {", "if (false) {"), null],
   ["pre-listing points kept", (s) => once(s, "  if (listedFrom) {", "  if (false) {"), null],
+  ["the end never steps back", (s) => once(s, "i >= 0 && days(points[i].date, last.date) <= SHARE_TREND_BASE_MAX_DAYS; i--", "i >= points.length - 1; i--"), null],
+  ["the end steps back without limit", (s) => once(s, "i >= 0 && days(points[i].date, last.date) <= SHARE_TREND_BASE_MAX_DAYS; i--", "i >= 0; i--"), null],
   ["the 6-month base window removed", (s) => once(s, "days(base.date, cut) > SHARE_TREND_BASE_MAX_DAYS || ", ""), null],
   ["the line drawn across a gap", null, (s) => once(s, "if (gapStarts.has(c.p.date)) segments.push([]);", "")],
   ["the colour from first-vs-last again", null, (s) => once(s, "const trend = threeYearWords(threePct);", "const trend = threeYearWords(changePercent);")],
