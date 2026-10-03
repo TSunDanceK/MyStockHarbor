@@ -139,5 +139,16 @@ const MUTANTS = [
 ];
 for (const [label, bm, cm] of MUTANTS) check(`MUTATION: ${label} → caught`, await caught(bm, cm));
 
+// THE LAYOUT (#552 COWORK #88 §1): the chart and the learn links FULL WIDTH
+// after the clear; phones read description -> dilution -> stats -> links.
+const PROFILE = fs.readFileSync("app/components/CompanyProfile.tsx", "utf8");
+const layout = (src) =>
+  /<div className="cp-clear" \/>\s*\{belowDescription \? <div className="cp-full cp-full-chart">\{belowDescription\}<\/div> : null\}\s*\{belowStats \? <div className="cp-full cp-full-learn">\{belowStats\}<\/div> : null\}/.test(src)
+  && /\.cp-desc \{ order: 1; \}\s*\.cp-full-chart \{ order: 2; \}\s*\.cp-stats \{ order: 3; \}\s*\.cp-full-learn \{ order: 4;/.test(src)
+  && !/cp-below-desc/.test(src);
+check("layout: the chart, then Learn the indicators, full width after the clear; phones description -> dilution -> stats -> links", layout(PROFILE));
+check("MUTATION: the chart back beside the float (before the clear) → caught",
+  !layout(once(PROFILE, `<div className="cp-clear" />\n          {belowDescription ? <div className="cp-full cp-full-chart">{belowDescription}</div> : null}`, `{belowDescription ? <div className="cp-full cp-full-chart">{belowDescription}</div> : null}\n          <div className="cp-clear" />`)));
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
