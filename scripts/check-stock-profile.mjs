@@ -49,6 +49,8 @@ async function loadComposer(mutate = (s) => s) {
     // may declare too.
     grabConst("lib/server/annualOnly.ts", "ANNUAL_ONLY_QUARTER_MONTHS"),
     grabFunction(fs.readFileSync("lib/server/annualOnly.ts", "utf8"), "annualOnlyForm"),
+    // THE ESTIMATE LAYER, which secValuation reads (#552 COWORK #112).
+    strip("lib/server/secEstimates.ts"),
     strip("lib/server/secValuation.ts"),
     strip("lib/server/secShareHistory.ts"),
     read("lib/symbolSpellings.mjs").replace(/^export /gm, ""),
@@ -258,19 +260,58 @@ console.log("\n8. the valuation multiples are the filings', one period basis eac
   check("...and CATCHES four non-consecutive quarters summed as a year",
     mixed.multipleInputs(fixture("AZN")).revenue?.basis === "four-quarters");
 
-  // NOT APPROXIMATED: one missing debt line refuses EV/EBITDA outright.
+  // NOT APPROXIMATED unless the surface renders the estimate mark (#552
+  // COWORK #112): by default one missing debt line refuses EV/EBITDA outright.
+  // An opted-in surface gets the back-tested M2 estimate for short-term debt
+  // ONLY; long-term debt or cash missing is still refused (check-estimates).
   const noDebt = { ...mi, balanceSheet: { ...mi.balanceSheet, shortTermDebt: null } };
   check("a missing debt line refuses EV/EBITDA rather than assuming zero",
     M.valuationMultiples(inputs, noDebt, 200).evEbitda?.why === "enterprise-value-input-missing");
+  const noLtd = { ...mi, balanceSheet: { ...mi.balanceSheet, longTermDebt: null } };
+  check("...and, opted in, a missing long-term debt line is still refused",
+    M.valuationMultiples(inputs, noLtd, 200, { withEstimates: true }).evEbitda?.why === "enterprise-value-input-missing");
   const zeroed = await loadComposer(once(
-    "if (!bs || bs.shortTermDebt === null || bs.longTermDebt === null || bs.cash === null || !m.ebitda) {",
-    "if (!bs || !m.ebitda) {"
+    "evAny.val !== null && evAny.est && !opts.withEstimates",
+    "false"
   ));
-  check("...and CATCHES a missing debt line treated as zero",
-    zeroed.valuationMultiples(inputs, noDebt, 200).evEbitda?.ok !== false);
+  check("...and CATCHES a missing debt line treated as zero on a surface that has not opted in",
+    // A non-bank SIC, so only the opt-in gate stands between the fixture and an estimate.
+    zeroed.valuationMultiples({ ...inputs, sic: "3826" }, noDebt, 200).evEbitda?.ok !== false);
 
   check("non-positive equity refuses P/B",
     M.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity: -5 } }, 200).pb?.why === "equity-is-zero-or-negative");
+
+  // P/B ON A SLIVER OF EQUITY (#552 COWORK #86b, census CODE-A #112): GDDY's
+  // 1,813x refused as not meaningful; MA's ~70x (equity ~1.4% of cap) still a
+  // figure; exactly 1% is the edge and is kept.
+  const capAt200 = inputs.shares.val * 200;
+  const pbWith = (mod, equity) => mod.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity } }, 200).pb;
+  check("a GDDY-shaped P/B (equity 1/1813 of cap) is refused as not meaningful",
+    pbWith(M, capAt200 / 1813)?.why === "equity-too-small-for-pb");
+  check("an MA-shaped P/B (equity 1.4% of cap) is still shown",
+    pbWith(M, capAt200 * 0.014)?.ok === true);
+  check("equity at exactly 1% of cap is still shown (the rule is strictly under)",
+    pbWith(M, capAt200 * 0.01)?.ok === true);
+  check("the threshold is 1% and the reader's words say so",
+    M.PB_MIN_EQUITY_SHARE === 0.01 && /under 1% of market cap/.test(M.REFUSAL_WORDS["equity-too-small-for-pb"] ?? ""));
+  const noFloor = await loadComposer(once("equity < cap.val * PB_MIN_EQUITY_SHARE", "false"));
+  check("...and CATCHES the floor removed (GDDY's 1,813x shown again)",
+    pbWith(noFloor, capAt200 / 1813)?.ok === true);
+  const twoPct = await loadComposer(once("export const PB_MIN_EQUITY_SHARE = 0.01;", "export const PB_MIN_EQUITY_SHARE = 0.02;"));
+  check("...and CATCHES the floor raised to 2% (MA refused)",
+    pbWith(twoPct, capAt200 * 0.014)?.ok === false);
+  // A BANK WHOSE REVENUE LINE IS FEE INCOME ONLY (#552 COWORK #86b/#92): the
+  // same filed revenue under ZION refuses P/S; under JPM (a total concept) it
+  // stays. The list is named, so a mutation that empties it must show ZION.
+  const asBank = (sym) => M.valuationMultiples(inputs, M.multipleInputs({ ...set, symbol: sym }), 200).ps;
+  check("ZION (fee-only revenue line) refuses P/S as revenue-line-incomplete", asBank("ZION")?.why === "revenue-line-incomplete", JSON.stringify(asBank("ZION")));
+  check("the same filed revenue under JPM keeps its P/S", asBank("JPM")?.ok === true);
+  check("the list is exactly the 8 measured (CODE-A #113)",
+    [...M.BANK_REVENUE_IS_FEES_ONLY].sort().join(" ") === "AXP CFG CFR COF KEY NTRS SOFI ZION");
+  const noBankList = await loadComposer(once("|| BANK_REVENUE_IS_FEES_ONLY.has(set.symbol)", ""));
+  check("...and CATCHES the bank list unwired (ZION's P/S shown again)",
+    noBankList.valuationMultiples(inputs, noBankList.multipleInputs({ ...set, symbol: "ZION" }), 200).ps?.ok === true);
+
   check("no twelve months of revenue refuses P/S",
     M.valuationMultiples(inputs, { ...mi, revenue: null }, 200).ps?.why === "no-twelve-month-revenue");
 

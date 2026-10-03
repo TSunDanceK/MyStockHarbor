@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
 import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
+import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
+import { TIINGO_CREDIT, TIINGO_URL, readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";
 import {
   computeIndicatorSeed,
   type Point,
@@ -300,17 +302,24 @@ async function getEarningsData(symbol: string) {
     };
   })();
 
-  const [cold, dailyHistory, latestBars] = await Promise.all([
+  // ── STEP 3 ON THIS PAGE, B3 (#553 CODE-B table; #552 COWORK #108/#112) ──
+  // The reaction chart and the title follow PRICE_PROVIDER_CHARTS through B's
+  // historyForSurface, exactly as /stock does; the valuation price follows the
+  // same gate through readSurfacePrice (the newer of the EOD close and the IEX
+  // trade, labelled). Unset, every read below is what it was.
+  const onTiingo = historyOnTiingo("CHARTS");
+  const [cold, chartHistory, latestBars, surfacePrice] = await Promise.all([
     resolveFactSetForRender(symbol),
     // THE ~110 KB MEASUREMENT THAT ASKED FOR A BOUNDED RANGE now lives on
     // getDailyBars in lib/server/historyCache.ts, with the thing it justifies —
     // including what a range does NOT save, which is the Redis read itself:
     // bars are one value per symbol, so the GET returns every bar whatever
     // range is asked for. What it saves is everything downstream of it.
-    barWindow
-      ? getDailyBars(symbol, barWindow.from, barWindow.to, { caller: "stock-earnings" })
-          .catch(() => [] as Point[])
-      : getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
+    historyForSurface("CHARTS", symbol, () =>
+      barWindow
+        ? getDailyBars(symbol, barWindow.from, barWindow.to, { caller: "stock-earnings" })
+        : getDailyHistory(symbol, { caller: "stock-earnings" })
+    ).catch(() => ({ points: [] as Point[], provider: "none" as const })),
     // ── THE WHOLE SERIES, FOR ITS LAST BAR AND NOTHING ELSE ─────────────────
     //
     // The valuation card needs the MOST RECENT close. The window above is
@@ -327,7 +336,10 @@ async function getEarningsData(symbol: string) {
     // entries of this Promise.all start in the same tick, so the second finds
     // the first's promise already registered and awaits it. One read, two
     // shapes of answer.
-    getDailyHistory(symbol, { caller: "stock-earnings-valuation" }).catch(() => [] as Point[]),
+    //
+    // ON TIINGO this read is skipped: readSurfacePrice below is the price.
+    onTiingo ? Promise.resolve([] as Point[]) : getDailyHistory(symbol, { caller: "stock-earnings-valuation" }).catch(() => [] as Point[]),
+    onTiingo ? readSurfacePrice(symbol).catch(() => null) : Promise.resolve(null),
     // NO FMP FALLBACK (#535 COWORK #18 §3, 2026-09-23). A fourth read here
     // fetched FMP's /earnings when the filings had not been read, and the
     // reaction card then said "Dates here come from an earnings calendar"
@@ -427,9 +439,14 @@ async function getEarningsData(symbol: string) {
   const barLabels = reactionBarLabels(barRows, (end) => storedLabels.get(end));
   const reactionRows = barRows.map((b, i) => ({ label: barLabels[i], row: b.row }));
 
+  // THE REACTION BARS: closes only (today's partial Tiingo bar is not a day's
+  // reaction), and on Tiingo the full series cut to the same window the FMP
+  // read asks for, so both providers walk the same bars.
+  const dailyHistory: Point[] = (chartHistory.points as (Point & { partial?: true })[])
+    .filter((p) => !p.partial && (!barWindow || (p.date >= barWindow.from && p.date <= barWindow.to)));
   const priceReactionQuarters: EarningsReactionPoint[] = reactionRows.map(({ label, row }) => ({
     label,
-    ...computeEarningsReactionDetail(row, dailyHistory as Point[]),
+    ...computeEarningsReactionDetail(row, dailyHistory),
   }));
 
   // ── THE NEXT REPORT ──────────────────────────────────────────────────────
@@ -475,14 +492,23 @@ async function getEarningsData(symbol: string) {
   const valuation = cold.status === "ready"
     ? valuationInputs(cold.set, todayIso, { annualForm: registrantFor(symbol)?.annualForm ?? null, ads: adsRatioFor(symbol), nonEquity: nonEquityListingOf(symbol), citedCover: citedCoverFor(symbol) })
     : { shares: null, eps: null, refusals: [] };
+  // ON TIINGO: readSurfacePrice's price and its own label ("close, 29 Sep
+  // 2026" or "last IEX trade, 14:05 ET"); its date is the ET trading day, which
+  // the card's staleness test reads as before. A miss shows no price: there is
+  // no FMP fallback on the Tiingo path (#552 COWORK #108 item 2).
   const lastBar = (latestBars as Point[]).at(-1) ?? null;
-  const latestClose = typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
-  const latestCloseOn = lastBar?.date ?? null;
+  const latestClose = onTiingo
+    ? surfacePrice?.price ?? null
+    : typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
+  const latestCloseOn = onTiingo ? surfacePrice?.date ?? null : lastBar?.date ?? null;
+  const latestPriceLabel = onTiingo ? surfacePrice?.label ?? null : null;
+  /** The linked credit shows when any figure on the page is Tiingo's. */
+  const pricesFromTiingo = chartHistory.provider === "tiingo" || (onTiingo && surfacePrice !== null);
 
   return {
     earningsRows, completedRows, latest, next, nextReport,
     priceReactionQuarters, score, secView, cold, annualForm, hidePriceReaction,
-    valuation, latestClose, latestCloseOn,
+    valuation, latestClose, latestCloseOn, latestPriceLabel, pricesFromTiingo,
     /**
      * THE DATE THIS RENDER RAN, read once here rather than inside a component.
      * A card that called Date.now() itself would be untestable and would also
@@ -508,7 +534,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // NO FMP QUOTE (#535 COWORK #18 §3, 2026-09-23). fetchQuoteForMeta read
   // FMP's /stable/quote into seed.price, and the title never read it: it
   // prints seed.lastClose, the newest bar of getDailyHistory.
-  const rawHistory = await getDailyHistory(clean, { caller: "stock-earnings-meta" }).catch(() => []);
+  // THE TITLE FOLLOWS PRICE_PROVIDER_CHARTS too (B3), as /stock's does.
+  const rawHistory = await historyForSurface("CHARTS", clean, () => getDailyHistory(clean, { caller: "stock-earnings-meta" }))
+    .then((h) => h.points.filter((p) => !p.partial), () => [] as Point[]);
   const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
   const seed = computeIndicatorSeed(points, "", null, null);
   const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
@@ -1002,6 +1030,7 @@ export default async function StockEarningsPage({ params }: Props) {
                     inputs={data.valuation}
                     price={data.latestClose}
                     priceAsOf={data.latestCloseOn}
+                    priceLabel={data.latestPriceLabel}
                     today={data.renderedOn}
                   />
                   <SecCashQualityCard view={secView} />
@@ -1030,6 +1059,15 @@ export default async function StockEarningsPage({ params }: Props) {
                 uncoveredLabels={uncoveredLabels}
                 noPriceHistoryNote={NO_PRICE_HISTORY_NOTE}
               />}
+
+              {/* THE LINKED CREDIT, once for the page, whenever the reaction
+                  chart or the valuation price is Tiingo's (B3; the contract's
+                  credit, #563 COWORK #31 §5). */}
+              {data.pricesFromTiingo ? (
+                <p className="earningsDataNote">
+                  Prices: <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                </p>
+              ) : null}
 
               {secView ? <SecRecentPeriodsCard view={secView} /> : null}
             </div>

@@ -35,6 +35,8 @@ const PRELUDE = [
   // basis (#552 COWORK #9): the function and its constant, not the module.
   grabConst("lib/server/annualOnly.ts", "ANNUAL_ONLY_QUARTER_MONTHS"),
   grabFunction(readCodeOnly("lib/server/annualOnly.ts"), "annualOnlyForm"),
+  // THE ESTIMATE LAYER, which secValuation reads (#552 COWORK #112).
+  strip("lib/server/secEstimates.ts"),
 ].join("\n");
 const SRC = strip("lib/server/secValuation.ts");
 

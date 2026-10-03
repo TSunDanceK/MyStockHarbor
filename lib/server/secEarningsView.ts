@@ -846,6 +846,8 @@ export type SecEarningsView = {
     net: number | null;
     /** TRUE when revenueLineIncomplete: the three margins are refused, by name. */
     marginsRefused: boolean;
+    /** The year's net income in dollars, as filed (#563 COWORK #36: the Years profit chart). */
+    netIncome: ViewCell;
   }[];
   growth: {
     label: string;
@@ -939,6 +941,14 @@ export type SecEarningsView = {
     epsDiluted: ViewCell;
     netIncome: ViewCell;
   }[];
+  /**
+   * THE ONE-OFF NOTE PER PERIOD (#563 COWORK #36 blocker), label → note, for
+   * every period on the table basis where largeNonOperating fires: the SAME
+   * rule and words as the latest period's marker, run on each period's own
+   * income rows. Absent label = checked, none. The Growth & margins picture
+   * draws its profit chart only with this (lib/growthVisuals.ts).
+   */
+  oneOffs: Record<string, string>;
   ttmRevenue: number | null;
   ttmNetIncome: number | null;
   coverShares: StoredFactSet["cover"];
@@ -1438,6 +1448,7 @@ export function buildSecEarningsView(
       epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
       ...marginsOf(p),
+      netIncome: view(p, "netIncome", "Net income"),
     };
   }).reverse();
 
@@ -1736,6 +1747,10 @@ export function buildSecEarningsView(
         epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
         netIncome: view(p, "netIncome", "Net income"),
       })),
+    oneOffs: Object.fromEntries(
+      q.map((p) => [periodLabel(p), largeNonOperatingNote(withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(p, k, label)))))] as const)
+        .filter((e): e is readonly [string, string] => e[1] !== null)
+    ),
     ttmRevenue: ttm(q, "revenue"),
     ttmNetIncome: ttm(q, "netIncome"),
     coverShares: set.cover,

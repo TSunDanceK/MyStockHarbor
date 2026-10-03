@@ -1,0 +1,158 @@
+{
+  "_comment": "Share counts cited from a 20-F or 40-F filer's own latest annual-report cover (#552 COWORK #86b, CODE-A #93/#98): the sentence giving 'the number of outstanding shares of each of the issuer's classes ... as of the close of the period covered by the annual report'. One row per symbol, only where the cover states ONE common-share count, or names the common shares on their own line beside preferred series (the 40-F layout). A cover that states two or more common classes is the multi-class rule's, not this file's. `quote` is verbatim from the cover and must contain `count` as printed; `period` is the date the count is as of; `source` is the accession. secPrimaryListing.citedCoverFor reads it, and secValuation uses it only when it is NEWER than the stored dei count.",
+  "entries": {
+    "AZN": {
+      "form": "20-F",
+      "source": "0001104659-26-019130",
+      "filed": "2026-02-24",
+      "period": "2025-12-31",
+      "class": "Ordinary Shares",
+      "count": 1550907927,
+      "quote": "number of outstanding shares of each of the issuer ' s classes of capital or common stock as of the close of the period covered by the annual report … Ordinary Shares of 25 ¢ each: 1,550,907,927"
+    },
+    "BCE": {
+      "form": "40-F",
+      "source": "0001193125-26-095004",
+      "filed": "2026-03-06",
+      "period": "2025-12-31",
+      "class": "Common Shares",
+      "count": 932525817,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report: Common Shares 932,525,817"
+    },
+    "CHT": {
+      "form": "20-F",
+      "source": "0001193125-26-155848",
+      "filed": "2026-04-15",
+      "period": "2025-12-31",
+      "class": "Common Shares",
+      "count": 7757446545,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report. 7,757,446,545 Common Shares"
+    },
+    "EMA": {
+      "form": "40-F",
+      "source": "0001193125-26-062876",
+      "filed": "2026-02-23",
+      "period": "2025-12-31",
+      "class": "Common Shares",
+      "count": 301754258,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report: 301,754,258 Common Shares"
+    },
+    "GMAB": {
+      "form": "20-F",
+      "source": "0001434265-26-000014",
+      "filed": "2026-02-17",
+      "period": "2025-12-31",
+      "class": "Ordinary Shares",
+      "count": 64238408,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report. 64,238,408 Ordinary Shares (including shares underlying American Depositary Shares)"
+    },
+    "HMC": {
+      "form": "20-F",
+      "source": "0001193125-26-274991",
+      "filed": "2026-06-18",
+      "period": "2026-03-31",
+      "class": "Common Stock",
+      "count": 3892580441,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report … Common Stock 3,892,580,441"
+    },
+    "IBN": {
+      "form": "20-F",
+      "source": "0000950103-26-010820",
+      "filed": "2026-07-20",
+      "period": "2026-03-31",
+      "class": "Equity Shares",
+      "count": 7160112569,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report. The number of outstanding Equity Shares of ICICI Bank Limited as of March 31, 2026 was 7,160,112,569."
+    },
+    "MFC": {
+      "form": "40-F",
+      "source": "0001086888-26-000003",
+      "filed": "2026-02-11",
+      "period": "2025-12-31",
+      "class": "Common Shares",
+      "count": 1677180680,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report: Common Shares 1,677,180,680"
+    },
+    "NTR": {
+      "form": "40-F",
+      "source": "0001193125-26-081326",
+      "filed": "2026-02-27",
+      "period": "2025-12-31",
+      "class": "Common Shares",
+      "count": 481962233,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report. 481,962,233 Common Shares outstanding as of December 31, 2025"
+    },
+    "NVMI": {
+      "form": "20-F",
+      "source": "0001178913-26-000504",
+      "filed": "2026-02-17",
+      "period": "2025-12-31",
+      "class": "ordinary shares",
+      "count": 31780111,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report: 31,780,111 ordinary shares, as of December 31, 2025."
+    },
+    "NWG": {
+      "form": "20-F",
+      "source": "0001104659-26-016245",
+      "filed": "2026-02-17",
+      "period": "2025-12-31",
+      "class": "Ordinary shares",
+      "count": 8227041758,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of December 31, 2025, the close of the period covered by the annual report … Ordinary shares of £1.0769* each 8,227,041,758"
+    },
+    "PDD": {
+      "form": "20-F",
+      "source": "0001104659-26-050727",
+      "filed": "2026-04-29",
+      "period": "2025-12-31",
+      "class": "Class A ordinary shares",
+      "count": 5693585848,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report: 5,693,585,848 Class A ordinary shares, par value US$0.000005 per share, and no Class B ordinary shares were outstanding as of December 31, 2025."
+    },
+    "SLF": {
+      "form": "40-F",
+      "source": "0001097362-26-000010",
+      "filed": "2026-02-12",
+      "period": "2025-12-31",
+      "class": "Common Shares",
+      "count": 553799595,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report. Common Shares 553,799,595"
+    },
+    "SONY": {
+      "form": "20-F",
+      "source": "0001193125-26-274893",
+      "filed": "2026-06-18",
+      "period": "2026-03-31",
+      "class": "Common Stock",
+      "count": 5907667254,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the Annual Report … Common Stock 5,907,667,254"
+    },
+    "TAK": {
+      "form": "20-F",
+      "source": "0001395064-26-000177",
+      "filed": "2026-06-17",
+      "period": "2026-03-31",
+      "class": "shares of common stock",
+      "count": 1579836830,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report … 1,579,836,830 shares of common stock as of March 31, 2026"
+    },
+    "TRI": {
+      "form": "40-F",
+      "source": "0001193125-26-094222",
+      "filed": "2026-03-05",
+      "period": "2025-12-31",
+      "class": "common shares",
+      "count": 444962490,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report: 444,962,490 common shares"
+    },
+    "VOD": {
+      "form": "20-F",
+      "source": "0001193125-26-235425",
+      "filed": "2026-05-22",
+      "period": "2026-03-31",
+      "class": "Ordinary Shares",
+      "count": 24328378589,
+      "quote": "number of outstanding shares of each of the issuer's classes of capital or common stock as of the close of the period covered by the annual report. Ordinary Shares of 20 20/21 US cents each: 24,328,378,589"
+    }
+  }
+}

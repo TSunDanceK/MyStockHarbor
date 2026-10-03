@@ -10,7 +10,7 @@ import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
 import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGrid";
 import ScanFooter from "@/app/components/ScanFooter";
 import { PickerFilterProvider, PickerFilterUrlSync } from "@/app/components/PickerFilterContext";
-import { getCompanyNameMap } from "@/lib/server/companyNames";
+import { cleanName, getCompanyNameMap } from "@/lib/server/companyNames";
 import { resolveProfileBulk } from "@/lib/server/staticProfile";
 import { excludedFromFundamentals } from "@/lib/server/pickerEquity";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
@@ -20,6 +20,7 @@ import { recordAboveFold } from "@/lib/server/priceTiers";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import {
   applySecEarnings,
+  secPickerWhy,
   applySecPickerRow,
   pickersFundamentalsSource,
   readSecPickerRows,
@@ -27,8 +28,12 @@ import {
   SEC_PICKER_FIELDS,
 } from "@/lib/server/pickersSecFundamentals";
 import { HIDDEN_FIELD_KEYS } from "@/lib/pickerHiddenFields";
+import type { CellWhyCode, CellWhyColumn } from "@/lib/pickerCellWhy";
+import { gridCompanyName } from "@/lib/server/secTickerNames";
+import { toDotted } from "@/lib/symbolSpellings.mjs";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { applyPerf, type PerfFields, type PerfRow } from "@/lib/pickerPerf";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
@@ -182,6 +187,8 @@ type PickerSection = {
 
 type SignalRecord = {
   symbol?: string;
+  /** B6: the build's 1W..1Y returns from stored Tiingo bars (lib/pickerPerf.ts). */
+  perf?: PerfRow;
   note?: string;
   tone?: PickerTone;
   chartPoints?: MiniCandlePoint[];
@@ -339,6 +346,9 @@ export type ResultEntry = ResultEntryFlags & {
   perf6m?: number;
   perfYtd?: number;
   perf1y?: number;
+  /** B6 (#553 CODE-B #94): the close the returns run to, and why each empty one is empty. */
+  perfAsOf?: PerfFields["perfAsOf"];
+  perfWhy?: PerfFields["perfWhy"];
   /**
    * "sec" when this row's Market Cap / PS / PB / EV / P/FCF / Revenue /
    * Op. Income / Net Income / FCF / Div ($) / Div Yield / Div Growth came from
@@ -346,6 +356,8 @@ export type ResultEntry = ResultEntryFlags & {
    * take Payout Ratio as filed rather than recomputing it from EPS.
    */
   fundamentalsFrom?: "sec";
+  /** Grid column key -> lib/pickerCellWhy.ts code, for each empty filings cell (#553 COWORK #69). */
+  cellWhy?: Partial<Record<CellWhyColumn, CellWhyCode>>;
   /**
    * What period the filed P/E and EPS cover, and the Payout's: "TTM to 30 Jun
    * 2026" or "FY2025" (#553 COWORK #21). The grid shows it as the cell's
@@ -1125,12 +1137,22 @@ async function getPickerData(config: PickerResultConfig) {
       const nameMap = await getCompanyNameMap();
       if (nameMap.size) {
         for (const entry of entries) {
-          const name = nameMap.get(entry.symbol);
+          const name = nameMap.get(entry.symbol) ?? nameMap.get(toDotted(entry.symbol));
           if (name) entry.companyName = name;
         }
       }
     } catch {
       // names are optional
+    }
+    // THE COMMITTED FLOOR (#553 COWORK #69: MKC-V showed no name). The live
+    // directory spells dual-class and preferred listings dotted (MKC.V) while
+    // the universe is dashed, and the directory can be unreachable; a row the
+    // live map misses takes the committed directory snapshot's name, else SEC's
+    // registrant name (gridCompanyName), never an invented one.
+    for (const entry of entries) {
+      if (entry.companyName) continue;
+      const name = cleanName(gridCompanyName(entry.symbol));
+      if (name) entry.companyName = name;
     }
 
     // One switch for where Market Cap comes from (see the filings overlay).
@@ -1221,6 +1243,10 @@ async function getPickerData(config: PickerResultConfig) {
     // for the list-view tabs. Redis-ONLY read (see stockDataCache) -- warmed by
     // the warm-stock-data cron, so a page render never spends an FMP call. Any
     // symbol not yet warmed just shows "--" in those tab columns.
+    // THE PERFORMANCE TAB ON TIINGO (#553 CODE-B #94 B6). With the Pickers on
+    // Tiingo the five returns come from the build (signalRecords[].perf,
+    // computed from the stored EOD bars), never from FMP's stockDataCache.
+    const perfOnTiingo = priceProviderFor("PICKERS") === "tiingo";
     try {
       const extra = await readCachedStockDataBulk(entries.map((e) => e.symbol));
       if (extra.size) {
@@ -1245,15 +1271,25 @@ async function getPickerData(config: PickerResultConfig) {
           if (d.rating) entry.rating = d.rating;
           if (d.analystCount != null) entry.analystCount = d.analystCount;
           if (d.priceTarget != null) entry.priceTarget = d.priceTarget;
-          if (d.perf1w != null) entry.perf1w = d.perf1w;
-          if (d.perf1m != null) entry.perf1m = d.perf1m;
-          if (d.perf6m != null) entry.perf6m = d.perf6m;
-          if (d.perfYtd != null) entry.perfYtd = d.perfYtd;
-          if (d.perf1y != null) entry.perf1y = d.perf1y;
+          if (!perfOnTiingo) {
+            if (d.perf1w != null) entry.perf1w = d.perf1w;
+            if (d.perf1m != null) entry.perf1m = d.perf1m;
+            if (d.perf6m != null) entry.perf6m = d.perf6m;
+            if (d.perfYtd != null) entry.perfYtd = d.perfYtd;
+            if (d.perf1y != null) entry.perf1y = d.perf1y;
+          }
         }
       }
     } catch {
       // extended data is optional
+    }
+    {
+      const perfBySymbol = new Map<string, PerfRow>();
+      for (const record of signalRecords) {
+        const symbol = cleanSymbol(record.symbol);
+        if (symbol && record.perf) perfBySymbol.set(symbol, record.perf);
+      }
+      for (const entry of entries) applyPerf(entry, perfBySymbol.get(entry.symbol), perfOnTiingo);
     }
 
     // HIDDEN FIELDS ARE NOT SHIPPED (lib/pickerHiddenFields.ts, 2026-09-23).
@@ -1302,6 +1338,12 @@ async function getPickerData(config: PickerResultConfig) {
             else delete entry.payoutBasis;
           }
           entry.fundamentalsFrom = "sec";
+          // WHY EACH EMPTY CELL IS EMPTY (#553 COWORK #69): a short code per
+          // refused column, read from A's refusals; the grid turns it into a
+          // reason on hover or tap (lib/pickerCellWhy.ts holds the words).
+          const why = secPickerWhy(row, typeof shown === "number" ? shown : null, figures, earnings, entry.industry);
+          if (Object.keys(why).length) entry.cellWhy = why;
+          else delete entry.cellWhy;
         }
       } catch {
         // A failed read leaves the stored values, as before this block existed.
@@ -1699,7 +1741,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .chgUp { color: #4ade80; font-weight: 800; }
         .chgDown { color: #f87171; font-weight: 800; }
         .muted { color: rgba(148,163,184,0.55); }
-        .basisFy { margin-left: 4px; font-size: 0.72em; letter-spacing: 0.02em; color: rgba(148,163,184,0.75); }
+        /* .basisFy (the "FY" marker) is styled in PickerResultsGrid: it now sits BEFORE the figure (#553 COWORK #90). */
         @keyframes pickerHighlightPulse {
           0% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
           15% { box-shadow: 0 0 0 4px rgba(245,197,66,0.35); border-color: #f5c542; }

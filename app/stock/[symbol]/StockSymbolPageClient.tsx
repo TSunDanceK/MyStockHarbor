@@ -1,10 +1,13 @@
 "use client";
+import { EstimatedValue, ReasonedValue } from "@/app/components/EstimatedValue";
+import { EstimateKey } from "@/app/components/EstimateKey";
+import type { EstimateMark } from "@/app/components/estimateMark";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
-import StockPriceChart from "./StockPriceChart";
+import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
@@ -16,7 +19,8 @@ import CompanyProfile, {
 import DilutionHistory, {
   type DilutionHistoryData,
 } from "@/app/components/DilutionHistory";
-import ReturnsBarChart, { type ReturnBar } from "@/app/components/ReturnsBarChart";
+import type { ReturnBar } from "@/app/components/ReturnsBarChart";
+import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
 import ShareButton from "@/app/components/ShareButton";
 
 type Quote = {
@@ -74,7 +78,12 @@ type StockValuationData = {
   peBasis?: string | null;
   /** The derived-Q4 caveat, when the TTM includes one. */
   peBasisNote?: string | null;
+  /** "Loss", "Not meaningful", "Neg." in place of a dash (#552 COWORK #98 §1); its reason is `reasons`. */
+  words?: Partial<Record<ValuationKey, string | null>>;
+  /** The estimate/derived mark on a figure (lib/server/secEstimates); absent on a filed figure. */
+  estimates?: Partial<Record<ValuationKey, EstimateMark | null>>;
 };
+type ValuationKey = "peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda";
 
 type AnalystRatingData = {
   consensusRating: string | null;
@@ -119,6 +128,9 @@ type Point = {
   high?: number;
   low?: number;
   volume?: number;
+  // Tiingo only (step 3, #553 COWORK #57 §2): today's partial bar, "today so
+  // far (IEX), hh:mm ET". It carries no volume.
+  label?: string;
 };
 
 type StockSymbolPageClientProps = {
@@ -150,6 +162,12 @@ type StockSymbolPageClientProps = {
   // The linked "Market data from Tiingo.com", rendered by page.tsx when
   // PRICE_PROVIDER_STOCK_PAGE=tiingo (step 4). Shown only under a Tiingo quote.
   tiingoCredit?: ReactNode;
+  // The linked "Market data from Tiingo.com", rendered by page.tsx when the
+  // series shown can be Tiingo's (step 3). Shown under the chart only while
+  // the series actually shown is Tiingo's (#553 COWORK #103).
+  historyCredit?: ReactNode;
+  // Whose bars `initialHistory` is: "tiingo", "fmp" or "none".
+  historyProvider?: string;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -735,8 +753,11 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
+  // Whose bars the chart is showing: the seed's provider, or what the client
+  // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
+  const [shownProvider, setShownProvider] = useState<string | null>(seededHistory ? historyProvider ?? null : null);
   const [quote, setQuote] = useState<Quote | null>(
     initialQuote?.price != null || seed?.price != null
       ? {
@@ -815,22 +836,25 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         // No cache:"no-store". /api/history already declares revalidate = 900
         // and returns its own tiered s-maxage; a no-store request header opted
         // the browser and the CDN out of both.
-        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`);
+        // The page token lets a browser that sends no Sec-Fetch-Site through
+        // /api/history's same-origin check on the Tiingo path (#553 COWORK #103).
+        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined);
         if (!res.ok) throw new Error("History fetch failed");
-        const data = (await res.json()) as { symbol: string; points: any[] };
+        const data = (await res.json()) as { symbol: string; points: any[]; provider?: string };
         if (cancelled) return;
+        setShownProvider(typeof data.provider === "string" ? data.provider : null);
         const ptsRaw = Array.isArray(data.points) ? data.points : [];
-        const pts: Point[] = ptsRaw.map((p: any) => ({ date: String(p?.date ?? ""), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume) })).filter((p) => p.date && Number.isFinite(p.close));
+        const pts: Point[] = ptsRaw.map((p: any) => ({ date: String(p?.date ?? ""), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume), label: typeof p?.label === "string" ? p.label : undefined })).filter((p) => p.date && Number.isFinite(p.close));
         setHistory(pts);
       } catch {
         if (cancelled) return;
-        setErr("Failed to load stock page."); setHistory([]);
+        setErr("Failed to load stock page."); setHistory([]); setShownProvider(null);
       }
       finally { if (!cancelled) setPriceLoading(false); }
     }
     loadHistory();
     return () => { cancelled = true; };
-  }, [symbol, seededHistory]);
+  }, [symbol, seededHistory, pageToken]);
 
   // -- Quote ---------------------------------------------------------------
   // Still fetched on every load, and deliberately so. `initialQuote` seeds the
@@ -1026,7 +1050,11 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               {!valuationLoading && valuation ? (
                 <div className="stock-stat-cell">
                   <div className="stock-stat-label">P/E ({valuation.peBasis ?? "TTM"})</div>
-                  <div className="stock-stat-value">{formatValuationMultiple(valuation.peRatio)}</div>
+                  <div className="stock-stat-value">
+                    {valuation.peRatio != null
+                      ? formatValuationMultiple(valuation.peRatio)
+                      : <ReasonedValue text={valuation.words?.peRatio ?? "—"} reason={valuation.reasons?.peRatio} />}
+                  </div>
                   <div className="stock-stat-sub">See valuation ↓</div>
                 </div>
               ) : null}
@@ -1106,16 +1134,16 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                     <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
                   </div>
                 </div>
-                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} />
+                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} />
               </section>
 
               {/* -- Daily / weekly returns --------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Price Action</div>
-                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily &amp; weekly close-over-close change</h2>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily or weekly close-over-close change</h2>
+                {/* ONE card, Daily | Weekly toggle, Daily first (#552 COWORK #89). Both views server-rendered. */}
                 <div className="returns-charts-grid">
-                  <ReturnsBarChart symbol={symbol} periodLabel="Daily" compareLabel="previous day's close" bars={dailyReturns} />
-                  <ReturnsBarChart symbol={symbol} periodLabel="Weekly" compareLabel="previous week's close" bars={weeklyReturns} />
+                  <ReturnsToggleCard symbol={symbol} daily={dailyReturns} weekly={weeklyReturns} />
                 </div>
               </section>
 
@@ -1125,14 +1153,14 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Key levels &amp; signals</h2>
                 <div className="indicator-rows">
                   {[
-                    { label: "MA50", value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—", sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma50Pct) },
-                    { label: "MA200", value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—", sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma200Pct) },
+                    { label: "MA50", value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—", sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : "Distance unavailable", tone: metricToneFromPct(ma50Pct), title: closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : undefined },
+                    { label: "MA200", value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—", sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : "Distance unavailable", tone: metricToneFromPct(ma200Pct), title: closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : undefined },
                     { label: "RSI (14)", value: typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—", sub: typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought zone" : lastRsi <= 30 ? "Oversold zone" : "Neutral zone") : "Momentum unavailable", tone: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
                     { label: "MACD Signal", value: macdSignal?.label ?? "—", sub: macdSignal?.meta ?? "Momentum unavailable", tone: macdSignal?.tone ?? "yellow" as "green" | "yellow" | "red" },
                     { label: "Macro Support", value: macroSupport ? `$${macroSupport.lower.toFixed(2)}–$${macroSupport.upper.toFixed(2)}` : "Not identified", sub: macroSupport ? `${macroSupport.distancePct.toFixed(1)}% below price · ${macroSupport.touches} touches` : "No repeated weekly support zone found", tone: supportTone(macroSupport?.distancePct ?? null) },
                     { label: "Support Quality", value: macroSupport ? `${macroSupport.touches} touches` : "—", sub: macroSupport?.volumeRatio != null ? `${macroSupport.volumeRatio.toFixed(1)}× zone volume` : "Volume data unavailable", tone: supportQualityTone(macroSupport) },
                   ].map((row) => (
-                    <div key={row.label} className="indicator-row">
+                    <div key={row.label} className="indicator-row" title={"title" in row ? row.title : undefined}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 110, flex: "0 0 auto" }}>
                         <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(row.tone), boxShadow: `0 0 5px ${toneColor(row.tone)}66`, flex: "0 0 auto" }} />
                         <span style={{ fontSize: 14, fontWeight: 700, color: "rgba(226,232,240,0.75)" }}>{row.label}</span>
@@ -1151,27 +1179,41 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 <div style={sectionLabelStyle}>Valuation</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>{symbol} valuation multiples (TTM)</h2>
                 <div className="valuationGrid">
-                  {[
-                    { label: valuation?.peBasis ? `P/E Ratio (${valuation.peBasis})` : "P/E Ratio", value: valuation?.peRatio, reason: valuation?.reasons?.peRatio ?? (valuation?.peRatio != null ? valuation?.peBasisNote : null) },
-                    { label: "P/S Ratio", value: valuation?.priceToSalesRatio, reason: valuation?.reasons?.priceToSalesRatio },
-                    { label: "P/B Ratio", value: valuation?.priceToBookRatio, reason: valuation?.reasons?.priceToBookRatio },
-                    { label: "EV/EBITDA", value: valuation?.evToEbitda, reason: valuation?.reasons?.evToEbitda },
-                  ].map((item) => (
+                  {([
+                    { key: "peRatio", label: valuation?.peBasis ? `P/E Ratio (${valuation.peBasis})` : "P/E Ratio", value: valuation?.peRatio, reason: valuation?.reasons?.peRatio ?? (valuation?.peRatio != null ? valuation?.peBasisNote : null) },
+                    { key: "priceToSalesRatio", label: "P/S Ratio", value: valuation?.priceToSalesRatio, reason: valuation?.reasons?.priceToSalesRatio },
+                    { key: "priceToBookRatio", label: "P/B Ratio", value: valuation?.priceToBookRatio, reason: valuation?.reasons?.priceToBookRatio },
+                    { key: "evToEbitda", label: "EV/EBITDA", value: valuation?.evToEbitda, reason: valuation?.reasons?.evToEbitda },
+                  ] as { key: ValuationKey; label: string; value: number | null | undefined; reason: string | null | undefined }[]).map((item) => (
                     <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                       <div style={miniLabelStyle}>{item.label}</div>
                       <div style={{ marginTop: 4, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
-                        {valuationLoading ? "—" : formatValuationMultiple(item.value)}
+                        {valuationLoading ? "—" : item.value != null
+                          ? <EstimatedValue text={formatValuationMultiple(item.value)} est={valuation?.estimates?.[item.key]} />
+                          : <ReasonedValue text={valuation?.words?.[item.key] ?? "—"} reason={item.reason} />}
                       </div>
-                      {/* WHY IT IS BLANK, where the filings say why. A missing
-                          input stays a bare "—" (owner: no approximation), but a
-                          refusal with a reason names it. */}
-                      {item.reason ? (
+                      {/* A FIGURE'S NOTE (its basis, NCI-inclusive equity) is
+                          printed; a REFUSAL'S reason is on hover/tap of the dash
+                          or word instead (#552 COWORK #98 §1). */}
+                      {item.value != null && item.reason ? (
                         <div style={{ marginTop: 4, fontSize: 11, lineHeight: 1.4, opacity: 0.55 }}>{item.reason}</div>
                       ) : null}
                     </div>
                   ))}
                 </div>
-                <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{valuation?.sourceNote ?? "Computed from the company's own filings on SEC EDGAR; none are on file for this symbol."}</div>
+                <EstimateKey
+                  marks={[valuation?.estimates?.priceToSalesRatio, valuation?.estimates?.priceToBookRatio, valuation?.estimates?.evToEbitda]}
+                  style={{ marginTop: 12 }}
+                />
+                <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>
+                  {valuation?.sourceNote ? "From the company's SEC filings and this page's share price." : "Computed from the company's own filings on SEC EDGAR; none are on file for this symbol."}
+                </div>
+                {valuation?.sourceNote ? (
+                  <details style={{ marginTop: 6, fontSize: 12, lineHeight: 1.6, opacity: 0.6 }}>
+                    <summary style={{ cursor: "pointer" }}>How these are calculated</summary>
+                    <div style={{ marginTop: 6 }}>{valuation.sourceNote}</div>
+                  </details>
+                ) : null}
               </section>
 
               {/* -- Analyst ratings & price targets (FMP) ------------ */}

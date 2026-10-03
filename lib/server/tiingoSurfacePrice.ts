@@ -11,6 +11,13 @@
 //   the EOD close        the stored history's newest bar, once it is at least
 //                        as new as the IEX trade: "close, 29 Sep 2026".
 //
+// OUTSIDE THE SESSION, THE LABEL SAYS SO (#563 COWORK #35): an IEX trade before
+// 09:30 ET reads "last IEX trade, 08:40 ET (pre-market)", after 16:00 ET "…
+// 17:05 ET (after hours)", so a pre-market print isn't taken for the day's
+// price. The test is the trade's own timestamp in America/New_York (DST-safe),
+// not the server clock; 09:30 and 16:00 themselves are in session. Weekends and
+// holidays need nothing extra: the trade's date and time already say it.
+//
 // NOT A SESSION-CLOCK RULE, deliberately. "Market open -> IEX, closed -> EOD"
 // would, between the 16:00 ET close and the nightly EOD job (~00:45 UTC), show
 // yesterday's close under today's IEX trade. Comparing the two dates instead
@@ -29,7 +36,10 @@ export const TIINGO_URL = "https://www.tiingo.com/";
 
 export type SurfacePrice = {
   price: number;
-  /** "last IEX trade, 14:05 ET" | "last IEX trade, 15:59 ET, 29 Sep" | "close, 29 Sep 2026" */
+  /**
+   * "last IEX trade, 14:05 ET" | "last IEX trade, 08:40 ET (pre-market)" |
+   * "last IEX trade, 17:05 ET, 29 Sep (after hours)" | "close, 29 Sep 2026"
+   */
   label: string;
   kind: "iex" | "close";
   /** The ET trading date the price belongs to, YYYY-MM-DD. */
@@ -48,6 +58,17 @@ export function easternDateTime(ms: number): { date: string; time: string } {
     }).formatToParts(new Date(ms)).map((p) => [p.type, p.value])
   );
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+/** The regular session, ET, both ends inclusive ("HH:MM" compares as text). */
+const SESSION_OPEN = "09:30";
+const SESSION_CLOSE = "16:00";
+
+/** " (pre-market)" / " (after hours)" for an ET time outside the session; "" inside it. */
+export function sessionSuffix(etTime: string): string {
+  if (etTime < SESSION_OPEN) return " (pre-market)";
+  if (etTime > SESSION_CLOSE) return " (after hours)";
+  return "";
 }
 
 function dayMonth(iso: string): string {
@@ -81,7 +102,7 @@ export function pickSurfacePrice(
       price: iex.price,
       kind: "iex",
       date: iex.date,
-      label: `last IEX trade, ${iex.time} ET${iex.date === today ? "" : `, ${dayMonth(iex.date)}`}`,
+      label: `last IEX trade, ${iex.time} ET${iex.date === today ? "" : `, ${dayMonth(iex.date)}`}${sessionSuffix(iex.time)}`,
     };
   }
   return null;

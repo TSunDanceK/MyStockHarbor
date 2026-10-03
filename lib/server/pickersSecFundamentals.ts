@@ -61,8 +61,12 @@ import {
   type EpsBasis,
   type FilerFacts,
   type MultipleInputs,
+  type ValuationFigure,
   type ValuationInputs,
+  type ValuationRefusal,
 } from "./secValuation";
+import { isBankOrInsurer, type CellWhyCode, type CellWhyColumn } from "../pickerCellWhy";
+import { secGrowthFacts, type SecGrowthFacts } from "./pickersSecEarningsGrowth";
 
 export const PICKERS_SEC_KEY = "msh:pickers:sec-fundamentals:v1";
 /**
@@ -141,6 +145,13 @@ export type SecPickerRow = {
   eps?: EpsBasis | null;
   /** Payout from one period only, or null. Same optionality as `eps`. */
   payout?: PayoutBasis | null;
+  /**
+   * The latest filed period against a year earlier, for the Strong Earnings
+   * Growth list's membership (pickersSecEarningsGrowth.ts, #553 CODE-B #94 B5,
+   * 2026-10-03), or the reason there is none. Same optionality as `eps`: a row
+   * written before it existed is simply not a member until the job rewrites it.
+   */
+  growth?: SecGrowthFacts | null;
 };
 
 /** A payout ratio (PERCENT) whose dividend and EPS cover the same period. */
@@ -282,6 +293,7 @@ export function buildSecPickerRow(
       // the row carries nothing derived from a figure it refused.
       eps: null,
       payout: null,
+      growth: secGrowthFacts(set, today, filer, inputs.refusals),
     };
   }
   const oi = twelveMonthsOf(set, ["operatingIncome"]);
@@ -303,6 +315,7 @@ export function buildSecPickerRow(
     divGrowth: dividendGrowth(set),
     eps: inputs.eps,
     payout: samePeriodPayout(set, inputs.eps),
+    growth: secGrowthFacts(set, today, filer, inputs.refusals),
   };
 }
 
@@ -404,6 +417,93 @@ export function applySecEarnings(
     epsBasis: eps && (pe !== null || epsTtm !== null) ? basisLabel(eps) : null,
     payoutBasis: payout ? basisLabel(payout) : periodsDiffer ? PAYOUT_PERIODS_DIFFER : null,
   };
+}
+
+/**
+ * A's REFUSAL, AS THE GRID'S CODE (#553 COWORK #69). Every ValuationRefusal
+ * has one: the Record type makes a new refusal a type error here until it is
+ * given a code, and scripts/check-pickers-cell-why.mjs checks each code has
+ * words in lib/pickerCellWhy.ts.
+ */
+export const WHY_FOR_REFUSAL: Record<ValuationRefusal, CellWhyCode> = {
+  "no-cover-share-count": "noShr",
+  "multi-class-share-count-is-ambiguous": "multi",
+  "ads-ratio-makes-shares-incomparable": "adsS",
+  "ads-ratio-makes-eps-incomparable": "adsE",
+  "ticker-is-a-debt-security": "debt",
+  "share-count-is-stale": "shOld",
+  "no-twelve-month-eps": "noEps",
+  "eps-period-is-stale": "epsOld",
+  "share-basis-changed": "basis",
+  "eps-is-zero-or-negative": "epsNeg",
+  "eps-near-zero": "eps0",
+  "no-twelve-month-revenue": "noRev",
+  "revenue-line-incomplete": "revInc",
+  "no-balance-sheet-equity": "noEq",
+  "equity-tagged-only-incl-nci": "eqNci",
+  "equity-is-zero-or-negative": "eqNeg",
+  "equity-too-small-for-pb": "eqSmall",
+  "enterprise-value-input-missing": "evIn",
+  "ebitda-is-zero-or-negative": "ebitNeg",
+};
+
+/**
+ * WHY EACH EMPTY CELL IS EMPTY (#553 COWORK #69). Pure. For every grid column
+ * this row leaves empty -- the same `figures` and `earnings` the page applies
+ * -- the code of the reason, taken from A's refusal where there is one. A
+ * column with a figure gets no entry. `industry` is A's label for the row: a
+ * bank or insurer's empty Ent. Value, P/S and P/FCF read "n/a", not "–".
+ */
+export function secPickerWhy(
+  row: SecPickerRow,
+  price: number | null,
+  figures: SecPickerFigures,
+  earnings: SecEarningsFigures | null,
+  industry: string | null | undefined
+): Partial<Record<CellWhyColumn, CellWhyCode>> {
+  const out: Partial<Record<CellWhyColumn, CellWhyCode>> = {};
+  const usd = moneyIsUsd(row.unit);
+  const refusals = row.inputs.refusals;
+  const priced = price !== null && Number.isFinite(price) && price > 0;
+  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: row.eps ?? null, refusals };
+  const capFig = marketCap(inputs, price);
+  const why = (f: ValuationFigure | null | undefined): CellWhyCode | null => (f && !f.ok ? WHY_FOR_REFUSAL[f.why] : null);
+  // The cap's reason is every cap-based column's reason, as in valuationMultiples.
+  const capWhy: CellWhyCode = refusals.includes("ticker-is-a-debt-security")
+    ? "debt"
+    : why(capFig) ?? (priced ? "noCap" : "noPx");
+  const bank = isBankOrInsurer(industry);
+  const set = (col: CellWhyColumn, v: number | null, code: () => CellWhyCode) => {
+    if (v === null) out[col] = code();
+  };
+  const money = (code: () => CellWhyCode) => () => (usd ? code() : "fx");
+
+  set("marketCap", figures.marketCap, () => capWhy);
+  const mult = valuationMultiples(inputs, row.m, price);
+  set("ps", figures.psRatio, () => (bank ? "naPs" : figures.marketCap === null ? capWhy : usd ? why(mult.ps) ?? "noRev" : "fx"));
+  set("pb", figures.pbRatio, () => (figures.marketCap === null ? capWhy : usd ? why(mult.pb) ?? "noEq" : "fx"));
+  set("ev", figures.enterpriseValue, () => (bank ? "naEv" : figures.marketCap === null ? capWhy : usd ? "evIn" : "fx"));
+  set("pfcf", figures.pfcfRatio, () =>
+    bank ? "naFcf" : figures.marketCap === null ? capWhy : !usd ? "fx" : row.freeCashFlow === null ? "noFcf" : row.freeCashFlow === 0 ? "fcf0" : "fcfNeg");
+  set("revenue", figures.revenue, money(() => (row.m.revenueIncomplete ? "revInc" : "noRev")));
+  set("opinc", figures.operatingIncome, money(() => "noOpi"));
+  set("netinc", figures.netIncome, money(() => "noNi"));
+  set("fcf", figures.freeCashFlow, money(() => "noFcf"));
+  set("dps", figures.divPerShare, money(() => "noDiv"));
+  set("dyield", figures.divYield, money(() => (row.divPerShare === null ? "noDiv" : "noPx")));
+  set("dgrowth", figures.divGrowth, money(() => "noDg"));
+
+  // P/E, EPS and Payout only where the page applies them (a row written before
+  // they moved keeps its stored figures, and so has no reason to give).
+  if (earnings) {
+    const ads = refusals.includes("ads-ratio-makes-eps-incomparable");
+    set("pe", earnings.peRatio, money(() => why(peRatio(inputs, price)) ?? (priced ? "noEps" : "noPx")));
+    set("eps", earnings.epsTtm, money(() =>
+      ads ? "adsE" : refusals.includes("eps-period-is-stale") ? "epsOld" : "noEps"));
+    set("payout", earnings.payoutRatio, money(() =>
+      ads ? "adsE" : earnings.payoutBasis === PAYOUT_PERIODS_DIFFER ? "payMix" : "noPay"));
+  }
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────────── I/O

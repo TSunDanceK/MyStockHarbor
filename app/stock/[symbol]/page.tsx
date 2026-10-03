@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { getDailyHistory } from "@/lib/server/historyCache";
+import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { searchSymbols } from "@/lib/server/symbolSearch";
 import {
   getStockPageSecFacts,
@@ -18,8 +20,9 @@ import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import { composeCompanyProfile, exchangeFor, peBasisLabel, peBasisNote, registrantFor } from "@/lib/server/stockProfile";
 import { filingDescriptionFor } from "@/lib/server/filingDescription";
 import {
-  REFUSAL_WORDS, valuationMultiples, type MultipleInputs, type ValuationFigure, type ValuationInputs,
+  REFUSAL_CELL_WORD, REFUSAL_WORDS, fyPeRatio, valuationMultiples, type EpsBasis, type MultipleInputs, type ValuationFigure, type ValuationInputs,
 } from "@/lib/server/secValuation";
+import { readableDate } from "@/lib/server/secEstimates";
 import { symbolSpellings } from "@/lib/symbolSpellings.mjs";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
@@ -33,7 +36,6 @@ import {
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { readTiingoQuote } from "@/lib/server/tiingoQuote";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { awaitingSecRead } from "@/lib/server/secColdFetch";
 import Link from "next/link";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
@@ -75,8 +77,10 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
   // STEP 4 (#553 COWORK #71), behind PRICE_PROVIDER_STOCK_PAGE, the same switch
   // as the client's /api/quote refresh, so the header never seeds from FMP and
   // then flips to Tiingo on hydration. A Tiingo miss keeps the FMP path below.
+  let tiingoAsked = false;
   if (priceProviderFor("STOCK_PAGE") === "tiingo") {
     const t = await readTiingoQuote(symbol);
+    tiingoAsked = true;
     if (t && t.price != null) {
       return {
         quote: {
@@ -114,7 +118,12 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
     volume: null,
     avgVolume: null,
   };
-  if (!apiKey) return { quote: empty, outcome: "unavailable" };
+  // NO FMP KEY AFTER A TIINGO MISS IS "NO DATA" (#553 CODE-B #94 B12). Tiingo
+  // was asked and had nothing, and there is no fallback left to ask, so an
+  // unknown or delisted ticker reads "No data available" rather than
+  // "temporarily unavailable". "unavailable" stays for the FMP path failing
+  // below, and for no provider having been asked at all.
+  if (!apiKey) return { quote: empty, outcome: tiingoAsked ? "no-data" : "unavailable" };
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
       toDashed(symbol)
@@ -375,20 +384,28 @@ async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | 
  * The Valuation section's footer: SEC EDGAR, and which periods the figures
  * cover. No FMP wording — the section no longer reads FMP.
  */
-function valuationSourceNote(m: MultipleInputs | null, v: ValuationInputs | null): string {
+// THE PERIOD DETAIL, for the panel's "How these are calculated" (#552 COWORK
+// #98 §3–4): which periods each multiple rests on, in readable dates. The
+// visible line under the panel is the short one; this sits inside <details>.
+function valuationSourceNote(m: MultipleInputs | null, v: ValuationInputs | null, peEps: EpsBasis | null = v?.eps ?? null): string {
   const basis = (b: "four-quarters" | "fiscal-year" | "year-to-date", end: string) =>
-    b === "four-quarters" ? `the four quarters to ${end}`
-      : b === "year-to-date" ? `the twelve months to ${end}` : `the fiscal year to ${end}`;
+    b === "four-quarters" ? `the four quarters to ${readableDate(end)}`
+      : b === "year-to-date" ? `the twelve months to ${readableDate(end)}` : `the fiscal year to ${readableDate(end)}`;
   const parts: string[] = [];
-  if (v?.eps) parts.push(`earnings over ${basis(v.eps.basis, v.eps.periodEnd)}`);
+  if (peEps) parts.push(`earnings over ${basis(peEps.basis, peEps.periodEnd)}`);
   if (m?.revenue) parts.push(`revenue over ${basis(m.revenue.basis, m.revenue.periodEnd)}`);
   if (m?.ebitda) parts.push(`operating income plus D&A over ${basis(m.ebitda.basis, m.ebitda.periodEnd)}`);
-  if (m?.balanceSheet) parts.push(`the balance sheet at ${m.balanceSheet.asOf}`);
+  if (m?.balanceSheet) parts.push(`the balance sheet at ${readableDate(m.balanceSheet.asOf)}`);
   return (
     "Computed from the company's own filings on SEC EDGAR and this page's share price" +
     (parts.length ? `: ${parts.join("; ")}.` : ".") +
-    " A figure the filings cannot support shows —, never an estimate."
+    " Where the filings can't support a figure, it shows a dash or a word (Loss, Not meaningful), with the reason on hover or tap."
   );
+}
+
+/** Under an FY-basis P/E (#552 COWORK #98 §2). */
+function fyPeNote(eps: EpsBasis): string {
+  return `Twelve months of diluted EPS aren't on file, so this P/E uses the latest full year (to ${readableDate(eps.periodEnd)}).`;
 }
 
 // ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
@@ -402,8 +419,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   // Run history + quote in parallel; we only need these for meta generation.
+  // History follows PRICE_PROVIDER_CHARTS exactly as the page body does (step 3,
+  // #553 COWORK #71), so the title's MA/RSI read and the page agree.
   const [rawHistory, quoteResult] = await Promise.all([
-    getDailyHistory(upper, { caller: "stock-page" }).catch(() => []),
+    historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page" })).then(
+      (h) => h.points,
+      () => [] as Point[]
+    ),
     fetchQuote(upper),
   ]);
   const quote = quoteResult.quote;
@@ -493,9 +515,14 @@ export default async function StockPage({ params }: Props) {
       // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
       // unreachable) stays distinguishable from a read that legitimately
       // returned nothing for this symbol.
-      getDailyHistory(upper, { caller: "stock-page-meta" }).then(
-        (pts) => ({ points: pts as Point[], failed: false }),
-        () => ({ points: [] as Point[], failed: true })
+      //
+      // STEP 3 (#553 COWORK #71 row 3), behind PRICE_PROVIDER_CHARTS: the stored
+      // Tiingo bars + today's labelled partial bar, whole, or this FMP read
+      // whole on a Tiingo miss (lib/server/tiingoHistory.ts). The chart, the
+      // indicator seed and the 52-week range all read this one series.
+      historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page-meta" })).then(
+        (h) => ({ points: h.points as Point[], failed: false, provider: h.provider }),
+        () => ({ points: [] as Point[], failed: true, provider: "none" as const })
       ),
       fetchQuote(upper),
       fetchCompanyName(upper),
@@ -554,28 +581,50 @@ export default async function StockPage({ params }: Props) {
   // same number (owner addendum, brief 2026-09-22 PR 2).
   const multiples =
     secFacts.profileFacts.valuation && secFacts.profileFacts.multiples
-      ? valuationMultiples(secFacts.profileFacts.valuation, secFacts.profileFacts.multiples, quote.price)
+      ? valuationMultiples(secFacts.profileFacts.valuation, secFacts.profileFacts.multiples, quote.price, { withEstimates: true })
       : null;
   const figure = (f: ValuationFigure | null | undefined) => (f && f.ok ? f.val : null);
   // A computed figure with a note (P/B on NCI-inclusive equity) shows the note in the same line.
   const why = (f: ValuationFigure | null | undefined) => (f && !f.ok ? f.detail ?? REFUSAL_WORDS[f.why] : f?.ok ? f.note ?? null : null);
+  // A WORD IN PLACE OF A DASH where the figure exists but means nothing (#98 §1).
+  const word = (f: ValuationFigure | null | undefined) => (f && !f.ok ? REFUSAL_CELL_WORD[f.why] ?? null : null);
+  // THE MARK, from secEstimates via the figure: only an `est` figure wears one.
+  const mark = (f: ValuationFigure | null | undefined) => (f && f.ok && f.est ? { kind: f.est.kind, note: f.est.note } : null);
+  // THE FY FALLBACK (#98 §2): only where the trailing P/E is refused as "not on
+  // file"; labelled FY on the tile, and "Loss (FY)" for a loss year.
+  const inputs = secFacts.profileFacts.valuation;
+  const fyPe = inputs && multiples?.pe && !multiples.pe.ok && multiples.pe.why === "no-twelve-month-eps" ? fyPeRatio(inputs, quote.price) : null;
+  const pe = fyPe ?? multiples?.pe;
+  const peEps = fyPe && inputs?.fyEps ? inputs.fyEps : inputs?.eps ?? null;
+  const fyWord = fyPe ? word(fyPe) : null;
   const valuation = {
-    peRatio: figure(multiples?.pe),
+    peRatio: figure(pe),
     priceToSalesRatio: figure(multiples?.ps),
     priceToBookRatio: figure(multiples?.pb),
     evToEbitda: figure(multiples?.evEbitda),
     reasons: {
-      peRatio: why(multiples?.pe),
+      peRatio: fyPe?.ok && inputs?.fyEps ? fyPeNote(inputs.fyEps) : why(pe),
       priceToSalesRatio: why(multiples?.ps),
       priceToBookRatio: why(multiples?.pb),
       evToEbitda: why(multiples?.evEbitda),
     },
+    words: {
+      peRatio: fyWord ? `${fyWord} (FY)` : word(pe),
+      priceToSalesRatio: word(multiples?.ps),
+      priceToBookRatio: word(multiples?.pb),
+      evToEbitda: word(multiples?.evEbitda),
+    },
+    estimates: {
+      priceToSalesRatio: mark(multiples?.ps),
+      priceToBookRatio: mark(multiples?.pb),
+      evToEbitda: mark(multiples?.evEbitda),
+    },
     // The multiples use the header's price; on Tiingo the note says which one.
-    sourceNote: `${valuationSourceNote(secFacts.profileFacts.multiples, secFacts.profileFacts.valuation)}${quote.priceLabel ? ` Price: ${quote.priceLabel}.` : ""}`,
+    sourceNote: `${valuationSourceNote(secFacts.profileFacts.multiples, inputs, peEps)}${quote.priceLabel ? ` Price: ${quote.priceLabel}.` : ""}`,
     // WHICH TWELVE MONTHS, said on the label (#552 COWORK #8/#9): "TTM to …"
     // or "FY2025", never a bare "TTM" over a fiscal-year figure.
-    peBasis: peBasisLabel(secFacts.profileFacts.valuation?.eps),
-    peBasisNote: peBasisNote(secFacts.profileFacts.valuation?.eps),
+    peBasis: peBasisLabel(peEps),
+    peBasisNote: fyPe ? null : peBasisNote(inputs?.eps),
   };
 
   // OLD BEHAVIOUR, REMOVED: this threw when there was no history and no price.
@@ -785,9 +834,20 @@ export default async function StockPage({ params }: Props) {
             <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
           ) : null
         }
+        // Step 3 (#553 COWORK #71/#92/#103): the linked credit under the chart.
+        // Handed down when the series shown can be Tiingo's: the seeded one
+        // (CHARTS), or the client's /api/history fallback (HISTORY). The client
+        // shows it only beside a series whose provider is "tiingo".
+        historyCredit={
+          historyResult.provider === "tiingo" || historyOnTiingo("HISTORY") ? (
+            <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+          ) : null
+        }
         // Proves to /api/quote that this client rendered a real page. Empty
         // string when QUOTE_TOKEN_SECRET is unset, in which case the client
         // sends no header and behaviour is unchanged. See lib/server/quoteToken.ts.
+        // Whose bars the seeded series is (a CHARTS miss falls back to FMP).
+        historyProvider={historyResult.provider}
         pageToken={mintQuoteToken()}
       />
 

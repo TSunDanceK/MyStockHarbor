@@ -16,6 +16,7 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { REQUEST_BYTE_BUDGET, pctOfRequestLimit, trySetRequestBytes } from "./chunkByBytes";
 import { detectBullFlag, type BullFlagResult } from "../ta/bullFlag";
 import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
+import { playsTiingoHistory } from "./marketData/playsHistory";
 import { flushRedisReadMeter } from "./redisBandwidth";
 
 import { addToDynamicUniverse, readDynamicUniverse, ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
@@ -115,6 +116,8 @@ export type PlaysPayload = {
   dynamicUniverseCount: number;
   dynamicUniversePreview: string[];
   estimatedApiCalls: number;
+  /** Which provider the scan read (#553 B4), with the per-tier counts on Tiingo. */
+  history?: { provider: "tiingo" | "fmp"; memory?: number; cache?: number; fmpFallback?: number; missing?: number };
   sections: PlaySection[];
   debug?: unknown;
   error?: string;
@@ -836,7 +839,7 @@ async function buildPlaysPayload(
   let freshHistoryFetchesUsed = 0;
   const limit = pLimit(10);
 
-  async function getHistoryForScan(symbol: string) {
+  async function getFmpHistoryForScan(symbol: string) {
     const cachedPoints = await getCachedDailyHistory(symbol, "plays-bull-flags");
 
     if (symbol === normalizedDebugSymbol && debugSymbolScan) {
@@ -863,6 +866,23 @@ async function buildPlaysPayload(
     }
 
     return fetchHistory(symbol, HISTORY_DAYS);
+  }
+
+  // ON STORED TIINGO BARS (#553 CODE-B #94 B4). PRICE_PROVIDER_PICKERS=tiingo
+  // scans the Tiingo history from the Data Cache (marketData/playsHistory.ts);
+  // the FMP path above then serves only symbols Tiingo has no history for, and
+  // only while FMP_API_KEY is set. A series is never spliced across providers.
+  const tiingoScan = await playsTiingoHistory(universe, getFmpHistoryForScan);
+
+  async function getHistoryForScan(symbol: string) {
+    if (!tiingoScan) return getFmpHistoryForScan(symbol);
+    const points = normalizeCachedPoints(tiingoScan.bySymbol.get(symbol) ?? []);
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.historyProvider = tiingoScan.fromTiingo.has(symbol) ? "tiingo" : points.length ? "fmp" : "none";
+      debugSymbolScan.cacheHadHistory = points.length > 0;
+      debugSymbolScan.cachedBars = points.length;
+    }
+    return points;
   }
 
   await Promise.all(
@@ -1040,6 +1060,7 @@ async function buildPlaysPayload(
         : dynamicUniverse.length,
     dynamicUniversePreview: dynamicUniverse.slice(0, 20),
     estimatedApiCalls: freshHistoryFetchesUsed + 1,
+    history: tiingoScan ? { provider: "tiingo", ...tiingoScan.stats } : { provider: "fmp" },
     sections,
     debug: debugSymbolScan
       ? {

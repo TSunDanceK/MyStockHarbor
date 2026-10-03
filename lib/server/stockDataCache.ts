@@ -13,6 +13,7 @@ import { readEarningsSchedule } from "./earningsSchedule";
 import { fmpFetch } from "./fmpUsage";
 import { hasFmpRows } from "./fmpResponse";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { priceProviderFor } from "./marketData/provider";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
 // Cron-warmed, Redis-cached "extended stock data" for the site-wide rolling
@@ -507,17 +508,22 @@ async function fetchOne(
 
   // 8) stock-price-change -> performance returns for every period in one call
   //    (fields are already percentages: "5D","1M","6M","ytd","1Y", ...).
-  try {
-    const row = firstRow(await fetchJson(`${base}/stock-price-change?symbol=${s}&apikey=${key}`, tally));
-    if (row) {
-      out.perf1w = num(row["5D"]);
-      out.perf1m = num(row["1M"]);
-      out.perf6m = num(row["6M"]);
-      out.perfYtd = num(row["ytd"]);
-      out.perf1y = num(row["1Y"]);
+  //    RETIRED ON TIINGO (#553 CODE-B #94 B6): with PRICE_PROVIDER_PICKERS=tiingo
+  //    the Performance tab is computed from stored Tiingo bars at build time
+  //    (lib/pickerPerf.ts) and the page never reads these, so no call is made.
+  if (priceProviderFor("PICKERS") !== "tiingo") {
+    try {
+      const row = firstRow(await fetchJson(`${base}/stock-price-change?symbol=${s}&apikey=${key}`, tally));
+      if (row) {
+        out.perf1w = num(row["5D"]);
+        out.perf1m = num(row["1M"]);
+        out.perf6m = num(row["6M"]);
+        out.perfYtd = num(row["ytd"]);
+        out.perf1y = num(row["1Y"]);
+      }
+    } catch {
+      /* fail open */
     }
-  } catch {
-    /* fail open */
   }
 
   return out;

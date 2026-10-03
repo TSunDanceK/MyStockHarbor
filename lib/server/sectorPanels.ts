@@ -6,7 +6,7 @@ import { getSectorConstituents, getSectorIndex } from "./sectorUniverse";
 import { readPricePoolBulk } from "./pricePool";
 import { readCachedStockDataBulk } from "./stockDataCache";
 import { getCachedDailyHistoryBulk } from "./historyCache";
-import { getCachedDayItems, isDateInWindow, type EarningsListItem } from "./earningsCalendar";
+import { getCachedDayItems, isDateInWindow, overlayLivePoolPrices, type EarningsListItem } from "./earningsCalendar";
 import { getCompanyNameMap } from "./companyNames";
 import { dayWindow as dayWindowAt, type DayBasis } from "./lastSession";
 import { priceProviderFor } from "./marketData/provider";
@@ -495,9 +495,16 @@ export async function getSectorEarningsThisWeek(
 
     const days = await Promise.all(
       dates.map((date) =>
-        getCachedDayItems(date).catch(() => [] as EarningsListItem[])
+        getCachedDayItems(date, { livePrices: false }).catch(() => [] as EarningsListItem[])
       )
     );
+    // THE CAPS, LIVE, IN ONE POOL READ for every date (the stored rows carry
+    // none for pool-priced names, #552 COWORK #113): only the order uses them.
+    // ONLY THE SECTOR'S OWN NAMES (#552 COWORK #115): a full window is ~4,200
+    // rows, and the overlay would read the pool for every one of them.
+    const mine = days.flat().filter((it) => constituentSet.has(String(it.symbol ?? "").toUpperCase()));
+    const live = await overlayLivePoolPrices(mine).catch(() => mine);
+    const capOf = new Map(live.map((it) => [String(it.symbol ?? "").toUpperCase(), it.marketCap]));
 
     const out: SectorEarningsEntry[] = [];
     const seen = new Set<string>();
@@ -512,7 +519,7 @@ export async function getSectorEarningsThisWeek(
           company: item.company || symbol,
           date: item.date || dates[i],
           epsEstimated: item.epsEstimated ?? null,
-          marketCap: item.marketCap ?? null,
+          marketCap: capOf.get(symbol) ?? item.marketCap ?? null,
         });
       }
     });

@@ -49,6 +49,9 @@ import { readSurfacePrice, TIINGO_CREDIT, TIINGO_URL, type SurfacePrice } from "
 
 export const runtime = "nodejs";
 
+/** The Last Price tile when neither Tiingo nor (until 14 Oct) FMP has a price (#563 COWORK #46, B13). */
+const NEWS_HERO_NO_PRICE = "Price not available right now";
+
 // This page previously set `dynamic = "force-dynamic"`, for a real reason worth
 // keeping on the record: Vercel's Full Route Cache was observed serving
 // pre-deploy HTML for this page well past a code change, and for a news page
@@ -603,9 +606,9 @@ export default async function StockNewsPage({ params }: Props) {
 
   const {
     quote, companyName, news, trend, lastClose, lastMA50, lastMA200,
-    lastRsi, isDataUnavailable, priceVs50, priceVs200,
+    lastRsi, priceVs50, priceVs200,
     recentHigh, recentLow, newsScore, earningsScore, detailedNews, compactNews,
-    history,
+    history, historySource,
   } = newsData;
 
   // ON SEC FILINGS SINCE 2026-09-21. This was getLatestEarningsData(), which
@@ -656,7 +659,11 @@ export default async function StockNewsPage({ params }: Props) {
   const leadSummary = buildLeadSummary({ symbol: upper, companyName, trend, newsScore, earningsScore });
   const whatItMeans = buildWhatItMeans({ symbol: upper, trend, newsScore, rsi: lastRsi, priceVs50 });
   const beyondHeadline = buildBeyondHeadline({ symbol: upper, newsScore, trend, recentHigh, recentLow });
-  const technicalRead = buildTechnicalRead({ symbol: upper, price: quote?.price ?? lastClose, ma50: lastMA50, ma200: lastMA200, trend, rsi: lastRsi, priceVs50, priceVs200 });
+  // ONE SOURCE PER READ (#563 COWORK #31 (a)): on the Tiingo history path the
+  // "last price" in the technical text is Tiingo's too (the hero's figure, or the
+  // newest stored close), never an FMP quote beside Tiingo moving averages.
+  const technicalPrice = historySource === "tiingo" ? heroPrice?.price ?? lastClose : quote?.price ?? lastClose;
+  const technicalRead = buildTechnicalRead({ symbol: upper, price: technicalPrice, ma50: lastMA50, ma200: lastMA200, trend, rsi: lastRsi, priceVs50, priceVs200 });
 
   const summaryByTitle = Object.fromEntries(
     detailedNews.map((item) => [item.title, getArticleSnippet(item, upper)]),
@@ -765,8 +772,13 @@ export default async function StockNewsPage({ params }: Props) {
                       {heroPrice.label} · <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
                     </div>
                   </>
+                ) : quote?.price != null ? (
+                  // THE FMP FALLBACK, until the FMP key goes (14 Oct).
+                  <div style={heroMetricValueStyle}>{formatMoney(quote.price)}</div>
                 ) : (
-                  <div style={heroMetricValueStyle}>{isDataUnavailable ? "DATA UNAVAILABLE" : formatMoney(quote?.price ?? lastClose)}</div>
+                  // NO UNLICENSED FALLBACK (#563 COWORK #46, B13): no Yahoo quote and no
+                  // stored-history close here; a plain, hedged "not available" instead.
+                  <div style={{ ...heroMetricValueStyle, fontSize: 15 }}>{NEWS_HERO_NO_PRICE}</div>
                 )}
               </div>
               <div style={heroMetricStyle}>
@@ -844,6 +856,12 @@ export default async function StockNewsPage({ params }: Props) {
                 <p style={bodyCopyStyle}>{technicalRead.trendText}</p>
                 <p style={bodyCopyStyle}>{technicalRead.momentumText}</p>
                 <p style={bodyCopyStyle}>{technicalRead.levelText}</p>
+                {/* The linked credit on the Tiingo history path (#563 COWORK #31 §5). */}
+                {historySource === "tiingo" ? (
+                  <p style={{ ...bodyCopyStyle, fontSize: 12, opacity: 0.7 }}>
+                    <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                  </p>
+                ) : null}
               </div>
             </section>
           </aside>
