@@ -33,6 +33,9 @@ import type { Pct, SecEarningsView, ViewCell } from "./server/secEarningsView";
 import { EMPTY_REASONS, periodWords } from "./server/secEarningsView";
 import { scaledAmount } from "./server/secPresentation";
 
+/** The one plain sentence explaining gross margin (#563 COWORK #55), printed under "About these figures". */
+export const GROSS_MARGIN_MEANS = "Gross margin is the share of sales left after the direct costs of making them.";
+
 /** Above this year-on-year %, the label reads SMALL_BASE instead (COWORK #26 §2). */
 export const SMALL_BASE_ABOVE_PCT = 200;
 export const SMALL_BASE = "from a small base";
@@ -146,7 +149,11 @@ export function marginWords(m: number | null, kind: "operating" | "net", refused
     : `the net profit was about ${(m / 100).toFixed(1)}× sales`;
 }
 
-/** One hedged sentence from the series. Never advice; null when there is too little to say. */
+/**
+ * One short hedged line from the series (#563 COWORK #56: "Sales up on a year
+ * earlier in the last 2 quarters · a net loss in 7 of 8"). Never advice; null
+ * when there is too little to say.
+ */
 export function summaryLine(periods: GvPeriod[], growth: (Pct | undefined)[], one: string, many: string): string | null {
   const parts: string[] = [];
   // Sales: the run of year-on-year rises (or falls) ending at the newest period.
@@ -156,8 +163,9 @@ export function summaryLine(periods: GvPeriod[], growth: (Pct | undefined)[], on
     const up = yoy[0] > 0;
     let run = 0;
     for (const v of yoy) { if (isNum(v) && (v > 0) === up && v !== 0) run++; else break; }
-    if (run >= 2) parts.push(`Sales were ${up ? "higher" : "lower"} than a year earlier in each of the last ${run} ${many}`);
-    else parts.push(`Sales in the latest ${one} were ${up ? "higher" : "lower"} than a year earlier`);
+    parts.push(run >= 2
+      ? `Sales ${up ? "up" : "down"} on a year earlier in each of the last ${run} ${many}`
+      : `Sales ${up ? "up" : "down"} on a year earlier in the latest ${one}`);
   }
   // Profit: losses and profits among the periods with a figure.
   const withProfit = periods.filter((p) => p.profit);
@@ -166,21 +174,25 @@ export function summaryLine(periods: GvPeriod[], growth: (Pct | undefined)[], on
     const profits = withProfit.length - losses;
     const n = withProfit.length;
     let s =
-      losses === n ? `it reported a net loss in all ${n} ${many} shown`
-        : profits === n ? `it reported a net profit in all ${n} ${many} shown`
-          : `it reported a net loss in ${losses} of the ${n} ${many} shown`;
+      losses === n ? `a net loss in all ${n} ${many}`
+        : profits === n ? `a net profit in all ${n} ${many}`
+          : `a net loss in ${losses} of ${n} ${many}`;
     const profitable = withProfit.filter((p) => p.profit!.val >= 0);
     if (losses > 0 && profitable.length > 0 && profitable.every((p) => p.oneOff)) {
       s += profitable.length === 1
-        ? `, and the profitable ${one} includes a one-off gain`
-        : `, and each profitable ${one} includes a one-off gain`;
+        ? ` (the profitable ${one} includes a one-off gain)`
+        : ` (each profitable ${one} includes a one-off gain)`;
     }
     parts.push(s);
   }
   if (!parts.length) return null;
-  const text = parts.join("; ");
+  const text = parts.join(" · ");
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
+
+/** Whether any period's sales or profit is derived, for the "*" footnote under "About these figures". */
+export const anyDerived = (s: GvSeries | null): boolean =>
+  !!s && s.periods.some((p) => p.sales?.derivedNote || p.profit?.derivedNote || p.lastYear?.derivedNote);
 
 /**
  * Build the picture's data from A's view.

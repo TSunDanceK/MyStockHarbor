@@ -651,9 +651,13 @@ console.log("\n7g. explanations a phone can read, and three periods declared");
     const rest = cardsRaw.slice(start);
     return rest.slice(0, rest.indexOf("\nexport ", 1));
   })();
-  const intro = growthCard.slice(growthCard.indexOf("<p>"), growthCard.indexOf("</p>"));
+  // UNDER "About these figures" since #563 COWORK #56: a <details> in the
+  // server-rendered card, so the sentence is text a tap opens, never a title.
+  const about = growthCard.slice(growthCard.indexOf('<details className="gvAbout">'));
+  const intro = about.slice(about.indexOf("<p>"), about.indexOf("</p>"));
   check("the gap marker is explained in visible text, not only in a title",
-    intro.length > 200 && /marked <strong>gap<\/strong>/.test(intro) &&
+    growthCard.includes('<details className="gvAbout">') &&
+      intro.length > 200 && /marked <strong>gap<\/strong>/.test(intro) &&
       /not a consecutive run/.test(intro),
     `intro ${intro.length}b — a title attribute cannot be reached on a touch screen`);
   // THE THREE PERIODS. Said only when they are genuinely far apart, so a

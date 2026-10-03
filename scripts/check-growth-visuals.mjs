@@ -17,6 +17,14 @@
 //   7. NO SCALE BEFORE A TAP (#36 ask 1): the newest bar and dot lose their
 //      values, or the 0% / 50% / 100% guides go.
 //   8. TWO PATTERNS FOR THE MULTIPLES (#36 ask 2).
+//  11. THE PHONE LAYOUT (owner ruling, #563 COWORK #58): at or below the phone
+//      breakpoint the margin is a line over the sales chart, in the margin
+//      dot's own purple, against a % scale on its right, and the separate
+//      margin chart is hidden; above it, the three charts as before. A missing
+//      margin breaks the line. A tap scrolls the panel into view on a phone only.
+//  12. "About these figures" (#56): a server-rendered <details> under one short
+//      intro line, holding the basis, the gross-margin sentence and the "*"
+//      footnote.
 //  10. CENTS-PER-DOLLAR WORDING BACK ON A MARGIN (owner ruling, #563 COWORK #55:
 //      margins in %, under the standard terms), or a missing gross-margin dot
 //      with no reason behind it.
@@ -45,10 +53,11 @@ const appended = (builder, component) =>
   `\n${reasonedValueUnit()}\n${strip(builder)}\n${strip(component).replace("export default function GrowthVisuals", "export function GrowthVisuals")}\n`;
 
 /** A's view stack plus C's two files, one transpiled unit (render-cards' method). */
-const load = (builder = fs.readFileSync(BUILDER, "utf8"), component = fs.readFileSync(COMPONENT, "utf8")) => {
+const load = (builder = fs.readFileSync(BUILDER, "utf8"), component = fs.readFileSync(COMPONENT, "utf8"), card = (src) => src) => {
   SRC_B = { src: builder, file: BUILDER };
   SRC_C = { src: component, file: COMPONENT };
-  return loadCards((src) => src + appended(builder, component));
+  // `card` mutates A's cards unit (SecEarningsCards.tsx, as render-cards joins it).
+  return loadCards((src) => card(src) + appended(builder, component));
 };
 
 const full = JSON.parse(fs.readFileSync("data/sec/factset-fixture-ONDS.json", "utf8"));
@@ -83,7 +92,8 @@ async function measure(M) {
   const ondsCard = M.buildGrowthVisuals(ondsView, { oneOffs: ondsView.oneOffs, unchecked: ondsView.oneOffUnchecked });
   // One year the rule couldn't run on, one year tagged: the gate on years, not just quarters.
   const yearsMarked = M.buildGrowthVisuals(ondsView, { oneOffs: { FY2024: "A note for FY2024." }, unchecked: ["FY2023"] });
-  return { onds, ondsChecked, ondsCard, ondsView, yearsMarked, q1, q1View, loss, render, markup, blankData, M };
+  const cardMarkup = html(React.createElement(M.SecGrowthMarginsCard, { view: ondsView }));
+  return { onds, ondsChecked, ondsCard, ondsView, yearsMarked, q1, q1View, loss, render, markup, blankData, cardMarkup, M };
 }
 
 let M_PROFIT_WAITS = "";
@@ -125,10 +135,10 @@ const rules = {
     return q4.length === 2 && q4.every((x) => x.sales?.derivedNote && x.profit?.derivedNote) && p[7].sales.derivedNote === null;
   },
   "summary without A's notes: sales only, no profit clause": ({ onds }) =>
-    onds.quarters.summary === "Sales were higher than a year earlier in each of the last 6 quarters.",
+    onds.quarters.summary === "Sales up on a year earlier in each of the last 6 quarters.",
   "summary with A's notes: seven of eight losses, the one-off named": ({ ondsChecked }) =>
     ondsChecked.quarters.summary ===
-      "Sales were higher than a year earlier in each of the last 6 quarters; it reported a net loss in 7 of the 8 quarters shown, and the profitable quarter includes a one-off gain.",
+      "Sales up on a year earlier in each of the last 6 quarters · a net loss in 7 of 8 quarters (the profitable quarter includes a one-off gain).",
   // THE #36 BLOCKER, on the data AND the markup: no profit bar, no profit row in
   // the panel, and the words saying where the figures are instead.
   "blocker: without A's per-period notes, no profit figure is drawn or listed": ({ onds, markup, render }) => {
@@ -158,8 +168,7 @@ const rules = {
   "wording: standard margin terms; one pattern for the multiples": ({ onds, render }) => {
     const t = render(onds);
     return /Operating margin\s*operating costs were about 2\.9× sales/.test(t) && /Net margin\s*the net loss was about 1\.1× sales/.test(t) &&
-      /Gross margin\s*43\.1%/.test(t) && t.includes("Gross margin is the share of sales left after the direct costs of making them.") &&
-      t.includes("Gross margin per quarter") && t.includes("Gross margin (% of sales)") && !/All costs|(operating|net) margin: /i.test(t);
+      /Gross margin\s*43\.1%/.test(t) && t.includes("Gross margin per quarter") && t.includes("Gross margin (% of sales)") && !/All costs|(operating|net) margin: /i.test(t);
   },
   "no cents-per-dollar wording on a margin, in the picture or its source": ({ onds, render }) => {
     const CENTS = /¢|per \$1|of every \$1|of each \$1|cents? kept|kept \d+/i;
@@ -173,7 +182,7 @@ const rules = {
       p.slice(0, -1).every((x) => x.oneOff === null);
   },
   "marker: the summary names the one-off": ({ q1 }) =>
-    /the profitable quarter includes a one-off gain\.$/.test(q1.quarters.summary),
+    /the profitable quarter includes a one-off gain\)\.$/.test(q1.quarters.summary),
   // ON THE TAG ELEMENT, not the text: the summary and the detail panel also
   // say "one-off", so a text match passed with the tag gone.
   "ONDS as filed: no one-off tag (A's rule is false for Q2 FY2026)": ({ onds, markup }) =>
@@ -190,7 +199,7 @@ const rules = {
       before.lastIndexOf("<button") < before.lastIndexOf("</button>") && !/<abbr class="gvOneOff"/.test(m);
   },
   "loss-only: all losses, said plainly": ({ loss }) =>
-    loss.quarters.periods.every((x) => x.profit.val < 0) && /it reported a net loss in all 8 quarters shown\.$/.test(loss.quarters.summary),
+    loss.quarters.periods.every((x) => x.profit.val < 0) && / · a net loss in all 8 quarters\.$/.test(loss.quarters.summary),
   "years without A's notes: no profit drawn, and it says why": ({ onds, M }) =>
     onds.years.periods.length === 5 && onds.years.periods.every((x) => x.profit === null && x.oneOff === null) &&
     onds.years.profitMissing === M.profitWaitsForOneOffs("year"),
@@ -208,9 +217,48 @@ const rules = {
       p.filter((x) => x.profitUnchecked).length === 1 && p.filter((x) => x.oneOff).length === 1;
   },
   "years: the summary counts the yearly losses": ({ ondsCard }) =>
-    /it reported a net loss in all 5 years shown\.$/.test(ondsCard.years.summary),
+    / · a net loss in all 5 years\.$/.test(ondsCard.years.summary),
   "'Not reported' survives a missing figure": ({ blankData, render }) =>
     blankData.quarters.periods.at(-1).sales === null && /Sales\s*Not reported/.test(render(blankData)),
+  // #58: one stylesheet decides; the markup carries both layouts.
+  "phone: the margin line over the sales chart, in the margin dot's purple, only below the breakpoint": ({ ondsChecked, markup, M }) => {
+    const m = markup(ondsChecked);
+    const css = (m.match(/<style>([\s\S]*?)<\/style>/) ?? [])[1] ?? "";
+    const media = css.slice(css.indexOf(`@media (max-width: ${M.PHONE_MAX_PX}px)`));
+    const outside = css.slice(0, css.indexOf("@media"));
+    const purple = (m.match(/class="gvDot" style="bottom:[^"]*;background:(#[0-9a-f]{6})"/) ?? [])[1];
+    const strokes = [...m.matchAll(/<svg class="gvPhoneOnly gvMarginLine"[\s\S]*?<\/svg>/g)].flatMap((x) => [...x[0].matchAll(/stroke="([^"]+)"/g)].map((y) => y[1]));
+    const withMargin = ondsChecked.quarters.periods.filter((p) => p.grossPct !== null).length;
+    const phoneDots = (m.match(/<span class="gvPhoneOnly"><span class="gvDot"/g) ?? []).length;
+    const right = [...m.matchAll(/class="gvPhoneOnly gvRightScale"[^>]*>([\s\S]*?)<\/span><\/span>/g)].map((x) => [...x[1].matchAll(/>(\d+%)(?=<|$)/g)].map((y) => y[1]).join(","));
+    return M.PHONE_MAX_PX === 480 && !!purple && purple === "#9085e9" &&
+      strokes.length >= 1 && strokes.every((c) => c === purple) && phoneDots === withMargin &&
+      right[0] === "0%,50%,100%" && /class="gvPhoneOnly"><i [^>]*><\/i>Gross margin % \(right scale\)/.test(m) &&
+      /<div class="gvDesktopOnly">[\s\S]*Gross margin per quarter/.test(m) &&
+      /\.gvPhoneOnly \{ display: none; \}/.test(outside) && !/\.gvDesktopOnly \{ display: none/.test(outside) &&
+      /\.gvPhoneOnly \{ display: inline; \}/.test(media) && /\.gvDesktopOnly \{ display: none; \}/.test(media) &&
+      // The profit chart stays on every screen: never inside a phone- or desktop-only box.
+      !/<div class="gvDesktopOnly">[\s\S]*Profit or loss per/.test(m) && /Profit or loss per quarter/.test(m);
+  },
+  "phone: a period with no margin breaks the line": ({ M }) => {
+    const p = (g) => ({ grossPct: g });
+    const segs = M.marginSegments([p(40), p(45), p(null), p(50), p(null)]);
+    return segs.length === 2 && segs[0] === "M0.5 60 L1.5 55" && segs[1] === "M3.5 50" && M.marginSegments([p(null)]).length === 0;
+  },
+  "phone: a tap scrolls the panel into view; desktop never scrolls": () => {
+    const c = stripComments(SRC_C.src, { file: COMPONENT });
+    const tapped = (c.match(/const tapped = \(\) => \{[\s\S]*?\n {2}\};/) ?? [""])[0];
+    return /window\.matchMedia\?\.\(PHONE\)\.matches\) return;/.test(tapped) &&
+      /scrollIntoView\(\{ block: "nearest"/.test(tapped) && /onClick=\{\(\) => \{ setActive\(i\); onTap\?\.\(\); \}\}/.test(c) &&
+      (c.match(/onTap=\{tapped\}/g) ?? []).length === 3 && /<div ref=\{detailRef\}>/.test(c);
+  },
+  "about these figures: one intro line; the basis, the margin sentence and the * footnote in a server-rendered <details>": ({ cardMarkup, M }) => {
+    const about = (cardMarkup.match(/<details class="gvAbout">([\s\S]*?)<\/details>/) ?? [])[1] ?? "";
+    return /<summary[^>]*>About these figures<\/summary>/.test(about) && /compared with the same fiscal quarter a year earlier/.test(about) &&
+      about.includes(M.GROSS_MARGIN_MEANS) && /\* Not filed as a quarter of its own/.test(about) &&
+      /<p>Sales, profit or loss and gross margin each quarter, as filed\. Tap a quarter for its figures\.<\/p>/.test(cardMarkup) &&
+      !/class="gvMissing"[^>]*>\* Not filed/.test(cardMarkup);
+  },
   "the render carries the summary, the toggle and the legend words": ({ ondsChecked, render }) => {
     const t = render(ondsChecked);
     return t.includes(ondsChecked.quarters.summary) && /Quarters/.test(t) && /Years/.test(t) && /Profit \(\+\), above the line/.test(t) && /Loss \(−\), below/.test(t);
@@ -259,17 +307,25 @@ const mutants = [
   ["scale: the newest sales bar and the newest dot carry their values", "c", (s) => s.replace("{i === newest && p.sales ? (", "{false && p.sales ? (")],
   ["scale: the newest sales bar and the newest dot carry their values", "c", (s) => s.replace("{i === newest ? (", "{false ? (")],
   ["scale: faint 0% / 50% / 100% guides on the margin chart", "c", (s) => s.replace("const PCT_GUIDES = [0, 50, 100] as const;", "const PCT_GUIDES = [0, 100] as const;")],
-  ["scale: faint 0% / 50% / 100% guides on the margin chart", "c", (s) => s.replace(">{c}%</span>", ">{c}¢</span>")],
+  ["scale: faint 0% / 50% / 100% guides on the margin chart", "c", (s) => s.replace(/(className="gvPctLabel"[^>]*>)\{c\}%</, "$1{c}¢<")],
   ["wording: standard margin terms; one pattern for the multiples", "b", (s) => s.replace("`operating costs were about ${", "`costs were about ${")],
   ["wording: standard margin terms; one pattern for the multiples", "c", (s) => s.replace("<dt>Operating margin</dt>", "<dt>All costs</dt>")],
-  ["wording: standard margin terms; one pattern for the multiples", "c", (s) => s.replace("<div className=\"gvNote\">{GROSS_MARGIN_MEANS}</div>", "")],
+  ["phone: the margin line over the sales chart, in the margin dot's purple, only below the breakpoint", "c", (s) => s.replace("<path key={d} d={d} fill=\"none\" stroke={C.margin}", "<path key={d} d={d} fill=\"none\" stroke={C.sales}")],
+  ["phone: the margin line over the sales chart, in the margin dot's purple, only below the breakpoint", "c", (s) => s.replace("          .gvDesktopOnly { display: none; }\n", "")],
+  ["phone: the margin line over the sales chart, in the margin dot's purple, only below the breakpoint", "c", (s) => s.replace("        .gvPhoneOnly { display: none; }\n", "")],
+  ["phone: the margin line over the sales chart, in the margin dot's purple, only below the breakpoint", "c", (s) => s.replace("{PCT_GUIDES.map((c) => <span key={c} style={{ bottom: `${c}%` }}>{c}%</span>)}", "")],
+  ["phone: a period with no margin breaks the line", "c", (s) => s.replace("if (p.grossPct === null) { if (run.length) runs.push(run.join(\" \")); run = []; return; }", "if (p.grossPct === null) return;")],
+  ["phone: a tap scrolls the panel into view; desktop never scrolls", "c", (s) => s.replace("if (typeof window === \"undefined\" || !window.matchMedia?.(PHONE).matches) return;", "if (typeof window === \"undefined\") return;")],
+  ["phone: a tap scrolls the panel into view; desktop never scrolls", "c", (s) => s.replace("onClick={() => { setActive(i); onTap?.(); }}", "onClick={() => setActive(i)}")],
+  ["about these figures: one intro line; the basis, the margin sentence and the * footnote in a server-rendered <details>", "k", (s) => s.replace("<p>{GROSS_MARGIN_MEANS}</p>", "")],
+  ["about these figures: one intro line; the basis, the margin sentence and the * footnote in a server-rendered <details>", "k", (s) => s.replace('<details className="gvAbout">', '<div className="gvAbout">').replace("      </details>\n      <MarginDelta", "      </div>\n      <MarginDelta")],
   ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace('legend={<><i style={{ background: C.margin, borderRadius: 999 }} />Gross margin (% of sales)</>}', 'legend={<><i style={{ background: C.margin, borderRadius: 999 }} />¢ kept per $1 (gross margin)</>}')],
   ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace("{p.grossPct}%", "{p.grossPct}¢")],
   ["no cents-per-dollar wording on a margin, in the picture or its source", "b", (s) => s.replace('"The direct costs of sales were more than the sales"', '"Under 0 cents kept per $1 of sales"')],
   ["marker: on the quarter A's rule fired for, with A's words", "b", (s) => s.replace("(label === view.latestLabel && view.largeNonOperating", "(view.largeNonOperating")],
   ["marker: the tag renders", "c", (s) => s.replace("        if (!p.oneOff) return null;\n", "        return null;\n")],
   ["marker: the tag renders", "c", (s) => s.replace('<ReasonedValue text="one-off" reason={p.oneOff} />', "<abbr title={p.oneOff}>one-off</abbr>")],
-  ["loss-only: all losses, said plainly", "b", (s) => s.replace("losses === n ? `it reported a net loss in all", "false ? `it reported a net loss in all")],
+  ["loss-only: all losses, said plainly", "b", (s) => s.replace("losses === n ? `a net loss in all", "false ? `a net loss in all")],
   ["years without A's notes: no profit drawn, and it says why", "b", (s) => s.replace("profitMissing: profitChecked ? null : profitWaitsForOneOffs(yw.one),", "profitMissing: null,")],
   ["years without A's notes: no profit drawn, and it says why", "b", (s) => s.replace("        ...profitOf(a.label, a.netIncome),\n", "        profit: amount(a.netIncome),\n        oneOff: null,\n")],
   ["years with A's notes: each year's filed net income, never a margin", "b", (s) => s.replace("        ...profitOf(a.label, a.netIncome),\n", "        ...profitOf(a.label, a.netIncome),\n        profit: a.net == null || a.revenue.val == null ? null : { val: (a.net / 100) * a.revenue.val, text: \"x\", derivedNote: null },\n")],
@@ -280,12 +336,15 @@ const mutants = [
   ["'Not reported' survives a missing figure", "c", (s) => s.replace("const nr = <span style={{ color: C.muted }}>{notReported}</span>;", "const nr = <span>$0.0M</span>;")],
   ["the render carries the summary, the toggle and the legend words", "c", (s) => s.replace("Profit (+), above the line", "Profit")],
 ];
+const CARDS = "app/stock/[symbol]/earnings/SecEarningsCards.tsx";
+const K = fs.readFileSync(CARDS, "utf8");
 for (const [name, which, mutate] of mutants) {
   const b2 = which === "b" ? mutate(B) : B;
   const c2 = which === "c" ? mutate(Cc) : Cc;
-  const changed = b2 !== B || c2 !== Cc;
+  const k2 = which === "k" ? mutate(K) : K;
+  const changed = b2 !== B || c2 !== Cc || k2 !== K;
   let bites = false;
-  try { bites = !rules[name](await measure(await load(b2, c2))); } catch { bites = true; }
+  try { bites = !rules[name](await measure(await load(b2, c2, which === "k" ? (src) => mutate(src) : undefined))); } catch { bites = true; }
   check(`mutant bites: ${name}`, changed && bites, changed ? "" : "the mutation did not apply");
 }
 const staticMutants = [
