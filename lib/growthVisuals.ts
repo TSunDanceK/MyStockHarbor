@@ -191,6 +191,14 @@ export function buildGrowthVisuals(
     opts.oneOffs?.[label] ??
     (label === view.latestLabel && view.largeNonOperating && view.largeNonOperatingNote ? view.largeNonOperatingNote : null);
 
+  // The profit fields, the same for quarters and years: drawn only once every
+  // period was checked, never for a period the rule could not run on.
+  const profitOf = (label: string, netIncome: ViewCell) => ({
+    profit: profitChecked && !unchecked.has(label) ? amount(netIncome) : null,
+    oneOff: profitChecked && !unchecked.has(label) ? oneOffOf(label) : null,
+    profitUnchecked: profitChecked && unchecked.has(label) ? PROFIT_UNCHECKED : null,
+  });
+
   // ── QUARTERS (or whatever the table basis is): the periods on file, oldest first.
   let quarters: GvSeries | null = null;
   if (view.recentPeriods.length) {
@@ -210,9 +218,7 @@ export function buildGrowthVisuals(
         sales: amount(p.revenue),
         lastYear: priorAmount && prior ? { ...priorAmount, label: prior.label } : null,
         growth: growthWords(g?.revenueYoY),
-        profit: profitChecked && !unchecked.has(p.label) ? amount(p.netIncome) : null,
-        oneOff: profitChecked && !unchecked.has(p.label) ? oneOffOf(p.label) : null,
-        profitUnchecked: profitChecked && unchecked.has(p.label) ? PROFIT_UNCHECKED : null,
+        ...profitOf(p.label, p.netIncome),
         keptCents: kept.cents,
         grossNote: kept.note,
         operating: marginWords(m?.operating ?? null, "operating", m?.marginsRefused ?? false),
@@ -227,8 +233,9 @@ export function buildGrowthVisuals(
     };
   }
 
-  // ── YEARS: A's five-year history. It carries no net income in dollars, so the
-  // profit chart says so rather than deriving one from a margin.
+  // ── YEARS: A's five-year history, with each year's filed net income. A's
+  // `oneOffs` covers every stored fiscal year too (#552 COWORK #117), so the
+  // profit chart follows the same gate as the quarters'. Never derived from a margin.
   let years: GvSeries | null = null;
   if (view.annual.length && view.tableBasis !== "year") {
     const byLabel = new Map(view.annual.map((a) => [a.label, a]));
@@ -242,8 +249,7 @@ export function buildGrowthVisuals(
         sales: amount(a.revenue),
         lastYear: priorAmount && prior ? { ...priorAmount, label: prior.label } : null,
         growth: growthWords(a.revenueYoY),
-        profit: null,
-        oneOff: null,
+        ...profitOf(a.label, a.netIncome),
         keptCents: kept.cents,
         grossNote: kept.note,
         operating: marginWords(a.operating, "operating", a.marginsRefused),
@@ -253,7 +259,7 @@ export function buildGrowthVisuals(
     const yw = periodWords("year");
     years = {
       one: yw.one, many: yw.many, periods,
-      profitMissing: "Yearly profit or loss in dollars isn’t shown here yet; the net margin for each year is under “See all the numbers”.",
+      profitMissing: profitChecked ? null : profitWaitsForOneOffs(yw.one),
       summary: summaryLine(periods, view.annual.map((a) => a.revenueYoY), yw.one, yw.many),
     };
   }

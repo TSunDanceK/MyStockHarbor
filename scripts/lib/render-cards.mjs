@@ -128,7 +128,21 @@ export function growthVisualsUnit() {
   const builder = stripImports("lib/growthVisuals.ts");
   const component = stripImports("app/stock/[symbol]/earnings/GrowthVisuals.tsx")
     .replace("export default function GrowthVisuals", "export function GrowthVisuals");
-  return `\nimport { useState } from "react";\n${builder}\n${component}\n`;
+  return `\n${reasonedValueUnit()}\n${builder}\n${component}\n`;
+}
+
+/**
+ * A's ReasonedValue (app/components/EstimatedValue.tsx) and the React hooks it
+ * and GrowthVisuals use, for a unit that renders the picture: the one-off tag
+ * opens its note through it (#563 COWORK #52). Its re-export line is dropped,
+ * since estimateMark's constants are inlined ahead of it.
+ */
+export function reasonedValueUnit() {
+  const mark = stripImports("app/components/estimateMark.ts");
+  const comp = stripImports("app/components/EstimatedValue.tsx")
+    .replace(/^"use client";$/m, "")
+    .replace(/^export \{ ESTIMATE_COLOUR, ESTIMATE_SIGN, type EstimateMark \};$/m, "");
+  return `import { useEffect, useId, useRef, useState } from "react";\n${mark}\n${comp}\n`;
 }
 
 /**
