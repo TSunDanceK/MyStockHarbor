@@ -49,6 +49,9 @@ import { readSurfacePrice, TIINGO_CREDIT, TIINGO_URL, type SurfacePrice } from "
 
 export const runtime = "nodejs";
 
+/** The Last Price tile when neither Tiingo nor (until 14 Oct) FMP has a price (#563 COWORK #46, B13). */
+const NEWS_HERO_NO_PRICE = "Price not available right now";
+
 // This page previously set `dynamic = "force-dynamic"`, for a real reason worth
 // keeping on the record: Vercel's Full Route Cache was observed serving
 // pre-deploy HTML for this page well past a code change, and for a news page
@@ -603,7 +606,7 @@ export default async function StockNewsPage({ params }: Props) {
 
   const {
     quote, companyName, news, trend, lastClose, lastMA50, lastMA200,
-    lastRsi, isDataUnavailable, priceVs50, priceVs200,
+    lastRsi, priceVs50, priceVs200,
     recentHigh, recentLow, newsScore, earningsScore, detailedNews, compactNews,
     history, historySource,
   } = newsData;
@@ -769,8 +772,13 @@ export default async function StockNewsPage({ params }: Props) {
                       {heroPrice.label} · <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
                     </div>
                   </>
+                ) : quote?.price != null ? (
+                  // THE FMP FALLBACK, until the FMP key goes (14 Oct).
+                  <div style={heroMetricValueStyle}>{formatMoney(quote.price)}</div>
                 ) : (
-                  <div style={heroMetricValueStyle}>{isDataUnavailable ? "DATA UNAVAILABLE" : formatMoney(quote?.price ?? lastClose)}</div>
+                  // NO UNLICENSED FALLBACK (#563 COWORK #46, B13): no Yahoo quote and no
+                  // stored-history close here; a plain, hedged "not available" instead.
+                  <div style={{ ...heroMetricValueStyle, fontSize: 15 }}>{NEWS_HERO_NO_PRICE}</div>
                 )}
               </div>
               <div style={heroMetricStyle}>

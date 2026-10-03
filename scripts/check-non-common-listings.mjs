@@ -45,11 +45,13 @@ console.log("\n2. the lookup and the refusal");
 const PSRC = fs.readFileSync("lib/server/secPrimaryListing.ts", "utf8");
 const I1 = 'import listingsFile from "@/data/sec/primary-listings.json";';
 const I2 = 'import nonCommonFile from "@/data/sec/non-common-listings.json";';
+const I3 = 'import citedCoversFile from "@/data/sec/cited-covers.json";';
 if (!PSRC.includes(I1) || !PSRC.includes(I2)) throw new Error("secPrimaryListing no longer imports its maps the expected way");
 const load = async (src) => {
   const tmp = `lib/server/.check-ncl-${process.pid}-${Math.random().toString(36).slice(2)}.ts`;
   fs.writeFileSync(tmp, src.replace(I1, `const listingsFile = ${fs.readFileSync("data/sec/primary-listings.json", "utf8")};`)
-    .replace(I2, `const nonCommonFile = ${fs.readFileSync("data/sec/non-common-listings.json", "utf8")};`));
+    .replace(I2, `const nonCommonFile = ${fs.readFileSync("data/sec/non-common-listings.json", "utf8")};`)
+    .replace(I3, `const citedCoversFile = ${fs.readFileSync("data/sec/cited-covers.json", "utf8")};`));
   try { return await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
 };
 const P = await load(PSRC);

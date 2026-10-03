@@ -9,8 +9,8 @@ import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pick
 import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
 import { valueSatisfies } from "@/lib/screenerFields";
 import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
-import { CELL_WHY_TABLE_NOTE, NOT_APPLICABLE_CODES, cellMark, cellWhyWords, compareForSort } from "@/lib/pickerCellWhy";
-import { BasisCell, WhyMark } from "@/app/components/PickerCellMarks";
+import { NOT_APPLICABLE_CODES, cellMark, cellWhyWords, compareForSort } from "@/lib/pickerCellWhy";
+import { BasisCell, CellWhyNote, WhyMark } from "@/app/components/PickerCellMarks";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -1546,9 +1546,13 @@ export default function PickerResultsGrid({
         </div>
       ) : null}
 
-      {/* THE TABLE NOTE (#553 COWORK #69 item 4), wherever cells are shown. */}
+      {/* THE TABLE NOTE (#553 COWORK #69 item 4), wherever cells are shown.
+          2026-10-03 (#553 COWORK #103): the owner's single line
+          (CELL_WHY_TABLE_NOTE, kept) said "SEC filings" under every tab and
+          "Hover" on a phone; it is now the active tab's note, with "Tap" on
+          touch screens (CellWhyNote). */}
       {shown.length && (showMobileRows || viewMode === "list") ? (
-        <p className="cellWhyNote">{CELL_WHY_TABLE_NOTE}</p>
+        <CellWhyNote tab={activeTab} />
       ) : null}
 
       <style>{`
@@ -1574,14 +1578,26 @@ export default function PickerResultsGrid({
         .basisSlot { display: inline-block; width: 2.2em; text-align: left; flex: 0 0 auto; }
         .basisFy { position: relative; cursor: help; font-size: 0.72em; letter-spacing: 0.02em; color: rgba(148,163,184,0.75); text-decoration: underline dotted rgba(148,163,184,0.45); text-underline-offset: 3px; }
         .basisFy:focus-visible { outline: 1px solid rgba(96,165,250,0.7); outline-offset: 2px; border-radius: 2px; }
+        /* #553 COWORK #103 (2026-10-03): was centred (left: 50%) and up to 70vw
+           wide, so a mark near either edge of a 360 px screen pushed it off
+           the page. Now anchored to the mark's right edge (the grid's figures
+           are right-aligned), capped at the viewport less an 8 px gutter each
+           side, and nudged by --why-shift (PickerCellMarks' clampPop) if it
+           still pokes past an edge. */
         .whyPop {
-          position: absolute; z-index: 30; left: 50%; top: calc(100% + 6px); transform: translateX(-50%);
-          width: max-content; max-width: min(260px, 70vw); white-space: normal; text-align: left;
+          position: absolute; z-index: 30; right: 0; left: auto; top: calc(100% + 6px); transform: translateX(var(--why-shift, 0px));
+          width: max-content; max-width: min(260px, calc(100vw - 16px)); white-space: normal; text-align: left;
           padding: 7px 9px; border-radius: 8px; font-size: 12px; font-weight: 500; line-height: 1.35;
           color: #e2e8f0; background: #0f172a; border: 1px solid rgba(148,163,184,0.35);
           box-shadow: 0 6px 18px rgba(0,0,0,0.35); text-decoration: none;
         }
         .cellWhyNote { margin: 10px 2px 0; font-size: 12px; line-height: 1.45; color: rgba(148,163,184,0.8); }
+        /* "Hover for why." on a pointer, "Tap for why." on touch (#553 COWORK #103). */
+        .cellWhyTap { display: none; }
+        @media (hover: none), (pointer: coarse) {
+          .cellWhyHover { display: none; }
+          .cellWhyTap { display: inline; }
+        }
 
         .viewToggleLabel { display: inline; }
 

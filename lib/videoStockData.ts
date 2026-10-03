@@ -26,7 +26,8 @@ import { fetchQuoteSnapshotForRender } from "@/lib/server/quoteData";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { pickSurfacePrice, readSurfaceInputs } from "@/lib/server/tiingoSurfacePrice";
 import { getStockPageSecFacts } from "@/lib/server/secEarningsSnapshot";
-import { marketCap, peRatio } from "@/lib/server/secValuation";
+import { fyPeRatio, marketCap, peRatio, REFUSAL_WORDS, type EpsBasis } from "@/lib/server/secValuation";
+import { readableDate } from "@/lib/server/secEstimates";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import { resolveProfile } from "@/lib/server/staticProfile";
 
@@ -68,7 +69,31 @@ export type VideoStockData = {
    */
   ma50Note?: string | null;
   ma200Note?: string | null;
+  /**
+   * Tiingo path only (#563 COWORK #45): why the market-cap tile shows "—".
+   * A's own words for a named refusal (REFUSAL_WORDS, the stock page's rule),
+   * so every dash explains itself; null when a cap is shown.
+   */
+  marketCapNote?: string | null;
+  /**
+   * Tiingo path only (#563 COWORK #50): set when the P/E is the latest FULL
+   * YEAR's because twelve months of diluted EPS aren't on file -- the stock
+   * page's fallback (#552 COWORK #98 §2). Filed EPS, not an estimate.
+   */
+  peLabel?: string | null;
+  peNote?: string | null;
 };
+
+/** The P/E tile's label and note when it falls back to the latest full year. */
+export function fyPeLabel(eps: EpsBasis): string {
+  return eps.fiscalYear ? `P/E (FY${eps.fiscalYear})` : "P/E (FY)";
+}
+export function fyPeNote(eps: EpsBasis): string {
+  return `Twelve months of diluted EPS aren't on file, so this P/E uses the latest full year (to ${readableDate(eps.periodEnd)}).`;
+}
+
+/** The market-cap tile's note when SEC data for the symbol isn't on file at all. */
+export const NO_SEC_SHARE_COUNT_NOTE = "No SEC share count on file for this company yet";
 
 export const SHORT_HISTORY_NOTE = "Not enough price history stored yet";
 
@@ -79,6 +104,8 @@ function formatMarketCap(value: number | null): string | null {
   if (value >= 1e6) return `$${(value / 1e6).toFixed(0)}M`;
   return `$${value.toLocaleString()}`;
 }
+
+const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function average(values: number[]): number | null {
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
@@ -125,7 +152,14 @@ async function getVideoStockDataTiingo(upper: string): Promise<VideoStockData | 
 
   const valuation = secFacts?.profileFacts.valuation ?? null;
   const cap = valuation ? marketCap(valuation, surface.price) : null;
-  const pe = valuation ? peRatio(valuation, surface.price) : null;
+  const ttmPe = valuation ? peRatio(valuation, surface.price) : null;
+  // THE FY FALLBACK (#563 COWORK #50, the stock page's #552 COWORK #98 §2): only
+  // where the trailing P/E is refused as "not on file". A's fyPeRatio keeps its
+  // own gate (never stale, never ADS, never across a share-basis change).
+  const fyPe =
+    valuation && ttmPe && !ttmPe.ok && ttmPe.why === "no-twelve-month-eps" ? fyPeRatio(valuation, surface.price) : null;
+  const usesFy = !!(fyPe && fyPe.ok && valuation?.fyEps);
+  const pe = usesFy ? fyPe : ttmPe;
 
   return {
     ticker: upper,
@@ -138,6 +172,12 @@ async function getVideoStockDataTiingo(upper: string): Promise<VideoStockData | 
     ma200Pct: pctFromBase(surface.price, ma200),
     trend: trendOf(surface.price, ma50, ma200),
     peRatio: pe && pe.ok ? pe.val : null,
+    peLabel: usesFy && valuation?.fyEps ? fyPeLabel(valuation.fyEps) : null,
+    peNote: usesFy && valuation?.fyEps ? fyPeNote(valuation.fyEps) : null,
+    marketCapNote:
+      cap && cap.ok ? null
+        : cap && !cap.ok ? capitalise(cap.detail ?? REFUSAL_WORDS[cap.why])
+          : NO_SEC_SHARE_COUNT_NOTE,
     sector: resolveProfile(symbol, null).sector,
     priceLabel: surface.label,
     ma50Note: ma50 === null ? SHORT_HISTORY_NOTE : null,

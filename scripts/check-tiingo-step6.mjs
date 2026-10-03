@@ -208,8 +208,34 @@ const rules = {
   "videos: an MA tile with a price but too few closes says why": (src) =>
     /export const SHORT_HISTORY_NOTE = "Not enough price history stored yet";/.test(src) &&
     /ma50Note: ma50 === null \? SHORT_HISTORY_NOTE : null/.test(src) && /ma200Note: ma200 === null \? SHORT_HISTORY_NOTE : null/.test(src),
-  "video page: the MA tiles carry the note as their hover text": (src) =>
-    /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /title=\{note \?\? undefined\}/.test(src),
+  // 7. PR 2 follow-ups (#563 COWORK #45)
+  "videos: a withheld market cap says why, in A's words": (src) =>
+    /import \{[^}]*\bREFUSAL_WORDS\b[^}]*\} from "@\/lib\/server\/secValuation";/.test(src) &&
+    /cap && cap\.ok \? null\s*: cap && !cap\.ok \? capitalise\(cap\.detail \?\? REFUSAL_WORDS\[cap\.why\]\)\s*: NO_SEC_SHARE_COUNT_NOTE/.test(src),
+  "video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows": (src) =>
+    /label: "Market cap", value: stockData\.marketCap \?\? "—", note: stockData\.marketCap \? null : stockData\.marketCapNote \?\? null/.test(src) &&
+    /\{stockData\.marketCap \? " Market cap is the SEC cover-page share count times that price\." : null\}/.test(src) &&
+    !/\. Market cap is the SEC cover-page share count times that price\. Figures/.test(src),
+  "video page: the tile notes open on tap, keyboard and hover (A's ReasonedValue)": (src) =>
+    /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /import \{ ReasonedValue \} from "@\/app\/components\/EstimatedValue";/.test(src) &&
+    /<ReasonedValue text=\{value\} reason=\{note\} \/>/.test(src) && !/title=\{note/.test(src),
+  // 9. FY P/E fallback (#563 COWORK #50): only on "not on file", A's gate, labelled
+  "videos: the P/E falls back to the full year only when twelve months aren't on file": (src) =>
+    /import \{ fyPeRatio, marketCap, peRatio, REFUSAL_WORDS, type EpsBasis \} from "@\/lib\/server\/secValuation";/.test(src) &&
+    /ttmPe && !ttmPe\.ok && ttmPe\.why === "no-twelve-month-eps" \? fyPeRatio\(valuation, surface\.price\) : null/.test(src) &&
+    /const pe = usesFy \? fyPe : ttmPe;/.test(src) &&
+    /eps\.fiscalYear \? `P\/E \(FY\$\{eps\.fiscalYear\}\)` : "P\/E \(FY\)"/.test(src) &&
+    /peNote: usesFy && valuation\?\.fyEps \? fyPeNote\(valuation\.fyEps\) : null/.test(src),
+  "video page: the P/E tile takes the FY label and note": (src) =>
+    /label: stockData\.peLabel \?\? "P\/E \(TTM\)"/.test(src) && /note: stockData\.peNote \?\? null/.test(src),
+  // 8. B13 (#563 COWORK #46): the news price never falls back to Yahoo
+  "news data: the quote is FMP only, with no Yahoo quote left": (src) =>
+    /async function fetchQuote\(symbol: string\): Promise<Quote \| null> \{\s*return fetchFmpQuote\(symbol\);\s*\}/.test(src) &&
+    !/fetchYahooQuote|meta\.regularMarketPrice/.test(src),
+  "news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close": (src) =>
+    /\{heroPrice \? \(/.test(src) && /\) : quote\?\.price != null \? \(/.test(src) &&
+    /\{NEWS_HERO_NO_PRICE\}/.test(src) && /const NEWS_HERO_NO_PRICE = "Price not available right now";/.test(src) &&
+    !/formatMoney\(quote\?\.price \?\? lastClose\)/.test(src) && !/DATA UNAVAILABLE/.test(src),
 };
 const sourceOf = {
   "ai-market reads no price and takes no price argument": FILES.aiMarket,
@@ -232,7 +258,13 @@ const sourceOf = {
   "videos: the IFX -> IFNNY remap applies on the Tiingo path too": FILES.video,
   "videos: the sector is A's resolver, SEC-only, imported": FILES.video,
   "videos: an MA tile with a price but too few closes says why": FILES.video,
-  "video page: the MA tiles carry the note as their hover text": FILES.videoPage,
+  "video page: the tile notes open on tap, keyboard and hover (A's ReasonedValue)": FILES.videoPage,
+  "videos: a withheld market cap says why, in A's words": FILES.video,
+  "video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows": FILES.videoPage,
+  "news data: the quote is FMP only, with no Yahoo quote left": FILES.newsData,
+  "videos: the P/E falls back to the full year only when twelve months aren't on file": FILES.video,
+  "video page: the P/E tile takes the FY label and note": FILES.videoPage,
+  "news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close": FILES.news,
 };
 const srcFor = (name) => [sourceOf[name]].flat().map((f) => (name.includes("caption") ? raw(f) : code(f))).join("\n");
 
@@ -266,7 +298,18 @@ const mutants = [
   ["videos: the IFX -> IFNNY remap applies on the Tiingo path too", (s) => s.replace("readSurfaceInputs(symbol)", "readSurfaceInputs(upper)")],
   ["videos: the sector is A's resolver, SEC-only, imported", (s) => s.replace("sector: resolveProfile(symbol, null).sector,", "sector: null,")],
   ["videos: an MA tile with a price but too few closes says why", (s) => s.replace("ma200Note: ma200 === null ? SHORT_HISTORY_NOTE : null", "ma200Note: null")],
-  ["video page: the MA tiles carry the note as their hover text", (s) => s.replace("title={note ?? undefined}", "")],
+  ["video page: the tile notes open on tap, keyboard and hover (A's ReasonedValue)", (s) => s.replace("<ReasonedValue text={value} reason={note} />", "{value}")],
+  ["video page: the tile notes open on tap, keyboard and hover (A's ReasonedValue)", (s) => s.replace("<ReasonedValue text={value} reason={note} />", "<span title={note ?? undefined}>{value}</span>")],
+  ["videos: a withheld market cap says why, in A's words", (s) => s.replace("capitalise(cap.detail ?? REFUSAL_WORDS[cap.why])", "null")],
+  ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace(", note: stockData.marketCap ? null : stockData.marketCapNote ?? null", "")],
+  ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace('{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null}', " Market cap is the SEC cover-page share count times that price.")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace('ttmPe.why === "no-twelve-month-eps" ? fyPeRatio', "true ? fyPeRatio")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace("const pe = usesFy ? fyPe : ttmPe;", "const pe = ttmPe;")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace("peNote: usesFy && valuation?.fyEps ? fyPeNote(valuation.fyEps) : null", "peNote: null")],
+  ["video page: the P/E tile takes the FY label and note", (s) => s.replace('label: stockData.peLabel ?? "P/E (TTM)"', 'label: "P/E (TTM)"')],
+  ["news data: the quote is FMP only, with no Yahoo quote left", (s) => s.replace("  return fetchFmpQuote(symbol);\n}", "  return (await fetchFmpQuote(symbol)) ?? fetchYahooQuote(symbol);\n}")],
+  ["news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close", (s) => s.replace("<div style={heroMetricValueStyle}>{formatMoney(quote.price)}</div>", "<div style={heroMetricValueStyle}>{formatMoney(quote?.price ?? lastClose)}</div>")],
+  ["news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close", (s) => s.replace("{NEWS_HERO_NO_PRICE}</div>", "{formatMoney(lastClose)}</div>")],
 ];
 for (const [name, mutate] of mutants) {
   const before = srcFor(name);

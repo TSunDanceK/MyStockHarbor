@@ -23,7 +23,8 @@ import { utcDay, utcStamp } from "@/lib/utcDate";
 import { browserStorage, readWideChoice, WIDE_ARROW_LEFT, WIDE_ARROW_RIGHT, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; priceLabel?: string | null; };
-export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
+// `label`: Tiingo's partial bar only, "today so far (IEX), hh:mm ET" (step 3, #553 COWORK #57 §2).
+export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; label?: string; };
 type ChartInterval = "d" | "w" | "m";
 type ChartMode = "basic" | "interactive" | "tradingview";
 type SymbolResult = { symbol: string; name: string; exchange: string };
@@ -40,7 +41,8 @@ type InternalNewsCard = { title: string; source: string | null; pubDate: string 
 export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string | null; newsScoreLabel: string | null; newsScoreValue: number | null; cards: InternalNewsCard[]; ctaHref: string; changePct?: number | null; sparkPoints?: number[]; };
 // FROM THE SEC SNAPSHOT (lib/server/secEarningsSummary.ts) since 2026-09-23: the band label ("Good", "Mixed", "Weak", "Unavailable").
 export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: string; };
-type CachedSymbolData = { quote: Quote | null; history: Point[]; };
+// `provider`: whose bars `history` is, as /api/history reported it ("tiingo" drives the chart credit, #553 COWORK #103).
+type CachedSymbolData = { quote: Quote | null; history: Point[]; provider?: string | null; };
 type DivergenceState = "bullish" | "bearish" | "none";
 type OverviewItem = { key: string; label: string; tone: "green" | "yellow" | "orange" | "red" | "muted"; valueText: string; severity: number; order: number; };
 // `known` is false when the checks had no inputs to run against, not when
@@ -361,6 +363,8 @@ export default function DashboardClient({
   initialEarningsSummary = null,
   pageToken = "",
   tiingoCredit = null,
+  historyCredit = null,
+  initialHistoryProvider = null,
 }: {
   defaultSymbol?: string;
   initialQuote?: Quote | null;
@@ -376,6 +380,11 @@ export default function DashboardClient({
   // The linked "Market data from Tiingo.com", rendered by the server page when
   // PRICE_PROVIDER_STOCK_PAGE=tiingo (step 4). Shown beside a Tiingo figure only.
   tiingoCredit?: React.ReactNode;
+  // The linked "Market data from Tiingo.com" when PRICE_PROVIDER_HISTORY=tiingo (step 3).
+  historyCredit?: React.ReactNode;
+  // Whose bars `initialHistory` is ("tiingo", "fmp" or "none"); the credit
+  // shows only beside a series that is Tiingo's (#553 COWORK #103).
+  initialHistoryProvider?: string | null;
 }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [assetType, setAssetType] = useState<AssetType>("stock");
@@ -446,6 +455,9 @@ export default function DashboardClient({
   const [highlightChart, setHighlightChart] = useState(false);
   const [quote, setQuote] = useState<Quote | null>(() => (seedMatchesSymbol ? initialQuote : null));
   const [historyAll, setHistoryAll] = useState<Point[]>(() => (seedMatchesSymbol ? initialHistory : []));
+  // Whose bars the chart is showing right now: the seed's, then each
+  // /api/history answer's `provider` (absent on the FMP path).
+  const [historyProvider, setHistoryProvider] = useState<string | null>(() => (seedMatchesSymbol ? initialHistoryProvider : null));
   const [symbolCache, setSymbolCache] = useState<Record<string, CachedSymbolData>>(() => {
     if (!seedMatchesSymbol || (!initialHistory.length && !initialQuote)) return {};
     // Matches the cache-key shape the main data-loading effect below
@@ -454,7 +466,7 @@ export default function DashboardClient({
     // own fetch entirely, using this server-fetched data instead.
     const seedTf = TIMEFRAMES[0];
     const key = `${defaultSymbol}:D:${seedTf.fetchBars}:${seedTf.interval}`;
-    return { [key]: { quote: initialQuote, history: initialHistory } };
+    return { [key]: { quote: initialQuote, history: initialHistory, provider: initialHistoryProvider } };
   });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -731,15 +743,17 @@ export default function DashboardClient({
     let c = false;
     async function load() {
       const ck = `${symbol}:${activeTimeframe}:${selectedTimeframe.fetchBars}:${selectedTimeframe.interval}`; const hit = symbolCache[ck];
-      if (hit) { setErr(null); setQuote(hit.quote); setHistoryAll(hit.history); setLoading(false); return; }
+      if (hit) { setErr(null); setQuote(hit.quote); setHistoryAll(hit.history); setHistoryProvider(hit.provider ?? null); setLoading(false); return; }
       setLoading(true); setErr(null);
       try {
-        const [qR, hR] = await Promise.all([fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined), fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${selectedTimeframe.fetchBars}&interval=${chartInterval}`)]);
+        const [qR, hR] = await Promise.all([fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined), fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${selectedTimeframe.fetchBars}&interval=${chartInterval}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined)]);
+        // 404 = no data for this ticker (no price, no FMP key: #553 COWORK #103), worded, not "Failed to load".
+        if (qR.status === 404) { if (c) return; setErr(`No data available for ${symbol.toUpperCase()}.`); setQuote(null); setHistoryAll([]); setHistoryProvider(null); return; }
         if (!qR.ok) throw new Error("q"); if (!hR.ok) throw new Error("h");
-        const q = (await qR.json()) as Quote, h = (await hR.json()) as { points: any[] }; if (c) return;
-        const pts: Point[] = (Array.isArray(h.points) ? h.points : []).map((p: any) => ({ date: String(p?.date ?? ""), open: p?.open == null ? undefined : Number(p.open), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume) })).filter(p => p.date && Number.isFinite(p.close));
-        setQuote(q); setHistoryAll(pts); setSymbolCache(prev => ({ ...prev, [ck]: { quote: q, history: pts } }));
-      } catch { if (c) return; setErr("Failed to load data (try another ticker)."); setQuote(null); setHistoryAll([]); }
+        const q = (await qR.json()) as Quote, h = (await hR.json()) as { points: any[]; provider?: string }; if (c) return; const prov = typeof h.provider === "string" ? h.provider : null;
+        const pts: Point[] = (Array.isArray(h.points) ? h.points : []).map((p: any) => ({ date: String(p?.date ?? ""), open: p?.open == null ? undefined : Number(p.open), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume), label: typeof p?.label === "string" ? p.label : undefined })).filter(p => p.date && Number.isFinite(p.close));
+        setQuote(q); setHistoryAll(pts); setHistoryProvider(prov); setSymbolCache(prev => ({ ...prev, [ck]: { quote: q, history: pts, provider: prov } }));
+      } catch { if (c) return; setErr("Failed to load data (try another ticker)."); setQuote(null); setHistoryAll([]); setHistoryProvider(null); }
       finally { if (!c) setLoading(false); }
     }
     load(); return () => { c = true; };
@@ -1139,7 +1153,7 @@ export default function DashboardClient({
   // lines) -- those belong to the Basic chart only.
   function ChartEngine({ full, compact, trailing }: { full?: boolean; compact?: boolean; trailing?: React.ReactNode } = {}) {
     if (chartMode === "interactive") {
-      return <InteractiveChart symbol={symbol} seed={historyAll} isMobile={isMobile} fill={full} height={full ? undefined : 520} compact={compact} trailing={trailing} onFullscreen={full ? undefined : () => setFullscreen(true)} />;
+      return <InteractiveChart symbol={symbol} seed={historyAll} pageToken={pageToken} onProvider={setHistoryProvider} isMobile={isMobile} fill={full} height={full ? undefined : 520} compact={compact} trailing={trailing} onFullscreen={full ? undefined : () => setFullscreen(true)} />;
     }
     if (chartMode === "tradingview") {
       const h = full ? (typeof window !== "undefined" ? Math.max(360, window.innerHeight - 108) : 720) : (isMobile ? 480 : 620);
@@ -1210,6 +1224,13 @@ export default function DashboardClient({
                 <Link href="/platforms" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Compare platforms →</Link>
               </div>
             </>
+          ) : null}
+          {historyCredit && historyProvider === "tiingo" && chartMode !== "tradingview" ? (
+            // Step 3 (#553 COWORK #56/#92/#103): whose bars these are, and what the newest
+            // one is. Only while the series shown is Tiingo's (a miss falls back to FMP).
+            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
+              {historyAll.length && historyAll[historyAll.length - 1].label ? `Last bar: ${historyAll[historyAll.length - 1].label} · ` : null}{historyCredit}
+            </div>
           ) : null}
         </div>
       </SectionCard>

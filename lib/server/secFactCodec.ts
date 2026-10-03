@@ -97,6 +97,16 @@ export type StoredFactSet = {
    */
   yt?: StoredPeriod;
   /**
+   * The balance-sheet noncontrolling interest, `[date, USD]` (ExtractResult.nci),
+   * for the derived P/B (secEstimates). Absent on older sets and on filers that
+   * tag none; it fills in as each set is refreshed.
+   *
+   * NOT in contentHashOf: the first refresh after it shipped would otherwise
+   * move every NCI filer's hash with no filing behind it, and Layer 2 would log
+   * hundreds of false silent restatements.
+   */
+  nci?: [string, number][];
+  /**
    * Taxonomy namespaces the payload carried. OPTIONAL, because sets written
    * before this existed do not have it -- absent is "unknown", not "none", and
    * every reader must treat it that way.
@@ -316,6 +326,7 @@ export function encodeFactSet(
     cover: result.coverShares,
     ...(result.ttmEps ? { te: result.ttmEps } : {}),
     ...(result.ytd ? { yt: encodePeriod(result.ytd) } : {}),
+    ...(result.nci?.length ? { nci: result.nci } : {}),
     tx: result.taxonomies,
     c: secChainsHash(),
     cu: result.refusedUnits,
