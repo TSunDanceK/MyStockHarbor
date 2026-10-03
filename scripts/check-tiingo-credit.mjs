@@ -41,6 +41,9 @@ const FOOTER = "app/components/ScanFooter.tsx";
 const PICKER_PAGE = "app/components/PickerResultPage.tsx";
 const HUB = "app/pickers/page.tsx";
 const CREDIT_FILE = "lib/server/tiingoSurfacePrice.ts";
+// The calendar's Price column reads the pool, so POOL=tiingo makes it a
+// Tiingo surface too (#552 COWORK #108).
+const CALENDAR = "app/earnings-calendar/page.tsx";
 
 /** The rules over a {file: source} map. Returns failure labels. */
 function rules(srcs) {
@@ -52,6 +55,7 @@ function rules(srcs) {
   const pages = Object.keys(code).filter((f) => f.startsWith("app/") && !f.startsWith("app/api/") && /\b(priceProviderFor|readSurfacePrice)\(/.test(code[f]));
   want(`the switched pages are found (${pages.length})`, pages.length >= 4 && pages.includes(HUB) && pages.includes(PICKER_PAGE));
   for (const f of pages) want(`${f} renders the Tiingo credit`, /\{TIINGO_CREDIT\}|marketDataCredit=\{[^}]*TIINGO_CREDIT/.test(code[f]));
+  want("the calendar switches its credit on the POOL provider", /priceProviderFor\("POOL"\) === "tiingo"/.test(code[CALENDAR] ?? ""));
 
   // 2. every rendered {TIINGO_CREDIT} is inside a link to TIINGO_URL
   for (const [f, c] of Object.entries(code)) {
@@ -85,6 +89,9 @@ const MUTANTS = [
   ["the Pickers footer loses its link", PICKER_PAGE, /\s*marketDataHref=\{[^}]*\}/, ""],
   ["the hub drops its credit", HUB, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, ""],
   ["a page hand-types the credit unlinked", HUB, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "Market data from Tiingo.com"],
+  ["the calendar drops its credit", CALENDAR, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, ""],
+  ["the calendar's credit is unlinked", CALENDAR, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "{TIINGO_CREDIT}"],
+  ["the calendar's credit is never switched on", CALENDAR, /priceProviderFor\("POOL"\) === "tiingo" && /, "false && "],
 ];
 for (const [label, file, from, to] of MUTANTS) {
   const m = srcs[file].replace(from, to);
