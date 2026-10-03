@@ -54,16 +54,23 @@ const X = await import(pathToFileURL(path.join(ROOT, EXT)).href);
 console.log("1. secEstimates");
 const BS = { asOf: "2026-06-30", shortTermDebt: 10, longTermDebt: 100, cash: 30 };
 const evCases = (F) => ({
-  full: F.enterpriseValueOf(1000, BS),
-  noStd: F.enterpriseValueOf(1000, { ...BS, shortTermDebt: null }),
-  noCash: F.enterpriseValueOf(1000, { ...BS, cash: null }),
-  noLtd: F.enterpriseValueOf(1000, { ...BS, longTermDebt: null }),
-  stdAndCash: F.enterpriseValueOf(1000, { ...BS, shortTermDebt: null, cash: null }),
+  full: F.enterpriseValueOf(1000, BS, "3826"),
+  noStd: F.enterpriseValueOf(1000, { ...BS, shortTermDebt: null }, "3826"),
+  noCash: F.enterpriseValueOf(1000, { ...BS, cash: null }, "3826"),
+  noLtd: F.enterpriseValueOf(1000, { ...BS, longTermDebt: null }, "3826"),
+  stdAndCash: F.enterpriseValueOf(1000, { ...BS, shortTermDebt: null, cash: null }, "3826"),
+  bank: F.enterpriseValueOf(1000, { ...BS, shortTermDebt: null }, "6022"),
+  broker: F.enterpriseValueOf(1000, { ...BS, shortTermDebt: null }, "6211"),
+  unknownSic: F.enterpriseValueOf(1000, { ...BS, shortTermDebt: null }, null),
 });
 const ev = evCases(E);
 check("every line filed → the filed EV, no estimate", ev.full.val === 1080 && !ev.full.est);
 check("short-term debt alone untagged → ≈ EV counting it as zero, marked M2",
   ev.noStd.val === 1070 && ev.noStd.est?.key === "ev-short-term-debt-untagged" && ev.noStd.est.kind === "estimate" && /30 Jun 2026/.test(ev.noStd.est.note));
+check("a bank or other SIC 6000–6299 filer never gets the estimate (deposits and short-term funding are not zero)",
+  ev.bank.val === null && ev.broker.val === null && E.sicAllowsEstimate("6300") && !E.sicAllowsEstimate("6000") && !E.sicAllowsEstimate("6299"));
+check("an unknown SIC gets no estimate (fail-closed)", ev.unknownSic.val === null);
+check("filed EV is unaffected by the bank gate", E.enterpriseValueOf(1000, BS, "6022").val === 1080);
 check("cash, long-term debt, or short-term debt + cash missing → still refused (those patterns failed)",
   ev.noCash.val === null && ev.noLtd.val === null && ev.stdAndCash.val === null && ev.stdAndCash.missing.join() === "short-term debt,cash");
 const FACTS = { facts: { "us-gaap": { MinorityInterest: { units: { USD: [
@@ -82,13 +89,15 @@ check("derived equity = total − NCI on the same date, marked derived; none wit
   const M = await mutated(EST, "if (cap === null || !bs || bs.longTermDebt === null || bs.cash === null)", "if (cap === null || !bs || bs.longTermDebt === null)");
   let caught = false; try { caught = evCases(M).noCash.val !== null; } catch { caught = true; }
   check("MUTATION: cash-missing allowed into the estimate → caught", caught);
+  const Mb = await mutated(EST, "    if (!sicAllowsEstimate(sic)) return { val: null, missing };\n", "");
+  check("MUTATION: the bank gate removed → caught (a bank gets ≈ EV)", evCases(Mb).bank.val !== null);
   const Mc = await mutated(EXT, `if (currency !== "USD" || !dates.length) return [];`, "if (!dates.length) return [];");
   check("MUTATION: the USD gate on NCI removed → caught", Mc.minorityInterestAt(FACTS, ["2026-06-30"], "EUR").length > 0);
 }
 
 // ── 2. valuationMultiples ───────────────────────────────────────────────────
 console.log("\n2. valuationMultiples: opt-in, and today's figures otherwise");
-const inputs = { shares: { val: 100, asOf: "2026-08-01" }, eps: { val: 2, basis: "four-quarters", periodEnd: "2026-06-30" }, refusals: [] };
+const inputs = { shares: { val: 100, asOf: "2026-08-01" }, eps: { val: 2, basis: "four-quarters", periodEnd: "2026-06-30" }, refusals: [], sic: "3826" };
 const m = (bs) => ({
   revenue: { vals: { revenue: 500 }, basis: "four-quarters", periodEnd: "2026-06-30" },
   ebitda: { vals: { operatingIncome: 80, depreciationAndAmortization: 20 }, basis: "four-quarters", periodEnd: "2026-06-30" },
@@ -102,6 +111,10 @@ check("without withEstimates: EV/EBITDA refused as before (short-term debt not o
 check("without withEstimates: P/B keeps today's refusal (equity only incl. NCI)", !off.pb.ok && off.pb.why === "equity-tagged-only-incl-nci");
 check("with withEstimates: ≈ EV/EBITDA = (1000 + 100 − 30) ÷ 100, marked estimate",
   on.evEbitda.ok && Math.abs(on.evEbitda.val - 10.7) < 1e-9 && on.evEbitda.est?.kind === "estimate");
+const bankOn = V.valuationMultiples({ ...inputs, sic: "6022" }, m({}), 10, { withEstimates: true });
+check("with withEstimates, a bank (SIC 6022): EV/EBITDA refused, not ≈", !bankOn.evEbitda.ok && bankOn.evEbitda.why === "enterprise-value-input-missing");
+check("valuationInputs carries the filer's SIC to the gate, and the stock page passes it",
+  /\.\.\.\(filer\.sic \? \{ sic: filer\.sic \} : \{\}\)/.test(readCodeOnly(VAL)) && /sic: registrantFor\(clean\)\?\.sic \?\? null/.test(readCodeOnly("lib/server/secEarningsSnapshot.ts")));
 check("with withEstimates: P/B = 1000 ÷ (455 − 55), marked derived", on.pb.ok && on.pb.val === 2.5 && on.pb.est?.kind === "derived");
 check("filed figures never carry an est (P/E, P/S)", on.pe.ok && !on.pe.est && on.ps.ok && !on.ps.est);
 const neg = V.valuationMultiples(inputs, m({ derivedEquity: { val: -5, est: derivedEq.est } }), 10, { withEstimates: true });

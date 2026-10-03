@@ -15,21 +15,51 @@
 // ReasonedValue is the same popover for a word in place of a dash ("Loss",
 // "Not meaningful"), whose reason is on hover/tap rather than printed under
 // the tile (#552 COWORK #98 §1).
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { ESTIMATE_COLOUR, ESTIMATE_SIGN, type EstimateMark } from "./estimateMark";
 
 export { ESTIMATE_COLOUR, ESTIMATE_SIGN, type EstimateMark };
 
+/** The popover's widest, and the gutter it keeps from each viewport edge. */
+export const NOTE_MAX_WIDTH = 280;
+export const NOTE_GUTTER = 16;
+
+/**
+ * WHERE THE NOTE GOES (#552 COWORK #113): under the trigger, but never past a
+ * viewport edge. A note anchored at the trigger's left pushed a 360 px page
+ * sideways from a right-hand cell; fixed positioning also escapes a parent's
+ * overflow clipping (the hero stat row). Pure, so the check can drive it.
+ */
+export function notePlacement(trigger: { left: number; bottom: number }, viewportWidth: number): { left: number; top: number; width: number } {
+  const width = Math.max(0, Math.min(NOTE_MAX_WIDTH, viewportWidth - 2 * NOTE_GUTTER));
+  const left = Math.max(NOTE_GUTTER, Math.min(trigger.left, viewportWidth - NOTE_GUTTER - width));
+  return { left, top: trigger.bottom + 6, width };
+}
+
 function Noted({ children, note, style, label }: { children: ReactNode; note: string; style?: CSSProperties; label: string }) {
   const [open, setOpen] = useState(false);
+  const [place, setPlace] = useState<{ left: number; top: number; width: number } | null>(null);
   const id = useId();
   const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    if (!open || !ref.current) { setPlace(null); return; }
+    const r = ref.current.getBoundingClientRect();
+    setPlace(notePlacement({ left: r.left, bottom: r.bottom }, document.documentElement.clientWidth));
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    // Fixed to the viewport, so a scroll or resize would leave it behind: close instead.
+    const close = () => setOpen(false);
     document.addEventListener("pointerdown", away);
-    return () => document.removeEventListener("pointerdown", away);
+    window.addEventListener("scroll", close, { passive: true });
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      window.removeEventListener("scroll", close);
+      window.removeEventListener("resize", close);
+    };
   }, [open]);
   return (
     <span ref={ref} style={{ position: "relative", display: "inline-block" }}>
@@ -50,12 +80,12 @@ function Noted({ children, note, style, label }: { children: ReactNode; note: st
       >
         {children}
       </span>
-      {open ? (
+      {open && place ? (
         <span
           id={id}
           role="tooltip"
           style={{
-            position: "absolute", left: 0, top: "calc(100% + 6px)", zIndex: 20, width: "min(280px, 80vw)",
+            position: "fixed", left: place.left, top: place.top, zIndex: 50, width: place.width,
             padding: "8px 10px", borderRadius: 8, background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)",
             color: "#e2e8f0", fontSize: 12, fontWeight: 500, lineHeight: 1.45, letterSpacing: 0, whiteSpace: "normal",
           }}
@@ -74,7 +104,7 @@ export function EstimatedValue({ text, est, style }: { text: string; est?: Estim
     return (
       <Noted note={est.note} label={`${text}, derived`} style={style}>
         {text}
-        <span style={{ marginLeft: 6, fontSize: "0.55em", fontWeight: 700, letterSpacing: "0.04em", opacity: 0.75, verticalAlign: "middle" }}>derived</span>
+        <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", opacity: 0.85, verticalAlign: "middle" }}>derived</span>
       </Noted>
     );
   }

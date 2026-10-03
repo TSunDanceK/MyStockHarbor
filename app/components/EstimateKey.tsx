@@ -1,9 +1,10 @@
 // THE KEY LINE (#552 COWORK #94): on every page that shows an estimated or
 // derived figure, saying what the mark means. Only the kinds on the page are
 // listed, and nothing renders when there are none.
+import type { CSSProperties } from "react";
 import { ESTIMATE_COLOUR, ESTIMATE_SIGN, type EstimateMark } from "./estimateMark";
 
-export function EstimateKey({ marks, style }: { marks: (EstimateMark | null | undefined)[]; style?: React.CSSProperties }) {
+export function EstimateKey({ marks, style }: { marks: (EstimateMark | null | undefined)[]; style?: CSSProperties }) {
   const kinds = new Set(marks.filter((m): m is EstimateMark => Boolean(m)).map((m) => m.kind));
   if (!kinds.size) return null;
   return (

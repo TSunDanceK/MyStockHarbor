@@ -102,7 +102,7 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
   "equity-is-zero-or-negative":
     "shareholders' equity on the latest balance sheet is not positive, so a P/B is not meaningful",
   "enterprise-value-input-missing":
-    "one of the enterprise-value or EBITDA inputs is not on file, and it is not approximated",
+    "one of the enterprise-value or EBITDA inputs is not on file",
   "ebitda-is-zero-or-negative":
     "EBITDA over the last twelve months is not positive, so EV/EBITDA is not meaningful",
 };
@@ -249,6 +249,8 @@ export type ValuationInputs = {
    * be read as trailing (the NVDA defect, #552 COWORK #8). See fyPeRatio.
    */
   fyEps?: EpsBasis;
+  /** FilerFacts.sic, carried for the estimate layer's bank gate. Absent = unknown = no estimate. */
+  sic?: string | null;
 };
 
 /**
@@ -501,6 +503,8 @@ export type FilerFacts = {
    * stored dei count only when it is NEWER. BIP's dei count is as of 2020.
    */
   citedCover?: { val: number; asOf: string; source: string } | null;
+  /** The registrant's SIC (data/sec/registrants.json), for the estimate layer's bank gate (secEstimates). */
+  sic?: string | null;
 };
 
 /** How far the filer's own EPS identity may sit from 1 or from the ratio. */
@@ -655,7 +659,7 @@ export function valuationInputs(
   const fyYear = !ads && refusals.length === 1 && refusals[0] === "no-twelve-month-eps" ? newestFiscalYear(set.years) : null;
   const fyEps = fyYear && !epsIsStale(fyYear.periodEnd, today) ? fyYear : null;
 
-  return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}), ...(fyEps ? { fyEps } : {}) };
+  return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}), ...(fyEps ? { fyEps } : {}), ...(filer.sic ? { sic: filer.sic } : {}) };
 }
 
 /**
@@ -1045,7 +1049,7 @@ export function valuationMultiples(
   // "not meaningful" before it is "not on file": EV cannot rescue it.
   // EV FROM THE ONE LAYER (secEstimates): filed, or the M2 estimate when only
   // short-term debt is untagged; any other missing line is still refused.
-  const evAny = enterpriseValueOf(cap.val, bs);
+  const evAny = enterpriseValueOf(cap.val, bs, inputs.sic);
   const ev = evAny.val !== null && evAny.est && !opts.withEstimates
     ? { val: null, missing: ["short-term debt"] }
     : evAny;
@@ -1058,7 +1062,7 @@ export function valuationMultiples(
     evEbitda = { ok: false, why: "ebitda-is-zero-or-negative" };
   } else if (ev.val === null || knownEbitda === null) {
     evEbitda = { ok: false, why: "enterprise-value-input-missing",
-      detail: `not on file: ${missing.join(", ")}; it is not approximated` };
+      detail: `not on file: ${missing.join(", ")}` };
   } else {
     evEbitda = { ok: true, val: ev.val / knownEbitda, ...(evAny.val !== null && evAny.est ? { est: evAny.est } : {}) };
   }

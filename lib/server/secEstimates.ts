@@ -74,6 +74,20 @@ export function estimateOf(key: EstimateKey, asOf: string): Estimate {
   return { key, kind: m.kind, asOf, note: `${lead}, balance sheet as at ${readableDate(asOf)}: ${m.method} (${m.backtest}).` };
 }
 
+/**
+ * BANKS AND OTHER FINANCIALS ARE NEVER ESTIMATED (#552 COWORK #113): SIC
+ * 6000–6299, the range the #86b bank census used (CODE-A #113). At a bank,
+ * "no short-term debt tagged" is deposits and short-term funding, so counting
+ * it as zero is not the tested M2 case. FAIL-CLOSED: an unknown SIC gets no
+ * estimate either.
+ */
+export const BANK_SIC_RANGE = [6000, 6299] as const;
+export function sicAllowsEstimate(sic: string | null | undefined): boolean {
+  const n = Number(sic);
+  if (!sic || !Number.isFinite(n)) return false;
+  return n < BANK_SIC_RANGE[0] || n > BANK_SIC_RANGE[1];
+}
+
 /** The balance-sheet lines EV needs, as stored (null = not tagged). */
 export type EvBalanceSheet = { asOf: string; shortTermDebt: number | null; longTermDebt: number | null; cash: number | null };
 
@@ -81,12 +95,14 @@ export type EvBalanceSheet = { asOf: string; shortTermDebt: number | null; longT
  * ENTERPRISE VALUE: cap + short-term debt + long-term debt − cash.
  *
  * Every line on file → the filed figure, no estimate. ONLY short-term debt
- * untagged → the M2 estimate. Anything else missing → null with the missing
+ * untagged, and the filer not a bank (sicAllowsEstimate) → the M2 estimate. Anything else missing → null with the missing
  * lines named, exactly as before: those patterns failed the back-test.
  */
 export function enterpriseValueOf(
   cap: number | null,
   bs: EvBalanceSheet | null,
+  /** The filer's SIC, REQUIRED so no caller can skip the bank gate; null = unknown (no estimate). */
+  sic: string | null | undefined,
 ): { val: number; est?: Estimate } | { val: null; missing: string[] } {
   const missing = [
     ...(bs ? [] : ["the balance sheet"]),
@@ -96,6 +112,7 @@ export function enterpriseValueOf(
   ];
   if (cap === null || !bs || bs.longTermDebt === null || bs.cash === null) return { val: null, missing };
   if (bs.shortTermDebt === null) {
+    if (!sicAllowsEstimate(sic)) return { val: null, missing };
     return { val: cap + bs.longTermDebt - bs.cash, est: estimateOf("ev-short-term-debt-untagged", bs.asOf) };
   }
   return { val: cap + bs.shortTermDebt + bs.longTermDebt - bs.cash };

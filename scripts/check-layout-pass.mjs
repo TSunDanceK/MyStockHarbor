@@ -150,7 +150,7 @@ console.log("\n7. AVAV (COWORK #54): P/B on NCI-inclusive equity, EV/EBITDA reas
   check("EBITDA ≤ 0 → 'EBITDA over the last twelve months is not positive…'", neg.ok === false && neg.why === "ebitda-is-zero-or-negative" && /^EBITDA over the last twelve months is not positive/.test(VAL.REFUSAL_WORDS[neg.why]));
   const miss = VAL.valuationMultiples(inputs, mi({ ...avavBs, longTermDebt: null }, null, ["depreciation & amortization"]), 80.6).evEbitda;
   check("a missing input is named: long-term debt, D&A (twelve months)",
-    miss.ok === false && miss.detail === "not on file: long-term debt, depreciation & amortization (twelve months); it is not approximated", miss.detail);
+    miss.ok === false && miss.detail === "not on file: long-term debt, depreciation & amortization (twelve months)", miss.detail);
 
   const liab = V.withDerivedLiabilities({ key: "totalLiabilities", label: "Total liabilities", val: null, derived: null, derivedNote: null }, AVAV.instants[0]);
   check("total liabilities derived = 5.73 - 4.40 = 1.33B, marked derived", Math.abs(liab.val - 1.33 * B) < 1 && liab.derived === "computed" && /accounting identity/.test(liab.derivedNote));
