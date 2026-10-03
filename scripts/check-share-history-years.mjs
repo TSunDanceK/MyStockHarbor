@@ -116,10 +116,27 @@ const RULES = {
     !m.listing.withheld && m.listing.points.length >= 4 && !m.listing.points.some((p) => p.date === "2025-12-31") &&
     m.listing.points.every((p) => p.date >= "2025-06-30"),
   "4a. the headline: arrow and hedged words, from the 3-year figure": (m) =>
-    m.C.shareHeadline(-9.1, -12, "Sept 2021") === "▼ Down 9.1% over the last 3 years, which may reflect buybacks" &&
-    m.C.shareHeadline(98.9, null, null).startsWith("▲ Up 98.9% over the last 3 years") &&
-    m.C.shareHeadline(0.4, null, null) === "– Share count roughly unchanged over the last 3 years" &&
+    m.C.shareHeadline({ pct: -9.1, from: "Jun 2023", to: "Jun 2026", endIsNewest: true }, -12, "Sept 2021") === "▼ Down 9.1% over the last 3 years, which may reflect buybacks" &&
+    m.C.shareHeadline({ pct: 98.9, from: "Jun 2023", to: "Jun 2026", endIsNewest: true }, null, null).startsWith("▲ Up 98.9% over the last 3 years") &&
+    m.C.shareHeadline({ pct: 0.4, from: "Jun 2023", to: "Jun 2026", endIsNewest: true }, null, null) === "– Share count roughly unchanged over the last 3 years" &&
     m.C.shareHeadline(null, -5.5, "Dec 2023") === "▼ Down 5.5% since Dec 2023, which may reflect buybacks",
+  "4c. one span (#552 COWORK #138): where the 3-year end stepped back, the headline and the tile name the same window": (m) => {
+    const h = m.render(m.aapl);
+    const t = m.aapl.threeYear;
+    const stepped = t.end.date !== m.aapl.points.at(-1).date;
+    const head = (h.match(/data-share-headline="">([^<]*)</) ?? [])[1] ?? "";
+    const tile = (h.match(/data-share-three-window="">([^<]*)</) ?? [])[1] ?? "";
+    const yr = (d) => d.slice(0, 4);
+    return stepped && head.includes("the newest 3-year span on file") && tile.includes("the newest 3-year span on file") &&
+      head.includes(yr(t.base.date)) && head.includes(yr(t.end.date)) && !/over the last 3 years/.test(head);
+  },
+  "5. a split note names no date (the stored step is a year-end, not the effective date): AAPL, NVDA, a reverse split": (m) => {
+    const notes = m.C.seriesNotes({ points: [], splits: [{ date: "2012-09-29", ratio: 7 }, { date: "2018-09-29", ratio: 4 }, { date: "2021-01-31", ratio: 4 }, { date: "2024-01-28", ratio: 10 }, { date: "2023-06-30", ratio: 0.1 }] });
+    const split = notes.filter((n) => /split/.test(n));
+    return split.length === 5 && split.every((n) => !/\b(19|20)\d{2}\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\b/.test(n)) &&
+      split[0] === "Earlier counts are adjusted for a 7-for-1 split, using the company's own restated figures." &&
+      split[4].includes("1-for-10 split");
+  },
   "4b. the headline renders above the chart, and the footnote names the basis": (m) => {
     const h = m.render(m.aapl);
     return h.indexOf("data-share-headline") > 0 && h.indexOf("data-share-headline") < h.indexOf("<svg") &&
@@ -141,6 +158,8 @@ const MUTANTS = [
   ["a fiscal year drawn on top of a quarter's date", (s) => once(s, "    if (quarterDates.has(y.date)) continue;\n", ""), null],
   ["fiscal years kept whatever the listing date", (s) => once(s, "filedQuarters.has(p.date) || p.date < listedFrom || days(listedFrom, p.date) >= SHARE_YEAR_AFTER_LISTING_DAYS", "true"), null],
   ["the headline without its arrow", null, (s) => once(s, "`▼ Down ${", "`Down ${")],
+  ["the split's step date printed as if it were the split date", null, (s) => once(s, "a ${splitWords(s.ratio)} split, using", "a ${splitWords(s.ratio)} split (${fmtDateShort(s.date)}), using")],
+  ["the headline back on 'the last 3 years' when the end stepped back", null, (s) => once(s, "three.endIsNewest ? \"over the last 3 years\"", "true ? \"over the last 3 years\"")],
   ["the footnote's basis dropped", null, (s) => once(s, "quarterly averages plus{\" \"}", "quarters plus{\" \"}")],
 ];
 for (const [label, bm, cm] of MUTANTS) {

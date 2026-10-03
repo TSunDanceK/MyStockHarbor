@@ -114,15 +114,28 @@ export function threeYearWords(pct: number | null): { label: string; tone: "up" 
  * an arrow, hedged. From the 3-year figure where there is one, else since the
  * first point. Direction is in the arrow AND the words, never colour alone.
  */
-export function shareHeadline(threePct: number | null, sincePct: number | null, since: string | null): string | null {
-  const pct = threePct ?? sincePct;
+/**
+ * THE SAME SPAN AS THE TILE (#552 COWORK #138): where the 3-year window's end
+ * stepped back from the newest point to find a base (COWORK #120), the
+ * headline names that window, as the tile does, rather than "the last 3 years".
+ */
+export const NEWEST_SPAN_WORDS = "the newest 3-year span on file";
+
+export function shareHeadline(
+  three: { pct: number; from: string; to: string; endIsNewest: boolean } | null,
+  sincePct: number | null,
+  since: string | null,
+): string | null {
+  const pct = three ? three.pct : sincePct;
   if (pct === null || !Number.isFinite(pct)) return null;
-  const when = threePct !== null ? "over the last 3 years" : since ? `since ${since}` : "";
+  const when = three
+    ? three.endIsNewest ? "over the last 3 years" : `from ${three.from} to ${three.to}, ${NEWEST_SPAN_WORDS},`
+    : since ? `since ${since}` : "";
   // "–", NOT "≈": that glyph is reserved for estimates (check-estimate-glyph-reserved).
-  if (Math.abs(pct) <= SHARE_FLAT_PCT) return `– Share count roughly unchanged ${when}`.trim();
+  if (Math.abs(pct) <= SHARE_FLAT_PCT) return `– Share count roughly unchanged ${when.replace(/,$/, "")}`.trim();
   return pct < 0
-    ? `▼ Down ${Math.abs(pct).toFixed(1)}% ${when}, which may reflect buybacks`
-    : `▲ Up ${pct.toFixed(1)}% ${when}: more shares can spread the same earnings and ownership thinner`;
+    ? `▼ Down ${Math.abs(pct).toFixed(1)}% ${when.replace(/,$/, "")}, which may reflect buybacks`
+    : `▲ Up ${pct.toFixed(1)}% ${when.replace(/,$/, "")}: more shares can spread the same earnings and ownership thinner`;
 }
 
 /** "20-for-1" / "1-for-10". */
@@ -151,7 +164,10 @@ export function withheldWords(w: NonNullable<DilutionHistoryData["withheld"]>): 
 export function seriesNotes(data: DilutionHistoryData): string[] {
   const out: string[] = [];
   for (const s of data.splits ?? []) {
-    out.push(`Earlier counts are adjusted for a ${splitWords(s.ratio)} split (${fmtDateShort(s.date)}), using the company's own restated figures.`);
+    // NO DATE (#552 COWORK #138): s.date is where the step sits in the series
+    // (a fiscal year-end), not when the split took effect, and the stored set
+    // carries no effective date. AAPL read "Sept 2012" for its June 2014 7-for-1.
+    out.push(`Earlier counts are adjusted for a ${splitWords(s.ratio)} split, using the company's own restated figures.`);
   }
   const st = data.startedAfter;
   if (st?.reason === "listing") out.push("Starts at the company's first report after listing.");
@@ -207,11 +223,19 @@ export default function DilutionHistory({
   const threePct = data?.threeYear && data.threeYear.pct !== null ? data.threeYear.pct : null;
   // THE WINDOW'S ACTUAL ENDS, NEVER "LATEST" (#552 COWORK #120): the end may
   // step back up to 6 months from the newest point to find a base.
-  const threeWindow = data?.threeYear && data.threeYear.pct !== null && data.threeYear.end
-    ? `${fmtDateDay(data.threeYear.base.date)} to ${fmtDateDay(data.threeYear.end.date)}`
+  const threeSpan = data?.threeYear && data.threeYear.pct !== null && data.threeYear.end ? data.threeYear : null;
+  // WHEN THE END STEPPED BACK, THE TILE SAYS SO (#552 COWORK #138), and the
+  // headline names the same span: one window, stated the same way twice.
+  const endIsNewest = threeSpan ? threeSpan.end!.date === last.date : true;
+  const threeWindow = threeSpan
+    ? `${fmtDateDay(threeSpan.base.date)} to ${fmtDateDay(threeSpan.end!.date)}${endIsNewest ? "" : ` · ${NEWEST_SPAN_WORDS}`}`
     : null;
   const trend = threeYearWords(threePct);
-  const headline = shareHeadline(threePct, changePercent, fmtDateShort(first.date));
+  const headline = shareHeadline(
+    threeSpan ? { pct: threeSpan.pct as number, from: fmtDateShort(threeSpan.base.date) ?? threeSpan.base.date, to: fmtDateShort(threeSpan.end!.date) ?? threeSpan.end!.date, endIsNewest } : null,
+    changePercent,
+    fmtDateShort(first.date),
+  );
   const trendColor = trend.tone === "up" ? RED : trend.tone === "down" ? GREEN : BLUE;
 
   // -- Chart geometry (server-rendered SVG, no client JS) --------------------
