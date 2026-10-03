@@ -71,6 +71,15 @@ function q4Filed() {
   return { set: s, date: fy.e, quarterVal: q.v[SI] };
 }
 
+/** A CRCL-shaped listing: first 10-Q for Jun 2025; FY2025's average mixes in pre-listing months. */
+function newListing() {
+  const q = (e, shares) => { const v = new Array(SEC_FIELD_KEYS.length).fill(null); v[SI] = shares; return { e, v, d: "" }; };
+  return {
+    quarters: [q("2026-06-30", 236e6), q("2026-03-31", 233e6), q("2025-12-31", null), q("2025-09-30", 229e6), q("2025-06-30", 222e6), q("2025-03-31", 120e6)],
+    years: [], as: [["2024-12-31", 110e6], ["2025-12-31", 180e6]],
+  };
+}
+
 async function measure(B, C) {
   const aapl = fixture("AAPL"), onds = fixture("ONDS");
   const mix = mixedBasis();
@@ -79,6 +88,7 @@ async function measure(B, C) {
     aapl: B.buildShareHistory(aapl), aaplSet: aapl,
     onds: B.buildShareHistory(onds),
     mix: B.buildShareHistory(mix.set), mixDate: mix.date,
+    listing: B.buildShareHistory(newListing(), { listedFrom: "2025-06-30" }),
     q4: (() => { const c = q4Filed(); return { h: B.buildShareHistory(c.set), ...c }; })(),
     render, C,
   };
@@ -102,6 +112,9 @@ const RULES = {
     return inWindow.length >= 2 && inWindow.every((d) => !qEnds.has(d)) && new Set(m.aapl.points.map((p) => p.date)).size === m.aapl.points.length &&
       atQ4.length === 1 && atQ4[0].shares === m.q4.quarterVal && !(m.q4.h.yearEnds ?? []).includes(m.q4.date);
   },
+  "3b. a fiscal year that began before the listing is left out; the listed series still draws (CRCL)": (m) =>
+    !m.listing.withheld && m.listing.points.length >= 4 && !m.listing.points.some((p) => p.date === "2025-12-31") &&
+    m.listing.points.every((p) => p.date >= "2025-06-30"),
   "4a. the headline: arrow and hedged words, from the 3-year figure": (m) =>
     m.C.shareHeadline(-9.1, -12, "Sept 2021") === "▼ Down 9.1% over the last 3 years, which may reflect buybacks" &&
     m.C.shareHeadline(98.9, null, null).startsWith("▲ Up 98.9% over the last 3 years") &&
@@ -126,6 +139,7 @@ const MUTANTS = [
   ["no basis check", (s) => once(s, "        if (y.shares < lo || y.shares > hi) { refusedYears.push(y.date); continue; }", ""), null],
   ["a slipped quarter widens the range", (s) => once(s, "const own = ownAll.filter((v) => v / mid <= SHARE_SCALE_MAX_STEP && mid / v <= SHARE_SCALE_MAX_STEP);", "const own = ownAll;"), null],
   ["a fiscal year drawn on top of a quarter's date", (s) => once(s, "    if (quarterDates.has(y.date)) continue;\n", ""), null],
+  ["fiscal years kept whatever the listing date", (s) => once(s, "filedQuarters.has(p.date) || p.date < listedFrom || days(listedFrom, p.date) >= SHARE_YEAR_AFTER_LISTING_DAYS", "true"), null],
   ["the headline without its arrow", null, (s) => once(s, "`▼ Down ${", "`Down ${")],
   ["the footnote's basis dropped", null, (s) => once(s, "quarterly averages plus{\" \"}", "quarters plus{\" \"}")],
 ];
