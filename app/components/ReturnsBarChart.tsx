@@ -29,6 +29,7 @@ export default function ReturnsBarChart({
   periodLabel,
   compareLabel,
   bars,
+  bare = false,
 }: {
   symbol: string;
   // "Daily" | "Weekly"
@@ -36,6 +37,9 @@ export default function ReturnsBarChart({
   // e.g. "previous day's close" | "previous week's close"
   compareLabel: string;
   bars: ReturnBar[];
+  // Inside ReturnsToggleCard (#553 COWORK #89): that card is the one border, so
+  // each view drops its own. Content is identical either way.
+  bare?: boolean;
 }) {
   // Need a real run of bars for the chart to read as a trend, not noise.
   if (bars.length < 3) return null;
@@ -62,7 +66,7 @@ export default function ReturnsBarChart({
   const first = bars[0];
 
   return (
-    <div style={cardStyle}>
+    <div style={bare ? bareStyle : cardStyle}>
       <div style={eyebrowStyle}>{periodLabel} returns</div>
       <h3 style={headingStyle}>
         {symbol} close vs {compareLabel}
@@ -159,13 +163,14 @@ export default function ReturnsBarChart({
   );
 }
 
-const cardStyle: CSSProperties = {
+export const cardStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   borderRadius: 16,
   padding: "16px 18px",
   background: "rgba(255,255,255,0.02)",
   minWidth: 0,
 };
+const bareStyle: CSSProperties = { minWidth: 0 };
 const eyebrowStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 900,

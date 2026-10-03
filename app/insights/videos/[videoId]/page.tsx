@@ -16,6 +16,7 @@ import html from "remark-html";
 import VideoPageClient from "./VideoPageClient";
 import DatasheetViewer from "./DatasheetViewer";
 import PageShareBar from "@/app/components/PageShareBar";
+import { ReasonedValue } from "@/app/components/EstimatedValue";
 
 // Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
 // makes every crawl a full serverless render Google can never cheaply
@@ -233,9 +234,11 @@ export default async function VideoPage({ params }: Props) {
             {statItems && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, marginBottom: 10 }}>
                 {statItems.map(({ label, value, note }) => (
-                  <div key={label} title={note ?? undefined} style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "10px 14px", cursor: note ? "help" : undefined }}>
+                  <div key={label} style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "10px 14px" }}>
                     <div style={{ fontSize: 10, opacity: 0.6, fontWeight: 700, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-                    <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "-0.2px" }}>{value}</div>
+                    {/* TAP, KEYBOARD AND HOVER (#563 COWORK #47): A's shared ReasonedValue, so a
+                        "—" or an empty MA explains itself on a phone too, not only on hover. */}
+                    <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "-0.2px" }}><ReasonedValue text={value} reason={note} /></div>
                   </div>
                 ))}
               </div>

@@ -216,8 +216,9 @@ const rules = {
     /label: "Market cap", value: stockData\.marketCap \?\? "—", note: stockData\.marketCap \? null : stockData\.marketCapNote \?\? null/.test(src) &&
     /\{stockData\.marketCap \? " Market cap is the SEC cover-page share count times that price\." : null\}/.test(src) &&
     !/\. Market cap is the SEC cover-page share count times that price\. Figures/.test(src),
-  "video page: the MA tiles carry the note as their hover text": (src) =>
-    /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /title=\{note \?\? undefined\}/.test(src),
+  "video page: the tile notes open on tap, keyboard and hover (A's ReasonedValue)": (src) =>
+    /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /import \{ ReasonedValue \} from "@\/app\/components\/EstimatedValue";/.test(src) &&
+    /<ReasonedValue text=\{value\} reason=\{note\} \/>/.test(src) && !/title=\{note/.test(src),
   // 8. B13 (#563 COWORK #46): the news price never falls back to Yahoo
   "news data: the quote is FMP only, with no Yahoo quote left": (src) =>
     /async function fetchQuote\(symbol: string\): Promise<Quote \| null> \{\s*return fetchFmpQuote\(symbol\);\s*\}/.test(src) &&
@@ -248,7 +249,7 @@ const sourceOf = {
   "videos: the IFX -> IFNNY remap applies on the Tiingo path too": FILES.video,
   "videos: the sector is A's resolver, SEC-only, imported": FILES.video,
   "videos: an MA tile with a price but too few closes says why": FILES.video,
-  "video page: the MA tiles carry the note as their hover text": FILES.videoPage,
+  "video page: the tile notes open on tap, keyboard and hover (A's ReasonedValue)": FILES.videoPage,
   "videos: a withheld market cap says why, in A's words": FILES.video,
   "video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows": FILES.videoPage,
   "news data: the quote is FMP only, with no Yahoo quote left": FILES.newsData,
@@ -286,7 +287,8 @@ const mutants = [
   ["videos: the IFX -> IFNNY remap applies on the Tiingo path too", (s) => s.replace("readSurfaceInputs(symbol)", "readSurfaceInputs(upper)")],
   ["videos: the sector is A's resolver, SEC-only, imported", (s) => s.replace("sector: resolveProfile(symbol, null).sector,", "sector: null,")],
   ["videos: an MA tile with a price but too few closes says why", (s) => s.replace("ma200Note: ma200 === null ? SHORT_HISTORY_NOTE : null", "ma200Note: null")],
-  ["video page: the MA tiles carry the note as their hover text", (s) => s.replace("title={note ?? undefined}", "")],
+  ["video page: the tile notes open on tap, keyboard and hover (A's ReasonedValue)", (s) => s.replace("<ReasonedValue text={value} reason={note} />", "{value}")],
+  ["video page: the tile notes open on tap, keyboard and hover (A's ReasonedValue)", (s) => s.replace("<ReasonedValue text={value} reason={note} />", "<span title={note ?? undefined}>{value}</span>")],
   ["videos: a withheld market cap says why, in A's words", (s) => s.replace("capitalise(cap.detail ?? REFUSAL_WORDS[cap.why])", "null")],
   ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace(", note: stockData.marketCap ? null : stockData.marketCapNote ?? null", "")],
   ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace('{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null}', " Market cap is the SEC cover-page share count times that price.")],
