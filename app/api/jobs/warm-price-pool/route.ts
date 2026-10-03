@@ -4,7 +4,7 @@ import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPricePool, keepPricePoolAlive, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS } from "../../../../lib/server/pricePool";
 import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
-import { planTiingoUniverse, writeTiingoUniverse, STOCK_PAGE_SYMBOLS } from "../../../../lib/server/tiingoUniverse";
+import { planTiingoUniverse, writeTiingoUniverse, refreshTiingoUniverseOffHours, STOCK_PAGE_SYMBOLS } from "../../../../lib/server/tiingoUniverse";
 import { priceProviderFor } from "../../../../lib/server/marketData/provider";
 
 export const runtime = "nodejs";
@@ -141,6 +141,12 @@ export async function GET(req: NextRequest) {
       // gate stays; the reset is hoisted to the same decision instead, through
       // the single exported keep-alive so there is no second expire to drift.
       const poolKeptAlive = await keepPricePoolAlive();
+      // THE TIINGO UNIVERSE, ON THE CLOSED PATH TOO (#553 COWORK #119/#120).
+      // The in-session write below never runs on a weekend or overnight, so a
+      // universe change merged then (5b, Sat 3 Oct) never reached the key and
+      // the Tiingo jobs and warm-pickers-sec stayed on ~760 symbols. 1 TTL a
+      // run; HKEYS + SET only when the key is absent or older than 6 h.
+      const tiingoUniverse = await refreshTiingoUniverseOffHours();
       await recordJobRun("warm-price-pool", true, {
         skipped: true,
         reason: "market-closed",
@@ -154,6 +160,9 @@ export async function GET(req: NextRequest) {
         // one is written instead of it. Without the flag the two are the same
         // line on /cache-health and the saving is invisible.
         targetsSkipped: true,
+        tiingoUniverse: tiingoUniverse.symbols ?? null,
+        tiingoUniverseWritten: tiingoUniverse.written,
+        tiingoUniverseReason: tiingoUniverse.reason,
       });
       // No releaseLock here: the `finally` below owns it, and releasing twice
       // means the second call can delete a token a LATER run has already taken.
@@ -162,6 +171,7 @@ export async function GET(req: NextRequest) {
         skipped: true,
         reason: "market-closed",
         targetsSkipped: true,
+        tiingoUniverse,
       });
     }
 

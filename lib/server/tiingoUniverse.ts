@@ -27,7 +27,7 @@ import { Redis } from "@upstash/redis";
 import { TIINGO_UNIVERSE_KEY, TIINGO_UNIVERSE_TTL_SECONDS } from "./marketData/keys";
 import { isDebtListing } from "./marketData/universe";
 import { isPriceExcluded } from "../priceExcluded.mjs";
-import { poolField } from "./pricePool";
+import { poolField, PRICE_POOL_KEY, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS } from "./pricePool";
 import companyNameSnapshot from "@/data/company-names.json";
 import { priorityStocks, uniqueEtfs } from "../curatedSymbols";
 
@@ -137,5 +137,56 @@ export async function writeTiingoUniverse(plan: TiingoUniversePlan, nowMs = Date
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Off market hours, re-write the universe when the stored key is older than
+ * this. 6 h against the 4-day TTL: at most ~4 re-writes a closed day.
+ */
+export const TIINGO_UNIVERSE_REFRESH_SECONDS = 6 * 60 * 60;
+
+/**
+ * Pure: should an off-hours run re-write the key, given Redis's TTL reply?
+ * -2 (absent) and -1 (no expiry; never written that way) both say yes.
+ */
+export function universeNeedsRefresh(ttlSeconds: number): boolean {
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds < 0) return true;
+  return ttlSeconds <= TIINGO_UNIVERSE_TTL_SECONDS - TIINGO_UNIVERSE_REFRESH_SECONDS;
+}
+
+export type OffHoursUniverseResult = { written: boolean; reason: string; symbols?: number };
+
+/**
+ * THE UNIVERSE OUTSIDE THE MARKET WINDOW (#553 COWORK #119/#120).
+ *
+ * The in-session write in warm-price-pool sits after the market gate, so a
+ * universe change merged on a weekend (5b, Sat 3 Oct) never reached the key:
+ * jobs.ts fell back to the pool's HKEYS (~760) and warm-pickers-sec read no
+ * universe at all. This runs on the gate's closed path instead, with no target
+ * derivation and no FMP call: the pool's fields stand in for the warm targets
+ * (they are what in-session runs priced), plus the ETFs, the video tickers and
+ * every stock page, exactly the in-session sources.
+ *
+ * Cost: 1 TTL per closed run; when the key is absent or older than
+ * TIINGO_UNIVERSE_REFRESH_SECONDS, +1 HKEYS +1 SET (~15 KB). Never an empty
+ * list (writeTiingoUniverse refuses one). Never throws.
+ */
+export async function refreshTiingoUniverseOffHours(nowMs = Date.now()): Promise<OffHoursUniverseResult> {
+  if (!redis) return { written: false, reason: "no-redis" };
+  try {
+    const ttl = await redis.ttl(TIINGO_UNIVERSE_KEY);
+    if (!universeNeedsRefresh(ttl)) return { written: false, reason: "fresh" };
+    const poolKeys = (await redis.hkeys(PRICE_POOL_KEY)).map(String);
+    const plan = planTiingoUniverse({
+      pool: poolKeys,
+      etfs: POOL_BENCHMARK_ETFS,
+      video: POOL_VIDEO_TICKERS,
+      stockPages: STOCK_PAGE_SYMBOLS,
+    });
+    const written = await writeTiingoUniverse(plan, nowMs);
+    return { written, reason: ttl === -2 ? "absent" : "stale", symbols: plan.symbols.length };
+  } catch {
+    return { written: false, reason: "redis-error" };
   }
 }

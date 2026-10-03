@@ -207,14 +207,15 @@ check("a stored list parses; an empty or junk one is null (the jobs fall back)",
   U.parseTiingoUniverse({ at: 1, symbols: [] }) === null && U.parseTiingoUniverse("nope") === null && U.parseTiingoUniverse(null) === null);
 
 // The jobs, run against a stubbed Upstash and Tiingo (as check-tiingo-step1 does).
-const net = { strings: new Map(), hashes: new Map(), cmds: [], tiingo: [] };
+const net = { strings: new Map(), hashes: new Map(), ttls: new Map(), cmds: [], tiingo: [] };
 const b64 = (v) => (typeof v === "string" ? Buffer.from(v).toString("base64") : Array.isArray(v) ? v.map(b64) : v);
 function redisAnswer(cmd) {
   net.cmds.push(cmd);
   const [op, key, ...rest] = cmd.map(String);
   switch (op.toLowerCase()) {
     case "get": return net.strings.get(key) ?? null;
-    case "set": net.strings.set(key, rest[0]); return "OK";
+    case "set": net.strings.set(key, rest[0]); if (String(rest[1] ?? "").toLowerCase() === "ex") net.ttls.set(key, Number(rest[2])); return "OK";
+    case "ttl": return net.strings.has(key) ? (net.ttls.get(key) ?? -1) : -2;
     case "hkeys": return [...(net.hashes.get(key)?.keys() ?? [])];
     case "hmget": return rest.map((f) => net.hashes.get(key)?.get(f) ?? null);
     case "hgetall": return [...(net.hashes.get(key) ?? new Map()).entries()].flat();
@@ -259,6 +260,7 @@ globalThis.fetch = async (input, init = {}) => {
 Object.assign(process.env, { VERCEL_ENV: "production", TIINGO_API_KEY: "test-key" });
 const resetNet = (universe) => {
   net.strings = new Map();
+  net.ttls = new Map();
   net.hashes = new Map([
     ["msh:price-pool:v1", new Map([["ZZZ", "{}"]])],
     ["msh:universe:sec-cik:v1", new Map([["EQR", "0000906107"]])],
@@ -296,6 +298,46 @@ const J = await real(FILES.jobs);
 const jFails = await jobsBehaviour(J);
 for (const f of jFails) check(f, false);
 check("the Tiingo jobs prefer the universe key, guarded, and write the EOD summary", jFails.length === 0);
+
+// #553 COWORK #119/#120: the universe written OFF market hours, so a weekend
+// merge reaches the key. Run against the same stubbed Upstash.
+async function offHoursBehaviour(Um) {
+  const fails = [];
+  const want = (label, ok) => { if (!ok) fails.push(label); };
+  const T = K.TIINGO_UNIVERSE_TTL_SECONDS;
+  want("the refresh age: absent (-2) and no-expiry (-1) refresh; a fresh key does not; an old one does",
+    Um.universeNeedsRefresh(-2) && Um.universeNeedsRefresh(-1) && !Um.universeNeedsRefresh(T) && !Um.universeNeedsRefresh(T - 3600) &&
+    Um.universeNeedsRefresh(T - Um.TIINGO_UNIVERSE_REFRESH_SECONDS) && Um.TIINGO_UNIVERSE_REFRESH_SECONDS <= 12 * 3600);
+  resetNet(null);
+  const a = await Um.refreshTiingoUniverseOffHours(5);
+  const stored = Um.parseTiingoUniverse(net.strings.get(K.TIINGO_UNIVERSE_KEY));
+  want("absent key: written, from the pool's fields + ETFs + video tickers + every stock page",
+    a.written === true && a.reason === "absent" && !!stored && stored.at === 5 &&
+    ["ZZZ", "SPY", "IFNNY", "KO", "BRK-B"].every((x) => stored.symbols.includes(x)) && stored.symbols.length >= 2400);
+  want("...with the universe TTL", net.ttls.get(K.TIINGO_UNIVERSE_KEY) === T);
+  net.cmds = [];
+  const b = await Um.refreshTiingoUniverseOffHours(6);
+  want("a fresh key: 1 TTL and nothing else", b.written === false && b.reason === "fresh" && net.cmds.length === 1 && String(net.cmds[0][0]).toLowerCase() === "ttl");
+  net.ttls.set(K.TIINGO_UNIVERSE_KEY, T - Um.TIINGO_UNIVERSE_REFRESH_SECONDS - 1);
+  const c = await Um.refreshTiingoUniverseOffHours(7);
+  want("a key older than the refresh age: re-written", c.written === true && c.reason === "stale" && Um.parseTiingoUniverse(net.strings.get(K.TIINGO_UNIVERSE_KEY))?.at === 7);
+  return fails;
+}
+const oFails = await offHoursBehaviour(U);
+for (const f of oFails) check(f, false);
+check("off hours, the universe key is written when absent or older than the refresh age (1 TTL otherwise)", oFails.length === 0);
+const UNI_SRC = raw(FILES.universe);
+const O_MUTANTS = [
+  ["the off-hours write skips the stock pages", /\n\s*pool: poolKeys,[\s\S]*?stockPages: STOCK_PAGE_SYMBOLS,/, "\n      pool: poolKeys,"],
+  ["the off-hours refresh writes every run", /if \(!universeNeedsRefresh\(ttl\)\) return \{ written: false, reason: "fresh" \};/, ""],
+  ["the off-hours refresh never writes", /const written = await writeTiingoUniverse\(plan, nowMs\);/, "const written = false;"],
+];
+for (const [label, from, to] of O_MUTANTS) {
+  const m = UNI_SRC.replace(from, to);
+  if (m === UNI_SRC) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
+  const fails = await offHoursBehaviour(await loadMutant(FILES.universe, m));
+  check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no assertion failed");
+}
 
 const JOBS_SRC = raw(FILES.jobs);
 const J_MUTANTS = [
@@ -340,6 +382,7 @@ const isActiveMarketWindow = () => S().open;
 const keepPricePoolAlive = async () => { S().log.push("keepalive"); return true; };
 const planTiingoUniverse = (parts) => ({ symbols: Object.values(parts).flat(), sources: {}, dropped: { debt: 0, excluded: 0 } });
 const writeTiingoUniverse = async (plan) => { S().log.push("universe"); S().universe = plan.symbols; return true; };
+const refreshTiingoUniverseOffHours = async () => { S().log.push("offhours-universe"); return { written: true, reason: "absent", symbols: 1 }; };
 const priceProviderFor = (s) => (s === "POOL" ? S().pool : "fmp");
 const process = { get env() { return S().env; } };
 ${getFn}
@@ -358,7 +401,12 @@ export { GET };`,
   want("...the pool is kept alive BEFORE the run returns, and recorded", noKey.log.includes("keepalive") && noKey.log.indexOf("keepalive") < noKey.log.indexOf("record") && noKey.records[0]?.poolKeptAlive === true);
   want("...and no FMP warm is attempted", !noKey.log.includes("warm"));
   const shut = await run(false, {});
-  want("FMP_API_KEY unset, window shut: kept alive, nothing derived", shut.log.join() === "keepalive,record");
+  want("FMP_API_KEY unset, window shut: kept alive, nothing derived", shut.log.join() === "keepalive,offhours-universe,record");
+  // #553 COWORK #119/#120: the universe is refreshed on the closed path too,
+  // so a weekend merge reaches the key, and the run record says so.
+  want("window shut: the off-hours universe refresh runs and is recorded", shut.log.includes("offhours-universe") && shut.records[0]?.tiingoUniverseWritten === true && shut.records[0]?.tiingoUniverseReason === "absent");
+  const shutKey = await run(false, { FMP_API_KEY: "x" });
+  want("window shut with the key: the same refresh, no warm", shutKey.log.join() === "keepalive,offhours-universe,record");
   const withKey = await run(true, { FMP_API_KEY: "x" });
   want("with the key: the universe, then the FMP warm, with the mover buckets on fmp", withKey.log.join() === "universe,warm,record" && withKey.warmOpts?.moverBuckets === true);
   const onTiingo = await run(true, { FMP_API_KEY: "x" }, "tiingo");
@@ -375,6 +423,7 @@ const R_MUTANTS = [
   ["the universe written only with an FMP key", /const tiingoUniverseWritten = await writeTiingoUniverse\(tiingoUniverse\);/, "const tiingoUniverseWritten = process.env.FMP_API_KEY ? await writeTiingoUniverse(tiingoUniverse) : false;"],
   ["the mover buckets kept on Tiingo", /moverBuckets: priceProviderFor\("POOL"\) !== "tiingo",/, "moverBuckets: true,"],
   ["5b: the stock-page symbols left out", /\n\s*stockPages: STOCK_PAGE_SYMBOLS,/, ""],
+  ["#120: no universe refresh on the closed path", /const tiingoUniverse = await refreshTiingoUniverseOffHours\(\);/, "const tiingoUniverse = { written: false, reason: \"off\" };"],
 ];
 for (const [label, from, to] of R_MUTANTS) {
   const m = ROUTE_SRC.replace(from, to);

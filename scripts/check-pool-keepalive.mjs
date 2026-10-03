@@ -157,6 +157,8 @@ const keepPricePoolAlive = async () => { S().keptAlive += 1; return true; };
 // Step 5 (#553 COWORK #98): the route writes the Tiingo universe in session.
 const planTiingoUniverse = (parts) => ({ symbols: Object.values(parts).flat(), sources: {}, dropped: { debt: 0, excluded: 0 } });
 const writeTiingoUniverse = async () => true;
+// #553 COWORK #120: and refreshes it on the market-closed path.
+const refreshTiingoUniverseOffHours = async () => ({ written: false, reason: "fresh" });
 const STOCK_PAGE_SYMBOLS = ["KO"]; // step 5b: the stock-page symbols join the universe
 const priceProviderFor = () => "fmp";
 const process = { env: { FMP_API_KEY: "x", NEXT_PUBLIC_SITE_URL: "https://x" } };
