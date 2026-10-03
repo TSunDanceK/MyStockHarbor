@@ -114,6 +114,22 @@ export const SEC_YEAR_WINDOW = 6;
  */
 export const SEC_LABEL_VERSION = 5;
 
+/**
+ * THE SHARE-SERIES SHAPE a stored set was written under (#552 COWORK #132).
+ *
+ * 1 (absent) — before #706: no `asr` (restated comparatives) or `asf`
+ *     (re-filed periods), so a split cannot be proven and the dilution chart
+ *     cuts at it (BKNG drew nothing).
+ * 2 — `as`/`asr`/`asf` as #706 reads them.
+ *
+ * ITS OWN STAMP, because nothing else could see it: none of the three share
+ * fields is in contentHash (they are not restatement evidence about a filed
+ * figure), so a re-read that changed only them was counted "unchanged" and
+ * never written, while the manifest stamped the symbol current. Absent selects,
+ * so every set written before this stamp existed is re-read once.
+ */
+export const SEC_SHARE_VERSION = 2;
+
 export type FactRow = {
   start?: string;
   end?: string;

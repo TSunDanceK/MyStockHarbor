@@ -18,6 +18,7 @@ import {
   type FxSource,
 } from "./fxRates";
 import { encodeFactSet, type StoredFactSet } from "./secFactCodec";
+import { needsReread } from "./secStaleness";
 
 /**
  * The date span a filer's periods need rates for.
@@ -126,6 +127,62 @@ export async function toStoredSet(
   return encodeFactSet(result, { conversion, reported: extracted });
 }
 
+
+/**
+ * DID toStoredSet DROP THE PERIODS FOR WANT OF A RATE SERIES? (#552 COWORK #132 (b))
+ *
+ * True when the filer reports in a non-USD currency, the extraction had
+ * periods, and the stored form has none and no conversion. That is exactly
+ * withoutPeriods' output: no source carries the currency, or every source that
+ * does failed to answer (ECB timing out on INR and MXN, 3 Oct 20:22 UTC).
+ *
+ * A JOB MUST NOT WRITE SUCH A SET OVER ONE THAT HAS PERIODS. Its hash is taken
+ * on no periods, so it always reads as "changed", and the write blanked the
+ * filer's figures until a later run's fetch succeeded. Over a set with no
+ * periods it changes nothing, so the guard keys on the prior having some.
+ * PURE, so a check can pin it without a network.
+ */
+export function periodsDroppedForFx(
+  extracted: Pick<ExtractResult, "reportingCurrency" | "quarters" | "years" | "instants">,
+  fresh: Pick<StoredFactSet, "quarters" | "years" | "instants" | "fx">,
+): boolean {
+  if (!extracted.reportingCurrency || extracted.reportingCurrency === "USD") return false;
+  const hadPeriods = extracted.quarters.length + extracted.years.length + extracted.instants.length > 0;
+  const hasPeriods = fresh.quarters.length + fresh.years.length + fresh.instants.length > 0;
+  return hadPeriods && !hasPeriods && !fresh.fx;
+}
+
+/** A stored set that has figures to lose. */
+export function setHasPeriods(set: Pick<StoredFactSet, "quarters" | "years" | "instants"> | null | undefined): boolean {
+  return Boolean(set && set.quarters.length + set.years.length + set.instants.length > 0);
+}
+
+/** The stored set stands over a fresh read that lost its periods for want of a rate. */
+export function priorStandsForFx(
+  prior: Pick<StoredFactSet, "quarters" | "years" | "instants"> | null | undefined,
+  extracted: Pick<ExtractResult, "reportingCurrency" | "quarters" | "years" | "instants">,
+  fresh: Pick<StoredFactSet, "quarters" | "years" | "instants" | "fx">,
+): boolean {
+  return setHasPeriods(prior) && periodsDroppedForFx(extracted, fresh);
+}
+
+/**
+ * MUST A RE-READ BE WRITTEN OVER THE STORED SET? (#552 COWORK #132 (a))
+ *
+ * A filed figure moved (contentHash), a refused period now converts
+ * (conversionGained), OR THE STORED SET IS BEHIND what the code writes
+ * (needsReread on the PRIOR). The last is what keeps the store and the
+ * manifest's stamps the same thing: the manifest stamps from the set the job
+ * holds, so a stale prior left unwritten was stamped current and never queued
+ * again. That is how #706's share fields, which are not in contentHash, missed
+ * ~225 of the first 239 re-reads.
+ */
+export function mustWriteOver(
+  prior: Pick<StoredFactSet, "contentHash" | "fx" | "w" | "y" | "lv" | "sv" | "c">,
+  set: Pick<StoredFactSet, "contentHash" | "fx" | "quarters" | "years" | "instants">,
+): boolean {
+  return prior.contentHash !== set.contentHash || conversionGained(prior, set) || needsReread(prior);
+}
 
 /**
  * A PERIOD THAT HAD NO RATE NOW HAS ONE (#552 COWORK #50, CHT).

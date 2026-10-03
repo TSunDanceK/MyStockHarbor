@@ -22,7 +22,8 @@ const check = (name, ok, detail = "") => {
 const strip = (f) => fs.readFileSync(f, "utf8").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const load = (mutate = (s) => s) => lift(mutate([fs.readFileSync("lib/server/secFields.ts", "utf8"),
   strip("lib/server/secExtract.ts"), strip("lib/server/fxRates.ts"), strip("lib/server/secCurrency.ts"),
-  strip("lib/server/secFactCodec.ts"), strip("lib/server/secFactBuild.ts")].join("\n")));
+  // secStaleness since #552 COWORK #132: secFactBuild's mustWriteOver closes over needsReread.
+  strip("lib/server/secFactCodec.ts"), strip("lib/server/secStaleness.ts"), strip("lib/server/secFactBuild.ts")].join("\n")));
 
 const day = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 let calls = [];

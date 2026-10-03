@@ -162,8 +162,9 @@ const READERS = {
   "lib/server/secColdFetch.ts": [/extracted\.ttmEps = await withInstanceEps\(symbol, cik, extracted, secGet\);\s*const set = await toStoredSet\(extracted\)/],
   "app/api/jobs/sec-facts/route.ts": [/extracted\.ttmEps = await withInstanceEps\(symbol, cik, extracted, secGetGated\);[\s\S]{0,600}?const fresh = await toStoredSet\(extracted,/],
   "lib/server/secFilingJob.ts": [
-    /base\.ttmEps = await withInstanceEps\(symbol, cik, base, fetch\.get\);\s*return \{ kind: "caught-up", set: await toStoredSet\(base,/,
-    /filled\.ttmEps = await withInstanceEps\(symbol, cik, filled, fetch\.get\);\s*const next = await toStoredSet\(filled,/,
+    // keptFromFx (#552 COWORK #132 (b)) wraps the store; the EPS is still applied before it.
+    /base\.ttmEps = await withInstanceEps\(symbol, cik, base, fetch\.get\);\s*return \{ kind: "caught-up", set: keptFromFx\(stored, base, await toStoredSet\(base,/,
+    /filled\.ttmEps = await withInstanceEps\(symbol, cik, filled, fetch\.get\);\s*const next = keptFromFx\(stored, filled, await toStoredSet\(filled,/,
   ],
 };
 const SRCS = Object.fromEntries(Object.keys(READERS).map((f) => [f, readCodeOnly(f)]));

@@ -188,6 +188,30 @@ console.log("\nDIRECTION — normalised in the adapter, so no call site can inve
     "",
     (m) => m.fredSource().supports("TWD")
   );
+  // INR and MXN (#552 COWORK #132 (c)): the real DEXINUS / DEXMXUS values for
+  // 2026-09-25 (relay fred-inr-mxn). Before these, ECB was their only route,
+  // and its timeout blanked those filers' sets.
+  for (const [ccy, id, val] of [["INR", "DEXINUS", "95.81"], ["MXN", "DEXMXUS", "17.6932"]]) {
+    const r = await fx.fredSource(stub(csv(id, val))).fetchSeries(ccy, "2026-09-01", "2026-09-30");
+    check(`${id} (${ccy} per USD) is INVERTED to USD per ${ccy}`, near(r[0]?.usdPerUnit, 1 / Number(val), 1e-12),
+      `got ${r[0]?.usdPerUnit?.toFixed(6)} (expected ${(1 / Number(val)).toFixed(6)})`);
+    check(`FRED supports ${ccy} (ECB is now the fallback, not the only route)`, fx.fredSource().supports(ccy));
+  }
+  await underMutation(
+    "INR taken as USD per unit (a ~9,000x error on IBN, HDB, WIT)",
+    'INR: { id: "DEXINUS", quote: "unit-per-usd" }',
+    'INR: { id: "DEXINUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXINUS", "95.81"))).fetchSeries("INR", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 95.81, 1e-12);
+    }
+  );
+  await underMutation(
+    "MXN dropped from the FRED map",
+    '  MXN: { id: "DEXMXUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("MXN")
+  );
   await underMutation(
     "every series treated as USD-per-unit (the 1.92x error on CNI)",
     'usdPerUnit: quote === "usd-per-unit" ? val : 1 / val',

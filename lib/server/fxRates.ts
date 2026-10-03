@@ -218,6 +218,19 @@ const FRED_SERIES: Record<string, { id: string; quote: "usd-per-unit" | "unit-pe
   // therefore had no rate. Where both sources existed, they agreed to within
   // 0.56% (median 0.055%) over 453 days.
   TWD: { id: "DEXTAUS", quote: "unit-per-usd" },
+  // DEXINUS is INDIAN RUPEES and DEXMXUS MEXICAN PESOS to one U.S. DOLLAR
+  // (#552, COWORK #132 (c)). INR and MXN had ECB only, and ECB timing out on
+  // both in the 3 Oct 20:22 UTC sec-facts run blanked those filers' sets.
+  // MEASURED (relay fred-inr-mxn, 2026-10-03), each from 2019-01-02 to
+  // 2026-09-25: 1,933 daily rows, zero "." placeholders.
+  //   DEXINUS last 95.81, so INR per USD. Against the ECB cross over 1,907
+  //     shared days: median 0.048%, p95 0.241%, max 1.19%.
+  //   DEXMXUS last 17.6932, so MXN per USD. Against the ECB cross: median
+  //     0.257%, p95 0.930%, max 2.66% (peso volatility between the two fixing
+  //     times; ECB fixes at 14:15 CET, H.10 at noon New York).
+  // ECB stays the fallback for both.
+  INR: { id: "DEXINUS", quote: "unit-per-usd" },
+  MXN: { id: "DEXMXUS", quote: "unit-per-usd" },
 };
 
 /**

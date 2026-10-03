@@ -11,7 +11,7 @@ import { withClassCover } from "@/lib/server/secCoverClasses";
 import { withInstanceEps } from "@/lib/server/secInstanceEps";
 import { applyRereadRequests, SEC_REREAD_REQUESTS } from "@/lib/server/secRereadRequests";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
-import { conversionGained, toStoredSet } from "@/lib/server/secFactBuild";
+import { mustWriteOver, priorStandsForFx, toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
@@ -632,10 +632,20 @@ export async function GET(req: NextRequest) {
       const keepFilled = Boolean(prior?.ff && freshNewest < prior.ff.reportDate);
       // The "neither source has it" notice rides along the same way.
       const keepNotice = Boolean(prior?.lg && freshNewest < prior.lg.reportDate);
-      const set: StoredFactSet = keepFilled ? prior! : keepNotice ? { ...fresh, lg: prior!.lg } : fresh;
-      // OR A REFUSED PERIOD NOW CONVERTS (a rate source was added). The hash is
-      // on the reported figures and cannot see it. See conversionGained.
-      const changed = keepFilled ? false : prior ? prior.contentHash !== set.contentHash || conversionGained(prior, set) : true;
+      // ── A RATE SERIES THAT FAILED TO LOAD NEVER BLANKS A STORED SET ───────
+      // (#552 COWORK #132 (b)). The prior stands, counted unchanged; its own
+      // stamps go to the manifest below, so a stale prior stays queued and the
+      // next run with a rate re-reads it.
+      const keepForFx = priorStandsForFx(prior, extracted, fresh);
+      if (keepForFx) console.warn("[sec-facts] fx unavailable — stored set kept", JSON.stringify({ symbol, cur: extracted.reportingCurrency }));
+      const keepPrior = keepFilled || keepForFx;
+      const set: StoredFactSet = keepPrior ? prior! : keepNotice ? { ...fresh, lg: prior!.lg } : fresh;
+      // A figure moved, OR A REFUSED PERIOD NOW CONVERTS (a rate source was
+      // added; the hash is on the reported figures and cannot see it), OR THE
+      // STORED SET IS BEHIND WHAT THE CODE WRITES (#552 COWORK #132 (a)): the
+      // manifest stamps from `set`, so a stale prior left unwritten was stamped
+      // current with the old shape still stored. See mustWriteOver.
+      const changed = keepPrior ? false : prior ? mustWriteOver(prior, set) : true;
       // LAYER 2 OF THE CORRECTIONS FAILSAFE (spec §3). A figure that moved with
       // no filing event behind it is a SILENT RESTATEMENT -- the case the
       // amended-form signal cannot see. The site is allowed to update; it is
@@ -739,6 +749,7 @@ export async function GET(req: NextRequest) {
         // what actually produced this set, not what was current when the line
         // was written. A set written by the cold path never passes through here.
         entry.lv = set.lv ?? 1;
+        entry.sv = set.sv ?? 1;
         // FROM THE SET, NOT FROM secChainsHash() — the manifest must record
         // which chains ACTUALLY produced this set, not which chains were
         // current when the manifest line was written. They are the same value
