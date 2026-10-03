@@ -159,6 +159,14 @@ check("the stock page uses it only on \"not on file\", labels the basis FY, and 
 check("MUTATION: the page labels the FY P/E with the trailing basis → caught", !fyWired(once(PSRC, "peBasis: peBasisLabel(peEps)", "peBasis: peBasisLabel(inputs?.eps)")));
 
 // ── 4. rendering ────────────────────────────────────────────────────────────
+// ONE COPY OF THE FY WORDING (#552 COWORK #117): secValuation exports it; the
+// stock page imports it rather than declaring its own.
+const fyOne = (val, page) => /export function fyPeLabel\(eps: EpsBasis\)/.test(val) && /export function fyPeNote\(eps: EpsBasis\)/.test(val)
+  && !/function fyPeNote\(/.test(page) && /\bfyPeNote, fyPeRatio, valuationMultiples\b/.test(page);
+check("fyPeLabel/fyPeNote live in secValuation; the stock page imports fyPeNote, no local copy", fyOne(VSRC, PSRC));
+check("MUTATION: a local fyPeNote on the page again → caught", !fyOne(VSRC, PSRC + "\nfunction fyPeNote(e) { return \"\"; }"));
+check("the label reads \"P/E (FY2025)\" and the note names the year's end", V.fyPeLabel(fy) === "P/E (FY2025)" && /latest full year \(to 31 Dec 2025\)/.test(V.fyPeNote(fy)));
+
 console.log("\n4. rendering");
 const COMP = "app/components/EstimatedValue.tsx";
 const CSRC = stripComments(fs.readFileSync(COMP, "utf8"), { file: COMP });

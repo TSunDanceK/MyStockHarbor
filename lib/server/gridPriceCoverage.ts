@@ -83,6 +83,21 @@ export function showsPriceCells(coverage: PriceCoverage): boolean {
  * sentence under the table explains every blank cell above it, which is what a
  * reader actually needs to not misread the gap as a broken page.
  */
+/**
+ * A DASH UNDER MARKET CAP BESIDE A PRICE (#552 COWORK #117). Once the cap is
+ * SEC shares × price (B's #690), a refused filer (depositary shares, several
+ * share classes, a stale count) has a price and no cap. Said once under the
+ * grid, like the note below, and only when such a row is on the page.
+ */
+export const CAP_REFUSED_NOTE =
+  "A dash under Market Cap beside a price means the company's own filings don't support a market cap here " +
+  "(for example, depositary shares or several share classes). The company's stock page says why.";
+
+/** Whether a row shows a price but no market cap: the case CAP_REFUSED_NOTE explains. */
+export function capRefusedBesidePrice(item: { price: number | null; marketCap: number | null; priceCoverage?: PriceCoverage }): boolean {
+  return item.priceCoverage !== "outside-bar-universe" && item.price != null && item.marketCap == null;
+}
+
 export const PRICE_COVERAGE_NOTE =
   "Price and market cap are shown for the companies this site tracks closely. " +
   "A dash marks companies outside that set — the figures are not collected " +

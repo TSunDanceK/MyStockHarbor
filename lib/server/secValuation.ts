@@ -42,7 +42,7 @@ import { balanceSheetInstant, valueOf } from "./secFactCodec";
 import { isConsecutive, revenueLineIncomplete } from "./secEarningsView";
 import { DEADLINE_FALLBACK } from "./secReportDates";
 import { annualOnlyForm } from "./annualOnly";
-import { derivedParentEquity, enterpriseValueOf, type Estimate } from "./secEstimates";
+import { derivedParentEquity, enterpriseValueOf, readableDate, type Estimate } from "./secEstimates";
 
 /** Why a numerator could not be supplied. Rendered, never swallowed. */
 export type ValuationRefusal =
@@ -665,6 +665,16 @@ export function valuationInputs(
   const fyEps = fyYear && !epsIsStale(fyYear.periodEnd, today) ? fyYear : null;
 
   return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}), ...(fyEps ? { fyEps } : {}), ...(filer.sic ? { sic: filer.sic } : {}) };
+}
+
+/** The P/E label on the FY fallback: "P/E (FY2025)" (#552 COWORK #98 §2; one copy for every surface, #117). */
+export function fyPeLabel(eps: EpsBasis): string {
+  return eps.fiscalYear ? `P/E (FY${eps.fiscalYear})` : "P/E (FY)";
+}
+
+/** The note under or behind an FY-basis P/E. */
+export function fyPeNote(eps: EpsBasis): string {
+  return `Twelve months of diluted EPS aren't on file, so this P/E uses the latest full year (to ${readableDate(eps.periodEnd)}).`;
 }
 
 /**

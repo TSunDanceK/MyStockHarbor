@@ -17,7 +17,7 @@ import {
   getMonthVisibility,
 } from "@/lib/server/earningsCalendar";
 import { resolveCalendarDay, dayStateMessage, easternDate, outOfWindowCell } from "@/lib/server/calendarDayState";
-import { PRICE_COVERAGE_NOTE } from "@/lib/server/gridPriceCoverage";
+import { CAP_REFUSED_NOTE, PRICE_COVERAGE_NOTE, capRefusedBesidePrice } from "@/lib/server/gridPriceCoverage";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import EarningsDayList from "./EarningsDayList";
@@ -853,6 +853,13 @@ export default async function EarningsCalendarPage({
               {dayData.items.some((i) => i.priceCoverage === "outside-bar-universe") ? (
                 <p style={{ fontSize: 12.5, opacity: 0.6, marginTop: 12, marginBottom: 0 }}>
                   {PRICE_COVERAGE_NOTE}
+                </p>
+              ) : null}
+              {/* A CAP DASH BESIDE A PRICE, said once (#552 COWORK #117): the
+                  filings refused the cap, which is not the coverage gap above. */}
+              {dayData.items.some(capRefusedBesidePrice) ? (
+                <p style={{ fontSize: 12.5, opacity: 0.6, marginTop: 8, marginBottom: 0 }}>
+                  {CAP_REFUSED_NOTE}
                 </p>
               ) : null}
               {/* THE PRICE COLUMN'S SOURCE (#552 COWORK #108). The grid's prices

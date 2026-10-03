@@ -746,7 +746,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           built from this view; the profit chart draws only because the view
           carries every period's one-off note (view.oneOffs). It replaces the
           old single growth/margin bar chart, removed with this swap. */}
-      <GrowthVisuals data={buildGrowthVisuals(view, { oneOffs: view.oneOffs })} notReported={NOT_REPORTED} />
+      <GrowthVisuals data={buildGrowthVisuals(view, { oneOffs: view.oneOffs, unchecked: view.oneOffUnchecked })} notReported={NOT_REPORTED} />
       <MarginDelta view={view} />
       {/* THE FULL TABLE, collapsed under "See all the numbers" (#35a §5). */}
       <SeeAllTheNumbers>

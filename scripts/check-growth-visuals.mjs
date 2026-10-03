@@ -186,7 +186,7 @@ const mutants = [
   ["margins beyond ±100% are worded, within are percentages", "b", (s) => s.replace("if (Math.abs(m) <= MARGIN_AS_MULTIPLE_BEYOND_PCT)", "if (true)")],
   ["derived quarters keep A's derived note", "b", (s) => s.replace("derivedNote: cell.derivedNote ?? null", "derivedNote: null")],
   ["summary with A's notes: seven of eight losses, the one-off named", "b", (s) => s.replace("const losses = withProfit.filter((p) => p.profit!.val < 0).length;", "const losses = withProfit.filter((p) => p.profit!.val <= 0).length + 1;")],
-  ["summary without A's notes: sales only, no profit clause", "b", (s) => s.replace("profit: profitChecked ? amount(p.netIncome) : null,", "profit: amount(p.netIncome),")],
+  ["summary without A's notes: sales only, no profit clause", "b", (s) => s.replace("profit: profitChecked && !unchecked.has(p.label) ? amount(p.netIncome) : null,", "profit: amount(p.netIncome),")],
   ["blocker: without A's per-period notes, no profit figure is drawn or listed", "b", (s) => s.replace("const profitChecked = opts.oneOffs !== undefined;", "const profitChecked = true;")],
   ["blocker: without A's per-period notes, no profit figure is drawn or listed", "c", (s) => s.replace("{showProfit ? (", "{true ? (")],
   ["blocker: with A's per-period note, Q1 '26 draws tagged", "b", (s) => s.replace("opts.oneOffs?.[label] ??", "")],
