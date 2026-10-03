@@ -25,7 +25,8 @@ export type DilutionHistoryData = {
   gaps?: { from: string; to: string }[];
   splits?: { date: string; ratio: number }[];
   dropped?: string[];
-  startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" };
+  startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; ratio?: number };
+  withheld?: { reason: "units-unconfirmed"; factor: number | null };
   threeYear?: { pct: number; base: SharePoint; end?: SharePoint } | { pct: null; reason: "too-short" };
 };
 
@@ -103,6 +104,17 @@ export function splitWords(ratio: number): string {
   return ratio >= 1 ? `${Math.round(ratio)}-for-1` : `1-for-${Math.round(1 / ratio)}`;
 }
 
+/**
+ * WHY NO CHART (#552 COWORK #121): the filed counts couldn't be confirmed in
+ * the units the cover page uses. Said instead of drawing a count that may be
+ * off by a thousand times.
+ */
+export function withheldWords(w: NonNullable<DilutionHistoryData["withheld"]>): string {
+  return w.factor !== null
+    ? `Not drawn: the share counts in this company's filings don't agree with the count on its latest cover page (they differ by more than 10 times), so we can't confirm which units they're in.`
+    : "Not drawn: the filed share counts jump by more than 100 times at one point, and there's no cover-page count to confirm which side is in the right units.";
+}
+
 /** The notes the source line carries for a corrected series (#552 COWORK #89 §1–4). */
 export function seriesNotes(data: DilutionHistoryData): string[] {
   const out: string[] = [];
@@ -111,6 +123,7 @@ export function seriesNotes(data: DilutionHistoryData): string[] {
   }
   const st = data.startedAfter;
   if (st?.reason === "listing") out.push("Starts at the company's first report after listing.");
+  else if (st?.reason === "unmatched-split") out.push(`Starts ${fmtDateShort(st.date)}: the company restated its earlier counts for a ${splitWords(st.ratio ?? 1)} split, but the step before this point doesn't match it, so the chart doesn't draw across it.`);
   else if (st) out.push(`Starts ${fmtDateShort(st.date)}: an earlier step in the filed counts couldn't be matched to a split the company restated, so the chart doesn't draw across it.`);
   const dropped = data.dropped ?? [];
   if (dropped.length === 1) out.push(`The filed figure for ${fmtDateShort(dropped[0])} is left out: it was off by a factor of 100 or more from the figures either side.`);
@@ -139,6 +152,16 @@ export default function DilutionHistory({
   embedded?: boolean;
 }) {
   const points = data?.points ?? [];
+  if (data?.withheld) {
+    const said = (
+      <>
+        <div style={eyebrowStyle}>Share dilution</div>
+        <h2 style={embedded ? embeddedHeadingStyle : headingStyle}>{symbol} shares outstanding over time</h2>
+        <p style={subStyle} data-share-withheld="">{withheldWords(data.withheld)}</p>
+      </>
+    );
+    return embedded ? <div style={{ marginTop: 24 }}>{said}</div> : <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>{said}</section>;
+  }
   // Need a real spread of points to show a meaningful trend — a single
   // snapshot (or FMP returning nothing usable) isn't a "history".
   if (points.length < 3) return null;

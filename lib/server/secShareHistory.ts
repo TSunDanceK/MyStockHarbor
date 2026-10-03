@@ -64,7 +64,13 @@ export type ShareHistory = {
    */
   dropped?: string[];
   /** The series starts later than the data because of an unexplained step, or the listing. */
-  startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" };
+  startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; ratio?: number };
+  /**
+   * NOT DRAWN, AND WHY (#552 COWORK #121): the kept counts disagree with the
+   * cover page by more than SHARE_UNITS_MAX_FACTOR, or a >100× step was cut
+   * with no cover count to say which side is right. `points` is empty.
+   */
+  withheld?: { reason: "units-unconfirmed"; factor: number | null };
   /** The 3-year change, or null with the reason (rule 5). */
   threeYear?: { pct: number; base: ShareHistoryPoint; end: ShareHistoryPoint } | { pct: null; reason: "too-short" };
 };
@@ -84,6 +90,10 @@ export const SHARE_PROVEN_SPLIT_TOLERANCE = 0.1;
 export const SHARE_PROVEN_SPLIT_YEARS = 3;
 /** A step bigger than this either way is a unit or scale error, never dilution. */
 export const SHARE_SCALE_MAX_STEP = 100;
+/** A step at least this big either way, next to an unmatched split, is not drawn across. */
+export const SHARE_UNMATCHED_SPLIT_STEP = 1.5;
+/** The kept counts must agree with the cover page within this factor either way. */
+export const SHARE_UNITS_MAX_FACTOR = 10;
 /** Consecutive points further apart than this (15 months) break the line. */
 export const SHARE_GAP_MAX_DAYS = 460;
 /** The trend window, and how far before its cut the base may sit. */
@@ -211,6 +221,31 @@ export function correctShareSeries(
       break;
     }
   }
+  // A SPLIT ON FILE THAT NO STEP MATCHED (#552 COWORK #121 follow-up 1). The
+  // filer restated its counts for a split, so from the earliest restated
+  // period on the counts are on the new basis; the point before it, if it
+  // sits a real step away (more than SHARE_UNMATCHED_SPLIT_STEP either way)
+  // and no step was matched to that split, is on the OLD basis and mixed with
+  // real issuance, so it can be neither scaled nor drawn as it stands (ONDS
+  // 2018: 28.5M before its 2020 1-for-3, a 0.62× step). The chart starts at
+  // the earliest restated period. Real dilution elsewhere is untouched: this
+  // needs restatement evidence for a split, next to the step.
+  const byRatio = new Map<number, string[]>();
+  for (const x of proven) byRatio.set(x.k, [...(byRatio.get(x.k) ?? []), x.e]);
+  for (const [k, dates] of byRatio) {
+    const sorted = [...dates].sort();
+    const clusters: string[] = [];
+    for (const d of sorted) if (!clusters.length || d > plusYears(clusters[clusters.length - 1], SHARE_PROVEN_SPLIT_YEARS)) clusters.push(d);
+    for (const eMin of clusters) {
+      if (splits.some((x) => x.ratio === k && nearStep(x.date, eMin))) continue;
+      const j = pts.findIndex((p) => p.date >= eMin);
+      if (j < 1) continue;
+      const r = pts[j].shares / pts[j - 1].shares;
+      if (Math.abs(Math.log(r)) <= Math.log(SHARE_UNMATCHED_SPLIT_STEP)) continue;
+      startedAfter = { date: pts[j].date, reason: "unmatched-split", ratio: k };
+      pts = pts.slice(j);
+    }
+  }
   // Only the slips inside the series as drawn: one before a later cut is moot.
   const dropped = slips.filter((d) => pts.length > 0 && d > pts[0].date);
   return { points: pts, splits: splits.reverse(), dropped, ...(startedAfter ? { startedAfter } : {}) };
@@ -258,6 +293,20 @@ export function threeYearChange(points: ShareHistoryPoint[]): NonNullable<ShareH
   return { pct: null, reason: "too-short" };
 }
 
+/** The units check: null when the counts can be drawn, else why not. */
+export function sharesUnconfirmed(
+  fixed: { points: ShareHistoryPoint[]; startedAfter?: ShareHistory["startedAfter"] },
+  cover: number | null,
+): ShareHistory["withheld"] | null {
+  const last = fixed.points[fixed.points.length - 1];
+  if (!last) return null;
+  if (typeof cover === "number" && cover > 0) {
+    const f = last.shares / cover;
+    return f > SHARE_UNITS_MAX_FACTOR || f < 1 / SHARE_UNITS_MAX_FACTOR ? { reason: "units-unconfirmed", factor: f } : null;
+  }
+  return fixed.startedAfter?.reason === "scale-step" ? { reason: "units-unconfirmed", factor: null } : null;
+}
+
 /**
  * Quarters first (finer-grained), fiscal years when quarters give too few
  * points — the same preference fetchShareHistory had against FMP — then the
@@ -269,6 +318,14 @@ export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?
   const raw = rawShareSeries(set);
   if (!raw) return null;
   const fixed = correctShareSeries(raw.points, set.asr ?? [], opts.listedFrom ?? null, set.asf ?? []);
+  // THE UNITS CHECK (#552 COWORK #121). PAC's kept segment read 505.28B
+  // shares; the cover page says 505.28M. The newest counts must agree with the
+  // cover-page count within SHARE_UNITS_MAX_FACTOR (wide enough for a class
+  // or two the cover leaves out); where they don't, or where a >100× step was
+  // cut and no cover count can say which side is right, nothing is drawn and
+  // the reason is shown. A count we can't confirm is never charted.
+  const withheld = sharesUnconfirmed(fixed, set.cover?.val ?? null);
+  if (withheld) return { points: [], basis: raw.basis, withheld };
   if (fixed.points.length < MIN_SHARE_POINTS) return null;
   const gaps = shareGaps(fixed.points, fixed.dropped);
   return {
