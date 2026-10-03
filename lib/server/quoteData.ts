@@ -5,6 +5,7 @@ import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { timingCache, beginTiming } from "./timing";
 import { tryReserveFmpCallSlot } from "./historyCache";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { readTiingoQuote, stockPageOnTiingo } from "./tiingoQuote";
 
 export type Quote = {
   symbol: string;
@@ -36,6 +37,12 @@ export type Quote = {
   yearHigh: number | null;
   volume: number | null;
   avgVolume: number | null;
+  // Tiingo path only (step 4, #553 COWORK #56): what the price is ("last IEX
+  // trade, 14:05 ET" / "close, 1 Oct 2026") and what the volume is ("as of last
+  // close"). The label's presence is also what tells a page to show the linked
+  // "Market data from Tiingo.com" credit. Absent on the FMP path.
+  priceLabel?: string | null;
+  volumeLabel?: string | null;
 };
 
 export function emptyQuote(symbol: string): Quote {
@@ -252,6 +259,15 @@ async function fetchQuoteFromFmpUncached(symbol: string): Promise<Quote> {
 export async function fetchQuoteSnapshot(symbolInput: string): Promise<Quote> {
   const endTiming = beginTiming("quote", "fetchQuoteSnapshot");
   try {
+    // STEP 4 (#553 COWORK #71), behind PRICE_PROVIDER_STOCK_PAGE: the dashboard
+    // and the stock page's live refresh read Tiingo from the Data Cache. A miss
+    // (a symbol outside the pool, or no row yet) keeps the FMP path below.
+    // BEFORE the msh:quote:v1 read and never written back to it: a Tiingo price
+    // must not be stored outside msh:tiingo: (contract §7, the purge).
+    if (stockPageOnTiingo()) {
+      const tiingo = await readTiingoQuote(symbolInput);
+      if (tiingo) return tiingo;
+    }
     return await fetchQuoteSnapshotInner(symbolInput, fetchQuoteFromFmpUncached);
   } finally {
     endTiming();
@@ -275,6 +291,11 @@ export async function fetchQuoteSnapshot(symbolInput: string): Promise<Quote> {
  * The revalidate matches QUOTE_CACHE_TTL_SECONDS deliberately: this module
  * already declares 60s as its freshness budget, so the second layer reuses that
  * number rather than inventing one.
+ *
+ * STAYS ON FMP UNDER STEP 4, deliberately. Its callers are the insight snapshot
+ * (persisted to Redis with no TTL, outside msh:tiingo:, so a Tiingo price there
+ * would escape the contract's deletion obligation) and the video pages' FMP
+ * fallback (C's surface has its own Tiingo path first).
  */
 export async function fetchQuoteSnapshotForRender(symbolInput: string): Promise<Quote> {
   const endTiming = beginTiming("quote", "fetchQuoteSnapshotForRender");

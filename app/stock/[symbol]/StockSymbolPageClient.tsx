@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart from "./StockPriceChart";
@@ -37,6 +37,10 @@ type Quote = {
   yearHigh?: number | null;
   volume?: number | null;
   avgVolume?: number | null;
+  // Tiingo path only (step 4, #553 COWORK #56): "last IEX trade, 14:05 ET" /
+  // "close, 1 Oct 2026", and "as of last close" for the EOD-only volume.
+  priceLabel?: string | null;
+  volumeLabel?: string | null;
 };
 
 // Server-fetched quote payload passed down from page.tsx so the header
@@ -54,6 +58,8 @@ export type InitialQuote = {
   yearHigh: number | null;
   volume: number | null;
   avgVolume: number | null;
+  priceLabel?: string | null;
+  volumeLabel?: string | null;
 };
 
 type StockValuationData = {
@@ -141,6 +147,9 @@ type StockSymbolPageClientProps = {
   // change) — seeds the header stats bar so it renders real numbers
   // immediately instead of waiting on the client refresh.
   initialQuote?: InitialQuote;
+  // The linked "Market data from Tiingo.com", rendered by page.tsx when
+  // PRICE_PROVIDER_STOCK_PAGE=tiingo (step 4). Shown only under a Tiingo quote.
+  tiingoCredit?: ReactNode;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -726,7 +735,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   const [quote, setQuote] = useState<Quote | null>(
     initialQuote?.price != null || seed?.price != null
@@ -746,6 +755,8 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           yearHigh: initialQuote?.yearHigh ?? null,
           volume: initialQuote?.volume ?? null,
           avgVolume: initialQuote?.avgVolume ?? null,
+          priceLabel: initialQuote?.priceLabel ?? null,
+          volumeLabel: initialQuote?.volumeLabel ?? null,
         }
       : null
   );
@@ -1000,7 +1011,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">Volume</div>
                 <div className="stock-stat-value" style={{ color: toneColor(volumeTone(quote?.volume, quote?.avgVolume)) }}>{formatCompactNumber(quote?.volume)}</div>
-                <div className="stock-stat-sub">Avg {formatCompactNumber(quote?.avgVolume)}</div>
+                <div className="stock-stat-sub">{quote?.volumeLabel ? `50-day avg ${formatCompactNumber(quote?.avgVolume)} · ${quote.volumeLabel}` : `Avg ${formatCompactNumber(quote?.avgVolume)}`}</div>
               </div>
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">Trend score</div>
@@ -1034,6 +1045,12 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 </span>
               ))}
             </div>
+          ) : null}
+          {!priceLoading && !err && quote?.priceLabel ? (
+            // Step 4 (#553 COWORK #56): what the header's price is, and whose.
+            <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.6 }}>
+              Price: {quote.priceLabel}{tiingoCredit ? <> · {tiingoCredit}</> : null}
+            </p>
           ) : null}
           </div>{/* end hero box */}
         </header>

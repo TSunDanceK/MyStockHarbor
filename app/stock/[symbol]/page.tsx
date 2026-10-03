@@ -31,6 +31,9 @@ import {
   type Point,
 } from "@/lib/indicators";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { readTiingoQuote } from "@/lib/server/tiingoQuote";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { awaitingSecRead } from "@/lib/server/secColdFetch";
 import Link from "next/link";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
@@ -69,6 +72,33 @@ type QuoteOutcome = "ok" | "no-data" | "unavailable";
 // "no-data" -- which reads as "this symbol has no data", the one outcome above
 // that is supposed to be legitimate. The displayed symbol is left alone.
 async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcome: QuoteOutcome }> {
+  // STEP 4 (#553 COWORK #71), behind PRICE_PROVIDER_STOCK_PAGE, the same switch
+  // as the client's /api/quote refresh, so the header never seeds from FMP and
+  // then flips to Tiingo on hydration. A Tiingo miss keeps the FMP path below.
+  if (priceProviderFor("STOCK_PAGE") === "tiingo") {
+    const t = await readTiingoQuote(symbol);
+    if (t && t.price != null) {
+      return {
+        quote: {
+          price: t.price,
+          date: t.date,
+          open: t.open,
+          previousClose: t.previousClose,
+          change: t.change,
+          changePercentage: t.changePercentage,
+          dayLow: t.dayLow,
+          dayHigh: t.dayHigh,
+          yearLow: t.yearLow,
+          yearHigh: t.yearHigh,
+          volume: t.volume,
+          avgVolume: t.avgVolume,
+          priceLabel: t.priceLabel ?? null,
+          volumeLabel: t.volumeLabel ?? null,
+        },
+        outcome: "ok",
+      };
+    }
+  }
   const apiKey = process.env.FMP_API_KEY;
   const empty: InitialQuote = {
     price: null,
@@ -740,6 +770,13 @@ export default async function StockPage({ params }: Props) {
         // is why the client re-fetched 900 bars on every load.
         initialHistory={points.slice(-500)}
         initialQuote={quote}
+        // Step 4 (#553 COWORK #71/#92): the linked credit, shown by the client
+        // under the header stats whenever the quote is a Tiingo one.
+        tiingoCredit={
+          priceProviderFor("STOCK_PAGE") === "tiingo" ? (
+            <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+          ) : null
+        }
         // Proves to /api/quote that this client rendered a real page. Empty
         // string when QUOTE_TOKEN_SECRET is unset, in which case the client
         // sends no header and behaviour is unchanged. See lib/server/quoteToken.ts.
