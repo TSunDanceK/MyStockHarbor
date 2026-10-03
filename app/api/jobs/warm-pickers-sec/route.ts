@@ -5,12 +5,14 @@
 // call -- it reads the stored fact sets and writes one Redis hash -- so it does
 // not need FMP_API_KEY and keeps working when that key is gone.
 //
-// COST: ~860 Redis commands a run (one GET per symbol, one HSET per 100, one
-// EXPIRE), hard-capped by MAX_SYMBOLS_PER_RUN; the first write error stops it.
+// COST: ~2,630 Redis commands a run (one GET per symbol over ~2,600 symbols,
+// one HSET per 100, one EXPIRE, +1 GET for the universe), hard-capped by
+// MAX_SYMBOLS_PER_RUN; the first write error stops it.
 import { NextRequest, NextResponse } from "next/server";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { guardJob } from "../../../../lib/server/jobGuard";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
+import { readTiingoUniverseSymbols } from "../../../../lib/server/tiingoUniverse";
 import { warmPickersSec } from "../../../../lib/server/pickersSecFundamentals";
 import { registrantFor } from "../../../../lib/server/stockProfile";
 import { adsRatioFor } from "../../../../lib/server/secAdsMap";
@@ -35,7 +37,12 @@ async function handleGET(req: NextRequest) {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
 
   try {
-    const { symbols } = await getWarmTargetSymbols(base);
+    const { symbols: warm } = await getWarmTargetSymbols(base);
+    // PLUS THE TIINGO UNIVERSE (#553 COWORK #110, 2026-10-03): the pool overlay
+    // (earnings calendar, sector weights) caps a row from this hash only, so it
+    // must hold every symbol the overlay prices. Warm targets first, so the run
+    // cap can never drop a Pickers symbol. +1 GET for the universe key.
+    const symbols = [...new Set([...warm, ...(await readTiingoUniverseSymbols())])];
     // The cited ADS ratio (#553 COWORK #44), as the stock and earnings pages
     // pass it: absent keeps the depositary-share refusal. A committed file, so
     // no Redis cost. And A's non-common listings (#553 COWORK #67): a note,
