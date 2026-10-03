@@ -1318,6 +1318,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #86b cited 20-F/40-F cover rows (#552 CODE-A #98): read-only, SEC at
+  // <=4/s outside the job windows (the script refuses inside them).
+  "write-foreign-cover-rows": {
+    script: "scripts/foreign-cover-rows-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-pickers-marketcap-census": {
     script: "scripts/pickers-marketcap-census.mjs",
     args: () => [],
