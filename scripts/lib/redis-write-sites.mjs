@@ -50,7 +50,8 @@ export const WRITE_SITES = [
   { file: "lib/server/marketData/jobs.ts", key: "TIINGO_EOD_META_KEY", cls: "small" },
   // Step 5 (#553 COWORK #98): the newest bar per symbol, one HSET a complete night (~150 B a row).
   { file: "lib/server/marketData/jobs.ts", key: "TIINGO_EOD_LAST_KEY", cls: "listed", candidate: "TIINGO_EOD_LAST_KEY" },
-  // Step 5: the Tiingo jobs' symbols-only universe (~6 B a symbol), one SET per in-session warm-price-pool run.
+  // Step 5: the Tiingo jobs' symbols-only universe (~6 B a symbol), one SET per in-session warm-price-pool run,
+  // and off hours only when the key is absent or older than 6 h (#553 COWORK #120).
   { file: "lib/server/tiingoUniverse.ts", key: "TIINGO_UNIVERSE_KEY", cls: "small" },
   { file: "lib/server/news/secFilingsStore.ts", key: "secFilingsNewsKey(symbol", cls: "row" },
   { file: "lib/server/newsStore.ts", key: "key", cls: "row" },
