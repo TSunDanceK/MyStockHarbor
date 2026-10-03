@@ -4,13 +4,15 @@
 // which, and what is derived, is made in lib/server/secEarningsView.ts and
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
 import Link from "next/link";
+import GrowthVisuals, { SeeAllTheNumbers } from "./GrowthVisuals";
+import { buildGrowthVisuals } from "@/lib/growthVisuals";
 import {
   CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
   filingCreditText, filingNoticeText, isCrossing, periodWords, retiredSource,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
 import {
-  STALE_PRICE_WORDS, barValue, growthToneWord, marginToneWord, priceIsCurrent,
+  STALE_PRICE_WORDS, growthToneWord, marginToneWord, priceIsCurrent,
   GROWTH_BAND_PCT, MARGIN_BAND_PP, fiscalYearEndNote, stalePriceNote, toneBg, toneColor, toneTint,
   toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate, waterfallGeometry,
   TREND_MIN_PERIODS, coverageIsInformative, partialScoreLabel, partialScoreNote, scaledAmount,
@@ -644,75 +646,6 @@ export function chartFootnote(blankBars: boolean, one: string, crossings: boolea
   return `${bands} Blank bars: ${crossings ? `no year-earlier ${one} on file, or a crossing between profit and loss` : `no year-earlier ${one} on file`}.`;
 }
 
-function GrowthMarginsChart({ view }: { view: SecEarningsView }) {
-  const w = periodWords(view.tableBasis);
-  const rows = view.margins.map((m, i) => ({
-    label: m.label,
-    revenue: barValue(view.growth[i]?.revenueYoY ?? null),
-    operating: m.operating,
-  }));
-  const revenues = rows.map((r) => r.revenue).filter((v): v is number => v !== null);
-  if (revenues.length < 2) return null;
-  // TWO REASONS A BAR IS MISSING, COUNTED SEPARATELY. barValue returns null
-  // for both a crossing and an absence, and the sentence under the chart has
-  // to name the one that actually happened — "no bar because the comparison
-  // crossed" is a false explanation for a period the filer never filed.
-  const crossings = view.growth.filter((g) => isCrossing(g.revenueYoY)).length;
-  const absent = rows.filter((r) => r.revenue === null).length - crossings;
-  // ── ALREADY OLDEST FIRST — DO NOT REVERSE IT ─────────────────────────────
-  // buildSecEarningsView reverses `margins` and `growth` on the way out (see
-  // the `.reverse()` on both), so view.margins[0] is the OLDEST period and the
-  // table's own intro says "newest last". A `[...rows].reverse()` here was
-  // therefore drawing the chart newest-first under a heading that said oldest
-  // first — the same data sloping the opposite direction, which is precisely
-  // the failure the ordering rule exists to stop, committed by the rule.
-  const ordered = rows;
-  const span = Math.max(...revenues.map((v) => Math.abs(v)), 1);
-  return (
-    <div className="chartBlock">
-      <div className="chartBlockTitle">Revenue growth by {w.one}, oldest first</div>
-      <div className="gmChart">
-        {ordered.map((r) => {
-          const tone = toneForGrowth(r.revenue);
-          const h = r.revenue === null ? 0 : (Math.abs(r.revenue) / span) * 100;
-          return (
-            <div className="gmCol" key={r.label}>
-              <div className="gmPlot">
-                {r.revenue === null ? (
-                  <span className="gmNone" title="Not measured" />
-                ) : (
-                  <span
-                    className={r.revenue >= 0 ? "gmBar gmUp" : "gmBar gmDown"}
-                    style={{ height: `${h / 2}%`, background: toneColor(tone) }}
-                  />
-                )}
-              </div>
-              <span className="gmTick">{r.label}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="chartLegend">
-        <span><i style={{ background: toneColor("good") }} />Growing</span>
-        <span><i style={{ background: toneColor("neutral") }} />Flat</span>
-        <span><i style={{ background: toneColor("weak") }} />Declining</span>
-        {/* THE FOURTH SWATCH ONLY WHERE A FOURTH STATE EXISTS — the same rule
-            as the n/m legend above it. A grey "Not measured" key on a filer
-            whose every period is measured sends the reader hunting for a mark
-            that is not on the chart. */}
-        {crossings + absent > 0
-          ? <span><i style={{ background: toneColor(null) }} />Not measured</span>
-          : null}
-      </div>
-      {/* ONE LINE OF THRESHOLDS, NOT A PARAGRAPH. The bands are the same
-          GROWTH_BAND_PCT and MARGIN_BAND_PP every tint on the page uses, and
-          the blank-bar clause appears only where a bar is blank. A crossing
-          is a blank bar too, and says so in its own table cell. */}
-      <p className="earningsDataNote">{chartFootnote(crossings + absent > 0, w.one, crossings > 0)}</p>
-    </div>
-  );
-}
-
 /**
  * DID THE MARGIN ACTUALLY MOVE? — the newest period against its own comparator.
  *
@@ -809,8 +742,14 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           table of fiscal years is the defect the noun rule already exists to
           stop, one element further down the card — and a reader trusts a
           picture faster than a column header. */}
-      <GrowthMarginsChart view={view} />
+      {/* THE PICTURE (#563 COWORK #35a/#36): C's three charts on one time axis,
+          built from this view; the profit chart draws only because the view
+          carries every period's one-off note (view.oneOffs). It replaces the
+          old single growth/margin bar chart, removed with this swap. */}
+      <GrowthVisuals data={buildGrowthVisuals(view, { oneOffs: view.oneOffs })} notReported={NOT_REPORTED} />
       <MarginDelta view={view} />
+      {/* THE FULL TABLE, collapsed under "See all the numbers" (#35a §5). */}
+      <SeeAllTheNumbers>
       <div style={{ overflowX: "auto" }}>
         <table className="historyTable">
           <thead>
@@ -861,6 +800,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           </tbody>
         </table>
       </div>
+      </SeeAllTheNumbers>
       {crossingNoteHome(view) === "growth" ? <p className="earningsDataNote">{CROSSING_NOTE}</p> : null}
       <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>

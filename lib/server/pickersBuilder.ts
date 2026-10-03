@@ -27,6 +27,7 @@ import { priceProviderFor, type PriceProvider } from "./marketData/provider";
 import { tiingoPickerHistory, type PickerHistoryStats } from "./marketData/pickerHistory";
 import { readTiingoTickerMovers } from "./tiingoMovers";
 import type { EodBar } from "./marketData/types";
+import { pickersWithoutBars } from "../pickersPublic";
 import { recordRedisRead, flushRedisReadMeter } from "./redisBandwidth";
 import {
   chunkByBytes,
@@ -5279,6 +5280,9 @@ async function handlePickersRequest(
 
   let forceRefresh = false;
   let ownerKeyed = false;
+  // NO PRICE BARS IN THIS PUBLIC JSON (#553 COWORK #105): every payload answer
+  // below goes through pickersWithoutBars (lib/pickersPublic.ts), which removes
+  // every chartPoints. Pages read the bars in-process (getPickersData).
 
   if (forceRequested) {
     const ip = getClientIp(req);
@@ -5324,7 +5328,7 @@ async function handlePickersRequest(
   if (forceHistoryRefresh) forceRefresh = true;
 
   if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
-    return NextResponse.json(memo.data, {
+    return NextResponse.json(pickersWithoutBars(memo.data), {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
         "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
@@ -5340,7 +5344,7 @@ async function handlePickersRequest(
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
 
-    return NextResponse.json(cached.data, {
+    return NextResponse.json(pickersWithoutBars(cached.data), {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
         // Set on EVERY response path, not just the one that built something.
@@ -5361,7 +5365,7 @@ async function handlePickersRequest(
     const lastGood = await readPickersLastGood();
     if (lastGood?.data) {
       memo = { ts: now, data: lastGood.data };
-      return NextResponse.json(lastGood.data, {
+      return NextResponse.json(pickersWithoutBars(lastGood.data), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": "false",
@@ -5386,7 +5390,7 @@ async function handlePickersRequest(
     if (published?.data) {
       memo = { ts: now, data: published.data };
 
-      return NextResponse.json(published.data, {
+      return NextResponse.json(pickersWithoutBars(published.data), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
@@ -5442,7 +5446,7 @@ async function handlePickersRequest(
       recordBuildStats(data, { degradedFallbackUsed: true, wrote: false });
       memo = { ts: now, data: cached.data };
 
-      return NextResponse.json(cached.data, {
+      return NextResponse.json(pickersWithoutBars(cached.data), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-Degraded-Fallback": "true",
@@ -5455,7 +5459,7 @@ async function handlePickersRequest(
     memo = { ts: now, data };
     await writePickersCache(data, () => buildReducedPickersPayload(data));
 
-    return NextResponse.json(data, {
+    return NextResponse.json(pickersWithoutBars(data), {
       headers: {
         "Cache-Control": forceRefresh
           ? "no-store"
@@ -5467,7 +5471,7 @@ async function handlePickersRequest(
     if (cached?.data) {
       memo = { ts: now, data: cached.data };
 
-      return NextResponse.json(cached.data, {
+      return NextResponse.json(pickersWithoutBars(cached.data), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",

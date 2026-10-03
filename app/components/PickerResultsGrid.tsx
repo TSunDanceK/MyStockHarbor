@@ -9,6 +9,8 @@ import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pick
 import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
 import { valueSatisfies } from "@/lib/screenerFields";
 import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
+import { NOT_APPLICABLE_CODES, cellMark, cellWhyWords, compareForSort } from "@/lib/pickerCellWhy";
+import { BasisCell, CellWhyNote, WhyMark } from "@/app/components/PickerCellMarks";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -571,8 +573,56 @@ type Col = {
   /** Header tooltip, for a column whose meaning needs one line of explanation. */
   tip?: string;
   get: (e: ResultEntry, d: DerivedRow) => string | number | null;
-  cell: (e: ResultEntry, d: DerivedRow) => ReactNode;
+  /** `inert`: inside the phone row's toggle button, where a nested control is invalid. */
+  cell: (e: ResultEntry, d: DerivedRow, inert?: boolean) => ReactNode;
 };
+
+// ── WHY A CELL IS EMPTY (#553 COWORK #69) ───────────────────────────────────
+// Every "–" carries its reason on hover (title) and on tap (a small popover),
+// and a figure that doesn't apply (a bank's Ent. Value, P/S, P/FCF) reads
+// "n/a" in a lighter tone. Filings columns take the code the page attached
+// (entry.cellWhy, from A's refusals); every other dash gets its column's line.
+const COLUMN_DASH_WHY: Record<string, string> = {
+  name: "No company name on file for this listing",
+  industry: "Industry not classified yet",
+  signals: "None of the tracked conditions is met",
+  price: "No current price for this stock",
+  change: "No current price for this stock",
+  volume: "No volume for the latest session",
+  ma200: "Not enough price history for a 200-day average",
+  perf1w: "Not enough price history for this period",
+  perf1m: "Not enough price history for this period",
+  perf6m: "Not enough price history for this period",
+  perfYtd: "Not enough price history for this period",
+  perf1y: "Not enough price history for this period",
+};
+
+/**
+ * The reason for an empty cell in column `key`, the mark it shows ("–", or a
+ * word cell: "Loss", "Neg.", "n/a" -- #553 COWORK #94), and whether it is "n/a".
+ */
+export function cellWhyFor(e: Pick<ResultEntry, "cellWhy">, key: string): { text: string; mark: string; word: boolean; na: boolean } {
+  const code = (e.cellWhy as Record<string, string> | undefined)?.[key];
+  if (code) return { text: cellWhyWords(code), ...cellMark(key, code), na: NOT_APPLICABLE_CODES.has(code) };
+  return { text: COLUMN_DASH_WHY[key] ?? cellWhyWords(null), ...cellMark(key, null), na: false };
+}
+
+const isEmptyValue = (v: string | number | null) =>
+  v == null || v === "" || (typeof v === "number" && !Number.isFinite(v));
+
+/** A column whose empty cells explain themselves. Exported for the check. */
+export function withWhy(col: Col): Col {
+  if (col.key === "symbol") return col;
+  const filled = col.cell;
+  return {
+    ...col,
+    cell: (e, d, inert) => {
+      if (!isEmptyValue(col.get(e, d))) return filled(e, d, inert);
+      const why = cellWhyFor(e, col.key);
+      return <WhyMark text={why.text} mark={why.mark} word={why.word} na={why.na} inert={inert} />;
+    },
+  };
+}
 
 // ── THE PERIOD A FILED FIGURE COVERS (#553 COWORK #21) ─────────────────────
 // P/E, EPS and Payout from the filings cover four quarters for most filers and
@@ -581,19 +631,15 @@ type Col = {
 // the cell's tooltip names it ("TTM to 30 Jun 2026" / "FY2025"), and a
 // fiscal-year figure carries a small "FY" so a reader skimming the column sees
 // which numbers are a year old without hovering.
-const BASIS_TIP = "Trailing twelve months from the filings where filed quarterly, else the latest fiscal year (marked FY). Hover a value for its period.";
+const BASIS_TIP = "Trailing twelve months from the filings where filed quarterly, else the latest fiscal year (marked FY before the figure). Hover a value for its period.";
 
-function basisCell(value: ReactNode, v: number | null, basis: string | undefined): ReactNode {
+function basisCell(value: ReactNode, v: number | null, basis: string | undefined, inert?: boolean): ReactNode {
   // A withheld figure (payout whose period differs from the row's EPS, #553
   // COWORK #60) arrives as a null with its reason in `basis`: "–", hover to see why.
   if (v == null || !Number.isFinite(v)) return basis ? <span className="muted" title={basis}>–</span> : MUTED;
   if (!basis) return value;
-  return (
-    <span title={basis}>
-      {value}
-      {basis.startsWith("FY") ? <span className="basisFy">FY</span> : null}
-    </span>
-  );
+  // #553 COWORK #90: "FY" BEFORE the number, in a fixed-width slot (PickerCellMarks).
+  return <BasisCell value={value} basis={basis} inert={inert} />;
 }
 
 // Compact price line for a phone row.
@@ -893,7 +939,7 @@ export default function PickerResultsGrid({
         );
       },
     };
-    const pe: Col = { key: "pe", label: "PE Ratio", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.peRatio), cell: (e) => basisCell(numCell(num(e.peRatio)), num(e.peRatio), e.epsBasis) };
+    const pe: Col = { key: "pe", label: "PE Ratio", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.peRatio), cell: (e, _d, inert) => basisCell(numCell(num(e.peRatio)), num(e.peRatio), e.epsBasis, inert) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
 
     const perf1w: Col = { key: "perf1w", label: "1W", sortType: "num", get: (e) => num(e.perf1w), cell: (e) => pctCell(num(e.perf1w)) };
@@ -910,7 +956,7 @@ export default function PickerResultsGrid({
 
     const dps: Col = { key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare), cell: (e) => dollarCell(num(e.divPerShare)) };
     const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e, d) => divYieldPct(e, d), cell: (e, d) => plainPctCell(divYieldPct(e, d)) };
-    const payout: Col = { key: "payout", label: "Payout Ratio", tip: BASIS_TIP, sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d) => basisCell(plainPctCell(payoutRatioPct(e, d)), payoutRatioPct(e, d), e.fundamentalsFrom === "sec" ? e.payoutBasis : undefined) };
+    const payout: Col = { key: "payout", label: "Payout Ratio", tip: BASIS_TIP, sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d, inert) => basisCell(plainPctCell(payoutRatioPct(e, d)), payoutRatioPct(e, d), e.fundamentalsFrom === "sec" ? e.payoutBasis : undefined, inert) };
     const dgrowth: Col = { key: "dgrowth", label: "Div Growth", sortType: "num", get: (e) => num(e.divGrowth), cell: (e) => pctCell(num(e.divGrowth)) };
     const freq: Col = { key: "freq", label: "Payout Freq.", sortType: "str", get: (e) => e.payoutFreq ?? "", cell: (e) => textCell(e.payoutFreq) };
 
@@ -918,7 +964,7 @@ export default function PickerResultsGrid({
     const opinc: Col = { key: "opinc", label: "Op. Income", sortType: "num", get: (e) => num(e.operatingIncome), cell: (e) => moneyCell(num(e.operatingIncome)) };
     const netinc: Col = { key: "netinc", label: "Net Income", sortType: "num", get: (e) => num(e.netIncome), cell: (e) => moneyCell(num(e.netIncome)) };
     const fcf: Col = { key: "fcf", label: "FCF", sortType: "num", get: (e) => num(e.freeCashFlow), cell: (e) => moneyCell(num(e.freeCashFlow)) };
-    const eps: Col = { key: "eps", label: "EPS", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.epsTtm), cell: (e) => basisCell(numCell(num(e.epsTtm)), num(e.epsTtm), e.epsBasis) };
+    const eps: Col = { key: "eps", label: "EPS", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.epsTtm), cell: (e, _d, inert) => basisCell(numCell(num(e.epsTtm)), num(e.epsTtm), e.epsBasis, inert) };
 
     const rating: Col = { key: "rating", label: "Rating", sortType: "str", get: (e) => e.rating ?? "", cell: (e) => textCell(e.rating) };
     const analysts: Col = { key: "analysts", label: "Analysts", sortType: "num", get: (e) => num(e.analystCount), cell: (e) => numCell(num(e.analystCount), 0) };
@@ -936,7 +982,7 @@ export default function PickerResultsGrid({
     // THE REGISTRY, APPLIED ONCE: every tab drops the hidden columns, so a
     // hidden column cannot be rendered, sorted or picked as a phone headline.
     for (const tab of Object.keys(sets) as TabKey[]) {
-      sets[tab] = sets[tab].filter((col) => !HIDDEN_COLUMN_KEYS.has(col.key));
+      sets[tab] = sets[tab].filter((col) => !HIDDEN_COLUMN_KEYS.has(col.key)).map(withWhy);
     }
     return sets;
     // displayTone is a real dependency: the symbol cell renders the dot, so
@@ -993,27 +1039,13 @@ export default function PickerResultsGrid({
   const sortedEntries = useMemo(() => {
     const sortCol = sort ? activeColumns.find((c) => c.key === sort.key) : null;
     if (!sortCol || !sort) return filteredEntries;
-    const factor = sort.dir === "asc" ? 1 : -1;
     const copy = filteredEntries.slice();
+    // compareForSort (lib/pickerCellWhy.ts): an empty cell -- "–" or a word
+    // cell such as "Loss" -- sinks below every figure both ways, never as zero.
     copy.sort((a, b) => {
       const da = derivedByEntry.get(a) ?? deriveRow(a);
       const db = derivedByEntry.get(b) ?? deriveRow(b);
-      const av = sortCol.get(a, da);
-      const bv = sortCol.get(b, db);
-      if (sortCol.sortType === "str") {
-        const as = (av as string) || "";
-        const bs = (bv as string) || "";
-        if (!as && !bs) return 0;
-        if (!as) return 1;
-        if (!bs) return -1;
-        return factor * as.localeCompare(bs);
-      }
-      const an = av as number | null;
-      const bn = bv as number | null;
-      if (an == null && bn == null) return 0;
-      if (an == null) return 1;
-      if (bn == null) return -1;
-      return factor * (an - bn);
+      return compareForSort(sortCol.get(a, da), sortCol.get(b, db), sortCol.sortType, sort.dir);
     });
     return copy;
   }, [filteredEntries, sort, activeColumns, derivedByEntry]);
@@ -1290,7 +1322,10 @@ export default function PickerResultsGrid({
               // message says N/A rather than promising the number is on its way.
               const panelColumns = metricColumns.filter((col) => {
                 const value = col.get(entry, d);
-                return value != null && value !== "";
+                // AN EXPLAINED GAP IS SHOWN (#553 COWORK #69): a filings
+                // figure refused for a stated reason stays in the panel, as a
+                // dash (or n/a) the reader can tap for why.
+                return (value != null && value !== "") || Boolean(entry.cellWhy?.[col.key as keyof NonNullable<ResultEntry["cellWhy"]>]);
               });
               const closes = sparkCloses(entry);
               // Direction comes from the day's % change where we have it, so
@@ -1336,10 +1371,10 @@ export default function PickerResultsGrid({
                         {headlineColumn ? (
                           <>
                             <span className="mRowLabel">{headlineColumn.label}</span>
-                            <span className="mRowValue">{headlineColumn.cell(entry, d)}</span>
+                            <span className="mRowValue">{headlineColumn.cell(entry, d, true)}</span>
                           </>
                         ) : null}
-                        {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d)}</span> : null}
+                        {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d, true)}</span> : null}
                       </span>
                       <span className="mRowChev" aria-hidden="true">{open ? "▲" : "▼"}</span>
                     </button>
@@ -1511,6 +1546,15 @@ export default function PickerResultsGrid({
         </div>
       ) : null}
 
+      {/* THE TABLE NOTE (#553 COWORK #69 item 4), wherever cells are shown.
+          2026-10-03 (#553 COWORK #103): the owner's single line
+          (CELL_WHY_TABLE_NOTE, kept) said "SEC filings" under every tab and
+          "Hover" on a phone; it is now the active tab's note, with "Tap" on
+          touch screens (CellWhyNote). */}
+      {shown.length && (showMobileRows || viewMode === "list") ? (
+        <CellWhyNote tab={activeTab} />
+      ) : null}
+
       <style>{`
         .screenerControls {
           display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -1521,6 +1565,39 @@ export default function PickerResultsGrid({
            hidden anyway (the tab row and column headers do those jobs there), so
            a break would just leave a gap under a lone view-mode button. */
         .ctrlBreak { display: none; }
+        /* #553 COWORK #69: a dash (or n/a) that explains itself. The dotted
+           underline says "there is more here"; the popover is the tap path,
+           since a phone has no hover. */
+        .whyMark { position: relative; cursor: help; text-decoration: underline dotted rgba(148,163,184,0.45); text-underline-offset: 3px; }
+        .whyMark:focus-visible { outline: 1px solid rgba(96,165,250,0.7); outline-offset: 2px; border-radius: 2px; }
+        /* #553 COWORK #94: a word cell ("Loss", "Neg.", "n/a") in the lighter tone. */
+        .whyWord { color: rgba(148,163,184,0.5); font-size: 0.86em; letter-spacing: 0.02em; }
+        /* #553 COWORK #90: "FY" BEFORE the figure, in a fixed-width slot, so the
+           digits keep the cell's right edge with or without it. */
+        .basisCell { display: inline-flex; align-items: baseline; justify-content: flex-end; }
+        .basisSlot { display: inline-block; width: 2.2em; text-align: left; flex: 0 0 auto; }
+        .basisFy { position: relative; cursor: help; font-size: 0.72em; letter-spacing: 0.02em; color: rgba(148,163,184,0.75); text-decoration: underline dotted rgba(148,163,184,0.45); text-underline-offset: 3px; }
+        .basisFy:focus-visible { outline: 1px solid rgba(96,165,250,0.7); outline-offset: 2px; border-radius: 2px; }
+        /* #553 COWORK #103 (2026-10-03): was centred (left: 50%) and up to 70vw
+           wide, so a mark near either edge of a 360 px screen pushed it off
+           the page. Now anchored to the mark's right edge (the grid's figures
+           are right-aligned), capped at the viewport less an 8 px gutter each
+           side, and nudged by --why-shift (PickerCellMarks' clampPop) if it
+           still pokes past an edge. */
+        .whyPop {
+          position: absolute; z-index: 30; right: 0; left: auto; top: calc(100% + 6px); transform: translateX(var(--why-shift, 0px));
+          width: max-content; max-width: min(260px, calc(100vw - 16px)); white-space: normal; text-align: left;
+          padding: 7px 9px; border-radius: 8px; font-size: 12px; font-weight: 500; line-height: 1.35;
+          color: #e2e8f0; background: #0f172a; border: 1px solid rgba(148,163,184,0.35);
+          box-shadow: 0 6px 18px rgba(0,0,0,0.35); text-decoration: none;
+        }
+        .cellWhyNote { margin: 10px 2px 0; font-size: 12px; line-height: 1.45; color: rgba(148,163,184,0.8); }
+        /* "Hover for why." on a pointer, "Tap for why." on touch (#553 COWORK #103). */
+        .cellWhyTap { display: none; }
+        @media (hover: none), (pointer: coarse) {
+          .cellWhyHover { display: none; }
+          .cellWhyTap { display: inline; }
+        }
 
         .viewToggleLabel { display: inline; }
 
