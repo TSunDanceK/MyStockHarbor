@@ -8,20 +8,20 @@
 // the tickers in the buckets a threshold would refuse. SEC reads: none.
 //
 //   relay task: write-pb-equity-cap-census
-//   Redis: 1 GET (universe; +1 payload GET if the symbol key has lapsed) + 1 HMGET (stored rows) + the pool bulk read,
+//   Redis: 1 HKEYS (universe) + 1 HMGET (stored rows) + the pool bulk read,
 //   read-only.
 import "./lib/register-ts-app.mjs";
 import { Redis } from "@upstash/redis";
 
 const P = await import("../lib/server/pickersSecFundamentals.ts");
-const B = await import("../lib/server/pickersBuilder.ts");
 const POOL = await import("../lib/server/pricePool.ts");
 const redis = Redis.fromEnv();
 let commands = 0;
 
-// The builder's own reader: the symbol key has a 3 h TTL, and the reader falls
-// back to the payload when it has lapsed (the first run read an empty key).
-const list = (await B.readPickersSymbolsIfCached()) ?? []; commands++;
+// The universe is the stored SEC Pickers rows themselves (the warm job writes
+// one field per Pickers symbol). pickersBuilder imports next/server, so it
+// can't load here, and its 3 h symbol key had lapsed on the first run.
+const list = (await redis.hkeys(P.PICKERS_SEC_KEY)) ?? []; commands++;
 const universe = [...new Set(list.map((x) => String(typeof x === "string" ? x : x?.symbol ?? "").toUpperCase()).filter(Boolean))];
 const rows = await P.readSecPickerRows(universe); commands++;
 const pool = await POOL.readPricePoolBulk(universe); commands++;

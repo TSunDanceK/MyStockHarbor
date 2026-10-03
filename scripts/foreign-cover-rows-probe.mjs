@@ -13,10 +13,11 @@
 //   relay task: write-foreign-cover-rows
 import "./lib/register-ts-app.mjs";
 import fs from "node:fs";
+import { Redis } from "@upstash/redis";
 
 const P = await import("../lib/server/pickersSecFundamentals.ts");
-const B = await import("../lib/server/pickersBuilder.ts");
 const V = await import("../lib/server/secValuation.ts");
+const redis = Redis.fromEnv();
 const UA = process.env.SEC_USER_AGENT || "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; cover rows probe)";
 const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
 const reg = (s) => REG[s] ?? REG[s.replace(".", "-")] ?? REG[s.replace("-", ".")];
@@ -37,7 +38,8 @@ const get = async (url) => {
   return r.ok ? r.text() : null;
 };
 
-const universe = (await B.readPickersSymbolsIfCached()) ?? []; commands++;
+// The stored SEC Pickers rows' own fields (pickersBuilder imports next/server).
+const universe = [...new Set(((await redis.hkeys(P.PICKERS_SEC_KEY)) ?? []).map((x) => String(x).toUpperCase()))]; commands++;
 const rows = await P.readSecPickerRows(universe); commands++;
 const targets = [];
 for (const s of universe) {
