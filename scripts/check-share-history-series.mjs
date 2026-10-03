@@ -193,7 +193,7 @@ const RULES = {
       && Math.abs(h.threeYear.pct - ((14748158000 - 16215963000) / 16215963000) * 100) < 1e-9
       && /Share count has fallen over the last 3 years/.test(render(c, h))
       // The tile names the window's actual ends, never "latest" (#552 COWORK #120).
-      && /data-share-three-window="">24 Sept? 2022 to 27 Dec 2025</.test(render(c, h)) && !/latest/i.test(render(c, h).match(/data-share-three-year[\s\S]*?<\/div><\/div>/)?.[0] ?? "x latest")
+      && /data-share-three-window="">24 Sept? 2022 to 27 Dec 2025( · the newest 3-year span on file)?</.test(render(c, h)) && !/latest/i.test(render(c, h).match(/data-share-three-year[\s\S]*?<\/div><\/div>/)?.[0] ?? "x latest")
       && s?.threeYear?.pct === null;
   },
 };
