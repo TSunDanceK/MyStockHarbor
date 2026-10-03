@@ -61,13 +61,14 @@ const SALES_HEADROOM = 0.84;
 /** The gross-margin chart's guide lines, in % of sales. */
 const PCT_GUIDES = [0, 50, 100] as const;
 
+/**
+ * "derived", BEFORE THE FIGURE, ITS NOTE ON TAP (#552 COWORK #124/#125): an
+ * <abbr title> opened nothing on a tap, and after the figure it broke the
+ * column's right edge.
+ */
 function DerivedTag({ note }: { note: string | null }) {
   if (!note) return null;
-  return (
-    <abbr title={note} style={{ marginLeft: 4, fontSize: 11, fontWeight: 800, color: C.muted, textDecoration: "none", cursor: "help" }}>
-      derived
-    </abbr>
-  );
+  return <ReasonedValue text="derived" reason={note} style={{ marginRight: 4, fontSize: 11, fontWeight: 800, color: C.muted }} />;
 }
 
 /** One chart: a title, the plot as a grid of columns, and the shared axis labels. */
@@ -142,7 +143,7 @@ function Axis({ periods, active }: { periods: GvPeriod[]; active: number }) {
           {p.short}
           {/* THE DERIVED MARK STAYS (COWORK #26 rules): the sentence is on the
               mark itself and in the footnote, never an asterisk alone. */}
-          {derivedOf(p) ? <abbr title={derivedOf(p)!} style={{ textDecoration: "none", cursor: "help" }}>*</abbr> : null}
+          {derivedOf(p) ? <ReasonedValue text="*" reason={derivedOf(p)} /> : null}
         </span>
       ))}
     </div>
@@ -314,8 +315,8 @@ function Detail({ p, one, notReported, showProfit }: { p: GvPeriod; one: string;
       <dl>
         <dt>Sales</dt>
         <dd>
-          {p.sales ? <><strong>{p.sales.text}</strong><DerivedTag note={p.sales.derivedNote} /></> : nr}
-          {p.lastYear ? <> · {p.lastYear.label}: {p.lastYear.text}<DerivedTag note={p.lastYear.derivedNote} /></> : null}
+          {p.sales ? <><DerivedTag note={p.sales.derivedNote} /><strong>{p.sales.text}</strong></> : nr}
+          {p.lastYear ? <> · {p.lastYear.label}: <DerivedTag note={p.lastYear.derivedNote} />{p.lastYear.text}</> : null}
           {p.growth ? <> · {p.growth} on a year earlier</> : null}
         </dd>
         {/* NO PROFIT ROW while the chart is off: an unmarked profit figure here
@@ -325,7 +326,7 @@ function Detail({ p, one, notReported, showProfit }: { p: GvPeriod; one: string;
             <dt>Profit or loss</dt>
             <dd>
               {p.profit
-                ? <><strong>{p.profit.val >= 0 ? "Profit +" : "Loss −"}{p.profit.text.replace(/^-/, "")}</strong><DerivedTag note={p.profit.derivedNote} /></>
+                ? <><DerivedTag note={p.profit.derivedNote} /><strong>{p.profit.val >= 0 ? "Profit +" : "Loss −"}{p.profit.text.replace(/^-/, "")}</strong></>
                 : p.profitUnchecked ? <span className="gvNote">{p.profitUnchecked}</span> : nr}
               {p.oneOff ? <div className="gvNote">{p.oneOff}</div> : null}
             </dd>

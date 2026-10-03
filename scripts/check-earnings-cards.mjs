@@ -107,7 +107,7 @@ const MUTANTS = [
   ["the long refusal back in the cell", (s) => once(s, "? <ReasonedValue text={NOT_AVAILABLE} reason={cantCalculate(missing)} style={MUTED_VALUE} />", "? <span style={MUTED_VALUE}>{cantCalculate(missing)}</span>")],
   ["the cash figure dropped from its bar", (s) => once(s, "          text: <CellValue cell={b.cash} compact />,", "          text: null,")],
   ["an empty track drawn for a missing value", (s) => once(s, "  if (value === null || !Number.isFinite(value) || max <= 0) return null;", "  if (value === null || !Number.isFinite(value) || max <= 0) return <div className=\"hbarTrack\" aria-hidden=\"true\" />;")],
-  ["the 'Not reported' sentence on every card", (s) => once(s, "{balanceShowsNotReported(b) ? `${NOT_REPORTED_NOTE} ` : \"\"}", "{`${NOT_REPORTED_NOTE} `}")],
+  ["the 'Not reported' sentence on every card", (s) => once(s, "{balanceShowsNotReported(b) ? <p>{NOT_REPORTED_NOTE}</p> : null}", "<p>{NOT_REPORTED_NOTE}</p>")],
   ["the recent-periods table back on ISO dates", (s) => once(s, `<td data-label="Period ending">{readableDate(r.end)}</td>`, `<td data-label="Period ending">{r.end}</td>`)],
 ];
 for (const [label, mutate] of MUTANTS) {

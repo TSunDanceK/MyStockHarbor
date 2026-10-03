@@ -97,7 +97,9 @@ const AXTI_MARGINS = [mr(-30), mr(-22), mr(-15.5), mr(-8), mr(21.9)];
   const r = Mr.trendSummary(viewOf(AXTI_GROWTH, AXTI_MARGINS)).lines.find((l) => l.label === "EPS growth");
   check("MUTATION: the loss reason removed → AXTI reads 'needs 3 … has 0' again (caught)", /has 0\.$/.test(r.reason ?? ""), r.reason);
   const cards = readCodeOnly("app/stock/[symbol]/earnings/SecEarningsCards.tsx");
-  check("the card prints the reason and the latest words", /\(l\.reason \?\? `needs/.test(cards) && /l\.latestWords \?/.test(cards));
+  // THE REASON IS THE WORD'S TAP NOTE since #552 COWORK #124.
+  check("the card carries the reason (as the word's note) and prints the latest words",
+    /reason=\{l\.reason \?\? `Needs/.test(cards) && /l\.latestWords \?/.test(cards));
 }
 
 console.log("\n4. operating margin direction chip");

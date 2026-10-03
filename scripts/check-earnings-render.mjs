@@ -794,8 +794,8 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // "EPS surprise: 0.00", which read as "came in exactly in line".
   const coalesceCell = (src) =>
     src.replace(
-      "  if (cell.val == null) {\n    if (short) {",
-      "  if (false) {\n    if (short) {"
+      "  if (cell.val == null) {\n    const word",
+      "  if (false) {\n    const word"
     ).replace(
       "? money(cell.val, compact && !cell.perShare, cell.perShare)",
       "? money(cell.val ?? 0, compact && !cell.perShare, cell.perShare)"
@@ -945,7 +945,7 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // from the view that computes the YoY cells, and the rendered row labels are
   // checked to be the same rows in the same order.
   const hMarkup = html(React.createElement(M.SecAnnualCard, { view: hView, sole: false }));
-  const rowLabels = [...hMarkup.matchAll(/class="rowHead"><abbr[^>]*>([^<]+)<\/abbr>/g)].map((m) => m[1]);
+  const rowLabels = [...hMarkup.matchAll(/class="rowHead"><span[^>]*><span role="button"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]);
   const comparedCells = hView.annual.map((r) => r.comparedWith);
   // DROPPING A ROW MUST NOT RE-BASE THE NEXT ONE. The risk in removing rows is
   // that the survivors quietly shift onto whatever is now below them; every
@@ -1096,7 +1096,8 @@ console.log("\n15. EPS is labelled with the standard the filer reports under");
   check("the EPS-basis note is not repeated on the cards",
     onCards === 0, `${onCards} copies across the rendered cards`);
   check("...and the page states it once, in the hero, from the filer's own standard",
-    (pageRaw.match(/epsBasisNote\(/g) ?? []).length === 1 && /heroNote">\{epsBasisNote\(secView\.accounting\)\}/.test(pageRaw),
+    // ONE SHORT LINE, THE NOTE ON TAP since #552 COWORK #124.
+    (pageRaw.match(/epsBasisNote\(/g) ?? []).length === 1 && /heroNote"><ReasonedValue text=\{epsBasisShort\(secView\.accounting\)\} reason=\{epsBasisNote\(secView\.accounting\)\} \/>/.test(pageRaw),
     "one call, in the hero");
   const hard = await loadCards(once(
     'return accounting === "IFRS" ? "IFRS" : accounting === "US GAAP" ? "GAAP" : "as filed";',
@@ -1153,14 +1154,18 @@ console.log("\n16. AVAV — the earnings-page cleanup brief, on the filer it was
     annualText.slice(0, 200));
 
   // B: the valuation card is two tiles, with no paragraph under them.
-  const val = visibleText(html(React.createElement(M.SecValuationCard, {
+  const valMarkup = html(React.createElement(M.SecValuationCard, {
     view: vAvav, inputs: M.valuationInputs(AVAV, "2026-09-22"), price: 164.31, priceAsOf: "2026-09-21", today: "2026-09-22",
-  })));
+  }));
+  const val = visibleText(valMarkup);
   // $8.35B, not $8.4B: the market cap now uses the page's one amount rule
   // (scaledAmount, 2dp in B) rather than a second 1dp formatter (PR #531).
-  check("B: valuation reads Market cap $8.35B and P/E Not meaningful, each with a one-line caption",
-    /Market cap \$8\.35B 50\.8M shares × \$164\.31 close, 21 Sep 2026/.test(val) &&
-      /P\/E \(GAAP, trailing\) Not meaningful Loss over/.test(val) && !/never an adjusted figure/.test(val),
+  // THE CAPTIONS MOVED (#552 COWORK #124): a figure's inputs into the card's
+  // "About these figures", a refusal's reason into its tap note.
+  check("B: valuation reads Market cap $8.35B and P/E Not meaningful; the inputs in the details, the reason in the note",
+    /Market cap \$8\.35B P\/E \(GAAP, trailing\) Not meaningful/.test(val) &&
+      /About these figures Market cap: 50\.8M shares × \$164\.31 close, 21 Sep 2026\./.test(val) &&
+      /data-estimate-note="Loss over[^"]*"[^>]*>Not meaningful</.test(valMarkup) && !/never an adjusted figure/.test(val),
     val);
   // TREND: the median beside the newest period (owner review, #522). AVAV's
   // typical quarter is dominated by its acquisition year; the latest is not.
@@ -1214,7 +1219,7 @@ console.log("\n17. round 2 — fiscal-year ends said once, a horizon not reached
     `${(annualMarkup.match(/<th>/g) ?? []).length} columns`);
   check("...and each row's FY label is the card header, with the date tooltip",
     (annualMarkup.match(/class="rowHead"/g) ?? []).length === vAvav2.annual.length &&
-      /<td data-label="Fiscal year" class="rowHead"><abbr class="cellShort" title="Ended /.test(annualMarkup), "");
+      /<td data-label="Fiscal year" class="rowHead"><span[^>]*><span role="button" tabindex="0" title="Ended /.test(annualMarkup), "");
   const growthMarkup = html(React.createElement(M.SecGrowthMarginsCard, { view: vAapl }));
   check("...while the quarterly table keeps its 'Compared with' column",
     /<th>Compared with<\/th>/.test(growthMarkup) && /data-label="Compared with"/.test(growthMarkup), "");

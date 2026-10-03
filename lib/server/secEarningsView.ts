@@ -161,6 +161,11 @@ export function epsBasisNote(accounting: "IFRS" | "US GAAP" | null): string {
     "figure that excludes one-off charges; the two can differ substantially.";
 }
 
+/** The hero's one short line (#552 COWORK #124); epsBasisNote is its tap note. */
+export function epsBasisShort(accounting: "IFRS" | "US GAAP" | null): string {
+  return accounting === "IFRS" ? "EPS is IFRS, as filed." : accounting === "US GAAP" ? "EPS is GAAP, as filed." : "EPS is as filed.";
+}
+
 /** The US GAAP wording — what every stock used to get, IFRS filers included. */
 export const GAAP_EPS_NOTE = epsBasisNote("US GAAP");
 

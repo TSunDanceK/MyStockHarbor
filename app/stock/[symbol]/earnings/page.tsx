@@ -14,7 +14,8 @@ import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark 
 import { awaitingSecRead, cikForSymbol, resolveFactSetForRender } from "@/lib/server/secColdFetch";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import ColdFill from "../ColdFill";
-import { buildSecEarningsView, epsBasisNote, periodWords } from "@/lib/server/secEarningsView";
+import { buildSecEarningsView, epsBasisNote, epsBasisShort, periodWords } from "@/lib/server/secEarningsView";
+import { ReasonedValue } from "@/app/components/EstimatedValue";
 // ONLY WHAT THIS FILE RENDERS. The tone words, the band note, the trend
 // median and the waterfall gate are imported by SecEarningsCards.tsx, which is
 // where they are drawn; re-importing them here would just be a second name for
@@ -816,6 +817,16 @@ export default async function StockEarningsPage({ params }: Props) {
         .wfTotal { border-top: 1px solid rgba(255,255,255,0.10); padding-top: 8px; }
 
         .trendGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+        /* THE TREND TILES (#552 COWORK #124/#125): four rows in every tile, so
+           Typical and Latest share baselines and a left edge across the three,
+           and the pills sit on one row at the bottom. */
+        .trendTile { display: grid; grid-template-rows: auto auto auto 1fr; row-gap: 6px; min-width: 0; font-variant-numeric: tabular-nums; }
+        .trendTileLabel { min-height: 2.6em; }
+        .trendTileValue { margin-top: 0; white-space: nowrap; overflow-wrap: normal; }
+        .trendTile .trendChipRow { align-self: end; margin-top: 6px; }
+        .metricValue, .hbarValue, .wfValue { font-variant-numeric: tabular-nums; }
+        .cardDetailsBody { margin-top: 8px; font-size: 12px; line-height: 1.55; color: rgba(203,213,225,0.72); }
+        .cardDetailsBody p { margin: 0 0 6px; }
         .trendCell { display: grid; gap: 4px; align-content: start; }
         .trendChipRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
         .trendCount { font-size: 11px; color: rgba(148,163,184,0.75); }
@@ -938,7 +949,8 @@ export default async function StockEarningsPage({ params }: Props) {
                   income statement — the same two sentences four times on
                   AVAV. It applies to every EPS on the page, so it sits where
                   the page introduces them; each card keeps a one-line source. */}
-              {secView ? <p className="earningsDataNote heroNote">{epsBasisNote(secView.accounting)}</p> : null}
+              {/* ONE SHORT LINE; THE REST ON TAP (#552 COWORK #124). */}
+              {secView ? <p className="earningsDataNote heroNote"><ReasonedValue text={epsBasisShort(secView.accounting)} reason={epsBasisNote(secView.accounting)} /></p> : null}
               {/* THE ANNUAL-ONLY NOTE (#535 COWORK #15), once, at the top. */}
               {data.annualForm ? <p className="earningsDataNote heroNote">{annualOnlyNote(data.annualForm)}</p> : null}
               <EarningsSymbolPicker currentSymbol={clean} />
