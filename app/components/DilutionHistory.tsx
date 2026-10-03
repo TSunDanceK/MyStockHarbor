@@ -25,7 +25,7 @@ export type DilutionHistoryData = {
   gaps?: { from: string; to: string }[];
   splits?: { date: string; ratio: number }[];
   startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" };
-  threeYear?: { pct: number; base: SharePoint } | { pct: null; reason: "too-short" };
+  threeYear?: { pct: number; base: SharePoint; end: SharePoint } | { pct: null; reason: "too-short" };
 };
 
 function fmtShares(value: number | null) {
