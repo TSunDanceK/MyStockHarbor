@@ -373,10 +373,16 @@ export async function GET(req: NextRequest) {
   }
 
   if (!process.env.FMP_API_KEY) {
-    return NextResponse.json(
-      { error: "Missing FMP_API_KEY environment variable." },
-      { status: 500 }
-    );
+    // NO KEY IS A HEALTHY SKIP, NOT A FAILURE (#553 CODE-B #94, FMP-off). This
+    // used to answer 500 on every run once Production dropped the key -- about
+    // 170 red runs a day across this job, warm-earnings, warm-fundamentals and
+    // warm-stock-data -- for a job with nothing it can do. Mirrors the
+    // warm-price-pool no-key skip: recorded as ok + skipped, so /cache-health
+    // shows a skip rather than either a failure or silence.
+    // No side work is kept: the dynamic-universe enqueue only feeds a queue that
+    // nothing can drain without the key, so it is skipped too.
+    await recordJobRun("warm-earnings", true, { skipped: true, reason: "no FMP_API_KEY" });
+    return NextResponse.json({ ok: true, skipped: true, reason: "no FMP_API_KEY" });
   }
 
   const lock = await acquireLock();
