@@ -176,6 +176,17 @@ export function unresolvedClassCover(
   return { asOf, accession: filing.accession, filed: filing.filed, val: null, derived: "ambiguous", candidates: onDate.map((f) => f.val) };
 }
 
+/** The extractor's cover where it is usable; else the classes as ambiguous, if the filing states two or more. */
+export function keepOrAmbiguous(
+  cover: CoverShares | null,
+  facts: ClassCoverFact[],
+  filing: { accession: string | null; filed: string | null },
+  today: string,
+): CoverShares | null {
+  if (coverIsUsable(cover, today, COVER_SHARES_MAX_AGE_DAYS)) return cover;
+  return unresolvedClassCover(facts, filing) ?? cover;
+}
+
 /**
  * THE ONE CALL a companyfacts reader makes after extracting.
  *
@@ -196,17 +207,6 @@ export function unresolvedClassCover(
  * ambiguous (unresolvedClassCover), so the reason the reader sees is the true
  * one. A usable extractor cover is never replaced by the ambiguous form.
  */
-/** The extractor's cover where it is usable; else the classes as ambiguous, if the filing states two or more. */
-export function keepOrAmbiguous(
-  cover: CoverShares | null,
-  facts: ClassCoverFact[],
-  filing: { accession: string | null; filed: string | null },
-  today: string,
-): CoverShares | null {
-  if (coverIsUsable(cover, today, COVER_SHARES_MAX_AGE_DAYS)) return cover;
-  return unresolvedClassCover(facts, filing) ?? cover;
-}
-
 export async function withClassCover(
   symbol: string,
   cik: string,
