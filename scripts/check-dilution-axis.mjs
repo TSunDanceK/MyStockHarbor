@@ -49,7 +49,10 @@ const labels = [...flat.html.matchAll(/text-anchor="end"[^>]*>([^<]+)</g)].map((
 check("3. three right-hand labels in the page's share format", labels.filter((l) => /^\d+\.\d{2}B$/.test(l)).length === 3, labels.join(" | "));
 check("4. two decimals, and 'Unchanged' under 0.01%",
   M.formatShareChange(-0.0231) === "-0.02%" && M.formatShareChange(0.004) === "Unchanged" && M.formatShareChange(15) === "+15.00%" && M.formatShareChange(null) === "—");
-check("...and the trend cell keeps 'Roughly flat'", /Roughly flat/.test(flat.html));
+// THE TREND WORDS COME FROM THE 3-YEAR FIGURE NOW (#552 COWORK #89 §5): a
+// flat count over three years reads "roughly unchanged", hedged.
+check("...and a flat 3-year count reads 'roughly unchanged'",
+  M.threeYearWords(-0.02).label === "Share count roughly unchanged over the last 3 years" && M.threeYearWords(-0.02).tone === "flat");
 {
   const old = await load(SRC.replace(
     "const { lo: minV, hi: maxV } = shareAxis(values);",
