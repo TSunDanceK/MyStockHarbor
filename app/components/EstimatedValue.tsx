@@ -24,42 +24,56 @@ export { ESTIMATE_COLOUR, ESTIMATE_SIGN, type EstimateMark };
 /** The popover's widest, and the gutter it keeps from each viewport edge. */
 export const NOTE_MAX_WIDTH = 280;
 export const NOTE_GUTTER = 16;
+/** Less room than this below the trigger, and more above, and the note opens upward. */
+export const NOTE_FLIP_SPACE = 120;
+
+export type NotePlace = { left: number; width: number } & ({ top: number } | { bottom: number });
 
 /**
  * WHERE THE NOTE GOES (#552 COWORK #113): under the trigger, but never past a
  * viewport edge. A note anchored at the trigger's left pushed a 360 px page
  * sideways from a right-hand cell; fixed positioning also escapes a parent's
  * overflow clipping (the hero stat row). Pure, so the check can drive it.
+ *
+ * AND ABOVE IT NEAR THE FOOT OF THE SCREEN (#552 COWORK #115): a tile in the
+ * bottom ~90 px of a phone had its note cut off. Anchored by `bottom` when it
+ * flips, so the note's own height (unknown before it renders) never matters.
  */
-export function notePlacement(trigger: { left: number; bottom: number }, viewportWidth: number): { left: number; top: number; width: number } {
+export function notePlacement(trigger: { left: number; top?: number; bottom: number }, viewportWidth: number, viewportHeight?: number): NotePlace {
   const width = Math.max(0, Math.min(NOTE_MAX_WIDTH, viewportWidth - 2 * NOTE_GUTTER));
   const left = Math.max(NOTE_GUTTER, Math.min(trigger.left, viewportWidth - NOTE_GUTTER - width));
+  if (viewportHeight !== undefined && trigger.top !== undefined) {
+    const below = viewportHeight - trigger.bottom;
+    if (below < NOTE_FLIP_SPACE && trigger.top > below) return { left, width, bottom: viewportHeight - trigger.top + 6 };
+  }
   return { left, top: trigger.bottom + 6, width };
 }
 
 function Noted({ children, note, style, label }: { children: ReactNode; note: string; style?: CSSProperties; label: string }) {
   // OPEN IS WHERE IT IS: null is closed. Measured when it opens, in the event.
-  const [place, setPlace] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [place, setPlace] = useState<NotePlace | null>(null);
   const open = place !== null;
   const setOpen = (next: boolean | ((was: boolean) => boolean)) => {
     const want = typeof next === "function" ? next(open) : next;
     if (!want || !ref.current) { setPlace(null); return; }
     const r = ref.current.getBoundingClientRect();
-    setPlace(notePlacement({ left: r.left, bottom: r.bottom }, document.documentElement.clientWidth));
+    setPlace(notePlacement({ left: r.left, top: r.top, bottom: r.bottom }, document.documentElement.clientWidth, document.documentElement.clientHeight));
   };
   const id = useId();
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setPlace(null); };
-    // Fixed to the viewport, so a scroll or resize would leave it behind: close instead.
+    // Fixed to the viewport, so a scroll or resize would leave it behind: close
+    // instead. CAPTURE PHASE, so an inner container's scroll (which does not
+    // bubble to window) closes it too (#552 COWORK #115).
     const close = () => setPlace(null);
     document.addEventListener("pointerdown", away);
-    window.addEventListener("scroll", close, { passive: true });
+    window.addEventListener("scroll", close, { passive: true, capture: true });
     window.addEventListener("resize", close);
     return () => {
       document.removeEventListener("pointerdown", away);
-      window.removeEventListener("scroll", close);
+      window.removeEventListener("scroll", close, { capture: true });
       window.removeEventListener("resize", close);
     };
   }, [open]);
@@ -87,7 +101,7 @@ function Noted({ children, note, style, label }: { children: ReactNode; note: st
           id={id}
           role="tooltip"
           style={{
-            position: "fixed", left: place.left, top: place.top, zIndex: 50, width: place.width,
+            position: "fixed", left: place.left, ...("top" in place ? { top: place.top } : { bottom: place.bottom }), zIndex: 50, width: place.width,
             padding: "8px 10px", borderRadius: 8, background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)",
             color: "#e2e8f0", fontSize: 12, fontWeight: 500, lineHeight: 1.45, letterSpacing: 0, whiteSpace: "normal",
           }}

@@ -119,6 +119,10 @@ type Props = {
   trailing?: React.ReactNode;
   /** Opens the chart fullscreen. Omitted when already fullscreen. (#553 COWORK #28) */
   onFullscreen?: () => void;
+  /** The page token, sent to /api/history for its same-origin check on the Tiingo path (#553 COWORK #103). */
+  pageToken?: string;
+  /** Told whose bars each /api/history answer is (its `provider`, null when absent), for the chart credit. */
+  onProvider?: (provider: string | null) => void;
 };
 
 // ---- Static config --------------------------------------------------------
@@ -776,7 +780,7 @@ function ChartToolsSheet({ sections, onAction, onClose }: {
 
 // ---- Component ------------------------------------------------------------
 
-export default function InteractiveChart({ symbol, seed, isMobile = false, fill = false, height = 460, compact = false, trailing, onFullscreen }: Props) {
+export default function InteractiveChart({ symbol, seed, isMobile = false, fill = false, height = 460, compact = false, trailing, onFullscreen, pageToken = "", onProvider }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<ChartApi | null>(null);
   const disposeRef = useRef<((el: HTMLElement) => void) | null>(null);
@@ -1052,13 +1056,14 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     setLoading(true);
     setErr(null);
     const url = `/api/history?symbol=${encodeURIComponent(symbol)}&interval=${interval}&days=2000`;
-    fetch(url, { cache: "no-store" })
+    fetch(url, { cache: "no-store", ...(pageToken ? { headers: { "x-msh-page-token": pageToken } } : {}) })
       .then((r) => {
         if (!r.ok) throw new Error("history fetch failed");
         return r.json();
       })
-      .then((json: { points?: SeedPoint[] }) => {
+      .then((json: { points?: SeedPoint[]; provider?: string }) => {
         if (cancelled) return;
+        onProvider?.(typeof json?.provider === "string" ? json.provider : null);
         const pts = Array.isArray(json?.points) ? json.points : [];
         rawDataRef.current = mapToKLine(pts);
         pushData();

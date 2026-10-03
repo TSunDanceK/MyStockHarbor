@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
-import StockPriceChart from "./StockPriceChart";
+import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
@@ -19,7 +19,8 @@ import CompanyProfile, {
 import DilutionHistory, {
   type DilutionHistoryData,
 } from "@/app/components/DilutionHistory";
-import ReturnsBarChart, { type ReturnBar } from "@/app/components/ReturnsBarChart";
+import type { ReturnBar } from "@/app/components/ReturnsBarChart";
+import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
 import ShareButton from "@/app/components/ShareButton";
 
 type Quote = {
@@ -127,6 +128,9 @@ type Point = {
   high?: number;
   low?: number;
   volume?: number;
+  // Tiingo only (step 3, #553 COWORK #57 §2): today's partial bar, "today so
+  // far (IEX), hh:mm ET". It carries no volume.
+  label?: string;
 };
 
 type StockSymbolPageClientProps = {
@@ -158,6 +162,12 @@ type StockSymbolPageClientProps = {
   // The linked "Market data from Tiingo.com", rendered by page.tsx when
   // PRICE_PROVIDER_STOCK_PAGE=tiingo (step 4). Shown only under a Tiingo quote.
   tiingoCredit?: ReactNode;
+  // The linked "Market data from Tiingo.com", rendered by page.tsx when the
+  // series shown can be Tiingo's (step 3). Shown under the chart only while
+  // the series actually shown is Tiingo's (#553 COWORK #103).
+  historyCredit?: ReactNode;
+  // Whose bars `initialHistory` is: "tiingo", "fmp" or "none".
+  historyProvider?: string;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -743,8 +753,11 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
+  // Whose bars the chart is showing: the seed's provider, or what the client
+  // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
+  const [shownProvider, setShownProvider] = useState<string | null>(seededHistory ? historyProvider ?? null : null);
   const [quote, setQuote] = useState<Quote | null>(
     initialQuote?.price != null || seed?.price != null
       ? {
@@ -823,22 +836,25 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         // No cache:"no-store". /api/history already declares revalidate = 900
         // and returns its own tiered s-maxage; a no-store request header opted
         // the browser and the CDN out of both.
-        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`);
+        // The page token lets a browser that sends no Sec-Fetch-Site through
+        // /api/history's same-origin check on the Tiingo path (#553 COWORK #103).
+        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined);
         if (!res.ok) throw new Error("History fetch failed");
-        const data = (await res.json()) as { symbol: string; points: any[] };
+        const data = (await res.json()) as { symbol: string; points: any[]; provider?: string };
         if (cancelled) return;
+        setShownProvider(typeof data.provider === "string" ? data.provider : null);
         const ptsRaw = Array.isArray(data.points) ? data.points : [];
-        const pts: Point[] = ptsRaw.map((p: any) => ({ date: String(p?.date ?? ""), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume) })).filter((p) => p.date && Number.isFinite(p.close));
+        const pts: Point[] = ptsRaw.map((p: any) => ({ date: String(p?.date ?? ""), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume), label: typeof p?.label === "string" ? p.label : undefined })).filter((p) => p.date && Number.isFinite(p.close));
         setHistory(pts);
       } catch {
         if (cancelled) return;
-        setErr("Failed to load stock page."); setHistory([]);
+        setErr("Failed to load stock page."); setHistory([]); setShownProvider(null);
       }
       finally { if (!cancelled) setPriceLoading(false); }
     }
     loadHistory();
     return () => { cancelled = true; };
-  }, [symbol, seededHistory]);
+  }, [symbol, seededHistory, pageToken]);
 
   // -- Quote ---------------------------------------------------------------
   // Still fetched on every load, and deliberately so. `initialQuote` seeds the
@@ -1118,16 +1134,16 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                     <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
                   </div>
                 </div>
-                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} />
+                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} />
               </section>
 
               {/* -- Daily / weekly returns --------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Price Action</div>
-                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily &amp; weekly close-over-close change</h2>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily or weekly close-over-close change</h2>
+                {/* ONE card, Daily | Weekly toggle, Daily first (#552 COWORK #89). Both views server-rendered. */}
                 <div className="returns-charts-grid">
-                  <ReturnsBarChart symbol={symbol} periodLabel="Daily" compareLabel="previous day's close" bars={dailyReturns} />
-                  <ReturnsBarChart symbol={symbol} periodLabel="Weekly" compareLabel="previous week's close" bars={weeklyReturns} />
+                  <ReturnsToggleCard symbol={symbol} daily={dailyReturns} weekly={weeklyReturns} />
                 </div>
               </section>
 
@@ -1137,14 +1153,14 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Key levels &amp; signals</h2>
                 <div className="indicator-rows">
                   {[
-                    { label: "MA50", value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—", sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma50Pct) },
-                    { label: "MA200", value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—", sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma200Pct) },
+                    { label: "MA50", value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—", sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : "Distance unavailable", tone: metricToneFromPct(ma50Pct), title: closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : undefined },
+                    { label: "MA200", value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—", sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : "Distance unavailable", tone: metricToneFromPct(ma200Pct), title: closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : undefined },
                     { label: "RSI (14)", value: typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—", sub: typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought zone" : lastRsi <= 30 ? "Oversold zone" : "Neutral zone") : "Momentum unavailable", tone: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
                     { label: "MACD Signal", value: macdSignal?.label ?? "—", sub: macdSignal?.meta ?? "Momentum unavailable", tone: macdSignal?.tone ?? "yellow" as "green" | "yellow" | "red" },
                     { label: "Macro Support", value: macroSupport ? `$${macroSupport.lower.toFixed(2)}–$${macroSupport.upper.toFixed(2)}` : "Not identified", sub: macroSupport ? `${macroSupport.distancePct.toFixed(1)}% below price · ${macroSupport.touches} touches` : "No repeated weekly support zone found", tone: supportTone(macroSupport?.distancePct ?? null) },
                     { label: "Support Quality", value: macroSupport ? `${macroSupport.touches} touches` : "—", sub: macroSupport?.volumeRatio != null ? `${macroSupport.volumeRatio.toFixed(1)}× zone volume` : "Volume data unavailable", tone: supportQualityTone(macroSupport) },
                   ].map((row) => (
-                    <div key={row.label} className="indicator-row">
+                    <div key={row.label} className="indicator-row" title={"title" in row ? row.title : undefined}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 110, flex: "0 0 auto" }}>
                         <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(row.tone), boxShadow: `0 0 5px ${toneColor(row.tone)}66`, flex: "0 0 auto" }} />
                         <span style={{ fontSize: 14, fontWeight: 700, color: "rgba(226,232,240,0.75)" }}>{row.label}</span>

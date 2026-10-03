@@ -583,6 +583,9 @@ const checkBackfillLockout = async () => ({ locked: false, retryAfterSeconds: 0 
 const recordBackfillFailure = async () => {};
 const clearBackfillFailures = async () => {};
 const checkBackfillKey = () => bench.keyOk === true;
+// #701's bar filter composes inside this one (#553 COWORK #107); identity here,
+// since this suite is about perf. Its own check runs the real one.
+const pickersWithoutBars = (d) => d;
 const NextResponse = { json: (data, init) => ({ data, status: init?.status ?? 200, headers: init?.headers ?? {} }) };
 let lastBuildStats = null;
 export const reset = (over) => { memo = null; MEMORY_CACHE_MS = 0; Object.keys(bench).forEach((k) => delete bench[k]); Object.assign(bench, { cache: null, lock: "token", gate: "allowed", lastGood: null, published: null, built: null, buildThrows: false }, over); };
@@ -651,8 +654,17 @@ const pickersBuilderSrc = read(PICKERS_BUILDER);
   const h = code(PICKERS_BUILDER, pickersBuilderSrc);
   const start = h.search(/async function handlePickersRequest\(/);
   const body = start >= 0 ? h.slice(start, h.search(/export async function GET\(req: NextRequest\)/)) : "";
-  const payloadAnswers = body.match(/NextResponse\.json\(\s*[a-zA-Z.]+\.data\b|NextResponse\.json\(data\b/g) ?? [];
+  const payloadAnswers = body.match(/NextResponse\.json\(\s*(?:pickersWithoutBars\()?(?:[a-zA-Z.]+\.data\b|data\b)/g) ?? [];
   check("#103: no /api/pickers answer hands a payload to NextResponse.json unfiltered", body.length > 0 && payloadAnswers.length === 0, payloadAnswers.join(" | "));
+}
+
+// #107: /pickers' own client props carry no perf either (they ride in the HTML/RSC).
+{
+  const pickersPageOk = (src) => /return publicPickersPayload\(pickersWithoutBars\(await getPickersData\(SITE_ORIGIN\)\)\) as unknown as PickersPayload;/.test(code("app/pickers/page.tsx", src));
+  const pageSrc = read("app/pickers/page.tsx");
+  check("#107: /pickers strips perf (and bars) from PickersClient's props", pickersPageOk(pageSrc));
+  const mut = pageSrc.replace("publicPickersPayload(pickersWithoutBars(await getPickersData(SITE_ORIGIN)))", "pickersWithoutBars(await getPickersData(SITE_ORIGIN))");
+  check("mutant caught: /pickers props keep perf", mut !== pageSrc && !pickersPageOk(mut));
 }
 
 // ── 12. the clients, on their code ──────────────────────────────────────────
@@ -716,12 +728,12 @@ for (const [label, from, to] of ACTION_MUTANTS) {
   check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no assertion failed");
 }
 const PICKERS_MUTANTS = [
-  ["/api/pickers serves the cached payload unfiltered", PICKERS_BUILDER, /if \(!forceRefresh && cached\?\.data\) \{\s*memo = \{ ts: now, data: cached\.data \};\s*return NextResponse\.json\(publicPickersPayload\(cached\.data\),/, "if (!forceRefresh && cached?.data) {\n    memo = { ts: now, data: cached.data };\n\n    return NextResponse.json(cached.data,"],
-  ["/api/pickers serves the memo unfiltered", PICKERS_BUILDER, /NextResponse\.json\(publicPickersPayload\(memo\.data\),/, "NextResponse.json(memo.data,"],
-  ["/api/pickers serves a fresh build unfiltered", PICKERS_BUILDER, /return NextResponse\.json\(publicPickersPayload\(data\), \{/, "return NextResponse.json(data, {"],
-  ["/api/pickers serves the build-threw fallback unfiltered", PICKERS_BUILDER, /\} catch \(error\) \{\s*if \(cached\?\.data\) \{\s*memo = \{ ts: now, data: cached\.data \};\s*return NextResponse\.json\(publicPickersPayload\(cached\.data\),/, "} catch (error) {\n    if (cached?.data) {\n      memo = { ts: now, data: cached.data };\n\n      return NextResponse.json(cached.data,"],
-  ["/api/pickers serves the degraded-build fallback unfiltered", PICKERS_BUILDER, /recordBuildStats\(data, \{ degradedFallbackUsed: true, wrote: false \}\);\s*memo = \{ ts: now, data: cached\.data \};\s*return NextResponse\.json\(publicPickersPayload\(cached\.data\),/, "recordBuildStats(data, { degradedFallbackUsed: true, wrote: false });\n      memo = { ts: now, data: cached.data };\n\n      return NextResponse.json(cached.data,"],
-  ["/api/pickers serves the preview's last-good unfiltered", PICKERS_BUILDER, /NextResponse\.json\(publicPickersPayload\(lastGood\.data\),/, "NextResponse.json(lastGood.data,"],
+  ["/api/pickers serves the cached payload unfiltered", PICKERS_BUILDER, /if \(!forceRefresh && cached\?\.data\) \{\s*memo = \{ ts: now, data: cached\.data \};\s*return NextResponse\.json\(publicPickersPayload\(pickersWithoutBars\(cached\.data\)\),/, "if (!forceRefresh && cached?.data) {\n    memo = { ts: now, data: cached.data };\n\n    return NextResponse.json(pickersWithoutBars(cached.data),"],
+  ["/api/pickers serves the memo unfiltered", PICKERS_BUILDER, /NextResponse\.json\(publicPickersPayload\(pickersWithoutBars\(memo\.data\)\),/, "NextResponse.json(pickersWithoutBars(memo.data),"],
+  ["/api/pickers serves a fresh build unfiltered", PICKERS_BUILDER, /return NextResponse\.json\(publicPickersPayload\(pickersWithoutBars\(data\)\), \{/, "return NextResponse.json(pickersWithoutBars(data), {"],
+  ["/api/pickers serves the build-threw fallback unfiltered", PICKERS_BUILDER, /\} catch \(error\) \{\s*if \(cached\?\.data\) \{\s*memo = \{ ts: now, data: cached\.data \};\s*return NextResponse\.json\(publicPickersPayload\(pickersWithoutBars\(cached\.data\)\),/, "} catch (error) {\n    if (cached?.data) {\n      memo = { ts: now, data: cached.data };\n\n      return NextResponse.json(pickersWithoutBars(cached.data),"],
+  ["/api/pickers serves the degraded-build fallback unfiltered", PICKERS_BUILDER, /recordBuildStats\(data, \{ degradedFallbackUsed: true, wrote: false \}\);\s*memo = \{ ts: now, data: cached\.data \};\s*return NextResponse\.json\(publicPickersPayload\(pickersWithoutBars\(cached\.data\)\),/, "recordBuildStats(data, { degradedFallbackUsed: true, wrote: false });\n      memo = { ts: now, data: cached.data };\n\n      return NextResponse.json(pickersWithoutBars(cached.data),"],
+  ["/api/pickers serves the preview's last-good unfiltered", PICKERS_BUILDER, /NextResponse\.json\(publicPickersPayload\(pickersWithoutBars\(lastGood\.data\)\),/, "NextResponse.json(pickersWithoutBars(lastGood.data),"],
   ["publicPickersPayload keeps perf", PERF, /if \(k !== "perf"\) out\[k\] = v;/, "out[k] = v;"],
   ["publicPickersPayload strips perf from the shared memo too", PERF, /const signalRecords = records\.map\(\(r\) => \{/, "for (const r of records) if (r && typeof r === \"object\") delete (r as Record<string, unknown>).perf;\n  const signalRecords = records.map((r) => {"],
 ];

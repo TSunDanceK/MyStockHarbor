@@ -56,12 +56,14 @@ console.log("\n3. every serve re-reads the pool");
 const serveRules = (s, sector) => [
   /items: await withLivePoolPrices\(cleaned\),/.test(s),
   /return opts\.livePrices === false \? dedupeAndSortItems\(items\) : withLivePoolPrices\(items\);/.test(s),
-  /getCachedDayItems\(date, \{ livePrices: false \}\)/.test(sector) && /await overlayLivePoolPrices\(days\.flat\(\)\)/.test(sector),
+  /getCachedDayItems\(date, \{ livePrices: false \}\)/.test(sector) && /days\.flat\(\)\.filter\(\(it\) => constituentSet\.has\(/.test(sector) && /await overlayLivePoolPrices\(mine\)/.test(sector),
   /pool = await readPricePoolBulk\(want\);/.test(s),
 ];
 check("the cached day, Show more and the sector panels (one batched read) all overlay live pool prices", serveRules(SRC, SECTOR).every(Boolean), serveRules(SRC, SECTOR).join());
 check("MUTATION: the cached day served from the blob as stored → caught",
   !serveRules(once(SRC, "items: await withLivePoolPrices(cleaned),", "items: cleaned,"), SECTOR).every(Boolean));
+check("MUTATION: the sector panels overlay every calendar row, not just the sector's → caught",
+  !serveRules(SRC, once(SECTOR, "const live = await overlayLivePoolPrices(mine)", "const live = await overlayLivePoolPrices(days.flat())")).every(Boolean));
 check("MUTATION: the sector panels read the pool per date → caught",
   !serveRules(SRC, once(SECTOR, "getCachedDayItems(date, { livePrices: false })", "getCachedDayItems(date)")).every(Boolean));
 

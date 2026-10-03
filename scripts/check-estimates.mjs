@@ -179,7 +179,7 @@ check("MUTATION: a filed figure rendered in the estimate colour → caught",
 const notePlacementSrc = CSRC.match(/export function notePlacement[\s\S]*?\n\}/)?.[0] ?? "";
 const placeFrom = (src) => {
   const js = ts.transpileModule(src.replace("export function", "function"), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-  return new Function("NOTE_MAX_WIDTH", "NOTE_GUTTER", `${js}\nreturn notePlacement;`)(280, 16);
+  return new Function("NOTE_MAX_WIDTH", "NOTE_GUTTER", "NOTE_FLIP_SPACE", `${js}\nreturn notePlacement;`)(280, 16, 120);
 };
 const placeOk = (fn) => [[300, 360], [20, 360], [200, 1280], [0, 320]].every(([left, vw]) => {
   const p = fn({ left, bottom: 100 }, vw);
@@ -188,7 +188,18 @@ const placeOk = (fn) => [[300, 360], [20, 360], [200, 1280], [0, 320]].every(([l
 check("the note's box stays inside the viewport with a 16 px gutter (360 px, 320 px and desktop; right-hand cells)", notePlacementSrc !== "" && placeOk(placeFrom(notePlacementSrc)));
 check("MUTATION: the note anchored at the trigger's left again → caught",
   !placeOk(placeFrom(once(notePlacementSrc, "Math.max(NOTE_GUTTER, Math.min(trigger.left, viewportWidth - NOTE_GUTTER - width))", "trigger.left"))));
-check("the note is position:fixed (escapes the hero row's clipping) and closes on scroll", /position: "fixed", left: place\.left, top: place\.top/.test(CSRC) && /addEventListener\("scroll", close/.test(CSRC));
+check("the note is position:fixed (escapes the hero row's clipping) and closes on any scroll, inner containers included (capture phase)",
+  /position: "fixed", left: place\.left, \.\.\.\("top" in place \? \{ top: place\.top \} : \{ bottom: place\.bottom \}\)/.test(CSRC) && /addEventListener\("scroll", close, \{ passive: true, capture: true \}\)/.test(CSRC));
+// NEAR THE FOOT OF THE SCREEN IT OPENS UPWARD (#552 COWORK #115): a 360×640
+// phone, a tile whose bottom edge is 40 px from the foot.
+const flipOk = (fn) => {
+  const low = fn({ left: 20, top: 580, bottom: 600 }, 360, 640);
+  const high = fn({ left: 20, top: 100, bottom: 120 }, 360, 640);
+  return "bottom" in low && low.bottom === 640 - 580 + 6 && "top" in high && high.top === 126;
+};
+check("near the foot of the screen the note opens upward; elsewhere below", flipOk(placeFrom(notePlacementSrc)));
+check("MUTATION: the flip removed → caught",
+  !flipOk(placeFrom(once(notePlacementSrc, "if (below < NOTE_FLIP_SPACE && trigger.top > below) return", "if (false) return"))));
 
 // Every surface that opts in renders the mark AND the key. Map: the file that
 // passes { withEstimates: true } → the file that renders its figures.
