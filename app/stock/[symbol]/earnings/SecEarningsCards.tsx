@@ -5,7 +5,7 @@
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
 import Link from "next/link";
 import GrowthVisuals, { SeeAllTheNumbers } from "./GrowthVisuals";
-import { buildGrowthVisuals } from "@/lib/growthVisuals";
+import { anyDerived, buildGrowthVisuals, GROSS_MARGIN_MEANS } from "@/lib/growthVisuals";
 import {
   CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
   filingCreditText, filingNoticeText, isCrossing, periodWords, retiredSource,
@@ -707,6 +707,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
   // Every row needs the same period a year earlier on file. When none has it
   // this rendered a header row over an empty body; it now says why instead.
   if (view.margins.length === 0) return <GrowthMarginsEmpty one={w.one} />;
+  const pictures = buildGrowthVisuals(view, { oneOffs: view.oneOffs, unchecked: view.oneOffUnchecked });
   return (
     <section className="card">
       <div className="eyebrow">Growth &amp; margins</div>
@@ -714,39 +715,41 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
       {/* "PERIODS ON FILE", NOT "QUARTERS". These are the periods the filer
           published, in order — not a contiguous run. AZN's eight rows carry a
           three-quarter hole and the table presented them as consecutive. */}
-      {/* ── THE GAP EXPLANATION IS VISIBLE TEXT, NOT AN abbr TITLE ────────────
-          It lived only in the badge's `title`, which is hover-only: on a phone
-          there is nothing to hover, so most of the audience saw an unexplained
-          "gap" and no way to find out what it meant. This paragraph already
-          carries two other clarifications, so it is where the third belongs.
-          The badge stays as a per-row marker — it now points at an explanation
-          the reader can actually read. */}
-      <p>
-        Each {w.one} as filed, compared with the same fiscal {w.one} a year earlier.
-        {/* ONLY WHERE THERE IS A Q4 ROW WITHOUT EPS. Visible, not hover-only —
-            the same lesson as the gap badge. */}
-        {view.margins.some((m, i) => /^Q4 /.test(m.label) && view.growth[i]?.epsYoY == null)
-          ? <> {Q4_EPS_SHORT}</>
-          : null}
-        {/* THE GAP SENTENCE ONLY WHEN A ROW IS MARKED gap. It explains a
-            badge, and on a filer with no gap it explained nothing. */}
-        {view.margins.some((m) => m.gapAfter) ? (
-          <>
-            {" "}A row marked <strong>gap</strong> has no filing on file for the period immediately
-            before it — these are the periods the company published, not a consecutive run of {w.many}.
-          </>
+      {/* THE GAP EXPLANATION IS TEXT, NOT AN abbr TITLE: the badge's hover-only
+          `title` left phone readers an unexplained "gap". It now sits under
+          "About these figures" below, readable on tap. */}
+      {/* ONE SHORT LINE ABOVE THE PICTURE; THE REST UNDER "About these figures"
+          (#563 COWORK #56 item 2: the card was taller than a phone screen). The
+          dropdown is a plain <details> in this server-rendered card, so its text
+          is in the page's HTML for readers and crawlers alike, closed or open.
+          The gap and Q4 EPS sentences stay visible text there, never hover-only. */}
+      <p>Sales, profit or loss and gross margin each {w.one}, as filed. Tap a {w.one} for its figures.</p>
+      {/* THE PICTURE (#563 COWORK #35a/#36): C's charts on one time axis, built
+          from this view, keyed to tableBasis like the nouns above; the profit
+          chart draws only because the view carries every period's one-off note
+          (view.oneOffs). */}
+      <GrowthVisuals data={pictures} notReported={NOT_REPORTED} />
+      <details className="gvAbout">
+        <summary style={{ cursor: "pointer", fontWeight: 800, margin: "8px 0" }}>About these figures</summary>
+        <p>
+          Each {w.one} as filed, compared with the same fiscal {w.one} a year earlier.
+          {/* ONLY WHERE THERE IS A Q4 ROW WITHOUT EPS. */}
+          {view.margins.some((m, i) => /^Q4 /.test(m.label) && view.growth[i]?.epsYoY == null)
+            ? <> {Q4_EPS_SHORT}</>
+            : null}
+          {/* THE GAP SENTENCE ONLY WHEN A ROW IS MARKED gap. */}
+          {view.margins.some((m) => m.gapAfter) ? (
+            <>
+              {" "}A row marked <strong>gap</strong> has no filing on file for the period immediately
+              before it — these are the periods the company published, not a consecutive run of {w.many}.
+            </>
+          ) : null}
+        </p>
+        <p>{GROSS_MARGIN_MEANS}</p>
+        {anyDerived(pictures.quarters) ? (
+          <p>* Not filed as a {pictures.quarters!.one} of its own; worked out from the company&rsquo;s filings. Tap the {pictures.quarters!.one} for how.</p>
         ) : null}
-      </p>
-      {/* ── THE CHART IS KEYED TO tableBasis, LIKE THE NOUNS ABOVE ───────────
-          Same list, same order, same basis. A chart headed "by quarter" over a
-          table of fiscal years is the defect the noun rule already exists to
-          stop, one element further down the card — and a reader trusts a
-          picture faster than a column header. */}
-      {/* THE PICTURE (#563 COWORK #35a/#36): C's three charts on one time axis,
-          built from this view; the profit chart draws only because the view
-          carries every period's one-off note (view.oneOffs). It replaces the
-          old single growth/margin bar chart, removed with this swap. */}
-      <GrowthVisuals data={buildGrowthVisuals(view, { oneOffs: view.oneOffs, unchecked: view.oneOffUnchecked })} notReported={NOT_REPORTED} />
+      </details>
       <MarginDelta view={view} />
       {/* THE FULL TABLE, collapsed under "See all the numbers" (#35a §5). */}
       <SeeAllTheNumbers>
