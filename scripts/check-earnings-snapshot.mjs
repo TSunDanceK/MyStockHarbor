@@ -23,7 +23,15 @@
 // NO FIXTURE SUPPLIES AN EXPECTED VALUE. data/sec/factset-fixture-*.json come
 // from live companyfacts via the shipped extractor. Every number is SEC's.
 import fs from "node:fs";
-import { loadSnapshot, loadProfile, html, visibleText, once, React } from "./lib/render-snapshot.mjs";
+import { loadSnapshot as loadShipped, loadProfile, html, visibleText, once, React } from "./lib/render-snapshot.mjs";
+
+// ── THE REVENUE, NET INCOME AND NET MARGIN TILES ARE RETIRED (#552 COWORK #134,
+// 2026-10-03): hidden, not removed, behind SHOW_CHARTED_METRIC_TILES; the
+// annual chart shows those figures now (check-snapshot-annual-chart). This
+// check keeps testing their copy WITH THE TILES RESTORED, so the hidden code
+// stays correct for the day they come back. Every load below goes through it.
+const RESTORE_TILES = once("const SHOW_CHARTED_METRIC_TILES = false;", "const SHOW_CHARTED_METRIC_TILES = true;");
+const loadSnapshot = (mutate = (src) => src) => loadShipped((src) => mutate(RESTORE_TILES(src)));
 
 // EVERY MUTATION BELOW GOES THROUGH `once`. These loaders concatenate several
 // modules, and a string anchor that appears in more than one of them rewrites

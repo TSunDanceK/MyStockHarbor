@@ -46,10 +46,12 @@ export const WRITE_SITES = [
   { file: "lib/server/jobGuard.ts", key: "key", cls: "small" },
   { file: "lib/server/jobRuns.ts", key: "`${JOB_RUN_PREFIX}:${job}`", cls: "small" },
   { file: "lib/server/marketData/jobs.ts", key: "TIINGO_QUOTES_KEY", cls: "listed", candidate: "TIINGO_QUOTES_KEY" },
-  { file: "lib/server/marketData/jobs.ts", key: "tiingoEodKey(sym", cls: "chunked", bound: "EOD_WRITE_CHUNK rows per pipeline; pinned below" },
+  // Two sites (#553 COWORK #124): the night's re-pull and the already-complete backfill, both EOD_WRITE_CHUNK rows per pipeline.
+  { file: "lib/server/marketData/jobs.ts", key: "tiingoEodKey(sym", cls: "chunked", bound: "EOD_WRITE_CHUNK rows per pipeline; pinned below", count: 2 },
   { file: "lib/server/marketData/jobs.ts", key: "TIINGO_EOD_META_KEY", cls: "small" },
   // Step 5 (#553 COWORK #98): the newest bar per symbol, one HSET a complete night (~150 B a row).
-  { file: "lib/server/marketData/jobs.ts", key: "TIINGO_EOD_LAST_KEY", cls: "listed", candidate: "TIINGO_EOD_LAST_KEY" },
+  // Two sites: the night's whole rewrite, and the backfill's HSET of at most EOD_WRITE_CHUNK new fields per pipeline (#553 COWORK #124).
+  { file: "lib/server/marketData/jobs.ts", key: "TIINGO_EOD_LAST_KEY", cls: "listed", candidate: "TIINGO_EOD_LAST_KEY", count: 2 },
   // Step 5: the Tiingo jobs' symbols-only universe (~6 B a symbol), one SET per in-session warm-price-pool run,
   // and off hours only when the key is absent or older than 6 h (#553 COWORK #120).
   { file: "lib/server/tiingoUniverse.ts", key: "TIINGO_UNIVERSE_KEY", cls: "small" },
