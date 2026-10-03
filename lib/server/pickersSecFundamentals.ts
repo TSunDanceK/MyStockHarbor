@@ -9,8 +9,10 @@
 //
 //   Market Cap      price × cover-page shares          secValuation.marketCap
 //   PS Ratio        cap ÷ TTM revenue (guarded)        secValuation.valuationMultiples
-//   PB Ratio        cap ÷ latest equity                secValuation.valuationMultiples
-//   Ent. Value      cap + short + long debt − cash     the evEbitda inputs, all present
+//   PB Ratio        cap ÷ latest equity                secValuation.valuationMultiples (or
+//                                                      "derived": total equity − filed NCI)
+//   Ent. Value      cap + short + long debt − cash     secEstimates.enterpriseValueOf (filed,
+//                                                      or ≈ when only short-term debt is untagged)
 //   P/FCF           cap ÷ TTM (OCF − capex)            below
 //   Revenue         TTM, refused by revenueLineIncomplete (imported, via multipleInputs)
 //   Op. Income, Net Income, FCF    TTM                 secValuation.twelveMonthsOf
@@ -55,6 +57,7 @@ import {
   marketCap,
   multipleInputs,
   peRatio,
+  REFUSAL_CELL_WORD,
   twelveMonthsOf,
   valuationInputs,
   valuationMultiples,
@@ -65,6 +68,7 @@ import {
   type ValuationInputs,
   type ValuationRefusal,
 } from "./secValuation";
+import { enterpriseValueOf, type Estimate } from "./secEstimates";
 import { isBankOrInsurer, type CellWhyCode, type CellWhyColumn } from "../pickerCellWhy";
 import { secGrowthFacts, type SecGrowthFacts } from "./pickersSecEarningsGrowth";
 
@@ -130,7 +134,12 @@ export type SecPickerRow = {
   unit: SecPickerUnit;
   /** When the job built it (ms). */
   at: number;
-  inputs: Pick<ValuationInputs, "shares" | "refusals">;
+  /**
+   * `sic` (#553 COWORK #102, 2026-10-03): the filer's SIC, for A's bank gate on
+   * the ≈ Ent. Value (secEstimates.enterpriseValueOf). Absent on a row written
+   * before it existed, or for a filer with none: no estimate (fail-closed).
+   */
+  inputs: Pick<ValuationInputs, "shares" | "refusals" | "sic">;
   m: MultipleInputs;
   operatingIncome: number | null;
   netIncome: number | null;
@@ -227,6 +236,26 @@ export type SecPickerFigures = {
   divGrowth: number | null;
 };
 
+/**
+ * ESTIMATES ON PICKERS (#553 COWORK #102, A's layer from #696). Pickers opts
+ * into A's estimate layer for the two columns it has a back-tested method for:
+ *   Ent. Value  ≈ when only short-term debt is untagged (M2, enterpriseValueOf)
+ *   PB Ratio    "derived" from total equity less the filed NCI (M6a)
+ * Every other column is filed or refused, as before. The opt-in is only safe
+ * because the grid renders each marked figure through A's EstimatedValue and
+ * puts EstimateKey under the table (app/components/PickerEstimateMarks.tsx):
+ * an estimate never reaches the page without its mark. The mark travels as
+ * A's EstimateMark (kind + note), keyed by grid column.
+ */
+const PICKERS_VALUATION_OPTS = { withEstimates: true } as const;
+
+/** A figure's mark as the client renders it: A's EstimateMark shape. */
+export type SecPickerMark = Pick<Estimate, "kind" | "note">;
+/** The columns that can carry one, by grid column key. */
+export type SecPickerMarks = Partial<Record<"ev" | "pb", SecPickerMark>>;
+
+const markOf = (e: Estimate | undefined): SecPickerMark | null => (e ? { kind: e.kind, note: e.note } : null);
+
 /** The fields applySecPickerRow owns, in one place for the page and the check. */
 export const SEC_PICKER_FIELDS: (keyof SecPickerFigures)[] = [
   "marketCap", "psRatio", "pbRatio", "enterpriseValue", "pfcfRatio", "revenue",
@@ -282,7 +311,7 @@ export function buildSecPickerRow(
       v: 1,
       at: nowMs,
       unit,
-      inputs: { shares: inputs.shares, refusals: inputs.refusals },
+      inputs: { shares: inputs.shares, refusals: inputs.refusals, ...(inputs.sic ? { sic: inputs.sic } : {}) },
       m: { revenue: null, revenueIncomplete: false, ebitda: null, balanceSheet: null },
       operatingIncome: null,
       netIncome: null,
@@ -304,7 +333,7 @@ export function buildSecPickerRow(
     v: 1,
     at: nowMs,
     unit,
-    inputs: { shares: inputs.shares, refusals: inputs.refusals },
+    inputs: { shares: inputs.shares, refusals: inputs.refusals, ...(inputs.sic ? { sic: inputs.sic } : {}) },
     m: multipleInputs(set),
     operatingIncome: oi ? oi.vals.operatingIncome : null,
     netIncome: ni ? ni.vals.netIncome : null,
@@ -322,20 +351,24 @@ export function buildSecPickerRow(
 const ok = (f: { ok: true; val: number } | { ok: false } | null): number | null =>
   f && f.ok ? f.val : null;
 
-/** READ half. Pure. `price` is the price the page shows for the row. */
-export function applySecPickerRow(row: SecPickerRow, price: number | null): SecPickerFigures {
+/**
+ * READ half. Pure. `price` is the price the page shows for the row. `marks`
+ * names each figure that is an estimate or derived (absent when none); a
+ * marked figure must be rendered with it.
+ */
+export function applySecPickerRow(row: SecPickerRow, price: number | null): SecPickerFigures & { marks?: SecPickerMarks } {
   // BELT AND BRACES: a row whose money is not in dollars yields no money
   // figure here either, whatever its fields hold.
   const usd = moneyIsUsd(row.unit);
-  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: null, refusals: row.inputs.refusals };
+  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: null, refusals: row.inputs.refusals, sic: row.inputs.sic ?? null };
   const cap = ok(marketCap(inputs, price));
-  const mult = valuationMultiples(inputs, row.m, price);
+  const mult = valuationMultiples(inputs, row.m, price, PICKERS_VALUATION_OPTS);
 
-  const bs = row.m.balanceSheet;
-  const enterpriseValue =
-    cap !== null && bs && bs.shortTermDebt !== null && bs.longTermDebt !== null && bs.cash !== null
-      ? cap + bs.shortTermDebt + bs.longTermDebt - bs.cash
-      : null;
+  // A's ONE EV (secEstimates): every line filed → the filed figure; ONLY
+  // short-term debt untagged, and not a bank by SIC → the M2 estimate, marked;
+  // anything else → null.
+  const evFig = enterpriseValueOf(cap, row.m.balanceSheet, row.inputs.sic ?? null);
+  const enterpriseValue = evFig.val;
 
   // P/FCF is refused on a non-positive FCF, like P/E on a loss: a negative
   // multiple sorts to the top of a cheapest-first column.
@@ -351,7 +384,14 @@ export function applySecPickerRow(row: SecPickerRow, price: number | null): SecP
       : null;
 
   const money = <T,>(v: T | null): T | null => (usd ? v : null);
+  // A MARK ONLY BESIDE A FIGURE THAT IS SHOWN: none on a refused or non-dollar cell.
+  const marks: SecPickerMarks = {};
+  const evMark = usd && evFig.val !== null ? markOf(evFig.est) : null;
+  if (evMark) marks.ev = evMark;
+  const pbMark = usd && mult.pb?.ok ? markOf(mult.pb.est) : null;
+  if (pbMark) marks.pb = pbMark;
   return {
+    ...(Object.keys(marks).length ? { marks } : {}),
     marketCap: cap,
     psRatio: money(ok(mult.ps)),
     pbRatio: money(ok(mult.pb)),
@@ -465,7 +505,7 @@ export function secPickerWhy(
   const usd = moneyIsUsd(row.unit);
   const refusals = row.inputs.refusals;
   const priced = price !== null && Number.isFinite(price) && price > 0;
-  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: row.eps ?? null, refusals };
+  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: row.eps ?? null, refusals, sic: row.inputs.sic ?? null };
   const capFig = marketCap(inputs, price);
   const why = (f: ValuationFigure | null | undefined): CellWhyCode | null => (f && !f.ok ? WHY_FOR_REFUSAL[f.why] : null);
   // The cap's reason is every cap-based column's reason, as in valuationMultiples.
@@ -479,7 +519,7 @@ export function secPickerWhy(
   const money = (code: () => CellWhyCode) => () => (usd ? code() : "fx");
 
   set("marketCap", figures.marketCap, () => capWhy);
-  const mult = valuationMultiples(inputs, row.m, price);
+  const mult = valuationMultiples(inputs, row.m, price, PICKERS_VALUATION_OPTS);
   set("ps", figures.psRatio, () => (bank ? "naPs" : figures.marketCap === null ? capWhy : usd ? why(mult.ps) ?? "noRev" : "fx"));
   set("pb", figures.pbRatio, () => (figures.marketCap === null ? capWhy : usd ? why(mult.pb) ?? "noEq" : "fx"));
   set("ev", figures.enterpriseValue, () => (bank ? "naEv" : figures.marketCap === null ? capWhy : usd ? "evIn" : "fx"));
@@ -502,6 +542,46 @@ export function secPickerWhy(
       ads ? "adsE" : refusals.includes("eps-period-is-stale") ? "epsOld" : "noEps"));
     set("payout", earnings.payoutRatio, money(() =>
       ads ? "adsE" : earnings.payoutBasis === PAYOUT_PERIODS_DIFFER ? "payMix" : "noPay"));
+  }
+  return out;
+}
+
+/**
+ * A's WORD FOR A REFUSED CELL, BY GRID CODE (#553 COWORK #102, matching the
+ * stock page): REFUSAL_CELL_WORD read through WHY_FOR_REFUSAL, so the strings
+ * live once, in secValuation. "Loss" (EPS not positive), "Not meaningful"
+ * (EPS near zero, an incomplete revenue line, book equity under 1% of market
+ * value), "Neg." (equity not positive).
+ */
+export const REFUSAL_WORD_BY_CODE: Partial<Record<CellWhyCode, string>> = Object.fromEntries(
+  (Object.keys(REFUSAL_CELL_WORD) as ValuationRefusal[]).map((r) => [WHY_FOR_REFUSAL[r], REFUSAL_CELL_WORD[r] as string])
+);
+
+/**
+ * WHERE A's WORDS APPLY: the valuation multiples, and in each only the codes
+ * A's refusal for THAT multiple can produce (what secPickerWhy sets there), as
+ * on the stock page. A refusal shown in a figure column (Revenue on an
+ * incomplete line, say) or any other code stays a dash with its reason. Exact
+ * per column so each tab's table note can name exactly the words it can show
+ * (scripts/check-pickers-cell-why.mjs derives them from this map).
+ */
+export const REFUSAL_WORD_CODES: Readonly<Partial<Record<CellWhyColumn, readonly CellWhyCode[]>>> = {
+  pe: ["epsNeg", "eps0"],
+  ps: ["revInc"],
+  pb: ["eqNeg", "eqSmall"],
+};
+
+/**
+ * THE WORD EACH REFUSED CELL SHOWS, WHERE A GIVES ONE. Pure, server-side, so
+ * the client grid (which may not import secValuation) receives the word as
+ * data beside the code. B's own word cells ("Neg." for negative FCF and the
+ * bank/insurer "n/a") stay in lib/pickerCellWhy.ts: neither is an A refusal.
+ */
+export function secPickerWords(why: Partial<Record<CellWhyColumn, CellWhyCode>>): Partial<Record<CellWhyColumn, string>> {
+  const out: Partial<Record<CellWhyColumn, string>> = {};
+  for (const [col, code] of Object.entries(why) as [CellWhyColumn, CellWhyCode][]) {
+    const word = REFUSAL_WORD_CODES[col]?.includes(code) ? REFUSAL_WORD_BY_CODE[code] : undefined;
+    if (word) out[col] = word;
   }
   return out;
 }
@@ -624,8 +704,37 @@ export type WarmPickersSecResult = {
   commands: number;
   /** Rows for symbols no longer targeted, removed after the write (COWORK #60). */
   pruned?: number;
-  /** Why the prune was skipped, when it was. */
+  /** Why the prune was skipped, when it was ("time-budget" after an early stop). */
   pruneSkipped?: string | null;
+  /** How long the run took, ms (#553 COWORK #113/#114), by the run's clock. */
+  durationMs?: number;
+};
+
+/**
+ * THE RUN'S TIME BUDGET (#553 COWORK #113/#114, 2026-10-03). The route's
+ * maxDuration is 300 s; ~2,600 sequential GETs can approach it, and a run
+ * killed by the platform writes neither its last batch nor the EXPIRE. So the
+ * job stops READING once this much time has passed, then still flushes what
+ * it has, sets the EXPIRE, and reports stoppedEarly: "time-budget". The prune
+ * is SKIPPED on an early stop (pruneSkipped: "time-budget"): it would compare
+ * the stored rows against the full target list, and nothing was wrong with the
+ * rows of the symbols this run simply did not reach.
+ */
+export const WARM_PICKERS_SEC_BUDGET_MS = 240_000;
+
+/** The module's client, read through a function so warmPickersSec can name its local `redis`. */
+const moduleRedis = (): WarmPickersSecRedis | null => redis;
+
+/** What warmPickersSec needs from Redis, so a check can stub it. */
+export type WarmPickersSecRedis = Pick<Redis, "hset" | "hkeys" | "hdel" | "expire">;
+
+/** Injectable for checks only; production passes nothing. */
+export type WarmPickersSecDeps = {
+  /** ms clock; default Date.now. */
+  clock?: () => number;
+  budgetMs?: number;
+  redis?: WarmPickersSecRedis | null;
+  readFactSet?: (symbol: string) => Promise<StoredFactSet | null>;
 };
 
 /** Below this share of the hash's current rows, today's targets look like a bad read. */
@@ -673,12 +782,24 @@ export async function warmPickersSec(
   // A callback, so this module stays free of JSON imports like secValuation.
   filerFor: (symbol: string) => FilerFacts,
   nowMs = Date.now(),
-  key = pickersSecKey()
+  key = pickersSecKey(),
+  deps: WarmPickersSecDeps = {}
 ): Promise<WarmPickersSecResult> {
+  const clock = deps.clock ?? Date.now;
+  const budgetMs = deps.budgetMs ?? WARM_PICKERS_SEC_BUDGET_MS;
+  // Named `redis` on purpose: the write-site registry (scripts/check-redis-write-sites.mjs)
+  // finds this job's HSET/EXPIRE/HDEL by that name.
+  const redis: WarmPickersSecRedis | null = deps.redis !== undefined ? deps.redis : moduleRedis();
+  const readSet = deps.readFactSet ?? readFactSet;
+  const startedAt = clock();
   const result: WarmPickersSecResult = {
     ok: true, symbols: 0, written: 0, noFactSet: 0, stoppedEarly: null, commands: 0,
   };
-  if (!redis) return { ...result, ok: false, stoppedEarly: "no-redis" };
+  const done = () => {
+    result.durationMs = Math.max(0, clock() - startedAt);
+    return result;
+  };
+  if (!redis) return { ...done(), ok: false, stoppedEarly: "no-redis" };
 
   const list = [...new Set(symbols.filter(Boolean))].slice(0, MAX_SYMBOLS_PER_RUN);
   result.symbols = list.length;
@@ -702,19 +823,28 @@ export async function warmPickersSec(
   };
 
   for (const symbol of list) {
-    const set = await readFactSet(symbol).catch(() => null);
+    // THE TIME BUDGET: no new read once it is spent; what was read is kept.
+    if (clock() - startedAt >= budgetMs) {
+      result.stoppedEarly = "time-budget";
+      break;
+    }
+    const set = await readSet(symbol).catch(() => null);
     result.commands++;
     if (!set) {
       result.noFactSet++;
       continue;
     }
     batch[symbol] = buildSecPickerRow(set, today, filerFor(symbol), nowMs);
-    if (Object.keys(batch).length >= 100 && !(await flush())) return result;
+    if (Object.keys(batch).length >= 100 && !(await flush())) return done();
   }
-  if (!(await flush())) return result;
+  if (!(await flush())) return done();
 
   // Drop the rows of symbols no longer targeted: 1 HKEYS + 1 multi-key HDEL.
-  try {
+  // Not after an early stop: the unread symbols' rows are not stale.
+  if (result.stoppedEarly === "time-budget") {
+    result.pruneSkipped = "time-budget";
+    console.warn("[warm-pickers-sec] prune skipped: time-budget");
+  } else try {
     const stored = ((await redis.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
     result.commands++;
     const { drop, skipped } = rowsToPrune(stored, list);
@@ -737,5 +867,5 @@ export async function warmPickersSec(
   } catch {
     // The rows carry their own `at`; a missed EXPIRE is not a correctness issue.
   }
-  return result;
+  return done();
 }

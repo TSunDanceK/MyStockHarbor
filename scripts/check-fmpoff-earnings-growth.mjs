@@ -113,6 +113,16 @@ async function suite(mod) {
   setVal(oneOff.quarters[0], "preTaxIncome", opi * 3);
   ok("ONE-OFF: a large non-operating item in the latest period is refused (A's largeNonOperating)",
     facts(oneOff).ok === false && facts(oneOff).why === "large-non-operating-item" && member(oneOff) === null);
+  // #109 (2026-10-03): the same rule on the YEAR-AGO period. A one-off loss in
+  // Q3 FY2025 (a large negative non-operating item) depresses the base and
+  // would inflate growth; it must refuse with the same code.
+  const oneOffPrior = clone(aapl);
+  const opiPrior = C.valueOf(ap, "operatingIncome");
+  setVal(q(oneOffPrior, "Q3", 2025), "nonOperatingIncomeExpense", -opiPrior * 2);
+  setVal(q(oneOffPrior, "Q3", 2025), "preTaxIncome", -opiPrior);
+  ok("ONE-OFF: a large non-operating item in the YEAR-AGO period is refused too, same code",
+    facts(oneOffPrior).ok === false && facts(oneOffPrior).why === "large-non-operating-item" && member(oneOffPrior) === null, JSON.stringify(facts(oneOffPrior)));
+  ok("ONE-OFF: control -- the unedited AAPL fixture is not refused for a one-off", facts(aapl).ok === true, JSON.stringify(facts(aapl)));
   const stale = clone(aapl);
   ok("STALE: a latest period older than A's EPS age limit is refused",
     mod.secGrowthFacts(stale, "2028-01-01", {}, []).ok === false && mod.secGrowthFacts(stale, "2028-01-01", {}, []).why === "period-is-stale");
@@ -152,6 +162,10 @@ async function suite(mod) {
     [mod.SEC_GROWTH_COPY.description, mod.SEC_GROWTH_COPY.explainerBody, mod.SEC_GROWTH_COPY.metaDescription, mod.SEC_GROWTH_COPY.sectionDescription]
       .every((t) => t.includes(`${N}%`)) && !/\d+%/.test(copy.replaceAll(`${N}%`, "")),
     `minimum ${N}%`);
+  // #109: the rule also compares fiscal years, so no description may say "quarter" without the fiscal-year hedge.
+  ok("COPY: description, explainer and meta name the fiscal year beside the quarter",
+    [mod.SEC_GROWTH_COPY.description, mod.SEC_GROWTH_COPY.explainerBody, mod.SEC_GROWTH_COPY.metaDescription, mod.SEC_GROWTH_COPY.sectionDescription]
+      .every((t) => !/quarter/.test(t) || /quarter \(or fiscal year/.test(t)));
   ok("COPY: says revenue must be up and the source is filings, and promises no beats or consistency",
     /revenue (up|is also higher)/.test(copy) && /filed|SEC/.test(copy) && !/beat history|consistency|beating expectations/i.test(copy));
   return fails;
@@ -173,13 +187,16 @@ const MUTANTS = [
   ["currency gate removed", "  if (reporting !== \"USD\" && !set.fx) return refuse(\"not-in-dollars\");", "  void reporting;"],
   ["growth taken on converted (USD) values", "  const home = (x: StoredPeriod) => (set.fx ? storedInReportingCurrency(x, set.fx) : x);", "  const home = (x: StoredPeriod): StoredPeriod | null => x;"],
   ["nearest-row fallback for the year-ago period", "  const prior = priorYearOf(list, p);", "  const prior = priorYearOf(list, p) ?? list[1] ?? null;"],
-  ["large non-operating item allowed", "  if (largeNonOperating(rows)) return refuse(\"large-non-operating-item\");", "  void rows;"],
+  ["large non-operating item allowed", "  if (largeNonOperating(linesOf(now)) || largeNonOperating(linesOf(then))) return refuse(\"large-non-operating-item\");", "  void linesOf;"],
+  ["#109: the year-ago period's one-off ignored", "largeNonOperating(linesOf(now)) || largeNonOperating(linesOf(then))", "largeNonOperating(linesOf(now))"],
+  ["#109: the copy says quarter only again", "latest filed quarter (or fiscal year, for annual filers) shows", "latest filed quarter shows"],
+  ["#109: the meta says quarter only again", "latest SEC-filed quarter (or fiscal year) shows", "latest SEC-filed quarter shows"],
   ["threshold made strict", "  if (!(epsGrowthPct >= SEC_GROWTH_MIN_EPS_YOY)) return null;", "  if (!(epsGrowthPct > SEC_GROWTH_MIN_EPS_YOY)) return null;"],
   ["revenue condition dropped", "  if (!(revenueGrowthPct > SEC_GROWTH_MIN_REVENUE_YOY)) return null;", ""],
   ["profit on both sides not required", "  if (!(g.epsPrior >= PE_MIN_EPS) || !(g.eps >= PE_MIN_EPS)) return null;", "  if (!(g.epsPrior > 0)) return null;"],
   ["read-side refusal belt removed", "  if (r.includes(\"ads-ratio-makes-eps-incomparable\") || r.includes(\"ticker-is-a-debt-security\") || r.includes(\"share-basis-changed\")) {", "  if (false) {"],
   ["read-side currency gate removed", "  if (!row || !g || !g.ok || !usd) return null;", "  if (!row || !g || !g.ok) return null;"],
-  ["copy states a different minimum", "`Stocks whose latest filed quarter shows diluted EPS up at least ${SEC_GROWTH_MIN_EPS_YOY}%", "`Stocks whose latest filed quarter shows diluted EPS up at least 20%"],
+  ["copy states a different minimum", "`Stocks whose latest filed quarter (or fiscal year, for annual filers) shows diluted EPS up at least ${SEC_GROWTH_MIN_EPS_YOY}%", "`Stocks whose latest filed quarter (or fiscal year, for annual filers) shows diluted EPS up at least 20%"],
 ];
 for (const [label, from, to] of MUTANTS) {
   if (!src.includes(from)) {

@@ -102,21 +102,32 @@ const OWNER_LEAD = "Figures come from company SEC filings; '–' means the filin
  * THE TABLE NOTE, PER TAB (#553 COWORK #103, 2026-10-03). The SEC wording only
  * where every visible column comes from the filings (Valuation, Dividends,
  * Financials); hedged wording on the mixed General tab and the price-based
- * Performance tab. The word cells ("Loss", "Neg.", "n/a") are named on exactly
- * the tabs whose columns can show them (CELL_WORDS) -- the check derives that
- * from the grid's columns, so a tab cannot promise a word it never shows.
+ * Performance tab. The word cells ("Loss", "Neg.", "Not meaningful", "n/a")
+ * are named on exactly the tabs whose columns can show them (CELL_WORDS, plus
+ * A's words per column, pickersSecFundamentals.REFUSAL_WORD_CODES) -- the
+ * check derives that from the grid's columns, so a tab cannot promise a word it never shows.
  * Each ends without the action: the grid appends CELL_WHY_ACTION's hover or
  * tap sentence, chosen by CSS media query so the server render is the same.
  */
 export const CELL_WHY_TABLE_NOTE_BY_TAB: Record<PickerNoteTab, string> = {
+  // HIDDEN, NOT DELETED (2026-10-03, #553 COWORK #102): P/E can now also read
+  // A's "Not meaningful" (EPS near zero), so the line names it. Was:
+  //   "Market Cap and P/E are based on company SEC filings where available, and price, change and volume on market data; " +
+  //   "'–' means a figure isn't available, and 'Loss' means earnings per share weren't positive, so a P/E isn't meaningful."
   general:
     "Market Cap and P/E are based on company SEC filings where available, and price, change and volume on market data; " +
-    "'–' means a figure isn't available, and 'Loss' means earnings per share weren't positive, so a P/E isn't meaningful.",
+    "'–' means a figure isn't available, and 'Loss' means earnings per share weren't positive and 'Not meaningful' that they were close to zero, " +
+    "so a P/E isn't meaningful.",
   performance:
     "Returns are calculated from price history, and Market Cap is based on company SEC filings where available; " +
     "'–' means there isn't enough data to calculate a figure.",
+  // HIDDEN, NOT DELETED (2026-10-03, #553 COWORK #102): P/E, P/S and P/B can
+  // now also read A's "Not meaningful", so the line names it. Was:
+  //   `${OWNER_LEAD}; 'Loss', 'Neg.' or 'n/a' means a ratio isn't meaningful (a loss, negative free cash flow or equity) ` +
+  //   "or doesn't apply (banks and insurers).",
   valuation:
-    `${OWNER_LEAD}; 'Loss', 'Neg.' or 'n/a' means a ratio isn't meaningful (a loss, negative free cash flow or equity) ` +
+    `${OWNER_LEAD}; 'Loss', 'Neg.', 'Not meaningful' or 'n/a' means a ratio isn't meaningful ` +
+    "(a loss, negative free cash flow or equity, earnings near zero, an incomplete revenue line, or equity that is very small next to market value) " +
     "or doesn't apply (banks and insurers).",
   dividends: `${OWNER_LEAD}.`,
   financials: `${OWNER_LEAD}.`,
@@ -141,27 +152,40 @@ export function whyPopShift(left: number, right: number, viewport: number, gutte
 
 /**
  * WORD CELLS (#553 COWORK #94 Part 1). Where a figure would be MEANINGLESS
- * rather than missing, the cell says so in a word instead of "–": a P/E on a
- * loss, a P/FCF on negative free cash flow, a P/B on negative equity, and the
- * bank/insurer "n/a" above. Keyed by column AND code, so the word only appears
- * in the column the ruling names (a "–" for "EPS near zero", "no dividend on
- * file", "not enough history" and every other reason stays a dash). Same
+ * rather than missing, the cell says so in a word instead of "–". Same
  * lighter tone as "n/a", same hover/tap reason. A word cell has no figure, so
  * it sorts with the blanks (compareForSort), never as zero.
+ *
+ * TWO SOURCES, NEITHER DUPLICATED (#553 COWORK #102, 2026-10-03):
+ *   - A's refusals ("Loss" for a P/E on a loss, "Neg." for a P/B on negative
+ *     equity, "Not meaningful" for EPS near zero, an incomplete revenue line
+ *     on P/S, or book equity too small for a P/B) come from secValuation's
+ *     REFUSAL_CELL_WORD, looked up SERVER-SIDE
+ *     (pickersSecFundamentals.secPickerWords, per column in
+ *     REFUSAL_WORD_CODES) and shipped as `entry.cellWord`, because this module
+ *     is imported by the client and may not import it.
+ *   - The grid's own: "Neg." for negative free cash flow (not an A refusal)
+ *     and the bank/insurer "n/a", below. Keyed by column AND code, so the word
+ *     only appears in the column the ruling names; every other reason ("no
+ *     dividend on file", "not enough history", ...) stays a dash.
  */
 export const CELL_WORDS: Readonly<Partial<Record<CellWhyColumn, Partial<Record<CellWhyCode, string>>>>> = {
-  pe: { epsNeg: "Loss" },
+  // HIDDEN, NOT DELETED (2026-10-03, #553 COWORK #102): `pe: { epsNeg: "Loss" }`
+  // and `pb: { eqNeg: "Neg." }` were here; the same words now come from A's
+  // REFUSAL_CELL_WORD via entry.cellWord, so they live once.
   pfcf: { fcfNeg: "Neg.", naFcf: "n/a" },
-  pb: { eqNeg: "Neg." },
   ev: { naEv: "n/a" },
   ps: { naPs: "n/a" },
 };
 
-/** The mark an empty cell shows: a word (lighter tone) or the dash. */
+/**
+ * The mark an empty cell shows: a word (lighter tone) or the dash. `aWord` is
+ * the word the page shipped for this cell from A's map, when there is one.
+ */
 export const CELL_DASH = "–";
-export function cellMark(column: string, code: string | null | undefined): { mark: string; word: boolean } {
+export function cellMark(column: string, code: string | null | undefined, aWord?: string | null): { mark: string; word: boolean } {
   const byCode = (CELL_WORDS as Record<string, Record<string, string> | undefined>)[column];
-  const word = code ? byCode?.[code] : undefined;
+  const word = code ? (byCode?.[code] ?? (aWord || undefined)) : undefined;
   return word ? { mark: word, word: true } : { mark: CELL_DASH, word: false };
 }
 

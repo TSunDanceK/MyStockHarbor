@@ -12,6 +12,7 @@ import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields
 import { NOT_APPLICABLE_CODES, cellMark, cellWhyWords, compareForSort } from "@/lib/pickerCellWhy";
 import { BasisCell, CellWhyNote, WhyMark } from "@/app/components/PickerCellMarks";
 import { perfAsOfLabel, perfWhyText, type PerfKey } from "@/lib/pickerPerf";
+import { EstimateCell, PickerEstimateKey, estimateMarksShown } from "@/app/components/PickerEstimateMarks";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -612,7 +613,7 @@ const PERF_KEYS = new Set<string>(["perf1w", "perf1m", "perf6m", "perfYtd", "per
  * The reason for an empty cell in column `key`, the mark it shows ("–", or a
  * word cell: "Loss", "Neg.", "n/a" -- #553 COWORK #94), and whether it is "n/a".
  */
-export function cellWhyFor(e: Pick<ResultEntry, "cellWhy" | "perfWhy">, key: string): { text: string; mark: string; word: boolean; na: boolean } {
+export function cellWhyFor(e: Pick<ResultEntry, "cellWhy" | "perfWhy" | "cellWord">, key: string): { text: string; mark: string; word: boolean; na: boolean } {
   // The Performance columns carry their own TRUE reason, computed from the
   // stored bars at build time (lib/pickerPerf.ts, #553 CODE-B #94 B6), never a
   // blanket "not enough history".
@@ -621,7 +622,9 @@ export function cellWhyFor(e: Pick<ResultEntry, "cellWhy" | "perfWhy">, key: str
     return { text, ...cellMark(key, null), na: false };
   }
   const code = (e.cellWhy as Record<string, string> | undefined)?.[key];
-  if (code) return { text: cellWhyWords(code), ...cellMark(key, code), na: NOT_APPLICABLE_CODES.has(code) };
+  // A's word for this cell, where the page shipped one (#553 COWORK #102).
+  const aWord = (e.cellWord as Record<string, string> | undefined)?.[key];
+  if (code) return { text: cellWhyWords(code), ...cellMark(key, code, aWord), na: NOT_APPLICABLE_CODES.has(code) };
   return { text: COLUMN_DASH_WHY[key] ?? cellWhyWords(null), ...cellMark(key, null), na: false };
 }
 
@@ -966,10 +969,13 @@ export default function PickerResultsGrid({
     const perfYtd: Col = { key: "perfYtd", label: "YTD", sortType: "num", get: (e) => num(e.perfYtd), cell: (e) => perfCell(e, "perfYtd") };
     const perf1y: Col = { key: "perf1y", label: "1Y", sortType: "num", get: (e) => num(e.perf1y), cell: (e) => perfCell(e, "perf1y") };
 
-    const ev: Col = { key: "ev", label: "Ent. Value", sortType: "num", get: (e) => num(e.enterpriseValue), cell: (e) => capCell(num(e.enterpriseValue)) };
+    // ≈ / "derived" (#553 COWORK #102): a marked figure renders through A's
+    // EstimatedValue (EstimateCell); `get` stays the number, so sorting and
+    // filtering are unchanged.
+    const ev: Col = { key: "ev", label: "Ent. Value", sortType: "num", get: (e) => num(e.enterpriseValue), cell: (e, _d, inert) => <EstimateCell text={fmtCap(num(e.enterpriseValue))} est={e.cellEst?.ev} inert={inert} empty={MUTED} /> };
     const fwdpe: Col = { key: "fwdpe", label: "Forward PE", sortType: "num", get: (e, d) => forwardPe(e, d), cell: (e, d) => numCell(forwardPe(e, d)) };
     const ps: Col = { key: "ps", label: "PS Ratio", sortType: "num", get: (e, d) => psRatio(e, d), cell: (e, d) => numCell(psRatio(e, d)) };
-    const pb: Col = { key: "pb", label: "PB Ratio", sortType: "num", get: (e) => num(e.pbRatio), cell: (e) => numCell(num(e.pbRatio)) };
+    const pb: Col = { key: "pb", label: "PB Ratio", sortType: "num", get: (e) => num(e.pbRatio), cell: (e, _d, inert) => <EstimateCell text={fmtNum(num(e.pbRatio))} est={e.cellEst?.pb} inert={inert} empty={MUTED} /> };
     const pfcf: Col = { key: "pfcf", label: "P/FCF", sortType: "num", get: (e, d) => pfcfRatio(e, d), cell: (e, d) => numCell(pfcfRatio(e, d)) };
 
     const dps: Col = { key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare), cell: (e) => dollarCell(num(e.divPerShare)) };
@@ -1125,6 +1131,17 @@ export default function PickerResultsGrid({
   }, [conditionCounts, setConditionCounts]);
 
   const shown = sortedEntries.slice(0, visibleCount);
+
+  // THE MARKS ON SCREEN (#553 COWORK #102), for the key: the table's columns
+  // on every shown row; on a phone, the headline column, plus every metric
+  // column of an expanded row. At most a page of rows: computed per render.
+  const headKeys = headlineColumn ? [headlineColumn.key] : [];
+  const shownEstimateMarks = estimateMarksShown(shown, (e) =>
+    showMobileRows
+      ? (expandedRows.has(e.symbol) ? [...headKeys, ...metricColumns.map((c) => c.key)] : headKeys)
+      : activeColumns.map((c) => c.key)
+  );
+
   const hasMore = visibleCount < sortedEntries.length;
 
   // Synced top + bottom horizontal scrollbars (grey /insights style). The top
@@ -1572,6 +1589,11 @@ export default function PickerResultsGrid({
       {shown.length && (showMobileRows || viewMode === "list") ? (
         <CellWhyNote tab={activeTab} />
       ) : null}
+      {/* A's KEY (#553 COWORK #102) for the ≈ / "derived" marks a reader can
+          see: nothing when none is shown, only the kinds that are. */}
+      {shown.length && (showMobileRows || viewMode === "list") ? (
+        <PickerEstimateKey marks={shownEstimateMarks} />
+      ) : null}
 
       <style>{`
         .screenerControls {
@@ -1630,10 +1652,16 @@ export default function PickerResultsGrid({
         .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
 
         .mRows { margin-top: 12px; display: grid; gap: 8px; }
+        /* 2026-10-03 (#553 COWORK #107/#109): was overflow: hidden, which clipped
+           a why-popover (or A's estimate note) opened on an expanded row's
+           bottom fields. The row's own background and border follow
+           border-radius without clipping; the only child that paints to the
+           edge is the toggle's tap highlight, so IT carries the corners
+           (13px = the row's 14px less its 1px border). */
         .mRow {
           border: 1px solid rgba(255,255,255,0.09); border-radius: 14px;
           background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-          overflow: hidden;
+          overflow: visible;
         }
         .mRow.open { border-color: rgba(96,165,250,0.4); }
         .mRowTop { display: flex; }
@@ -1642,7 +1670,9 @@ export default function PickerResultsGrid({
           flex: 1 1 auto; display: flex; width: 100%; align-items: center; gap: 10px;
           padding: 11px 12px; border: none; background: none;
           font-family: inherit; color: inherit; cursor: pointer; text-align: left;
+          border-radius: 13px;
         }
+        .mRow.open .mRowToggle { border-radius: 13px 13px 0 0; }
         .mRowToggle:active { background: rgba(255,255,255,0.03); }
         .mRowId { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
         .mRowId .dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }

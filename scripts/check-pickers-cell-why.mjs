@@ -15,6 +15,11 @@
 //      committed name, and the page falls back to it.
 //   5. WORD CELLS (#553 COWORK #94 Part 1): "EPS not positive" on P/E reads
 //      "Loss", negative FCF on P/FCF and negative equity on P/B read "Neg.",
+//      EPS near zero on P/E, an incomplete revenue line on P/S and equity under
+//      1% of market value on P/B read "Not meaningful" (A's words,
+//      REFUSAL_CELL_WORD, looked up server-side by secPickerWords -- #553
+//      COWORK #102), while the same incomplete revenue line in the Revenue
+//      column stays "–",
 //      a bank's Ent. Value / P/S / P/FCF read "n/a"; every other reason stays
 //      "–". A word cell sorts with the blanks, never as zero. RENDERED
 //      (app/components/PickerCellMarks.tsx through react-dom/server).
@@ -163,14 +168,18 @@ async function suite(mod, words, union = refusalUnion) {
     words.isBankOrInsurer("Banks - Diversified") && words.isBankOrInsurer("Insurance - Life") &&
       !words.isBankOrInsurer("Insurance - Brokers") && !words.isBankOrInsurer("Financial - Capital Markets") && !words.isBankOrInsurer(null));
   // #94 Part 1: the word cells, by column and code; every other reason a dash.
-  const mk = (col, code) => words.cellMark(col, code);
+  // A's word arrives as data (entry.cellWord, from secPickerWords): pass it the way the page does.
+  const mk = (col, code) => words.cellMark(col, code, mod.secPickerWords({ [col]: code })[col]);
   want("P/E on a loss reads Loss", mk("pe", "epsNeg").mark === "Loss" && mk("pe", "epsNeg").word, JSON.stringify(mk("pe", "epsNeg")));
   want("P/FCF on negative FCF reads Neg.", mk("pfcf", "fcfNeg").mark === "Neg." && mk("pfcf", "fcfNeg").word, JSON.stringify(mk("pfcf", "fcfNeg")));
   want("P/B on negative equity reads Neg.", mk("pb", "eqNeg").mark === "Neg." && mk("pb", "eqNeg").word, JSON.stringify(mk("pb", "eqNeg")));
   want("a bank's Ent. Value / P/S / P/FCF read n/a",
     mk("ev", "naEv").mark === "n/a" && mk("ps", "naPs").mark === "n/a" && mk("pfcf", "naFcf").mark === "n/a");
-  want("every other reason stays a dash (EPS near zero, no dividend, not enough history, no EPS, no price)",
-    [["pe", "eps0"], ["pe", "noEps"], ["dps", "noDiv"], ["dyield", "noDiv"], ["dgrowth", "noDg"], ["marketCap", "noPx"], ["pe", null], ["eps", "epsNeg"]]
+  want("P/E on EPS near zero reads A's \"Not meaningful\"", mk("pe", "eps0").mark === "Not meaningful" && mk("pe", "eps0").word, JSON.stringify(mk("pe", "eps0")));
+  want("P/S on an incomplete revenue line reads A's \"Not meaningful\"", mk("ps", "revInc").mark === "Not meaningful" && mk("ps", "revInc").word, JSON.stringify(mk("ps", "revInc")));
+  want("P/B on equity under 1% of market value reads A's \"Not meaningful\"", mk("pb", "eqSmall").mark === "Not meaningful" && mk("pb", "eqSmall").word, JSON.stringify(mk("pb", "eqSmall")));
+  want("every other reason stays a dash (no dividend, not enough history, no EPS, no price, Revenue on an incomplete line, an A code in a column it doesn't belong to)",
+    [["revenue", "revInc"], ["pb", "eps0"], ["pe", "eqSmall"], ["pe", "noEps"], ["dps", "noDiv"], ["dyield", "noDiv"], ["dgrowth", "noDg"], ["marketCap", "noPx"], ["pe", null], ["eps", "epsNeg"]]
       .every(([c, k]) => mk(c, k).mark === "–" && !mk(c, k).word));
   const wordCodes = Object.values(words.CELL_WORDS).flatMap((m) => Object.keys(m));
   want("every word cell's code has words for its hover", wordCodes.every(has), wordCodes.join(","));
@@ -192,6 +201,7 @@ async function suite(mod, words, union = refusalUnion) {
 }
 
 const moduleSrc = read(MODULE);
+const SEC_MOD = await import(pathToFileURL(path.join(ROOT, MODULE)).href);
 const wordsSrc = read(WORDS);
 const real = await suite(await import(pathToFileURL(path.join(ROOT, MODULE)).href), W);
 for (const f of real) check(f, false);
@@ -217,22 +227,22 @@ async function loadMarks(src, wordsHref = pathToFileURL(path.join(ROOT, WORDS)).
   fs.writeFileSync(tmp, js);
   try { return await import(pathToFileURL(tmp).href); } finally { fs.rmSync(tmp, { force: true }); }
 }
-function renderRules(M, words) {
+function renderRules(M, words, mod = SEC_MOD) {
   const fails = [];
   const want = (label, ok, detail = "") => { if (!ok) fails.push(`${label}${detail ? ` — ${detail}` : ""}`); };
   const html = (el) => renderToStaticMarkup(el);
   const mark = (col, code) => {
-    const m = words.cellMark(col, code);
+    const m = words.cellMark(col, code, mod.secPickerWords({ [col]: code })[col]);
     return html(React.createElement(M.WhyMark, { text: words.cellWhyWords(code), mark: m.mark, word: m.word, na: words.NOT_APPLICABLE_CODES.has(code) }));
   };
-  for (const [col, code, word] of [["pe", "epsNeg", "Loss"], ["pfcf", "fcfNeg", "Neg."], ["pb", "eqNeg", "Neg."], ["ev", "naEv", "n/a"], ["ps", "naPs", "n/a"], ["pfcf", "naFcf", "n/a"]]) {
+  for (const [col, code, word] of [["pe", "epsNeg", "Loss"], ["pe", "eps0", "Not meaningful"], ["pfcf", "fcfNeg", "Neg."], ["pb", "eqNeg", "Neg."], ["ev", "naEv", "n/a"], ["ps", "naPs", "n/a"], ["pfcf", "naFcf", "n/a"]]) {
     const h = mark(col, code);
     want(`rendered: ${col} ${code} shows "${word}" in the lighter tone, with its reason on hover`,
       h.includes(`>${word}</span>`) && /class="whyMark whyWord"/.test(h) && h.includes(`title="${words.cellWhyWords(code).replace(/'/g, "&#x27;")}"`) && !h.includes(">–<"), h);
     want(`rendered: ${col} ${code} is keyboard-operable`, /role="button"/.test(h) && /tabindex="0"/.test(h), h);
   }
-  const dash = mark("pe", "eps0");
-  want("rendered: EPS near zero stays a dash with its reason", dash.includes(">–</span>") && /whyMark muted/.test(dash), dash);
+  const dash = mark("pe", "noEps");
+  want("rendered: no EPS on file stays a dash with its reason", dash.includes(">–</span>") && /whyMark muted/.test(dash), dash);
   const fy = html(React.createElement(M.BasisCell, { value: "4.08", basis: "FY2025" }));
   const iFy = fy.indexOf(">FY<");
   const iVal = fy.indexOf("4.08");
@@ -304,14 +314,15 @@ function maxWidthAt(value, vw) {
   });
   return px.some((n) => !Number.isFinite(n)) ? NaN : Math.min(...px);
 }
-function noteRules(gridSource, M, words) {
+function noteRules(gridSource, M, words, mod = SEC_MOD) {
   const fails = [];
   const want = (label, ok, detail = "") => { if (!ok) fails.push(`${label}${detail ? ` — ${detail}` : ""}`); };
   const g = stripComments(gridSource, { file: GRID });
   const cols = tabColumns(gridSource);
   want("#103: the grid's tab column sets were read", Object.keys(cols).length >= 5 && (cols.valuation ?? []).includes("pfcf"), JSON.stringify(cols));
   const filings = new Set(words.CELL_WHY_COLUMNS);
-  const WORD_MARKS = ["Loss", "Neg.", "n/a"];
+  // "Not meaningful" is A's word (#553 COWORK #102), shipped per cell by secPickerWords.
+  const WORD_MARKS = ["Loss", "Neg.", "Not meaningful", "n/a"];
   for (const [tab, keys] of Object.entries(cols)) {
     const note = words.CELL_WHY_TABLE_NOTE_BY_TAB?.[tab];
     want(`#103 ${tab}: has its own table note`, typeof note === "string" && note.length > 20, String(note));
@@ -319,7 +330,10 @@ function noteRules(gridSource, M, words) {
     const allFilings = keys.length > 0 && keys.every((k) => filings.has(k));
     if (allFilings) want(`#103 ${tab}: every column is from the filings, so the note keeps the owner's SEC wording`, note.startsWith(OWNER_SEC_LEAD), note);
     else want(`#103 ${tab}: not every column is from the filings, so the note does not claim they all are`, !note.includes("Figures come from company SEC filings"), note);
-    const canShow = new Set(keys.flatMap((k) => Object.values(words.CELL_WORDS[k] ?? {})));
+    const canShow = new Set(keys.flatMap((k) => [
+      ...Object.values(words.CELL_WORDS[k] ?? {}),
+      ...(mod.REFUSAL_WORD_CODES?.[k] ?? []).map((c) => mod.secPickerWords({ [k]: c })[k]).filter(Boolean),
+    ]));
     const named = new Set(WORD_MARKS.filter((w) => note.includes(`'${w}'`)));
     want(`#103 ${tab}: names exactly the word cells its columns can show`,
       [...canShow].every((w) => named.has(w)) && [...named].every((w) => canShow.has(w)), `can show ${[...canShow].join("/") || "none"}, names ${[...named].join("/") || "none"}`);
@@ -337,6 +351,15 @@ function noteRules(gridSource, M, words) {
     /\.cellWhyTap \{ display: none; \}/.test(gridSource));
   want("#103 CSS: (hover: none) / (pointer: coarse) swaps hover for tap",
     /@media \(hover: none\), \(pointer: coarse\) \{\s*\.cellWhyHover \{ display: none; \}\s*\.cellWhyTap \{ display: inline; \}\s*\}/.test(gridSource));
+  // Static CSS: the phone row does not clip an open popover (#553 COWORK
+  // #107/#109); the toggle's tap highlight keeps the rounded corners instead.
+  const mRowCss = /\n\s*\.mRow \{([^}]*)\}/.exec(gridSource)?.[1] ?? "";
+  want("#109 CSS: .mRow is found", mRowCss.length > 0);
+  want("#109 CSS: .mRow does not clip (a why-popover under an expanded row's bottom fields stays visible)",
+    !/overflow(?:-[xy])?:\s*(hidden|clip|auto|scroll)/.test(mRowCss) && !/clip-path|contain:\s*(paint|strict|content)/.test(mRowCss), mRowCss.replace(/\s+/g, " ").trim());
+  const toggleCss = /\n\s*\.mRowToggle \{([^}]*)\}/.exec(gridSource)?.[1] ?? "";
+  want("#109 CSS: the toggle's highlight keeps the row's rounded corners", /border-radius:\s*13px;/.test(toggleCss) &&
+    /\.mRow\.open \.mRowToggle \{ border-radius: 13px 13px 0 0; \}/.test(gridSource), toggleCss.replace(/\s+/g, " ").trim());
   // Static CSS: the popover.
   const pop = /\.whyPop \{([^}]*)\}/.exec(gridSource)?.[1] ?? "";
   const decl = (prop) => new RegExp(`(?:^|;|\\s)${prop}:\\s*([^;]+);`).exec(pop)?.[1]?.trim();
@@ -393,6 +416,9 @@ const MODULE_MUTANTS = [
   ["negative FCF is not explained", `row.freeCashFlow === 0 ? "fcf0" : "fcfNeg"`, `row.freeCashFlow === 0 ? "fcf0" : (undefined as unknown as CellWhyCode)`],
   ["#103: an FCF of 0 reads Neg. again", `row.freeCashFlow === 0 ? "fcf0" : "fcfNeg"`, `"fcfNeg"`],
   ["a bank's P/S is a plain dash", `bank ? "naPs" :`, ``],
+  ["#102: equity under 1% of market value reads a dash again", `pb: ["eqNeg", "eqSmall"],`, `pb: ["eqNeg"],`],
+  ["#102: A's word shown in every column", `const word = REFUSAL_WORD_CODES[col]?.includes(code) ? REFUSAL_WORD_BY_CODE[code] : undefined;`, `const word = REFUSAL_WORD_BY_CODE[code];`],
+  ["'–' rendered for EPS near zero (A's word not shipped)", `const word = REFUSAL_WORD_CODES[col]?.includes(code) ? REFUSAL_WORD_BY_CODE[code] : undefined;`, `const word = undefined as string | undefined;`],
 ];
 for (const [label, from, to] of MODULE_MUTANTS) {
   if (!moduleSrc.includes(from)) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
@@ -433,7 +459,6 @@ for (const [label, file, from, to] of UI_MUTANTS) {
 }
 // #94: the word cells, broken.
 const WORD_MUTANTS = [
-  ["'–' rendered for a loss", `  pe: { epsNeg: "Loss" },\n`, `  pe: {},\n`],
   ["word cells sorted as zero", `const an = typeof av === "number" && Number.isFinite(av) ? av : null;\n  const bn = typeof bv === "number" && Number.isFinite(bv) ? bv : null;`,
     `const an = typeof av === "number" && Number.isFinite(av) ? av : 0;\n  const bn = typeof bv === "number" && Number.isFinite(bv) ? bv : 0;`],
 ];
@@ -473,14 +498,18 @@ for (const [label, from, to] of WORD_MUTANTS) {
 {
   const NOTE_MUTANTS = [
     ["#103: the Performance tab claims SEC filings", "words", `  performance:\n    "Returns are calculated from price history`, `  performance:\n    "Figures come from company SEC filings; Returns are calculated from price history`],
-    ["#103: Valuation stops naming 'Neg.'", "words", `'Loss', 'Neg.' or 'n/a' means a ratio`, `'Loss' or 'n/a' means a ratio`],
-    ["#103: General names a word it never shows", "words", `'Loss' means earnings per share`, `'Loss' or 'Neg.' means earnings per share`],
+    ["#103: Valuation stops naming 'Neg.'", "words", `'Loss', 'Neg.', 'Not meaningful' or 'n/a' means a ratio`, `'Loss', 'Not meaningful' or 'n/a' means a ratio`],
+    ["#102: Valuation stops naming 'Not meaningful'", "words", `'Loss', 'Neg.', 'Not meaningful' or 'n/a' means a ratio`, `'Loss', 'Neg.' or 'n/a' means a ratio`],
+    ["#102: General stops naming 'Not meaningful'", "words", `weren't positive and 'Not meaningful' that they were close to zero`, `weren't positive`],
+    ["#103: General names a word it never shows", "words", `'Loss' means earnings per share weren't positive and`, `'Loss' or 'Neg.' means earnings per share weren't positive and`],
     ["#103: the shift never moves the popover", "words", `  if (right > viewport - gutter) return`, `  if (left === left) return 0;\n  if (right > viewport - gutter) return`],
     ["#103: the note renders hover only", "marks", `      <span className="cellWhyTap">{CELL_WHY_ACTION.tap}</span>\n`, ``],
     ["#103: touch still says hover (media rule gone)", "grid", `@media (hover: none), (pointer: coarse) {`, `@media (max-width: 1px) {`],
     ["#103: the tap line is always shown", "grid", `.cellWhyTap { display: none; }`, `.cellWhyTap { display: inline; }`],
     ["#103: the popover centred again", "grid", `right: 0; left: auto; top: calc(100% + 6px); transform: translateX(var(--why-shift, 0px));`, `left: 50%; top: calc(100% + 6px); transform: translateX(-50%);`],
     ["#103: the popover wider than a small screen", "grid", `max-width: min(260px, calc(100vw - 16px));`, `max-width: min(260px, 120vw);`],
+    ["#109: the phone row clips the popover again", "grid", `          overflow: visible;\n        }\n        .mRow.open {`, `          overflow: hidden;\n        }\n        .mRow.open {`],
+    ["#109: the toggle's highlight loses the rounded corners", "grid", `          border-radius: 13px;\n        }\n        .mRow.open .mRowToggle`, `        }\n        .mRow.open .mRowToggle`],
     ["#103: the grid prints the one note again", "grid", `<CellWhyNote tab={activeTab} />`, `<p className="cellWhyNote">{CELL_WHY_TABLE_NOTE}</p>`],
   ];
   for (const [label, where, from, to] of NOTE_MUTANTS) {

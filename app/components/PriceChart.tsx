@@ -9,7 +9,7 @@ import {
   TREND_HELPER_COLORS,
 } from "@/lib/ta/trendHelper";
 import TradingViewChartEmbed from "./TradingViewChartEmbed";
-import { utcMonthDay } from "@/lib/utcDate";
+import { utcDay, utcMonthDay } from "@/lib/utcDate";
 
 type Point = {
   date: string;
@@ -1278,7 +1278,8 @@ export default function PriceChart(props: Props) {
           <div style={{ fontSize: 12, opacity: 0.7 }}>
             {showTradingView
               ? `Live TradingView chart for ${symbol}`
-              : `From ${series[0].date} → ${series[series.length - 1].date}`}
+              : // 2026-10-03 (#553 COWORK #113/#114): ISO dates read as "20 Oct 2025" now.
+                `From ${utcDay(series[0].date) ?? series[0].date} → ${utcDay(series[series.length - 1].date) ?? series[series.length - 1].date}`}
           </div>
 
           {!hideSourceToggle ? (

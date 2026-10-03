@@ -211,7 +211,12 @@ check("MUTATION: the flip removed → caught",
 
 // Every surface that opts in renders the mark AND the key. Map: the file that
 // passes { withEstimates: true } → the file that renders its figures.
-const RENDERS = { [PAGE]: "app/stock/[symbol]/StockSymbolPageClient.tsx" };
+const RENDERS = {
+  [PAGE]: "app/stock/[symbol]/StockSymbolPageClient.tsx",
+  // Pickers (#553 COWORK #102): the grid renders its marked cells and the key
+  // through this component; scripts/check-pickers-estimates.mjs checks the grid uses it.
+  "lib/server/pickersSecFundamentals.ts": "app/components/PickerEstimateMarks.tsx",
+};
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
     const rel = path.join(dir, e.name);

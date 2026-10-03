@@ -122,7 +122,9 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/breakout-signal-stocks", label: "Breakout", icon: "↗", tone: "orange", filterKey: "breakout" },
       { href: "/volume-spike-stocks", label: "Volume Spike", icon: "▮", tone: "orange", filterKey: "volumeSpike" },
-      { href: "/atr-spike-stocks", label: "ATR Spike", icon: "≈", tone: "orange", filterKey: "atrSpike" },
+      // 2026-10-03 (#553 COWORK #107/#109): the icon was "≈", which now means
+      // "estimate" site-wide (A's ESTIMATE_SIGN); "↕" reads as a widening range.
+      { href: "/atr-spike-stocks", label: "ATR Spike", icon: "↕", tone: "orange", filterKey: "atrSpike" },
     ],
   },
   {
