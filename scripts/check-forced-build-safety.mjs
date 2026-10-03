@@ -129,6 +129,10 @@ const NextResponse = {
 let lastBuildStats = null;
 export const resetMemo = () => { memo = null; lastBuildStats = null; };
 export const readStats = () => lastBuildStats;
+// The no-bars filter (#553 COWORK #105): identity here, since this bench
+// measures which payload is served, not its shape. Its own check runs the real
+// one (scripts/check-pickers-api-no-bars.mjs).
+const pickersWithoutBars = (d) => d;
 `;
 
 const js = ts.transpileModule(

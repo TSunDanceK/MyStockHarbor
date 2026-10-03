@@ -7,6 +7,7 @@ import BookmarkPromptButton from "./BookmarkPromptButton";
 import PageShareBar from "@/app/components/PageShareBar";
 import { getAllPosts } from "@/lib/blog";
 import { getPickersData } from "@/lib/server/pickersBuilder";
+import { pickersWithoutBars } from "@/lib/pickersPublic";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
@@ -114,7 +115,11 @@ const SITE_ORIGIN = "https://www.mystockharbor.com";
 // instrumentation-client.ts.
 async function fetchInitialPickersPayload(): Promise<PickersPayload | null> {
   try {
-    return (await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
+    // NO BARS INTO THIS PAGE'S CLIENT PROPS (#553 COWORK #105): PickersClient
+    // draws no chart, so the ~72 bars per record would only ride along in the
+    // HTML. Same filter as the /api/pickers answer, so the mount refresh
+    // replaces like with like.
+    return pickersWithoutBars(await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
   } catch {
     return null;
   }
