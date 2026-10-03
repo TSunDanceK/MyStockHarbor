@@ -27,7 +27,7 @@ import { extractForSymbol } from "./secExtractFor";
 import { withPredecessorFacts } from "./secSuccession";
 import { withClassCover } from "./secCoverClasses";
 import { withInstanceEps } from "./secInstanceEps";
-import { periodsDroppedForFx, setHasPeriods, toStoredSet } from "./secFactBuild";
+import { priorStandsForFx, toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { sicChangeOf, type SicChange } from "./secSicChange";
 import { instanceToFacts, isLagging, mergeFillOnly, newestPeriodicFiling, newestStoredEnd } from "./secFilingFill";
@@ -229,7 +229,7 @@ export async function checkAndFill(
  * symbol failed, stamps it, and a later run with a rate fills it.
  */
 function keptFromFx(stored: StoredFactSet, extracted: ExtractResult, fresh: StoredFactSet): StoredFactSet {
-  if (setHasPeriods(stored) && periodsDroppedForFx(extracted, fresh)) {
+  if (priorStandsForFx(stored, extracted, fresh)) {
     throw new Error(`fx unavailable for ${extracted.reportingCurrency}: stored set kept`);
   }
   return fresh;

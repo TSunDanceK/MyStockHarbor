@@ -133,6 +133,13 @@ const RULES = {
     return p && p.points.length === 0 && p.withheld?.reason === "units-unconfirmed" && p.withheld.factor > 900
       && /data-share-withheld="">Not drawn: the share counts in this company/.test(html) && !/505\.28B|525\.58B/.test(html) && !/<svg/.test(html);
   },
+  "3i. BKNG with no restatements on file: cut below 3 points -> 'Not drawn' with the reason, never a silent hide (#552 COWORK #132 (d))": (b, c) => {
+    const p = b.buildShareHistory(set(BKNG, undefined, undefined, 770e6));
+    const html = render(c, p);
+    return p && p.points.length === 0 && p.withheld?.reason === "cut-too-short" && p.withheld.cut && p.withheld.since === "2026-03-31"
+      && /data-share-withheld="">Not drawn: an earlier step in the filed share counts couldn&#x27;t be matched to a split the company restated, and the counts since Mar 2026 are too few/.test(html)
+      && !/<svg/.test(html);
+  },
   "3h. a cover naming one class (SHOP-like, ×33) is not a units slip: still drawn": (b) => {
     const h = b.buildShareHistory(set(DILUTER, undefined, undefined, 125e6 / 33));
     return h && h.points.length === 5 && !h.withheld;
@@ -214,6 +221,8 @@ const MUTANTS = [
   ["the units check against the cover only, not the uncovered cut", (s) => once(s, '  return fixed.startedAfter?.reason === "scale-step" ? { reason: "units-unconfirmed", factor: null } : null;', "  return null;"), null],
   ["an unmatched split drawn across", (s) => once(s, '      startedAfter = { date: pts[j].date, reason: "unmatched-split", ratio: k };\n      pts = pts.slice(j);', ""), null],
   ["any move next to a split cut (no step test)", (s) => once(s, "      if (Math.abs(Math.log(r)) <= Math.log(SHARE_UNMATCHED_SPLIT_STEP)) continue;\n", ""), null],
+  ["a series cut below 3 points hidden silently again", (s) => once(s, "  if (fixed.points.length < MIN_SHARE_POINTS) {\n    return {", "  if (fixed.points.length < MIN_SHARE_POINTS) {\n    return null; return {"), null],
+  ["the cut reason worded as the units reason", null, (s) => once(s, '  if (w.reason === "cut-too-short") {', "  if (false) {")],
   ["the withheld reason not shown", null, (s) => once(s, "  if (data?.withheld) {", "  if (false) {")],
   ["the >100× guard removed", (s) => once(s, "if (r > SHARE_SCALE_MAX_STEP || r < 1 / SHARE_SCALE_MAX_STEP) {", "if (false) {"), null],
   ["pre-listing points kept", (s) => once(s, "  if (listedFrom) {", "  if (false) {"), null],

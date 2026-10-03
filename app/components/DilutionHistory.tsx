@@ -26,7 +26,9 @@ export type DilutionHistoryData = {
   splits?: { date: string; ratio: number }[];
   dropped?: string[];
   startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; ratio?: number };
-  withheld?: { reason: "units-unconfirmed"; factor: number | null };
+  withheld?:
+    | { reason: "units-unconfirmed"; factor: number | null }
+    | { reason: "cut-too-short"; factor: null; cut?: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; since?: string };
   threeYear?: { pct: number; base: SharePoint; end?: SharePoint } | { pct: null; reason: "too-short" };
 };
 
@@ -110,6 +112,12 @@ export function splitWords(ratio: number): string {
  * off by a thousand times.
  */
 export function withheldWords(w: NonNullable<DilutionHistoryData["withheld"]>): string {
+  // A SERIES THE CORRECTIONS CUT BELOW THREE POINTS (#552 COWORK #132 (d)).
+  if (w.reason === "cut-too-short") {
+    if (w.cut === "listing") return "Not drawn: fewer than three share counts have been filed since the company's first report after listing, too few to show a trend.";
+    if (w.cut) return `Not drawn: an earlier step in the filed share counts couldn't be matched to a split the company restated, and the counts since${w.since ? ` ${fmtDateShort(w.since)}` : ""} are too few to show a trend.`;
+    return "Not drawn: after leaving out filed figures that were off by a factor of 100 or more, too few share counts remain to show a trend.";
+  }
   return w.factor !== null
     ? `Not drawn: the share counts in this company's filings don't agree with the count on its latest cover page (they differ by a factor of 300 or more), so we can't confirm which units they're in.`
     : "Not drawn: the filed share counts jump by more than 100 times at one point, and there's no cover-page count to confirm which side is in the right units.";
