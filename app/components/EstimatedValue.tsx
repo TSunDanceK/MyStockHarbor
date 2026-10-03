@@ -64,17 +64,31 @@ function Noted({ children, note, style, label }: { children: ReactNode; note: st
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setPlace(null); };
-    // Fixed to the viewport, so a scroll or resize would leave it behind: close
-    // instead. CAPTURE PHASE, so an inner container's scroll (which does not
-    // bubble to window) closes it too (#552 COWORK #115).
-    const close = () => setPlace(null);
+    // FIXED TO THE VIEWPORT, SO IT FOLLOWS ITS TRIGGER ON A SCROLL OR RESIZE,
+    // and closes only once the trigger has left the screen. CAPTURE PHASE, so
+    // an inner container's scroll (which does not bubble to window) moves it
+    // too (#552 COWORK #115).
+    //
+    // NOT "CLOSE ON ANY SCROLL" (#552 COWORK #126): scroll events arrive on
+    // the next frame, so a tap that lands while the page is still settling (a
+    // phone's momentum scroll, or a tile scrolled into view just before the
+    // click) opened the note and shut it in the same breath. The snapshot's
+    // "Loss both periods" never stayed open for exactly that reason.
+    const follow = () => {
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const vh = document.documentElement.clientHeight;
+      if (r.bottom < 0 || r.top > vh) { setPlace(null); return; }
+      setPlace(notePlacement({ left: r.left, top: r.top, bottom: r.bottom }, document.documentElement.clientWidth, vh));
+    };
     document.addEventListener("pointerdown", away);
-    window.addEventListener("scroll", close, { passive: true, capture: true });
-    window.addEventListener("resize", close);
+    window.addEventListener("scroll", follow, { passive: true, capture: true });
+    window.addEventListener("resize", follow);
     return () => {
       document.removeEventListener("pointerdown", away);
-      window.removeEventListener("scroll", close, { capture: true });
-      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", follow, { capture: true });
+      window.removeEventListener("resize", follow);
     };
   }, [open]);
   return (

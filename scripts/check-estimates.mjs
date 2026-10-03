@@ -202,8 +202,15 @@ const placeOk = (fn) => [[300, 360], [20, 360], [200, 1280], [0, 320]].every(([l
 check("the note's box stays inside the viewport with a 16 px gutter (360 px, 320 px and desktop; right-hand cells)", notePlacementSrc !== "" && placeOk(placeFrom(notePlacementSrc)));
 check("MUTATION: the note anchored at the trigger's left again → caught",
   !placeOk(placeFrom(once(notePlacementSrc, "Math.max(NOTE_GUTTER, Math.min(trigger.left, viewportWidth - NOTE_GUTTER - width))", "trigger.left"))));
-check("the note is position:fixed (escapes the hero row's clipping) and closes on any scroll, inner containers included (capture phase)",
-  /position: "fixed", left: place\.left, \.\.\.\("top" in place \? \{ top: place\.top \} : \{ bottom: place\.bottom \}\)/.test(CSRC) && /addEventListener\("scroll", close, \{ passive: true, capture: true \}\)/.test(CSRC));
+// FOLLOWS ON SCROLL, CLOSES ONLY OFF SCREEN (#552 COWORK #126): closing on any
+// scroll shut a note opened during a scroll's last frame.
+const followRule = (s) => /position: "fixed", left: place\.left, \.\.\.\("top" in place \? \{ top: place\.top \} : \{ bottom: place\.bottom \}\)/.test(s)
+  && /addEventListener\("scroll", follow, \{ passive: true, capture: true \}\)/.test(s)
+  && /if \(r\.bottom < 0 \|\| r\.top > vh\) \{ setPlace\(null\); return; \}\s*setPlace\(notePlacement\(/.test(s);
+check("the note is position:fixed (escapes the hero row's clipping), follows its trigger on any scroll (capture phase), and closes only once the trigger leaves the screen",
+  followRule(CSRC));
+check("MUTATION: close on any scroll again → caught",
+  !followRule(CSRC.replace('window.addEventListener("scroll", follow, { passive: true, capture: true });', 'window.addEventListener("scroll", () => setPlace(null), { passive: true, capture: true });')));
 // NEAR THE FOOT OF THE SCREEN IT OPENS UPWARD (#552 COWORK #115): a 360×640
 // phone, a tile whose bottom edge is 40 px from the foot.
 const flipOk = (fn) => {
