@@ -15,6 +15,8 @@
 //      restated; scaling stops there, and the split is noted once.
 //   3b. ONDS: single filings mis-scaled ×1000 between agreeing neighbours are
 //      dropped, not cut at (the chart was lost to them).
+//   3c. DOV-like: a dropped mis-scaled year leaves no "no filing data" break,
+//      and the source line says which filed figure was left out.
 //   5b. AAPL as stored (no fiscal Q4 quarters, years stop at the first
 //      quarter): the end steps back up to 6 months to find a base; never more.
 //   plus MUTATIONS, one per rule.
@@ -72,6 +74,8 @@ const GDDY = [["2013-12-31", 38826000], ["2014-12-31", 38826000], ["2015-12-31",
 const BKNG = [["2024-03-31", 33.9e6], ["2024-06-30", 33.4e6], ["2024-09-30", 33.1e6], ["2025-03-31", 816e6], ["2025-06-30", 812e6], ["2025-09-30", 32.38e6], ["2026-03-31", 790e6], ["2026-06-30", 768e6]];
 // ONDS as archived (fourth probe run), from 2021: two single-filing ×1000 slips.
 const ONDS = [["2021-12-31", 34180897], ["2022-12-31", 42242525], ["2023-09-30", 53892848], ["2024-03-31", 63035122], ["2024-06-30", 66377505], ["2024-09-30", 70741662], ["2025-03-31", 105005], ["2025-06-30", 150653000], ["2025-09-30", 259909415], ["2026-03-31", 445089], ["2026-06-30", 500709000]];
+// A long annual series with one year filed in the wrong units (fifth probe run: DOV, EFX, FITB...).
+const SLIP = [["2006-12-31", 203e6], ["2007-12-31", 200e6], ["2008-12-31", 186e6], ["2009-12-31", 186100], ["2010-12-31", 187e6], ["2011-12-31", 185e6]];
 // AAPL's stored tail (third probe run): the years stop at 2022-09-24, and the
 // quarters skip each fiscal Q4. From the latest quarter the cut lands in the hole.
 const AAPL_TAIL = [["2021-09-25", 16701272000], ["2022-09-24", 16215963000], ["2023-09-30", 15744231000], ["2023-12-30", 15509763000], ["2024-03-30", 15405856000], ["2024-06-29", 15287521000], ["2024-12-28", 15081724000], ["2025-03-29", 14994082000], ["2025-06-28", 14902886000], ["2025-12-27", 14748158000], ["2026-03-28", 14673278000], ["2026-06-27", 14656110000]];
@@ -127,6 +131,12 @@ const RULES = {
     const dates = h?.points.map((p) => p.date) ?? [];
     return h && !h.startedAfter && dates.length === 9 && dates[0] === "2021-12-31" && !dates.includes("2025-03-31") && !dates.includes("2026-03-31");
   },
+  "3c. a dropped mis-scaled year leaves no break, and the source line names it": (b, c) => {
+    const h = b.buildShareHistory(set(SLIP));
+    const html = render(c, h);
+    return h && h.points.length === 5 && !h.gaps && h.dropped?.[0] === "2009-12-31" && !/no filing data/.test(html)
+      && (html.match(/data-share-segment/g) ?? []).length === 1 && /The filed figure for Dec 2009 is left out/.test(html);
+  },
   "4a. GDDY: pre-listing points dropped (first report 2015-03-31)": (b) => {
     const h = b.buildShareHistory(set(GDDY), { listedFrom: "2015-03-31" });
     return h && h.points[0].date === "2015-12-31" && h.startedAfter?.reason === "listing";
@@ -170,9 +180,11 @@ const MUTANTS = [
   ["the proven-split date window removed", (s) => once(s, "nearStep(x.e, pts[i].date) && ", ""), null],
   ["the loose match for a proven split removed", (s) => once(s, "Math.abs(r / x.k - 1) < SHARE_PROVEN_SPLIT_TOLERANCE", "Math.abs(r / x.k - 1) < SHARE_SPLIT_TOLERANCE"), null],
   ["re-filed periods ignored", (s) => once(s, "    if (refiled.includes(pts[i - 1].date)) continue;\n", ""), null],
-  ["isolated mis-scaled filings kept (cut at instead)", (s) => once(s, "    return !(up !== 0 && up === off(p.shares, a[i + 1].shares) && off(a[i + 1].shares, a[i - 1].shares) === 0);", "    return true;"), null],
+  ["isolated mis-scaled filings kept (cut at instead)", (s) => once(s, "    if (slip) slips.push(p.date);\n    return !slip;", "    return true;"), null],
   ["a proven split scales every earlier point again", (s) => once(s, "while (j0 > 0 && Math.abs((pts[j0].shares / pts[j0 - 1].shares) * p - 1) >= SHARE_PROVEN_SPLIT_TOLERANCE) j0--;", "j0 = 0;"), null],
   ["the same split noted twice", (s) => once(s, "if (!splits.some((x) => x.ratio === p && nearStep(x.date, pts[i].date))) splits.push", "splits.push"), null],
+  ["a dropped filing counted as a gap", (s) => once(s, "    if (dropped.some((d) => d > from && d < to)) continue;\n", ""), null],
+  ["the dropped filing not named", null, (s) => once(s, "  if (dropped.length === 1) out.push(", "  if (false) out.push(")],
   ["the >100× guard removed", (s) => once(s, "if (r > SHARE_SCALE_MAX_STEP || r < 1 / SHARE_SCALE_MAX_STEP) {", "if (false) {"), null],
   ["pre-listing points kept", (s) => once(s, "  if (listedFrom) {", "  if (false) {"), null],
   ["the end never steps back", (s) => once(s, "i >= 0 && days(points[i].date, last.date) <= SHARE_TREND_BASE_MAX_DAYS; i--", "i >= points.length - 1; i--"), null],

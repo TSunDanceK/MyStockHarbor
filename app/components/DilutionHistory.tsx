@@ -24,6 +24,7 @@ export type DilutionHistoryData = {
   /** The series' corrections and its 3-year figure (lib/server/secShareHistory.ts, #552 COWORK #89). */
   gaps?: { from: string; to: string }[];
   splits?: { date: string; ratio: number }[];
+  dropped?: string[];
   startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" };
   threeYear?: { pct: number; base: SharePoint; end?: SharePoint } | { pct: null; reason: "too-short" };
 };
@@ -111,6 +112,9 @@ export function seriesNotes(data: DilutionHistoryData): string[] {
   const st = data.startedAfter;
   if (st?.reason === "listing") out.push("Starts at the company's first report after listing.");
   else if (st) out.push(`Starts ${fmtDateShort(st.date)}: an earlier step in the filed counts couldn't be matched to a split the company restated, so the chart doesn't draw across it.`);
+  const dropped = data.dropped ?? [];
+  if (dropped.length === 1) out.push(`The filed figure for ${fmtDateShort(dropped[0])} is left out: it was off by a factor of 100 or more from the figures either side.`);
+  else if (dropped.length > 1) out.push(`${dropped.length} filed figures (${dropped.map((d) => fmtDateShort(d)).join(", ")}) are left out: each was off by a factor of 100 or more from the figures either side.`);
   if (data.gaps?.length) out.push("A break in the line marks more than 15 months with no filing data.");
   return out;
 }
