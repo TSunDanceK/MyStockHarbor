@@ -42,6 +42,7 @@ import { balanceSheetInstant, valueOf } from "./secFactCodec";
 import { isConsecutive, revenueLineIncomplete } from "./secEarningsView";
 import { DEADLINE_FALLBACK } from "./secReportDates";
 import { annualOnlyForm } from "./annualOnly";
+import { derivedParentEquity, enterpriseValueOf, type Estimate } from "./secEstimates";
 
 /** Why a numerator could not be supplied. Rendered, never swallowed. */
 export type ValuationRefusal =
@@ -61,6 +62,7 @@ export type ValuationRefusal =
   | "no-balance-sheet-equity"
   | "equity-tagged-only-incl-nci"
   | "equity-is-zero-or-negative"
+  | "equity-too-small-for-pb"
   | "enterprise-value-input-missing"
   | "ebitda-is-zero-or-negative";
 
@@ -100,10 +102,28 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "equity is tagged only including noncontrolling interests, so a P/B for shareholders is not computed",
   "equity-is-zero-or-negative":
     "shareholders' equity on the latest balance sheet is not positive, so a P/B is not meaningful",
+  // GDDY's P/B 1,813 (#552 COWORK #86b): arithmetically right, meaningless.
+  "equity-too-small-for-pb":
+    "book equity is under 1% of market cap, so a P/B is not meaningful",
   "enterprise-value-input-missing":
-    "one of the enterprise-value or EBITDA inputs is not on file, and it is not approximated",
+    "one of the enterprise-value or EBITDA inputs is not on file",
   "ebitda-is-zero-or-negative":
     "EBITDA over the last twelve months is not positive, so EV/EBITDA is not meaningful",
+};
+
+/**
+ * THE WORD A CELL SHOWS IN PLACE OF A DASH (#552 COWORK #98 §1, matching
+ * Pickers, #553 COWORK #94): a figure that exists but means nothing reads as a
+ * word, with REFUSAL_WORDS as its hover/tap reason. Every refusal not listed
+ * here is a gap in the data and stays "—" (with its reason).
+ */
+export const REFUSAL_CELL_WORD: Partial<Record<ValuationRefusal, string>> = {
+  "eps-is-zero-or-negative": "Loss",
+  "eps-near-zero": "Not meaningful",
+  "ebitda-is-zero-or-negative": "Not meaningful",
+  "revenue-line-incomplete": "Not meaningful",
+  "equity-is-zero-or-negative": "Neg.",
+  "equity-too-small-for-pb": "Not meaningful",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -227,6 +247,15 @@ export type ValuationInputs = {
   refusals: ValuationRefusal[];
   /** Set when the ticker is notes, debentures or units on a shared CIK (secPrimaryListing). */
   debtListing?: { cls: string; primary: string };
+  /**
+   * THE LATEST FULL YEAR, where twelve months of EPS are refused
+   * ("no-twelve-month-eps") and that year is not stale (#552 COWORK #98 §2).
+   * Never folded into `eps`: the P/E built on it is labelled "FY", so it can't
+   * be read as trailing (the NVDA defect, #552 COWORK #8). See fyPeRatio.
+   */
+  fyEps?: EpsBasis;
+  /** FilerFacts.sic, carried for the estimate layer's bank gate. Absent = unknown = no estimate. */
+  sic?: string | null;
 };
 
 /**
@@ -479,6 +508,8 @@ export type FilerFacts = {
    * stored dei count only when it is NEWER. BIP's dei count is as of 2020.
    */
   citedCover?: { val: number; asOf: string; source: string } | null;
+  /** The registrant's SIC (data/sec/registrants.json), for the estimate layer's bank gate (secEstimates). */
+  sic?: string | null;
 };
 
 /** How far the filer's own EPS identity may sit from 1 or from the ratio. */
@@ -628,7 +659,22 @@ export function valuationInputs(
     }
   }
 
-  return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}) };
+  // THE FY FALLBACK (#552 COWORK #98 §2): only for a plain "not on file",
+  // never across a stale year, an ADS unit or a share-basis change.
+  const fyYear = !ads && refusals.length === 1 && refusals[0] === "no-twelve-month-eps" ? newestFiscalYear(set.years) : null;
+  const fyEps = fyYear && !epsIsStale(fyYear.periodEnd, today) ? fyYear : null;
+
+  return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}), ...(fyEps ? { fyEps } : {}), ...(filer.sic ? { sic: filer.sic } : {}) };
+}
+
+/**
+ * P/E ON THE LATEST FULL YEAR, where the trailing P/E is refused only because
+ * twelve months are not on file (#552 COWORK #98 §2). The same rules as
+ * peRatio (loss, near zero) on the year's EPS. Null when there is no such year.
+ */
+export function fyPeRatio(inputs: ValuationInputs, price: number | null): ValuationFigure | null {
+  if (!inputs.fyEps) return null;
+  return peRatio({ ...inputs, eps: inputs.fyEps, refusals: [] }, price);
 }
 
 /** Shown under a P/B computed on NCI-inclusive equity (#552 COWORK #54). */
@@ -636,6 +682,17 @@ export const PB_INCL_NCI_NOTE = "Book value incl. noncontrolling interests (the 
 
 /** Positive trailing EPS below this (in the price's unit, per share or per ADS) gives no P/E. */
 export const PE_MIN_EPS = 0.05;
+
+/**
+ * POSITIVE BOOK EQUITY BELOW THIS SHARE OF MARKET CAP GIVES NO P/B (#552
+ * COWORK #86b). GDDY printed 1,813x: tiny positive equity, so the division is
+ * right and the figure tells a reader nothing. The census (CODE-A #112, 577
+ * P/Bs shown): 1% refuses 8, all over 100x (buyback-shrunk or accumulated-
+ * deficit equity: CL, CLX, MTD, LYV, RBLX, AXSM, ONC, GDDY); 2% would reach
+ * MA, FTNT and CRWD, whose high P/B is still a figure. The words say "1%", so
+ * a change here changes REFUSAL_WORDS too (check-sec-valuation pins both).
+ */
+export const PB_MIN_EQUITY_SHARE = 0.01;
 
 /** A debt ticker's refusal, naming its class and the equity's listing (#552 COWORK #48). */
 export function debtRefusal(d: { cls: string; primary: string }): ValuationFigure {
@@ -686,7 +743,9 @@ export function epsUnitWords(eps: Pick<EpsBasis, "adsRatio" | "adsKind">): strin
 
 export type ValuationFigure =
   /** `note`: what the figure is, where it is not the plain one (P/B on NCI-inclusive equity). */
-  | { ok: true; val: number; note?: string }
+  | { ok: true; val: number; note?: string;
+      /** An estimated or derived figure (secEstimates): never rendered without its marker, note and key. */
+      est?: Estimate }
   /** `detail`: the refusal in words with its own date, where one exists (stale EPS). */
   | { ok: false; why: ValuationRefusal; detail?: string };
 
@@ -816,10 +875,11 @@ export function peRatio(
 // present, else the newest fiscal year with every input present — never a mix.
 // A multiple whose inputs span two bases is a number describing no period.
 //
-// EV/EBITDA IS NOT APPROXIMATED. A missing debt line is not assumed to be
-// zero, and a missing D&A is not assumed to be small: any missing input is a
-// refusal and the section prints "—". EBITDA here is operating income plus
-// D&A as filed — the conventional construction, stated rather than implied.
+// EV/EBITDA IS APPROXIMATED IN ONE TESTED CASE ONLY (#552 COWORK #112): an
+// untagged short-term debt line counts as zero, marked "≈" (secEstimates, M2,
+// back-tested). Any other missing debt or cash line, or a missing D&A, is a
+// refusal. EBITDA here is operating income plus D&A as filed — the
+// conventional construction, stated rather than implied.
 //
 // THE 20-F RULE APPLIES TO ALL FOUR. Every one of them divides a market cap or
 // a price by a filed per-share or company figure; for a depositary-share filer
@@ -878,11 +938,34 @@ export type MultipleInputs = {
     equityIncludesNci?: boolean;
     /** Only an NCI-inclusive total is tagged AND the filer reports a non-zero NCI: P/B refused by name. */
     equityOnlyInclNci?: boolean;
+    /**
+     * Shareholders' equity DERIVED as total equity less the filed NCI
+     * (secEstimates, M6a), beside `equity`, which keeps today's figure or
+     * refusal. Used only by a caller that renders the "derived" mark.
+     */
+    derivedEquity?: { val: number; est: Estimate };
     shortTermDebt: number | null;
     longTermDebt: number | null;
     cash: number | null;
   } | null;
 };
+
+/**
+ * BANKS WHOSE REVENUE LINE IS FEE INCOME ONLY (#552 COWORK #86b, ruled COWORK
+ * #92): ZION showed P/S 16.79. Measured from the R2 archive (CODE-A #113): for
+ * each Pickers filer with SIC 6000-6299 that showed a P/S, the concept that
+ * fills revenue in its newest annual period. These 8 fill it with ASC 606
+ * "revenue from contracts with customers" while also tagging interest income,
+ * so the line is fee income and the net interest income is missing -- a P/S on
+ * it overstates the multiple several-fold. (NTRS even tags a total Revenues,
+ * which the chain ranks after 606.) Their revenue is treated as incomplete,
+ * so P/S and Pickers' Revenue cell take the existing refusal. Asset managers
+ * and exchanges filing 606 with no interest income (BLK, TROW, ICE, NDAQ, BEN,
+ * JEF) and banks whose revenue comes from a total concept keep theirs.
+ * INTERIM, 3 Oct 2026: retire it when the bank-revenue chain (COWORK #81/#83)
+ * reads the total, and re-measure then.
+ */
+export const BANK_REVENUE_IS_FEES_ONLY: ReadonlySet<string> = new Set(["AXP", "CFG", "CFR", "COF", "KEY", "NTRS", "SOFI", "ZION"]);
 
 /**
  * BOOK EQUITY FOR P/B (#552 COWORK #54, AVAV).
@@ -897,16 +980,24 @@ export type MultipleInputs = {
  * for the period that closes at this balance-sheet date. Non-zero there, and
  * the inclusive total is not shareholders' book value: refused by name.
  */
-export function bookEquityAt(set: StoredFactSet, b: StoredPeriod): { equity: number | null; equityIncludesNci: boolean; equityOnlyInclNci: boolean } {
+export function bookEquityAt(set: StoredFactSet, b: StoredPeriod): { equity: number | null; equityIncludesNci: boolean; equityOnlyInclNci: boolean; derivedEquity?: { val: number; est: Estimate } } {
   const parent = valueOf(b, "stockholdersEquity");
   if (parent !== null) return { equity: parent, equityIncludesNci: false, equityOnlyInclNci: false };
   const total = valueOf(b, "totalEquity");
   if (total === null) return { equity: null, equityIncludesNci: false, equityOnlyInclNci: false };
   const closing = [...set.quarters, ...set.years].filter((p) => p.e === b.e);
   const nciTagged = closing.some((p) => { const n = valueOf(p, "netIncomeToNoncontrollingInterest"); return n !== null && n !== 0; });
-  return nciTagged
+  const today = nciTagged
     ? { equity: null, equityIncludesNci: false, equityOnlyInclNci: true }
     : { equity: total, equityIncludesNci: true, equityOnlyInclNci: false };
+  // THE FILED BALANCE-SHEET NCI, WHERE THE SET CARRIES IT (#552 COWORK #112,
+  // M6a): shareholders' equity is the total less it, marked "derived". Carried
+  // BESIDE today's answer, which stays as it was for every other caller. A
+  // zero NCI derives nothing new.
+  const derived = derivedParentEquity(total, set.nci, b.e);
+  return derived && derived.equity !== total
+    ? { ...today, derivedEquity: { val: derived.equity, est: derived.est } }
+    : today;
 }
 
 export function multipleInputs(set: StoredFactSet): MultipleInputs {
@@ -915,7 +1006,7 @@ export function multipleInputs(set: StoredFactSet): MultipleInputs {
   const periods = revenue?.basis === "four-quarters" ? set.quarters.slice(0, 4) : set.years.slice(0, 1);
   return {
     revenue,
-    revenueIncomplete: Boolean(revenue && periods.some((p) => revenueLineIncomplete(p))),
+    revenueIncomplete: Boolean(revenue && (periods.some((p) => revenueLineIncomplete(p)) || BANK_REVENUE_IS_FEES_ONLY.has(set.symbol))),
     ebitda: twelveMonthsOf(set, ["operatingIncome", "depreciationAndAmortization"]),
     ebitdaMissing: [
       ...(twelveMonthsOf(set, ["operatingIncome"]) ? [] : ["operating income"]),
@@ -947,7 +1038,14 @@ export type ValuationMultiples = {
 export function valuationMultiples(
   inputs: ValuationInputs,
   m: MultipleInputs,
-  price: number | null
+  price: number | null,
+  /**
+   * OPT-IN, PER SURFACE (#552 COWORK #94): an estimated or derived figure may
+   * only render with its mark, note and key (app/components/EstimatedValue).
+   * A caller that does not render them yet gets today's refusals instead, so a
+   * surface can never show an estimate unmarked between two PRs.
+   */
+  opts: { withEstimates?: boolean } = {}
 ): ValuationMultiples {
   const cap = marketCap(inputs, price);
   const pe = peRatio(inputs, price);
@@ -964,38 +1062,46 @@ export function valuationMultiples(
       ? { ok: true, val: cap.val / m.revenue.vals.revenue }
       : { ok: false, why: "no-twelve-month-revenue" };
 
-  const equity = m.balanceSheet?.equity ?? null;
+  // THE DERIVED EQUITY ONLY FOR A CALLER THAT MARKS IT; a non-positive derived
+  // figure is refused exactly like a filed one ("Neg."), so the two never
+  // disagree about what a cell shows.
+  const derivedEq = opts.withEstimates ? m.balanceSheet?.derivedEquity ?? null : null;
+  const equity = derivedEq ? derivedEq.val : m.balanceSheet?.equity ?? null;
   const pb: ValuationFigure =
     equity === null
       ? { ok: false, why: m.balanceSheet?.equityOnlyInclNci ? "equity-tagged-only-incl-nci" : "no-balance-sheet-equity" }
       : equity <= 0
         ? { ok: false, why: "equity-is-zero-or-negative" }
-        : { ok: true, val: cap.val / equity,
-            ...(m.balanceSheet?.equityIncludesNci ? { note: PB_INCL_NCI_NOTE } : {}) };
+        // THE 1% FLOOR (#691) APPLIES TO WHICHEVER EQUITY WAS CHOSEN, the
+        // derived one included (#552 COWORK #113).
+        : equity < cap.val * PB_MIN_EQUITY_SHARE
+          ? { ok: false, why: "equity-too-small-for-pb" }
+          : { ok: true, val: cap.val / equity,
+            ...(!derivedEq && m.balanceSheet?.equityIncludesNci ? { note: PB_INCL_NCI_NOTE } : {}),
+            ...(derivedEq ? { est: derivedEq.est } : {}) };
 
   const bs = m.balanceSheet;
   let evEbitda: ValuationFigure;
   // NAME WHAT IS MISSING (#552 COWORK #54), and a known non-positive EBITDA is
   // "not meaningful" before it is "not on file": EV cannot rescue it.
+  // EV FROM THE ONE LAYER (secEstimates): filed, or the M2 estimate when only
+  // short-term debt is untagged; any other missing line is still refused.
+  const evAny = enterpriseValueOf(cap.val, bs, inputs.sic);
+  const ev = evAny.val !== null && evAny.est && !opts.withEstimates
+    ? { val: null, missing: ["short-term debt"] }
+    : evAny;
   const missing = [
-    ...(bs ? [] : ["the balance sheet"]),
-    ...(bs && bs.shortTermDebt === null ? ["short-term debt"] : []),
-    ...(bs && bs.longTermDebt === null ? ["long-term debt"] : []),
-    ...(bs && bs.cash === null ? ["cash"] : []),
+    ...(ev.val === null ? ev.missing : []),
     ...(m.ebitda ? [] : (m.ebitdaMissing?.length ? m.ebitdaMissing : ["twelve months of EBITDA"]).map((x) => `${x} (twelve months)`)),
   ];
   const knownEbitda = m.ebitda ? m.ebitda.vals.operatingIncome + m.ebitda.vals.depreciationAndAmortization : null;
   if (knownEbitda !== null && knownEbitda <= 0) {
     evEbitda = { ok: false, why: "ebitda-is-zero-or-negative" };
-  } else if (!bs || bs.shortTermDebt === null || bs.longTermDebt === null || bs.cash === null || !m.ebitda) {
+  } else if (ev.val === null || knownEbitda === null) {
     evEbitda = { ok: false, why: "enterprise-value-input-missing",
-      detail: `not on file: ${missing.join(", ")}; it is not approximated` };
+      detail: `not on file: ${missing.join(", ")}` };
   } else {
-    const ebitda = m.ebitda.vals.operatingIncome + m.ebitda.vals.depreciationAndAmortization;
-    const ev = cap.val + bs.shortTermDebt + bs.longTermDebt - bs.cash;
-    evEbitda = ebitda <= 0
-      ? { ok: false, why: "ebitda-is-zero-or-negative" }
-      : { ok: true, val: ev / ebitda };
+    evEbitda = { ok: true, val: ev.val / knownEbitda, ...(evAny.val !== null && evAny.est ? { est: evAny.est } : {}) };
   }
   return { pe, ps, pb, evEbitda };
 }

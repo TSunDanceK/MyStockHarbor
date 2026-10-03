@@ -475,10 +475,6 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
   const [dynamicUniversePreview, setDynamicUniversePreview] = useState<string[] | null>(() => Array.isArray(initialPickersPayload?.dynamicUniversePreview) ? initialPickersPayload!.dynamicUniversePreview : null);
   const [dynamicSymbols, setDynamicSymbols] = useState<string[]>(() => Array.isArray(initialPickersPayload?.dynamicSymbols) ? initialPickersPayload!.dynamicSymbols.map((x) => String(x).trim().toUpperCase()).filter(Boolean) : []);
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(() => typeof initialPickersPayload?.estimatedApiCalls === "number" ? initialPickersPayload!.estimatedApiCalls : null);
-  const [earningsFetchBusy, setEarningsFetchBusy] = useState(false);
-  const [earningsFetchLockedUntil, setEarningsFetchLockedUntil] = useState(0);
-  const [earningsFetchTick, setEarningsFetchTick] = useState(0);
-  const [earningsFetchMessage, setEarningsFetchMessage] = useState<string | null>(null);
   const [companyNames, setCompanyNames] = useState<Map<string, string>>(new Map());
 
   // Accordion + sidebar + search state (draft-approved redesign of the
@@ -510,30 +506,6 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
       window.setTimeout(() => setScreenerHighlight(false), 2700);
     }, 80);
   }, [loading]);
-
-  const EARNINGS_FETCH_LOCK_MS = 90 * 1000;
-  void earningsFetchTick;
-  const earningsFetchRemainingSeconds = Math.max(0, Math.ceil((earningsFetchLockedUntil - Date.now()) / 1000));
-
-  async function handleFetchEarnings() {
-    if (earningsFetchBusy || Date.now() < earningsFetchLockedUntil) return;
-    setEarningsFetchBusy(true); setEarningsFetchMessage(null);
-    try {
-      const res = await fetch(`/api/jobs/warm-earnings?t=${Date.now()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Earnings warm-up failed");
-      const data = (await res.json()) as { fetchedCount?: number; checked?: number; deferredCount?: number; failedCount?: number };
-      const fetched = typeof data?.fetchedCount === "number" ? data.fetchedCount : 0;
-      const checked = typeof data?.checked === "number" ? data.checked : 0;
-      const deferred = typeof data?.deferredCount === "number" ? data.deferredCount : 0;
-      const failed = typeof data?.failedCount === "number" ? data.failedCount : 0;
-      setEarningsFetchMessage(`Checked ${checked}, fetched ${fetched}, deferred ${deferred}, failed ${failed}.`);
-      const lockUntil = Date.now() + EARNINGS_FETCH_LOCK_MS;
-      setEarningsFetchLockedUntil(lockUntil);
-      try { window.localStorage.setItem("msh:lastEarningsFetchUntil", String(lockUntil)); } catch { /* ignore */ }
-      await loadPickers(true);
-    } catch { setEarningsFetchMessage("Earnings warm-up failed. Try again in a moment."); }
-    finally { setEarningsFetchBusy(false); }
-  }
 
   function toggleSection(title: string) {
     setExpandedSections((prev) => {
@@ -596,23 +568,6 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
       if (!force) { setSections([]); setSignalRecords([]); setUpdatedAt(null); setUniverseSize(null); setDynamicUniverseCount(null); setDynamicUniversePreview(null); setDynamicSymbols([]); setEstimatedApiCalls(null); }
     } finally { setBusy(false); }
   }
-
-  useEffect(() => {
-    try { const saved = Number(window.localStorage.getItem("msh:lastEarningsFetchUntil") || "0"); if (Number.isFinite(saved) && saved > Date.now()) setEarningsFetchLockedUntil(saved); } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    if (!earningsFetchLockedUntil) return;
-    const interval = window.setInterval(() => setEarningsFetchTick((v) => v + 1), 1000);
-    return () => window.clearInterval(interval);
-  }, [earningsFetchLockedUntil]);
-
-  useEffect(() => {
-    if (!earningsFetchLockedUntil) return;
-    if (Date.now() < earningsFetchLockedUntil) return;
-    setEarningsFetchLockedUntil(0);
-    try { window.localStorage.removeItem("msh:lastEarningsFetchUntil"); } catch { /* ignore */ }
-  }, [earningsFetchTick, earningsFetchLockedUntil]);
 
   useEffect(() => {
     let cancelled = false;
@@ -916,7 +871,6 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
   .pickers-section-title { display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0; }
   .pickers-section-title-text { min-width:0;line-height:1.22;font-size:14px;font-weight:700; }
   .pickers-screener-panel { display:block; }
-  .pickers-earnings-fetch-button:hover:not(:disabled) { filter:brightness(1.08);transform:translateY(-1px); }
 
   @keyframes screenerHighlightGlow {
     0% { box-shadow:0 0 0 0 rgba(59,130,246,0);border-color:rgba(255,255,255,0.08); }
@@ -1187,18 +1141,13 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
                           })}
                         </div>
 
-                        {(isEarnings || seeAllHref) ? (
+                        {seeAllHref ? (
                           <div className="pickers-section-footer">
-                            <div className="pickers-section-footer-left">
-                              {isEarnings ? (
-                                <>
-                                  <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.06)", color: "rgba(134,239,172,0.80)", fontSize: 11, fontWeight: 600, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.65 : 1, whiteSpace: "nowrap", flex: "0 0 auto" }}>
-                                    {earningsFetchBusy ? "Fetching…" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
-                                  </button>
-                                  {earningsFetchMessage ? <span style={{ fontSize: 11, opacity: 0.55, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{earningsFetchMessage}</span> : null}
-                                </>
-                              ) : null}
-                            </div>
+                            {/* The "Fetch Earnings" button that sat here was removed
+                                (#553 CODE-B #94 B11): it ran the FMP warm-earnings
+                                cron from the browser, which errors once FMP is off.
+                                The earnings rows refresh on the job's own schedule. */}
+                            <div className="pickers-section-footer-left" />
                             {seeAllHref ? <a href={seeAllHref} className="pickers-see-all">See all →</a> : null}
                           </div>
                         ) : null}

@@ -26,11 +26,13 @@ import { fetchQuoteSnapshotForRender } from "@/lib/server/quoteData";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { pickSurfacePrice, readSurfaceInputs } from "@/lib/server/tiingoSurfacePrice";
 import { getStockPageSecFacts } from "@/lib/server/secEarningsSnapshot";
-import { marketCap, peRatio } from "@/lib/server/secValuation";
+import { marketCap, peRatio, REFUSAL_WORDS } from "@/lib/server/secValuation";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
+import { resolveProfile } from "@/lib/server/staticProfile";
 
-// Ticker remapping for non-US tickers.
-// Use US-listed ADR equivalents where available — all FMP endpoints work reliably for US symbols.
+// Ticker remapping for non-US tickers, on BOTH paths (Tiingo since #563 COWORK #34).
+// Use US-listed ADR equivalents where available: Tiingo's US feed and our price
+// pool carry the ADR, not the home listing, and so do the FMP endpoints.
 // IFX (Xetra) → IFNNY (US OTC ADR for Infineon Technologies)
 const TICKER_REMAP: Record<string, string> = {
   IFX: "IFNNY",
@@ -59,7 +61,25 @@ export type VideoStockData = {
    * the page to show the linked "Market data from Tiingo.com" credit.
    */
   priceLabel?: string;
+  /**
+   * Tiingo path only (#553 COWORK #88): why an MA tile is empty when there IS a
+   * price -- fewer than 50 / 200 stored daily closes. Shown as the tile's hover
+   * note; null when the average computed.
+   */
+  ma50Note?: string | null;
+  ma200Note?: string | null;
+  /**
+   * Tiingo path only (#563 COWORK #45): why the market-cap tile shows "—".
+   * A's own words for a named refusal (REFUSAL_WORDS, the stock page's rule),
+   * so every dash explains itself; null when a cap is shown.
+   */
+  marketCapNote?: string | null;
 };
+
+/** The market-cap tile's note when SEC data for the symbol isn't on file at all. */
+export const NO_SEC_SHARE_COUNT_NOTE = "No SEC share count on file for this company yet";
+
+export const SHORT_HISTORY_NOTE = "Not enough price history stored yet";
 
 function formatMarketCap(value: number | null): string | null {
   if (!value || !Number.isFinite(value)) return null;
@@ -68,6 +88,8 @@ function formatMarketCap(value: number | null): string | null {
   if (value >= 1e6) return `$${(value / 1e6).toFixed(0)}M`;
   return `$${value.toLocaleString()}`;
 }
+
+const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function average(values: number[]): number | null {
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
@@ -93,13 +115,17 @@ function trendOf(price: number | null, ma50: number | null, ma200: number | null
  * Null when Tiingo has no price for the symbol, so the caller keeps the FMP
  * path: FMP stays this surface's fallback until the owner flips it.
  *
- * NO REMAP. IFX -> IFNNY exists for FMP; the Tiingo universe is our own price
- * pool, and a symbol it does not carry simply falls back.
+ *   sector      A's sector resolver, SEC-only (no cached vendor value is passed)
+ *
+ * THE REMAP APPLIES HERE TOO (#563 COWORK #34): IFX reads IFNNY's pool row,
+ * history and SEC facts. An ADR filer meets A's ADS-ratio refusal, so IFX shows
+ * no market-cap or P/E tile -- correct, not a gap. The page keeps showing IFX.
  */
 async function getVideoStockDataTiingo(upper: string): Promise<VideoStockData | null> {
+  const symbol = TICKER_REMAP[upper] ?? upper;
   const [{ row, bars }, secFacts] = await Promise.all([
-    readSurfaceInputs(upper),
-    getStockPageSecFacts(upper).catch(() => null),
+    readSurfaceInputs(symbol),
+    getStockPageSecFacts(symbol).catch(() => null),
   ]);
   const surface = pickSurfacePrice(row, bars, Date.now());
   if (!surface) return null;
@@ -114,7 +140,7 @@ async function getVideoStockDataTiingo(upper: string): Promise<VideoStockData | 
 
   return {
     ticker: upper,
-    companyName: secFacts?.profileFacts.entityName ?? (snapshotCompanyName(upper) || null),
+    companyName: secFacts?.profileFacts.entityName ?? (snapshotCompanyName(symbol) || snapshotCompanyName(upper) || null),
     price: surface.price,
     marketCap: formatMarketCap(cap && cap.ok ? cap.val : null),
     ma50,
@@ -123,8 +149,14 @@ async function getVideoStockDataTiingo(upper: string): Promise<VideoStockData | 
     ma200Pct: pctFromBase(surface.price, ma200),
     trend: trendOf(surface.price, ma50, ma200),
     peRatio: pe && pe.ok ? pe.val : null,
-    sector: null,
+    marketCapNote:
+      cap && cap.ok ? null
+        : cap && !cap.ok ? capitalise(cap.detail ?? REFUSAL_WORDS[cap.why])
+          : NO_SEC_SHARE_COUNT_NOTE,
+    sector: resolveProfile(symbol, null).sector,
     priceLabel: surface.label,
+    ma50Note: ma50 === null ? SHORT_HISTORY_NOTE : null,
+    ma200Note: ma200 === null ? SHORT_HISTORY_NOTE : null,
   };
 }
 

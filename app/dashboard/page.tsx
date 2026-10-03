@@ -16,6 +16,8 @@ import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { secEarningsSummary } from "@/lib/server/secEarningsSummary";
 import { getInternalNewsPayload } from "@/lib/server/internalNews";
 import { cleanSymbol, SYMBOL_COOKIE } from "@/lib/symbol";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -96,6 +98,7 @@ async function getInitialQuoteAndName(
         date: q.date,
         time: q.time,
         source: q.source,
+        priceLabel: q.priceLabel ?? null,
       },
       name: q.name ?? "",
     };
@@ -168,6 +171,14 @@ export default async function DashboardPage({ searchParams }: Props) {
   const initialHistory: Point[] = Array.isArray(rawHistory) ? rawHistory : [];
   const { quote: initialQuote, name: initialSymbolName } = quoteAndName;
 
+  // STEP 4 (#553 COWORK #71/#92): the linked credit, rendered here and handed
+  // down, shown by the client beside any figure that came from Tiingo (a quote
+  // with a priceLabel, a benchmark payload with provider "tiingo").
+  const tiingoCredit =
+    priceProviderFor("STOCK_PAGE") === "tiingo" ? (
+      <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+    ) : null;
+
   return (
     <>
       <Suspense
@@ -185,6 +196,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           initialBenchmarks={benchmarks}
           initialNews={news}
           initialEarningsSummary={earningsSummary}
+          tiingoCredit={tiingoCredit}
           // Proves to /api/quote that this client rendered a real page. Empty
           // string when QUOTE_TOKEN_SECRET is unset, in which case the client
           // sends no header and behaviour is unchanged. Session-scoped, not

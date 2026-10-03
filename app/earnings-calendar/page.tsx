@@ -18,6 +18,8 @@ import {
 } from "@/lib/server/earningsCalendar";
 import { resolveCalendarDay, dayStateMessage, easternDate, outOfWindowCell } from "@/lib/server/calendarDayState";
 import { PRICE_COVERAGE_NOTE } from "@/lib/server/gridPriceCoverage";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsDueStrip from "./EarningsDueStrip";
@@ -851,6 +853,16 @@ export default async function EarningsCalendarPage({
               {dayData.items.some((i) => i.priceCoverage === "outside-bar-universe") ? (
                 <p style={{ fontSize: 12.5, opacity: 0.6, marginTop: 12, marginBottom: 0 }}>
                   {PRICE_COVERAGE_NOTE}
+                </p>
+              ) : null}
+              {/* THE PRICE COLUMN'S SOURCE (#552 COWORK #108). The grid's prices
+                  come from the price pool, so once POOL is on Tiingo they are
+                  Tiingo prices and carry the same linked credit as every other
+                  Tiingo surface -- the shared constants, never hand-typed.
+                  Only under a grid that has rows: no prices, nothing to credit. */}
+              {priceProviderFor("POOL") === "tiingo" && dayData.items.length > 0 ? (
+                <p style={{ fontSize: 12.5, opacity: 0.6, marginTop: 8, marginBottom: 0 }}>
+                  Prices: <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
                 </p>
               ) : null}
             </div>

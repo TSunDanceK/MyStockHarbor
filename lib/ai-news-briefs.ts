@@ -1,5 +1,17 @@
 import { unstable_cache } from "next/cache";
 
+// THE AI GETS NON-PRICE INPUTS ONLY (#563 COWORK #31 (b); Tiingo contract §5.3(x)).
+// Headlines, the news-score label/value and the SEC earnings tone. No price,
+// no RSI, no distance from a moving average, no range levels and no trend label
+// (trend is derived from MA50/MA200). Those are shown on the page as plain
+// figures beside the AI text, never fed into it, so no data-provider switch can
+// route licensed price data into model output.
+//
+// ENFORCED HERE, NOT AT THE CALLERS: the payload sent to the model (and used as
+// the cache key) is rebuilt field by field from an allow-list below, so an
+// object carrying extra price fields (TypeScript lets those through
+// structurally) still can't reach the prompt. check-news-ai-inputs pins it.
+
 export type AiNewsBriefInputItem = {
   title: string;
   source: string | null;
@@ -17,10 +29,24 @@ export type AiNewsBrief = {
 type BatchInput = {
   symbol: string;
   companyName: string;
-  trend: string | null;
   newsScoreLabel: string | null;
   items: AiNewsBriefInputItem[];
 };
+
+/** The allow-list: exactly these fields reach the model. */
+function briefsAiPayload(input: BatchInput): BatchInput {
+  return {
+    symbol: input.symbol,
+    companyName: input.companyName,
+    newsScoreLabel: input.newsScoreLabel,
+    items: input.items.map((item) => ({
+      title: item.title,
+      source: item.source,
+      pubDate: item.pubDate,
+      description: item.description,
+    })),
+  };
+}
 
 function extractResponseText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -96,12 +122,13 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
 
   const systemPrompt =
     "You write short investor context lines for MyStockHarbor, a beginner-friendly stock analysis site. " +
-    "Use only the provided headline, source, publication date, feed description, stock symbol, company name, trend context, and news-score label. " +
-    "Any field that is null was not available. Do not describe it, do not guess it, and do not treat a missing trend or news score as neutral -- neutral is a real reading and these fields are absent, not neutral. " +
+    "Use only the provided headline, source, publication date, feed description, stock symbol, company name, and news-score label. " +
+    "You are given no price or chart data: do not describe the share price, its trend, moving averages, momentum indicators or price levels. " +
+    "Any field that is null was not available. Do not describe it, do not guess it, and do not treat a missing news score as neutral -- neutral is a real reading and this field is absent, not neutral. " +
     "Return one output item for each input article in the exact same order. " +
-    "The page already shows the original headline and FMP feed excerpt, so do not rewrite or summarise the article. " +
+    "The page already shows the original headline and feed excerpt, so do not rewrite or summarise the article. " +
     "Set summary to an empty string unless a few words are needed for valid JSON. " +
-    "Use whyItMatters for one short investor-focused sentence explaining why the item could matter for sentiment, earnings expectations, regulation, demand, margins, valuation, or the chart. " +
+    "Use whyItMatters for one short investor-focused sentence explaining why the item could matter for sentiment, earnings expectations, regulation, demand, margins, or valuation. " +
     "If the article appears vague, recycled, thin, or low-information, say what traders may watch instead. " +
     "Do not invent facts. Do not imply full article access or independent verification. " +
     "Keep whyItMatters under 28 words. " +
@@ -184,7 +211,7 @@ const getCachedAiNewsBriefs = unstable_cache(
     const payload = JSON.parse(payloadJson) as BatchInput;
     return generateAiNewsBriefs(payload);
   },
-  ["msh-ai-news-briefs-v4-why-only"],
+  ["msh-ai-news-briefs-v5-non-price"],
   {
     revalidate: 60 * 60,
   }
@@ -196,7 +223,7 @@ export async function getAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]>
   }
 
   try {
-    return await getCachedAiNewsBriefs(JSON.stringify(input));
+    return await getCachedAiNewsBriefs(JSON.stringify(briefsAiPayload(input)));
   } catch {
     return [];
   }
@@ -209,15 +236,9 @@ export type AiNewsInsight = {
 type InsightInput = {
   symbol: string;
   companyName: string;
-  trend: string | null;
   newsScoreLabel: string | null;
   newsScoreValue: number | null;
   earningsTone: string;
-  rsi: number | null;
-  priceVs50: number | null;
-  priceVs200: number | null;
-  recentHigh: number | null;
-  recentLow: number | null;
   items: Array<{
     title: string;
     source: string | null;
@@ -227,6 +248,25 @@ type InsightInput = {
     whyItMatters: string | null;
   }>;
 };
+
+/** The allow-list: exactly these fields reach the model. */
+function insightAiPayload(input: InsightInput): InsightInput {
+  return {
+    symbol: input.symbol,
+    companyName: input.companyName,
+    newsScoreLabel: input.newsScoreLabel,
+    newsScoreValue: input.newsScoreValue,
+    earningsTone: input.earningsTone,
+    items: input.items.map((item) => ({
+      title: item.title,
+      source: item.source,
+      pubDate: item.pubDate,
+      description: item.description,
+      summary: item.summary,
+      whyItMatters: item.whyItMatters,
+    })),
+  };
+}
 
 async function generateAiNewsInsight(input: InsightInput): Promise<AiNewsInsight | null> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -261,10 +301,11 @@ async function generateAiNewsInsight(input: InsightInput): Promise<AiNewsInsight
 
   const systemPrompt =
     "You write concise stock-news insight copy for MyStockHarbor, a beginner-friendly stock analysis site. " +
-    "Use only the provided symbol, company name, trend, news score, earnings tone, RSI, distance vs moving averages, recent range levels, and the provided top article details. " +
-    "Any field that is null was not available. Do not describe it, do not guess it, and do not treat a missing trend or news score as neutral -- neutral is a real reading and these fields are absent, not neutral. " +
+    "Use only the provided symbol, company name, news score, earnings tone, and the provided top article details. " +
+    "You are given no price or chart data: do not describe the share price, its trend, moving averages, momentum indicators or price levels; the page shows those separately. " +
+    "Any field that is null was not available. Do not describe it, do not guess it, and do not treat a missing news score as neutral -- neutral is a real reading and this field is absent, not neutral. " +
     "Do not invent facts. Do not imply full article access or independent verification. " +
-    "Your job is to identify the dominant current catalyst in the provided coverage, then combine that with the chart context into one calm editorial read. " +
+    "Your job is to identify the dominant current catalyst in the provided coverage and turn it into one calm editorial read. " +
     "Weight the freshest and most consequential article most heavily. Use older, weaker, or more generic stories only as supporting background. Do not give equal emphasis to every item if one story clearly leads the narrative. " +
     "Do not flatten a clearly important development into a generic blended summary. " +
     "The beyondHeadline field should be one paragraph of 80 to 140 words. It should explain the leading theme in the current coverage, what remains uncertain, and what traders may be watching next. " +
@@ -358,7 +399,7 @@ const getCachedAiNewsInsight = unstable_cache(
     const payload = JSON.parse(payloadJson) as InsightInput;
     return generateAiNewsInsight(payload);
   },
-  ["msh-ai-news-insight-v3"],
+  ["msh-ai-news-insight-v4-non-price"],
   {
     revalidate: 60 * 60,
   }
@@ -370,7 +411,7 @@ export async function getAiNewsInsight(input: InsightInput): Promise<AiNewsInsig
   }
 
   try {
-    return await getCachedAiNewsInsight(JSON.stringify(input));
+    return await getCachedAiNewsInsight(JSON.stringify(insightAiPayload(input)));
   } catch {
     return null;
   }

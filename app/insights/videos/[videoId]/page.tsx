@@ -16,6 +16,7 @@ import html from "remark-html";
 import VideoPageClient from "./VideoPageClient";
 import DatasheetViewer from "./DatasheetViewer";
 import PageShareBar from "@/app/components/PageShareBar";
+import { ReasonedValue } from "@/app/components/EstimatedValue";
 
 // Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
 // makes every crawl a full serverless render Google can never cheaply
@@ -180,11 +181,13 @@ export default async function VideoPage({ params }: Props) {
     publisher: { "@type": "Organization", name: "MyStockHarbor", url: "https://www.mystockharbor.com" },
   };
 
-  const statItems = stockData ? [
+  const statItems: { label: string; value: string; note?: string | null }[] | null = stockData ? [
     { label: "Price", value: fmtPrice(stockData.price) },
-    { label: "Market cap", value: stockData.marketCap ?? "—" },
-    { label: "vs MA50", value: fmtPct(stockData.ma50Pct) },
-    { label: "vs MA200", value: fmtPct(stockData.ma200Pct) },
+    // A WITHHELD CAP SAYS WHY (#563 COWORK #45): every dash explains itself.
+    { label: "Market cap", value: stockData.marketCap ?? "—", note: stockData.marketCap ? null : stockData.marketCapNote ?? null },
+    // The Tiingo path says why an MA tile is empty with a price on screen (#553 COWORK #88).
+    { label: "vs MA50", value: fmtPct(stockData.ma50Pct), note: stockData.ma50Note ?? null },
+    { label: "vs MA200", value: fmtPct(stockData.ma200Pct), note: stockData.ma200Note ?? null },
     ...(stockData.peRatio ? [{ label: "P/E (TTM)", value: stockData.peRatio.toFixed(1) }] : []),
     ...(stockData.trend ? [{ label: "Trend", value: stockData.trend }] : []),
   ] : null;
@@ -230,10 +233,12 @@ export default async function VideoPage({ params }: Props) {
             {stockData?.companyName && <p style={{ margin: "0 0 14px", opacity: 0.7, fontSize: 15 }}>{stockData.companyName}</p>}
             {statItems && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, marginBottom: 10 }}>
-                {statItems.map(({ label, value }) => (
+                {statItems.map(({ label, value, note }) => (
                   <div key={label} style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "10px 14px" }}>
                     <div style={{ fontSize: 10, opacity: 0.6, fontWeight: 700, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-                    <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "-0.2px" }}>{value}</div>
+                    {/* TAP, KEYBOARD AND HOVER (#563 COWORK #47): A's shared ReasonedValue, so a
+                        "—" or an empty MA explains itself on a phone too, not only on hover. */}
+                    <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "-0.2px" }}><ReasonedValue text={value} reason={note} /></div>
                   </div>
                 ))}
               </div>
@@ -243,7 +248,7 @@ export default async function VideoPage({ params }: Props) {
                 close, and the contract asks for the linked credit on each figure. */}
             {stockData?.priceLabel ? (
               <p style={{ fontSize: 11, opacity: 0.5, marginBottom: 0, fontStyle: "italic" }}>
-                Price: {stockData.priceLabel}. Market cap is the SEC cover-page share count times that price. Figures will differ from those in the video. <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                Price: {stockData.priceLabel}.{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null} Figures will differ from those in the video. <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
               </p>
             ) : stockData ? (
               <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 0, fontStyle: "italic" }}>Price and market cap update live &mdash; figures will differ from those in the video.</p>

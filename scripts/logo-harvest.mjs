@@ -23,6 +23,8 @@
 // for the Exchange and ETF columns it split on; the harvest needs none of that,
 // so the universe comes from committed files only and this script has no
 // external dependency beyond the CDN itself.
+// Re-harvest, 3 Oct 2026 (#553 COWORK #97/#102): refresh while FMP's image CDN
+// still serves, before the FMP-off cutover. This line is also the push trigger.
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";

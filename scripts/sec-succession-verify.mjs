@@ -22,6 +22,7 @@ const M = await lift([
   grabConst("lib/server/secReportDates.ts", "DEADLINE_FALLBACK"),
   grabConst("lib/server/annualOnly.ts", "ANNUAL_ONLY_QUARTER_MONTHS"),
   grabFunction(readCodeOnly("lib/server/annualOnly.ts"), "annualOnlyForm"),
+  strip("lib/server/secEstimates.ts"),
   strip("lib/server/secValuation.ts"),
   `const successorsFile = ${JSON.stringify(MAP)};`,
   FILL.match(/^const foreignCurrencyIn = [\s\S]*?;$/m)?.[0] ?? "",
