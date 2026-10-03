@@ -26,6 +26,10 @@ export type DilutionHistoryData = {
   splits?: { date: string; ratio: number }[];
   dropped?: string[];
   startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; ratio?: number };
+  /** Fiscal-year-average points, by date (#552 COWORK #136); the rest are quarterly. */
+  yearEnds?: string[];
+  /** Fiscal years left out as another basis, by date. */
+  refusedYears?: string[];
   withheld?:
     | { reason: "units-unconfirmed"; factor: number | null }
     | { reason: "cut-too-short"; factor: null; cut?: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; since?: string };
@@ -64,8 +68,12 @@ function fmtDateShort(value: string | null) {
  * stable-share large cap. The axis now spans at least ±2.5% around the mean,
  * widened to take in the data; it is NOT anchored at zero, so real dilution
  * (a 15% rise) still fills the chart.
+ *
+ * ±10% SINCE #552 COWORK #136: at ±2.5% AAPL's −5.5% over two and a half years
+ * filled the whole plot and read as dramatic as a doubling. At ±10% a 5% drift
+ * takes about a quarter of the height, and a heavy diluter (+100%) still fills it.
  */
-export const SHARE_AXIS_MIN_HALF_SPAN = 0.025;
+export const SHARE_AXIS_MIN_HALF_SPAN = 0.1;
 
 export function shareAxis(values: number[]): { lo: number; hi: number } {
   const minV = Math.min(...values);
@@ -99,6 +107,21 @@ export function threeYearWords(pct: number | null): { label: string; tone: "up" 
   if (pct > SHARE_FLAT_PCT) return { label: "Share count has risen over the last 3 years", tone: "up" };
   if (pct < -SHARE_FLAT_PCT) return { label: "Share count has fallen over the last 3 years", tone: "down" };
   return { label: "Share count roughly unchanged over the last 3 years", tone: "flat" };
+}
+
+/**
+ * THE HEADLINE OVER THE CHART (#552 COWORK #136 (b)): the move in words, with
+ * an arrow, hedged. From the 3-year figure where there is one, else since the
+ * first point. Direction is in the arrow AND the words, never colour alone.
+ */
+export function shareHeadline(threePct: number | null, sincePct: number | null, since: string | null): string | null {
+  const pct = threePct ?? sincePct;
+  if (pct === null || !Number.isFinite(pct)) return null;
+  const when = threePct !== null ? "over the last 3 years" : since ? `since ${since}` : "";
+  if (Math.abs(pct) <= SHARE_FLAT_PCT) return `≈ Share count roughly unchanged ${when}`.trim();
+  return pct < 0
+    ? `▼ Down ${Math.abs(pct).toFixed(1)}% ${when}, which may reflect buybacks`
+    : `▲ Up ${pct.toFixed(1)}% ${when}: more shares can spread the same earnings and ownership thinner`;
 }
 
 /** "20-for-1" / "1-for-10". */
@@ -187,6 +210,7 @@ export default function DilutionHistory({
     ? `${fmtDateDay(data.threeYear.base.date)} to ${fmtDateDay(data.threeYear.end.date)}`
     : null;
   const trend = threeYearWords(threePct);
+  const headline = shareHeadline(threePct, changePercent, fmtDateShort(first.date));
   const trendColor = trend.tone === "up" ? RED : trend.tone === "down" ? GREEN : BLUE;
 
   // -- Chart geometry (server-rendered SVG, no client JS) --------------------
@@ -250,7 +274,13 @@ export default function DilutionHistory({
         buybacks.
       </p>
 
-      <div style={{ marginTop: 18 }}>
+      {headline ? (
+        <div style={{ marginTop: 14, fontSize: 14, fontWeight: 800, lineHeight: 1.4, color: trendColor }} data-share-headline="">
+          {headline}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: headline ? 10 : 18 }}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           width={width}
@@ -331,8 +361,11 @@ export default function DilutionHistory({
 
       <div style={sourceStyle}>
         {data?.basis === "annual+quarters" ? (
-          // THE OWNER'S WORDING (#517).
-          <>Annual share counts from SEC filings, latest quarters appended. {symbol} — {points.length} data points
+          // THE BASIS, SAID (#552 COWORK #136): quarterly averages plus
+          // fiscal-year averages, which fill the year-ends no quarter covers.
+          <>Weighted-average basic shares from {symbol}&apos;s own SEC filings: quarterly averages plus{" "}
+          {data.yearEnds?.length ?? 0} fiscal-year average{(data.yearEnds?.length ?? 0) === 1 ? "" : "s"} (a year&apos;s
+          figure averages all twelve months; a fourth quarter has no share count of its own) — {points.length} data points
           from {fmtDateShort(first.date)} to {fmtDateShort(last.date)}.</>
         ) : (
           <>Weighted-average basic shares from {symbol}&apos;s own SEC filings
@@ -346,6 +379,9 @@ export default function DilutionHistory({
         {data?.basis === "quarter"
           ? " Covers the last 12 quarters on file; fourth quarters have no separately filed share count and are not plotted."
           : data?.basis === "year" ? " Covers the fiscal years on file." : ""}
+        {data?.refusedYears?.length
+          ? ` ${data.refusedYears.length === 1 ? "One fiscal-year figure is" : `${data.refusedYears.length} fiscal-year figures are`} left out: outside the range of that year's own quarterly figures, so likely on another basis.`
+          : null}
         {notes.length ? <> {notes.join(" ")}</> : null}
       </div>
 
