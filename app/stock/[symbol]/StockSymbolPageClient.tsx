@@ -11,6 +11,8 @@ import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import KeyLevelsCard from "./KeyLevelsCard";
+import PerformanceStrip from "./PerformanceStrip";
+import type { PerfStrip } from "@/lib/ta/performance";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
 import type { ProfileDividend } from "@/lib/server/secDividend";
 import { isRetiredBlock } from "./retiredBlocks";
@@ -169,6 +171,8 @@ type StockSymbolPageClientProps = {
   historyCredit?: ReactNode;
   // Whose bars `initialHistory` is: "tiingo", "fmp" or "none".
   historyProvider?: string;
+  /** The performance strip (#563 COWORK #69), computed server-side from the full series. */
+  performance?: PerfStrip;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -754,7 +758,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, performance }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   // Whose bars the chart is showing: the seed's provider, or what the client
   // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
@@ -1081,6 +1085,8 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               Price: {quote.priceLabel}{tiingoCredit ? <> · {tiingoCredit}</> : null}
             </p>
           ) : null}
+          {/* #563 COWORK #69: C's performance strip, under the header strip. */}
+          {performance ? <PerformanceStrip strip={performance} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : null}
           </div>{/* end hero box */}
         </header>
 
