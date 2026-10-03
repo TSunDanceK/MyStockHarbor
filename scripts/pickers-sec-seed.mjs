@@ -37,6 +37,8 @@ const result = await warmPickersSec(symbols, (s) => ({
   // A withheld row (#552 COWORK #64, MFG) is not used, as in adsRatioFor.
   ads: ((e) => (e && !e.withheld ? e : null))(lookupSpellingIn(ADS, s.toUpperCase())?.value ?? null),
   nonEquity: nonEquityListingOf(s),
+  // The filer's SIC for A's bank gate on the ≈ Ent. Value (#553 COWORK #102), as the job passes it.
+  sic: REGISTRANTS[s]?.sic ?? null,
 }), Date.now(), KEY);
 console.log(JSON.stringify(result));
 console.log(`key ${KEY}; field count now: ${await redis.hlen(KEY)}; seeded at ${new Date().toISOString()}`);

@@ -45,6 +45,9 @@ async function handleGET(req: NextRequest) {
       annualForm: registrantFor(s)?.annualForm ?? null,
       ads: adsRatioFor(s),
       nonEquity: nonEquityListingOf(s),
+      // The filer's SIC for A's bank gate on the ≈ Ent. Value (#553 COWORK
+      // #102), as the earnings snapshot passes it. A committed file, no Redis cost.
+      sic: registrantFor(s)?.sic ?? null,
     }));
     console.log("[warm-pickers-sec]", JSON.stringify(result));
     await recordJobRun("warm-pickers-sec", result.ok, {

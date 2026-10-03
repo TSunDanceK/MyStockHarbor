@@ -21,6 +21,7 @@ import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import {
   applySecEarnings,
   secPickerWhy,
+  secPickerWords,
   applySecPickerRow,
   pickersFundamentalsSource,
   readSecPickerRows,
@@ -29,6 +30,7 @@ import {
 } from "@/lib/server/pickersSecFundamentals";
 import { HIDDEN_FIELD_KEYS } from "@/lib/pickerHiddenFields";
 import type { CellWhyCode, CellWhyColumn } from "@/lib/pickerCellWhy";
+import type { EstimateMark } from "@/app/components/estimateMark";
 import { gridCompanyName } from "@/lib/server/secTickerNames";
 import { toDotted } from "@/lib/symbolSpellings.mjs";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
@@ -358,6 +360,18 @@ export type ResultEntry = ResultEntryFlags & {
   fundamentalsFrom?: "sec";
   /** Grid column key -> lib/pickerCellWhy.ts code, for each empty filings cell (#553 COWORK #69). */
   cellWhy?: Partial<Record<CellWhyColumn, CellWhyCode>>;
+  /**
+   * A's word for a refused cell ("Loss", "Not meaningful", "Neg."), by grid
+   * column, from secValuation's REFUSAL_CELL_WORD (#553 COWORK #102). Shipped
+   * as data because the grid may not import the server module.
+   */
+  cellWord?: Partial<Record<CellWhyColumn, string>>;
+  /**
+   * An estimated (≈) or derived figure's mark, by grid column (#553 COWORK
+   * #102, A's layer). The grid renders a marked figure only through A's
+   * EstimatedValue, with EstimateKey under the table.
+   */
+  cellEst?: Partial<Record<CellWhyColumn, EstimateMark>>;
   /**
    * What period the filed P/E and EPS cover, and the Payout's: "TTM to 30 Jun
    * 2026" or "FY2025" (#553 COWORK #21). The grid shows it as the cell's
@@ -1344,6 +1358,14 @@ async function getPickerData(config: PickerResultConfig) {
           const why = secPickerWhy(row, typeof shown === "number" ? shown : null, figures, earnings, entry.industry);
           if (Object.keys(why).length) entry.cellWhy = why;
           else delete entry.cellWhy;
+          // A's WORDS AND MARKS (#553 COWORK #102): the word for a refused
+          // cell where A gives one, and the mark on an estimated or derived
+          // figure. Both are data; the grid renders them.
+          const words = secPickerWords(why);
+          if (Object.keys(words).length) entry.cellWord = words;
+          else delete entry.cellWord;
+          if (figures.marks) entry.cellEst = figures.marks;
+          else delete entry.cellEst;
         }
       } catch {
         // A failed read leaves the stored values, as before this block existed.

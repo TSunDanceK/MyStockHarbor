@@ -167,9 +167,12 @@ const MUTANTS = [
   ["negative FCF divided anyway", "row.freeCashFlow !== null && row.freeCashFlow > 0 ? cap / row.freeCashFlow", "row.freeCashFlow !== null ? cap / row.freeCashFlow"],
   ["yield left as a fraction", "(row.divPerShare / price) * 100", "row.divPerShare / price"],
   ["FCF adds capex", "cf.vals.operatingCashFlow - Math.abs(cf.vals.capex)", "cf.vals.operatingCashFlow + Math.abs(cf.vals.capex)"],
+  // EV is A's enterpriseValueOf now (#553 COWORK #102): the mutant zero-fills
+  // every untagged line before the call (these rows carry no SIC, so A's M2
+  // estimate for short-term debt alone stays off and the old rule still holds).
   ["a missing debt line read as zero",
-    "cap !== null && bs && bs.shortTermDebt !== null && bs.longTermDebt !== null && bs.cash !== null\n      ? cap + bs.shortTermDebt + bs.longTermDebt - bs.cash",
-    "cap !== null && bs\n      ? cap + (bs.shortTermDebt ?? 0) + (bs.longTermDebt ?? 0) - (bs.cash ?? 0)"],
+    "const evFig = enterpriseValueOf(cap, row.m.balanceSheet, row.inputs.sic ?? null);",
+    "const evFig = enterpriseValueOf(cap, row.m.balanceSheet && { ...row.m.balanceSheet, shortTermDebt: row.m.balanceSheet.shortTermDebt ?? 0, longTermDebt: row.m.balanceSheet.longTermDebt ?? 0, cash: row.m.balanceSheet.cash ?? 0 }, row.inputs.sic ?? null);"],
   ["the rollback spelling broken", 'process.env.PICKERS_FUNDAMENTALS === "fmp"', 'process.env.PICKERS_FUNDAMENTALS === "FMP"'],
   ["P/E moved before the EPS fix", '"marketCap", "psRatio"', '"peRatio", "marketCap", "psRatio"'],
   ["UNIT: build-side currency gate removed", "  if (!moneyIsUsd(unit)) {", "  if (false) {"],
@@ -278,7 +281,7 @@ checks.push(
   checks.push(["SOMN with the mark: no P/E, no EPS, no market cap", refused.pe === null && refused.eps === null && refused.cap === null, JSON.stringify(refused)]);
   const unmarked = valued({ annualForm: "10-K" });
   checks.push(["...and without it the same set IS valued (so the mark is what refuses it)", unmarked.pe !== null && unmarked.cap !== null, JSON.stringify(unmarked)]);
-  const passes = (c) => /import \{ nonEquityListingOf \} from "[./]+lib\/server\/secPrimaryListing";/.test(c) && /ads: adsRatioFor\(s\),\s*nonEquity: nonEquityListingOf\(s\),\s*\}\)\)/.test(c);
+  const passes = (c) => /import \{ nonEquityListingOf \} from "[./]+lib\/server\/secPrimaryListing";/.test(c) && /ads: adsRatioFor\(s\),\s*nonEquity: nonEquityListingOf\(s\),/.test(c);
   checks.push(["the daily job passes A's non-common mark, imported", passes(job)]);
   const mutJob = job.replace(/\s*nonEquity: nonEquityListingOf\(s\),/, "");
   checks.push(["mutant caught: the job drops nonEquity (SOMN valued as SO's common again)", mutJob !== job && !passes(mutJob)]);
