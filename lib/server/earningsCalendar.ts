@@ -291,10 +291,50 @@ async function readDayItemsCache(date: string): Promise<EarningsListItem[] | nul
   return null;
 }
 
+// ── NO POOL PRICE IS STORED HERE (#552 COWORK #113) ───────────────────────
+// A row priced from the shared price pool ("covered") is stored WITHOUT its
+// price and market cap, and both are read back from the pool when the day is
+// served (withLivePoolPrices). With PRICE_PROVIDER_POOL=tiingo the pool read
+// carries Tiingo's price, and this blob lives 3+ days under a key outside
+// msh:tiingo:, where the Tiingo clean-up (§7) can't reach it. So Tiingo data
+// is never written here, whichever provider is on. Rows quoted one by one
+// from FMP ("outside-bar-universe") keep their stored figures, as before.
+export function stripPoolPrices(items: EarningsListItem[]): EarningsListItem[] {
+  return items.map((it) => (it.priceCoverage === "covered" ? { ...it, price: null, marketCap: null } : it));
+}
+
+/**
+ * The pool's live price and market cap onto every covered row (and onto a row
+ * from a blob older than priceCoverage, which may be one). ONE pool read for
+ * the whole list, so a caller spanning several dates batches them. A symbol
+ * the pool has no row for keeps what is stored. Order is unchanged.
+ */
+export async function overlayLivePoolPrices(items: EarningsListItem[]): Promise<EarningsListItem[]> {
+  const live = (it: EarningsListItem) => it.priceCoverage === "covered" || it.priceCoverage === undefined;
+  const want = [...new Set(items.filter(live).map((it) => it.symbol))];
+  if (!want.length) return items;
+  let pool: Map<string, { price: number | null; marketCap: number | null }> = new Map();
+  try {
+    pool = await readPricePoolBulk(want);
+  } catch {
+    // fail open: covered rows show no price this render, never a stored Tiingo one
+  }
+  return items.map((it) => {
+    if (!live(it)) return it;
+    const p = pool.get(normSymbol(it.symbol));
+    return p && p.price != null ? { ...it, price: p.price, marketCap: p.marketCap } : it;
+  });
+}
+
+/** Live pool prices, then the dedupe and the cap-descending sort. */
+async function withLivePoolPrices(items: EarningsListItem[]): Promise<EarningsListItem[]> {
+  return dedupeAndSortItems(await overlayLivePoolPrices(items));
+}
+
 async function writeDayItemsCache(date: string, items: EarningsListItem[]) {
   if (!redis) return;
   try {
-    await redis.set(`${DAY_ITEMS_PREFIX}:${date}`, items, {
+    await redis.set(`${DAY_ITEMS_PREFIX}:${date}`, stripPoolPrices(items), {
       ex: QUOTE_REVALIDATE_SECONDS + 3 * 24 * 60 * 60,
     });
   } catch {
@@ -322,8 +362,13 @@ function dedupeAndSortItems(items: EarningsListItem[]): EarningsListItem[] {
 
 // Read-only accessor for a date's materialised rows -- used by the Show more
 // pagination endpoint (app/api/earnings-calendar/day). Never quotes.
-export async function getCachedDayItems(date: string): Promise<EarningsListItem[]> {
-  return dedupeAndSortItems((await readDayItemsCache(date)) ?? []);
+export async function getCachedDayItems(
+  date: string,
+  /** false: the stored rows only (covered rows unpriced), for a caller that batches overlayLivePoolPrices across dates. */
+  opts: { livePrices?: boolean } = {},
+): Promise<EarningsListItem[]> {
+  const items = (await readDayItemsCache(date)) ?? [];
+  return opts.livePrices === false ? dedupeAndSortItems(items) : withLivePoolPrices(items);
 }
 
 // --- Window completeness (read in ONE command, not one per date) ----------
@@ -1130,7 +1175,7 @@ export async function getFullDayEarnings(
       }
       return {
         date,
-        items: cleaned,
+        items: await withLivePoolPrices(cleaned),
         totalCandidates,
         usListedCount: cleaned.length,
         complete: await isDateComplete(date),
