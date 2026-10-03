@@ -12,17 +12,18 @@ import { useState } from "react";
 //      see the note on the manifest below.
 //   2. Clearbit domain logo   (when a `domain` is known -- e.g. bottleneck
 //      posts already carry one; same source CompanyLogo.tsx uses).
-//   3. FMP public symbol logo (images.financialmodelingprep.com/symbol/SYM.png)
-//      -- no API key and no quota. Kept DELIBERATELY as a fallback rather than
-//      removed: it costs nothing while it works and it covers anything the
-//      harvest missed, including symbols that list after the last harvest.
-//   4. Monogram (first letter of name/symbol) -- so nothing ever renders as
+//   3. Monogram (first letter of name/symbol) -- so nothing ever renders as
 //      a broken image, matching the letter treatment used before logos.
+//
+// FMP'S IMAGE CDN WAS SOURCE 3 UNTIL 3 OCT 2026, removed with the FMP exit
+// (#553 COWORK #102, owner ruling on checklist row B9): no third-party vendor
+// hotlink stays in the chain. The last harvest ran the same day, while the CDN
+// still served (2,612 files, 4.6 MB).
 //
 // THE HARVEST IS A SNAPSHOT, not a live index -- see
 // claude/BRIEF-logo-harvest-2026-09-14.md. It is re-run quarterly, and between
-// runs a newly listed symbol simply falls through to source 3 and then 4. No
-// breakage either way, which is why the chain below is left intact.
+// runs a newly listed symbol simply falls through to the monogram. No breakage
+// either way.
 
 // ONE CONSTANT, so moving the assets off our own domain later (a separate repo
 // on GitHub Pages was the runner-up home) is a one-line change rather than a
@@ -59,17 +60,12 @@ export default function TickerLogo({
   const sources: string[] = [];
   if (sym) sources.push(`${LOGO_BASE}/${encodeURIComponent(sym)}.webp`);
   if (domain) sources.push(`https://logo.clearbit.com/${domain}`);
-  if (sym) {
-    sources.push(
-      `https://images.financialmodelingprep.com/symbol/${encodeURIComponent(sym)}.png`
-    );
-  }
 
   // ── THE FALLBACK POSITION IS SCOPED TO THE SYMBOL IT WAS EARNED ON ───────
   // A plain useState(0) survives a symbol change, because React reuses the
   // instance when the element keeps its position and key. An instance that had
   // walked to idx 2 for the previous symbol would therefore START at 2 for the
-  // next one -- skipping /logos/{SYM}.webp and serving FMP instead. It renders
+  // next one -- skipping /logos/{SYM}.webp and serving the next source instead. It renders
   // a correct-looking logo either way, which is exactly why a visual check
   // cannot catch it.
   //
