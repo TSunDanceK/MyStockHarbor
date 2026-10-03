@@ -99,6 +99,18 @@ const noGross = (M, op, only = null) => {
   }
   return s;
 };
+/**
+ * A loss-maker with mixed signs (#563 COWORK #72): no gross line, operating
+ * margin alternating +20% / −35% of revenue, newest quarter negative.
+ */
+const mixedSigns = (M) => {
+  const s = noGross(M, "keep"), k = (f) => M.SEC_FIELD_KEYS.indexOf(f);
+  [...s.quarters, ...s.years].forEach((p, i) => {
+    const rev = p.v[k("revenue")];
+    if (typeof rev === "number") { p.v[k("operatingIncome")] = rev * (i % 2 ? 0.2 : -0.35); p.v[k("netIncome")] = rev * (i % 2 ? 0.1 : -0.4); }
+  });
+  return s;
+};
 /** Gross gone from two quarters only, which do have a positive operating margin: a partial gap. */
 const partialGross = (M) => {
   const t = structuredClone(full), k = M.SEC_FIELD_KEYS;
@@ -136,7 +148,10 @@ async function measure(M) {
   const neither = M.buildGrowthVisuals(M.buildSecEarningsView(noGross(M, "none")), { oneOffs: {} });
   const lossNoGross = M.buildGrowthVisuals(M.buildSecEarningsView(noGross(M, "loss")), { oneOffs: {} });
   const partial = M.buildGrowthVisuals(M.buildSecEarningsView(partialGross(M)), { oneOffs: {} });
+  const card = (set) => html(React.createElement(M.SecGrowthMarginsCard, { view: M.buildSecEarningsView(set) }));
+  const orclCard = card(noGross(M, "positive")), neitherCard = card(noGross(M, "none")), mixedCard = card(mixedSigns(M));
   return { onds, ondsChecked, ondsCard, ondsView, yearsMarked, q1, q1View, loss, render, markup, blankData, cardMarkup, M,
+    orclCard, neitherCard, mixedCard,
     orcl, orclMarkup: markup(orcl), neither, neitherMarkup: markup(neither), lossNoGross, partial, partialMarkup: markup(partial) };
 }
 
@@ -178,12 +193,24 @@ const rules = {
       floor === Math.max(-100, Math.floor(lo / 25) * 25) && floor < 0 &&
       near(M.marginPos(0, -100), 50) && near(M.marginPos(-250, -100), 0) && near(M.marginPos(100, -25), 100) &&
       redDots === vals.filter((v) => v < 0).length && /stroke="#d03b3b"/.test(desk) &&
-      desk.includes(`>${M.pctWords(floor)}</span>`) && /Below 0%/.test(visibleText(desk)) &&
+      desk.includes(`>${M.pctWords(floor)}</span>`) && /Below 0% shown in red/.test(visibleText(desk)) &&
       cross.length === 2 && !cross[0].neg && cross[1].neg && /L1 /.test(cross[0].d);
   },
   "the newest column's one-off tag hugs the right edge, so a phone shows it whole": ({ q1, markup }) => {
     const m = markup(q1);
     return /class="gvOneOff gvOneOffEnd"/.test(m) && /\.gvOneOffEnd \{ left: auto !important; right: 0; transform: none !important; \}/.test(m);
+  },
+  "the card's intro and margin sentence name the margin the chart draws (#72)": ({ cardMarkup, orclCard, neitherCard, M }) =>
+    cardMarkup.includes("<p>Sales, profit or loss and gross margin each quarter, as filed.") && cardMarkup.includes(M.GROSS_MARGIN_MEANS) &&
+    orclCard.includes("<p>Sales, profit or loss and operating margin each quarter, as filed.") && orclCard.includes(M.OPERATING_MARGIN_MEANS) && !orclCard.includes(M.GROSS_MARGIN_MEANS) &&
+    neitherCard.includes("<p>Sales and profit or loss each quarter, as filed.") && !neitherCard.includes(M.GROSS_MARGIN_MEANS) && !neitherCard.includes(M.OPERATING_MARGIN_MEANS),
+  "negatives carry '−' in the label, the panel and the table; positive-only series unchanged (#72)": ({ mixedCard, orclCard }) => {
+    const t = visibleText(mixedCard);
+    return /class="gvVal"[^>]*>−35%<\/span>/.test(mixedCard) && /Operating margin\s*−35\.0%/.test(t) &&
+      /data-label="Operating margin">−35\.0%</.test(mixedCard) && !/data-label="(Gross|Operating|Net) margin">-/.test(mixedCard) &&
+      /class="gvDot" style="bottom:[^"]*;background:#d03b3b"/.test(mixedCard) && /Below 0% shown in red/.test(t) &&
+      // all positive: the 0/50/100% scale, no red, no "Below 0%".
+      !/Below 0%/.test(visibleText(orclCard)) && !/class="gvDot" style="[^"]*#d03b3b/.test(orclCard) && />0%<\/span>/.test(orclCard) && !/>−\d+%<\/span>/.test(orclCard);
   },
   "the filer's name from its SEC name": ({ M }) =>
     M.filerName("ORACLE CORP") === "Oracle" && M.filerName("BANK OF AMERICA CORP /DE/") === "Bank of America" &&
@@ -439,7 +466,7 @@ const mutants = [
   ["phone: a period with no margin breaks the line", "c", (s) => s.replace("const a = marginPct(periods[i - 1], kind), b = marginPct(periods[i], kind);", "const a = marginPct(periods[i - 1], kind) ?? 0, b = marginPct(periods[i], kind) ?? 0;")],
   ["phone: a tap scrolls the panel into view; desktop never scrolls", "c", (s) => s.replace("if (typeof window === \"undefined\" || !window.matchMedia?.(PHONE).matches) return;", "if (typeof window === \"undefined\") return;")],
   ["phone: a tap scrolls the panel into view; desktop never scrolls", "c", (s) => s.replace("onClick={() => { setActive(i); onTap?.(); }}", "onClick={() => setActive(i)}")],
-  ["about these figures: one intro line; the basis, the margin sentence and the * footnote in a server-rendered <details>", "k", (s) => s.replace("<p>{GROSS_MARGIN_MEANS}</p>", "")],
+  ["about these figures: one intro line; the basis, the margin sentence and the * footnote in a server-rendered <details>", "k", (s) => s.replace("{marginMeans((pictures.quarters ?? pictures.years)?.margin.kind) ? <p>{marginMeans((pictures.quarters ?? pictures.years)?.margin.kind)}</p> : null}", "")],
   ["about these figures: one intro line; the basis, the margin sentence and the * footnote in a server-rendered <details>", "k", (s) => s.replace('<details className="gvAbout">', '<div className="gvAbout">').replace("      </details>\n      <MarginDelta", "      </div>\n      <MarginDelta")],
   ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace("{MARGIN_NAME[kind]} (% of sales)\n", "¢ kept per $1 (gross margin)\n")],
   ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace('export const pctWords = (v: number) => `${v < 0 ? "−" : ""}${Math.abs(v)}%`;', 'export const pctWords = (v: number) => `${v < 0 ? "−" : ""}${Math.abs(v)}¢`;')],
@@ -468,8 +495,13 @@ const mutants = [
   ["below zero (owner): the scale moves down, the dots and line below 0% are red", "c", (s) => s.replace("Math.max(MARGIN_FLOOR_MIN, Math.floor(lo / MARGIN_FLOOR_STEP) * MARGIN_FLOOR_STEP)", "0")],
   ["below zero (owner): the scale moves down, the dots and line below 0% are red", "c", (s) => s.replace("export const marginColour = (v: number) => (v < 0 ? C.loss : C.margin);", "export const marginColour = (_v: number) => C.margin;")],
   ["below zero (owner): the scale moves down, the dots and line below 0% are red", "c", (s) => s.replace("if ((a < 0) === (b < 0) || a === 0 || b === 0) {", "if (true) {")],
-  ["below zero (owner): the scale moves down, the dots and line below 0% are red", "c", (s) => s.replace("{floor < 0 ? <><i style={{ background: C.loss, borderRadius: 999 }} />Below 0%</> : null}", "{null}")],
+  ["below zero (owner): the scale moves down, the dots and line below 0% are red", "c", (s) => s.replace("{floor < 0 ? <><i style={{ background: C.loss, borderRadius: 999 }} />Below 0% shown in red</> : null}", "{null}")],
   ["the newest column's one-off tag hugs the right edge, so a phone shows it whole", "c", (s) => s.replace('i === s.periods.length - 1 ? " gvOneOffEnd"', 'false ? " gvOneOffEnd"')],
+  ["the card's intro and margin sentence name the margin the chart draws (#72)", "b", (s) => s.replace('const what = kind === "operating" ? "Sales, profit or loss and operating margin"', 'const what = kind === "operating" ? "Sales, profit or loss and gross margin"')],
+  ["the card's intro and margin sentence name the margin the chart draws (#72)", "b", (s) => s.replace('kind === "operating" ? OPERATING_MARGIN_MEANS : kind === "none" ? null : GROSS_MARGIN_MEANS;', "GROSS_MARGIN_MEANS;")],
+  ["negatives carry '−' in the label, the panel and the table; positive-only series unchanged (#72)", "k", (s) => s.replace('`${v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}%`', "`${v.toFixed(digits)}%`")],
+  ["negatives carry '−' in the label, the panel and the table; positive-only series unchanged (#72)", "c", (s) => s.replace('export const pctWords = (v: number) => `${v < 0 ? "−" : ""}${Math.abs(v)}%`;', "export const pctWords = (v: number) => `${v}%`;")],
+  ["negatives carry '−' in the label, the panel and the table; positive-only series unchanged (#72)", "b", (s) => s.replace("if (Math.abs(m) <= MARGIN_AS_MULTIPLE_BEYOND_PCT) return `${m >= 0 ? \"\" : \"−\"}${Math.abs(m).toFixed(1)}%`;", "if (Math.abs(m) <= MARGIN_AS_MULTIPLE_BEYOND_PCT) return `${m.toFixed(1)}%`;")],
   ["the filer's name from its SEC name", "b", (s) => s.replace('.replace(/\\s*\\/[A-Z]{2,}\\/?\\s*$/i, "")', "")],
   ["the render carries the summary, the toggle and the legend words", "c", (s) => s.replace("Profit (+), above the line", "Profit")],
 ];

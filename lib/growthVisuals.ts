@@ -41,6 +41,20 @@ import { scaledAmount } from "./server/secPresentation";
 
 /** The one plain sentence explaining gross margin (#563 COWORK #55), printed under "About these figures". */
 export const GROSS_MARGIN_MEANS = "Gross margin is the share of sales left after the direct costs of making them.";
+/** The same sentence when the chart shows operating margin instead (#563 COWORK #71/#72). */
+export const OPERATING_MARGIN_MEANS = "Operating margin is the share of sales left after the costs of running the business, before interest and tax.";
+
+/**
+ * The card's one intro line, following the series' measure (#563 COWORK #72):
+ * "…and gross margin each quarter", "…and operating margin…", or no margin at all.
+ */
+export function introLine(kind: GvMarginKind | undefined, one: string): string {
+  const what = kind === "operating" ? "Sales, profit or loss and operating margin" : kind === "none" ? "Sales and profit or loss" : "Sales, profit or loss and gross margin";
+  return `${what} each ${one}, as filed. Tap a ${one} for its figures.`;
+}
+/** The "About these figures" margin sentence for the series' measure; null when there is no margin chart. */
+export const marginMeans = (kind: GvMarginKind | undefined): string | null =>
+  kind === "operating" ? OPERATING_MARGIN_MEANS : kind === "none" ? null : GROSS_MARGIN_MEANS;
 
 /** Above this year-on-year %, the label reads SMALL_BASE instead (COWORK #26 §2). */
 export const SMALL_BASE_ABOVE_PCT = 200;

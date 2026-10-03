@@ -247,7 +247,7 @@ function SalesChart({ s, active, setActive, onTap, notReported }: ChartProps & {
         <i style={{ background: C.sales }} />This {s.one}
         {anyGhost ? <><i style={{ background: C.lastYear }} />Same {s.one} a year earlier</> : null}
         {/* PHONE ONLY: the margin line's legend entry names its scale (right, %). */}
-        {kind !== "none" ? <span className="gvPhoneOnly"><i style={{ background: C.margin, borderRadius: 999 }} />{MARGIN_NAME[kind]} % (right scale){floor < 0 ? <><i style={{ background: C.loss, borderRadius: 999, marginLeft: 8 }} />below 0%</> : null}</span> : null}
+        {kind !== "none" ? <span className="gvPhoneOnly"><i style={{ background: C.margin, borderRadius: 999 }} />{MARGIN_NAME[kind]} % (right scale){floor < 0 ? <><i style={{ background: C.loss, borderRadius: 999, marginLeft: 8 }} />below 0% in red</> : null}</span> : null}
       </>}
       note={kind === "operating" ? <span className="gvPhoneOnly">{s.margin.note}</span> : null}
       periods={s.periods} active={active} setActive={setActive} onTap={onTap} height={PLOT_H}
@@ -338,7 +338,7 @@ function MarginChart({ s, active, setActive, onTap }: ChartProps) {
     <Chart
       title={`${MARGIN_NAME[kind]} per ${s.one}`}
       legend={<><i style={{ background: C.margin, borderRadius: 999 }} />{MARGIN_NAME[kind]} (% of sales)
-        {floor < 0 ? <><i style={{ background: C.loss, borderRadius: 999 }} />Below 0%</> : null}</>}
+        {floor < 0 ? <><i style={{ background: C.loss, borderRadius: 999 }} />Below 0% shown in red</> : null}</>}
       note={kind === "operating" ? s.margin.note : null}
       periods={s.periods} active={active} setActive={setActive} onTap={onTap} height={Math.round((MARGIN_H * (100 - floor)) / 100)}
       behind={<>

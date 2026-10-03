@@ -39,6 +39,17 @@ if (process.env.LOSS) {
   const k = (f) => M.SEC_FIELD_KEYS.indexOf(f);
   for (const p of [...set.quarters, ...set.years]) { p.v[k("grossProfit")] = null; p.v[k("costOfRevenue")] = null; }
 }
+// MIXED=1 (#563 COWORK #72): no gross line, operating margin alternating +20% /
+// −35% of sales and net +10% / −40%, the newest quarter negative: the scale
+// below zero, red dots and line, "−" labels.
+if (process.env.MIXED) {
+  const k = (f) => M.SEC_FIELD_KEYS.indexOf(f);
+  [...set.quarters, ...set.years].forEach((p, i) => {
+    p.v[k("grossProfit")] = null; p.v[k("costOfRevenue")] = null;
+    const rev = p.v[k("revenue")];
+    if (typeof rev === "number") { p.v[k("operatingIncome")] = rev * (i % 2 ? 0.2 : -0.35); p.v[k("netIncome")] = rev * (i % 2 ? 0.1 : -0.4); }
+  });
+}
 if (process.env.ORCL) {
   const k = (f) => M.SEC_FIELD_KEYS.indexOf(f);
   set.entityName = "ORACLE CORP";
@@ -82,7 +93,7 @@ for (const width of [360, 1280]) {
       fill, barsInside: fills.every((f) => f.inside), deskLine: shown(".gvDeskLine") };
   });
   // ORCL=1 has no one-off quarter, so no tag is expected there.
-  const tagsOk = (process.env.ORCL || process.env.LOSS ? true : r.tags.length > 0) && r.tags.every((t) => t.inView && t.onTop);
+  const tagsOk = (process.env.ORCL || process.env.LOSS || process.env.MIXED ? true : r.tags.length > 0) && r.tags.every((t) => t.inView && t.onTop);
   const layoutOk = (width < 481 ? r.phoneLine && !r.marginChart : !r.phoneLine && r.marginChart && r.deskLine) &&
     !!r.fill && r.fill.min >= 0.6 && r.fill.max <= 0.7 && r.barsInside && r.clipped.length === 0;
   if (!tagsOk || !layoutOk) failures++;
