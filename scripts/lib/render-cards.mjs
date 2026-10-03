@@ -146,6 +146,25 @@ export function reasonedValueUnit() {
 }
 
 /**
+ * The Next report card (#552 COWORK #96), with what it imports: the shared
+ * estimate mark, and secEstimates' date words (the two functions and their
+ * month table, not the module). `mutate` breaks the card's source on purpose.
+ */
+export async function loadNextReportCard(mutate = (src) => src) {
+  const est = fs.readFileSync("lib/server/secEstimates.ts", "utf8");
+  const card = stripImports("app/stock/[symbol]/earnings/NextReportCard.tsx")
+    .replace("export default function NextReportCard", "export function NextReportCard");
+  return importTsxSource([
+    reasonedValueUnit(),
+    grabConst("lib/server/secEstimates.ts", "EST_MONTH_ABBR"),
+    grabFunction(est, "readableDate"),
+    grabFunction(est, "readableIsoDates"),
+    grabFunction(est, "reportWindowMark"),
+    mutate(card),
+  ].join("\n"));
+}
+
+/**
  * The price-reaction charts (app/stock/[symbol]/earnings/ReactionCharts.tsx).
  * Self-contained — its only import is React's types — so it transpiles alone.
  */
