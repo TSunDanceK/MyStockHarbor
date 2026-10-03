@@ -1,0 +1,55 @@
+// THE GROWTH & MARGINS PICTURE AT PHONE AND DESKTOP WIDTH, MEASURED IN CHROMIUM
+// (#563 COWORK #56/#58). A rendered layout, not an argument about CSS: the
+// one-off tag went missing in the owner's phone screenshot while the desktop
+// page showed it.
+//
+// Renders A's earnings card for ONDS (data/sec/factset-fixture-ONDS.json) with
+// the page's own <style> block, at 360 px and 1280 px, and reports for each:
+// whether every one-off tag is inside the viewport and is the topmost element
+// at its centre (not covered or clipped), which of the two margin layouts is
+// showing, and the card's height.
+//
+// NOT IN check-all: it needs a browser, and the suite must run without one
+// (the same rule as layout-overlap-measure.mjs).
+//
+//   node scripts/growth-visuals-measure.mjs
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import { loadCards, html, React } from "./lib/render-cards.mjs";
+
+const require = createRequire(import.meta.url);
+let chromium;
+try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("/opt/node22/lib/node_modules/playwright")); }
+
+const PAGE = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
+const open = PAGE.indexOf("<style>{`"), close = PAGE.indexOf("`}</style>", open);
+const CSS = open >= 0 && close > open ? PAGE.slice(open + 9, close) : "";
+const M = await loadCards();
+const view = M.buildSecEarningsView(JSON.parse(fs.readFileSync("data/sec/factset-fixture-ONDS.json", "utf8")));
+const card = html(React.createElement(M.SecGrowthMarginsCard, { view }));
+const doc = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;background:#06080d;color:#e2e8f0;font-family:system-ui,sans-serif}${CSS}</style></head><body><main style="padding:0 16px">${card}</main></body></html>`;
+
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
+let failures = 0;
+for (const width of [360, 1280]) {
+  const page = await browser.newPage({ viewport: { width, height: 800 } });
+  await page.setContent(doc);
+  const r = await page.evaluate(() => {
+    const tags = [...document.querySelectorAll(".gvOneOff")].map((t) => {
+      const b = t.getBoundingClientRect();
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { w: Math.round(b.width), h: Math.round(b.height), x: Math.round(b.left), y: Math.round(b.top),
+        inView: b.width > 0 && b.left >= 0 && b.right <= innerWidth, onTop: !!hit && t.contains(hit) };
+    });
+    const shown = (sel) => [...document.querySelectorAll(sel)].some((e) => getComputedStyle(e).display !== "none" && e.getBoundingClientRect().height > 0);
+    const c = document.querySelector("section.card")?.getBoundingClientRect();
+    return { tags, phoneLine: shown(".gvPhoneOnly"), marginChart: shown(".gvDesktopOnly"), cardH: Math.round(c?.height ?? 0) };
+  });
+  const tagsOk = r.tags.length > 0 && r.tags.every((t) => t.inView && t.onTop);
+  const layoutOk = width < 481 ? r.phoneLine && !r.marginChart : !r.phoneLine && r.marginChart;
+  if (!tagsOk || !layoutOk) failures++;
+  console.log(`${width}px: tags ${JSON.stringify(r.tags)} · margin line over sales ${r.phoneLine} · separate margin chart ${r.marginChart} · card ${r.cardH}px — ${tagsOk && layoutOk ? "OK" : "FAIL"}`);
+  await page.close();
+}
+await browser.close();
+process.exit(failures ? 1 : 0);
