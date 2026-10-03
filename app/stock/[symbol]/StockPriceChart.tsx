@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { utcDay } from "@/lib/utcDate";
 
 type Point = {
   date: string;
@@ -290,7 +291,10 @@ export default function StockPriceChart({
         }}
       >
         <div>
-          {symbol} • {series[0].date} → {series[series.length - 1].date}
+          {/* 2026-10-03 (#553 COWORK #113/#114): read "2025-10-20 → 2026-10-02";
+              now "20 Oct 2025 → 2 Oct 2026" (utcDay: UTC fields, by hand, so the
+              server and browser render the same text). */}
+          {symbol} • {utcDay(series[0].date) ?? series[0].date} → {utcDay(series[series.length - 1].date) ?? series[series.length - 1].date}
           {series[series.length - 1].label ? ` (${series[series.length - 1].label})` : null}
           {credit ? <> · {credit}</> : null}
         </div>

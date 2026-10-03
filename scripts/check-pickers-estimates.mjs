@@ -21,7 +21,11 @@
 //      "Loss" / "Not meaningful", P/B "Neg." / "Not meaningful", P/S "Not
 //      meaningful", each only in its own column (REFUSAL_WORD_CODES), looked up
 //      server-side and shipped as entry.cellWord; the bank/insurer "n/a" stays.
-//   6. Sorting is unchanged: the two columns still sort on the number.
+//   6. Sorting is unchanged: the two columns still sort on the number. AND
+//      FILTERS COUNT THEM (owner rule, #553 COWORK #113/#114): an ≈ EV or a
+//      derived P/B is the number in entry.enterpriseValue / entry.pbRatio,
+//      which the screener filters read (valueForField -> valueSatisfies), so a
+//      marked figure passes or fails a range filter like a filed one.
 //   7. Mutants: each rule broken once, through temp files, and caught.
 //
 // No Redis, no network: fixtures, real modules and source only.
@@ -75,6 +79,15 @@ const E = await import(pathToFileURL(path.join(ROOT, "lib/server/secEstimates.ts
 const W = await import(pathToFileURL(path.join(ROOT, WORDS)).href);
 const moduleSrc = read(MODULE);
 const REAL = await loadSibling(MODULE, moduleSrc);
+// The screener's own filter test (lib/screenerFields.ts valueSatisfies), lifted
+// verbatim and transpiled: the module's "@/lib" imports do not resolve here.
+const SF = await (async () => {
+  const fieldsSrc = read("lib/screenerFields.ts");
+  const fn = /export function valueSatisfies\([\s\S]*?\n\}\n/.exec(fieldsSrc)?.[0];
+  if (!fn) throw new Error("valueSatisfies not found in lib/screenerFields.ts");
+  const js = ts.transpileModule(fn, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+})();
 
 // ── the components, transpiled together (JSX on, "@/" pointed at the copies)
 async function loadComponents(over = {}) {
@@ -156,6 +169,14 @@ function moduleRules(mod) {
   want("M6a: a non-positive derived equity is the \"Neg.\" refusal, unmarked",
     fn.pbRatio === null && !fn.marks?.pb && whyN.pb === "eqNeg" && mod.secPickerWords(whyN).pb === V.REFUSAL_CELL_WORD["equity-is-zero-or-negative"],
     `${fn.pbRatio} ${whyN.pb} ${mod.secPickerWords(whyN).pb}`);
+  // FILTERS COUNT ESTIMATES: the marked figures are finite numbers in the
+  // fields the screener filters read, and pass/fail a range like any number.
+  const evNum = (f) => SF.valueSatisfies({ kind: "number", field: "enterpriseValue", min: f.enterpriseValue - 1, max: f.enterpriseValue + 1 }, f.enterpriseValue);
+  const pbNum = (f) => SF.valueSatisfies({ kind: "number", field: "pbRatio", min: 0, max: f.pbRatio + 1 }, f.pbRatio);
+  want("FILTERS: an ≈ Ent. Value is a number a range filter counts", Number.isFinite(fa.enterpriseValue) && evNum(fa) &&
+    !SF.valueSatisfies({ kind: "number", field: "enterpriseValue", min: fa.enterpriseValue + 1 }, fa.enterpriseValue), String(fa.enterpriseValue));
+  want("FILTERS: a derived P/B is a number a range filter counts", Number.isFinite(fd.pbRatio) && pbNum(fd) &&
+    !SF.valueSatisfies({ kind: "number", field: "pbRatio", max: fd.pbRatio - 0.01 }, fd.pbRatio), String(fd.pbRatio));
   const whyD = mod.secPickerWhy(dRow, PRICE, fd, mod.applySecEarnings(dRow, PRICE), "Software - Application");
   want("M6a: a shown derived P/B has no reason code (it is a figure, not a gap)", whyD.pb === undefined, String(whyD.pb));
 
@@ -287,6 +308,10 @@ function uiRules(gridSrc, pageSrc) {
     /\{shown\.length && \(showMobileRows \|\| viewMode === "list"\) \? \(\s*<PickerEstimateKey marks=\{shownEstimateMarks\} \/>/.test(g));
   want("the shown marks: table columns; on a phone the headline, plus an expanded row's metrics",
     /const shownEstimateMarks = estimateMarksShown\(shown, \(e\) =>\s*showMobileRows\s*\? \(expandedRows\.has\(e\.symbol\) \? \[\.\.\.headKeys, \.\.\.metricColumns\.map\(\(c\) => c\.key\)\] : headKeys\)\s*: activeColumns\.map\(\(c\) => c\.key\)/.test(g));
+  const vff = /function valueForField\(entry: ResultEntry, derived: DerivedRow, field: string\): unknown \{([\s\S]*?)\n\}/.exec(g)?.[1] ?? "";
+  want("FILTERS: the filters read the entry's own field (the marked number), with no estimate exception",
+    /return \(entry as unknown as Record<string, unknown>\)\[field\];/.test(vff) && !/cellEst|\best\b/.test(vff) &&
+      /valueSatisfies\(p, valueForField\(entry, derived, p\.field\)\)/.test(g));
   want("the grid passes A's word to the mark", /const aWord = \(e\.cellWord as [^;]*\)\?\.\[key\];[\s\S]{0,200}cellMark\(key, code, aWord\)/.test(g));
   want("the page ships the marks and A's words", /if \(figures\.marks\) entry\.cellEst = figures\.marks;/.test(p) && /const words = secPickerWords\(why\);\s*if \(Object\.keys\(words\)\.length\) entry\.cellWord = words;/.test(p));
   return fails;
@@ -332,12 +357,13 @@ const MODULE_MUTANTS = [
   ["the opt-in dropped (no derived P/B)", "const PICKERS_VALUATION_OPTS = { withEstimates: true } as const;", "const PICKERS_VALUATION_OPTS = { withEstimates: false } as const;"],
   ["the EV mark dropped (an ≈ figure unmarked)", "  if (evMark) marks.ev = evMark;\n", ""],
   ["the P/B mark dropped (a derived figure unmarked)", "  if (pbMark) marks.pb = pbMark;\n", ""],
+  ["FILTERS: an ≈ EV withheld from the number", "const enterpriseValue = evFig.val;", "const enterpriseValue = evFig.val !== null && evFig.est ? null : evFig.val;"],
   ["a mark on a non-dollar row", "const evMark = usd && evFig.val !== null", "const evMark = evFig.val !== null"],
   ["A's word lookup removed", "const word = REFUSAL_WORD_CODES[col]?.includes(code) ? REFUSAL_WORD_BY_CODE[code] : undefined;", "const word = undefined as string | undefined;"],
   ["A's word spread to a figure column", `  pe: ["epsNeg", "eps0"],\n`, `  pe: ["epsNeg", "eps0"],\n  revenue: ["revInc"],\n  eps: ["epsNeg"],\n`],
   ["A's word in any ratio column, whatever the code", `REFUSAL_WORD_CODES[col]?.includes(code) ? REFUSAL_WORD_BY_CODE[code]`, `REFUSAL_WORD_CODES[col] ? REFUSAL_WORD_BY_CODE[code]`],
   ["the bank gate skipped (a SIC-less EV call)", "const evFig = enterpriseValueOf(cap, row.m.balanceSheet, row.inputs.sic ?? null);", `const evFig = enterpriseValueOf(cap, row.m.balanceSheet, "3812");`],
-  ["the SIC not stored on the row", "    inputs: { shares: inputs.shares, refusals: inputs.refusals, ...(inputs.sic ? { sic: inputs.sic } : {}) },\n", "    inputs: { shares: inputs.shares, refusals: inputs.refusals },\n"],
+  ["the SIC not stored on the row", "\n    inputs: { shares: inputs.shares, refusals: inputs.refusals, ...(inputs.sic ? { sic: inputs.sic } : {}) },\n", "\n    inputs: { shares: inputs.shares, refusals: inputs.refusals },\n"],
 ];
 for (const [label, from, to] of MODULE_MUTANTS) {
   let fails;
@@ -365,6 +391,8 @@ const UI_MUTANTS = [
     "cell: (e) => capCell(num(e.enterpriseValue)) };"],
   ["the PB cell drops its mark", GRID, "est={e.cellEst?.pb}", "est={undefined}"],
   ["the key removed from the grid", GRID, "<PickerEstimateKey marks={shownEstimateMarks} />", "null"],
+  ["FILTERS: a marked figure dropped from the filters", GRID, "  return (entry as unknown as Record<string, unknown>)[field];\n}",
+    "  if ((entry as { cellEst?: Record<string, unknown> }).cellEst?.[field === \"enterpriseValue\" ? \"ev\" : \"pb\"]) return null;\n  return (entry as unknown as Record<string, unknown>)[field];\n}"],
   ["PB sorted by something other than its number", GRID, `sortType: "num", get: (e) => num(e.pbRatio),`, `sortType: "num", get: (e) => (e.cellEst?.pb ? null : num(e.pbRatio)),`],
   ["the page drops the marks", PAGE, "if (figures.marks) entry.cellEst = figures.marks;", "void figures;"],
   ["the page drops A's words", PAGE, "if (Object.keys(words).length) entry.cellWord = words;", "void words;"],
