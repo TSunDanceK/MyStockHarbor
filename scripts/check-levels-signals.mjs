@@ -67,6 +67,12 @@ async function measure(M) {
   return {
     M,
     aapl: M.ladderMarks(AAPL), above: M.ladderMarks(ABOVE), crowd: M.ladderMarks(CROWD),
+    // Eight markers inside ~4% of the price (#73: the ladder must hold up to 8 without overlaps).
+    eight: M.layoutLadder([
+      { key: "last", name: "Last price", value: 100, anchor: true }, { key: "a", name: "MA50", value: 100.4 }, { key: "b", name: "MA200", value: 99.5 },
+      { key: "c", name: "52-week high", value: 103.9 }, { key: "d", name: "52-week low", value: 96.2 }, { key: "e", name: "Week open", value: 100.1 },
+      { key: "f", name: "Month open", value: 99.9 }, { key: "g", name: "Prev. day high", value: 100.6 },
+    ], 100),
     aaplScale: M.ladderScale(AAPL),
     aaplHtml, aaplText: visibleText(aaplHtml), aboveHtml, aboveText: visibleText(aboveHtml),
     shortText: visibleText(render(props({ last: 50, ma50: null, ma200: null, zone: null }, { ma50Missing: "Not enough price history stored yet", ma200Missing: "Not enough price history stored yet", rsi: null, macdTone: null }))),
@@ -87,18 +93,37 @@ const rules = {
     const l = mark(above, "last"), m2 = mark(above, "ma200"), m5 = mark(above, "ma50");
     return m2.side === "above" && m2.y < l.y && m5.y < l.y && m5.y > m2.y && /^\$120\.00 · 20\.0% above$/.test(m2.words) && !mark(above, "zone");
   },
-  "labels: stacked to the minimum gap, in order, inside the ladder": ({ crowd, above, M }) => {
-    const ys = crowd.map((m) => m.labelY).sort((a, b) => a - b);
-    const gaps = ys.slice(1).map((y, i) => y - ys[i]);
-    const ordered = crowd.every((m, i) => i === 0 || crowd[i - 1].y <= m.y) && crowd.every((m, i) => i === 0 || crowd[i - 1].labelY < m.labelY);
-    // 34 px (two-line labels), written out here so the constant can't shrink silently.
-    return M.LABEL_GAP === 34 && gaps.every((g) => g >= 34 - 1e-9) && ys[0] >= 17 && ys.at(-1) <= M.LADDER_HEIGHT - 17 && ordered &&
+  "labels: stacked to the minimum gap on each side, in order, inside the ladder": ({ crowd, above, eight, M }) => {
+    const sideOk = (marks) => ["right", "left"].every((side) => {
+      const on = marks.filter((m) => m.labelSide === side);
+      const ys = on.map((m) => m.labelY);
+      // In price order, 46 px apart (three-line labels; written out so the constant can't shrink), half a gap inside each end.
+      return ys.every((y, k) => k === 0 || y - ys[k - 1] >= 46 - 1e-9) && ys.every((y) => y >= 23 - 1e-9 && y <= M.LADDER_HEIGHT - 23 + 1e-9);
+    });
+    return M.LABEL_GAP === 46 && sideOk(crowd) && sideOk(eight) && eight.length === 8 &&
       // MA200 at the very top of its ladder: its label is kept half a gap inside.
-      mark(above, "ma200").y < 17 && mark(above, "ma200").labelY >= 17 &&
+      mark(above, "ma200").y < 23 && mark(above, "ma200").labelY >= 23 &&
       JSON.stringify(M.stackLabels([100, 105, 110], 30, 220)) === "[100,130,160]" &&
       JSON.stringify(M.stackLabels([210, 215], 30, 220)) === "[190,220]" &&
       JSON.stringify(M.stackLabels([0, 2], 30, 220)) === "[0,30]" && JSON.stringify(M.stackLabels([0, 2], 30, 220, 15)) === "[15,45]";
   },
+  "labels alternate sides down the pillar: right, left, right, …": ({ aapl, eight, crowd }) =>
+    [aapl, eight, crowd].every((ms) => ms.every((m, i) => (i === 0 || ms[i - 1].y <= m.y) && m.labelSide === (i % 2 === 0 ? "right" : "left"))),
+  "the pillar is centred; the anchor keeps its bolder marker and label": ({ aaplHtml }) =>
+    /class="lsAxis" style="position:absolute;left:calc\(50% - 1px\)/.test(aaplHtml) &&
+    /class="lsBand" style="position:absolute;left:calc\(50% - 11px\);width:22px/.test(aaplHtml) &&
+    (aaplHtml.match(/class="lsTick" data-key="[^"]+" style="position:absolute;left:calc\(50% - (5|8)px\)/g) ?? []).length === 4 &&
+    /data-key="last" style="position:absolute;left:calc\(50% - 8px\);[^"]*width:16px;height:6px/.test(aaplHtml) &&
+    /data-key="last"[^>]*data-label-side="[a-z]+"[^>]*>[^]*?font-size:14px;font-weight:900/.test(aaplHtml),
+  "leaders stop short of the label's edge, so no line crosses text": ({ aaplHtml, M }) => {
+    const w = M.LABEL_OFFSET - M.LEADER_GAP;
+    return M.LEADER_GAP >= 4 && (aaplHtml.match(new RegExp(`<svg class="lsLeaders lsLeaders-(right|left)" width="${w}"`, "g")) ?? []).length === 2 &&
+      new RegExp(`data-label-side="right" style="[^"]*left:calc\\(50% \\+ ${M.LABEL_OFFSET}px\\)`).test(aaplHtml) &&
+      new RegExp(`data-label-side="left" style="[^"]*right:calc\\(50% \\+ ${M.LABEL_OFFSET}px\\)`).test(aaplHtml) &&
+      [...aaplHtml.matchAll(/<line [^>]*x1="([\d.]+)"[^>]*x2="([\d.]+)"/g)].every((l) => Math.max(+l[1], +l[2]) <= w);
+  },
+  "the Signals column keeps its width": ({ aaplHtml }) =>
+    /\.lsGrid \{ display: grid; grid-template-columns: minmax\(0, 3fr\) minmax\(0, 2fr\); gap: 28px; \}/.test(aaplHtml),
   "the zone: a band from its low to its high, touches and volume in its note": ({ aapl, aaplScale, aaplHtml, M }) => {
     const z = mark(aapl, "zone");
     return near(z.band.top, M.ladderY(268.9, aaplScale)) && near(z.band.bottom, M.ladderY(255.4, aaplScale)) &&
@@ -170,11 +195,18 @@ const mutants = [
   ["the scale: the highest value nearest the top, every mark at its own height, padded 8%", "l", (s) => s.replace("const vals = [input.last, input.ma50, input.ma200, input.zone?.lower, input.zone?.upper]", "const vals = [input.last, input.ma50, input.ma200]")],
   ["MA200 above the price reads above, drawn above", "l", (s) => s.replace('const sideOf = (v: number, last: number): LadderSide => (v < last ? "below" : "above");', 'const sideOf = (_v: number, _last: number): LadderSide => "below";')],
   ["MA200 above the price reads above, drawn above", "l", (s) => s.replace("return d === \"at the last price\" ? \"at the price\" : d;", "return d.replace(\"above\", \"below\");")],
-  ["labels: stacked to the minimum gap, in order, inside the ladder", "l", (s) => s.replace("for (let k = 1; k < out.length; k++) out[k] = Math.max(out[k], out[k - 1] + gap);\n  if (out.length) out", "if (out.length) out")],
-  ["labels: stacked to the minimum gap, in order, inside the ladder", "l", (s) => s.replace("for (let k = out.length - 2; k >= 0; k--) out[k] = Math.min(out[k], out[k + 1] - gap);", "")],
-  ["labels: stacked to the minimum gap, in order, inside the ladder", "l", (s) => s.replace("export const LABEL_GAP = 34;", "export const LABEL_GAP = 10;")],
-  ["labels: stacked to the minimum gap, in order, inside the ladder", "l", (s) => s.replace("const labelYs = stackLabels(marks.map((m) => m.y), LABEL_GAP, height, LABEL_GAP / 2);", "const labelYs = stackLabels(marks.map((m) => m.y), LABEL_GAP, height);")],
-  ["the zone: a band from its low to its high, touches and volume in its note", "l", (s) => s.replace("band: { top: ladderY(z.upper, s, height), bottom: ladderY(z.lower, s, height) },", "band: { top: ladderY(mid, s, height), bottom: ladderY(z.lower, s, height) },")],
+  ["labels: stacked to the minimum gap on each side, in order, inside the ladder", "l", (s) => s.replace("for (let k = 1; k < out.length; k++) out[k] = Math.max(out[k], out[k - 1] + gap);\n  if (out.length) out", "if (out.length) out")],
+  ["labels: stacked to the minimum gap on each side, in order, inside the ladder", "l", (s) => s.replace("for (let k = out.length - 2; k >= 0; k--) out[k] = Math.min(out[k], out[k + 1] - gap);", "")],
+  ["labels: stacked to the minimum gap on each side, in order, inside the ladder", "l", (s) => s.replace("export const LABEL_GAP = 46;", "export const LABEL_GAP = 20;")],
+  ["labels: stacked to the minimum gap on each side, in order, inside the ladder", "l", (s) => s.replace("const ys = stackLabels(idx.map((i) => placed[i].y), LABEL_GAP, height, LABEL_GAP / 2);", "const ys = stackLabels(idx.map((i) => placed[i].y), LABEL_GAP, height);")],
+  ["labels: stacked to the minimum gap on each side, in order, inside the ladder", "l", (s) => s.replace("const ys = stackLabels(idx.map((i) => placed[i].y), LABEL_GAP, height, LABEL_GAP / 2);", "const ys = idx.map((i) => placed[i].y);")],
+  ["labels alternate sides down the pillar: right, left, right, …", "l", (s) => s.replace('const sides: LabelSide[] = placed.map((_, i) => (i % 2 === 0 ? "right" : "left"));', 'const sides: LabelSide[] = placed.map(() => "right");')],
+  ["the pillar is centred; the anchor keeps its bolder marker and label", "c", (s) => s.replace('left: "calc(50% - 1px)", top: 0, bottom: 0, width: 2', "left: 10, top: 0, bottom: 0, width: 2")],
+  ["the pillar is centred; the anchor keeps its bolder marker and label", "c", (s) => s.replace('fontSize: m.key === "last" ? 14 : 13, fontWeight: m.key === "last" ? 900 : 800', "fontSize: 13, fontWeight: 800")],
+  ["leaders stop short of the label's edge, so no line crosses text", "l", (s) => s.replace("export const LEADER_GAP = 4;", "export const LEADER_GAP = -10;")],
+  ["leaders stop short of the label's edge, so no line crosses text", "c", (s) => s.replace("width={LABEL_OFFSET - LEADER_GAP}", "width={LABEL_OFFSET + 20}")],
+  ["the Signals column keeps its width", "c", (s) => s.replace(".lsGrid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px; }", ".lsGrid { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 1fr); gap: 28px; }")],
+  ["the zone: a band from its low to its high, touches and volume in its note", "l", (s) => s.replace("band: it.band ? { top: ladderY(it.band.high, s, height),", "band: it.band ? { top: ladderY(it.value, s, height),")],
   ["the zone: a band from its low to its high, touches and volume in its note", "c", (s) => s.replace("return `${NOTES.zone} ${p.zone.touches} touches${vol}. ${when}`;", "return `${NOTES.zone} ${when}`;")],
   ["the zone: a band from its low to its high, touches and volume in its note", "c", (s) => s.replace('{marks.filter((m) => m.band).map((m) => (', "{marks.filter(() => false).map((m) => (")],
   ["no zone: omitted with its reason, never hidden", "c", (s) => s.replace("p.zone == null ? `Macro support: ${p.zoneMissing}` : null,", "null,")],
@@ -184,7 +216,7 @@ const mutants = [
   ["MACD: where it sits against its signal line, never Bullish or Bearish", "l", (s) => s.replace('below: { pill: "Below signal",', 'below: { pill: "Bearish",')],
   ["MACD: where it sits against its signal line, never Bullish or Bearish", "l", (s) => s.replace('return tone === "green" ? "above" : tone === "red" ? "below" : "near";', 'return tone === "green" ? "below" : tone === "red" ? "above" : "near";')],
   ["MACD: where it sits against its signal line, never Bullish or Bearish", "c", (s) => s.replace('{macd === "above" ? "▲ " : macd === "below" ? "▼ " : "– "}', "")],
-  ["never colour alone: each label's colour matches its side, which matches its height", "c", (s) => s.replace("<span style={{ fontSize: 13, fontWeight: 800, color: SIDE_COLOUR[m.side] }}>", "<span style={{ fontSize: 13, fontWeight: 800, color: SIDE_COLOUR.above }}>")],
+  ["never colour alone: each label's colour matches its side, which matches its height", "c", (s) => s.replace('fontWeight: m.key === "last" ? 900 : 800, color: SIDE_COLOUR[m.side] }}', 'fontWeight: m.key === "last" ? 900 : 800, color: SIDE_COLOUR.above }}')],
   ["never colour alone: each label's colour matches its side, which matches its height", "c", (s) => s.replace("{marks.length > 1 ? <p className=\"lsKey\" style={noteStyle}>{LADDER_KEY}</p> : null}", "")],
   ["short history: each missing piece says why", "c", (s) => s.replace("p.ma200 == null ? `MA200: ${p.ma200Missing ?? \"not available\"}` : null,", "null,")],
   ["the notes describe, and nothing reads as advice", "c", (s) => s.replace('rsi: "RSI (14) compares', 'rsi: "A buy signal when RSI (14) compares')],

@@ -6,9 +6,14 @@
 //
 // THE LADDER: one vertical price scale with the last price (the anchor), MA50,
 // MA200 and the macro support zone (a band from its low to its high) at their
-// real heights. Labels that would overlap are pushed apart to a minimum gap and
-// joined to their true height by a short leader. A level below the last price
-// and one above it are told apart by colour AND by position, and a key says so.
+// real heights. A level below the last price and one above it are told apart by
+// colour AND by position, and a key says so.
+//
+// A CENTRED PILLAR, LABELS ALTERNATING SIDES (#563 COWORK #73): going down the
+// pillar in price order the labels go right, left, right, … so the ladder has
+// room for more levels later (built and checked for up to 8 markers; none added
+// yet). Each side keeps the minimum-gap stacking on its own, and each label's
+// short leader ends at the label's edge, never across its text.
 //
 // THE GAUGES: RSI (14) on a 0–100 bar with the 30 and 70 bands; MACD as a
 // state pill and one hedged line. "Bullish" / "Bearish" are gone (owner ruling,
@@ -18,10 +23,19 @@ import { distanceWords, priceWords } from "./keyLevels";
 
 /** Padding above and below the ladder's scale, as a share of its span. */
 export const LADDER_PAD = 0.08;
-/** The ladder's drawn height and the least room between two labels, in px. */
+/** The ladder's drawn height, in px. */
 export const LADDER_HEIGHT = 240;
-/** Each label is two lines (name, then value and distance), so this is its height plus a little air. */
-export const LABEL_GAP = 34;
+/**
+ * The least room between two labels ON THE SAME SIDE, in px. A label is up to
+ * three lines (name, value, distance: on a phone each side is half the column),
+ * so this is its height plus a little air.
+ */
+export const LABEL_GAP = 46;
+/** A label's inner edge sits this far from the pillar's centre; its leader stops LEADER_GAP short of it. */
+export const LABEL_OFFSET = 30;
+export const LEADER_GAP = 4;
+/** Built and checked for up to this many markers (#73). */
+export const MAX_MARKERS = 8;
 
 export type LadderSide = "anchor" | "below" | "above";
 
@@ -32,15 +46,21 @@ export type LadderInput = {
   zone: { lower: number; upper: number; touches: number; volumeRatio: number | null } | null;
 };
 
+export type LabelSide = "right" | "left";
 export type LadderMark = {
-  key: "last" | "ma50" | "ma200" | "zone";
+  key: string;
   name: string;
   /** The price the mark sits at: the zone's middle for the band. */
   value: number;
   /** Its true height on the scale, in px from the top. */
   y: number;
-  /** Where its label sits after stacking, in px from the top. */
+  /** Where its label sits after stacking (per side), in px from the top. */
   labelY: number;
+  /** Which side of the pillar its label is on: right, left, right, … in price order (#73). */
+  labelSide: LabelSide;
+  /** "$322.42" and "3.4% below" (null for the anchor): the label's second and third lines. */
+  valueText: string;
+  distText: string | null;
   side: LadderSide;
   /** "$322.42 · 3.5% below", or "$333.69" for the anchor. Distances are from the last price (the key says so). */
   words: string;
@@ -95,31 +115,62 @@ function fromPrice(v: number, last: number): string {
 
 const sideOf = (v: number, last: number): LadderSide => (v < last ? "below" : "above");
 
+/** A level to place on the ladder: a price, or a band (its middle is the price). */
+export type LadderItem = { key: string; name: string; value: number; band?: { low: number; high: number } | null; anchor?: boolean; valueText?: string; distText?: string | null };
+
+/**
+ * Place items on one scale: true height, side of the price, and a label side
+ * that alternates right, left, right, … going down the pillar, with the gap
+ * stacking applied to each side on its own. Marks come back top to bottom.
+ */
+export function layoutLadder(items: readonly LadderItem[], last: number, height = LADDER_HEIGHT): LadderMark[] {
+  if (!isNum(last) || !items.length) return [];
+  const vals = items.flatMap((it) => [it.value, it.band?.low, it.band?.high]).filter(isNum);
+  vals.push(last);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = hi > lo ? (hi - lo) * LADDER_PAD : hi * 0.02;
+  const s = { min: lo - pad, max: hi + pad };
+  const placed = items.map((it) => {
+    const inside = !!it.band && last >= it.band.low && last <= it.band.high;
+    return {
+      key: it.key, name: it.name, value: it.value, y: ladderY(it.value, s, height),
+      side: (it.anchor || inside ? "anchor" : sideOf(it.value, last)) as LadderSide,
+      valueText: it.valueText ?? priceWords(it.value),
+      distText: it.anchor ? null : it.distText ?? fromPrice(it.value, last),
+      band: it.band ? { top: ladderY(it.band.high, s, height), bottom: ladderY(it.band.low, s, height) } : null,
+    };
+  }).sort((a, b) => a.y - b.y);
+  const sides: LabelSide[] = placed.map((_, i) => (i % 2 === 0 ? "right" : "left"));
+  const labelY = Array<number>(placed.length);
+  for (const side of ["right", "left"] as const) {
+    const idx = placed.map((_, i) => i).filter((i) => sides[i] === side);
+    const ys = stackLabels(idx.map((i) => placed[i].y), LABEL_GAP, height, LABEL_GAP / 2);
+    idx.forEach((i, k) => { labelY[i] = ys[k]; });
+  }
+  return placed.map((m, i) => ({
+    ...m, labelY: labelY[i], labelSide: sides[i],
+    words: m.distText ? `${m.valueText} · ${m.distText}` : m.valueText,
+  }));
+}
+
 /** The ladder's marks, top to bottom as drawn, or [] without a price. */
-export function ladderMarks(input: LadderInput, height = LADDER_HEIGHT): LadderMark[] {
-  const s = ladderScale(input);
-  if (!s) return [];
+export function ladderMarks(input: LadderInput, height = LADDER_HEIGHT, extra: readonly LadderItem[] = []): LadderMark[] {
+  if (!ladderScale(input)) return [];
   const { last } = input;
-  const marks: Omit<LadderMark, "labelY">[] = [
-    { key: "last", name: "Last price", value: last, y: ladderY(last, s, height), side: "anchor", words: priceWords(last), band: null },
-  ];
-  if (isNum(input.ma50)) marks.push({ key: "ma50", name: "MA50", value: input.ma50, y: ladderY(input.ma50, s, height), side: sideOf(input.ma50, last), words: `${priceWords(input.ma50)} · ${fromPrice(input.ma50, last)}`, band: null });
-  if (isNum(input.ma200)) marks.push({ key: "ma200", name: "MA200", value: input.ma200, y: ladderY(input.ma200, s, height), side: sideOf(input.ma200, last), words: `${priceWords(input.ma200)} · ${fromPrice(input.ma200, last)}`, band: null });
+  const items: LadderItem[] = [{ key: "last", name: "Last price", value: last, anchor: true }];
+  if (isNum(input.ma50)) items.push({ key: "ma50", name: "MA50", value: input.ma50 });
+  if (isNum(input.ma200)) items.push({ key: "ma200", name: "MA200", value: input.ma200 });
   const z = input.zone;
   if (z && isNum(z.lower) && isNum(z.upper)) {
-    const mid = (z.lower + z.upper) / 2;
-    // A band that holds the price reads "the price is inside the zone"; otherwise its near edge's distance.
+    // A band that holds the price reads "price inside"; otherwise its near edge's distance.
     const inside = last >= z.lower && last <= z.upper;
     const edge = last > z.upper ? z.upper : z.lower;
-    marks.push({
-      key: "zone", name: "Macro support", value: mid, y: ladderY(mid, s, height),
-      side: inside ? "anchor" : sideOf(mid, last),
-      words: `${priceWords(z.lower)}–${priceWords(z.upper)} · ${inside ? "price inside" : fromPrice(edge, last)}`,
-      band: { top: ladderY(z.upper, s, height), bottom: ladderY(z.lower, s, height) },
+    items.push({
+      key: "zone", name: "Macro support", value: (z.lower + z.upper) / 2, band: { low: z.lower, high: z.upper },
+      valueText: `${priceWords(z.lower)}–${priceWords(z.upper)}`, distText: inside ? "price inside" : fromPrice(edge, last),
     });
   }
-  const labelYs = stackLabels(marks.map((m) => m.y), LABEL_GAP, height, LABEL_GAP / 2);
-  return marks.map((m, i) => ({ ...m, labelY: labelYs[i] })).sort((a, b) => a.y - b.y);
+  return layoutLadder([...items, ...extra].slice(0, MAX_MARKERS), last, height);
 }
 
 // ── Signals ────────────────────────────────────────────────────────────────

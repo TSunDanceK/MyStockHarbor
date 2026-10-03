@@ -15,8 +15,8 @@ import type { CSSProperties, ReactNode } from "react";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
 import { dateWords } from "@/lib/ta/keyLevels";
 import {
-  LADDER_HEIGHT, MACD_WORDS, ladderMarks, macdState, rsiPct, rsiZone,
-  type LadderMark, type LadderSide,
+  LABEL_OFFSET, LADDER_HEIGHT, LEADER_GAP, MACD_WORDS, ladderMarks, macdState, rsiPct, rsiZone,
+  type LadderItem, type LadderMark, type LadderSide,
 } from "@/lib/ta/priceLadder";
 
 /** Below the price vs above it: the key says so, and position says it too. */
@@ -57,6 +57,11 @@ export type LevelsSignalsProps = {
   asOf: string | null;
   asOfPartial?: boolean;
   credit?: ReactNode;
+  /**
+   * More levels for the ladder, for later (#563 COWORK #73: built and checked
+   * for up to 8 markers). The page passes none yet; the measure script does.
+   */
+  extraLevels?: LadderItem[];
 };
 
 function asOfWords(asOf: string | null, partial?: boolean): string {
@@ -69,12 +74,12 @@ function noteFor(m: LadderMark, p: LevelsSignalsProps, when: string): string {
     const vol = p.zone.volumeRatio != null ? ` · ${p.zone.volumeRatio.toFixed(1)}× zone volume (weekly volume in the band against the past year's average)` : "";
     return `${NOTES.zone} ${p.zone.touches} touches${vol}. ${when}`;
   }
-  return `${NOTES[m.key]} ${when}`;
+  return `${(NOTES as Record<string, string>)[m.key] ?? ""} ${when}`.trim();
 }
 
 export default function LevelsSignals(p: LevelsSignalsProps) {
   const when = asOfWords(p.asOf, p.asOfPartial);
-  const marks = p.last != null ? ladderMarks({ last: p.last, ma50: p.ma50, ma200: p.ma200, zone: p.zone }) : [];
+  const marks = p.last != null ? ladderMarks({ last: p.last, ma50: p.ma50, ma200: p.ma200, zone: p.zone }, LADDER_HEIGHT, p.extraLevels) : [];
   const missing = [
     p.ma50 == null ? `MA50: ${p.ma50Missing ?? "not available"}` : null,
     p.ma200 == null ? `MA200: ${p.ma200Missing ?? "not available"}` : null,
@@ -87,24 +92,41 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
         <h3 style={partTitleStyle}>Price levels</h3>
         {marks.length ? (
           <div className="lsLadder" style={{ position: "relative", height: LADDER_HEIGHT, marginTop: 14 }}>
-            {/* the axis, the zone band and each mark's tick, at true height */}
-            <div style={{ position: "absolute", left: 10, top: 0, bottom: 0, width: 2, background: C.axis, borderRadius: 1 }} />
+            {/* THE PILLAR, CENTRED (#563 COWORK #73): the axis, the zone band and
+                each mark's tick at true height, on the column's centre line. */}
+            <div className="lsAxis" style={{ position: "absolute", left: "calc(50% - 1px)", top: 0, bottom: 0, width: 2, background: C.axis, borderRadius: 1 }} />
             {marks.filter((m) => m.band).map((m) => (
-              <div key="band" className="lsBand" style={{ position: "absolute", left: 0, width: 22, top: m.band!.top, height: Math.max(3, m.band!.bottom - m.band!.top), background: C.band, border: `1px solid ${SIDE_COLOUR.below}55`, borderRadius: 3 }} />
+              <div key={`b-${m.key}`} className="lsBand" style={{ position: "absolute", left: "calc(50% - 11px)", width: 22, top: m.band!.top, height: Math.max(3, m.band!.bottom - m.band!.top), background: C.band, border: `1px solid ${SIDE_COLOUR.below}55`, borderRadius: 3 }} />
             ))}
             {marks.map((m) => (
-              <div key={`t-${m.key}`} className="lsTick" data-key={m.key} style={{ position: "absolute", left: m.key === "last" ? 4 : 6, top: m.y - (m.key === "last" ? 3 : 1), width: m.key === "last" ? 14 : 10, height: m.key === "last" ? 6 : 2, borderRadius: 2, background: SIDE_COLOUR[m.side] }} />
+              <div key={`t-${m.key}`} className="lsTick" data-key={m.key} style={{ position: "absolute", left: m.key === "last" ? "calc(50% - 8px)" : "calc(50% - 5px)", top: m.y - (m.key === "last" ? 3 : 1), width: m.key === "last" ? 16 : 10, height: m.key === "last" ? 6 : 2, borderRadius: 2, background: SIDE_COLOUR[m.side] }} />
             ))}
-            {/* leaders from each tick to its stacked label */}
-            <svg className="lsLeaders" width="28" height={LADDER_HEIGHT} style={{ position: "absolute", left: 22, top: 0, overflow: "visible" }} aria-hidden="true">
-              {marks.map((m) => <line key={m.key} x1={0} y1={m.y} x2={28} y2={m.labelY} stroke={SIDE_COLOUR[m.side]} strokeOpacity={0.5} strokeWidth={1} />)}
-            </svg>
+            {/* LEADERS, one SVG each side of the pillar: from the tick at true
+                height to the label's inner edge at its stacked height, stopping
+                LEADER_GAP short of the label, so a line never crosses text. */}
+            {(["right", "left"] as const).map((side) => (
+              <svg key={side} className={`lsLeaders lsLeaders-${side}`} width={LABEL_OFFSET - LEADER_GAP} height={LADDER_HEIGHT} aria-hidden="true"
+                style={{ position: "absolute", top: 0, ...(side === "right" ? { left: "50%" } : { right: "50%" }) }}>
+                {marks.filter((m) => m.labelSide === side).map((m) => {
+                  const w = LABEL_OFFSET - LEADER_GAP;
+                  return <line key={m.key} x1={side === "right" ? 0 : w} y1={m.y} x2={side === "right" ? w : 0} y2={m.labelY} stroke={SIDE_COLOUR[m.side]} strokeOpacity={0.5} strokeWidth={1} />;
+                })}
+              </svg>
+            ))}
             {marks.map((m) => (
-              <div key={`l-${m.key}`} className="lsLabel" data-key={m.key} data-side={m.side} style={{ position: "absolute", left: 54, right: 0, top: m.labelY, transform: "translateY(-50%)", display: "flex", flexDirection: "column", lineHeight: 1.2, minWidth: 0, whiteSpace: "nowrap" }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: SIDE_COLOUR[m.side] }}>
+              <div key={`l-${m.key}`} className="lsLabel" data-key={m.key} data-side={m.side} data-label-side={m.labelSide}
+                style={{
+                  position: "absolute", top: m.labelY, transform: "translateY(-50%)", display: "flex", flexDirection: "column", lineHeight: 1.2, minWidth: 0,
+                  ...(m.labelSide === "right"
+                    ? { left: `calc(50% + ${LABEL_OFFSET}px)`, right: 0, alignItems: "flex-start", textAlign: "left" as const }
+                    : { left: 0, right: `calc(50% + ${LABEL_OFFSET}px)`, alignItems: "flex-end", textAlign: "right" as const }),
+                }}>
+                {/* THE ANCHOR STAYS BOLDER on whichever side it falls (#73). */}
+                <span style={{ fontSize: m.key === "last" ? 14 : 13, fontWeight: m.key === "last" ? 900 : 800, color: SIDE_COLOUR[m.side] }}>
                   <ReasonedValue text={m.name} reason={noteFor(m, p, when)} />
                 </span>
-                <span className="lsWords" style={{ fontSize: 12, color: m.key === "last" ? C.value : C.muted, fontWeight: m.key === "last" ? 800 : 500, overflow: "hidden", textOverflow: "ellipsis" }}>{m.words}</span>
+                <span className="lsValue" style={{ fontSize: 12, color: m.key === "last" ? C.value : C.muted, fontWeight: m.key === "last" ? 800 : 600 }}>{m.valueText}</span>
+                {m.distText ? <span className="lsDist" style={{ fontSize: 11.5, color: C.muted }}>{m.distText}</span> : null}
               </div>
             ))}
           </div>
@@ -149,6 +171,8 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
         .lsGrid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px; }
         .lsPart { min-width: 0; }
         @media (max-width: 640px) { .lsGrid { grid-template-columns: minmax(0, 1fr); gap: 22px; } }
+        /* Half a 320 px column per side: labels a size smaller so "$23,700–$24,300" stays on two lines at most. */
+        @media (max-width: 360px) { .lsLabel { line-height: 1.15 !important; } .lsLabel > span:first-child { font-size: 12px !important; } .lsValue, .lsDist { font-size: 11px !important; } }
       `}</style>
     </div>
   );
