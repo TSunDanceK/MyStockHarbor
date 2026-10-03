@@ -529,7 +529,9 @@ export default async function StockPage({ params }: Props) {
       fetchStockPageSecFacts(upper),
       // A cached Redis mget that never fetches on a miss: the FMP-cache leg of
       // resolveProfile, exactly as the news page reads it.
-      readCachedFundamentalsBulk([upper]).then((m) => m.get(upper) ?? null, () => null),
+      // `raw` (#690 follow-up, 2026-10-03): read only for the profile (sector,
+      // industry, updatedAt), which the read-time cap/P/E overlay never changes.
+      readCachedFundamentalsBulk([upper], { raw: true }).then((m) => m.get(upper) ?? null, () => null),
       // Nasdaq Trader's directory for the heading, memoised per process.
       getCompanyNameMap().catch(() => new Map<string, string>()),
     ]);

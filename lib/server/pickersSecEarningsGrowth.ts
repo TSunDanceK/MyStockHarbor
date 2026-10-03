@@ -34,8 +34,9 @@
 // differs between the two periods, a debt ticker, a share-basis change, no
 // year-ago period, a stale period, a missing FX rate for either period, an
 // incomplete revenue line (A's revenueLineIncomplete) on either period, or a
-// large non-operating item in the latest period (A's largeNonOperating: an
-// EPS jump that is a one-off gain is not earnings growth) -- each one leaves
+// large non-operating item in either period (A's largeNonOperating: an EPS
+// jump that is a one-off gain now, or a one-off loss a year ago, is not
+// earnings growth) -- each one leaves
 // the symbol OUT of the list, with its reason stored on the row.
 //
 // Growth is taken in the filer's REPORTING currency (A's
@@ -162,11 +163,14 @@ export function secGrowthFacts(
   const revenuePrior = valueOf(then, "revenue");
   if (revenue === null || revenuePrior === null) return refuse("revenue-missing");
 
-  // A's large-non-operating rule, on the latest period's own lines.
-  const rows = ["revenue", "operatingIncome", "preTaxIncome", "nonOperatingIncomeExpense"].map(
-    (key) => ({ key, val: valueOf(now, key) }) as unknown as ViewCell
+  // A's large-non-operating rule, on EACH period's own lines (#553 COWORK
+  // #109, 2026-10-03): a one-off gain now inflates EPS, and a one-off LOSS a
+  // year ago deflates the base -- either way the growth is not earnings
+  // growth. Was the latest period only.
+  const linesOf = (x: StoredPeriod) => ["revenue", "operatingIncome", "preTaxIncome", "nonOperatingIncomeExpense"].map(
+    (key) => ({ key, val: valueOf(x, key) }) as unknown as ViewCell
   );
-  if (largeNonOperating(rows)) return refuse("large-non-operating-item");
+  if (largeNonOperating(linesOf(now)) || largeNonOperating(linesOf(then))) return refuse("large-non-operating-item");
 
   return {
     ok: true,
@@ -241,22 +245,31 @@ export function secStrongEarningsGrowth(
  * Dated 2026-10-03 (#553 CODE-B #94 B5): the old copy promised "beat history"
  * and "positive earnings consistency", which the filings cannot measure.
  */
+//
+// HIDDEN, NOT DELETED (2026-10-03, #553 COWORK #109): description, explainer and
+// meta said "quarter" only, though annual filers are compared fiscal year
+// against fiscal year. Was:
+//   description: `Stocks whose latest filed quarter shows diluted EPS up at least ${N}% and revenue up on the same quarter a year earlier, ` +
+//     "ranked by that growth. Figures are as filed with the SEC."
+//   explainerBody: "... A stock qualifies when its diluted EPS for the latest quarter is at least ${N}% above the same quarter
+//     a year earlier, with a profit in both quarters, and its revenue is also higher. ..."
+//   metaDescription: `Stocks whose latest SEC-filed quarter shows diluted EPS up ${N}%+ and revenue up year over year, ranked by that growth.`
 export const SEC_GROWTH_COPY = {
   description:
-    `Stocks whose latest filed quarter shows diluted EPS up at least ${SEC_GROWTH_MIN_EPS_YOY}% and revenue up on the same quarter a year earlier, ` +
-    "ranked by that growth. Figures are as filed with the SEC.",
+    `Stocks whose latest filed quarter (or fiscal year, for annual filers) shows diluted EPS up at least ${SEC_GROWTH_MIN_EPS_YOY}% ` +
+    "and revenue up on the same period a year earlier, ranked by that growth. Figures are as filed with the SEC.",
   explainerTitle: "How this earnings growth screen works",
   explainerBody:
     "This page lists companies whose most recent filed results show year-over-year growth. A stock qualifies when its diluted EPS for " +
-    `the latest quarter is at least ${SEC_GROWTH_MIN_EPS_YOY}% above the same quarter a year earlier, with a profit in both quarters, ` +
+    `the latest filed quarter (or fiscal year) is at least ${SEC_GROWTH_MIN_EPS_YOY}% above the same period a year earlier, with a profit in both periods, ` +
     "and its revenue is also higher. Annual-only filers, and companies whose newest filing is the annual report, are compared fiscal " +
     "year against fiscal year. Stocks are left out when the filings can't support a like-for-like comparison: a different currency " +
-    "we can't convert, depositary shares whose EPS unit is unclear, an incomplete revenue line, a large one-off non-operating item, " +
+    "we can't convert, depositary shares whose EPS unit is unclear, an incomplete revenue line, a large one-off non-operating item in either period, " +
     "or no year-ago period on file. It reads filed figures only; it does not use analyst estimates, so it says nothing about beats or misses.",
   emptyText:
     "No stock currently meets this screen's filed-figures rule, or today's SEC filings data has not been processed yet. Check back later.",
   metaDescription:
-    `Stocks whose latest SEC-filed quarter shows diluted EPS up ${SEC_GROWTH_MIN_EPS_YOY}%+ and revenue up year over year, ranked by that growth.`,
+    `Stocks whose latest SEC-filed quarter (or fiscal year) shows diluted EPS up ${SEC_GROWTH_MIN_EPS_YOY}%+ and revenue up year over year, ranked by that growth.`,
   sectionDescription:
     `Latest filed quarter (or fiscal year) vs a year earlier: diluted EPS up at least ${SEC_GROWTH_MIN_EPS_YOY}% and revenue up, from SEC filings.`,
 } as const;

@@ -638,7 +638,9 @@ export default async function StockNewsPage({ params }: Props) {
   // resolveProfile falls through to the SEC classification leg — still no network
   // request, still no throw, and it logs any symbol that neither leg answers for.
   const endFundamentals = beginTiming("page", `fundamentals ${upper}`);
-  const fundamentals = (await readCachedFundamentalsBulk([upper])).get(upper) ?? null;
+  // `raw` (#690 follow-up, 2026-10-03): profile fields only (sector,
+  // industry), which the read-time cap/P/E overlay never changes.
+  const fundamentals = (await readCachedFundamentalsBulk([upper], { raw: true })).get(upper) ?? null;
   endFundamentals();
   const profile = resolveProfile(upper, fundamentals);
   const artBucket = bucketFor(

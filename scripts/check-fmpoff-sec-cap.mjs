@@ -540,5 +540,37 @@ for (const [name, rel, from, to] of [
   check("mutant caught: the run cap back at 2,000", !capFits(secMod.replace(/MAX_SYMBOLS_PER_RUN = [\d_]+;/, "MAX_SYMBOLS_PER_RUN = 2_000;")));
 }
 
+// ── 8. PROFILE-ONLY READERS SKIP THE OVERLAY (#690 follow-up, 2026-10-03) ───
+// The read-time overlay replaces only marketCap and peRatio. A reader that uses
+// the row for its profile alone (sector, industry, updatedAt) asks for `raw`,
+// so it costs no pool reads. Each reader: the call is raw, and the row is used
+// only through resolveProfile / classificationAsOf (never .marketCap/.peRatio).
+{
+  const PROFILE_READERS = [
+    ["lib/server/internalNews.ts", "symbol"],
+    ["app/stock/[symbol]/news/page.tsx", "upper"],
+    ["app/stock/[symbol]/page.tsx", "upper"],
+  ];
+  const profileOnly = (rel, src, v) => {
+    const c = stripComments(src, { file: rel });
+    const fails = [];
+    if (!new RegExp(`readCachedFundamentalsBulk\\(\\[${v}\\], \\{ raw: true \\}\\)`).test(c)) fails.push(`${rel}: the fundamentals read is raw`);
+    if ((c.match(/readCachedFundamentalsBulk\(/g) ?? []).length !== 1) fails.push(`${rel}: exactly one fundamentals read`);
+    if (/fundamentals\??\.(marketCap|peRatio)\b/.test(c)) fails.push(`${rel}: reads no cap or P/E from the raw row`);
+    return fails;
+  };
+  // The overlay changes only cap and P/E (so raw is safe for the profile).
+  const poolSrc = stripComments(raw(FILES.pool), { file: FILES.pool });
+  check("the overlay changes only marketCap and peRatio on a row", /out\.set\(s, \{ \.\.\.row, marketCap: v\.marketCap, peRatio: v\.pe \}\);/.test(poolSrc));
+  for (const [rel, v] of PROFILE_READERS) {
+    const src = raw(rel);
+    const fails = profileOnly(rel, src, v);
+    for (const f of fails) check(f, false);
+    check(`profile-only reader asks for raw: ${rel}`, fails.length === 0);
+    const m = src.replace(", { raw: true })", ")");
+    check(`mutant caught: ${rel} drops raw`, m !== src && profileOnly(rel, m, v).length > 0);
+  }
+}
+
 console.log(failures ? `\n${failures} CHECK(S) FAILED` : "\nALL CHECKS PASSED");
 process.exit(failures ? 1 : 0);
