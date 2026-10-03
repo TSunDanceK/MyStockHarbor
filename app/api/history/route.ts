@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getDailyHistory, type Point } from "../../../lib/server/historyCache";
 import { isUnwantedBot } from "@/lib/botid-guard";
 import { isActiveMarketWindow } from "@/lib/server/marketHours";
+import { carryPartialLabel, historyForSurface } from "@/lib/server/tiingoHistory";
 
 export const runtime = "nodejs";
 export const revalidate = 900;
@@ -116,8 +117,19 @@ export async function GET(req: Request) {
   }
 
   try {
-    const daily = await getDailyHistory(symbol, { caller: "api-history" });
-    const points = aggregate(daily, interval);
+    // STEP 3 (#553 COWORK #71 row 3), behind PRICE_PROVIDER_HISTORY: the
+    // nightly Tiingo bars from the Data Cache plus today's labelled partial bar,
+    // then the SAME d/w/m roll-up and the same {symbol, interval, points}
+    // shape. A Tiingo miss keeps this exact FMP read (lib/server/tiingoHistory.ts).
+    //
+    // COWORK #72 LIMITS, HELD AS THEY ARE (scripts/check-tiingo-step3.mjs):
+    // BotID above stays; still /api/ (robots-disallowed); no CORS header; no
+    // download/CSV; no new route. "Historical price charts" through our own
+    // same-origin route is display, not export.
+    const { points: daily } = await historyForSurface("HISTORY", symbol, () =>
+      getDailyHistory(symbol, { caller: "api-history" })
+    );
+    const points = carryPartialLabel(daily, aggregate(daily, interval));
 
     return NextResponse.json(
       {

@@ -23,7 +23,8 @@ import { utcDay, utcStamp } from "@/lib/utcDate";
 import { browserStorage, readWideChoice, WIDE_ARROW_LEFT, WIDE_ARROW_RIGHT, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; priceLabel?: string | null; };
-export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
+// `label`: Tiingo's partial bar only, "today so far (IEX), hh:mm ET" (step 3, #553 COWORK #57 §2).
+export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; label?: string; };
 type ChartInterval = "d" | "w" | "m";
 type ChartMode = "basic" | "interactive" | "tradingview";
 type SymbolResult = { symbol: string; name: string; exchange: string };
@@ -361,6 +362,7 @@ export default function DashboardClient({
   initialEarningsSummary = null,
   pageToken = "",
   tiingoCredit = null,
+  historyCredit = null,
 }: {
   defaultSymbol?: string;
   initialQuote?: Quote | null;
@@ -376,6 +378,8 @@ export default function DashboardClient({
   // The linked "Market data from Tiingo.com", rendered by the server page when
   // PRICE_PROVIDER_STOCK_PAGE=tiingo (step 4). Shown beside a Tiingo figure only.
   tiingoCredit?: React.ReactNode;
+  // The linked "Market data from Tiingo.com" when PRICE_PROVIDER_HISTORY=tiingo (step 3).
+  historyCredit?: React.ReactNode;
 }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [assetType, setAssetType] = useState<AssetType>("stock");
@@ -737,7 +741,7 @@ export default function DashboardClient({
         const [qR, hR] = await Promise.all([fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined), fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${selectedTimeframe.fetchBars}&interval=${chartInterval}`)]);
         if (!qR.ok) throw new Error("q"); if (!hR.ok) throw new Error("h");
         const q = (await qR.json()) as Quote, h = (await hR.json()) as { points: any[] }; if (c) return;
-        const pts: Point[] = (Array.isArray(h.points) ? h.points : []).map((p: any) => ({ date: String(p?.date ?? ""), open: p?.open == null ? undefined : Number(p.open), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume) })).filter(p => p.date && Number.isFinite(p.close));
+        const pts: Point[] = (Array.isArray(h.points) ? h.points : []).map((p: any) => ({ date: String(p?.date ?? ""), open: p?.open == null ? undefined : Number(p.open), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume), label: typeof p?.label === "string" ? p.label : undefined })).filter(p => p.date && Number.isFinite(p.close));
         setQuote(q); setHistoryAll(pts); setSymbolCache(prev => ({ ...prev, [ck]: { quote: q, history: pts } }));
       } catch { if (c) return; setErr("Failed to load data (try another ticker)."); setQuote(null); setHistoryAll([]); }
       finally { if (!c) setLoading(false); }
@@ -1210,6 +1214,12 @@ export default function DashboardClient({
                 <Link href="/platforms" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Compare platforms →</Link>
               </div>
             </>
+          ) : null}
+          {historyCredit && chartMode !== "tradingview" ? (
+            // Step 3 (#553 COWORK #56/#92): whose bars these are, and what the newest one is.
+            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
+              {historyAll.length && historyAll[historyAll.length - 1].label ? `Last bar: ${historyAll[historyAll.length - 1].label} · ` : null}{historyCredit}
+            </div>
           ) : null}
         </div>
       </SectionCard>

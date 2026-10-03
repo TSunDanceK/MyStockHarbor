@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { getDailyHistory } from "@/lib/server/historyCache";
+import { historyForSurface } from "@/lib/server/tiingoHistory";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { searchSymbols } from "@/lib/server/symbolSearch";
 import {
   getStockPageSecFacts,
@@ -33,7 +35,6 @@ import {
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { readTiingoQuote } from "@/lib/server/tiingoQuote";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { awaitingSecRead } from "@/lib/server/secColdFetch";
 import Link from "next/link";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
@@ -402,8 +403,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   // Run history + quote in parallel; we only need these for meta generation.
+  // History follows PRICE_PROVIDER_CHARTS exactly as the page body does (step 3,
+  // #553 COWORK #71), so the title's MA/RSI read and the page agree.
   const [rawHistory, quoteResult] = await Promise.all([
-    getDailyHistory(upper, { caller: "stock-page" }).catch(() => []),
+    historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page" })).then(
+      (h) => h.points,
+      () => [] as Point[]
+    ),
     fetchQuote(upper),
   ]);
   const quote = quoteResult.quote;
@@ -493,9 +499,14 @@ export default async function StockPage({ params }: Props) {
       // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
       // unreachable) stays distinguishable from a read that legitimately
       // returned nothing for this symbol.
-      getDailyHistory(upper, { caller: "stock-page-meta" }).then(
-        (pts) => ({ points: pts as Point[], failed: false }),
-        () => ({ points: [] as Point[], failed: true })
+      //
+      // STEP 3 (#553 COWORK #71 row 3), behind PRICE_PROVIDER_CHARTS: the stored
+      // Tiingo bars + today's labelled partial bar, whole, or this FMP read
+      // whole on a Tiingo miss (lib/server/tiingoHistory.ts). The chart, the
+      // indicator seed and the 52-week range all read this one series.
+      historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page-meta" })).then(
+        (h) => ({ points: h.points as Point[], failed: false, provider: h.provider }),
+        () => ({ points: [] as Point[], failed: true, provider: "none" as const })
       ),
       fetchQuote(upper),
       fetchCompanyName(upper),
@@ -774,6 +785,13 @@ export default async function StockPage({ params }: Props) {
         // under the header stats whenever the quote is a Tiingo one.
         tiingoCredit={
           priceProviderFor("STOCK_PAGE") === "tiingo" ? (
+            <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+          ) : null
+        }
+        // Step 3 (#553 COWORK #71/#92): the linked credit under the chart, only
+        // when the series above really is Tiingo's (a miss falls back to FMP).
+        historyCredit={
+          historyResult.provider === "tiingo" ? (
             <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
           ) : null
         }
