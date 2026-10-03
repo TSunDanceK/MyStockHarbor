@@ -34,6 +34,7 @@ import { eodBarsToPoints } from "./marketData/pickerHistory";
 import { todaySoFar } from "./marketData/merge";
 import { priceProviderFor, type PriceSurface } from "./marketData/provider";
 import { readSurfaceInputs } from "./tiingoSurfacePrice";
+import { QUOTE_TOKEN_HEADER, verifyQuoteToken } from "./quoteToken";
 
 export type HistorySurface = Extract<PriceSurface, "HISTORY" | "CHARTS">;
 
@@ -120,4 +121,56 @@ export async function historyForSurface(
   if (tiingo) return { points: tiingo, provider: "tiingo" };
   if (!env.FMP_API_KEY) return { points: [], provider: "none" };
   return { points: await fmp(), provider: "fmp" };
+}
+
+// ── /api/history ON THE TIINGO PATH (#553 COWORK #103) ──────────────────────
+// The contract ruling: Tiingo-derived bars do not go out through public JSON;
+// pages read them in-process. /api/history stays only as the same-origin feed
+// for the charts' own client refetches, so on the Tiingo path it is:
+//
+//   never shared-cached   `private, no-store`, so no CDN hit can skip BotID and
+//                         hand a warmed URL's bars to a plain curl;
+//   capped                at the most any of our charts asks for;
+//   same-origin only      the browser's `Sec-Fetch-Site: same-origin`, or a
+//                         valid page token (lib/server/quoteToken.ts, the
+//                         header /api/quote already takes) for a browser that
+//                         sends no Fetch Metadata. Anything else: 403, no bars.
+//
+// The FMP path (gate unset) keeps its public s-maxage headers and 5000 clamp.
+
+/**
+ * The most bars a chart requests: the dashboard's D and W timeframes
+ * (DashboardClient TIMEFRAMES fetchBars 2600). The others are below it: the
+ * dashboard's M (360), its interactive chart (days=2000) and the stock page's
+ * client fallback (days=900). scripts/check-tiingo-step3.mjs holds this equal
+ * to the largest of them, so a new, larger caller has to raise it on purpose.
+ */
+export const TIINGO_HISTORY_MAX_DAYS = 2600;
+const TIINGO_HISTORY_DEFAULT_DAYS = 365;
+const TIINGO_HISTORY_MIN_DAYS = 30;
+
+/** `Cache-Control` for every /api/history answer on the Tiingo path, 403s included. */
+export const TIINGO_HISTORY_CACHE_CONTROL = "private, no-store";
+
+/** The `days` query parameter on the Tiingo path: clamped, and a junk value is the default, never "all". */
+export function tiingoHistoryDays(raw: string | null | undefined): number {
+  const n = Number(raw || TIINGO_HISTORY_DEFAULT_DAYS);
+  if (!Number.isFinite(n)) return TIINGO_HISTORY_DEFAULT_DAYS;
+  return Math.max(TIINGO_HISTORY_MIN_DAYS, Math.min(TIINGO_HISTORY_MAX_DAYS, Math.floor(n)));
+}
+
+export type HistoryOriginCheck = { ok: boolean; via: "sec-fetch-site" | "page-token" | null };
+
+/**
+ * Is this request one of our own pages fetching its chart? The browser sets
+ * `Sec-Fetch-Site` itself (a page script cannot), so a cross-site page or a
+ * typed-in URL never reads "same-origin". A non-browser client can forge the
+ * header; what stops it is BotID on every request, which no-store guarantees.
+ * A page token counts only when it verifies ("valid"): an unconfigured secret
+ * ("not_configured") proves nothing here.
+ */
+export function historyRequestSameOrigin(headers: Pick<Headers, "get">): HistoryOriginCheck {
+  if (headers.get("sec-fetch-site") === "same-origin") return { ok: true, via: "sec-fetch-site" };
+  if (verifyQuoteToken(headers.get(QUOTE_TOKEN_HEADER)).reason === "valid") return { ok: true, via: "page-token" };
+  return { ok: false, via: null };
 }

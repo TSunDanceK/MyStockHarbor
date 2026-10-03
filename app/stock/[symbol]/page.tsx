@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { getDailyHistory } from "@/lib/server/historyCache";
-import { historyForSurface } from "@/lib/server/tiingoHistory";
+import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { searchSymbols } from "@/lib/server/symbolSearch";
 import {
@@ -788,16 +788,20 @@ export default async function StockPage({ params }: Props) {
             <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
           ) : null
         }
-        // Step 3 (#553 COWORK #71/#92): the linked credit under the chart, only
-        // when the series above really is Tiingo's (a miss falls back to FMP).
+        // Step 3 (#553 COWORK #71/#92/#103): the linked credit under the chart.
+        // Handed down when the series shown can be Tiingo's: the seeded one
+        // (CHARTS), or the client's /api/history fallback (HISTORY). The client
+        // shows it only beside a series whose provider is "tiingo".
         historyCredit={
-          historyResult.provider === "tiingo" ? (
+          historyResult.provider === "tiingo" || historyOnTiingo("HISTORY") ? (
             <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
           ) : null
         }
         // Proves to /api/quote that this client rendered a real page. Empty
         // string when QUOTE_TOKEN_SECRET is unset, in which case the client
         // sends no header and behaviour is unchanged. See lib/server/quoteToken.ts.
+        // Whose bars the seeded series is (a CHARTS miss falls back to FMP).
+        historyProvider={historyResult.provider}
         pageToken={mintQuoteToken()}
       />
 

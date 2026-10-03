@@ -15,12 +15,22 @@
 //   4. THE TOGGLE HALF-SWITCHES (COWORK #89): the chart changes but the tiles,
 //      the title or the explainer stay on the other view; the weekly view
 //      missing from the server HTML; no tablist; colour as the only cue.
+//   5. TIINGO BARS AS PUBLIC JSON (COWORK #103: "Tiingo-derived bars don't go
+//      out through public JSON; pages read them in-process"). On the Tiingo
+//      path /api/history must answer `private, no-store` (a CDN hit would skip
+//      BotID), cap `days` at what our charts ask for, and refuse a request that
+//      is not same-origin with a 403 carrying no bars, while the FMP path keeps
+//      its public headers. And the chart credit follows whose bars are SHOWN,
+//      not the gate or whether the page was seeded.
 //
 // Section 1 runs the real lib/server/tiingoHistory.ts on fixtures; section 2
 // re-runs it on mutated copies. Section 3 renders the real toggle card and the
 // chart with react-dom/server; section 4 renders mutated copies (and a mutated
 // markup for "the tiles don't switch"). Section 5 reads source for the gates and
-// the #72 limits; section 6 plants a mutant for each. Every mutant must fail.
+// the #72 limits; section 6 plants a mutant for each. Section 7 runs the REAL
+// /api/history GET handler with its I/O stubbed (BotID, the FMP read, the Data
+// Cache reader) under both gates, then re-runs it on mutated copies of the route
+// and the helper. Every mutant must fail.
 //
 //   node scripts/check-tiingo-step3.mjs
 import { register } from "node:module";
@@ -63,6 +73,7 @@ const FILES = {
   dashClient: "app/components/DashboardClient.tsx",
   toggle: "app/components/ReturnsToggleCard.tsx",
   returns: "app/components/ReturnsBarChart.tsx",
+  interactive: "app/components/InteractiveChart.tsx",
 };
 
 // ── 1. The helper, on the real module ─────────────────────────────────────
@@ -485,14 +496,32 @@ function rules(srcs) {
   const reads = (sp.match(/getDailyHistory\(upper/g) ?? []).length;
   const gated = (sp.match(/historyForSurface\("CHARTS", upper, \(\) => getDailyHistory\(upper/g) ?? []).length;
   want(`the stock page's two SSR history reads both switch on CHARTS (${gated}/${reads})`, reads === 2 && gated === 2);
-  want("the stock page passes the credit only when the series is Tiingo's",
-    /historyCredit=\{\s*historyResult\.provider === "tiingo" \?/.test(sp));
+  want("the stock page hands the credit down only when a shown series can be Tiingo's (the seed, or the HISTORY fallback)",
+    /historyCredit=\{\s*historyResult\.provider === "tiingo" \|\| historyOnTiingo\("HISTORY"\) \?/.test(sp));
+  want("the stock page tells the client whose bars the seed is", /historyProvider=\{historyResult\.provider\}/.test(sp));
   // The dashboard seed: HISTORY, the same gate as the route it refetches from.
   const dp = code[FILES.dashPage];
   want("the dashboard's SSR seed switches on HISTORY",
     /historyForSurface\("HISTORY", symbol, \(\) => getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\)/.test(dp) &&
     (dp.match(/getDailyHistory\(symbol/g) ?? []).length === 1);
   want("the dashboard shows the credit under the chart", /historyCredit=\{\s*historyOnTiingo\("HISTORY"\) \?/.test(dp) && /\{historyCredit\}/.test(code[FILES.dashClient]));
+
+  // COWORK #103 nit: the dashboard credit follows the provider of the series
+  // SHOWN (seed, each refetch, a cache hit, the interactive chart's own fetch),
+  // not the gate: a Tiingo miss that fell back to FMP shows no credit.
+  const dc = code[FILES.dashClient];
+  want("the dashboard credit is shown only while the series shown is Tiingo's",
+    /\{historyCredit && historyProvider === "tiingo" && chartMode !== "tradingview" \? \(/.test(dc));
+  want("the dashboard's seed provider comes from the server read",
+    /initialHistoryProvider=\{rawHistory\.provider\}/.test(dp) && /\(h\) => \(\{ points: h\.points as Point\[\], provider: h\.provider as string \}\)/.test(dp) &&
+    /useState<string \| null>\(\(\) => \(seedMatchesSymbol \? initialHistoryProvider : null\)\)/.test(dc));
+  want("each dashboard refetch sets the provider from /api/history's answer, and caches it",
+    /const prov = typeof h\.provider === "string" \? h\.provider : null;/.test(dc) &&
+    /setHistoryAll\(pts\); setHistoryProvider\(prov\); setSymbolCache\(prev => \(\{ \.\.\.prev, \[ck\]: \{ quote: q, history: pts, provider: prov \} \}\)\);/.test(dc));
+  want("a dashboard cache hit restores its own provider", /setHistoryAll\(hit\.history\); setHistoryProvider\(hit\.provider \?\? null\);/.test(dc));
+  want("the interactive chart reports the provider of the bars it fetched itself",
+    /<InteractiveChart [^>]*onProvider=\{setHistoryProvider\}/.test(dc) &&
+    /onProvider\?\.\(typeof json\?\.provider === "string" \? json\.provider : null\);/.test(code[FILES.interactive]));
 
   // The client: the toggle's inputs are unchanged (#89: no data or calculation change).
   const sc = code[FILES.stockClient];
@@ -506,7 +535,39 @@ function rules(srcs) {
     /% vs price` : closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : "Distance unavailable"/.test(sc) &&
     /% vs price` : closes\.length && closes\.length < 50 \? SHORT_HISTORY_NOTE : "Distance unavailable"/.test(sc) &&
     /className="indicator-row" title=\{"title" in row \? row\.title : undefined\}/.test(sc));
-  want("the stock chart is given the credit", /credit=\{seededHistory \? historyCredit : null\}/.test(sc));
+  // COWORK #103 nit: keyed on the provider of the series shown, so a
+  // client-fetched Tiingo chart is credited and a seeded FMP one is not.
+  want("the stock chart is given the credit only while the series shown is Tiingo's",
+    /credit=\{shownProvider === "tiingo" \? historyCredit : null\}/.test(sc));
+  want("the stock chart's provider starts as the seed's",
+    /const \[shownProvider, setShownProvider\] = useState<string \| null>\(seededHistory \? historyProvider \?\? null : null\);/.test(sc));
+  want("the stock page's client fetch takes the provider from /api/history's answer",
+    /if \(cancelled\) return;\s*setShownProvider\(typeof data\.provider === "string" \? data\.provider : null\);/.test(sc));
+
+  // COWORK #103: the Tiingo `days` cap is exactly the most any chart asks for,
+  // and every /api/history caller can pass the same-origin check without
+  // Fetch Metadata (it sends the page token).
+  const cap = Number(/export const TIINGO_HISTORY_MAX_DAYS = (\d+);/.exec(code[FILES.helper])?.[1]);
+  const callers = [];
+  for (const [f, c] of Object.entries(code)) {
+    if (!f.startsWith("app/") || f.startsWith("app/api/")) continue;
+    let i = -1;
+    while ((i = c.indexOf("/api/history?", i + 1)) >= 0) {
+      const win = c.slice(i, i + 420);
+      let days = [];
+      const lit = /days=(\d+)/.exec(win);
+      if (lit) days = [Number(lit[1])];
+      else if (/days=\$\{selectedTimeframe\.fetchBars\}/.test(win)) days = [...c.matchAll(/fetchBars: (\d+)/g)].map((m) => Number(m[1]));
+      callers.push({ f, days, token: /"x-msh-page-token": pageToken/.test(win) });
+    }
+  }
+  const unknown = callers.filter((x) => !x.days.length).map((x) => x.f);
+  want(`the /api/history callers were found, each with a known days (${callers.length}; unknown: ${unknown.join(", ") || "none"})`,
+    callers.length >= 3 && unknown.length === 0 && [FILES.dashClient, FILES.stockClient, FILES.interactive].every((f) => callers.some((x) => x.f === f)));
+  const most = Math.max(0, ...callers.flatMap((x) => x.days));
+  want(`the Tiingo days cap (${cap}) is the most any chart requests (${most})`, Number.isFinite(cap) && cap === most);
+  const tokenless = callers.filter((x) => !x.token).map((x) => x.f);
+  want(`every /api/history caller sends the page token (${tokenless.join(", ") || "all do"})`, tokenless.length === 0);
   return fails;
 }
 
@@ -522,12 +583,25 @@ const MUTANTS = [
   ["/api/history taken out of BotID's protect list", FILES.botid, /\{ path: "\/api\/history", method: "GET" \},/, ""],
   ["/api/quote downgraded to Basic", FILES.quoteRoute, /isUnwantedBot\("deepAnalysis"\)/, "isUnwantedBot()"],
   ["robots.txt opens /api/", FILES.robots, /disallow: \["\/api\/"\],/, "disallow: [],"],
-  ["a CORS header on /api/history", FILES.route, /"Cache-Control": getCacheControlHeader\(\),/, '"Cache-Control": getCacheControlHeader(), "Access-Control-Allow-Origin": "*",'],
-  ["a CSV download from /api/history", FILES.route, /"Cache-Control": getCacheControlHeader\(\),/, '"Cache-Control": getCacheControlHeader(), "Content-Disposition": "attachment; filename=history.csv",'],
+  ["a CORS header on /api/history", FILES.route, /: getCacheControlHeader\(\),/, ': getCacheControlHeader(), "Access-Control-Allow-Origin": "*",'],
+  ["a CSV download from /api/history", FILES.route, /: getCacheControlHeader\(\),/, ': getCacheControlHeader(), "Content-Disposition": "attachment; filename=history.csv",'],
   ["/api/history on the CHARTS gate", FILES.route, /historyForSurface\("HISTORY", /, 'historyForSurface("CHARTS", '],
   ["/api/history's monthly roll-up dropped", FILES.route, /const points = carryPartialLabel\(daily, aggregate\(daily, interval\)\);/, "const points = daily;"],
   ["the stock page's metadata read left on FMP", FILES.stockPage, /historyForSurface\("CHARTS", upper, \(\) => getDailyHistory\(upper, \{ caller: "stock-page" \}\)\)/, 'getDailyHistory(upper, { caller: "stock-page" })'],
-  ["the stock page credits FMP bars as Tiingo's", FILES.stockPage, /historyResult\.provider === "tiingo" \?/, "true ?"],
+  ["the stock page hands the credit down whatever the provider", FILES.stockPage, /historyResult\.provider === "tiingo" \|\| historyOnTiingo\("HISTORY"\) \?/, "true ?"],
+  ["the stock page passes no seed provider", FILES.stockPage, /historyProvider=\{historyResult\.provider\}/, ""],
+  ["the stock chart credited by the seed, not the provider (COWORK #103)", FILES.stockClient, /credit=\{shownProvider === "tiingo" \? historyCredit : null\}/, "credit={seededHistory ? historyCredit : null}"],
+  ["the stock client ignores the fetched provider", FILES.stockClient, /setShownProvider\(typeof data\.provider === "string" \? data\.provider : null\);/, ""],
+  ["the stock chart's provider starts as Tiingo whatever the seed", FILES.stockClient, /useState<string \| null>\(seededHistory \? historyProvider \?\? null : null\)/, 'useState<string | null>("tiingo")'],
+  ["the dashboard credit keyed on the gate, not the provider (COWORK #103)", FILES.dashClient, /historyCredit && historyProvider === "tiingo" && chartMode/, "historyCredit && chartMode"],
+  ["a dashboard refetch keeps the previous provider", FILES.dashClient, /setHistoryProvider\(prov\); /, ""],
+  ["a dashboard cache hit keeps the previous provider", FILES.dashClient, /setHistoryProvider\(hit\.provider \?\? null\); /, ""],
+  ["the dashboard seed's provider not passed", FILES.dashPage, /initialHistoryProvider=\{rawHistory\.provider\}/, ""],
+  ["the interactive chart does not report its provider", FILES.interactive, /onProvider\?\.\(typeof json\?\.provider === "string" \? json\.provider : null\);/, ""],
+  ["a chart asks for more than the Tiingo cap", FILES.dashClient, /fetchBars: 2600/, "fetchBars: 3000"],
+  ["the interactive chart asks for more than the cap", FILES.interactive, /days=2000/, "days=4000"],
+  ["the Tiingo cap raised past what the charts use", FILES.helper, /TIINGO_HISTORY_MAX_DAYS = 2600;/, "TIINGO_HISTORY_MAX_DAYS = 5000;"],
+  ["the stock page's history fetch sends no page token", FILES.stockClient, /&days=900`, pageToken \? \{ headers: \{ "x-msh-page-token": pageToken \} \} : undefined\)/, "&days=900`)"],
   ["the dashboard seed left on FMP", FILES.dashPage, /historyForSurface\("HISTORY", symbol, \(\) => getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\)/, 'getDailyHistory(symbol, { caller: "dashboard" })'],
   ["the weekly input window changed", FILES.stockClient, /computeCloseOverCloseReturns\(weeklyHistory, 12\)/, "computeCloseOverCloseReturns(weeklyHistory, 20)"],
   ["the old second returns card restored", FILES.stockClient, /<ReturnsToggleCard /, '<ReturnsBarChart symbol={symbol} periodLabel="Weekly" compareLabel="x" bars={weeklyReturns} /><ReturnsToggleCard '],
@@ -543,6 +617,209 @@ for (const [label, file, from, to] of MUTANTS) {
   const planted = { ...srcs, "app/api/history-export/route.ts": 'import { readTiingoHistory } from "@/lib/server/marketData/read";\nexport async function GET() { return Response.json(await readTiingoHistory("AAPL")); }\n' };
   const fails = rules(planted);
   check('mutant "a new API route serving Tiingo history" is caught', fails.length > 0, fails[0] ?? "no assertion failed");
+}
+
+// ── 7. /api/history on the Tiingo path: the REAL handler, stubbed I/O ─────
+// COWORK #103. The route file and the helper are the shipped sources; only
+// their I/O is swapped, by rewriting three import specifiers in a temp copy:
+// BotID (isUnwantedBot), the FMP read (getDailyHistory) and the Data Cache
+// reader that historyForSurface uses (injected through its own `readInputs`
+// seam). next/server is the real one.
+console.log("\n=== 7. /api/history on the Tiingo path, the real route handler ===\n");
+
+const ROUTE_TMP = path.join(ROOT, "scripts", `.check-step3-route-${process.pid}`);
+const ROUTE_DIR = path.join(ROOT, "app/api/history");
+const HELPER_DIR = path.join(ROOT, "lib/server");
+const QT = await import(pathToFileURL(path.join(ROOT, "lib/server/quoteToken.ts")).href);
+const HELPER_REAL_SRC = raw(FILES.helper);
+const ROUTE_SRC = raw(FILES.route);
+
+// A long Tiingo series, so the cap has something to cut: 3,000 stored bars.
+const LONG_BARS = Array.from({ length: 3000 }, (_, i) => {
+  const d = new Date(Date.UTC(2014, 0, 1) + i * 86400000).toISOString().slice(0, 10);
+  return bar(d, 100 + (i % 11), 1000 + i);
+});
+const LONG_FMP = LONG_BARS.map((b) => ({ date: b[0], close: b[4] - 0.01, volume: 7 }));
+
+const STUB = (globalThis.__step3Route = { bot: false, inputs: null, fmp: LONG_FMP, fmpThrows: false, fmpCalls: 0, reads: 0 });
+let routeN = 0;
+const routeTemps = [];
+
+/** Import a temp copy of `routeSrc` whose helper is `helperSrc`, I/O stubbed. Returns its GET. */
+async function loadRoute(routeSrc, helperSrc) {
+  fs.mkdirSync(ROUTE_TMP, { recursive: true });
+  const n = `${process.pid}-${++routeN}`;
+  const helperFile = path.join(HELPER_DIR, `.check-step3-route-helper-${n}.ts`);
+  fs.writeFileSync(helperFile, helperSrc);
+  const helperUrl = pathToFileURL(helperFile).href;
+  const bot = path.join(ROUTE_TMP, `bot-${n}.mjs`);
+  fs.writeFileSync(bot, "export async function isUnwantedBot() { return globalThis.__step3Route.bot; }\n");
+  const fmp = path.join(ROUTE_TMP, `fmp-${n}.mjs`);
+  fs.writeFileSync(fmp, [
+    "export async function getDailyHistory() {",
+    "  const s = globalThis.__step3Route; s.fmpCalls++;",
+    "  if (s.fmpThrows) throw new Error('fmp down');",
+    "  return s.fmp;",
+    "}",
+  ].join("\n"));
+  const helper = path.join(ROUTE_TMP, `helper-${n}.mjs`);
+  fs.writeFileSync(helper, [
+    `import * as real from ${JSON.stringify(helperUrl)};`,
+    `export * from ${JSON.stringify(helperUrl)};`,
+    "export function historyForSurface(surface, symbol, fmp, deps = {}) {",
+    "  return real.historyForSurface(surface, symbol, fmp, { ...deps, readInputs: async () => { const s = globalThis.__step3Route; s.reads++; return s.inputs; } });",
+    "}",
+  ].join("\n"));
+  const swaps = [
+    ['"@/lib/botid-guard"', JSON.stringify(pathToFileURL(bot).href)],
+    ['"../../../lib/server/historyCache"', JSON.stringify(pathToFileURL(fmp).href)],
+    ['"@/lib/server/tiingoHistory"', JSON.stringify(pathToFileURL(helper).href)],
+    ['"next/server"', '"next/server.js"'],
+  ];
+  let src = routeSrc;
+  for (const [from, to] of swaps) {
+    if (!src.includes(from)) throw new Error(`route import ${from} not found`);
+    src = src.replaceAll(from, to);
+  }
+  const routeFile = path.join(ROUTE_DIR, `.check-step3-route-${n}.ts`);
+  fs.writeFileSync(routeFile, src);
+  routeTemps.push(routeFile, helperFile);
+  return (await import(pathToFileURL(routeFile).href)).GET;
+}
+
+const ENV_KEYS = ["PRICE_PROVIDER_HISTORY", "FMP_API_KEY", "QUOTE_TOKEN_SECRET"];
+const SAVED_ENV = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
+const setEnv = (env) => {
+  for (const k of ENV_KEYS) delete process.env[k];
+  Object.assign(process.env, env);
+};
+
+/** One request through GET. Returns status, headers, body and the I/O counts. */
+async function call(GET, { env, headers = {}, query = "symbol=abc&days=5000", inputs = null, bot = false, fmpThrows = false }) {
+  setEnv(env);
+  Object.assign(STUB, { bot, inputs, fmpThrows, fmpCalls: 0, reads: 0 });
+  const res = await GET(new Request(`https://example.test/api/history?${query}`, { headers }));
+  const text = await res.text();
+  let body = null;
+  try { body = JSON.parse(text); } catch { /* not JSON */ }
+  return { status: res.status, cc: res.headers.get("cache-control") ?? "", body, text, fmpCalls: STUB.fmpCalls, reads: STUB.reads };
+}
+
+const TIINGO = { PRICE_PROVIDER_HISTORY: "tiingo", FMP_API_KEY: "x" };
+const FMP_GATE = { FMP_API_KEY: "x" };
+const SAME = { "sec-fetch-site": "same-origin" };
+const HIT_LONG = { row: null, bars: LONG_BARS };
+const NO_STORE = "private, no-store";
+const PUBLIC_OK = /^public, s-maxage=(900|3600), stale-while-revalidate=(900|3600)$/;
+const PUBLIC_ERR = "public, s-maxage=60, stale-while-revalidate=300";
+const hasBars = (r) => Array.isArray(r.body?.points) || /"close"/.test(r.text);
+
+/** The COWORK #103 rules over one route + helper pair. Returns failure labels. */
+async function routeFails(routeSrc, helperSrc) {
+  const fails = [];
+  const want = (label, ok) => { if (!ok) fails.push(label); };
+  let GET;
+  try { GET = await loadRoute(routeSrc, helperSrc); } catch (e) { return [`the route loads (${e.message})`]; }
+  const H2 = await import(pathToFileURL(routeTemps[routeTemps.length - 1]).href);
+  const CAP = H2.TIINGO_HISTORY_MAX_DAYS;
+
+  // Tiingo path, same-origin: private, no-store; days capped; provider named.
+  let r = await call(GET, { env: TIINGO, headers: SAME, inputs: HIT_LONG });
+  want(`[tiingo] a same-origin request is answered 200 (${r.status})`, r.status === 200);
+  want(`[tiingo] Cache-Control is "${NO_STORE}" (${r.cc})`, r.cc === NO_STORE);
+  want(`[tiingo] days=5000 is capped at ${CAP} (${r.body?.points?.length} bars)`, CAP === 2600 && r.body?.points?.length === CAP);
+  want(`[tiingo] the newest bar is kept when capping (${r.body?.points?.at?.(-1)?.date})`, r.body?.points?.at?.(-1)?.date === LONG_BARS[LONG_BARS.length - 1][0]);
+  want(`[tiingo] the answer names its provider, "tiingo" (${r.body?.provider})`, r.body?.provider === "tiingo");
+  r = await call(GET, { env: TIINGO, headers: SAME, inputs: HIT_LONG, query: "symbol=abc&days=abc" });
+  want(`[tiingo] a junk days is the default 365, never "all" (${r.body?.points?.length})`, r.body?.points?.length === 365);
+  r = await call(GET, { env: TIINGO, headers: SAME, inputs: HIT_LONG, query: "symbol=abc&days=900" });
+  want(`[tiingo] a chart's own request (days=900) is served whole (${r.body?.points?.length})`, r.body?.points?.length === 900);
+  r = await call(GET, { env: TIINGO, headers: SAME, inputs: HIT_LONG, query: "symbol=abc&days=2600&interval=w" });
+  want(`[tiingo] the weekly roll-up is still served, no-store (${r.status}, ${r.cc})`, r.status === 200 && r.cc === NO_STORE && r.body?.interval === "w" && r.body.points.length > 400 && r.body.points.length < 450);
+
+  // Tiingo path, not same-origin: 403, no bars, nothing read.
+  for (const [label, headers] of [
+    ["cross-site", { "sec-fetch-site": "cross-site" }],
+    ["same-site", { "sec-fetch-site": "same-site" }],
+    ["a typed-in URL (Sec-Fetch-Site: none)", { "sec-fetch-site": "none" }],
+    ["a plain curl (no Fetch Metadata, no token)", {}],
+  ]) {
+    r = await call(GET, { env: TIINGO, headers, inputs: HIT_LONG });
+    want(`[tiingo] ${label}: 403 (${r.status})`, r.status === 403);
+    want(`[tiingo] ${label}: no bars in the body`, !hasBars(r));
+    want(`[tiingo] ${label}: nothing read (Tiingo ${r.reads}, FMP ${r.fmpCalls})`, r.reads === 0 && r.fmpCalls === 0);
+    want(`[tiingo] ${label}: the 403 is no-store too (${r.cc})`, r.cc === NO_STORE);
+  }
+
+  // The page token: counts only when it verifies.
+  const secret = `check-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  setEnv({ ...TIINGO, QUOTE_TOKEN_SECRET: secret });
+  const good = QT.mintQuoteToken();
+  r = await call(GET, { env: { ...TIINGO, QUOTE_TOKEN_SECRET: secret }, headers: { "x-msh-page-token": good }, inputs: HIT_LONG });
+  want(`[tiingo] no Fetch Metadata but a valid page token: 200 (${r.status})`, good.length > 0 && r.status === 200 && r.body?.points?.length === CAP);
+  r = await call(GET, { env: { ...TIINGO, QUOTE_TOKEN_SECRET: secret }, headers: { "x-msh-page-token": `${good}x` }, inputs: HIT_LONG });
+  want(`[tiingo] a forged page token: 403 (${r.status})`, r.status === 403 && !hasBars(r));
+  r = await call(GET, { env: TIINGO, headers: { "x-msh-page-token": "anything" }, inputs: HIT_LONG });
+  want(`[tiingo] a token while QUOTE_TOKEN_SECRET is unset proves nothing: 403 (${r.status})`, r.status === 403 && !hasBars(r));
+
+  // BotID still runs on the Tiingo path.
+  r = await call(GET, { env: TIINGO, headers: SAME, inputs: HIT_LONG, bot: true });
+  want(`[tiingo] BotID still blocks a same-origin bot (${r.status})`, r.status === 403 && !hasBars(r) && r.reads === 0);
+
+  // A Tiingo miss falls back to FMP: still no-store, and it says "fmp".
+  r = await call(GET, { env: TIINGO, headers: SAME, inputs: { row: null, bars: null } });
+  want(`[tiingo] a miss: FMP's bars, provider "fmp", still no-store (${r.body?.provider}, ${r.cc})`,
+    r.status === 200 && r.body?.provider === "fmp" && r.fmpCalls === 1 && r.cc === NO_STORE && r.body.points.length === CAP);
+  r = await call(GET, { env: TIINGO, headers: SAME, inputs: { row: null, bars: null }, fmpThrows: true });
+  want(`[tiingo] an error answer is no-store too (${r.status}, ${r.cc})`, r.status === 500 && r.cc === NO_STORE);
+
+  // FMP path (gate unset): exactly as before. Public tiered s-maxage, the 5000
+  // clamp, no origin check, no provider field, Tiingo never read.
+  r = await call(GET, { env: FMP_GATE, headers: {}, inputs: HIT_LONG });
+  want(`[fmp] a plain request is still 200 with no origin check (${r.status})`, r.status === 200);
+  want(`[fmp] Cache-Control unchanged: public, tiered s-maxage (${r.cc})`, PUBLIC_OK.test(r.cc));
+  want(`[fmp] the 5000 clamp unchanged: all ${LONG_FMP.length} bars (${r.body?.points?.length})`, r.body?.points?.length === LONG_FMP.length);
+  want(`[fmp] the body is unchanged: {symbol, interval, points} only (${Object.keys(r.body ?? {}).join(",")})`, Object.keys(r.body ?? {}).join(",") === "symbol,interval,points");
+  want(`[fmp] Tiingo never read, FMP read once (${r.reads}/${r.fmpCalls})`, r.reads === 0 && r.fmpCalls === 1);
+  r = await call(GET, { env: FMP_GATE, headers: { "sec-fetch-site": "cross-site" }, inputs: HIT_LONG, query: "symbol=abc&days=10" });
+  want(`[fmp] a cross-site request is unchanged (200), min clamp 30 (${r.status}, ${r.body?.points?.length})`, r.status === 200 && r.body?.points?.length === 30);
+  r = await call(GET, { env: FMP_GATE, headers: {}, fmpThrows: true });
+  want(`[fmp] the error header unchanged (${r.cc})`, r.status === 500 && r.cc === PUBLIC_ERR);
+  return fails;
+}
+
+try {
+  report("/api/history on the Tiingo path: no-store, capped, same-origin only; the FMP path unchanged", await routeFails(ROUTE_SRC, HELPER_REAL_SRC));
+
+  const ROUTE_MUTANTS = [
+    ["the Tiingo path keeps the public s-maxage", "route", /onTiingo \? TIINGO_HISTORY_CACHE_CONTROL : getCacheControlHeader\(\)/, "getCacheControlHeader()"],
+    ["the Tiingo error answer is public", "route", /onTiingo \? TIINGO_HISTORY_CACHE_CONTROL : getErrorCacheControlHeader\(\)/, "getErrorCacheControlHeader()"],
+    ["the Tiingo 403 is shared-cacheable", "route", /status: 403, headers: \{ "Cache-Control": TIINGO_HISTORY_CACHE_CONTROL \}/, 'status: 403, headers: { "Cache-Control": "public, s-maxage=900" }'],
+    ["days not clamped on the Tiingo path", "route", /\? tiingoHistoryDays\(searchParams\.get\("days"\)\)/, '? Math.max(30, Math.min(5000, Number(searchParams.get("days") || "365")))'],
+    ["the same-origin check dropped", "route", /if \(onTiingo && !historyRequestSameOrigin\(req\.headers\)\.ok\) \{/, "if (false) {"],
+    ["the same-origin check applied to the FMP path too", "route", /if \(onTiingo && !historyRequestSameOrigin\(req\.headers\)\.ok\) \{/, "if (!historyRequestSameOrigin(req.headers).ok) {"],
+    ["the FMP path made no-store", "route", /onTiingo \? TIINGO_HISTORY_CACHE_CONTROL : getCacheControlHeader\(\)/, "TIINGO_HISTORY_CACHE_CONTROL"],
+    ["the Tiingo answer names no provider", "route", /\.\.\.\(onTiingo \? \{ provider \} : \{\}\),/, ""],
+    ["the FMP body gains a provider field", "route", /\.\.\.\(onTiingo \? \{ provider \} : \{\}\),/, "provider,"],
+    ["the cap raised to the old 5000", "helper", /Math\.min\(TIINGO_HISTORY_MAX_DAYS, /, "Math.min(5000, "],
+    ["a junk days serves everything", "helper", /\n\s*if \(!Number\.isFinite\(n\)\) return TIINGO_HISTORY_DEFAULT_DAYS;/, ""],
+    ["any Sec-Fetch-Site accepted", "helper", /headers\.get\("sec-fetch-site"\) === "same-origin"/, 'headers.get("sec-fetch-site") !== "cross-site"'],
+    ["a missing Sec-Fetch-Site accepted", "helper", /headers\.get\("sec-fetch-site"\) === "same-origin"/, '(headers.get("sec-fetch-site") ?? "same-origin") === "same-origin"'],
+    ["an unconfigured page token counts as proof", "helper", /verifyQuoteToken\(headers\.get\(QUOTE_TOKEN_HEADER\)\)\.reason === "valid"/, "verifyQuoteToken(headers.get(QUOTE_TOKEN_HEADER)).ok"],
+    ["the page token ignored", "helper", /\n\s*if \(verifyQuoteToken\(headers\.get\(QUOTE_TOKEN_HEADER\)\)\.reason === "valid"\) return \{ ok: true, via: "page-token" \};/, ""],
+  ];
+  for (const [label, which, from, to] of ROUTE_MUTANTS) {
+    const base = which === "route" ? ROUTE_SRC : HELPER_REAL_SRC;
+    const m = base.replace(from, to);
+    if (m === base) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
+    const fails = which === "route" ? await routeFails(m, HELPER_REAL_SRC) : await routeFails(ROUTE_SRC, m);
+    check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no assertion failed");
+  }
+} finally {
+  setEnv({});
+  for (const [k, v] of Object.entries(SAVED_ENV)) if (v !== undefined) process.env[k] = v;
+  for (const f of routeTemps) fs.rmSync(f, { force: true });
+  fs.rmSync(ROUTE_TMP, { recursive: true, force: true });
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL CHECKS PASSED");

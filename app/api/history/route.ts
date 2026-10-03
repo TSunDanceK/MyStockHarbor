@@ -3,7 +3,14 @@ import { NextResponse } from "next/server";
 import { getDailyHistory, type Point } from "../../../lib/server/historyCache";
 import { isUnwantedBot } from "@/lib/botid-guard";
 import { isActiveMarketWindow } from "@/lib/server/marketHours";
-import { carryPartialLabel, historyForSurface } from "@/lib/server/tiingoHistory";
+import {
+  carryPartialLabel,
+  historyForSurface,
+  historyOnTiingo,
+  historyRequestSameOrigin,
+  TIINGO_HISTORY_CACHE_CONTROL,
+  tiingoHistoryDays,
+} from "@/lib/server/tiingoHistory";
 
 export const runtime = "nodejs";
 export const revalidate = 900;
@@ -109,8 +116,21 @@ export async function GET(req: Request) {
   if (cryptoHidden(symbol)) {
     return NextResponse.json({ symbol, error: "not available" }, { status: 404 });
   }
-  const days = Math.max(30, Math.min(5000, Number(searchParams.get("days") || "365")));
+  // #553 COWORK #103: on the Tiingo path the bars are not public JSON. No
+  // shared cache, `days` capped at what the charts ask for, same-origin only
+  // (lib/server/tiingoHistory.ts). The FMP path below is exactly as it was.
+  const onTiingo = historyOnTiingo("HISTORY");
+  const days = onTiingo
+    ? tiingoHistoryDays(searchParams.get("days"))
+    : Math.max(30, Math.min(5000, Number(searchParams.get("days") || "365")));
   const interval = parseInterval(searchParams.get("interval"));
+
+  if (onTiingo && !historyRequestSameOrigin(req.headers).ok) {
+    return NextResponse.json(
+      { error: "Access denied" },
+      { status: 403, headers: { "Cache-Control": TIINGO_HISTORY_CACHE_CONTROL } }
+    );
+  }
 
   if (await isUnwantedBot()) {
     return NextResponse.json({ error: "Access denied" }, { status: 403 });
@@ -126,7 +146,7 @@ export async function GET(req: Request) {
     // BotID above stays; still /api/ (robots-disallowed); no CORS header; no
     // download/CSV; no new route. "Historical price charts" through our own
     // same-origin route is display, not export.
-    const { points: daily } = await historyForSurface("HISTORY", symbol, () =>
+    const { points: daily, provider } = await historyForSurface("HISTORY", symbol, () =>
       getDailyHistory(symbol, { caller: "api-history" })
     );
     const points = carryPartialLabel(daily, aggregate(daily, interval));
@@ -136,10 +156,13 @@ export async function GET(req: Request) {
         symbol,
         interval,
         points: points.slice(-days),
+        // Whose bars these are, so the chart credits Tiingo only beside Tiingo's
+        // (a Tiingo miss falls back to FMP). Tiingo path only: the FMP body is unchanged.
+        ...(onTiingo ? { provider } : {}),
       },
       {
         headers: {
-          "Cache-Control": getCacheControlHeader(),
+          "Cache-Control": onTiingo ? TIINGO_HISTORY_CACHE_CONTROL : getCacheControlHeader(),
         },
       }
     );
@@ -157,7 +180,7 @@ export async function GET(req: Request) {
       {
         status: 500,
         headers: {
-          "Cache-Control": getErrorCacheControlHeader(),
+          "Cache-Control": onTiingo ? TIINGO_HISTORY_CACHE_CONTROL : getErrorCacheControlHeader(),
         },
       }
     );

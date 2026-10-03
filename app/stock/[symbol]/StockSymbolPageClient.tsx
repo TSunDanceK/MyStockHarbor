@@ -155,8 +155,11 @@ type StockSymbolPageClientProps = {
   // PRICE_PROVIDER_STOCK_PAGE=tiingo (step 4). Shown only under a Tiingo quote.
   tiingoCredit?: ReactNode;
   // The linked "Market data from Tiingo.com", rendered by page.tsx when the
-  // seeded history is Tiingo's (step 3, PRICE_PROVIDER_CHARTS). Shown under the chart.
+  // series shown can be Tiingo's (step 3). Shown under the chart only while
+  // the series actually shown is Tiingo's (#553 COWORK #103).
   historyCredit?: ReactNode;
+  // Whose bars `initialHistory` is: "tiingo", "fmp" or "none".
+  historyProvider?: string;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -742,8 +745,11 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
+  // Whose bars the chart is showing: the seed's provider, or what the client
+  // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
+  const [shownProvider, setShownProvider] = useState<string | null>(seededHistory ? historyProvider ?? null : null);
   const [quote, setQuote] = useState<Quote | null>(
     initialQuote?.price != null || seed?.price != null
       ? {
@@ -822,22 +828,25 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         // No cache:"no-store". /api/history already declares revalidate = 900
         // and returns its own tiered s-maxage; a no-store request header opted
         // the browser and the CDN out of both.
-        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`);
+        // The page token lets a browser that sends no Sec-Fetch-Site through
+        // /api/history's same-origin check on the Tiingo path (#553 COWORK #103).
+        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined);
         if (!res.ok) throw new Error("History fetch failed");
-        const data = (await res.json()) as { symbol: string; points: any[] };
+        const data = (await res.json()) as { symbol: string; points: any[]; provider?: string };
         if (cancelled) return;
+        setShownProvider(typeof data.provider === "string" ? data.provider : null);
         const ptsRaw = Array.isArray(data.points) ? data.points : [];
         const pts: Point[] = ptsRaw.map((p: any) => ({ date: String(p?.date ?? ""), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume), label: typeof p?.label === "string" ? p.label : undefined })).filter((p) => p.date && Number.isFinite(p.close));
         setHistory(pts);
       } catch {
         if (cancelled) return;
-        setErr("Failed to load stock page."); setHistory([]);
+        setErr("Failed to load stock page."); setHistory([]); setShownProvider(null);
       }
       finally { if (!cancelled) setPriceLoading(false); }
     }
     loadHistory();
     return () => { cancelled = true; };
-  }, [symbol, seededHistory]);
+  }, [symbol, seededHistory, pageToken]);
 
   // -- Quote ---------------------------------------------------------------
   // Still fetched on every load, and deliberately so. `initialQuote` seeds the
@@ -1113,7 +1122,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                     <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
                   </div>
                 </div>
-                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={seededHistory ? historyCredit : null} />
+                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} />
               </section>
 
               {/* -- Daily / weekly returns --------------------------- */}

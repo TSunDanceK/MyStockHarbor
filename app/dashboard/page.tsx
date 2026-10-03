@@ -166,8 +166,8 @@ export default async function DashboardPage({ searchParams }: Props) {
       // gate as /api/history, which this chart calls on every timeframe change:
       // one provider for the seed and the refetches (lib/server/tiingoHistory.ts).
       historyForSurface("HISTORY", symbol, () => getDailyHistory(symbol, { caller: "dashboard" })).then(
-        (h) => h.points as Point[],
-        () => [] as Point[]
+        (h) => ({ points: h.points as Point[], provider: h.provider as string }),
+        () => ({ points: [] as Point[], provider: "none" })
       ),
       getInitialQuoteAndName(symbol),
       getInitialBenchmarks(),
@@ -175,7 +175,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       getInitialEarningsSummary(symbol),
     ]);
 
-  const initialHistory: Point[] = Array.isArray(rawHistory) ? rawHistory : [];
+  const initialHistory: Point[] = Array.isArray(rawHistory.points) ? rawHistory.points : [];
   const { quote: initialQuote, name: initialSymbolName } = quoteAndName;
 
   // STEP 4 (#553 COWORK #71/#92): the linked credit, rendered here and handed
@@ -204,14 +204,17 @@ export default async function DashboardPage({ searchParams }: Props) {
           initialNews={news}
           initialEarningsSummary={earningsSummary}
           tiingoCredit={tiingoCredit}
-          // Step 3 (#553 COWORK #71/#92): the linked credit under the chart.
-          // Keyed on the gate, not this one seed: the client swaps symbols and
-          // timeframes through /api/history, which follows the same gate.
+          // Step 3 (#553 COWORK #71/#92/#103): the linked credit under the
+          // chart, handed down while the gate is on (the client swaps symbols
+          // and timeframes through /api/history, which follows the same gate).
+          // The client shows it only beside a series whose provider is
+          // "tiingo": the seed's below, then each refetch's.
           historyCredit={
             historyOnTiingo("HISTORY") ? (
               <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
             ) : null
           }
+          initialHistoryProvider={rawHistory.provider}
           // Proves to /api/quote that this client rendered a real page. Empty
           // string when QUOTE_TOKEN_SECRET is unset, in which case the client
           // sends no header and behaviour is unchanged. Session-scoped, not
