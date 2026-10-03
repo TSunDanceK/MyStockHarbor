@@ -62,6 +62,11 @@ export type GvPeriod = {
   profit: GvAmount | null;
   /** A's one-off note for this period, or null. */
   oneOff: string | null;
+  /**
+   * Set when A's one-off rule cannot be run on this period (view.oneOffUnchecked,
+   * #552 COWORK #117): no profit bar and no figure, and this says why.
+   */
+  profitUnchecked?: string | null;
   /** Gross margin as cents kept per $1, or null with `grossNote` saying why. */
   keptCents: number | null;
   grossNote: string | null;
@@ -171,14 +176,28 @@ export function summaryLine(periods: GvPeriod[], growth: (Pct | undefined)[], on
  * Passing it (even `{}`) says every period was checked, and turns the quarterly
  * profit chart on; leaving it out keeps the chart off (see the header).
  */
+/** Said in place of a profit figure the one-off rule could not check (#552 COWORK #117). */
+export const PROFIT_UNCHECKED =
+  "Not drawn: this period can’t be checked for one-off gains or losses (the filing reports no revenue, operating income or non-operating figure for it).";
+
 export function buildGrowthVisuals(
   view: SecEarningsView,
-  opts: { oneOffs?: Record<string, string> } = {}
+  opts: { oneOffs?: Record<string, string>; unchecked?: string[] } = {}
 ): GrowthVisualsData {
   const profitChecked = opts.oneOffs !== undefined;
+  // A PERIOD THE RULE COULD NOT RUN ON IS NOT "CHECKED, NONE": no bar for it.
+  const unchecked = new Set(opts.unchecked ?? []);
   const oneOffOf = (label: string): string | null =>
     opts.oneOffs?.[label] ??
     (label === view.latestLabel && view.largeNonOperating && view.largeNonOperatingNote ? view.largeNonOperatingNote : null);
+
+  // The profit fields, the same for quarters and years: drawn only once every
+  // period was checked, never for a period the rule could not run on.
+  const profitOf = (label: string, netIncome: ViewCell) => ({
+    profit: profitChecked && !unchecked.has(label) ? amount(netIncome) : null,
+    oneOff: profitChecked && !unchecked.has(label) ? oneOffOf(label) : null,
+    profitUnchecked: profitChecked && unchecked.has(label) ? PROFIT_UNCHECKED : null,
+  });
 
   // ── QUARTERS (or whatever the table basis is): the periods on file, oldest first.
   let quarters: GvSeries | null = null;
@@ -199,8 +218,7 @@ export function buildGrowthVisuals(
         sales: amount(p.revenue),
         lastYear: priorAmount && prior ? { ...priorAmount, label: prior.label } : null,
         growth: growthWords(g?.revenueYoY),
-        profit: profitChecked ? amount(p.netIncome) : null,
-        oneOff: profitChecked ? oneOffOf(p.label) : null,
+        ...profitOf(p.label, p.netIncome),
         keptCents: kept.cents,
         grossNote: kept.note,
         operating: marginWords(m?.operating ?? null, "operating", m?.marginsRefused ?? false),
@@ -215,8 +233,9 @@ export function buildGrowthVisuals(
     };
   }
 
-  // ── YEARS: A's five-year history. It carries no net income in dollars, so the
-  // profit chart says so rather than deriving one from a margin.
+  // ── YEARS: A's five-year history, with each year's filed net income. A's
+  // `oneOffs` covers every stored fiscal year too (#552 COWORK #117), so the
+  // profit chart follows the same gate as the quarters'. Never derived from a margin.
   let years: GvSeries | null = null;
   if (view.annual.length && view.tableBasis !== "year") {
     const byLabel = new Map(view.annual.map((a) => [a.label, a]));
@@ -230,8 +249,7 @@ export function buildGrowthVisuals(
         sales: amount(a.revenue),
         lastYear: priorAmount && prior ? { ...priorAmount, label: prior.label } : null,
         growth: growthWords(a.revenueYoY),
-        profit: null,
-        oneOff: null,
+        ...profitOf(a.label, a.netIncome),
         keptCents: kept.cents,
         grossNote: kept.note,
         operating: marginWords(a.operating, "operating", a.marginsRefused),
@@ -241,7 +259,7 @@ export function buildGrowthVisuals(
     const yw = periodWords("year");
     years = {
       one: yw.one, many: yw.many, periods,
-      profitMissing: "Yearly profit or loss in dollars isn’t shown here yet; the net margin for each year is under “See all the numbers”.",
+      profitMissing: profitChecked ? null : profitWaitsForOneOffs(yw.one),
       summary: summaryLine(periods, view.annual.map((a) => a.revenueYoY), yw.one, yw.many),
     };
   }

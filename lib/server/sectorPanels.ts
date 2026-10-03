@@ -11,6 +11,8 @@ import { getCompanyNameMap } from "./companyNames";
 import { dayWindow as dayWindowAt, type DayBasis } from "./lastSession";
 import { priceProviderFor } from "./marketData/provider";
 import { readTiingoEodLast } from "./marketData/read";
+import { readSecTiingoCaps } from "./tiingoPool";
+import type { PricePoolRow } from "./pricePool";
 import { eodBreadth, eodDayMove, lastCloseRows, type EodLast } from "./marketData/eodLast";
 
 // ---------------------------------------------------------------------------
@@ -138,23 +140,42 @@ export type SectorPerformanceTable = {
   builtAt: number;
 };
 
-function weightedAverage(
-  entries: Array<{ value: number | null; weight: number }>
+/**
+ * CAP-WEIGHTED OVER THE CONSTITUENTS THAT HAVE A CAP (#553 CODE-B #94 B8).
+ *
+ * `weight` is a market cap or null. A constituent with a value but no cap is
+ * COUNTED (it was sampled) and carries NO weight -- the old code gave it 1
+ * against caps in the billions, which is the same answer stated honestly. A
+ * sector where no valued constituent has a cap falls back to EQUAL weight.
+ * Pure; exported for scripts/check-fmpoff-sec-cap.mjs.
+ */
+export function weightedAverage(
+  entries: Array<{ value: number | null; weight: number | null }>
 ): { value: number | null; count: number } {
+  const valued = entries.filter(
+    (e): e is { value: number; weight: number | null } => typeof e.value === "number" && Number.isFinite(e.value)
+  );
+  if (!valued.length) return { value: null, count: 0 };
+  const capped = valued.filter((e) => typeof e.weight === "number" && Number.isFinite(e.weight) && e.weight > 0);
+  const basis = capped.length ? capped : valued.map((e) => ({ value: e.value, weight: 1 }));
   let sum = 0;
   let weight = 0;
-  let count = 0;
-
-  for (const entry of entries) {
-    if (typeof entry.value !== "number" || !Number.isFinite(entry.value)) continue;
-    const w = entry.weight > 0 ? entry.weight : 1;
-    sum += entry.value * w;
-    weight += w;
-    count += 1;
+  for (const e of basis) {
+    sum += e.value * (e.weight as number);
+    weight += e.weight as number;
   }
+  return { value: weight ? sum / weight : null, count: valued.length };
+}
 
-  if (!weight || !count) return { value: null, count: 0 };
-  return { value: sum / weight, count };
+/**
+ * A pool row's cap AS A WEIGHT, on one basis: on the POOL gate only a Tiingo
+ * row's (SEC x Tiingo, tiingoPool.ts); a row the overlay left on FMP carries a
+ * frozen FMP cap and is not weighed. Off the gate every row is FMP's.
+ */
+export function poolCapWeight(row: Pick<PricePoolRow, "marketCap" | "source"> | null | undefined, onTiingo: boolean): number | null {
+  if (!row) return null;
+  if (onTiingo && row.source !== "tiingo") return null;
+  return typeof row.marketCap === "number" && row.marketCap > 0 ? row.marketCap : null;
 }
 
 async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
@@ -179,6 +200,7 @@ async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
     readPricePoolBulk(allSymbols).catch(() => new Map()),
     readCachedStockDataBulk(allSymbols).catch(() => new Map()),
   ]);
+  const onTiingo = poolOnTiingo();
 
   const now = Date.now();
   const dayRule = dayWindow(now);
@@ -186,16 +208,15 @@ async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
   const rows: SectorPerformanceRow[] = SECTORS.map((sector) => {
     const symbols = bySector.get(sector.slug) ?? [];
 
-    const dayEntries: Array<{ value: number | null; weight: number }> = [];
-    const weekEntries: Array<{ value: number | null; weight: number }> = [];
-    const monthEntries: Array<{ value: number | null; weight: number }> = [];
-    const ytdEntries: Array<{ value: number | null; weight: number }> = [];
+    const dayEntries: Array<{ value: number | null; weight: number | null }> = [];
+    const weekEntries: Array<{ value: number | null; weight: number | null }> = [];
+    const monthEntries: Array<{ value: number | null; weight: number | null }> = [];
+    const ytdEntries: Array<{ value: number | null; weight: number | null }> = [];
 
     for (const symbol of symbols) {
       const quote = pool.get(symbol) ?? null;
       const data = extended.get(symbol) ?? null;
-      const weight =
-        typeof quote?.marketCap === "number" && quote.marketCap > 0 ? quote.marketCap : 1;
+      const weight = poolCapWeight(quote, onTiingo);
 
       const counts = quote && dayRule.counts(quote.ts);
       dayEntries.push({ value: counts ? quote.changePct : null, weight });
@@ -234,10 +255,12 @@ async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
 
 /**
  * "Sector today" on Tiingo: the stored EOD move, week/month/YTD from the same
- * stored bars, cap-weighted as before (the weight is the pool row's market cap,
- * never computed from a Tiingo price here). Null when no constituent has a bar.
- * Reads: the sector index, 1 pool HMGET (weights), and the EOD blob from the
- * Data Cache (1 HGETALL per miss, nightly).
+ * stored bars, cap-weighted on SEC cover shares x the Tiingo price (B8: the
+ * pool overlay's own cap, never the frozen FMP one; weightedAverage says how a
+ * constituent without one is handled). Null when no constituent has a bar.
+ * Reads: the sector index, and the EOD, Tiingo pool and SEC cap blobs from the
+ * Data Cache (1 HGETALL per miss each). No Redis read of its own: the pool
+ * HMGET it used for weights is gone.
  */
 async function buildSectorPerformanceFromEod(eod: Record<string, EodLast>): Promise<SectorPerformanceTable | null> {
   const index = await getSectorIndex();
@@ -250,14 +273,13 @@ async function buildSectorPerformanceFromEod(eod: Record<string, EodLast>): Prom
   }
   const { date, rows: fresh } = lastCloseRows(allSymbols, eod);
   if (!date) return null;
-  const pool = await readPricePoolBulk(allSymbols).catch(() => new Map());
+  const caps = await readSecTiingoCaps(allSymbols, Date.now()).catch(() => new Map<string, number | null>());
 
   const rows: SectorPerformanceRow[] = SECTORS.map((sector) => {
     const entries = (pick: (r: EodLast) => number | null) =>
       (bySector.get(sector.slug) ?? []).map((symbol) => {
         const r = fresh.get(symbol);
-        const cap = pool.get(symbol)?.marketCap;
-        return { value: r ? pick(r) : null, weight: typeof cap === "number" && cap > 0 ? cap : 1 };
+        return { value: r ? pick(r) : null, weight: caps.get(symbol) ?? null };
       });
     const day = weightedAverage(entries(eodDayMove));
     return {

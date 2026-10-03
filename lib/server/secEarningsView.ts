@@ -662,6 +662,19 @@ export function largeNonOperating(rows: ViewCell[]): { amount: number } | null {
   if (Math.abs(nonOp) <= Math.abs(op) || Math.abs(nonOp) <= rev * LARGE_NON_OPERATING_SHARE_OF_REVENUE) return null;
   return { amount: nonOp };
 }
+/**
+ * CAN THE RULE ABOVE BE RUN ON THESE ROWS AT ALL (#552 COWORK #117)? It needs
+ * revenue above zero, operating income, and a non-operating figure (tagged, or
+ * pre-tax less operating). Without them largeNonOperating returns null for
+ * "can't tell", which must not read as "checked, none": a pre-revenue filer
+ * with a large non-operating gain would draw an untagged profit bar.
+ */
+export function oneOffCheckable(rows: ViewCell[]): boolean {
+  const v = (k: string) => rows.find((r) => r.key === k)?.val ?? null;
+  const rev = v("revenue"), op = v("operatingIncome"), pre = v("preTaxIncome");
+  const nonOp = v("nonOperatingIncomeExpense") ?? (pre !== null && op !== null ? pre - op : null);
+  return nonOp !== null && op !== null && rev !== null && rev > 0;
+}
 /** The marker's words, or null. One source for the rows and the snapshot's EPS-growth tile (#552 COWORK #60). */
 export function largeNonOperatingNote(rows: ViewCell[]): string | null {
   const big = largeNonOperating(rows);
@@ -943,12 +956,15 @@ export type SecEarningsView = {
   }[];
   /**
    * THE ONE-OFF NOTE PER PERIOD (#563 COWORK #36 blocker), label → note, for
-   * every period on the table basis where largeNonOperating fires: the SAME
-   * rule and words as the latest period's marker, run on each period's own
-   * income rows. Absent label = checked, none. The Growth & margins picture
-   * draws its profit chart only with this (lib/growthVisuals.ts).
+   * every period on the table basis AND every stored fiscal year (#552 COWORK
+   * #117) where largeNonOperating fires: the SAME rule and words as the latest
+   * period's marker, run on each period's own income rows. Absent label and
+   * not in oneOffUnchecked = checked, none. The Growth & margins picture draws
+   * its profit chart only with this (lib/growthVisuals.ts).
    */
   oneOffs: Record<string, string>;
+  /** Labels whose rows the rule cannot be run on (oneOffCheckable false): no profit bar is drawn for them. */
+  oneOffUnchecked: string[];
   ttmRevenue: number | null;
   ttmNetIncome: number | null;
   coverShares: StoredFactSet["cover"];
@@ -1556,6 +1572,12 @@ export function buildSecEarningsView(
     ["sharesDiluted", "Diluted shares"],
   ];
   const incomeRows = withNonOperatingMarker(withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(latest, k, label)))));
+  // EACH PERIOD'S OWN INCOME ROWS, for the per-period one-off check: the table
+  // basis's periods and every stored fiscal year (#552 COWORK #117). Labels are
+  // distinct across the two ("Q1 FY2026" / "FY2025"); a label in both is one row.
+  const oneOffRows: [string, ViewCell[]][] = [...new Map(
+    [...q, ...set.years].map((p) => [periodLabel(p), withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(p, k, label))))] as const)
+  )];
 
   // Does the stored breakdown actually reach the filed operating income? If it
   // does not, the card says the waterfall is partial rather than presenting a
@@ -1748,9 +1770,10 @@ export function buildSecEarningsView(
         netIncome: view(p, "netIncome", "Net income"),
       })),
     oneOffs: Object.fromEntries(
-      q.map((p) => [periodLabel(p), largeNonOperatingNote(withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(p, k, label)))))] as const)
+      oneOffRows.map(([label, rows]) => [label, largeNonOperatingNote(rows)] as const)
         .filter((e): e is readonly [string, string] => e[1] !== null)
     ),
+    oneOffUnchecked: oneOffRows.filter(([, rows]) => !oneOffCheckable(rows)).map(([label]) => label),
     ttmRevenue: ttm(q, "revenue"),
     ttmNetIncome: ttm(q, "netIncome"),
     coverShares: set.cover,

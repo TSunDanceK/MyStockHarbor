@@ -9,6 +9,7 @@
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
 import { readPricePoolBulk } from "./pricePool";
+import { priceProviderFor } from "./marketData/provider";
 import { fmpFetch, flushFmpUsage } from "./fmpUsage";
 import { claimStalest, deferSymbol, markRefreshed, readDeferred, registerSymbols } from "./stalenessQueue";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
@@ -247,7 +248,8 @@ async function awaitFmpCapacity(wait: WaitBudget): Promise<boolean> {
  * map (the caller shows "--" for those columns).
  */
 export async function readCachedFundamentalsBulk(
-  symbols: string[]
+  symbols: string[],
+  opts: { raw?: boolean } = {}
 ): Promise<Map<string, FundamentalsRow>> {
   const result = new Map<string, FundamentalsRow>();
   if (!redis) return result;
@@ -273,6 +275,21 @@ export async function readCachedFundamentalsBulk(
     });
   } catch {
     // Best-effort: a read failure just means "no fundamentals this render".
+  }
+
+  // THE STORED CAP AND P/E ARE FMP'S ONLY (#553 COWORK #103, #690 Q2). On
+  // PRICE_PROVIDER_POOL=tiingo a reader gets SEC x Tiingo for every symbol
+  // Tiingo prices, computed here at read time from the pool overlay's Data
+  // Cache blobs (tiingoPool.overlaySecTiingoFundamentals) and never written
+  // back. `raw` is the stored FMP figure: the sector index's "fmp" basis, which
+  // must not mix the two. Loaded on the switch only, as in readPricePoolBulk.
+  if (!opts.raw && result.size && priceProviderFor("POOL") === "tiingo") {
+    try {
+      const { overlaySecTiingoFundamentals } = await import("./tiingoPool");
+      return await overlaySecTiingoFundamentals(result, Date.now());
+    } catch {
+      // fail open -- the stored rows stand
+    }
   }
 
   return result;
@@ -605,7 +622,14 @@ export async function warmFundamentals(symbols: string[]) {
   // already means "nobody is maintaining this" while an old one means "the
   // market has been shut". Those are different questions and only the first is
   // this stage's problem.
-  const pool = await readPricePoolBulk(cleanSymbols);
+  //
+  // RAW, NEVER THE TIINGO OVERLAY (#553 COWORK #103, #690 Q2). On the POOL
+  // gate the overlay's cap and P/E are SEC shares x the Tiingo price; written
+  // into these FMP-named rows, the Tiingo close could be backed out of them
+  // (cap / shares) where the msh:tiingo: purge (§7) never looks. The rows hold
+  // the FMP pool's figures (or none); readers get SEC x Tiingo at read time
+  // (readCachedFundamentalsBulk).
+  const pool = await readPricePoolBulk(cleanSymbols, { raw: true });
   const quoteMap = new Map<string, { marketCap: number | null; peRatio: number | null }>();
   const poolMisses: string[] = [];
   for (const sym of quoteOrder) {

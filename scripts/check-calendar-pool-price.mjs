@@ -67,5 +67,31 @@ check("MUTATION: the sector panels overlay every calendar row, not just the sect
 check("MUTATION: the sector panels read the pool per date → caught",
   !serveRules(SRC, once(SECTOR, "getCachedDayItems(date, { livePrices: false })", "getCachedDayItems(date)")).every(Boolean));
 
+console.log("\n4. a cap dash beside a price says why, once (#552 COWORK #117)");
+{
+  const COV = readCodeOnly("lib/server/gridPriceCoverage.ts");
+  const PAGE = readCodeOnly("app/earnings-calendar/page.tsx");
+  const C = await lift([grabFunction(COV, "capRefusedBesidePrice"), "export { capRefusedBesidePrice };"].join("\n"));
+  check("a covered row with a price and no cap is the refused case; no price, or outside the set, is not",
+    C.capRefusedBesidePrice({ price: 12, marketCap: null, priceCoverage: "covered" })
+      && !C.capRefusedBesidePrice({ price: 12, marketCap: 3e9, priceCoverage: "covered" })
+      && !C.capRefusedBesidePrice({ price: null, marketCap: null, priceCoverage: "covered" })
+      && !C.capRefusedBesidePrice({ price: 12, marketCap: null, priceCoverage: "outside-bar-universe" }));
+  const pageRule = (s) => /\{dayData\.items\.some\(capRefusedBesidePrice\) \? \(\s*<p[^>]*>\s*\{CAP_REFUSED_NOTE\}/.test(s);
+  check("the calendar prints CAP_REFUSED_NOTE under the grid only when such a row is on the page", pageRule(PAGE));
+  check("MUTATION: the note printed on every day → caught", !pageRule(once(PAGE, "{dayData.items.some(capRefusedBesidePrice) ? (", "{true ? (")));
+  // HEDGED (#552 COWORK #119): the row carries no reason for its dash, so the
+  // note may not state the filings as THE cause, nor promise the stock page
+  // explains it. Read from the source text, comments stripped.
+  const noteRule = (s) => {
+    const m = s.match(/CAP_REFUSED_NOTE =\s*((?:"[^"]*"\s*\+?\s*)+);/);
+    const text = m ? [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]).join("") : "";
+    return /isn't available/.test(text) && /for some\b/.test(text) && !/means the company's own filings/.test(text) && !/says why/.test(text);
+  };
+  check("the cap note is hedged: not available here, and for SOME the filings don't support one", noteRule(COV));
+  check("MUTATION: the note states the filings as the cause → caught",
+    !noteRule(once(COV, "means a market cap isn't available for that company here; ", "means the company's own filings don't support a market cap here; ")));
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

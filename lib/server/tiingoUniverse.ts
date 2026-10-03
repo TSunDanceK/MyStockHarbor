@@ -111,6 +111,20 @@ export function parseTiingoUniverse(raw: unknown): StoredTiingoUniverse | null {
 }
 
 /**
+ * The stored universe's symbols (1 GET), or [] when absent or unreadable. For
+ * warm-pickers-sec (#553 COWORK #110): the pool overlay caps a row only from
+ * the pickers SEC hash, so the hash must cover what the overlay prices.
+ */
+export async function readTiingoUniverseSymbols(): Promise<string[]> {
+  if (!redis) return [];
+  try {
+    return parseTiingoUniverse(await redis.get<unknown>(TIINGO_UNIVERSE_KEY))?.symbols ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * One SET with a TTL (1 command, ~6 B a symbol). Never writes an empty list:
  * jobs.ts would then fall back to the pool's fields anyway, and an empty key
  * would hide that a source failed. Returns whether the write landed.

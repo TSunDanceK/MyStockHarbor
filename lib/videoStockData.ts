@@ -26,8 +26,7 @@ import { fetchQuoteSnapshotForRender } from "@/lib/server/quoteData";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { pickSurfacePrice, readSurfaceInputs } from "@/lib/server/tiingoSurfacePrice";
 import { getStockPageSecFacts } from "@/lib/server/secEarningsSnapshot";
-import { fyPeRatio, marketCap, peRatio, REFUSAL_WORDS, type EpsBasis } from "@/lib/server/secValuation";
-import { readableDate } from "@/lib/server/secEstimates";
+import { fyPeLabel, fyPeNote, fyPeRatio, marketCap, peRatio, REFUSAL_WORDS } from "@/lib/server/secValuation";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import { resolveProfile } from "@/lib/server/staticProfile";
 
@@ -83,14 +82,6 @@ export type VideoStockData = {
   peLabel?: string | null;
   peNote?: string | null;
 };
-
-/** The P/E tile's label and note when it falls back to the latest full year. */
-export function fyPeLabel(eps: EpsBasis): string {
-  return eps.fiscalYear ? `P/E (FY${eps.fiscalYear})` : "P/E (FY)";
-}
-export function fyPeNote(eps: EpsBasis): string {
-  return `Twelve months of diluted EPS aren't on file, so this P/E uses the latest full year (to ${readableDate(eps.periodEnd)}).`;
-}
 
 /** The market-cap tile's note when SEC data for the symbol isn't on file at all. */
 export const NO_SEC_SHARE_COUNT_NOTE = "No SEC share count on file for this company yet";

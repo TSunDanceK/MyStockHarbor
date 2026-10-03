@@ -98,7 +98,10 @@ function poolBehaviour(P) {
   want("% change from the STORED consolidated close (100), not IEX's prevClose or the open", r && Math.abs(r.changePct - 3) < 1e-9);
   want("open and day range are the IEX row's while the price is IEX", r?.open === 101 && r.dayHigh === 104 && r.dayLow === 99);
   want("volume is the last EOD bar's, labelled \"as of last close\" (never IEX's)", r?.volume === 3000 && r.volumeLabel === "as of last close");
-  want("market cap and P/E are the FMP row's own, never computed from the Tiingo price", r?.marketCap === 5e9 && r.pe === 22);
+  // B8 (#683 Q1): SEC shares x this price, or null -- never the FMP row's frozen
+  // figure. No SEC row is passed here, so both are null (check-fmpoff-sec-cap
+  // covers the computed case).
+  want("market cap and P/E are never the FMP row's, nor invented from the Tiingo price", r?.marketCap === null && r.pe === null);
   want("the FMP row's bookkeeping is carried (rotation, eviction)", r?.peTs === 7 && r.failStreak === 2 && r.failAt === 3);
 
   // IFNNY-shaped: the IEX trade is 29 h old and a newer close is stored.
@@ -132,7 +135,8 @@ const POOL_MUTANTS = [
   ["% change from IEX's prevClose first", /\? last && last\.d < surface\.date && pos\(last\.c\)\n\s*\? last\.c\n\s*: pos\(iex\?\.prevClose\)\n\s*\? iex!\.prevClose\n\s*: null/, "? pos(iex?.prevClose) ? iex!.prevClose : last && pos(last.c) ? last.c : null"],
   ["% change from the open", /changePct: base != null \? \(\(surface\.price - base\) \/ base\) \* 100 : null,/, "changePct: pos(iex?.open) ? ((surface.price - iex!.open!) / iex!.open!) * 100 : null,"],
   ["the IEX trade always wins (no newer-of)", /const surface = pickSurfacePrice\(iex \?\? null, bars, nowMs\);/, "const surface = pickSurfacePrice(iex ?? null, [], nowMs) ?? pickSurfacePrice(null, bars, nowMs);"],
-  ["a market cap computed from the Tiingo price", /marketCap: fmp\?\.marketCap \?\? null,/, "marketCap: surface.price * 1e9,"],
+  ["a market cap computed from the Tiingo price", /marketCap: valuation\.marketCap,/, "marketCap: surface.price * 1e9,"],
+  ["the FMP row's market cap carried onto the Tiingo row", /marketCap: valuation\.marketCap,/, "marketCap: fmp?.marketCap ?? null,"],
   ["the volume loses its label", /volumeLabel: volume != null \? VOLUME_LABEL : null,/, "volumeLabel: null,"],
 ];
 for (const [label, from, to] of POOL_MUTANTS) {
