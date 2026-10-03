@@ -35,7 +35,8 @@ const symbols = ((await redis(["SMEMBERS", INDEX])) ?? []).map(String);
 // Cells (a) could fill: Pickers symbols whose NEWEST balance-sheet date has
 // equity incl. NCI but no parent equity (the "equity only incl. minority"
 // refusal), split by whether MinorityInterest is filed on that date.
-const PICKERS_KEY = keyOf("PICKERS_SEC_KEY");
+const PICKERS_KEY = (fs.readFileSync("lib/server/pickersSecFundamentals.ts", "utf8").match(/export const PICKERS_SEC_KEY = "([^"]+)"/) ?? [])[1];
+if (!PICKERS_KEY) throw new Error("PICKERS_SEC_KEY not found");
 const pickers = new Set(((await redis(["HKEYS", PICKERS_KEY])) ?? []).map((x) => String(x).toUpperCase()));
 const inclOnly = [], fillable = [];
 const symsByCik = new Map();
