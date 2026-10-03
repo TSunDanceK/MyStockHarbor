@@ -11,7 +11,9 @@
 //                        periods on this page; absent -> no ghost, never derived
 //   growth wording       growth[i].revenueYoY / annual[i].revenueYoY as A
 //                        computed it; above +200% it reads "from a small base"
-//   "kept X¢ of $1"      margins[i].gross, A's gross margin, rounded to a cent
+//   gross margin %       margins[i].gross, A's gross margin: whole % on the dot,
+//                        one decimal in the panel (owner ruling, #563 COWORK #55:
+//                        margins in %, never cents-per-dollar wording)
 //   costs vs sales       A's operating / net margins, re-worded only when they
 //                        are beyond ±100% ("about 2.9× sales" for -194.5%)
 //   one-off tag          the note A attaches (largeNonOperatingNote), on the
@@ -67,8 +69,11 @@ export type GvPeriod = {
    * #552 COWORK #117): no profit bar and no figure, and this says why.
    */
   profitUnchecked?: string | null;
-  /** Gross margin as cents kept per $1, or null with `grossNote` saying why. */
-  keptCents: number | null;
+  /** Gross margin, whole %, for the dot; null with `grossNote` saying why. */
+  grossPct: number | null;
+  /** The same margin at one decimal for the panel ("43.4%"), or null. */
+  grossText: string | null;
+  /** Why there is no gross margin. Set whenever grossPct is null: a missing dot always says why. */
   grossNote: string | null;
   /** Operating and net margin, worded: "−85.1%" or "costs were about 2.9× sales". */
   operating: string | null;
@@ -100,13 +105,23 @@ export function growthWords(v: Pct | undefined): string | null {
   return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%`;
 }
 
-/** Gross margin as cents kept of each $1 of sales. */
-export function keptCents(gross: number | null, refused: boolean): { cents: number | null; note: string | null } {
+/**
+ * A's gross margin as a percentage, or the reason there is none. NEVER A BLANK
+ * WITHOUT A REASON (#563 COWORK #55): every null carries a note, in A's words
+ * where A has them.
+ */
+export function grossMargin(
+  gross: number | null,
+  refused: boolean,
+  hasSales: boolean
+): { pct: number | null; text: string | null; note: string | null } {
   // A's own words for a refused margin (its table's "Not meaningful" tooltip).
-  if (refused) return { cents: null, note: EMPTY_REASONS.revenueIncomplete };
-  if (gross == null || !Number.isFinite(gross)) return { cents: null, note: null };
-  if (gross < 0) return { cents: null, note: "the direct costs of sales were more than the sales" };
-  return { cents: Math.round(gross), note: null };
+  if (refused) return { pct: null, text: null, note: EMPTY_REASONS.revenueIncomplete };
+  if (gross == null || !Number.isFinite(gross)) {
+    return { pct: null, text: null, note: hasSales ? EMPTY_REASONS.notCaptured : EMPTY_REASONS.needsRevenue };
+  }
+  if (gross < 0) return { pct: null, text: null, note: "The direct costs of sales were more than the sales" };
+  return { pct: Math.round(gross), text: `${gross.toFixed(1)}%`, note: null };
 }
 
 /**
@@ -115,7 +130,7 @@ export function keptCents(gross: number | null, refused: boolean): { cents: numb
  * ONE PATTERN FOR THE MULTIPLES (COWORK #36 ask 2): "<what> was/were about N× sales",
  * with the "what" naming the measure, so the two read side by side as
  * "operating costs were about 2.9× sales · the net loss was about 1.1× sales".
- * Within ±100% it stays a percentage, and the panel labels it "operating margin".
+ * Within ±100% it stays a percentage, and the panel shows it under "Operating margin".
  */
 export function marginWords(m: number | null, kind: "operating" | "net", refused: boolean): string | null {
   if (refused || m == null || !Number.isFinite(m)) return null;
@@ -211,7 +226,7 @@ export function buildGrowthVisuals(
       const m = marginOf.get(p.label);
       const prior = g?.comparedWith ? byLabel.get(g.comparedWith) : undefined;
       const priorAmount = prior ? amount(prior.revenue) : null;
-      const kept = keptCents(m?.gross ?? null, m?.marginsRefused ?? false);
+      const kept = grossMargin(m?.gross ?? null, m?.marginsRefused ?? false, amount(p.revenue) !== null);
       return {
         label: p.label,
         short: shortLabel(p.label),
@@ -219,7 +234,8 @@ export function buildGrowthVisuals(
         lastYear: priorAmount && prior ? { ...priorAmount, label: prior.label } : null,
         growth: growthWords(g?.revenueYoY),
         ...profitOf(p.label, p.netIncome),
-        keptCents: kept.cents,
+        grossPct: kept.pct,
+        grossText: kept.text,
         grossNote: kept.note,
         operating: marginWords(m?.operating ?? null, "operating", m?.marginsRefused ?? false),
         net: marginWords(m?.net ?? null, "net", m?.marginsRefused ?? false),
@@ -242,7 +258,7 @@ export function buildGrowthVisuals(
     const periods: GvPeriod[] = view.annual.map((a) => {
       const prior = a.comparedWith ? byLabel.get(a.comparedWith) : undefined;
       const priorAmount = prior ? amount(prior.revenue) : null;
-      const kept = keptCents(a.gross, a.marginsRefused);
+      const kept = grossMargin(a.gross, a.marginsRefused, amount(a.revenue) !== null);
       return {
         label: a.label,
         short: shortLabel(a.label),
@@ -250,7 +266,8 @@ export function buildGrowthVisuals(
         lastYear: priorAmount && prior ? { ...priorAmount, label: prior.label } : null,
         growth: growthWords(a.revenueYoY),
         ...profitOf(a.label, a.netIncome),
-        keptCents: kept.cents,
+        grossPct: kept.pct,
+        grossText: kept.text,
         grossNote: kept.note,
         operating: marginWords(a.operating, "operating", a.marginsRefused),
         net: marginWords(a.net, "net", a.marginsRefused),

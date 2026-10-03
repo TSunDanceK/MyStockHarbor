@@ -15,8 +15,11 @@
 //      with no tag. The profit chart, its detail row and its summary clause stay
 //      off until A passes `oneOffs`.
 //   7. NO SCALE BEFORE A TAP (#36 ask 1): the newest bar and dot lose their
-//      values, or the 0¢ / 50¢ / 100¢ guides go.
+//      values, or the 0% / 50% / 100% guides go.
 //   8. TWO PATTERNS FOR THE MULTIPLES (#36 ask 2).
+//  10. CENTS-PER-DOLLAR WORDING BACK ON A MARGIN (owner ruling, #563 COWORK #55:
+//      margins in %, under the standard terms), or a missing gross-margin dot
+//      with no reason behind it.
 //   9. THE YEARS PROFIT CHART (#563 COWORK #51 (a), on A's #552 COWORK #117
 //      annual one-offs): each year's FILED net income, behind the same gate as
 //      the quarters, with no bar for a year the one-off rule can't run on.
@@ -42,8 +45,11 @@ const appended = (builder, component) =>
   `\n${reasonedValueUnit()}\n${strip(builder)}\n${strip(component).replace("export default function GrowthVisuals", "export function GrowthVisuals")}\n`;
 
 /** A's view stack plus C's two files, one transpiled unit (render-cards' method). */
-const load = (builder = fs.readFileSync(BUILDER, "utf8"), component = fs.readFileSync(COMPONENT, "utf8")) =>
-  loadCards((src) => src + appended(builder, component));
+const load = (builder = fs.readFileSync(BUILDER, "utf8"), component = fs.readFileSync(COMPONENT, "utf8")) => {
+  SRC_B = { src: builder, file: BUILDER };
+  SRC_C = { src: component, file: COMPONENT };
+  return loadCards((src) => src + appended(builder, component));
+};
 
 const full = JSON.parse(fs.readFileSync("data/sec/factset-fixture-ONDS.json", "utf8"));
 /** ONDS as it stood after Q1 FY2026: the same filings, newest quarter not yet filed. */
@@ -81,6 +87,8 @@ async function measure(M) {
 }
 
 let M_PROFIT_WAITS = "";
+/** The two files' source as loaded for this measure, for the wording rule. */
+let SRC_B = { src: "", file: BUILDER }, SRC_C = { src: "", file: COMPONENT };
 const rules = {
   "ONDS: 8 quarters, oldest first": ({ onds }) =>
     onds.quarters.periods.length === 8 && onds.quarters.periods[0].label === "Q3 FY2024" && onds.quarters.periods[7].label === "Q2 FY2026",
@@ -93,9 +101,19 @@ const rules = {
   "above +200% the label reads 'from a small base'": ({ onds, M }) =>
     onds.quarters.periods[7].growth === "from a small base" && M.growthWords(67.04) === "+67.0%" && M.growthWords(-44.44) === "−44.4%" &&
     M.growthWords(200) === "+200.0%" && M.growthWords("loss-both") === null,
-  "gross margin is A's figure in whole cents": ({ onds }) =>
+  "gross margin is A's figure: whole % on the dot, one decimal in the panel": ({ onds, ondsView }) =>
     // Q3 FY2025's 25.79% is where rounding and truncating disagree (26 vs 25).
-    onds.quarters.periods[7].keptCents === 43 && onds.quarters.periods[0].keptCents === 3 && onds.quarters.periods[4].keptCents === 26,
+    onds.quarters.periods[7].grossPct === 43 && onds.quarters.periods[0].grossPct === 3 && onds.quarters.periods[4].grossPct === 26 &&
+    // The panel's one decimal is A's figure too, not the rounded dot.
+    onds.quarters.periods[7].grossText === `${ondsView.margins.find((m) => m.label === "Q2 FY2026").gross.toFixed(1)}%`,
+  "a missing gross-margin dot always says why": ({ onds, blankData, render, M }) =>
+    M.grossMargin(null, false, true).note === M.EMPTY_REASONS.notCaptured &&
+    M.grossMargin(null, false, false).note === M.EMPTY_REASONS.needsRevenue &&
+    M.grossMargin(40, true, true).note === M.EMPTY_REASONS.revenueIncomplete &&
+    /more than the sales/.test(M.grossMargin(-5, false, true).note ?? "") &&
+    [...onds.quarters.periods, ...onds.years.periods, ...blankData.quarters.periods].every((p) => p.grossPct !== null || !!p.grossNote) &&
+    // The newest quarter of blankData has no sales: the panel (open on it) says so.
+    blankData.quarters.periods.at(-1).grossPct === null && /Gross margin\s*Needs revenue/.test(render(blankData)),
   "margins beyond ±100% are worded, within are percentages": ({ onds, M }) =>
     onds.quarters.periods[7].operating === "operating costs were about 2.9× sales" &&
     onds.quarters.periods[6].operating === "−85.1%" &&
@@ -129,15 +147,26 @@ const rules = {
   },
   "scale: the newest sales bar and the newest dot carry their values": ({ onds, markup }) => {
     const vals = [...markup(onds).matchAll(/class="gvVal"[^>]*>([^<]+)</g)].map((x) => x[1]);
-    return vals.length === 2 && vals[0] === "$83.8M" && vals[1] === "43¢";
+    return vals.length === 2 && vals[0] === "$83.8M" && vals[1] === "43%";
   },
-  "scale: faint 0¢ / 50¢ / 100¢ guides on the margin chart": ({ onds, markup }) => {
-    const labels = [...markup(onds).matchAll(/class="gvCentLabel"[^>]*>([^<]+)</g)].map((x) => x[1]);
-    return labels.join(",") === "0¢,50¢,100¢" && (markup(onds).match(/class="gvCentGuide"/g) ?? []).length === 3;
+  "scale: faint 0% / 50% / 100% guides on the margin chart": ({ onds, markup }) => {
+    const labels = [...markup(onds).matchAll(/class="gvPctLabel"[^>]*>([^<]+)</g)].map((x) => x[1]);
+    return labels.join(",") === "0%,50%,100%" && (markup(onds).match(/class="gvPctGuide"/g) ?? []).length === 3;
   },
-  "wording: one pattern for the multiples in the panel": ({ onds, render }) =>
-    render(onds).includes("operating costs were about 2.9× sales · the net loss was about 1.1× sales") &&
-    !/margin: (operating|the net)/.test(render(onds)),
+  // STANDARD TERMS (#563 COWORK #55): each margin under its own name; a multiple
+  // keeps its one pattern ("<what> was/were about N× sales", #36 ask 2).
+  "wording: standard margin terms; one pattern for the multiples": ({ onds, render }) => {
+    const t = render(onds);
+    return /Operating margin\s*operating costs were about 2\.9× sales/.test(t) && /Net margin\s*the net loss was about 1\.1× sales/.test(t) &&
+      /Gross margin\s*43\.1%/.test(t) && t.includes("Gross margin is the share of sales left after the direct costs of making them.") &&
+      t.includes("Gross margin per quarter") && t.includes("Gross margin (% of sales)") && !/All costs|(operating|net) margin: /i.test(t);
+  },
+  "no cents-per-dollar wording on a margin, in the picture or its source": ({ onds, render }) => {
+    const CENTS = /¢|per \$1|of every \$1|of each \$1|cents? kept|kept \d+/i;
+    const texts = [render(onds), render({ quarters: null, years: onds.years })];
+    return texts.every((t) => !CENTS.test(t)) && texts[1].includes("Gross margin per year") &&
+      ![SRC_B, SRC_C].some((s) => CENTS.test(stripComments(s.src, { file: s.file })));
+  },
   "marker: on the quarter A's rule fired for, with A's words": ({ q1, q1View }) => {
     const p = q1.quarters.periods;
     return q1View.largeNonOperating === true && p.at(-1).label === "Q1 FY2026" && p.at(-1).oneOff === q1View.largeNonOperatingNote &&
@@ -216,7 +245,10 @@ console.log("\n=== 3. Mutants: each must FAIL its rule ===\n");
 const mutants = [
   ["above +200% the label reads 'from a small base'", "b", (s) => s.replace("export const SMALL_BASE_ABOVE_PCT = 200;", "export const SMALL_BASE_ABOVE_PCT = 100000;")],
   ["ghost bars are A's comparator, looked up by label, never derived", "b", (s) => s.replace("const prior = g?.comparedWith ? byLabel.get(g.comparedWith) : undefined;", "const prior = ordered[ordered.indexOf(p) - 1];")],
-  ["gross margin is A's figure in whole cents", "b", (s) => s.replace("return { cents: Math.round(gross), note: null };", "return { cents: Math.floor(gross), note: null };")],
+  ["gross margin is A's figure: whole % on the dot, one decimal in the panel", "b", (s) => s.replace("return { pct: Math.round(gross),", "return { pct: Math.floor(gross),")],
+  ["gross margin is A's figure: whole % on the dot, one decimal in the panel", "b", (s) => s.replace("text: `${gross.toFixed(1)}%`", "text: `${Math.round(gross).toFixed(1)}%`")],
+  ["a missing gross-margin dot always says why", "b", (s) => s.replace("note: hasSales ? EMPTY_REASONS.notCaptured : EMPTY_REASONS.needsRevenue", "note: null")],
+  ["a missing gross-margin dot always says why", "c", (s) => s.replace("<span style={{ color: C.muted }}>{p.grossNote}</span>", "<span />")],
   ["margins beyond ±100% are worded, within are percentages", "b", (s) => s.replace("if (Math.abs(m) <= MARGIN_AS_MULTIPLE_BEYOND_PCT)", "if (true)")],
   ["derived quarters keep A's derived note", "b", (s) => s.replace("derivedNote: cell.derivedNote ?? null", "derivedNote: null")],
   ["summary with A's notes: seven of eight losses, the one-off named", "b", (s) => s.replace("const losses = withProfit.filter((p) => p.profit!.val < 0).length;", "const losses = withProfit.filter((p) => p.profit!.val <= 0).length + 1;")],
@@ -226,9 +258,14 @@ const mutants = [
   ["blocker: with A's per-period note, Q1 '26 draws tagged", "b", (s) => s.replace("opts.oneOffs?.[label] ??", "")],
   ["scale: the newest sales bar and the newest dot carry their values", "c", (s) => s.replace("{i === newest && p.sales ? (", "{false && p.sales ? (")],
   ["scale: the newest sales bar and the newest dot carry their values", "c", (s) => s.replace("{i === newest ? (", "{false ? (")],
-  ["scale: faint 0¢ / 50¢ / 100¢ guides on the margin chart", "c", (s) => s.replace("const CENT_GUIDES = [0, 50, 100] as const;", "const CENT_GUIDES = [0, 100] as const;")],
-  ["wording: one pattern for the multiples in the panel", "b", (s) => s.replace("`operating costs were about ${", "`costs were about ${")],
-  ["wording: one pattern for the multiples in the panel", "c", (s) => s.replace("(/%$/.test(text) ? `${kind} margin: ${text}` : text)", "`${kind} margin: ${text}`")],
+  ["scale: faint 0% / 50% / 100% guides on the margin chart", "c", (s) => s.replace("const PCT_GUIDES = [0, 50, 100] as const;", "const PCT_GUIDES = [0, 100] as const;")],
+  ["scale: faint 0% / 50% / 100% guides on the margin chart", "c", (s) => s.replace(">{c}%</span>", ">{c}¢</span>")],
+  ["wording: standard margin terms; one pattern for the multiples", "b", (s) => s.replace("`operating costs were about ${", "`costs were about ${")],
+  ["wording: standard margin terms; one pattern for the multiples", "c", (s) => s.replace("<dt>Operating margin</dt>", "<dt>All costs</dt>")],
+  ["wording: standard margin terms; one pattern for the multiples", "c", (s) => s.replace("<div className=\"gvNote\">{GROSS_MARGIN_MEANS}</div>", "")],
+  ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace('legend={<><i style={{ background: C.margin, borderRadius: 999 }} />Gross margin (% of sales)</>}', 'legend={<><i style={{ background: C.margin, borderRadius: 999 }} />¢ kept per $1 (gross margin)</>}')],
+  ["no cents-per-dollar wording on a margin, in the picture or its source", "c", (s) => s.replace("{p.grossPct}%", "{p.grossPct}¢")],
+  ["no cents-per-dollar wording on a margin, in the picture or its source", "b", (s) => s.replace('"The direct costs of sales were more than the sales"', '"Under 0 cents kept per $1 of sales"')],
   ["marker: on the quarter A's rule fired for, with A's words", "b", (s) => s.replace("(label === view.latestLabel && view.largeNonOperating", "(view.largeNonOperating")],
   ["marker: the tag renders", "c", (s) => s.replace("        if (!p.oneOff) return null;\n", "        return null;\n")],
   ["marker: the tag renders", "c", (s) => s.replace('<ReasonedValue text="one-off" reason={p.oneOff} />', "<abbr title={p.oneOff}>one-off</abbr>")],
