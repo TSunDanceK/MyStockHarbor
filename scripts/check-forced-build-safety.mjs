@@ -129,6 +129,10 @@ const NextResponse = {
 let lastBuildStats = null;
 export const resetMemo = () => { memo = null; lastBuildStats = null; };
 export const readStats = () => lastBuildStats;
+// The public-shape filter (#553 COWORK #103): identity here, since this bench
+// measures which payload is served, not its shape. Its own check runs the real
+// one (scripts/check-fmpoff-plays-perf.mjs).
+const publicPickersPayload = (d) => d;
 `;
 
 const js = ts.transpileModule(

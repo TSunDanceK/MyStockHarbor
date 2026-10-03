@@ -26,7 +26,7 @@ import { getDailyHistoryBulk } from "./historyCache";
 import { priceProviderFor, type PriceProvider } from "./marketData/provider";
 import { tiingoPickerHistory, type PickerHistoryStats } from "./marketData/pickerHistory";
 import type { EodBar } from "./marketData/types";
-import { computePerfFromBars, perfRowRefused, type PerfRow } from "../pickerPerf";
+import { computePerfFromBars, perfRowRefused, publicPickersPayload, type PerfRow } from "../pickerPerf";
 import { recordRedisRead, flushRedisReadMeter } from "./redisBandwidth";
 import {
   chunkByBytes,
@@ -5289,6 +5289,9 @@ async function handlePickersRequest(
 
   let forceRefresh = false;
   let ownerKeyed = false;
+  // NO TIINGO RETURNS IN THIS PUBLIC JSON (#553 COWORK #103, 2026-10-03): every
+  // payload answer below goes through publicPickersPayload, which removes
+  // signalRecords[].perf. Pages read `perf` in-process (getPickersData).
 
   if (forceRequested) {
     const ip = getClientIp(req);
@@ -5334,7 +5337,7 @@ async function handlePickersRequest(
   if (forceHistoryRefresh) forceRefresh = true;
 
   if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
-    return NextResponse.json(memo.data, {
+    return NextResponse.json(publicPickersPayload(memo.data), {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
         "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
@@ -5350,7 +5353,7 @@ async function handlePickersRequest(
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
 
-    return NextResponse.json(cached.data, {
+    return NextResponse.json(publicPickersPayload(cached.data), {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
         // Set on EVERY response path, not just the one that built something.
@@ -5371,7 +5374,7 @@ async function handlePickersRequest(
     const lastGood = await readPickersLastGood();
     if (lastGood?.data) {
       memo = { ts: now, data: lastGood.data };
-      return NextResponse.json(lastGood.data, {
+      return NextResponse.json(publicPickersPayload(lastGood.data), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": "false",
@@ -5396,7 +5399,7 @@ async function handlePickersRequest(
     if (published?.data) {
       memo = { ts: now, data: published.data };
 
-      return NextResponse.json(published.data, {
+      return NextResponse.json(publicPickersPayload(published.data), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
@@ -5452,7 +5455,7 @@ async function handlePickersRequest(
       recordBuildStats(data, { degradedFallbackUsed: true, wrote: false });
       memo = { ts: now, data: cached.data };
 
-      return NextResponse.json(cached.data, {
+      return NextResponse.json(publicPickersPayload(cached.data), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-Degraded-Fallback": "true",
@@ -5465,7 +5468,7 @@ async function handlePickersRequest(
     memo = { ts: now, data };
     await writePickersCache(data, () => buildReducedPickersPayload(data));
 
-    return NextResponse.json(data, {
+    return NextResponse.json(publicPickersPayload(data), {
       headers: {
         "Cache-Control": forceRefresh
           ? "no-store"
@@ -5477,7 +5480,7 @@ async function handlePickersRequest(
     if (cached?.data) {
       memo = { ts: now, data: cached.data };
 
-      return NextResponse.json(cached.data, {
+      return NextResponse.json(publicPickersPayload(cached.data), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import BullFlagsClient, { type PlaysPayload } from "./BullFlagsClient";
 import { getBullFlagsData } from "@/lib/server/bullFlagsBuilder";
-import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
 // ISR rather than force-dynamic. `force-dynamic` shipped Cache-Control:
@@ -90,14 +89,14 @@ export default async function BullFlagsPage() {
           __html: JSON.stringify(jsonLd),
         }}
       />
-      {/* THE LINKED CREDIT (#553 B4): the scan reads stored Tiingo bars when the
-          Pickers surface is on Tiingo, so the page carries the same credit. */}
+      {/* THE LINKED CREDIT (#553 B4). Handed over always, SHOWN by the client
+          only while the payload on screen records that its bars came from
+          Tiingo (payload.history, lib/playsPublic.ts), not merely because
+          PRICE_PROVIDER_PICKERS is on (#553 COWORK #103, 2026-10-03). */}
       <BullFlagsClient
         initialPayload={initialPayload}
         marketDataCredit={
-          priceProviderFor("PICKERS") === "tiingo" ? (
-            <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
-          ) : null
+          <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
         }
       />
     </>

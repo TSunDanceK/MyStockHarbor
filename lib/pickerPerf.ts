@@ -173,3 +173,27 @@ export function applyPerf(entry: PerfFields, row: PerfRow | null | undefined, on
   if (Object.keys(why).length) entry.perfWhy = why;
   else delete entry.perfWhy;
 }
+
+/**
+ * NO TIINGO RETURNS IN PUBLIC JSON (#553 COWORK #103, 2026-10-03). Contract
+ * ruling: Tiingo-derived bars and returns don't go out through public JSON;
+ * pages read them in-process. /api/pickers is public and CDN-cached, so its
+ * answer is the payload with every signal record's `perf` removed. The pages
+ * that show the Performance tab (PickerResultPage) read `perf` in-process from
+ * getPickersData, which this does not touch. Never mutates its input (it is the
+ * builder's shared memo).
+ */
+export function publicPickersPayload<T>(data: T): T {
+  const records = (data as { signalRecords?: unknown } | null)?.signalRecords;
+  if (!Array.isArray(records)) return data;
+  if (!records.some((r) => r && typeof r === "object" && "perf" in r)) return data;
+  const signalRecords = records.map((r) => {
+    if (!r || typeof r !== "object" || !("perf" in r)) return r;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(r as Record<string, unknown>)) {
+      if (k !== "perf") out[k] = v;
+    }
+    return out;
+  });
+  return { ...(data as object), signalRecords } as T;
+}
