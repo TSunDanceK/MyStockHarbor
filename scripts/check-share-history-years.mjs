@@ -118,7 +118,7 @@ const RULES = {
   "4a. the headline: arrow and hedged words, from the 3-year figure": (m) =>
     m.C.shareHeadline(-9.1, -12, "Sept 2021") === "▼ Down 9.1% over the last 3 years, which may reflect buybacks" &&
     m.C.shareHeadline(98.9, null, null).startsWith("▲ Up 98.9% over the last 3 years") &&
-    m.C.shareHeadline(0.4, null, null) === "≈ Share count roughly unchanged over the last 3 years" &&
+    m.C.shareHeadline(0.4, null, null) === "– Share count roughly unchanged over the last 3 years" &&
     m.C.shareHeadline(null, -5.5, "Dec 2023") === "▼ Down 5.5% since Dec 2023, which may reflect buybacks",
   "4b. the headline renders above the chart, and the footnote names the basis": (m) => {
     const h = m.render(m.aapl);

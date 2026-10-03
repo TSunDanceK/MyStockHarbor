@@ -118,7 +118,8 @@ export function shareHeadline(threePct: number | null, sincePct: number | null, 
   const pct = threePct ?? sincePct;
   if (pct === null || !Number.isFinite(pct)) return null;
   const when = threePct !== null ? "over the last 3 years" : since ? `since ${since}` : "";
-  if (Math.abs(pct) <= SHARE_FLAT_PCT) return `≈ Share count roughly unchanged ${when}`.trim();
+  // "–", NOT "≈": that glyph is reserved for estimates (check-estimate-glyph-reserved).
+  if (Math.abs(pct) <= SHARE_FLAT_PCT) return `– Share count roughly unchanged ${when}`.trim();
   return pct < 0
     ? `▼ Down ${Math.abs(pct).toFixed(1)}% ${when}, which may reflect buybacks`
     : `▲ Up ${pct.toFixed(1)}% ${when}: more shares can spread the same earnings and ownership thinner`;
