@@ -133,7 +133,11 @@ export async function GET(req: Request) {
   }
 
   if (await isUnwantedBot()) {
-    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    // The Tiingo path's no-store holds on this 403 too (#553 COWORK #105 nit).
+    return NextResponse.json(
+      { error: "Access denied" },
+      onTiingo ? { status: 403, headers: { "Cache-Control": TIINGO_HISTORY_CACHE_CONTROL } } : { status: 403 }
+    );
   }
 
   try {

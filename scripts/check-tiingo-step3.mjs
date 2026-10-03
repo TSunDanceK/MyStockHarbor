@@ -765,6 +765,7 @@ async function routeFails(routeSrc, helperSrc) {
   // BotID still runs on the Tiingo path.
   r = await call(GET, { env: TIINGO, headers: SAME, inputs: HIT_LONG, bot: true });
   want(`[tiingo] BotID still blocks a same-origin bot (${r.status})`, r.status === 403 && !hasBars(r) && r.reads === 0);
+  want(`[tiingo] the BotID 403 is no-store too (${r.cc})`, r.cc === NO_STORE);
 
   // A Tiingo miss falls back to FMP: still no-store, and it says "fmp".
   r = await call(GET, { env: TIINGO, headers: SAME, inputs: { row: null, bars: null } });
@@ -795,6 +796,7 @@ try {
     ["the Tiingo path keeps the public s-maxage", "route", /onTiingo \? TIINGO_HISTORY_CACHE_CONTROL : getCacheControlHeader\(\)/, "getCacheControlHeader()"],
     ["the Tiingo error answer is public", "route", /onTiingo \? TIINGO_HISTORY_CACHE_CONTROL : getErrorCacheControlHeader\(\)/, "getErrorCacheControlHeader()"],
     ["the Tiingo 403 is shared-cacheable", "route", /status: 403, headers: \{ "Cache-Control": TIINGO_HISTORY_CACHE_CONTROL \}/, 'status: 403, headers: { "Cache-Control": "public, s-maxage=900" }'],
+    ["the Tiingo BotID 403 is shared-cacheable", "route", /onTiingo \? \{ status: 403, headers: \{ "Cache-Control": TIINGO_HISTORY_CACHE_CONTROL \} \} : \{ status: 403 \}/, "{ status: 403 }"],
     ["days not clamped on the Tiingo path", "route", /\? tiingoHistoryDays\(searchParams\.get\("days"\)\)/, '? Math.max(30, Math.min(5000, Number(searchParams.get("days") || "365")))'],
     ["the same-origin check dropped", "route", /if \(onTiingo && !historyRequestSameOrigin\(req\.headers\)\.ok\) \{/, "if (false) {"],
     ["the same-origin check applied to the FMP path too", "route", /if \(onTiingo && !historyRequestSameOrigin\(req\.headers\)\.ok\) \{/, "if (!historyRequestSameOrigin(req.headers).ok) {"],
