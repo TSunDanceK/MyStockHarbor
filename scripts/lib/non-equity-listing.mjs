@@ -9,6 +9,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 export async function loadNonEquityListingOf(root = process.cwd()) {
+  return (await loadSecPrimaryListing(root)).nonEquityListingOf;
+}
+
+// The whole module, for scripts that need more than one of A's exports
+// (citedCoverFor, #552 COWORK #86b), loaded the same way.
+export async function loadSecPrimaryListing(root = process.cwd()) {
   const src = fs.readFileSync(path.join(root, "lib/server/secPrimaryListing.ts"), "utf8");
   const inlined = src.replace(/^import (\w+) from "@\/(data\/[^"]+\.json)";$/gm,
     (_, name, file) => `const ${name} = ${fs.readFileSync(path.join(root, file), "utf8")};`);
@@ -16,7 +22,7 @@ export async function loadNonEquityListingOf(root = process.cwd()) {
   const tmp = path.join(root, `lib/server/.nel-${process.pid}-${Math.random().toString(36).slice(2)}.ts`);
   fs.writeFileSync(tmp, inlined);
   try {
-    return (await import(pathToFileURL(tmp).href)).nonEquityListingOf;
+    return await import(pathToFileURL(tmp).href);
   } finally {
     fs.rmSync(tmp, { force: true });
   }

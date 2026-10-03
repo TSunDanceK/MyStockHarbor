@@ -27,8 +27,9 @@ const REGISTRANTS = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf
 const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries ?? {};
 
 // A's non-common listings (#553 COWORK #67), as the daily job passes them.
-const { loadNonEquityListingOf } = await import("./lib/non-equity-listing.mjs");
-const nonEquityListingOf = await loadNonEquityListingOf();
+// And A's cited 20-F / 40-F cover counts (#552 COWORK #86b), from the same module.
+const { loadSecPrimaryListing } = await import("./lib/non-equity-listing.mjs");
+const { nonEquityListingOf, citedCoverFor } = await loadSecPrimaryListing();
 
 const symbols = (await redis.hkeys("msh:price-pool:v1")).map(String);
 console.log(`universe: ${symbols.length} symbols (msh:price-pool:v1)`);
@@ -39,6 +40,7 @@ const result = await warmPickersSec(symbols, (s) => ({
   nonEquity: nonEquityListingOf(s),
   // The filer's SIC for A's bank gate on the ≈ Ent. Value (#553 COWORK #102), as the job passes it.
   sic: REGISTRANTS[s]?.sic ?? null,
+  citedCover: citedCoverFor(s),
 }), Date.now(), KEY);
 console.log(JSON.stringify(result));
 console.log(`key ${KEY}; field count now: ${await redis.hlen(KEY)}; seeded at ${new Date().toISOString()}`);

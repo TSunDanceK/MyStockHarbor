@@ -281,14 +281,51 @@ checks.push(
   checks.push(["SOMN with the mark: no P/E, no EPS, no market cap", refused.pe === null && refused.eps === null && refused.cap === null, JSON.stringify(refused)]);
   const unmarked = valued({ annualForm: "10-K" });
   checks.push(["...and without it the same set IS valued (so the mark is what refuses it)", unmarked.pe !== null && unmarked.cap !== null, JSON.stringify(unmarked)]);
-  const passes = (c) => /import \{ nonEquityListingOf \} from "[./]+lib\/server\/secPrimaryListing";/.test(c) && /ads: adsRatioFor\(s\),\s*nonEquity: nonEquityListingOf\(s\),/.test(c);
+  const passes = (c) => /import \{ (?:citedCoverFor, )?nonEquityListingOf \} from "[./]+lib\/server\/secPrimaryListing";/.test(c) && /ads: adsRatioFor\(s\),\s*nonEquity: nonEquityListingOf\(s\),/.test(c);
   checks.push(["the daily job passes A's non-common mark, imported", passes(job)]);
   const mutJob = job.replace(/\s*nonEquity: nonEquityListingOf\(s\),/, "");
   checks.push(["mutant caught: the job drops nonEquity (SOMN valued as SO's common again)", mutJob !== job && !passes(mutJob)]);
   const seed = readCodeOnly("scripts/pickers-sec-seed.mjs");
-  const seedPasses = (c) => /nonEquity: nonEquityListingOf\(s\),/.test(c) && /await loadNonEquityListingOf\(\)/.test(c);
+  const seedPasses = (c) => /nonEquity: nonEquityListingOf\(s\),/.test(c) && /\{ nonEquityListingOf, citedCoverFor \} = await loadSecPrimaryListing\(\)/.test(c);
   checks.push(["the seed passes the same mark, through A's module", seedPasses(seed)]);
   checks.push(["mutant caught: the seed drops nonEquity", !seedPasses(seed.replace("nonEquity: nonEquityListingOf(s),", ""))]);
+}
+
+// ── A CITED 20-F / 40-F COVER COUNT REACHES PICKERS (#552 COWORK #86b, #92 Q2) ─
+// A's citedCoverFor gives a current share count where the stored dei count is
+// old (BIP's is as of 2020). The stock and earnings pages pass it; without it
+// Pickers kept refusing those names. A's rule decides (newer than dei only);
+// this checks that the job and the seed pass it, and that the row honours it.
+{
+  const mod = await loadSibling(MODULE, src);
+  const base = fixture("AAPL");
+  const capWith = (filer) => {
+    const row = JSON.parse(JSON.stringify(mod.buildSecPickerRow(base, TODAY, filer, NOW)));
+    return mod.applySecPickerRow(row, PRICE).marketCap;
+  };
+  const deiAsOf = base.cover?.asOf;
+  const newer = { val: 12_345_678_900, asOf: "2026-09-01", source: "fixture" };
+  const older = { val: 12_345_678_900, asOf: "2001-01-01", source: "fixture" };
+  checks.push(["fixture's dei cover date is older than the cited fixture date", Boolean(deiAsOf) && deiAsOf < newer.asOf, String(deiAsOf)]);
+  const capNewer = capWith({ annualForm: "10-K", citedCover: newer });
+  checks.push(["a NEWER cited cover count prices the row (cap = cited count × price)", Math.abs(capNewer - newer.val * PRICE) < 1, String(capNewer)]);
+  const capOlder = capWith({ annualForm: "10-K", citedCover: older });
+  const capNone = capWith({ annualForm: "10-K" });
+  checks.push(["an OLDER cited count leaves the dei count in place (A's newer-only rule)", capOlder === capNone && capNone !== capNewer, `${capOlder} vs ${capNone}`]);
+
+  const P = await import(pathToFileURL(path.join(ROOT, "scripts/lib/non-equity-listing.mjs")).href);
+  const L = await P.loadSecPrimaryListing(ROOT);
+  checks.push(["the loader exposes A's citedCoverFor and nonEquityListingOf from one module", typeof L.citedCoverFor === "function" && typeof L.nonEquityListingOf === "function"]);
+
+  const jobPasses = (c) => /import \{ citedCoverFor, nonEquityListingOf \} from "[./]+lib\/server\/secPrimaryListing";/.test(c) &&
+    /nonEquity: nonEquityListingOf\(s\),[\s\S]{0,400}?citedCover: citedCoverFor\(s\),\s*\}\)\)/.test(c);
+  checks.push(["the daily job passes A's cited cover, imported", jobPasses(job)]);
+  checks.push(["mutant caught: the job drops citedCover", !jobPasses(job.replace(/\s*citedCover: citedCoverFor\(s\),/, ""))]);
+  checks.push(["mutant caught: the job passes null instead", !jobPasses(job.replace("citedCover: citedCoverFor(s),", "citedCover: null,"))]);
+  const seed = readCodeOnly("scripts/pickers-sec-seed.mjs");
+  const seedCited = (c) => /citedCover: citedCoverFor\(s\),\s*\}\), Date\.now\(\), KEY\)/.test(c) && /\{ nonEquityListingOf, citedCoverFor \} = await loadSecPrimaryListing\(\)/.test(c);
+  checks.push(["the seed passes the same cited cover, through A's module", seedCited(seed)]);
+  checks.push(["mutant caught: the seed drops citedCover", !seedCited(seed.replace("citedCover: citedCoverFor(s),", ""))]);
 }
 
 // ── PRUNING ROWS NO LONGER TARGETED (#553 COWORK #60, CODE-B #51) ─────────────

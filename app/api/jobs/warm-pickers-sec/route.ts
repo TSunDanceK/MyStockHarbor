@@ -14,7 +14,7 @@ import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPickersSec } from "../../../../lib/server/pickersSecFundamentals";
 import { registrantFor } from "../../../../lib/server/stockProfile";
 import { adsRatioFor } from "../../../../lib/server/secAdsMap";
-import { nonEquityListingOf } from "../../../../lib/server/secPrimaryListing";
+import { citedCoverFor, nonEquityListingOf } from "../../../../lib/server/secPrimaryListing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +48,9 @@ async function handleGET(req: NextRequest) {
       // The filer's SIC for A's bank gate on the ≈ Ent. Value (#553 COWORK
       // #102), as the earnings snapshot passes it. A committed file, no Redis cost.
       sic: registrantFor(s)?.sic ?? null,
+      // A's cited 20-F / 40-F cover counts (#552 COWORK #86b, #92 Q2), as the
+      // stock and earnings pages pass them; used only when newer than dei.
+      citedCover: citedCoverFor(s),
     }));
     console.log("[warm-pickers-sec]", JSON.stringify(result));
     await recordJobRun("warm-pickers-sec", result.ok, {
