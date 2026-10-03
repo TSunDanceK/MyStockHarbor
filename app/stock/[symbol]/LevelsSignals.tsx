@@ -138,7 +138,7 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
         <div style={{ marginTop: 18 }}>
           <div style={gaugeHeadStyle}>
             <span style={{ fontWeight: 800, color: C.value }}><ReasonedValue text="MACD" reason={`${NOTES.macd} ${when}`} /></span>
-            {macd ? <span className="lsMacdPill" data-state={macd} style={pillStyle(macd)}>{macd === "above" ? "▲ " : macd === "below" ? "▼ " : "≈ "}{MACD_WORDS[macd].pill}</span> : <span>—</span>}
+            {macd ? <span className="lsMacdPill" data-state={macd} style={pillStyle(macd)}>{macd === "above" ? "▲ " : macd === "below" ? "▼ " : "– "}{MACD_WORDS[macd].pill}</span> : <span>—</span>}
           </div>
           <div className="lsMacdLine" style={{ marginTop: 6, fontSize: 13, color: C.muted }}>{macd ? MACD_WORDS[macd].line : "Momentum unavailable: not enough daily prices on file."}</div>
         </div>

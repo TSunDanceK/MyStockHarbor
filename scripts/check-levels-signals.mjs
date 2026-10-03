@@ -183,7 +183,7 @@ const mutants = [
   ["RSI: the marker at its value on the 0–100 bar, the page's zone words", "l", (s) => s.replace("return Math.max(0, Math.min(100, rsi));", "return rsi;")],
   ["MACD: where it sits against its signal line, never Bullish or Bearish", "l", (s) => s.replace('below: { pill: "Below signal",', 'below: { pill: "Bearish",')],
   ["MACD: where it sits against its signal line, never Bullish or Bearish", "l", (s) => s.replace('return tone === "green" ? "above" : tone === "red" ? "below" : "near";', 'return tone === "green" ? "below" : tone === "red" ? "above" : "near";')],
-  ["MACD: where it sits against its signal line, never Bullish or Bearish", "c", (s) => s.replace('{macd === "above" ? "▲ " : macd === "below" ? "▼ " : "≈ "}', "")],
+  ["MACD: where it sits against its signal line, never Bullish or Bearish", "c", (s) => s.replace('{macd === "above" ? "▲ " : macd === "below" ? "▼ " : "– "}', "")],
   ["never colour alone: each label's colour matches its side, which matches its height", "c", (s) => s.replace("<span style={{ fontSize: 13, fontWeight: 800, color: SIDE_COLOUR[m.side] }}>", "<span style={{ fontSize: 13, fontWeight: 800, color: SIDE_COLOUR.above }}>")],
   ["never colour alone: each label's colour matches its side, which matches its height", "c", (s) => s.replace("{marks.length > 1 ? <p className=\"lsKey\" style={noteStyle}>{LADDER_KEY}</p> : null}", "")],
   ["short history: each missing piece says why", "c", (s) => s.replace("p.ma200 == null ? `MA200: ${p.ma200Missing ?? \"not available\"}` : null,", "null,")],
