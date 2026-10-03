@@ -202,6 +202,20 @@ check("5b: every symbol with a stock page is in (the name file + the sitemap's c
   NAMES.every((s) => U.STOCK_PAGE_SYMBOLS.includes(s)) && ["VTI", "GLD", "KO", "BRK.B"].every((s) => U.STOCK_PAGE_SYMBOLS.includes(s)), `${U.STOCK_PAGE_SYMBOLS.length} listed`);
 check("5b: ...with debt dropped, ~2,580 symbols (the PR's cost figures assume this size)",
   pagesPlan.symbols.length >= 2400 && pagesPlan.symbols.length <= 3000 && pagesPlan.dropped.debt > 0 && pagesPlan.symbols.includes("BRK-B"), `${pagesPlan.symbols.length} kept, ${pagesPlan.dropped.debt} debt dropped`);
+// #553 CODE-B #116: the job guard's ceilings must fit the widened universe, or
+// the guard stops the first widened run (writes included) part-way through.
+{
+  const G = await real("lib/server/jobGuard.ts");
+  const n = pagesPlan.symbols.length;
+  const REQUESTED_CAP = 1000; // #121's requested set, at its cap
+  const eodRun = (n + REQUESTED_CAP) + Math.ceil((n + REQUESTED_CAP) / 100) * 4 + 20;
+  const pickersRun = (n + 100) + Math.ceil((n + 100) / 100) + 10;
+  const L = G.JOB_LIMITS;
+  check("job guard: tiingo-eod's ceilings are >= 2x / 3x a widened night",
+    L["tiingo-eod"].perRun >= 2 * eodRun && L["tiingo-eod"].perDay >= 3 * eodRun, `normal ~${eodRun}; ${JSON.stringify(L["tiingo-eod"])}`);
+  check("job guard: warm-pickers-sec's ceilings are >= 2x / 3x a widened run",
+    L["warm-pickers-sec"].perRun >= 2 * pickersRun && L["warm-pickers-sec"].perDay >= 3 * pickersRun, `normal ~${pickersRun}; ${JSON.stringify(L["warm-pickers-sec"])}`);
+}
 check("a stored list parses; an empty or junk one is null (the jobs fall back)",
   U.parseTiingoUniverse(JSON.stringify({ at: 1, symbols: ["aapl"] }))?.symbols.join() === "AAPL" &&
   U.parseTiingoUniverse({ at: 1, symbols: [] }) === null && U.parseTiingoUniverse("nope") === null && U.parseTiingoUniverse(null) === null);
