@@ -1310,6 +1310,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #86b P/B "not meaningful" threshold (#552 COWORK #92 Q1): counts only,
+  // read-only, no SEC requests, no values printed.
+  "write-pb-equity-cap-census": {
+    script: "scripts/pb-equity-cap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-pickers-marketcap-census": {
     script: "scripts/pickers-marketcap-census.mjs",
     args: () => [],
