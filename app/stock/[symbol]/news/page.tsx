@@ -605,7 +605,7 @@ export default async function StockNewsPage({ params }: Props) {
     quote, companyName, news, trend, lastClose, lastMA50, lastMA200,
     lastRsi, isDataUnavailable, priceVs50, priceVs200,
     recentHigh, recentLow, newsScore, earningsScore, detailedNews, compactNews,
-    history,
+    history, historySource,
   } = newsData;
 
   // ON SEC FILINGS SINCE 2026-09-21. This was getLatestEarningsData(), which
@@ -656,7 +656,11 @@ export default async function StockNewsPage({ params }: Props) {
   const leadSummary = buildLeadSummary({ symbol: upper, companyName, trend, newsScore, earningsScore });
   const whatItMeans = buildWhatItMeans({ symbol: upper, trend, newsScore, rsi: lastRsi, priceVs50 });
   const beyondHeadline = buildBeyondHeadline({ symbol: upper, newsScore, trend, recentHigh, recentLow });
-  const technicalRead = buildTechnicalRead({ symbol: upper, price: quote?.price ?? lastClose, ma50: lastMA50, ma200: lastMA200, trend, rsi: lastRsi, priceVs50, priceVs200 });
+  // ONE SOURCE PER READ (#563 COWORK #31 (a)): on the Tiingo history path the
+  // "last price" in the technical text is Tiingo's too (the hero's figure, or the
+  // newest stored close), never an FMP quote beside Tiingo moving averages.
+  const technicalPrice = historySource === "tiingo" ? heroPrice?.price ?? lastClose : quote?.price ?? lastClose;
+  const technicalRead = buildTechnicalRead({ symbol: upper, price: technicalPrice, ma50: lastMA50, ma200: lastMA200, trend, rsi: lastRsi, priceVs50, priceVs200 });
 
   const summaryByTitle = Object.fromEntries(
     detailedNews.map((item) => [item.title, getArticleSnippet(item, upper)]),
@@ -844,6 +848,12 @@ export default async function StockNewsPage({ params }: Props) {
                 <p style={bodyCopyStyle}>{technicalRead.trendText}</p>
                 <p style={bodyCopyStyle}>{technicalRead.momentumText}</p>
                 <p style={bodyCopyStyle}>{technicalRead.levelText}</p>
+                {/* The linked credit on the Tiingo history path (#563 COWORK #31 §5). */}
+                {historySource === "tiingo" ? (
+                  <p style={{ ...bodyCopyStyle, fontSize: 12, opacity: 0.7 }}>
+                    <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                  </p>
+                ) : null}
               </div>
             </section>
           </aside>
