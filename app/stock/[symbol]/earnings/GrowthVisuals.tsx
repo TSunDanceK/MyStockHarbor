@@ -21,6 +21,7 @@
 // guide lines, so the picture reads before anyone touches it.
 import { useState, type ReactNode } from "react";
 import type { GrowthVisualsData, GvPeriod, GvSeries } from "@/lib/growthVisuals";
+import { ReasonedValue } from "@/app/components/EstimatedValue";
 
 const C = {
   sales: "#3987e5",
@@ -52,7 +53,7 @@ function DerivedTag({ note }: { note: string | null }) {
 
 /** One chart: a title, the plot as a grid of columns, and the shared axis labels. */
 function Chart({
-  title, legend, periods, active, setActive, height, render, behind,
+  title, legend, periods, active, setActive, height, render, behind, over,
 }: {
   title: string;
   legend: ReactNode;
@@ -63,6 +64,12 @@ function Chart({
   render: (p: GvPeriod, i: number) => ReactNode;
   /** Drawn across the whole plot, under the columns (guide lines). */
   behind?: ReactNode;
+  /**
+   * Per column, ON TOP of the column buttons and outside them (#563 COWORK #52):
+   * a tag whose note opens on tap can't sit inside a <button>, so it sits here.
+   * The layer lets taps through to the columns except on what it draws.
+   */
+  over?: (p: GvPeriod, i: number) => ReactNode;
 }) {
   return (
     <div className="gvChart">
@@ -87,6 +94,11 @@ function Chart({
             {render(p, i)}
           </button>
         ))}
+        {over ? (
+          <span className="gvOver" style={{ gridTemplateColumns: `repeat(${periods.length}, minmax(0, 1fr))` }}>
+            {periods.map((p, i) => <span key={p.label} className="gvOverCol">{over(p, i)}</span>)}
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -168,11 +180,16 @@ function ProfitChart({ s, active, setActive }: { s: GvSeries; active: number; se
             ) : (
               <span className="gvPlBar" style={{ top: `${zero}%`, height: `${(-v / span) * 100}%`, background: C.loss, borderRadius: "0 0 4px 4px" }} />
             )}
-            {p.oneOff ? (
-              <abbr className="gvOneOff" title={p.oneOff} style={{ top: v !== null && v >= 0 ? `calc(${zero - (v / span) * 100}% - 16px)` : `calc(${zero}% - 16px)` }}>
-                one-off
-              </abbr>
-            ) : null}
+          </span>
+        );
+      }}
+      over={(p) => {
+        if (!p.oneOff) return null;
+        const v = p.profit?.val ?? null;
+        // The note opens on tap, keyboard and hover: A's ReasonedValue (#563 COWORK #51/#52).
+        return (
+          <span className="gvOneOff" style={{ top: v !== null && v >= 0 ? `calc(${zero - (v / span) * 100}% - 16px)` : `calc(${zero}% - 16px)` }}>
+            <ReasonedValue text="one-off" reason={p.oneOff} />
           </span>
         );
       }}
@@ -327,7 +344,9 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
         .gvPl, .gvDotWrap { position: absolute; inset: 0; }
         .gvZero { position: absolute; left: 0; right: 0; height: 1px; }
         .gvPlBar { position: absolute; left: 25%; right: 25%; max-width: 22px; margin: 0 auto; }
-        .gvOneOff { position: absolute; left: 0; right: 0; text-align: center; font-size: 10px; font-weight: 800; color: ${C.ink}; text-decoration: none; cursor: help; white-space: nowrap; }
+        .gvOver { position: absolute; inset: 0; display: grid; gap: 2px; pointer-events: none; }
+        .gvOverCol { position: relative; }
+        .gvOneOff { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 800; color: ${C.ink}; white-space: nowrap; pointer-events: auto; }
         .gvDot { position: absolute; left: calc(50% - 5px); width: 10px; height: 10px; border-radius: 999px; box-shadow: 0 0 0 2px #0b1220; }
         .gvAxis { margin-top: 2px; }
         .gvTick { text-align: center; font-size: 11px; white-space: nowrap; overflow: hidden; }

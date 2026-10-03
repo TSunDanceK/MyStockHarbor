@@ -26,7 +26,7 @@
 //
 //   node scripts/check-growth-visuals.mjs
 import fs from "node:fs";
-import { loadCards, html, visibleText, React } from "./lib/render-cards.mjs";
+import { loadCards, html, visibleText, React, reasonedValueUnit } from "./lib/render-cards.mjs";
 import { stripComments } from "./lib/source-code.mjs";
 
 let failures = 0;
@@ -39,7 +39,7 @@ const BUILDER = "lib/growthVisuals.ts";
 const COMPONENT = "app/stock/[symbol]/earnings/GrowthVisuals.tsx";
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 const appended = (builder, component) =>
-  `\nimport { useState } from "react";\n${strip(builder)}\n${strip(component).replace("export default function GrowthVisuals", "export function GrowthVisuals")}\n`;
+  `\n${reasonedValueUnit()}\n${strip(builder)}\n${strip(component).replace("export default function GrowthVisuals", "export function GrowthVisuals")}\n`;
 
 /** A's view stack plus C's two files, one transpiled unit (render-cards' method). */
 const load = (builder = fs.readFileSync(BUILDER, "utf8"), component = fs.readFileSync(COMPONENT, "utf8")) =>
@@ -149,9 +149,17 @@ const rules = {
   // say "one-off", so a text match passed with the tag gone.
   "ONDS as filed: no one-off tag (A's rule is false for Q2 FY2026)": ({ onds, markup }) =>
     onds.quarters.periods.every((x) => x.oneOff === null) && !/class="gvOneOff"/.test(markup(onds)),
-  "marker: the tag renders": ({ q1, markup }) =>
-    (markup(q1).match(/class="gvOneOff"/g) ?? []).length === 1 &&
-    /<abbr class="gvOneOff" title="Includes a large non-operating gain; see the filing\."/.test(markup(q1)),
+  // ON TAP, NOT HOVER ONLY (#563 COWORK #51/#52): A's ReasonedValue, and outside
+  // every column <button> (a button inside a button can't take the tap).
+  "marker: the tag renders": ({ q1, markup }) => {
+    const m = markup(q1), at = m.indexOf('class="gvOneOff"');
+    const tag = at < 0 ? "" : m.slice(at, m.indexOf("one-off</span>", at) + 7);
+    const before = m.slice(0, at);
+    return (m.match(/class="gvOneOff"/g) ?? []).length === 1 &&
+      /role="button"/.test(tag) && /tabindex="0"/.test(tag) &&
+      /title="Includes a large non-operating gain; see the filing\."/.test(tag) && tag.endsWith("one-off") &&
+      before.lastIndexOf("<button") < before.lastIndexOf("</button>") && !/<abbr class="gvOneOff"/.test(m);
+  },
   "loss-only: all losses, said plainly": ({ loss }) =>
     loss.quarters.periods.every((x) => x.profit.val < 0) && /it reported a net loss in all 8 quarters shown\.$/.test(loss.quarters.summary),
   "years without A's notes: no profit drawn, and it says why": ({ onds, M }) =>
@@ -185,7 +193,10 @@ const staticRules = {
     ![b, c].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory|resolveFactSet/.test(s)),
   "the client component imports only React and the builder's types": (b, c) => {
     const imports = [...c.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
-    return imports.every((i) => i === "react" || i === "@/lib/growthVisuals") && /^import type \{[^}]*\} from "@\/lib\/growthVisuals";$/m.test(c);
+    // Plus A's ReasonedValue for the one-off tag's note (#563 COWORK #52), by name only.
+    return imports.every((i) => i === "react" || i === "@/lib/growthVisuals" || i === "@/app/components/EstimatedValue") &&
+      /^import type \{[^}]*\} from "@\/lib\/growthVisuals";$/m.test(c) &&
+      (!/@\/app\/components\/EstimatedValue/.test(c) || /^import \{ ReasonedValue \} from "@\/app\/components\/EstimatedValue";$/m.test(c));
   },
   "the builder imports A's formatter rather than copying it": (b) =>
     /import \{ scaledAmount \} from "\.\/server\/secPresentation";/.test(b) && /scaledAmount\(cell\.val\)/.test(b),
@@ -219,7 +230,8 @@ const mutants = [
   ["wording: one pattern for the multiples in the panel", "b", (s) => s.replace("`operating costs were about ${", "`costs were about ${")],
   ["wording: one pattern for the multiples in the panel", "c", (s) => s.replace("(/%$/.test(text) ? `${kind} margin: ${text}` : text)", "`${kind} margin: ${text}`")],
   ["marker: on the quarter A's rule fired for, with A's words", "b", (s) => s.replace("(label === view.latestLabel && view.largeNonOperating", "(view.largeNonOperating")],
-  ["marker: the tag renders", "c", (s) => s.replace("{p.oneOff ? (\n              <abbr", "{false ? (\n              <abbr")],
+  ["marker: the tag renders", "c", (s) => s.replace("        if (!p.oneOff) return null;\n", "        return null;\n")],
+  ["marker: the tag renders", "c", (s) => s.replace('<ReasonedValue text="one-off" reason={p.oneOff} />', "<abbr title={p.oneOff}>one-off</abbr>")],
   ["loss-only: all losses, said plainly", "b", (s) => s.replace("losses === n ? `it reported a net loss in all", "false ? `it reported a net loss in all")],
   ["years without A's notes: no profit drawn, and it says why", "b", (s) => s.replace("profitMissing: profitChecked ? null : profitWaitsForOneOffs(yw.one),", "profitMissing: null,")],
   ["years without A's notes: no profit drawn, and it says why", "b", (s) => s.replace("        ...profitOf(a.label, a.netIncome),\n", "        profit: amount(a.netIncome),\n        oneOff: null,\n")],
@@ -242,6 +254,7 @@ for (const [name, which, mutate] of mutants) {
 const staticMutants = [
   ["no fetch, no Redis, no server reads in either file", (b, c) => [b, `${c}\nconst x = fetch("/api/quote");`]],
   ["the client component imports only React and the builder's types", (b, c) => [b, `import { scaledAmount } from "@/lib/server/secPresentation";\n${c}`]],
+  ["the client component imports only React and the builder's types", (b, c) => [b, c.replace("import { ReasonedValue } from", "import { ReasonedValue, notePlacement } from")]],
   ["the builder imports A's formatter rather than copying it", (b, c) => [b.replace("scaledAmount(cell.val)", "money(cell.val)"), c]],
 ];
 for (const [name, mutate] of staticMutants) {
