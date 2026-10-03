@@ -377,11 +377,26 @@ export function sharesUnconfirmed(
  * corrections above. `listedFrom`: the first periodic report's own period end
  * (data/sec/first-periodic.json), or null when unknown.
  */
+/**
+ * A FISCAL YEAR THAT STARTED BEFORE THE LISTING IS NOT A LISTED YEAR (#552
+ * COWORK #136). Its twelve-month average mixes in pre-listing months (CRCL's
+ * FY2025 against its first 10-Q for June 2025) and reads as a false step. The
+ * listing date is the first periodic report's period END, so a year counts as
+ * listed only when it ends at least this long after it: the year began no
+ * earlier than that first reported quarter.
+ */
+export const SHARE_YEAR_AFTER_LISTING_DAYS = 273;
+
 export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?: string | null } = {}): ShareHistory | null {
   if (!set) return null;
-  const raw = rawShareSeries(set);
-  if (!raw) return null;
-  const fixed = correctShareSeries(raw.points, set.asr ?? [], opts.listedFrom ?? null, set.asf ?? []);
+  const rawAll = rawShareSeries(set);
+  if (!rawAll) return null;
+  const listedFrom = opts.listedFrom ?? null;
+  const filedQuarters = new Set(seriesOf(set.quarters ?? []).map((q) => q.date));
+  const raw = listedFrom
+    ? { ...rawAll, points: rawAll.points.filter((p) => filedQuarters.has(p.date) || p.date < listedFrom || days(listedFrom, p.date) >= SHARE_YEAR_AFTER_LISTING_DAYS) }
+    : rawAll;
+  const fixed = correctShareSeries(raw.points, set.asr ?? [], listedFrom, set.asf ?? []);
   // THE UNITS CHECK (#552 COWORK #121). PAC's kept segment read 505.28B
   // shares; the cover page says 505.28M. The newest counts must agree with the
   // cover-page count within SHARE_UNITS_MAX_FACTOR (wide enough for a cover
@@ -405,8 +420,7 @@ export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?
   }
   const gaps = shareGaps(fixed.points, fixed.dropped);
   // QUARTERS WITH A SHARE COUNT: a stored Q4 row carries none, and its slot is a year's.
-  const quarterDates = new Set(seriesOf(set.quarters ?? []).map((q) => q.date));
-  const yearEnds = fixed.points.filter((p) => !quarterDates.has(p.date)).map((p) => p.date);
+  const yearEnds = fixed.points.filter((p) => !filedQuarters.has(p.date)).map((p) => p.date);
   return {
     points: fixed.points,
     basis: raw.basis,
