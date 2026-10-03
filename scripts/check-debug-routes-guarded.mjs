@@ -14,7 +14,8 @@
 //                                   which is the meter that suspended the
 //                                   database on 2026-08-28.
 //   plus symbol-search, earnings/[symbol], index-changes, ipo-calendar,
-//   picker-structure, universe-size and stock-earnings-debug/[symbol].
+//   picker-structure and universe-size. (stock-earnings-debug/[symbol] was
+//   deleted outright in #553 CODE-B #94 B10.)
 //
 // robots.ts disallows /api/, which keeps well-behaved crawlers out. Scrapers do
 // not read robots -- that is why this site runs a firewall, and the firewall

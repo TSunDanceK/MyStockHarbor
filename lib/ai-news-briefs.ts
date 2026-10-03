@@ -126,7 +126,7 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
     "You are given no price or chart data: do not describe the share price, its trend, moving averages, momentum indicators or price levels. " +
     "Any field that is null was not available. Do not describe it, do not guess it, and do not treat a missing news score as neutral -- neutral is a real reading and this field is absent, not neutral. " +
     "Return one output item for each input article in the exact same order. " +
-    "The page already shows the original headline and FMP feed excerpt, so do not rewrite or summarise the article. " +
+    "The page already shows the original headline and feed excerpt, so do not rewrite or summarise the article. " +
     "Set summary to an empty string unless a few words are needed for valid JSON. " +
     "Use whyItMatters for one short investor-focused sentence explaining why the item could matter for sentiment, earnings expectations, regulation, demand, margins, or valuation. " +
     "If the article appears vague, recycled, thin, or low-information, say what traders may watch instead. " +

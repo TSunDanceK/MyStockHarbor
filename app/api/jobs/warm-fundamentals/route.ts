@@ -69,10 +69,16 @@ async function handleGET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (!process.env.FMP_API_KEY) {
-    return NextResponse.json(
-      { error: "Missing FMP_API_KEY environment variable." },
-      { status: 500 }
-    );
+    // NO KEY IS A HEALTHY SKIP, NOT A FAILURE (#553 CODE-B #94, FMP-off). This
+    // used to answer 500 on every run once Production dropped the key -- about
+    // 170 red runs a day across this job, warm-earnings, warm-fundamentals and
+    // warm-stock-data -- for a job with nothing it can do. Mirrors the
+    // warm-price-pool no-key skip: recorded as ok + skipped, so /cache-health
+    // shows a skip rather than either a failure or silence.
+    // Nothing runs without the key: warmFundamentals() itself bails with
+    // "no-fmp-key", so the target derivation is skipped as well.
+    await recordJobRun("warm-fundamentals", true, { skipped: true, reason: "no FMP_API_KEY" });
+    return NextResponse.json({ ok: true, skipped: true, reason: "no FMP_API_KEY" });
   }
 
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";

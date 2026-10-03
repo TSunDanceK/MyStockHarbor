@@ -23,7 +23,14 @@
 //   7. #91: n/a only on an empty cell (a bank's filed figure keeps it); no
 //      hard-coded ticker list in the reasons; a refusal A adds without words
 //      fails here.
-//   8. Mutants: each rule above broken once, and caught.
+//   8. #103 (2026-10-03): the table note is the TAB's -- the SEC wording only
+//      on tabs whose visible columns all come from the filings, the word cells
+//      named on exactly the tabs that can show them -- with "Tap" on touch
+//      (rendered, plus the CSS media rule); the .whyPop popover fits a 360 px
+//      screen (static CSS rule, plus the shift's arithmetic); and an FCF of
+//      exactly 0 reads "–" with its own reason, not "Neg." (behavioural, on a
+//      fixture variant).
+//   9. Mutants: each rule above broken once, and caught.
 //
 // No Redis, no network: fixtures and source only.
 //
@@ -101,6 +108,13 @@ async function suite(mod, words, union = refusalUnion) {
     cases.push({ name: `${s} no price`, row, price: null, industry: null });
     cases.push({ name: `${s} as a bank`, row, price: PRICE, industry: "Banks - Regional" });
   }
+  // #103: a filer whose free cash flow is exactly 0 (KTOS's row, FCF zeroed).
+  const ktos = cases.find((c) => c.name === "KTOS");
+  if (ktos) {
+    const zero = JSON.parse(JSON.stringify(ktos.row));
+    zero.freeCashFlow = 0;
+    cases.push({ name: "KTOS with FCF of 0", row: zero, price: PRICE, industry: "Software - Application" });
+  }
   const nonUsd = JSON.parse(JSON.stringify(cases[0].row));
   nonUsd.unit = { reporting: "COP", converted: false };
   cases.push({ name: "AAPL in unconverted pesos", row: nonUsd, price: PRICE, industry: null });
@@ -127,6 +141,17 @@ async function suite(mod, words, union = refusalUnion) {
     ["marketCap", "ps", "pb"].every((k) => at("AZN")[k] && at("AZN")[k] === at("AZN").marketCap) &&
       ["noShr", "adsS", "multi"].includes(at("AZN").marketCap), JSON.stringify(at("AZN")));
   want("KTOS: negative free cash flow is said as such on P/FCF", at("KTOS").pfcf === "fcfNeg", String(at("KTOS").pfcf));
+  // #103: zero is not negative. FCF of exactly 0 -> "–" with its own reason.
+  {
+    const z = byName["KTOS with FCF of 0"];
+    want("FCF of 0: the fixture variant ran", Boolean(z));
+    const code = z?.why.pfcf;
+    const m = words.cellMark("pfcf", code);
+    want("FCF of 0: P/FCF carries the zero-FCF reason, not the negative one", code === "fcf0", String(code));
+    want("FCF of 0: P/FCF reads '–', not 'Neg.'", m.mark === "–" && !m.word, JSON.stringify(m));
+    want("FCF of 0: the reason says free cash flow is zero", /free cash flow is zero/i.test(words.cellWhyWords(code)) && words.cellWhyWords(code) !== words.CELL_WHY_DEFAULT, words.cellWhyWords(code));
+    want("FCF of 0: the FCF column itself still shows the 0", z?.f.freeCashFlow === 0 && z?.why.fcf === undefined, String(z?.f.freeCashFlow));
+  }
   want("a bank's empty Ent. Value / P/S / P/FCF read n/a",
     Object.entries(at("KTOS as a bank")).filter(([k]) => ["ev", "ps", "pfcf"].includes(k)).every(([, v]) => words.NOT_APPLICABLE_CODES.has(v)) &&
       at("KTOS as a bank").pfcf === "naFcf" && at("AZN as a bank").ps === "naPs" && at("AZN as a bank").ev === "naEv",
@@ -242,7 +267,7 @@ function uiRules(gridSrc, pageSrc, marksSource = marksSrc) {
   want("the grid hands the mark its word", /return <WhyMark text=\{why\.text\} mark=\{why\.mark\} word=\{why\.word\}/.test(g));
   want("the grid sorts through compareForSort", /return compareForSort\(sortCol\.get\(a, da\), sortCol\.get\(b, db\), sortCol\.sortType, sort\.dir\);/.test(g));
   want("the grid's filed figures go through BasisCell", /return <BasisCell value=\{value\} basis=\{basis\} inert=\{inert\} \/>;/.test(g));
-  want("the table note is printed", /<p className="cellWhyNote">\{CELL_WHY_TABLE_NOTE\}<\/p>/.test(g));
+  want("the table note is printed (the active tab's, #103)", /<CellWhyNote tab=\{activeTab\} \/>/.test(g));
   want("the page falls back to the committed name", /if \(entry\.companyName\) continue;\s*const name = cleanName\(gridCompanyName\(entry\.symbol\)\);/.test(p));
   return fails;
 }
@@ -251,6 +276,107 @@ const pageSrc = read(PAGE);
 const ui = uiRules(gridSrc, pageSrc);
 for (const f of ui) check(f, false);
 check("the page and grid rules hold", ui.length === 0);
+
+// ── 8. #103: the per-tab note, the tap wording, the popover clamp ─────────
+// The tab -> visible columns map is read from the grid's own column sets (less
+// the hidden-fields registry), so a tab's note is judged against what the tab
+// actually shows, not a list kept here.
+const HIDDEN = await import(pathToFileURL(path.join(ROOT, "lib/pickerHiddenFields.ts")).href);
+const OWNER_SEC_LEAD = "Figures come from company SEC filings; '–' means the filing doesn't give enough to calculate it";
+function tabColumns(gridSource) {
+  const block = /const sets: Record<TabKey, Col\[\]> = \{([\s\S]*?)\n\s*\};/.exec(gridSource)?.[1] ?? "";
+  const out = {};
+  for (const m of block.matchAll(/(\w+): \[([^\]]*)\]/g)) {
+    out[m[1]] = m[2].split(",").map((x) => x.trim()).filter((k) => k && k !== "symbol" && k !== "name" && !HIDDEN.HIDDEN_COLUMN_KEYS.has(k));
+  }
+  return out;
+}
+/** The popover's max-width at a viewport width, from the CSS value: min(), px, vw, calc(100vw - Npx). */
+function maxWidthAt(value, vw) {
+  const inner = /^min\((.*)\)$/.exec(value.trim())?.[1] ?? value;
+  const args = inner.split(/,(?![^(]*\))/).map((a) => a.trim());
+  const px = args.map((a) => {
+    let m;
+    if ((m = /^(\d+(?:\.\d+)?)px$/.exec(a))) return Number(m[1]);
+    if ((m = /^(\d+(?:\.\d+)?)vw$/.exec(a))) return (Number(m[1]) * vw) / 100;
+    if ((m = /^calc\(100vw - (\d+(?:\.\d+)?)px\)$/.exec(a))) return vw - Number(m[1]);
+    return NaN;
+  });
+  return px.some((n) => !Number.isFinite(n)) ? NaN : Math.min(...px);
+}
+function noteRules(gridSource, M, words) {
+  const fails = [];
+  const want = (label, ok, detail = "") => { if (!ok) fails.push(`${label}${detail ? ` — ${detail}` : ""}`); };
+  const g = stripComments(gridSource, { file: GRID });
+  const cols = tabColumns(gridSource);
+  want("#103: the grid's tab column sets were read", Object.keys(cols).length >= 5 && (cols.valuation ?? []).includes("pfcf"), JSON.stringify(cols));
+  const filings = new Set(words.CELL_WHY_COLUMNS);
+  const WORD_MARKS = ["Loss", "Neg.", "n/a"];
+  for (const [tab, keys] of Object.entries(cols)) {
+    const note = words.CELL_WHY_TABLE_NOTE_BY_TAB?.[tab];
+    want(`#103 ${tab}: has its own table note`, typeof note === "string" && note.length > 20, String(note));
+    if (typeof note !== "string") continue;
+    const allFilings = keys.length > 0 && keys.every((k) => filings.has(k));
+    if (allFilings) want(`#103 ${tab}: every column is from the filings, so the note keeps the owner's SEC wording`, note.startsWith(OWNER_SEC_LEAD), note);
+    else want(`#103 ${tab}: not every column is from the filings, so the note does not claim they all are`, !note.includes("Figures come from company SEC filings"), note);
+    const canShow = new Set(keys.flatMap((k) => Object.values(words.CELL_WORDS[k] ?? {})));
+    const named = new Set(WORD_MARKS.filter((w) => note.includes(`'${w}'`)));
+    want(`#103 ${tab}: names exactly the word cells its columns can show`,
+      [...canShow].every((w) => named.has(w)) && [...named].every((w) => canShow.has(w)), `can show ${[...canShow].join("/") || "none"}, names ${[...named].join("/") || "none"}`);
+    want(`#103 ${tab}: the note leaves the hover/tap action to CELL_WHY_ACTION`, !/\b(Hover|Tap)\b/.test(note), note);
+    const h = renderToStaticMarkup(React.createElement(M.CellWhyNote, { tab }));
+    want(`#103 ${tab}: rendered note carries the tab's words, then hover and tap`,
+      h.startsWith('<p class="cellWhyNote">') && h.includes(note.replace(/'/g, "&#x27;")) &&
+        h.includes(`<span class="cellWhyHover">${words.CELL_WHY_ACTION.hover}</span><span class="cellWhyTap">${words.CELL_WHY_ACTION.tap}</span>`), h);
+  }
+  want("#103: the action says Hover on a pointer and Tap on touch",
+    /^Hover\b/.test(words.CELL_WHY_ACTION?.hover ?? "") && /^Tap\b/.test(words.CELL_WHY_ACTION?.tap ?? ""), JSON.stringify(words.CELL_WHY_ACTION));
+  want("#103: the grid prints the active tab's note", /<CellWhyNote tab=\{activeTab\} \/>/.test(g) && !/\{CELL_WHY_TABLE_NOTE\}/.test(g));
+  // Static CSS: tap shown only on touch, hover hidden there.
+  want("#103 CSS: 'Tap for why.' is hidden by default",
+    /\.cellWhyTap \{ display: none; \}/.test(gridSource));
+  want("#103 CSS: (hover: none) / (pointer: coarse) swaps hover for tap",
+    /@media \(hover: none\), \(pointer: coarse\) \{\s*\.cellWhyHover \{ display: none; \}\s*\.cellWhyTap \{ display: inline; \}\s*\}/.test(gridSource));
+  // Static CSS: the popover.
+  const pop = /\.whyPop \{([^}]*)\}/.exec(gridSource)?.[1] ?? "";
+  const decl = (prop) => new RegExp(`(?:^|;|\\s)${prop}:\\s*([^;]+);`).exec(pop)?.[1]?.trim();
+  want("#103 CSS: .whyPop is found", pop.length > 0);
+  want("#103 CSS: .whyPop is anchored to the mark's right edge, not centred",
+    decl("right") === "0" && decl("left") !== "50%" && !/translateX\(-50%\)/.test(pop), pop.replace(/\s+/g, " ").trim().slice(0, 160));
+  want("#103 CSS: .whyPop takes the edge-clamp shift", decl("transform") === "translateX(var(--why-shift, 0px))", String(decl("transform")));
+  const mw = decl("max-width") ?? "";
+  for (const vw of [240, 300, 360]) {
+    const w = maxWidthAt(mw, vw);
+    want(`#103 CSS: .whyPop fits a ${vw} px screen with the gutter`, Number.isFinite(w) && w <= vw - 2 * words.WHY_POP_GUTTER, `${mw} -> ${w}`);
+  }
+  // The arithmetic: at 360 px, a popover of the CSS width hung off a mark
+  // anywhere across the screen ends up inside it once shifted.
+  const vw = 360;
+  const width = maxWidthAt(mw, vw);
+  const bad = [];
+  if (Number.isFinite(width) && typeof words.whyPopShift === "function") {
+    for (let markRight = 12; markRight <= vw; markRight += 4) {
+      const left = markRight - width;
+      const shift = words.whyPopShift(left, markRight, vw);
+      if (left + shift < 0 || markRight + shift > vw) bad.push(markRight);
+    }
+  } else bad.push("no width or no whyPopShift");
+  want("#103: at 360 px the popover never leaves the screen, at either edge", bad.length === 0, bad.slice(0, 5).join(","));
+  want("#103: a popover that already fits is not moved", typeof words.whyPopShift === "function" && words.whyPopShift(50, 250, 360) === 0);
+  return fails;
+}
+const W103 = W;
+{
+  let fails;
+  try { fails = noteRules(gridSrc, await loadMarks(marksSrc), W103); } catch (err) { fails = [String(err)]; }
+  for (const f of fails) check(f, false);
+  check("#103: the per-tab note, tap wording and popover clamp hold", fails.length === 0);
+}
+{
+  const mk = stripComments(marksSrc, { file: MARKS });
+  check("#103: the open popover is measured and clamped", /<span className="whyPop" role="tooltip" ref=\{clampPop\}>/.test(mk) &&
+    /const shift = whyPopShift\(r\.left, r\.right, /.test(mk) && /el\.style\.setProperty\("--why-shift"/.test(mk));
+}
 
 // ── 4. MKC-V's name ─────────────────────────────────────────────────────────
 // The snapshot is the page's committed floor (gridCompanyName reads it first;
@@ -264,7 +390,8 @@ check("the page and grid rules hold", ui.length === 0);
 // ── 5. mutants ──────────────────────────────────────────────────────────────
 const MODULE_MUTANTS = [
   ["a refusal loses its code", `  "no-cover-share-count": "noShr",\n`, ""],
-  ["negative FCF is not explained", `row.freeCashFlow === null ? "noFcf" : "fcfNeg"`, `row.freeCashFlow === null ? "noFcf" : (undefined as unknown as CellWhyCode)`],
+  ["negative FCF is not explained", `row.freeCashFlow === 0 ? "fcf0" : "fcfNeg"`, `row.freeCashFlow === 0 ? "fcf0" : (undefined as unknown as CellWhyCode)`],
+  ["#103: an FCF of 0 reads Neg. again", `row.freeCashFlow === 0 ? "fcf0" : "fcfNeg"`, `"fcfNeg"`],
   ["a bank's P/S is a plain dash", `bank ? "naPs" :`, ``],
 ];
 for (const [label, from, to] of MODULE_MUTANTS) {
@@ -339,6 +466,52 @@ for (const [label, from, to] of WORD_MUTANTS) {
     let fails;
     try { fails = renderRules(await loadMarks(m), W); } catch (err) { fails = [String(err)]; }
     check(`mutant "the FY marker after the value" is caught`, fails.length > 0, fails[0] ?? "no assertion failed");
+  }
+}
+
+// #103 mutants: the per-tab note, tap wording, popover clamp.
+{
+  const NOTE_MUTANTS = [
+    ["#103: the Performance tab claims SEC filings", "words", `  performance:\n    "Returns are calculated from price history`, `  performance:\n    "Figures come from company SEC filings; Returns are calculated from price history`],
+    ["#103: Valuation stops naming 'Neg.'", "words", `'Loss', 'Neg.' or 'n/a' means a ratio`, `'Loss' or 'n/a' means a ratio`],
+    ["#103: General names a word it never shows", "words", `'Loss' means earnings per share`, `'Loss' or 'Neg.' means earnings per share`],
+    ["#103: the shift never moves the popover", "words", `  if (right > viewport - gutter) return`, `  if (left === left) return 0;\n  if (right > viewport - gutter) return`],
+    ["#103: the note renders hover only", "marks", `      <span className="cellWhyTap">{CELL_WHY_ACTION.tap}</span>\n`, ``],
+    ["#103: touch still says hover (media rule gone)", "grid", `@media (hover: none), (pointer: coarse) {`, `@media (max-width: 1px) {`],
+    ["#103: the tap line is always shown", "grid", `.cellWhyTap { display: none; }`, `.cellWhyTap { display: inline; }`],
+    ["#103: the popover centred again", "grid", `right: 0; left: auto; top: calc(100% + 6px); transform: translateX(var(--why-shift, 0px));`, `left: 50%; top: calc(100% + 6px); transform: translateX(-50%);`],
+    ["#103: the popover wider than a small screen", "grid", `max-width: min(260px, calc(100vw - 16px));`, `max-width: min(260px, 120vw);`],
+    ["#103: the grid prints the one note again", "grid", `<CellWhyNote tab={activeTab} />`, `<p className="cellWhyNote">{CELL_WHY_TABLE_NOTE}</p>`],
+  ];
+  for (const [label, where, from, to] of NOTE_MUTANTS) {
+    const src = where === "words" ? wordsSrc : where === "marks" ? marksSrc : gridSrc;
+    if (!src.includes(from)) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
+    let fails;
+    try {
+      const m = src.replace(from, to);
+      if (where === "words") {
+        const href = pathToFileURL(path.join(ROOT, "scripts", `.check-why-words-${process.pid}-${seq++}.ts`));
+        fs.writeFileSync(href, m);
+        try {
+          const mw = await import(href.href);
+          fails = noteRules(gridSrc, await loadMarks(marksSrc, href.href), mw);
+        } finally { fs.rmSync(href, { force: true }); }
+      } else if (where === "marks") fails = noteRules(gridSrc, await loadMarks(m), W103);
+      else fails = noteRules(m, await loadMarks(marksSrc), W103);
+    } catch (err) { fails = [String(err)]; }
+    check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no assertion failed");
+  }
+  // The popover is no longer measured (ref dropped).
+  const from = `role="tooltip" ref={clampPop}>`;
+  const mk = stripComments(marksSrc.replace(from, `role="tooltip">`), { file: MARKS });
+  check(`mutant "#103: the open popover is not clamped" is caught`, marksSrc.includes(from) && !/<span className="whyPop" role="tooltip" ref=\{clampPop\}>/.test(mk));
+  // FCF of 0 given the "Neg." word.
+  const wFrom = `  pfcf: { fcfNeg: "Neg.", naFcf: "n/a" },\n`;
+  if (!wordsSrc.includes(wFrom)) check(`mutant "#103: an FCF of 0 shows Neg." applies`, false, "the replacement matched nothing");
+  else {
+    let fails;
+    try { fails = await suite(await import(pathToFileURL(path.join(ROOT, MODULE)).href), await loadSibling(WORDS, wordsSrc.replace(wFrom, `  pfcf: { fcfNeg: "Neg.", fcf0: "Neg.", naFcf: "n/a" },\n`))); } catch (err) { fails = [String(err)]; }
+    check(`mutant "#103: an FCF of 0 shows Neg." is caught`, fails.length > 0, fails[0] ?? "no assertion failed");
   }
 }
 

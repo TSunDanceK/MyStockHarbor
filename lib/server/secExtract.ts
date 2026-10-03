@@ -335,6 +335,13 @@ export type ExtractResult = {
    */
   annualShares?: [string, number][];
   /**
+   * THE BALANCE-SHEET NONCONTROLLING INTEREST (us-gaap MinorityInterest) on the
+   * stored instants' dates, `[date, USD]`, newest first. An extra, not a field:
+   * see minorityInterestAt (below). Absent when the filer tags none, or
+   * reports in another currency.
+   */
+  nci?: [string, number][];
+  /**
    * THE NEWEST QUARTER'S YEAR-TO-DATE FRAME, WHEN ITS OWN CASH FLOW CANNOT BE
    * DERIVED (#552 COWORK #37). A first-time filer's Q2 10-Q carries cash flow
    * for six months only: there is no Q1 frame to difference against, so the
@@ -1510,6 +1517,8 @@ function extractCompanyFactsWith(
     keepInstants
   );
 
+  const nci = minorityInterestAt(facts, instants.map((i) => i.end), currency);
+
   return {
     symbol,
     cik: typeof facts.cik === "number" ? facts.cik : null,
@@ -1531,11 +1540,36 @@ function extractCompanyFactsWith(
     ),
     annualShares: annualShareSeries(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null, naming.yearEnd),
     ...(ytd ? { ytd } : {}),
+    ...(nci.length ? { nci } : {}),
     untagged: SEC_FIELDS.filter((f) => !fieldIsTagged(facts, f)).map((f) => f.key),
     readNamespaces: countReadNamespaces([...quarters, ...years, ...instants]),
     summedSga: summedSgaPeriods([...quarters, ...years]),
     notes,
   };
+}
+
+/**
+ * THE BALANCE-SHEET NCI, for the derived P/B (lib/server/secEstimates, M6a):
+ * us-gaap MinorityInterest (the balance-sheet noncontrolling
+ * interest) on the given balance-sheet dates, newest filing wins, USD only.
+ *
+ * STORED AS AN EXTRA, NOT A FIELD. A new field moves secFieldsHash, which makes
+ * every stored set unreadable at once; an extra fills in as each set is next
+ * refreshed. A non-USD reporter gets none: its instants are converted by the
+ * cron after extraction and this would not be, so it is left out rather than
+ * mixed (its P/B keeps today's refusal).
+ */
+export function minorityInterestAt(facts: CompanyFacts, dates: string[], currency: string): [string, number][] {
+  if (currency !== "USD" || !dates.length) return [];
+  const rows = facts.facts?.["us-gaap"]?.["MinorityInterest"]?.units?.USD ?? [];
+  const want = new Set(dates);
+  const best = new Map<string, { val: number; filed: string }>();
+  for (const r of rows) {
+    if (r.start || !r.end || !want.has(r.end) || typeof r.val !== "number" || !Number.isFinite(r.val)) continue;
+    const prior = best.get(r.end);
+    if (!prior || (r.filed ?? "") > prior.filed) best.set(r.end, { val: r.val, filed: r.filed ?? "" });
+  }
+  return [...best].map(([e, x]) => [e, x.val] as [string, number]).sort((a, b) => b[0].localeCompare(a[0]));
 }
 
 /**

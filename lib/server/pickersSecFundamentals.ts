@@ -429,6 +429,7 @@ export const WHY_FOR_REFUSAL: Record<ValuationRefusal, CellWhyCode> = {
   "no-balance-sheet-equity": "noEq",
   "equity-tagged-only-incl-nci": "eqNci",
   "equity-is-zero-or-negative": "eqNeg",
+  "equity-too-small-for-pb": "eqSmall",
   "enterprise-value-input-missing": "evIn",
   "ebitda-is-zero-or-negative": "ebitNeg",
 };
@@ -470,7 +471,7 @@ export function secPickerWhy(
   set("pb", figures.pbRatio, () => (figures.marketCap === null ? capWhy : usd ? why(mult.pb) ?? "noEq" : "fx"));
   set("ev", figures.enterpriseValue, () => (bank ? "naEv" : figures.marketCap === null ? capWhy : usd ? "evIn" : "fx"));
   set("pfcf", figures.pfcfRatio, () =>
-    bank ? "naFcf" : figures.marketCap === null ? capWhy : !usd ? "fx" : row.freeCashFlow === null ? "noFcf" : "fcfNeg");
+    bank ? "naFcf" : figures.marketCap === null ? capWhy : !usd ? "fx" : row.freeCashFlow === null ? "noFcf" : row.freeCashFlow === 0 ? "fcf0" : "fcfNeg");
   set("revenue", figures.revenue, money(() => (row.m.revenueIncomplete ? "revInc" : "noRev")));
   set("opinc", figures.operatingIncome, money(() => "noOpi"));
   set("netinc", figures.netIncome, money(() => "noNi"));

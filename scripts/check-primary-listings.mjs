@@ -70,9 +70,13 @@ if (!PSRC.includes(IMPORT)) throw new Error("secPrimaryListing no longer imports
 // Both maps inlined (bare Node has no @/ alias): the hand-cited entries and the census rows (#552 COWORK #64).
 const IMPORT2 = 'import nonCommonFile from "@/data/sec/non-common-listings.json";';
 if (!PSRC.includes(IMPORT2)) throw new Error("secPrimaryListing no longer imports the census rows the expected way");
-const inline = (src, nonCommon = fs.readFileSync("data/sec/non-common-listings.json", "utf8")) => src
+// And the cited 20-F/40-F covers (#552 COWORK #86b), overridable for the fixtures below.
+const IMPORT3 = 'import citedCoversFile from "@/data/sec/cited-covers.json";';
+if (!PSRC.includes(IMPORT3)) throw new Error("secPrimaryListing no longer imports the cited covers the expected way");
+const inline = (src, nonCommon = fs.readFileSync("data/sec/non-common-listings.json", "utf8"), cited = fs.readFileSync("data/sec/cited-covers.json", "utf8")) => src
   .replace(IMPORT, `const listingsFile = ${fs.readFileSync("data/sec/primary-listings.json", "utf8")};`)
-  .replace(IMPORT2, `const nonCommonFile = ${nonCommon};`);
+  .replace(IMPORT2, `const nonCommonFile = ${nonCommon};`)
+  .replace(IMPORT3, `const citedCoversFile = ${cited};`);
 const ptmp = `lib/server/.check-pl-src-${process.pid}.ts`;
 fs.writeFileSync(ptmp, inline(PSRC));
 let P;
@@ -166,6 +170,49 @@ check("the SEC universe includes every cited primary", /\.\.\.primaryListingSymb
 const snap = fs.readFileSync("lib/server/secEarningsSnapshot.ts", "utf8"), page = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
 check("both valuation callers pass nonEquity", /nonEquity: nonEquityListingOf\(clean\)/.test(snap) && /nonEquity: nonEquityListingOf\(symbol\)/.test(page));
 check("...and both pass the cited cover", /citedCover: citedCoverFor\(clean\)/.test(snap) && /citedCover: citedCoverFor\(symbol\)/.test(page));
+
+// ── 4. CITED 20-F / 40-F COVERS (#552 COWORK #86b) ───────────────────────────
+console.log("\n4. cited 20-F/40-F covers (data/sec/cited-covers.json)");
+const CITED = JSON.parse(fs.readFileSync("data/sec/cited-covers.json", "utf8")).entries ?? {};
+const ROW_OK = (r) => (r.form === "20-F" || r.form === "40-F") && /^\d{10}-\d{2}-\d{6}$/.test(r.source) &&
+  /^\d{4}-\d{2}-\d{2}$/.test(r.period) && /^\d{4}-\d{2}-\d{2}$/.test(r.filed) && r.filed >= r.period &&
+  typeof r.class === "string" && r.class.length > 0 && P.coverQuoteHasCount(r);
+const badRows = Object.entries(CITED).filter(([, r]) => !ROW_OK(r)).map(([s]) => s);
+check(`every row is whole: form, accession, period ≤ filed, class, and a quote that prints its count (${Object.keys(CITED).length} rows)`,
+  badRows.length === 0, badRows.join(" "));
+const clash = Object.keys(CITED).filter((s) => Object.values(MAP).some((e) => e.primary === s));
+check("no symbol is cited twice (a primary-listing entry and a cover row)", clash.length === 0, clash.join(" "));
+
+// Fixtures, through the shipped module with the file swapped for one row each.
+const fx = JSON.stringify({ entries: {
+  NTRX: { form: "40-F", source: "0001725964-26-000010", filed: "2026-02-19", period: "2025-12-31", class: "Common Shares",
+    count: 480123456, quote: "As at December 31, 2025, the registrant had 480,123,456 Common Shares outstanding." },
+  EURX: { form: "20-F", source: "0001000184-26-000011", filed: "2026-03-01", period: "2025-12-31", class: "ordinary shares",
+    count: 2345678901, quote: "2.345.678.901 ordinary shares of nominal value EUR 0.10 each" },
+  BADX: { form: "20-F", source: "0001000184-26-000012", filed: "2026-03-01", period: "2025-12-31", class: "ordinary shares",
+    count: 999000000, quote: "998,000,000 ordinary shares" },
+} });
+const ptmp4 = `lib/server/.check-pl-cc-${process.pid}.ts`;
+fs.writeFileSync(ptmp4, inline(PSRC, undefined, fx));
+let PCC;
+try { PCC = await import(`../${ptmp4}`); } finally { fs.rmSync(ptmp4, { force: true }); }
+const ntr = PCC.citedCoverFor("NTRX");
+check("a 40-F common-shares row is read as the cited cover, as of its period", ntr?.val === 480123456 && ntr.asOf === "2025-12-31", JSON.stringify(ntr));
+check("a European-printed count (dots) is read", PCC.citedCoverFor("EURX")?.val === 2345678901);
+check("a row whose quote does not print its count is NOT used", PCC.citedCoverFor("BADX") === null);
+check("a hand-cited primary-listing entry still wins for its own symbol", PCC.citedCoverFor("BIP")?.val === 460488788);
+const QANCHOR = "!coverQuoteHasCount(r)) return null;";
+if (PSRC.split(QANCHOR).length !== 2) throw new Error("quote-count mutation anchor must match once");
+const ptmp5 = `lib/server/.check-pl-cc2-${process.pid}.ts`;
+fs.writeFileSync(ptmp5, inline(PSRC, undefined, fx).replace(QANCHOR, "false) return null;"));
+let PCM;
+try { PCM = await import(`../${ptmp5}`); } finally { fs.rmSync(ptmp5, { force: true }); }
+check("MUTATION: the quote-must-print-the-count rule removed → the mistyped row is used (caught)", PCM.citedCoverFor("BADX")?.val === 999000000);
+// And through secValuation: newer-only still governs a cover row.
+const ntrSet = { ...bipSet, symbol: "NTRX", cover: { asOf: "2021-12-31", accession: null, filed: null, val: 470000000, derived: "as-filed" } };
+const ntrIn = V.valuationInputs(ntrSet, "2026-09-26", { annualForm: "40-F", citedCover: ntr });
+check("a 40-F filer's stale dei count is replaced by the newer cited cover", ntrIn.shares?.val === 480123456 && !ntrIn.refusals.includes("share-count-is-stale"),
+  JSON.stringify(ntrIn.shares) + " " + ntrIn.refusals.join(","));
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

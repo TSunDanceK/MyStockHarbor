@@ -9,6 +9,7 @@
 // cover's count for that class. Nothing here is inferred from ticker spelling.
 import listingsFile from "@/data/sec/primary-listings.json";
 import nonCommonFile from "@/data/sec/non-common-listings.json";
+import citedCoversFile from "@/data/sec/cited-covers.json";
 
 export type PrimaryListing = {
   primary: string;
@@ -28,6 +29,34 @@ const ENTRIES = (listingsFile as unknown as { entries: Record<string, PrimaryLis
 /** A census row (#552 COWORK #64): one non-common ticker, its 12(b) class and its CIK's common listing. */
 export type NonCommonListing = { cls: string; primary: string; cik: string; form: string; source: string; filed: string };
 const NON_COMMON = (nonCommonFile as unknown as { entries: Record<string, NonCommonListing> }).entries;
+
+/**
+ * A 20-F / 40-F COVER COUNT, CITED (#552 COWORK #86b): data/sec/cited-covers.json.
+ * The cover sentence states the count as of the close of the period; the row
+ * keeps the sentence verbatim, and the count is read back out of it.
+ */
+export type CitedCoverRow = {
+  form: "20-F" | "40-F";
+  /** The accession the cover is from. */
+  source: string;
+  filed: string;
+  /** The date the count is as of: the close of the period the report covers. */
+  period: string;
+  /** The class the count is of, as the cover names it. */
+  class: string;
+  count: number;
+  /** Verbatim from the cover; must contain `count` as printed. */
+  quote: string;
+};
+const CITED_COVERS = (citedCoversFile as unknown as { entries: Record<string, CitedCoverRow> }).entries;
+
+/** `count` as a cover prints it: 1,234,567 (or 1.234.567, the European layout). */
+export function coverQuoteHasCount(row: Pick<CitedCoverRow, "count" | "quote">): boolean {
+  const n = Math.round(row.count);
+  if (!(n > 0)) return false;
+  const comma = n.toLocaleString("en-US");
+  return row.quote.includes(comma) || row.quote.includes(comma.replace(/,/g, "."));
+}
 
 /** The primaries, for the SEC universe: each is stored and read under its own symbol. */
 export function primaryListingSymbols(): string[] {
@@ -70,8 +99,22 @@ export function citedCoverFor(symbol: string): { val: number; asOf: string; quot
   const c = line && !a && !b ? /^Shares Outstanding at\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\s+.+?\s+([\d,]+)$/.exec(line) : null;
   const [count, month, day, year] = a ? [a[1], a[2], a[3], a[4]] : b ? [b[4], b[1], b[2], b[3]] : c ? [c[4], c[1], c[2], c[3]] : [];
   const mm = month ? MONTHS[month.toLowerCase()] : undefined;
-  if (!e || !count || !day || !mm) return null;
+  if (!e) return citedCoverRowFor(s);
+  if (!count || !day || !mm) return null;
   const val = Number(count.replace(/,/g, ""));
   if (!Number.isFinite(val) || val <= 0) return null;
   return { val, asOf: `${year}-${mm}-${day.padStart(2, "0")}`, quote: line!, source: e.source };
+}
+
+/**
+ * THE 20-F / 40-F ROW, for a symbol with no primary-listing entry (#552 COWORK
+ * #86b). Refused (null) unless the row is whole: a positive count, an ISO
+ * period, and a quote that prints the count. A row that fails is a data error
+ * and check-cited-covers fails on it; here it is simply not used.
+ */
+export function citedCoverRowFor(symbol: string): { val: number; asOf: string; quote: string; source: string } | null {
+  const s = String(symbol ?? "").toUpperCase();
+  const r = Object.prototype.hasOwnProperty.call(CITED_COVERS, s) ? CITED_COVERS[s] : null;
+  if (!r || !/^\d{4}-\d{2}-\d{2}$/.test(r.period) || !coverQuoteHasCount(r)) return null;
+  return { val: Math.round(r.count), asOf: r.period, quote: r.quote, source: r.source };
 }
