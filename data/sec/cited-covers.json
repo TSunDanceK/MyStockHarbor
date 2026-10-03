@@ -1,0 +1,4 @@
+{
+  "_comment": "Share counts cited from a 20-F or 40-F filer's own latest annual-report cover (#552 COWORK #86b, CODE-A #93/#98): the sentence giving 'the number of outstanding shares of each of the issuer's classes ... as of the close of the period covered by the annual report'. One row per symbol, only where the cover states ONE common-share count, or names the common shares on their own line beside preferred series (the 40-F layout). A cover that states two or more common classes is the multi-class rule's, not this file's. `quote` is verbatim from the cover and must contain `count` as printed; `period` is the date the count is as of; `source` is the accession. secPrimaryListing.citedCoverFor reads it, and secValuation uses it only when it is NEWER than the stored dei count.",
+  "entries": {}
+}
