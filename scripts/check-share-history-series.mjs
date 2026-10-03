@@ -84,6 +84,10 @@ const RULES = {
     const h = b.buildShareHistory(set(ISSUER, [["2012-12-31", 2]]));
     return h && h.startedAfter?.reason === "unexplained-split-step" && h.points[0].date === "2022-12-31";
   },
+  "1e. a recent split whose restated comparative sits BEFORE the step (last year's same quarter) is proven": (b) => {
+    const h = b.buildShareHistory(set([["2024-03-31", 100e6], ["2024-06-30", 101e6], ["2025-03-31", 102e6], ["2025-12-31", 103e6], ["2026-03-31", 2575e6], ["2026-06-30", 2580e6]], [["2025-03-31", 25]]));
+    return h && h.splits?.[0]?.ratio === 25 && h.points.length === 6 && !h.startedAfter;
+  },
   "1d. a doubling whose earlier year was re-filed unchanged is real issuance: kept": (b) => {
     const h = b.buildShareHistory(set(ISSUER, undefined, ["2021-12-31"]));
     return h && h.points.length === 5 && !h.startedAfter && !h.splits;
@@ -128,7 +132,7 @@ const caught = async (bm, cm) => {
 };
 const MUTANTS = [
   ["a split-like step scaled with no restatement on file", (s) => once(s, "    if (refiled.includes(pts[i - 1].date)) continue;\n    {", "    if (refiled.includes(pts[i - 1].date)) continue;\n    if (true) { for (let j = 0; j < i; j++) pts[j] = { ...pts[j], shares: pts[j].shares * k }; continue; }\n    {"), null],
-  ["the proven-split date window removed", (s) => once(s, "x.e > pts[i - 1].date && x.e <= plusYears(pts[i].date, SHARE_PROVEN_SPLIT_YEARS)\n      && ", ""), null],
+  ["the proven-split date window removed", (s) => once(s, "nearStep(x.e, pts[i].date) && ", ""), null],
   ["the loose match for a proven split removed", (s) => once(s, "Math.abs(r / x.k - 1) < SHARE_PROVEN_SPLIT_TOLERANCE", "Math.abs(r / x.k - 1) < SHARE_SPLIT_TOLERANCE"), null],
   ["re-filed periods ignored", (s) => once(s, "    if (refiled.includes(pts[i - 1].date)) continue;\n", ""), null],
   ["the >100× guard removed", (s) => once(s, "if (r > SHARE_SCALE_MAX_STEP || r < 1 / SHARE_SCALE_MAX_STEP) {", "if (false) {"), null],
