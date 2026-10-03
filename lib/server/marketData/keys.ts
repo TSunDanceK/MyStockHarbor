@@ -38,3 +38,27 @@ export const TIINGO_EOD_TTL_SECONDS = 8 * 24 * 60 * 60;
 export const PRICES_TAG = "prices";
 export const EOD_TAG = "eod";
 export const eodSymbolTag = (symbol: string) => `eod:${symbol}`;
+
+/**
+ * Hash: field = our dashed symbol, value = JSON EodLast (marketData/eodLast.ts):
+ * the newest stored bar, the close before it, and the week/month/YTD moves and
+ * MA50/MA200 position computed from the same bars (step 5, #553 COWORK #98).
+ *
+ * ONE BLOB FOR EVERY POOL READER, so a page that shows 300 symbols reads one
+ * Data Cache entry instead of 300 histories. Written by the nightly EOD job on
+ * a complete night only (DEL + HSET + EXPIRE, 3 commands), from the bars it
+ * already holds in memory. Raw Tiingo data (closes, volume), so it lives under
+ * the prefix the purge SCANs.
+ */
+export const TIINGO_EOD_LAST_KEY = `${TIINGO_PREFIX}eod-last:v1`;
+
+/**
+ * String: JSON { at, symbols, sources } -- WHICH symbols the two Tiingo jobs
+ * fetch (step 5, #553 COWORK #98 ruling 2). Symbols only, no prices. Written by
+ * warm-price-pool on every in-session run (no FMP call, FMP_API_KEY or not);
+ * read first by jobs.ts universe(), with the price pool's HKEYS as the fallback.
+ * Under msh:tiingo: so the purge covers it with the rest.
+ */
+export const TIINGO_UNIVERSE_KEY = `${TIINGO_PREFIX}universe:v1`;
+/** Outlives a weekend (63 h with no in-session run) and a long weekend. */
+export const TIINGO_UNIVERSE_TTL_SECONDS = 4 * 24 * 60 * 60;

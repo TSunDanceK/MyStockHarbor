@@ -37,13 +37,17 @@ import { lastSessionDate } from "../lastSession";
 import {
   EOD_TAG,
   PRICES_TAG,
+  TIINGO_EOD_LAST_KEY,
   TIINGO_EOD_META_KEY,
   TIINGO_EOD_TTL_SECONDS,
   TIINGO_QUOTES_KEY,
   TIINGO_QUOTES_META_FIELD,
   TIINGO_QUOTES_TTL_SECONDS,
+  TIINGO_UNIVERSE_KEY,
   tiingoEodKey,
 } from "./keys";
+import { eodLastRow } from "./eodLast";
+import { parseTiingoUniverse } from "../tiingoUniverse";
 import {
   TiingoHttpError,
   TiingoRefused,
@@ -113,14 +117,19 @@ function mustRedis(): Redis {
 }
 
 /**
- * The universe: the price pool's fields (dashed), less debt listings (CCZ and
- * the other exchange-traded notes, #553 COWORK #60 -- see universe.ts), the
- * dated PRICE_EXCLUDED list (lib/priceExcluded.ts, COWORK #61) and any ticker
- * SEC has moved to another (retickeredOut, COWORK #70). 1 HKEYS, plus 1 HMGET
- * of last-seen CIKs when some pool symbol is missing from SEC's live map.
+ * The universe: msh:tiingo:universe:v1 (step 5, #553 COWORK #98 ruling 2: the
+ * symbols-only list warm-price-pool writes with no FMP call), or, while that
+ * key is absent, the price pool's fields (dashed) as before. Either way, less
+ * debt listings (CCZ and the other exchange-traded notes, #553 COWORK #60 --
+ * see universe.ts), the dated PRICE_EXCLUDED list (lib/priceExcluded.ts,
+ * COWORK #61) and any ticker SEC has moved to another (retickeredOut, COWORK
+ * #70). 1 GET, plus 1 HKEYS only when the key is absent, plus 1 HMGET of
+ * last-seen CIKs when some symbol is missing from SEC's live map.
  */
-async function universe(): Promise<{ symbols: string[]; retickered: string[]; retickerGuard: string }> {
-  const keys = await mustRedis().hkeys(PRICE_POOL_KEY);
+async function universe(): Promise<{ symbols: string[]; retickered: string[]; retickerGuard: string; universeSource: string }> {
+  const stored = parseTiingoUniverse(await mustRedis().get<unknown>(TIINGO_UNIVERSE_KEY));
+  const keys = stored ? stored.symbols : await mustRedis().hkeys(PRICE_POOL_KEY);
+  const universeSource = stored ? "tiingo-universe" : "pool-hkeys";
   const pool = [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
     .filter((s) => !isDebtListing(s) && !isPriceExcluded(s))
     .sort();
@@ -129,7 +138,7 @@ async function universe(): Promise<{ symbols: string[]; retickered: string[]; re
   const lastSeen = unlisted.length ? await readLastSeenCiks(unlisted) : new Map<string, string>();
   const r = retickeredOut(pool, live, lastSeen);
   if (r.dropped.length) console.warn(`[tiingo] retickered, not sent: ${r.dropped.map((d) => `${d.symbol}->${d.listed.join("/")}`).join(" ")}`);
-  return { symbols: r.keep, retickered: r.dropped.map((d) => d.symbol), retickerGuard: r.guard };
+  return { symbols: r.keep, retickered: r.dropped.map((d) => d.symbol), retickerGuard: r.guard, universeSource };
 }
 
 function refusalResult(err: unknown) {
@@ -144,8 +153,8 @@ export async function runTiingoQuotes(nowMs = Date.now()) {
   if (!isActiveMarketWindow(new Date(nowMs))) return { ok: true, skipped: "outside-market-window" };
   const refusal = tiingoCallRefusal();
   if (refusal) return { ok: true, skipped: `tiingo: ${refusal}` };
-  const { symbols, retickered, retickerGuard } = await universe();
-  if (!symbols.length) return { ok: false, error: "empty universe" };
+  const { symbols, retickered, retickerGuard, universeSource } = await universe();
+  if (!symbols.length) return { ok: false, error: "empty universe", universeSource };
   let fetched;
   try {
     fetched = await fetchIexQuotes(symbols, nowMs);
@@ -173,6 +182,7 @@ export async function runTiingoQuotes(nowMs = Date.now()) {
     bytesWritten: Object.entries(fields).reduce((n, [k, v]) => n + k.length + v.length, 0),
     retickered,
     retickerGuard,
+    universeSource,
   };
 }
 
@@ -207,8 +217,8 @@ export async function runTiingoEod(
   const metaAsOf = typeof meta === "string" ? (JSON.parse(meta) as { asOf?: string }).asOf : meta?.asOf;
   if (metaAsOf === expected) return { ok: true, skipped: "already-complete", asOf: expected };
 
-  const { symbols, retickered, retickerGuard } = await universe();
-  if (!symbols.length) return { ok: false, error: "empty universe" };
+  const { symbols, retickered, retickerGuard, universeSource } = await universe();
+  if (!symbols.length) return { ok: false, error: "empty universe", universeSource };
 
   let bytesDownloaded = 0;
   let requests = 0;
@@ -307,7 +317,30 @@ export async function runTiingoEod(
     shortOrEmpty,
     retickered,
     retickerGuard,
+    universeSource,
   };
+  // THE NEWEST BAR PER SYMBOL, ONE HASH (step 5, #553 COWORK #98): what every
+  // pool reader and the sector pages read instead of 1,400-bar histories (see
+  // eodLast.ts). A complete night only, written whole: DEL + HSET + EXPIRE, 3
+  // commands in one request of ~150 B a symbol (~0.45 MB at 3,000). A symbol
+  // that failed tonight drops out until tomorrow; its reader keeps the IEX row
+  // and IEX's prevClose, or FMP's row.
+  let eodLastRows = 0;
+  if (complete) {
+    const fields: Record<string, string> = {};
+    for (const [sym, b] of bars) {
+      const row = eodLastRow(b);
+      if (row) fields[sym] = JSON.stringify(row);
+    }
+    eodLastRows = Object.keys(fields).length;
+    if (eodLastRows) {
+      const p = r.pipeline();
+      p.del(TIINGO_EOD_LAST_KEY);
+      p.hset(TIINGO_EOD_LAST_KEY, fields);
+      p.expire(TIINGO_EOD_LAST_KEY, TIINGO_EOD_TTL_SECONDS);
+      await p.exec();
+    }
+  }
   // Only a complete night stamps the meta key, so the 02:45 retry re-runs a partial one.
   if (complete) await r.set(TIINGO_EOD_META_KEY, JSON.stringify(summary), { ex: TIINGO_EOD_TTL_SECONDS });
   if (bars.size) revalidateTag(EOD_TAG, "max");
@@ -320,6 +353,7 @@ export async function runTiingoEod(
     bytesDownloaded,
     bytesWritten,
     largestWriteRequestBytes,
+    eodLastRows,
     ms: Date.now() - started,
   };
 }

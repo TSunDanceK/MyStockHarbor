@@ -1,7 +1,10 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { closeDayLabel, lastCloseLabel } from "@/lib/server/marketData/eodLast";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
 import { SECTORS, getSectorBySlug, sectorNewsPath } from "@/lib/sectors";
 import { getSectorNewsBaseData, type SectorNewsBaseData } from "@/lib/sector-news-data";
@@ -230,9 +233,12 @@ export default async function SectorNewsPage({ params }: Props) {
 
   // Outside the regular session the card shows the LAST session's move, and
   // says so (#553 COWORK #12) -- never "today" for a number that is not.
-  const lastSession = performance?.dayBasis === "last-session";
-  const dayTitle = lastSession ? "Last Session" : "Sector Today";
-  const sessionLabel = lastSession ? sessionDateLabel(performance?.sessionDate) : null;
+  // On Tiingo (step 5, #553 COWORK #98 ruling 4) the move is the stored EOD
+  // close's, all day: "Last close · 1 Oct".
+  const lastClose = performance?.dayBasis === "last-close";
+  const lastSession = performance?.dayBasis === "last-session" || lastClose;
+  const dayTitle = lastClose ? "Last Close" : lastSession ? "Last Session" : "Sector Today";
+  const sessionLabel = lastClose ? lastCloseLabel(performance?.sessionDate) : lastSession ? sessionDateLabel(performance?.sessionDate) : null;
   const rankLine =
     typeof performance?.rank === "number"
       ? lastSession
@@ -242,6 +248,13 @@ export default async function SectorNewsPage({ params }: Props) {
         ? sessionLabel
         : "Ranking unavailable";
 
+  // Step 5 (#553 COWORK #92/#98): the linked credit wherever a Tiingo-built
+  // figure shows (PRICE_PROVIDER_POOL=tiingo).
+  const tiingoCredit =
+    priceProviderFor("POOL") === "tiingo" ? (
+      <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+    ) : null;
+
   const leadSummary = buildSectorLead({
     sector,
     newsScore,
@@ -249,7 +262,7 @@ export default async function SectorNewsPage({ params }: Props) {
     constituentCount: constituents.length,
     dayMove: performance?.day ?? null,
     rank: performance?.rank ?? null,
-    lastSession: lastSession ? sessionDateLabel(performance?.sessionDate) : null,
+    lastSession: lastClose ? closeDayLabel(performance?.sessionDate) : lastSession ? sessionDateLabel(performance?.sessionDate) : null,
   });
 
   const sectorRead = buildSectorRead({
@@ -384,6 +397,7 @@ export default async function SectorNewsPage({ params }: Props) {
                   </div>
                   <div style={miniScoreLabelStyle}>
                     {rankLine}
+                    {lastClose && tiingoCredit ? <> · {tiingoCredit}</> : null}
                   </div>
                 </div>
                 <div style={miniScoreCardStyle(newsScore.tone)}>
@@ -481,7 +495,7 @@ export default async function SectorNewsPage({ params }: Props) {
 
               <MostMentionedCard mentions={mentions} sectorName={sector.name} />
               <SectorEarningsCard entries={earnings} sectorName={sector.name} label={earningsScore.label} />
-              <SectorMoversCard movers={movers} sectorName={sector.name} />
+              <SectorMoversCard movers={movers} sectorName={sector.name} credit={tiingoCredit} />
               <SectorBreadthCard breadth={breadth} sectorName={sector.name} />
             </aside>
           </section>
@@ -897,15 +911,17 @@ function SectorEarningsCard({
   );
 }
 
-function SectorMoversCard({ movers, sectorName }: { movers: SectorMovers; sectorName: string }) {
+function SectorMoversCard({ movers, sectorName, credit }: { movers: SectorMovers; sectorName: string; credit?: ReactNode }) {
   const hasRows = movers.gainers.length > 0 || movers.losers.length > 0;
 
   return (
     <section style={sidebarCardStyle}>
       <div style={sectionEyebrowStyle}>
-        {movers.dayBasis === "last-session"
-          ? `Inside the sector · last session${sessionDateLabel(movers.sessionDate) ? ` (${sessionDateLabel(movers.sessionDate)})` : ""}`
-          : "Inside the sector today"}
+        {movers.dayBasis === "last-close"
+          ? `Inside the sector · ${lastCloseLabel(movers.sessionDate) ?? "Last close"}`
+          : movers.dayBasis === "last-session"
+            ? `Inside the sector · last session${sessionDateLabel(movers.sessionDate) ? ` (${sessionDateLabel(movers.sessionDate)})` : ""}`
+            : "Inside the sector today"}
       </div>
       <h2 style={sectionTitleSmallStyle}>Top Movers</h2>
 
@@ -938,9 +954,18 @@ function SectorMoversCard({ movers, sectorName }: { movers: SectorMovers; sector
             ))}
           </div>
           <div style={sourceFooterStyle}>
-            From {movers.sampled} {sectorName.toLowerCase()} names. This page is cached for 30
-            minutes and the underlying quotes rotate every ~15, so treat these as end-of-period
-            rather than live prices.
+            {movers.dayBasis === "last-close" ? (
+              <>
+                From {movers.sampled} {sectorName.toLowerCase()} names: consolidated closing prices
+                from the nightly end-of-day data, not live prices.{credit ? <> {credit}</> : null}
+              </>
+            ) : (
+              <>
+                From {movers.sampled} {sectorName.toLowerCase()} names. This page is cached for 30
+                minutes and the underlying quotes rotate every ~15, so treat these as end-of-period
+                rather than live prices.
+              </>
+            )}
           </div>
         </>
       ) : (

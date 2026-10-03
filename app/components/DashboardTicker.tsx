@@ -1,7 +1,7 @@
 "use client";
 
 import { getBuySignalCount } from "@/lib/signalCounts";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import TickerLogo from "@/app/components/TickerLogo";
 
@@ -25,6 +25,8 @@ type MarketRow = {
   rangePct: number | null;
   last: number | null;
   volume: number | null;
+  /** Set on Tiingo (step 5): "Last close · 1 Oct" -- the move is that close's, not today's. */
+  label?: string | null;
 };
 
 type TickerEarningsGrowthItem = {
@@ -132,7 +134,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
     const up = pct >= 0;
     items.push({
       id: `mover-${row.symbol}`,
-      text: `${row.symbol} ${up ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}% today`,
+      text: `${row.symbol} ${up ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}% ${row.label ?? "today"}`,
       href: href(row.symbol),
       color: up ? COLOR_UP : COLOR_DOWN,
       symbol: row.symbol,
@@ -335,7 +337,10 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
   return shuffle(items);
 }
 
-export default function DashboardTicker() {
+// `credit`: the linked "Market data from Tiingo.com", rendered by the server
+// page (step 5, #553 COWORK #92/#98) and shown under the ticker whenever its
+// movers are Tiingo's (they then carry a "Last close" label).
+export default function DashboardTicker({ credit = null }: { credit?: ReactNode } = {}) {
   const [data, setData] = useState<PickersPayload | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
 
@@ -376,8 +381,10 @@ export default function DashboardTicker() {
   // static list for them instead of an animated loop.
   const trackItems = reducedMotion ? items : [...items, ...items];
   const durationSec = Math.max(18, items.length * 4);
+  const tiingoMovers = (data?.tickerFeed?.topMovers ?? []).some((row) => !!row.label);
 
   return (
+    <>
     <div
       className="msh-ticker"
       style={{
@@ -471,5 +478,11 @@ export default function DashboardTicker() {
         .msh-ticker a:hover { filter: brightness(1.2); }
       `}</style>
     </div>
+    {tiingoMovers && credit ? (
+      <div style={{ margin: "-10px 0 12px", fontSize: 11, color: "#5f6b80", fontWeight: 600 }}>
+        Movers: last close (consolidated) · {credit}
+      </div>
+    ) : null}
+    </>
   );
 }

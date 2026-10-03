@@ -3,7 +3,10 @@
 // so it loads in bare Node for scripts/check-sector-last-session.mjs.
 import { getEasternParts, isRegularSessionOpen, isWeekendEastern, REGULAR_CLOSE_MINUTES_ET } from "./marketHours";
 
-export type DayBasis = "live" | "last-session";
+// "last-close" (step 5, #553 COWORK #98 ruling 4): on PRICE_PROVIDER_POOL=tiingo
+// "Sector today" is the stored EOD move, all day, labelled "Last close · 1 Oct"
+// (marketData/eodLast.ts lastCloseLabel). IEX in session is a later step.
+export type DayBasis = "live" | "last-session" | "last-close";
 
 // --- "Last session" (#553 COWORK #12) --------------------------------------
 //

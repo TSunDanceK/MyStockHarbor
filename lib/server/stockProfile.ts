@@ -33,6 +33,7 @@ import { loadTickerMap } from "./secTickerMap";
 import type { ResolvedProfile } from "./staticProfile";
 import type { FilingDescription } from "./filingDescription";
 import { descriptionAttribution, MONTHS } from "./filingDescription";
+import { fiftyTwoWeekRange } from "./fiftyTwoWeek";
 
 export type Registrant = {
   cik: string;
@@ -97,29 +98,9 @@ export function exchangeFor(symbol: string): string | null {
   return null;
 }
 
-/**
- * The 52-week range from bars the page already loaded. 252 trading days is a
- * year; fewer bars than that is a range over what exists, which for a recent
- * listing is still the true range since listing — but under ~a month it is not
- * a meaningful "52-week" figure and the row hides.
- */
-export const RANGE_BARS = 252;
-export const RANGE_MIN_BARS = 20;
-export function fiftyTwoWeekRange(
-  points: { close: number; high?: number; low?: number }[]
-): { low: number; high: number } | null {
-  const window = points.slice(-RANGE_BARS).filter((p) => Number.isFinite(p.close));
-  if (window.length < RANGE_MIN_BARS) return null;
-  let low = Infinity;
-  let high = -Infinity;
-  for (const p of window) {
-    const lo = Number.isFinite(p.low) ? (p.low as number) : p.close;
-    const hi = Number.isFinite(p.high) ? (p.high as number) : p.close;
-    if (lo < low) low = lo;
-    if (hi > high) high = hi;
-  }
-  return Number.isFinite(low) && Number.isFinite(high) ? { low, high } : null;
-}
+// The 52-week range: one helper for the header and this row (step 5,
+// #553 COWORK #80 §1). Re-exported so existing importers keep their path.
+export * from "./fiftyTwoWeek";
 
 export type ComposeInputs = {
   symbol: string;
@@ -143,7 +124,19 @@ export type ComposeInputs = {
   classificationAsOf: string | null;
   valuation: ValuationInputs | null;
   price: number | null;
+  /**
+   * What `price` is, when the page's quote says ("close, 1 Oct 2026" / "last
+   * IEX trade, 14:05 ET" on Tiingo, step 5). Named in the market cap's source
+   * line so the cap and the header price read as one basis.
+   */
+  priceLabel?: string | null;
   points: { close: number; high?: number; low?: number }[];
+  /**
+   * The range already computed by the same helper over the same bars as the
+   * header (Tiingo, step 5): used as given so the two can never disagree.
+   * Absent: fiftyTwoWeekRange(points), as before.
+   */
+  range?: { low: number; high: number } | null;
   exchange: string | null;
   registrant: Registrant | null;
 };
@@ -190,7 +183,7 @@ export function peBasisNote(eps: EpsBasis | null | undefined): string | null {
  */
 export function composeCompanyProfile(i: ComposeInputs): CompanyProfile {
   const cap = i.valuation ? marketCap(i.valuation, i.price) : null;
-  const range = fiftyTwoWeekRange(i.points);
+  const range = i.range !== undefined ? i.range : fiftyTwoWeekRange(i.points);
   const name = i.directoryName || i.snapshotName || i.entityName || null;
   const country = countryFor(i.registrant);
 
@@ -206,7 +199,7 @@ export function composeCompanyProfile(i: ComposeInputs): CompanyProfile {
     const asOf = dayMonthYear(i.classificationAsOf);
     if (asOf) add("Sector and industry", `classification as of ${asOf}`);
   }
-  if (cap?.ok) add("Market cap", "shares from SEC EDGAR, price from market data");
+  if (cap?.ok) add("Market cap", `shares from SEC EDGAR, price from market data${i.priceLabel ? ` (${i.priceLabel})` : ""}`);
   if (range) add("52-week range", "daily price history");
   if (i.exchange) add("Exchange", "SEC EDGAR");
   if (country) add("Country", "SEC EDGAR");

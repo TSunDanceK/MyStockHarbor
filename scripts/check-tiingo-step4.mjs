@@ -174,6 +174,8 @@ function rules(srcs) {
   want("the dashboard shows the quote's price label and the credit", /quote\?\.priceLabel \?/.test(code[FILES.dashClient]) && /tiingoCredit=\{tiingoCredit\}/.test(code[FILES.dashPage]));
   want("the dashboard seed carries the price label", /priceLabel: q\.priceLabel/.test(code[FILES.dashPage]));
   want("a benchmark tile shows its own price label", /it\.priceLabel \?\?/.test(code[FILES.dashClient]));
+  want("an FMP tile's time is readable, not the raw date and time (COWORK #101)",
+    /as of \$\{utcStamp\(/.test(code[FILES.dashClient]) && !/\? `\$\{it\.date\} \$\{it\.time\}` :/.test(code[FILES.dashClient]));
 
   // /api/quote: the missing-key 500 never pre-empts the Tiingo read (FMP-off test)
   const route = code[FILES.quoteRoute];
@@ -212,6 +214,7 @@ const MUTANTS = [
   ["the old \"(via SPY)\" label", FILES.bench, /"SPY · S&P 500 ETF"/, '"S&P 500 (via SPY)"'],
   ["the ETF note dropped", FILES.dashClient, / · ETF prices, not index levels/, ""],
   ["the stock page seeds from FMP only", FILES.stockPage, /if \(priceProviderFor\("STOCK_PAGE"\) === "tiingo"\) \{\n\s*const t = await readTiingoQuote\(symbol\);/, "if (false) {\n    const t = null as any;"],
+  ["the FMP tile shows the raw time again", FILES.dashClient, /`as of \$\{utcStamp\(`\$\{it\.date\}T\$\{it\.time\}Z`\) \?\? `\$\{it\.date\} \$\{it\.time\}`\}`/, "`${it.date} ${it.time}`"],
   ["/api/quote returns 500 before the Tiingo read again", FILES.quoteRoute, /  const payload = await fetchQuoteSnapshot\(symbol\);/, "  if (!process.env.FMP_API_KEY) return NextResponse.json(emptyQuote(symbol), { status: 500 });\n  const payload = await fetchQuoteSnapshot(symbol);"],
   ["/api/quote answers 500 again with no price and no key", FILES.quoteRoute, /status: 404, headers/, "status: 500, headers"],
   ["the dashboard words a 404 as a load failure", FILES.dashClient, /setErr\(`No data available for \$\{symbol\.toUpperCase\(\)\}\.`\)/, 'setErr("Failed to load data (try another ticker).")'],

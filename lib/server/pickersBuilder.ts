@@ -25,6 +25,7 @@ import {
 import { getDailyHistoryBulk } from "./historyCache";
 import { priceProviderFor, type PriceProvider } from "./marketData/provider";
 import { tiingoPickerHistory, type PickerHistoryStats } from "./marketData/pickerHistory";
+import { readTiingoTickerMovers } from "./tiingoMovers";
 import type { EodBar } from "./marketData/types";
 import { computePerfFromBars, perfRowRefused, publicPickersPayload, type PerfRow } from "../pickerPerf";
 import { pickersWithoutBars } from "../pickersPublic";
@@ -99,6 +100,8 @@ type MarketRow = {
   rangePct: number | null;
   last: number | null;
   volume: number | null;
+  /** Tiingo ticker movers only (step 5): "Last close · 1 Oct". */
+  label?: string | null;
 };
 
 type MarketPayload = {
@@ -4400,6 +4403,12 @@ async function buildPickersPayload(
   // its own re-derivation of "top movers" / "recent earnings growth".
   // Weekly MA200 proximity and buy-signal counts are cheap to derive
   // client-side from filteredSignalRecords, so they aren't duplicated here.
+  // STEP 5 (#553 COWORK #98 ruling 6): the ticker is the one page that SHOWS
+  // movers, so on PRICE_PROVIDER_POOL=tiingo they come from the Tiingo
+  // universe's stored EOD moves, labelled (lib/server/tiingoMovers.ts). A miss
+  // keeps the discovery list below.
+  const tiingoTickerMovers: MarketRow[] | null =
+    priceProviderFor("POOL") === "tiingo" ? await readTiingoTickerMovers(8).catch(() => null) : null;
   const topMoversForTicker = topMoversRaw
     .filter((row) => typeof row.changePct === "number" && Number.isFinite(row.changePct))
     // The market's movers come from outside the universe, so the dated
@@ -4446,7 +4455,7 @@ async function buildPickersPayload(
     sections,
     signalRecords: fullSignalRecords,
     tickerFeed: {
-      topMovers: topMoversForTicker,
+      topMovers: tiingoTickerMovers ?? topMoversForTicker,
       earningsGrowth: earningsGrowthForTicker,
     },
     degradedSymbolCount: failedSymbolCount,

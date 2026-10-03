@@ -31,7 +31,7 @@ import { SPENDING_KEY } from "@/lib/server/capexSpending";
 import { CONTRACTS_KEY } from "@/lib/server/capexContracts";
 import { RECEIVERS_KEY } from "@/lib/server/capexReceivers";
 import { LAST_SEEN_CIK_KEY } from "@/lib/server/secListing";
-import { TIINGO_QUOTES_KEY } from "@/lib/server/marketData/keys";
+import { TIINGO_EOD_LAST_KEY, TIINGO_QUOTES_KEY } from "@/lib/server/marketData/keys";
 import {
   PICKERS_MANIFEST_KEY,
   PICKERS_SYMBOLS_KEY,
@@ -230,6 +230,13 @@ const CANDIDATES: Candidate[] = [
     writtenBy: "tiingo-quotes, every 15 min in session",
     shape: "hash",
     note: "ONE HSET of every quote (~820 fields, 79 KB measured 2026-09-30).",
+  },
+  {
+    key: TIINGO_EOD_LAST_KEY,
+    owner: "lib/server/marketData/jobs.ts runTiingoEod()",
+    writtenBy: "tiingo-eod, a complete night (00:45 / 02:45 UTC)",
+    shape: "hash",
+    note: "Step 5: DEL + ONE HSET of every symbol's newest bar (~150 B a field; ~0.13 MB at 845, ~0.45 MB at 3,000).",
   },
 ];
 

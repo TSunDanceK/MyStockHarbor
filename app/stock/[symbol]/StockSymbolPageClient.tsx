@@ -1386,7 +1386,10 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                   {[
                     { q: "Is this page a buy or sell recommendation?", a: "No. This page is designed to help you review chart structure, momentum and technical context more quickly, but it is not personal financial advice." },
                     { q: "Why can a stock look bullish and overbought at the same time?", a: "Strong trending stocks can still become stretched in the short term. That is why trend traders and dip buyers can read the same chart differently." },
-                    { q: "What should I do next after reading this page?", a: "Open the full dashboard, review the chart in more detail, compare indicators, and decide whether the setup still makes sense within your own process." },
+                    // HEDGED, NOT AN INSTRUCTION (#553 COWORK #54, #80 §2, step 5): the old
+                    // answer told the reader what to do next. It now describes what some
+                    // readers do; the "not a recommendation" answer above stays as it was.
+                    { q: "Where can I see this chart in more detail?", a: "Some readers may open the full dashboard to review the chart in more detail and compare other indicators. This page describes the chart; it does not suggest any action." },
                   ].map((item) => (
                     <div key={item.q}>
                       <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{item.q}</h3>
