@@ -266,7 +266,7 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
     const skipped = values.length - nums.length;
     const crossed = values.filter(isCrossing);
     crossings += crossed.length;
-    // `values` is oldest first (see GrowthMarginsChart), so the newest is last.
+    // `values` is oldest first (the card draws oldest left), so the newest is last.
     const last = values.length ? values[values.length - 1] : null;
     const latest = isPct(last) ? last : null;
     const latestTone = toneForGrowth(latest);
