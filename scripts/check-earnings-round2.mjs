@@ -61,7 +61,7 @@ console.log("\nc. the balance sheet on AVAV");
   // COWORK #54: untagged, but total assets and total equity are filed at the
   // same date, so it is derived (assets - equity) and marked, not "not found".
   check("total liabilities is derived from assets less equity, and marked (COWORK #54)",
-    /Total liabilities \$1\.3\dB\s*derived/.test(t) && !new RegExp(`Total liabilities ${NOT_FOUND}`).test(t), (t.match(/Total liabilities[^A-Z]{0,40}/) ?? [""])[0]);
+    /Total liabilities\s*derived\s*\$1\.3\dB/.test(t) && !new RegExp(`Total liabilities ${NOT_FOUND}`).test(t), (t.match(/Total liabilities[^A-Z]{0,40}/) ?? [""])[0]);
   check("a filer with the parent-only figure keeps the plain label (AAPL)",
     /Shareholders' equity/.test(card(M, "SecBalanceSheetCard", vAapl)) &&
       !/incl\. noncontrolling/.test(card(M, "SecBalanceSheetCard", vAapl)));
@@ -74,10 +74,11 @@ console.log("\nd. the income statement on AVAV (fixture predates any chain chang
 {
   const d = card(M, "SecIncomeStatementCard", vAvav);
   check("both ends filed: 'Other income (net) $3.5M derived', interest 'Included in other income (net) below' (COWORK #47)",
-    /Interest expense Included in other income \(net\) below/.test(d) && /Other income \(net\) \$3\.5M derived/.test(d) && !d.includes(NOT_CAPTURED), d);
+    /Interest expense Included in other income \(net\) below/.test(d) && /Other income \(net\) derived \$3\.5M/.test(d) && !d.includes(NOT_CAPTURED), d);
   const t = card(M, "SecIncomeStatementCard", M.buildSecEarningsView(AVAV_NO_PRETAX));
-  check("one end missing: interest expense and other income say 'Not captured from this filing'",
-    new RegExp(`Interest expense ${NOT_CAPTURED}`).test(t) && new RegExp(`Other income / expense ${NOT_CAPTURED}`).test(t), t);
+  // THE SHORT WORD IN THE CELL, THE SENTENCE ITS NOTE (#552 COWORK #124).
+  check("one end missing: interest expense and other income say 'Not captured' (the full reason on tap)",
+    /Interest expense Not captured/.test(t) && /Other income \/ expense Not captured/.test(t), t);
   check("...and never 'Not found in the filing's tagged data' (AVAV tags both, outside our chains)",
     !t.includes(NOT_FOUND), t);
   check("the site's existing words are the ones used", M.EMPTY_REASONS.notCaptured === NOT_CAPTURED);
@@ -99,7 +100,7 @@ console.log("\ng. the trend card's skew line");
     t.split(LINE).length === 2, t);
   check("AAPL does not", !card(M, "SecTrendSummaryCard", vAapl).includes("unusually large"));
   await underMutation("skew line not rendered",
-    "{t.skewNote ? <p className=\"earningsDataNote\">{t.skewNote}</p> : null}", "",
+    "{t.skewNote ? <p>{t.skewNote}</p> : null}", "",
     (mod) => card(mod, "SecTrendSummaryCard", mod.buildSecEarningsView(AVAV)).includes(LINE));
 }
 
