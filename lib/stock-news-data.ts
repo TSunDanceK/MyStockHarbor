@@ -153,26 +153,20 @@ function parseRss(xml: string): NewsItem[] {
   return items;
 }
 
-// Live quote: FMP is the primary source (same endpoint/key already used
-// elsewhere on the site for metadata + company profile - reliable, and a
-// real API key is configured). Yahoo Finance's unofficial chart endpoint
-// (no key required) is the fallback for when FMP_API_KEY is missing or the
-// FMP call fails outright -- it also tends to pick up freshly-listed/
-// thin-coverage tickers (new IPOs, SPAC units) early, so a ticker that would
-// otherwise show "DATA UNAVAILABLE" right after listing often gets a real
-// price/history from here instead.
+// Live quote: FMP only, and only until the FMP key goes (14 Oct). The Yahoo
+// quote fallback that sat here is removed (#563 COWORK #46, B13): Yahoo is not
+// a licensed source. The page's Last Price tile reads Tiingo first
+// (PRICE_PROVIDER_NEWS_HERO), then this, then says plainly that no price is
+// available -- never a figure from an unlicensed source.
 //
-// Both paths require price > 0, not just a finite number: Stooq, an earlier
+// The path requires price > 0, not just a finite number: Stooq, an earlier
 // fallback, returned a literal "0" (not "N/D"/blank) for some tickers
 // instead of failing cleanly, which previously rendered as a real "$0.00"
 // price on the page (formatMoney only shows "-" for null/undefined, not
 // for an actual zero). Treating a non-positive price as "no data" avoids
 // that class of bug regardless of which upstream returns it.
 async function fetchQuote(symbol: string): Promise<Quote | null> {
-  const fmpQuote = await fetchFmpQuote(symbol);
-  if (fmpQuote) return fmpQuote;
-
-  return fetchYahooQuote(symbol);
+  return fetchFmpQuote(symbol);
 }
 
 // THE SPELLING THE VENDOR WANTS IS NOT THE SPELLING THE URL CARRIES.
@@ -251,10 +245,9 @@ const YAHOO_FETCH_HEADERS = {
 //   BRK.B   HTTP 404, "No data found, symbol may be delisted"
 //   BRK-B   HTTP 200, $503.49, meta.symbol=BRK-B
 //
-// CONVERTED HERE RATHER THAN IN ITS TWO CALLERS because fetchYahooQuote and
-// fetchYahooHistory are the same endpoint asked for different ranges. One
-// conversion covers the quote and the history; two would be two places to
-// forget.
+// CONVERTED HERE RATHER THAN IN ITS CALLER: the Yahoo quote that once shared
+// this endpoint is gone (B13), and the history (fetchYahooHistory, the
+// NEWS_TECH fallback) is now its only reader.
 async function fetchYahooChart(
   symbol: string,
   range: string
@@ -279,34 +272,9 @@ async function fetchYahooChart(
   }
 }
 
-async function fetchYahooQuote(symbol: string): Promise<Quote | null> {
-  const result = await fetchYahooChart(symbol, "5d");
-  if (!result) return null;
-
-  const meta = result.meta ?? {};
-  const price =
-    typeof meta.regularMarketPrice === "number" && Number.isFinite(meta.regularMarketPrice)
-      ? meta.regularMarketPrice
-      : null;
-  if (price == null || price <= 0) return null;
-
-  const timestampMs =
-    typeof meta.regularMarketTime === "number" ? meta.regularMarketTime * 1000 : Date.now();
-  const d = new Date(timestampMs);
-
-  return {
-    symbol,
-    price,
-    date: Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10),
-    time: Number.isNaN(d.getTime()) ? null : d.toISOString().slice(11, 19),
-    source: "Yahoo",
-  };
-}
-
 // Daily history. Behind PRICE_PROVIDER_NEWS_TECH=tiingo, the stored Tiingo EOD
 // bars (#563 COWORK #31 (a): Yahoo is not a licensed source); otherwise, and on
-// any Tiingo miss, Yahoo Finance's chart endpoint, the same one fetchYahooQuote
-// reads with a shorter range, until the flip.
+// any Tiingo miss, Yahoo Finance's chart endpoint, until the flip.
 async function fetchHistory(symbol: string): Promise<{ points: Point[]; source: "tiingo" | "yahoo" }> {
   const tiingo = await readNewsTechHistory(symbol);
   if (tiingo) return { points: tiingo, source: "tiingo" };
