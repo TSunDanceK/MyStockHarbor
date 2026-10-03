@@ -44,6 +44,8 @@ import { readSearchDemand } from "./searchDemand";
 import { PRESET_UNIVERSE } from "./presetUniverse";
 import { isPriceExcluded } from "../priceExcluded.mjs";
 import { POSITIVE_LAST_EARNINGS_ENABLED } from "../positiveLastEarnings";
+import { moneyIsUsd, pickersFundamentalsSource, readSecPickerRows, type SecPickerRow } from "./pickersSecFundamentals";
+import { SEC_GROWTH_COPY, secStrongEarningsGrowth } from "./pickersSecEarningsGrowth";
 import {
   readPickerChartsBulk,
   writePickerChartsBulk,
@@ -3371,14 +3373,33 @@ async function buildPickersPayload(
   fillSlots(dynamicUniverse, UNIVERSE_CAP); // backfills the remainder
   const universe = Array.from(universeSlots);
 
+  // STRONG EARNINGS GROWTH FROM THE FILINGS (#553 CODE-B #94 B5, 2026-10-03).
+  // Under PICKERS_FUNDAMENTALS's SEC default the list's membership comes from
+  // the picker SEC hash (pickersSecEarningsGrowth.ts) -- ONE HMGET here, per
+  // build, in place of the chunked FMP earnings MGET it replaces; nothing per
+  // page view. The FMP earnings rows are then read only while the hidden
+  // Positive Last Earnings screener is switched back on, which still needs
+  // them; with it off (the default) they are neither read nor queued.
+  // PICKERS_FUNDAMENTALS=fmp is the rollback to the FMP rule, unchanged.
+  const earningsGrowthFromSec = pickersFundamentalsSource() === "sec";
+  const needFmpEarnings = !earningsGrowthFromSec || POSITIVE_LAST_EARNINGS_ENABLED;
+
   // READ BEFORE QUEUEING, and pass the result on. These two used to run the
   // other way round over the same universe, so every earnings key was fetched
   // twice -- once to decide whether to queue it and once to use it.
-  const earningsBySymbol = await readCachedFmpEarningsBulk(universe);
+  const earningsBySymbol: Map<string, EarningsRow[]> = needFmpEarnings
+    ? await readCachedFmpEarningsBulk(universe)
+    : new Map();
 
   // Queue missing earnings data for the background warmer. The picker route reads
   // earnings from Redis only, so page loads never spend FMP calls on earnings.
-  if (!dryRun) await queueEarningsWarmupSymbols(universe, earningsBySymbol);
+  if (needFmpEarnings) {
+    if (!dryRun) await queueEarningsWarmupSymbols(universe, earningsBySymbol);
+  }
+
+  const secRowsBySymbol: Map<string, SecPickerRow> = earningsGrowthFromSec
+    ? await readSecPickerRows(universe)
+    : new Map();
 
   // Same idea for price history: one pipelined mget for the whole universe
   // up front instead of one Redis GET per symbol inside the loop below (was
@@ -3515,7 +3536,11 @@ async function buildPickersPayload(
             });
           }
 
-          const strongEarningsGrowthCandidate = computeStrongEarningsGrowthCandidate(earningsRows);
+          // SEC default: filed figures only, never the FMP rows (see above).
+          const secRow = secRowsBySymbol.get(symbol);
+          const strongEarningsGrowthCandidate = earningsGrowthFromSec
+            ? secStrongEarningsGrowth(secRow, secRow ? moneyIsUsd(secRow.unit) : false)
+            : computeStrongEarningsGrowthCandidate(earningsRows);
           if (strongEarningsGrowthCandidate) {
             strongEarningsGrowth.push({
               symbol,
@@ -4218,8 +4243,10 @@ async function buildPickersPayload(
     })] : []),
     buildSection({
       title: "Stocks With Strong Earnings Growth",
-      description:
-        "Stocks ranked by year-over-year EPS and revenue growth, recent positive earnings consistency and beat history.",
+      // The words follow the rule in force (#553 CODE-B #94 B5, 2026-10-03).
+      description: earningsGrowthFromSec
+        ? SEC_GROWTH_COPY.sectionDescription
+        : "Stocks ranked by year-over-year EPS and revenue growth, recent positive earnings consistency and beat history.",
       source: strongEarningsGrowth,
       take: 20,
     }),

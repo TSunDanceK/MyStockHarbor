@@ -66,6 +66,7 @@ import {
   type ValuationRefusal,
 } from "./secValuation";
 import { isBankOrInsurer, type CellWhyCode, type CellWhyColumn } from "../pickerCellWhy";
+import { secGrowthFacts, type SecGrowthFacts } from "./pickersSecEarningsGrowth";
 
 export const PICKERS_SEC_KEY = "msh:pickers:sec-fundamentals:v1";
 /**
@@ -144,6 +145,13 @@ export type SecPickerRow = {
   eps?: EpsBasis | null;
   /** Payout from one period only, or null. Same optionality as `eps`. */
   payout?: PayoutBasis | null;
+  /**
+   * The latest filed period against a year earlier, for the Strong Earnings
+   * Growth list's membership (pickersSecEarningsGrowth.ts, #553 CODE-B #94 B5,
+   * 2026-10-03), or the reason there is none. Same optionality as `eps`: a row
+   * written before it existed is simply not a member until the job rewrites it.
+   */
+  growth?: SecGrowthFacts | null;
 };
 
 /** A payout ratio (PERCENT) whose dividend and EPS cover the same period. */
@@ -285,6 +293,7 @@ export function buildSecPickerRow(
       // the row carries nothing derived from a figure it refused.
       eps: null,
       payout: null,
+      growth: secGrowthFacts(set, today, filer, inputs.refusals),
     };
   }
   const oi = twelveMonthsOf(set, ["operatingIncome"]);
@@ -306,6 +315,7 @@ export function buildSecPickerRow(
     divGrowth: dividendGrowth(set),
     eps: inputs.eps,
     payout: samePeriodPayout(set, inputs.eps),
+    growth: secGrowthFacts(set, today, filer, inputs.refusals),
   };
 }
 
