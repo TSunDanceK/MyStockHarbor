@@ -1,9 +1,11 @@
 import Link from "next/link";
 import ColdFill from "@/app/stock/[symbol]/ColdFill";
+import { ReasonedValue } from "@/app/components/EstimatedValue";
+import { GROWTH_COLORS, GROWTH_MARGIN_LINE } from "@/lib/growthPalette";
 import type { CSSProperties } from "react";
 
 import type {
-  SecEarningsSnapshot, SnapshotFigure, SnapshotNextReport, SnapshotPct,
+  SecEarningsSnapshot, SnapshotAnnualChart, SnapshotAnnualYear, SnapshotFigure, SnapshotNextReport, SnapshotPct,
 } from "@/lib/server/secEarningsSnapshot";
 
 // ── Shared "Earnings snapshot" card ──────────────────────────────────────────
@@ -152,6 +154,14 @@ const TONE_TEXT: Record<ToneKey, string> = {
   weak: "#fca5a5",
 };
 
+// ── Retired parts of the tile (#552 COWORK #134, 2026-10-03) ─────────────────
+// Hidden, not removed, per the owner's rule. See the comments where each renders.
+
+/** The "Next earnings" cell and the two-cell date row it sat in. */
+const SHOW_NEXT_REPORT_IN_TILE = false;
+/** The Revenue, Net income and Net margin tiles, now shown by the annual chart. */
+const SHOW_CHARTED_METRIC_TILES = false;
+
 // ── Card ─────────────────────────────────────────────────────────────────────
 
 export default function LatestEarningsCard({
@@ -171,7 +181,7 @@ export default function LatestEarningsCard({
   // be a claim the filings did not support.
   const verdict = snapshot.available && !snapshot.partial;
   return (
-    <section style={earningsCardStyle(tone, verdict)}>
+    <section className="snapshotMetricsWrap" style={earningsCardStyle(tone, verdict)}>
       <div style={sectionEyebrowStyle}>Latest earnings</div>
       <div
         style={{
@@ -186,6 +196,20 @@ export default function LatestEarningsCard({
         <h2 style={{ ...sectionTitleSmallStyle, margin: 0 }}>Earnings snapshot</h2>
         <div style={earningsTonePillStyle(tone, verdict)}>{snapshot.toneLabel}</div>
       </div>
+      {/* THE LATEST REPORT, IN SMALL PRINT BY THE TITLE (#552 COWORK #134). It
+          was the left half of a two-cell date row; that row is retired below.
+          WHICH EVENT THE DATE IS stays said: an 8-K Item 2.02 announcement and
+          a 10-Q acceptance are different days, often several apart. */}
+      {snapshot.available && snapshot.reportedOn ? (
+        <div style={earningsMiniSubStyle} data-snapshot-reported="">
+          Latest report {formatPlainDate(snapshot.reportedOn)}
+          {snapshot.reportedVia === "announcement"
+            ? ` · ${snapshot.reportedTimingNote ?? "Announced by the company"}`
+            : snapshot.reportedVia === "filing"
+              ? " · Filed with the SEC"
+              : ""}
+        </div>
+      ) : null}
       {snapshot.partialNote ? <div style={earningsFootnoteStyle}>{snapshot.partialNote}</div> : null}
       {/* THE ANNUAL-ONLY LAYOUT (#535 COWORK #15): one short, true note, and the
           score says what it is based on. */}
@@ -206,6 +230,13 @@ export default function LatestEarningsCard({
         )
       ) : (
         <>
+          {/* ── RETIRED 2026-10-03 (#552 COWORK #134): THE DATE ROW, AND WITH IT
+              "NEXT EARNINGS". Hidden, not removed. The owner ruled the
+              estimated window confusing in this tile; the latest report date
+              moved into small print by the title above, and the earnings
+              page's own next-report card is unchanged. The payload still
+              carries `nextReport`. Flip SHOW_NEXT_REPORT_IN_TILE to restore. */}
+          {SHOW_NEXT_REPORT_IN_TILE ? (
           <div style={earningsDateRowStyle}>
             <div>
               <div style={earningsMiniLabelStyle}>Latest report</div>
@@ -235,6 +266,10 @@ export default function LatestEarningsCard({
               ) : null}
             </div>
           </div>
+          ) : null}
+
+          {/* THE SMALL ANNUAL CHART IN THE FREED SPACE (#552 COWORK #134). */}
+          {snapshot.annualChart ? <AnnualChart chart={snapshot.annualChart} /> : null}
 
           {/* THE PERIOD THESE FIGURES ARE FOR. The old card had no period line
               at all: every figure was captioned "Actual EPS" with nothing
@@ -255,7 +290,11 @@ export default function LatestEarningsCard({
             <div style={earningsMiniSubStyle}>{snapshot.filingNotice}</div>
           ) : null}
 
-          <div style={earningsMetricGridStyle}>
+          {/* THREE TILES ON ONE ROW, OR EPS ON ITS OWN ROW WHEN THE TILE IS
+              NARROW (a phone, or the news page's column): a container query on
+              the tile's own width, so "Operating margin" never breaks mid-word. */}
+          <style>{SNAPSHOT_GRID_CSS}</style>
+          <div className="snapshotMetrics" style={earningsMetricGridStyle}>
             {/* A BLANK TILE SAYS WHY, in the meta slot where growth would sit.
                 The reason is the payload's (emptyReason / marginReasons) —
                 the card never guesses one. */}
@@ -272,22 +311,31 @@ export default function LatestEarningsCard({
                   : snapshot.eps.derivedNote
               }
             />
-            <EarningsMetric
-              label="Revenue"
-              value={formatFigure(snapshot.revenue)}
-              meta={snapshot.revenue.emptyReason ?? growthText(snapshot.revenueYoY)}
-              tone={snapshot.revenue.emptyReason ? undefined : growthTone(snapshot.revenueYoY)}
-              note={snapshot.revenue.derivedNote}
-            />
-            <EarningsMetric
-              label="Net income"
-              value={formatFigure(snapshot.netIncome)}
-              meta={snapshot.netIncome.emptyReason}
-              note={snapshot.netIncome.derivedNote}
-            />
+            {/* ── RETIRED 2026-10-03 (#552 COWORK #134): REVENUE, NET INCOME AND
+                NET MARGIN TILES. Hidden, not removed: the annual chart above
+                now shows all three. Flip SHOW_CHARTED_METRIC_TILES to restore. */}
+            {SHOW_CHARTED_METRIC_TILES ? (
+              <>
+                <EarningsMetric
+                  label="Revenue"
+                  value={formatFigure(snapshot.revenue)}
+                  meta={snapshot.revenue.emptyReason ?? growthText(snapshot.revenueYoY)}
+                  tone={snapshot.revenue.emptyReason ? undefined : growthTone(snapshot.revenueYoY)}
+                  note={snapshot.revenue.derivedNote}
+                />
+                <EarningsMetric
+                  label="Net income"
+                  value={formatFigure(snapshot.netIncome)}
+                  meta={snapshot.netIncome.emptyReason}
+                  note={snapshot.netIncome.derivedNote}
+                />
+              </>
+            ) : null}
             <EarningsMetric label="Gross margin" value={formatLevel(snapshot.margins.gross)} meta={snapshot.marginReasons.gross} />
             <EarningsMetric label="Operating margin" value={formatLevel(snapshot.margins.operating)} meta={snapshot.marginReasons.operating} />
-            <EarningsMetric label="Net margin" value={formatLevel(snapshot.margins.net)} meta={snapshot.marginReasons.net} />
+            {SHOW_CHARTED_METRIC_TILES ? (
+              <EarningsMetric label="Net margin" value={formatLevel(snapshot.margins.net)} meta={snapshot.marginReasons.net} />
+            ) : null}
           </div>
 
           {/* WHAT THE PERCENTAGES ARE MEASURED AGAINST. A "+12.4%" with no
@@ -298,8 +346,9 @@ export default function LatestEarningsCard({
           {/* Only when a growth figure actually prints: on a card whose two
               growth slots both carry an empty reason, the sentence describes
               a comparison nothing on screen makes. */}
-          {snapshot.comparedWith &&
-          (snapshot.epsYoY.kind !== "none" || snapshot.revenueYoY.kind !== "none") ? (
+          {/* EPS ONLY since #552 COWORK #134: the revenue tile is retired, so
+              its growth figure no longer prints here. */}
+          {snapshot.comparedWith && snapshot.epsYoY.kind !== "none" ? (
             <div style={earningsFootnoteStyle}>
               Growth is measured against {snapshot.comparedWith}.
             </div>
@@ -318,6 +367,164 @@ export default function LatestEarningsCard({
       )}
       <div style={earningsSourceStyle}>{snapshot.sourceNote}</div>
     </section>
+  );
+}
+
+// ── The small annual chart (#552 COWORK #134) ────────────────────────────────
+// Modelled on a TradingView income-statement mini-chart and kept as simple as
+// it can be: four fiscal years, Revenue and Net income as bars on the $ scale,
+// Net margin % as a purple line with dots on its own scale. No toggle, no
+// hover: each year's label opens its figures on a tap (ReasonedValue), and the
+// newest margin dot carries its value.
+//
+// SERVER-RENDERED SVG, NO HOOKS, so the tile still renders inside the news
+// page's server component. The colours are the earnings page's Growth &
+// margins palette (lib/growthPalette.ts), not a copy.
+//
+// THE TWO SCALES SHARE ONE ZERO LINE. Each is stretched below zero by the same
+// fraction, so a loss bar and a negative margin both sit under the same line.
+
+const CHART_W = 320;
+const CHART_H = 132;
+const CHART_PAD_L = 44;
+const CHART_PAD_R = 38;
+const CHART_PAD_T = 12;
+const CHART_PAD_B = 8;
+
+function moneyTick(v: number): string {
+  if (v === 0) return "$0";
+  return formatFigure({ value: v, perShare: false, derivedNote: null, emptyReason: null });
+}
+
+/** The year's figures in one sentence, for its tap note. Reasons stand in for absent figures. */
+function yearNote(y: SnapshotAnnualYear): string {
+  const parts = [
+    `Revenue ${y.revenueText ?? `not drawn (${y.revenueGap?.note ?? "not on file"})`}`,
+    `Net income ${y.netIncomeText ?? `not drawn (${y.profitGap?.note ?? "not on file"})`}`,
+    `Net margin ${y.netMargin !== null ? formatLevel(y.netMargin) : "not computed"}`,
+  ];
+  const extra = [y.oneOff, ...y.derivedNotes].filter(Boolean).join(" ");
+  return `${y.label}: ${parts.join(" · ")}.${extra ? ` ${extra}` : ""}`;
+}
+
+function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
+  if (chart.reason) {
+    return <p style={chartReasonStyle} data-snapshot-chart-reason="">{chart.reason}</p>;
+  }
+  const C = GROWTH_COLORS;
+  const years = chart.years;
+  const n = years.length;
+  const plotW = CHART_W - CHART_PAD_L - CHART_PAD_R;
+  const plotH = CHART_H - CHART_PAD_T - CHART_PAD_B;
+
+  // The $ scale: revenue and net income together. The % scale: net margin.
+  const money = years.flatMap((y) => [y.revenue, y.netIncome]).filter((v): v is number => v !== null);
+  const margins = years.map((y) => y.netMargin).filter((v): v is number => v !== null);
+  const moneyMax = Math.max(0, ...money);
+  const moneyMin = Math.min(0, ...money);
+  const pctMax = Math.max(0, ...margins);
+  const pctMin = Math.min(0, ...margins);
+  // How far below zero each scale must reach, as a fraction of its top; the
+  // larger wins for both so the zero lines coincide.
+  const below = Math.max(
+    moneyMax > 0 ? -moneyMin / moneyMax : 0,
+    pctMax > 0 ? -pctMin / pctMax : 0,
+    moneyMax <= 0 || pctMax <= 0 ? 1 : 0,
+  );
+  const mTop = moneyMax > 0 ? moneyMax : Math.max(1, -moneyMin);
+  const pTop = pctMax > 0 ? pctMax : Math.max(1, -pctMin);
+  const mBottom = -below * mTop;
+  const pBottom = -below * pTop;
+  const yMoney = (v: number) => CHART_PAD_T + ((mTop - v) / (mTop - mBottom)) * plotH;
+  const yPct = (v: number) => CHART_PAD_T + ((pTop - v) / (pTop - pBottom)) * plotH;
+  const zeroY = yMoney(0);
+
+  const slot = plotW / n;
+  const barW = slot * 0.26;
+  const xOf = (i: number) => CHART_PAD_L + slot * i + slot / 2;
+
+  const dots = years
+    .map((y, i) => (y.netMargin === null ? null : { x: xOf(i), y: yPct(y.netMargin), v: y.netMargin, i }))
+    .filter((d): d is { x: number; y: number; v: number; i: number } => d !== null);
+  // A missing margin breaks the line, as on the earnings page.
+  const segments: string[] = [];
+  let run: string[] = [];
+  years.forEach((y, i) => {
+    if (y.netMargin === null) { if (run.length > 1) segments.push(run.join(" ")); run = []; return; }
+    run.push(`${run.length ? "L" : "M"}${xOf(i).toFixed(1)},${yPct(y.netMargin).toFixed(1)}`);
+  });
+  if (run.length > 1) segments.push(run.join(" "));
+  const last = dots.at(-1);
+
+  const tick = (y: number, text: string, side: "l" | "r") => (
+    <text
+      x={side === "l" ? CHART_PAD_L - 6 : CHART_W - CHART_PAD_R + 6}
+      y={y + 3}
+      textAnchor={side === "l" ? "end" : "start"}
+      fontSize={9}
+      fill={C.muted}
+    >
+      {text}
+    </text>
+  );
+  const leftPct = (CHART_PAD_L / CHART_W) * 100;
+  const rightPct = (CHART_PAD_R / CHART_W) * 100;
+
+  return (
+    <div style={{ marginTop: 14 }} data-snapshot-chart="">
+      <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} width="100%" role="img" aria-label="Revenue, net income and net margin for the last fiscal years" style={{ display: "block", overflow: "visible" }}>
+        <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={zeroY} y2={zeroY} stroke={C.rule} strokeWidth={1} />
+        <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={CHART_PAD_T} y2={CHART_PAD_T} stroke={C.rule} strokeWidth={0.5} strokeDasharray="2 3" />
+        {tick(CHART_PAD_T, moneyTick(mTop), "l")}
+        {tick(zeroY, "$0", "l")}
+        {mBottom < 0 && moneyMin < 0 ? tick(yMoney(moneyMin), moneyTick(moneyMin), "l") : null}
+        {tick(CHART_PAD_T, `${Math.round(pTop)}%`, "r")}
+        {tick(zeroY, "0%", "r")}
+        {pBottom < 0 && pctMin < 0 ? tick(yPct(pctMin), `${Math.round(pctMin)}%`, "r") : null}
+        {years.map((y, i) => {
+          const x = xOf(i);
+          const bar = (v: number, dx: number, fill: string, kind: string) => {
+            const top = Math.min(yMoney(v), zeroY);
+            const h = Math.max(1, Math.abs(yMoney(v) - zeroY));
+            return <rect key={kind} data-bar={kind} x={x + dx} y={top} width={barW} height={h} rx={1.5} fill={fill} />;
+          };
+          return (
+            <g key={y.label}>
+              {y.revenue !== null ? bar(y.revenue, -barW - 1, C.sales, "revenue") : null}
+              {y.netIncome !== null ? bar(y.netIncome, 1, y.netIncome < 0 ? C.loss : C.profit, y.netIncome < 0 ? "loss" : "profit") : null}
+            </g>
+          );
+        })}
+        {segments.map((d) => (
+          <path key={d} d={d} fill="none" stroke={C.margin} strokeWidth={GROWTH_MARGIN_LINE.width} strokeOpacity={GROWTH_MARGIN_LINE.opacity} />
+        ))}
+        {dots.map((d) => <circle key={d.i} data-margin-dot="" cx={d.x} cy={d.y} r={3} fill={C.margin} />)}
+        {last ? (
+          <text data-margin-latest="" x={last.x} y={last.y - 6} textAnchor="middle" fontSize={9} fontWeight={800} fill={C.margin}>
+            {formatLevel(last.v)}
+          </text>
+        ) : null}
+      </svg>
+      {/* THE YEAR LABELS, IN HTML SO EACH OPENS ITS FIGURES ON A TAP. Laid
+          over the plot's own columns: the same side padding, as a % of width. */}
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, marginLeft: `${leftPct}%`, marginRight: `${rightPct}%` }}>
+        {years.map((y) => {
+          const gap = y.revenueGap ?? y.profitGap;
+          return (
+            <div key={y.label} style={chartYearStyle} data-snapshot-year={y.label}>
+              <ReasonedValue text={y.short} reason={yearNote(y)} />
+              {gap ? <div style={chartGapStyle}>{gap.words}</div> : null}
+              {y.oneOff && !gap ? <div style={chartGapStyle}>Includes a one-off</div> : null}
+            </div>
+          );
+        })}
+      </div>
+      <div style={chartLegendStyle} data-snapshot-legend="">
+        <span><i style={{ ...legendSwatchStyle, background: C.sales }} />Revenue</span>
+        <span><i style={{ ...legendSwatchStyle, background: C.profit }} />Net income</span>
+        <span><i style={{ ...legendSwatchStyle, background: C.margin, borderRadius: 999 }} />Net margin %</span>
+      </div>
+    </div>
   );
 }
 
@@ -395,11 +602,21 @@ function earningsTonePillStyle(tone: ToneKey, verdict: boolean): CSSProperties {
 }
 
 const earningsDateRowStyle: CSSProperties = { marginTop: 14, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 };
-const earningsMetricGridStyle: CSSProperties = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 };
+// THREE TILES SINCE #552 COWORK #134 (EPS, Gross margin, Operating margin).
+// The columns come from SNAPSHOT_GRID_CSS: one row of three where the tile is
+// wide enough, else EPS across the top and the two margins under it.
+const earningsMetricGridStyle: CSSProperties = { marginTop: 12, display: "grid", gap: 8 };
+/** The width (px) of the tile's content below which the three tiles stop sharing a row. */
+export const SNAPSHOT_GRID_ONE_ROW_MIN_PX = 300;
+const SNAPSHOT_GRID_CSS =
+  `.snapshotMetricsWrap{container-type:inline-size}` +
+  `.snapshotMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}` +
+  `.snapshotMetrics>:first-child{grid-column:1/-1}` +
+  `@container (min-width:${SNAPSHOT_GRID_ONE_ROW_MIN_PX}px){.snapshotMetrics{grid-template-columns:repeat(3,minmax(0,1fr))}.snapshotMetrics>:first-child{grid-column:auto}}`;
 
 function earningsMetricStyle(tone?: ToneKey): CSSProperties {
   const border = tone ? `rgba(${TONE_RGB[tone]},0.23)` : "rgba(255,255,255,0.08)";
-  return { border: `1px solid ${border}`, borderRadius: 14, padding: 12, background: "rgba(2,6,23,0.30)", minWidth: 0 };
+  return { border: `1px solid ${border}`, borderRadius: 14, padding: 10, background: "rgba(2,6,23,0.30)", minWidth: 0 };
 }
 
 const earningsMiniLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 950, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(203,213,225,0.72)" };
@@ -432,5 +649,11 @@ const fullReportLinkStyle: CSSProperties = {
   letterSpacing: "0.02em",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
 };
+
+const chartReasonStyle: CSSProperties = { marginTop: 14, fontSize: 12, lineHeight: 1.5, color: "rgba(203,213,225,0.70)" };
+const chartYearStyle: CSSProperties = { textAlign: "center", fontSize: 11, fontWeight: 800, color: "rgba(226,232,240,0.80)", minWidth: 0 };
+const chartGapStyle: CSSProperties = { marginTop: 2, fontSize: 9, lineHeight: 1.25, color: "rgba(203,213,225,0.58)" };
+const chartLegendStyle: CSSProperties = { marginTop: 8, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px", fontSize: 11, color: "rgba(203,213,225,0.72)" };
+const legendSwatchStyle: CSSProperties = { display: "inline-block", width: 9, height: 9, borderRadius: 2, marginRight: 5, verticalAlign: "-1px" };
 
 const earningsSourceStyle: CSSProperties = { marginTop: 12, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.58)" };
