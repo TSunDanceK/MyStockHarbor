@@ -721,6 +721,11 @@ export type WarmPickersSecResult = {
  * rows of the symbols this run simply did not reach.
  */
 export const WARM_PICKERS_SEC_BUDGET_MS = 240_000;
+/**
+ * Commands kept back when the job guard's budget runs low: the last HSET, the
+ * EXPIRE and the run record, with room (#553 COWORK #124).
+ */
+export const WARM_PICKERS_SEC_COMMAND_RESERVE = 20;
 
 /** The module's client, read through a function so warmPickersSec can name its local `redis`. */
 const moduleRedis = (): WarmPickersSecRedis | null => redis;
@@ -735,6 +740,11 @@ export type WarmPickersSecDeps = {
   budgetMs?: number;
   redis?: WarmPickersSecRedis | null;
   readFactSet?: (symbol: string) => Promise<StoredFactSet | null>;
+  /**
+   * Commands the job guard still allows this run, or null outside a guarded
+   * run. The route passes jobGuard's guardCommandsLeft; checks pass a stub.
+   */
+  commandsLeft?: () => number | null;
 };
 
 /** Below this share of the hash's current rows, today's targets look like a bad read. */
@@ -787,6 +797,7 @@ export async function warmPickersSec(
 ): Promise<WarmPickersSecResult> {
   const clock = deps.clock ?? Date.now;
   const budgetMs = deps.budgetMs ?? WARM_PICKERS_SEC_BUDGET_MS;
+  const commandsLeft = deps.commandsLeft ?? (() => null);
   // Named `redis` on purpose: the write-site registry (scripts/check-redis-write-sites.mjs)
   // finds this job's HSET/EXPIRE/HDEL by that name.
   const redis: WarmPickersSecRedis | null = deps.redis !== undefined ? deps.redis : moduleRedis();
@@ -828,6 +839,16 @@ export async function warmPickersSec(
       result.stoppedEarly = "time-budget";
       break;
     }
+    // THE COMMAND BUDGET (#553 COWORK #124): stop short of the job guard's
+    // per-run ceiling, keeping a reserve for the final flush and EXPIRE. Run
+    // into the guard instead and every later request throws -- the rows in
+    // hand, the EXPIRE and the summary line were all lost that way on the
+    // first widened run (3 Oct, 21:25 UTC).
+    const left = commandsLeft();
+    if (left != null && left <= WARM_PICKERS_SEC_COMMAND_RESERVE) {
+      result.stoppedEarly = "command-budget";
+      break;
+    }
     const set = await readSet(symbol).catch(() => null);
     result.commands++;
     if (!set) {
@@ -841,9 +862,9 @@ export async function warmPickersSec(
 
   // Drop the rows of symbols no longer targeted: 1 HKEYS + 1 multi-key HDEL.
   // Not after an early stop: the unread symbols' rows are not stale.
-  if (result.stoppedEarly === "time-budget") {
-    result.pruneSkipped = "time-budget";
-    console.warn("[warm-pickers-sec] prune skipped: time-budget");
+  if (result.stoppedEarly === "time-budget" || result.stoppedEarly === "command-budget") {
+    result.pruneSkipped = result.stoppedEarly;
+    console.warn(`[warm-pickers-sec] prune skipped: ${result.stoppedEarly}`);
   } else try {
     const stored = ((await redis.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
     result.commands++;

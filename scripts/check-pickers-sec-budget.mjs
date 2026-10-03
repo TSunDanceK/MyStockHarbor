@@ -41,7 +41,7 @@ async function loadSibling(source) {
 }
 
 /** One run: `n` symbols, each read advancing the fake clock by `stepMs`. */
-async function run(mod, n, stepMs = 1000) {
+async function run(mod, n, stepMs = 1000, commandBudget = null) {
   let t = 1_000_000;
   const log = [];
   const stored = [];
@@ -53,10 +53,13 @@ async function run(mod, n, stepMs = 1000) {
   };
   const symbols = Array.from({ length: n }, (_, i) => `S${i}`);
   let reads = 0;
+  // The guard's view: every command the run sends counts (reads and writes).
+  const used = () => reads + log.length;
   const result = await mod.warmPickersSec(symbols, () => ({}), NOW, "test:key", {
     clock: () => t,
     redis,
     readFactSet: async () => { reads++; t += stepMs; return SET; },
+    commandsLeft: commandBudget == null ? undefined : () => commandBudget - used(),
   });
   return { result, log, reads };
 }
@@ -85,8 +88,25 @@ function rules(mod, early, full) {
   want("CONTROL: ...and reports its duration", full.result.durationMs === 50_000, String(full.result.durationMs));
   return fails;
 }
+// #553 COWORK #124: the job guard's per-run command budget. 500 symbols at no
+// clock cost, against a budget of 250 commands: the job must stop itself with
+// its reserve in hand, flush, EXPIRE, skip the prune and say why -- never run
+// into the guard, which would make every later request throw.
+function budgetRules(mod, b) {
+  const fails = [];
+  const want = (label, ok, detail = "") => { if (!ok) fails.push(`${label}${detail ? ` — ${detail}` : ""}`); };
+  const R = mod.WARM_PICKERS_SEC_COMMAND_RESERVE;
+  want("COMMANDS: a reserve is kept for the final writes", Number.isFinite(R) && R >= 3, String(R));
+  want("COMMANDS: reading stops with the reserve still in hand", b.reads > 0 && b.reads < 500 && 250 - (b.reads + b.log.length) >= 1, `${b.reads} reads, ${b.log.length} writes`);
+  want("COMMANDS: the result says stoppedEarly \"command-budget\"", b.result.stoppedEarly === "command-budget", String(b.result.stoppedEarly));
+  want("COMMANDS: every row read is flushed", b.result.written === b.reads, `${b.result.written} of ${b.reads}`);
+  want("COMMANDS: the EXPIRE is still set", b.log.some((c) => c[0] === "expire"));
+  want("COMMANDS: the prune is skipped", !b.log.some((c) => c[0] === "hkeys" || c[0] === "hdel") && b.result.pruneSkipped === "command-budget", String(b.result.pruneSkipped));
+  want("COMMANDS: not a failed run", b.result.ok === true);
+  return fails;
+}
 async function suite(mod) {
-  return rules(mod, await run(mod, 300), await run(mod, 50));
+  return [...rules(mod, await run(mod, 300), await run(mod, 50)), ...budgetRules(mod, await run(mod, 500, 0, 250))];
 }
 
 const src = read(MODULE);
@@ -103,6 +123,7 @@ function routeRules(r) {
   if (!/console\.log\("\[warm-pickers-sec\]", `durationMs=\$\{result\.durationMs \?\? null\}`, JSON\.stringify\(result\)\);/.test(c)) fails.push("the job's console line carries durationMs");
   if (!/recordJobRun\("warm-pickers-sec", result\.ok, \{\s*durationMs: result\.durationMs \?\? null,/.test(c)) fails.push("the job's run summary records durationMs");
   if (!/stoppedEarly: result\.stoppedEarly,/.test(c)) fails.push("the run summary still records stoppedEarly");
+  if (!/commandsLeft: guardCommandsLeft,/.test(c)) fails.push("the route hands the job the guard's remaining budget (#553 COWORK #124)");
   return fails;
 }
 const routeSrc = read(ROUTE);
@@ -118,9 +139,12 @@ const MUTANTS = [
   ["the clock not injectable (wall clock)", `  const clock = deps.clock ?? Date.now;`, `  const clock = Date.now;`],
   ["the last batch dropped on an early stop", `  if (!(await flush())) return done();\n\n  // Drop`, `  if (result.stoppedEarly !== "time-budget" && !(await flush())) return done();\n\n  // Drop`],
   ["no EXPIRE after an early stop", `    await redis.expire(key, PICKERS_SEC_TTL_SECONDS);`, `    if (result.stoppedEarly) throw new Error("skip");\n    await redis.expire(key, PICKERS_SEC_TTL_SECONDS);`],
-  ["the prune runs after an early stop", `  if (result.stoppedEarly === "time-budget") {\n    result.pruneSkipped = "time-budget";`, `  if (false) {\n    result.pruneSkipped = "time-budget";`],
+  ["the prune runs after an early stop", `  if (result.stoppedEarly === "time-budget" || result.stoppedEarly === "command-budget") {`, `  if (false) {`],
   ["the duration not reported", `    result.durationMs = Math.max(0, clock() - startedAt);`, `    result.durationMs = 0;`],
   ["the budget doubled", `export const WARM_PICKERS_SEC_BUDGET_MS = 240_000;`, `export const WARM_PICKERS_SEC_BUDGET_MS = 480_000;`],
+  ["the command budget ignored (runs into the guard)", `    if (left != null && left <= WARM_PICKERS_SEC_COMMAND_RESERVE) {`, `    if (false) {`],
+  ["no reserve kept", `export const WARM_PICKERS_SEC_COMMAND_RESERVE = 20;`, `export const WARM_PICKERS_SEC_COMMAND_RESERVE = 0;`],
+  ["the prune runs after a command-budget stop", `  if (result.stoppedEarly === "time-budget" || result.stoppedEarly === "command-budget") {`, `  if (result.stoppedEarly === "time-budget") {`],
 ];
 for (const [label, from, to] of MUTANTS) {
   if (src.split(from).length !== 2) { check(`mutant "${label}" applies`, false, "the anchor matched other than once"); continue; }
@@ -131,6 +155,7 @@ for (const [label, from, to] of MUTANTS) {
 for (const [label, from, to] of [
   ["the console line drops durationMs", "`durationMs=${result.durationMs ?? null}`, ", ""],
   ["the run summary drops durationMs", "      durationMs: result.durationMs ?? null,\n", ""],
+  ["the route does not pass the guard's budget", "      commandsLeft: guardCommandsLeft,\n", ""],
 ]) {
   const m = routeSrc.replace(from, to);
   check(`mutant "${label}" is caught`, m !== routeSrc && routeRules(m).length > 0);

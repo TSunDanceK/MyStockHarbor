@@ -60,11 +60,15 @@ export const JOB_LIMITS: Record<GuardedJob, { perRun: number; perDay: number }> 
   // 1 run/day, ~6-7K a run (a forced history refetch of ~700 symbols); the
   // lock-failure amplifier in CODE-B #39 is ~28K, which this stops at 15K.
   "warm-picker-universe": { perRun: 15_000, perDay: 21_000 },
-  // 1 run/day. ~2,630 a run since #690 widened it to the Tiingo universe
+  // 1 run/day (+ a manual run). ~2,630 a run since #690 widened it to the Tiingo universe
   // (~2,600 fact-set GETs + an HSET per 100 + the universe GET). The old
   // 2,100 (sized for ~850) would have stopped the first widened run (#553
   // CODE-B #116); check-tiingo-step5 holds this to 2x the planned universe.
-  "warm-pickers-sec": { perRun: 6_000, perDay: 18_000 },
+  // Sized for 3,000 symbols (the run cap) at 1 GET each + an HSET per 100,
+  // plus the warm-target derivation's own reads, x2 (#553 COWORK #124). The
+  // job also stops itself short of this (guardCommandsLeft), so a stop still
+  // flushes and reports.
+  "warm-pickers-sec": { perRun: 7_000, perDay: 21_000 },
   // 1 run/day, ~5 a run (stated). A catch-up run is still tiny.
   "ipo-refresh": { perRun: 200, perDay: 600 },
   // Tiingo (#553 COWORK #55 §2). Quotes: ~10 a run inside market hours (HKEYS,
@@ -183,6 +187,18 @@ function installFetchGuard() {
     return res;
   };
   globalThis.fetch = guarded as typeof fetch;
+}
+
+/**
+ * Commands this guarded run may still send before the guard stops it, or null
+ * outside a guarded run. A job reads it to STOP ITSELF with room to spare
+ * (#553 COWORK #124): a guard stop makes every later request throw, so a job
+ * that runs into it cannot flush, EXPIRE or report. warm-pickers-sec checks it
+ * before each read and keeps a reserve for its final writes.
+ */
+export function guardCommandsLeft(): number | null {
+  const ctx = als.getStore();
+  return ctx ? ctx.budget - ctx.commands : null;
 }
 
 // ── the kill switch (Edge Config, no Redis) ──────────────────────────────────

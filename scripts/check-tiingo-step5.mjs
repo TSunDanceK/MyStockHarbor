@@ -306,6 +306,20 @@ async function jobsBehaviour(J) {
   want("a complete night writes the newest bar per symbol to msh:tiingo:eod-last:v1", e.ok && e.eodLastRows === 2 && aapl?.d === "2026-09-24" && aapl.c === 105 && aapl.pc === 100 && aapl.v === 1000);
   want("...whole (DEL first), with a TTL, before the eod tag is revalidated",
     net.cmds.some((c) => c[0] === "del" && c[1] === K.TIINGO_EOD_LAST_KEY) && net.cmds.some((c) => c[0] === "expire" && c[1] === K.TIINGO_EOD_LAST_KEY));
+  // #553 COWORK #124: the universe grows after the night is complete. The
+  // already-complete run backfills the symbols eod-last lacks, and only those.
+  net.strings.set(K.TIINGO_UNIVERSE_KEY, JSON.stringify({ at: 2, symbols: ["AAPL", "MSFT", "NVDA"] }));
+  net.tiingo = [];
+  const bf = await J.runTiingoEod(Date.parse("2026-09-25T02:45:00Z"));
+  const perSymbol = net.tiingo.filter((u) => /^\/tiingo\/daily\/[^/]+\/prices/.test(u));
+  want("an already-complete night still backfills the new symbol, and only it",
+    bf.skipped === "already-complete" && bf.backfilled === 1 && perSymbol.length === 1 && /\/tiingo\/daily\/nvda\/prices/i.test(perSymbol[0]));
+  want("...storing its history and adding it to eod-last",
+    net.strings.has(K.tiingoEodKey("NVDA")) && !!net.hashes.get(K.TIINGO_EOD_LAST_KEY)?.get("NVDA") && !!net.hashes.get(K.TIINGO_EOD_LAST_KEY)?.get("AAPL"));
+  net.tiingo = [];
+  const again = await J.runTiingoEod(Date.parse("2026-09-25T02:50:00Z"));
+  want("...and a repeat run backfills nothing and calls Tiingo for nothing", again.backfilled === 0 && net.tiingo.length === 0);
+  want("the per-run backfill is capped (1,000) through the limiter", J.EOD_BACKFILL_PER_RUN === 1000);
   return fails;
 }
 const J = await real(FILES.jobs);
@@ -358,6 +372,9 @@ const J_MUTANTS = [
   ["the jobs always read the pool's HKEYS", /const keys = stored \? stored\.symbols : await mustRedis\(\)\.hkeys\(PRICE_POOL_KEY\);/, "const keys = await mustRedis().hkeys(PRICE_POOL_KEY);"],
   ["the retick guard skipped for the key's list", /const r = retickeredOut\(pool, live, lastSeen\);/, "const r = stored ? { keep: pool, dropped: [], guard: \"off\" } : retickeredOut(pool, live, lastSeen);"],
   ["the summary is never written", /if \(eodLastRows\) \{/, "if (false) {"],
+  ["#124: no backfill on a complete night", /\.\.\.\(await backfillEod\(nowMs, started\)\)/, "backfilled: 0"],
+  ["#124: backfill refetches symbols eod-last already has", /const missing = symbols\.filter\(\(s\) => !have\.has\(s\)\);/, "const missing = symbols;"],
+  ["#124: backfilled symbols not added to eod-last", /if \(Object\.keys\(fields\)\.length\) p\.hset\(TIINGO_EOD_LAST_KEY, fields\);/, ""],
 ];
 for (const [label, from, to] of J_MUTANTS) {
   const m = JOBS_SRC.replace(from, to);
