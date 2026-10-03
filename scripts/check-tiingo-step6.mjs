@@ -218,6 +218,14 @@ const rules = {
     !/\. Market cap is the SEC cover-page share count times that price\. Figures/.test(src),
   "video page: the MA tiles carry the note as their hover text": (src) =>
     /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /title=\{note \?\? undefined\}/.test(src),
+  // 8. B13 (#563 COWORK #46): the news price never falls back to Yahoo
+  "news data: the quote is FMP only, with no Yahoo quote left": (src) =>
+    /async function fetchQuote\(symbol: string\): Promise<Quote \| null> \{\s*return fetchFmpQuote\(symbol\);\s*\}/.test(src) &&
+    !/fetchYahooQuote|meta\.regularMarketPrice/.test(src),
+  "news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close": (src) =>
+    /\{heroPrice \? \(/.test(src) && /\) : quote\?\.price != null \? \(/.test(src) &&
+    /\{NEWS_HERO_NO_PRICE\}/.test(src) && /const NEWS_HERO_NO_PRICE = "Price not available right now";/.test(src) &&
+    !/formatMoney\(quote\?\.price \?\? lastClose\)/.test(src) && !/DATA UNAVAILABLE/.test(src),
 };
 const sourceOf = {
   "ai-market reads no price and takes no price argument": FILES.aiMarket,
@@ -243,6 +251,8 @@ const sourceOf = {
   "video page: the MA tiles carry the note as their hover text": FILES.videoPage,
   "videos: a withheld market cap says why, in A's words": FILES.video,
   "video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows": FILES.videoPage,
+  "news data: the quote is FMP only, with no Yahoo quote left": FILES.newsData,
+  "news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close": FILES.news,
 };
 const srcFor = (name) => [sourceOf[name]].flat().map((f) => (name.includes("caption") ? raw(f) : code(f))).join("\n");
 
@@ -280,6 +290,9 @@ const mutants = [
   ["videos: a withheld market cap says why, in A's words", (s) => s.replace("capitalise(cap.detail ?? REFUSAL_WORDS[cap.why])", "null")],
   ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace(", note: stockData.marketCap ? null : stockData.marketCapNote ?? null", "")],
   ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace('{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null}', " Market cap is the SEC cover-page share count times that price.")],
+  ["news data: the quote is FMP only, with no Yahoo quote left", (s) => s.replace("  return fetchFmpQuote(symbol);\n}", "  return (await fetchFmpQuote(symbol)) ?? fetchYahooQuote(symbol);\n}")],
+  ["news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close", (s) => s.replace("<div style={heroMetricValueStyle}>{formatMoney(quote.price)}</div>", "<div style={heroMetricValueStyle}>{formatMoney(quote?.price ?? lastClose)}</div>")],
+  ["news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close", (s) => s.replace("{NEWS_HERO_NO_PRICE}</div>", "{formatMoney(lastClose)}</div>")],
 ];
 for (const [name, mutate] of mutants) {
   const before = srcFor(name);
