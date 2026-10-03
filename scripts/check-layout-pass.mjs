@@ -133,7 +133,7 @@ console.log("\n7. AVAV (COWORK #54): P/B on NCI-inclusive equity, EV/EBITDA reas
   check("NCI tagged as 0 → the inclusive total is used", VAL.bookEquityAt(ZERO, ZERO.instants[0]).equity === 4.40 * B);
   const PARENT = set({ stockholdersEquity: 4.1 * B, totalEquity: 4.40 * B });
   check("parent equity present → parent wins", VAL.bookEquityAt(PARENT, PARENT.instants[0]).equity === 4.1 * B);
-  const Mn = await loadMutant(VAL_FILE, once(VALS, "  return nciTagged\n", "  return false && nciTagged\n"));
+  const Mn = await loadMutant(VAL_FILE, once(VALS, "  const today = nciTagged\n", "  const today = false && nciTagged\n"));
   check("MUTATION: NCI test removed → an NCI filer gets a P/B on the inclusive total (caught)", Mn.bookEquityAt(NCI, NCI.instants[0]).equity === 4.40 * B);
   const Mp = await loadMutant(VAL_FILE, once(VALS, "  if (parent !== null) return { equity: parent, equityIncludesNci: false, equityOnlyInclNci: false };\n", ""));
   check("MUTATION: parent-first removed → the inclusive total replaces parent equity (caught)", Mp.bookEquityAt(PARENT, PARENT.instants[0]).equity === 4.40 * B);
@@ -150,7 +150,7 @@ console.log("\n7. AVAV (COWORK #54): P/B on NCI-inclusive equity, EV/EBITDA reas
   check("EBITDA ≤ 0 → 'EBITDA over the last twelve months is not positive…'", neg.ok === false && neg.why === "ebitda-is-zero-or-negative" && /^EBITDA over the last twelve months is not positive/.test(VAL.REFUSAL_WORDS[neg.why]));
   const miss = VAL.valuationMultiples(inputs, mi({ ...avavBs, longTermDebt: null }, null, ["depreciation & amortization"]), 80.6).evEbitda;
   check("a missing input is named: long-term debt, D&A (twelve months)",
-    miss.ok === false && miss.detail === "not on file: long-term debt, depreciation & amortization (twelve months); it is not approximated", miss.detail);
+    miss.ok === false && miss.detail === "not on file: long-term debt, depreciation & amortization (twelve months)", miss.detail);
 
   const liab = V.withDerivedLiabilities({ key: "totalLiabilities", label: "Total liabilities", val: null, derived: null, derivedNote: null }, AVAV.instants[0]);
   check("total liabilities derived = 5.73 - 4.40 = 1.33B, marked derived", Math.abs(liab.val - 1.33 * B) < 1 && liab.derived === "computed" && /accounting identity/.test(liab.derivedNote));
