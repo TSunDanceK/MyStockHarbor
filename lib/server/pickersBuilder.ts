@@ -26,6 +26,7 @@ import { getDailyHistoryBulk } from "./historyCache";
 import { priceProviderFor, type PriceProvider } from "./marketData/provider";
 import { tiingoPickerHistory, type PickerHistoryStats } from "./marketData/pickerHistory";
 import type { EodBar } from "./marketData/types";
+import { computePerfFromBars, perfRowRefused, publicPickersPayload, type PerfRow } from "../pickerPerf";
 import { pickersWithoutBars } from "../pickersPublic";
 import { recordRedisRead, flushRedisReadMeter } from "./redisBandwidth";
 import {
@@ -281,6 +282,12 @@ type SignalRecord = {
   // from the preset mega-cap list or the day's market activity. Carried on the
   // payload so the All Stocks / pickers UI can badge or group these later.
   isPopularSearch?: boolean;
+  // THE PERFORMANCE TAB FROM STORED BARS (#553 CODE-B #94 B6): 1W/1M/6M/YTD/1Y
+  // computed here, at build time, from this symbol's Tiingo bars, with the
+  // close they run to and a true reason for each refused period
+  // (lib/pickerPerf.ts). Only with PRICE_PROVIDER_PICKERS=tiingo; absent on
+  // the FMP path, where the page keeps stockDataCache's figures.
+  perf?: PerfRow;
 };
 
 type TickerEarningsGrowthItem = {
@@ -3447,6 +3454,9 @@ async function buildPickersPayload(
   // registering only the fallback symbols would be a truncated list, which
   // reconcileToList refuses by design.
   let historyBySymbol: ReadonlyMap<string, Point[]>;
+  // B6: which symbols' series are Tiingo's, so the Performance tab is computed
+  // from Tiingo bars only. Null off the Tiingo path (no `perf` is written).
+  let perfFromTiingo: ReadonlySet<string> | null = null;
   if (opts.historyOverride && dryRun) {
     historyBySymbol = opts.historyOverride;
     lastHistoryStats = null;
@@ -3457,6 +3467,7 @@ async function buildPickersPayload(
         : null,
     });
     historyBySymbol = got.bySymbol;
+    perfFromTiingo = got.fromTiingo;
     lastHistoryStats = { provider: "tiingo", universe: universe.length, ...got.stats };
   } else {
     historyBySymbol = await getDailyHistoryBulk(universe, {
@@ -3516,6 +3527,13 @@ async function buildPickersPayload(
           }
 
           const earningsRows = earningsBySymbol.get(symbol) ?? [];
+          // B6: on the Tiingo path, a series the FMP fallback supplied gets no
+          // returns (they would be FMP figures); it says why instead.
+          const perf: PerfRow | undefined = perfFromTiingo
+            ? perfFromTiingo.has(symbol)
+              ? computePerfFromBars(pts)
+              : perfRowRefused("noBars")
+            : undefined;
 
           const dynamicName = isDynamicUniverse(symbol);
           const popularName = isPopularSearch(symbol);
@@ -4119,6 +4137,7 @@ async function buildPickersPayload(
               : undefined,
             isDynamicUniverse: dynamicName,
             isPopularSearch: popularName,
+            perf,
           });
         } catch {
           failedSymbolCount++;
@@ -5298,9 +5317,11 @@ async function handlePickersRequest(
 
   let forceRefresh = false;
   let ownerKeyed = false;
-  // NO PRICE BARS IN THIS PUBLIC JSON (#553 COWORK #105): every payload answer
-  // below goes through pickersWithoutBars (lib/pickersPublic.ts), which removes
-  // every chartPoints. Pages read the bars in-process (getPickersData).
+  // NO TIINGO BARS OR RETURNS IN THIS PUBLIC JSON (#553 COWORK #103/#105/#107):
+  // every payload answer below goes through
+  // publicPickersPayload(pickersWithoutBars(..)), which removes every
+  // chartPoints (lib/pickersPublic.ts) and signalRecords[].perf
+  // (lib/pickerPerf.ts). Pages read both in-process (getPickersData).
 
   if (forceRequested) {
     const ip = getClientIp(req);
@@ -5346,7 +5367,7 @@ async function handlePickersRequest(
   if (forceHistoryRefresh) forceRefresh = true;
 
   if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
-    return NextResponse.json(pickersWithoutBars(memo.data), {
+    return NextResponse.json(publicPickersPayload(pickersWithoutBars(memo.data)), {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
         "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
@@ -5362,7 +5383,7 @@ async function handlePickersRequest(
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
 
-    return NextResponse.json(pickersWithoutBars(cached.data), {
+    return NextResponse.json(publicPickersPayload(pickersWithoutBars(cached.data)), {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
         // Set on EVERY response path, not just the one that built something.
@@ -5383,7 +5404,7 @@ async function handlePickersRequest(
     const lastGood = await readPickersLastGood();
     if (lastGood?.data) {
       memo = { ts: now, data: lastGood.data };
-      return NextResponse.json(pickersWithoutBars(lastGood.data), {
+      return NextResponse.json(publicPickersPayload(pickersWithoutBars(lastGood.data)), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": "false",
@@ -5408,7 +5429,7 @@ async function handlePickersRequest(
     if (published?.data) {
       memo = { ts: now, data: published.data };
 
-      return NextResponse.json(pickersWithoutBars(published.data), {
+      return NextResponse.json(publicPickersPayload(pickersWithoutBars(published.data)), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
@@ -5464,7 +5485,7 @@ async function handlePickersRequest(
       recordBuildStats(data, { degradedFallbackUsed: true, wrote: false });
       memo = { ts: now, data: cached.data };
 
-      return NextResponse.json(pickersWithoutBars(cached.data), {
+      return NextResponse.json(publicPickersPayload(pickersWithoutBars(cached.data)), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-Degraded-Fallback": "true",
@@ -5477,7 +5498,7 @@ async function handlePickersRequest(
     memo = { ts: now, data };
     await writePickersCache(data, () => buildReducedPickersPayload(data));
 
-    return NextResponse.json(pickersWithoutBars(data), {
+    return NextResponse.json(publicPickersPayload(pickersWithoutBars(data)), {
       headers: {
         "Cache-Control": forceRefresh
           ? "no-store"
@@ -5489,7 +5510,7 @@ async function handlePickersRequest(
     if (cached?.data) {
       memo = { ts: now, data: cached.data };
 
-      return NextResponse.json(pickersWithoutBars(cached.data), {
+      return NextResponse.json(publicPickersPayload(pickersWithoutBars(cached.data)), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",

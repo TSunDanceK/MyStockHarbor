@@ -114,7 +114,9 @@ async function loadBench(builderSrc, publicSrc) {
   ).outputText;
   // The real filter, inlined ahead of the handler: same module scope, so the
   // handler's bare `pickersWithoutBars` resolves to it.
-  const code = `${pub}\n${js}\n// ${benchSeq++}`;
+  // #689's perf filter composes outside this one (#553 COWORK #107); identity
+  // here, since this check is about bars. Its own check runs the real one.
+  const code = `const publicPickersPayload = (d) => d;\n${pub}\n${js}\n// ${benchSeq++}`;
   return import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
 }
 
@@ -247,7 +249,10 @@ function unfilteredJson(builderSrc) {
       const a = n.arguments[0];
       const ok =
         (a && ts.isObjectLiteralExpression(a)) ||
-        (a && ts.isCallExpression(a) && a.expression.getText(sf) === "pickersWithoutBars");
+        (a && ts.isCallExpression(a) && a.expression.getText(sf) === "pickersWithoutBars") ||
+        // #689's perf filter wrapped around it (#553 COWORK #107)
+        (a && ts.isCallExpression(a) && a.expression.getText(sf) === "publicPickersPayload" &&
+          ts.isCallExpression(a.arguments[0]) && a.arguments[0].expression.getText(sf) === "pickersWithoutBars");
       if (!ok) bad.push(a ? a.getText(sf) : "(none)");
     }
     ts.forEachChild(n, visit);
@@ -373,7 +378,7 @@ const mutant = async (label, fn) => {
 };
 
 // One path at a time left unfiltered.
-const WRAPS = [...builderRaw.matchAll(/NextResponse\.json\(pickersWithoutBars\(([\w.]+)\),/g)];
+const WRAPS = [...builderRaw.matchAll(/NextResponse\.json\((?:publicPickersPayload\()?pickersWithoutBars\(([\w.]+)\)\)?,/g)];
 check("every filtered path is mutated in turn", WRAPS.length === 7, `${WRAPS.length} filtered answers`);
 for (const w of WRAPS) {
   const at = w.index;

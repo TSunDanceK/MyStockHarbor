@@ -8,6 +8,7 @@ import PageShareBar from "@/app/components/PageShareBar";
 import { getAllPosts } from "@/lib/blog";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { pickersWithoutBars } from "@/lib/pickersPublic";
+import { publicPickersPayload } from "@/lib/pickerPerf";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
@@ -118,8 +119,10 @@ async function fetchInitialPickersPayload(): Promise<PickersPayload | null> {
     // NO BARS INTO THIS PAGE'S CLIENT PROPS (#553 COWORK #105): PickersClient
     // draws no chart, so the ~72 bars per record would only ride along in the
     // HTML. Same filter as the /api/pickers answer, so the mount refresh
-    // replaces like with like.
-    return pickersWithoutBars(await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
+    // replaces like with like. Nor Tiingo returns (signalRecords[].perf, #553
+    // COWORK #107): PickersClient has no Performance tab, so `perf` too would
+    // only ride along in the HTML/RSC props.
+    return publicPickersPayload(pickersWithoutBars(await getPickersData(SITE_ORIGIN))) as unknown as PickersPayload;
   } catch {
     return null;
   }

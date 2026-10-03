@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ScreenerShell from "@/app/components/ScreenerShell";
 import TimeframeFilterDropdown from "@/app/components/TimeframeFilterDropdown";
 import { useWatermarkHidden } from "@/app/components/WatermarkVisibility";
+import { playsBarsFromTiingo, resolvePlaysRefresh, type PlaysHistoryInfo } from "@/lib/playsPublic";
+import { readPlaysPagePayload } from "@/app/plays/playsPagePayload";
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
 
@@ -65,6 +67,10 @@ export type PlaysPayload = {
   dynamicUniversePreview?: string[];
   estimatedApiCalls?: number;
   sections?: PlaySection[];
+  /** Where the scan's bars came from (#553 B4); the credit follows it. */
+  history?: PlaysHistoryInfo;
+  /** Set by the public route when it removed the Tiingo bars (lib/playsPublic.ts). */
+  chartPointsWithheld?: boolean;
   error?: string;
 };
 
@@ -204,8 +210,11 @@ function useIsNarrowScreen() {
 
 export default function PlaysClient({
   initialPayload,
+  marketDataCredit,
 }: {
   initialPayload?: PlaysPayload | null;
+  /** The linked Tiingo credit, rendered by the server page when the scan is on Tiingo (#553 B4). */
+  marketDataCredit?: React.ReactNode;
 } = {}) {
   const initial = normalizeInitialPayload(initialPayload);
 
@@ -227,6 +236,15 @@ export default function PlaysClient({
     "ALL" | "M" | "W" | "D" | "ST"
   >("ALL");
   const isNarrow = useIsNarrowScreen();
+  // THE CREDIT FOLLOWS THE BARS (#553 COWORK #103, 2026-10-03): shown only
+  // while the payload on screen records that its bars came from Tiingo.
+  const [history, setHistory] = useState<PlaysHistoryInfo>(initialPayload?.history ?? null);
+  // The scan on screen whose items still carry their bars (the server props).
+  const shownWithBars = useRef<string | null>(
+    initialPayload && !initialPayload.chartPointsWithheld && typeof initialPayload.updatedAt === "string"
+      ? initialPayload.updatedAt
+      : null
+  );
 
   async function loadPlays(force = false, options: { silent?: boolean } = {}) {
     const silent = options.silent ?? false;
@@ -244,9 +262,26 @@ export default function PlaysClient({
 
       if (!res.ok) throw new Error("Plays API failed");
 
-      const data = (await res.json()) as PlaysPayload;
+      const routeData = (await res.json()) as PlaysPayload;
 
-      if (data?.error) throw new Error(data.error);
+      if (routeData?.error) throw new Error(routeData.error);
+
+      // THE ROUTE CARRIES NO TIINGO BARS (#553 COWORK #103, 2026-10-03). The
+      // scan already on screen keeps its server-rendered bars; a newer one
+      // is read in-process through the page's server action, never through
+      // public JSON (lib/playsPublic.ts).
+      const data = await resolvePlaysRefresh(
+        routeData,
+        shownWithBars.current,
+        async () => (await readPlaysPagePayload()) as unknown as PlaysPayload | null
+      );
+
+      if (!data) return;
+      if (data.error) throw new Error(data.error);
+
+      shownWithBars.current =
+        !data.chartPointsWithheld && typeof data.updatedAt === "string" ? data.updatedAt : null;
+      setHistory(data.history ?? null);
 
       setSections(Array.isArray(data?.sections) ? data.sections : []);
       setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
@@ -270,6 +305,8 @@ export default function PlaysClient({
 
       if (!force && !silent) {
         setSections([]);
+        setHistory(null);
+        shownWithBars.current = null;
         setUpdatedAt(null);
         setUniverseSize(null);
         setDynamicUniverseCount(null);
@@ -357,6 +394,7 @@ export default function PlaysClient({
         <>
           Current scan · Universe {universeSize == null ? "Live" : universeSize}
           {dynamicUniverseCount == null ? "" : ` (+${dynamicUniverseCount} dynamic)`} · Macro {macroCount} · Weekly {weeklyCount} · Daily {dailyCount} · Short-term {shortTermCount} · Top score {topScore == null ? "—" : topScore} · Updated {formatDate(updatedAt)}
+          {marketDataCredit && playsBarsFromTiingo(history) ? <> · {marketDataCredit}</> : null}
         </>
       }
     >

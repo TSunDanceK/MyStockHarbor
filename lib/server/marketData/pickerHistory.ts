@@ -46,7 +46,13 @@ export type PickerHistoryStats = {
   missing: number;
 };
 
-export type PickerHistoryResult = { bySymbol: Map<string, HistoryPoint[]>; stats: PickerHistoryStats };
+export type PickerHistoryResult = {
+  bySymbol: Map<string, HistoryPoint[]>;
+  stats: PickerHistoryStats;
+  /** The symbols whose series came from Tiingo (memory or the Data Cache), not
+   *  the FMP fallback. What the Performance tab is computed for (B6). */
+  fromTiingo: Set<string>;
+};
 
 /** A Tiingo bar as the builder's point. Pure; exported for the checks. */
 export function eodBarsToPoints(bars: readonly EodBar[]): HistoryPoint[] {
@@ -79,6 +85,7 @@ export async function tiingoPickerHistory(
   const readOne = deps.readOne ?? readTiingoHistory;
   const bySymbol = new Map<string, HistoryPoint[]>();
   const stats: PickerHistoryStats = { memory: 0, cache: 0, fmpFallback: 0, missing: 0 };
+  const fromTiingo = new Set<string>();
   const residual: string[] = [];
   const limit = pLimit(deps.concurrency ?? 16);
 
@@ -92,6 +99,7 @@ export async function tiingoPickerHistory(
           if (pts.length) {
             bySymbol.set(symbol, pts);
             stats.memory++;
+            fromTiingo.add(symbol);
             return;
           }
         }
@@ -105,6 +113,7 @@ export async function tiingoPickerHistory(
         if (pts.length) {
           bySymbol.set(symbol, pts);
           stats.cache++;
+          fromTiingo.add(symbol);
         } else {
           residual.push(symbol);
         }
@@ -129,5 +138,5 @@ export async function tiingoPickerHistory(
   } else {
     stats.missing += residual.length;
   }
-  return { bySymbol, stats };
+  return { bySymbol, stats, fromTiingo };
 }
