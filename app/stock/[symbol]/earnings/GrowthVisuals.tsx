@@ -58,7 +58,7 @@ export const BAR_INSET_PCT = 16;
 const MARGIN_H = 72;
 /** Room above the tallest sales bar for the newest bar's value label. */
 const SALES_HEADROOM = 0.84;
-/** The gross-margin chart's guide lines, in % of sales. */
+/** The margin chart's guide lines, in % of sales, when no margin is negative. */
 const PCT_GUIDES = [0, 50, 100] as const;
 
 /**
@@ -165,17 +165,53 @@ export function marginPct(p: GvPeriod, kind: GvMarginKind): number | null {
 }
 export const MARGIN_NAME: Record<Exclude<GvMarginKind, "none">, string> = { gross: "Gross margin", operating: "Operating margin" };
 
-/** The phone's margin line: one segment per run of periods with a margin; a period without one breaks it. */
-export function marginSegments(periods: GvPeriod[], kind: GvMarginKind = "gross"): string[] {
-  const runs: string[] = [];
-  let run: string[] = [];
-  periods.forEach((p, i) => {
-    const v = marginPct(p, kind);
-    if (v === null) { if (run.length) runs.push(run.join(" ")); run = []; return; }
-    run.push(`${run.length ? "L" : "M"}${i + 0.5} ${100 - Math.min(v, 100)}`);
-  });
-  if (run.length) runs.push(run.join(" "));
-  return runs;
+// ── BELOW ZERO (owner, 3 Oct) ─────────────────────────────────────────────
+// A negative margin is drawn, not dropped: the scale moves down to the next
+// 25% step under the lowest margin (no lower than −100%; anything beyond sits
+// at the floor, its figure in the panel), and the dots and line below zero are
+// red. The 0% line stays, so the change of sign is plain.
+
+/** The scale's bottom: 0, or the 25% step at or under the lowest margin, never under −100. */
+export const MARGIN_FLOOR_STEP = 25;
+export const MARGIN_FLOOR_MIN = -100;
+export function marginFloor(periods: GvPeriod[], kind: GvMarginKind): number {
+  const vals = periods.map((p) => marginPct(p, kind)).filter((v): v is number => v !== null);
+  const lo = Math.min(0, ...vals);
+  return lo >= 0 ? 0 : Math.max(MARGIN_FLOOR_MIN, Math.floor(lo / MARGIN_FLOOR_STEP) * MARGIN_FLOOR_STEP);
+}
+/** A margin's height on a floor..100% scale, in % of the plot. */
+export function marginPos(v: number, floor: number): number {
+  return ((Math.max(floor, Math.min(100, v)) - floor) / (100 - floor)) * 100;
+}
+/** The guides: 0 / 50 / 100, plus the floor when it is below zero. */
+export const marginGuides = (floor: number): number[] => (floor < 0 ? [floor, 0, 50, 100] : [...PCT_GUIDES]);
+/** "43%", "−12%". */
+export const pctWords = (v: number) => `${v < 0 ? "−" : ""}${Math.abs(v)}%`;
+/** Red below zero, the margin purple otherwise. */
+export const marginColour = (v: number) => (v < 0 ? C.loss : C.margin);
+
+/**
+ * The margin line as segments, one per pair of neighbouring periods with a
+ * margin (a period without one breaks it), each split where it crosses zero so
+ * the part below zero is red. `neg` marks a red piece.
+ */
+export function marginSegments(periods: GvPeriod[], kind: GvMarginKind = "gross", floor = 0): { d: string; neg: boolean }[] {
+  const out: { d: string; neg: boolean }[] = [];
+  const y = (v: number) => 100 - marginPos(v, floor);
+  for (let i = 1; i < periods.length; i++) {
+    const a = marginPct(periods[i - 1], kind), b = marginPct(periods[i], kind);
+    if (a === null || b === null) continue;
+    const x0 = i - 0.5, x1 = i + 0.5;
+    if ((a < 0) === (b < 0) || a === 0 || b === 0) {
+      out.push({ d: `M${x0} ${y(a)} L${x1} ${y(b)}`, neg: a < 0 || b < 0 });
+      continue;
+    }
+    // Crosses zero between them: split there.
+    const xz = x0 + (0 - a) / (b - a);
+    out.push({ d: `M${x0} ${y(a)} L${xz} ${y(0)}`, neg: a < 0 });
+    out.push({ d: `M${xz} ${y(0)} L${x1} ${y(b)}`, neg: b < 0 });
+  }
+  return out;
 }
 
 /**
@@ -185,11 +221,11 @@ export function marginSegments(periods: GvPeriod[], kind: GvMarginKind = "gross"
  * no margin breaks it (marginSegments); its panel says why.
  */
 export const MARGIN_LINE = { width: 1.5, opacity: 0.7 } as const;
-function MarginLine({ periods, kind, className }: { periods: GvPeriod[]; kind: GvMarginKind; className: string }) {
+function MarginLine({ periods, kind, floor, className }: { periods: GvPeriod[]; kind: GvMarginKind; floor: number; className: string }) {
   return (
     <svg className={`${className} gvMarginLine`} viewBox={`0 0 ${periods.length} 100`} preserveAspectRatio="none" aria-hidden="true">
-      {marginSegments(periods, kind).map((d) => (
-        <path key={d} d={d} fill="none" stroke={C.margin} strokeWidth={MARGIN_LINE.width} strokeOpacity={MARGIN_LINE.opacity} vectorEffect="non-scaling-stroke" />
+      {marginSegments(periods, kind, floor).map(({ d, neg }) => (
+        <path key={d} d={d} fill="none" stroke={neg ? C.loss : C.margin} strokeWidth={MARGIN_LINE.width} strokeOpacity={MARGIN_LINE.opacity} vectorEffect="non-scaling-stroke" />
       ))}
     </svg>
   );
@@ -203,6 +239,7 @@ function SalesChart({ s, active, setActive, onTap, notReported }: ChartProps & {
   // series, or none (then no line, no dots, no scale on the phone).
   const kind = s.margin.kind;
   const lastMargin = s.periods.map((p) => marginPct(p, kind) !== null).lastIndexOf(true);
+  const floor = marginFloor(s.periods, kind);
   return (
     <Chart
       title={`Sales per ${s.one}`}
@@ -210,22 +247,22 @@ function SalesChart({ s, active, setActive, onTap, notReported }: ChartProps & {
         <i style={{ background: C.sales }} />This {s.one}
         {anyGhost ? <><i style={{ background: C.lastYear }} />Same {s.one} a year earlier</> : null}
         {/* PHONE ONLY: the margin line's legend entry names its scale (right, %). */}
-        {kind !== "none" ? <span className="gvPhoneOnly"><i style={{ background: C.margin, borderRadius: 999 }} />{MARGIN_NAME[kind]} % (right scale)</span> : null}
+        {kind !== "none" ? <span className="gvPhoneOnly"><i style={{ background: C.margin, borderRadius: 999 }} />{MARGIN_NAME[kind]} % (right scale){floor < 0 ? <><i style={{ background: C.loss, borderRadius: 999, marginLeft: 8 }} />below 0%</> : null}</span> : null}
       </>}
       note={kind === "operating" ? <span className="gvPhoneOnly">{s.margin.note}</span> : null}
       periods={s.periods} active={active} setActive={setActive} onTap={onTap} height={PLOT_H}
       behind={kind === "none" ? null :
         // PHONE ONLY: the % scale, on the right-hand side, outside the bars.
         <span className="gvPhoneOnly gvRightScale" style={{ color: C.margin }}>
-          {PCT_GUIDES.map((c) => <span key={c} style={{ bottom: `${c}%` }}>{c}%</span>)}
+          {marginGuides(floor).map((c) => <span key={c} style={{ bottom: `${marginPos(c, floor)}%` }}>{pctWords(c)}</span>)}
         </span>
       }
-      overlay={kind === "none" ? null : <MarginLine periods={s.periods} kind={kind} className="gvPhoneOnly" />}
-      over={(p, i) => { const v = marginPct(p, kind); return v === null ? null : (
+      overlay={kind === "none" ? null : <MarginLine periods={s.periods} kind={kind} floor={floor} className="gvPhoneOnly" />}
+      over={(p, i) => { const v = marginPct(p, kind); if (v === null) return null; const at = marginPos(v, floor); return (
         <span className="gvPhoneOnly">
-          <span className="gvDot" style={{ bottom: `calc(${Math.min(v, 100)}% - 5px)`, background: C.margin }} />
+          <span className="gvDot" style={{ bottom: `calc(${at}% - 5px)`, background: marginColour(v) }} />
           {i === lastMargin ? (
-            <span className="gvVal gvPill" style={{ bottom: `calc(${Math.min(v, 100)}% + 7px)`, color: C.ink }}>{v}%</span>
+            <span className="gvVal gvPill" style={{ bottom: `calc(${at}% + 7px)`, color: C.ink }}>{pctWords(v)}</span>
           ) : null}
         </span>
       ); }}
@@ -295,33 +332,36 @@ function ProfitChart({ s, active, setActive, onTap }: ChartProps) {
 function MarginChart({ s, active, setActive, onTap }: ChartProps) {
   const newest = s.periods.length - 1;
   const kind = s.margin.kind === "operating" ? "operating" : "gross";
+  // The plot grows downward with the floor, so the 0–100% band keeps its height.
+  const floor = marginFloor(s.periods, kind);
   return (
     <Chart
       title={`${MARGIN_NAME[kind]} per ${s.one}`}
-      legend={<><i style={{ background: C.margin, borderRadius: 999 }} />{MARGIN_NAME[kind]} (% of sales)</>}
+      legend={<><i style={{ background: C.margin, borderRadius: 999 }} />{MARGIN_NAME[kind]} (% of sales)
+        {floor < 0 ? <><i style={{ background: C.loss, borderRadius: 999 }} />Below 0%</> : null}</>}
       note={kind === "operating" ? s.margin.note : null}
-      periods={s.periods} active={active} setActive={setActive} onTap={onTap} height={MARGIN_H}
+      periods={s.periods} active={active} setActive={setActive} onTap={onTap} height={Math.round((MARGIN_H * (100 - floor)) / 100)}
       behind={<>
-        {PCT_GUIDES.map((c) => (
-          <span key={c} className="gvPctGuide" style={{ bottom: `${c}%`, background: C.rule }}>
+        {marginGuides(floor).map((c) => (
+          <span key={c} className="gvPctGuide" style={{ bottom: `${marginPos(c, floor)}%`, background: c === 0 && floor < 0 ? C.muted : C.rule }}>
             {/* The top guide's label hangs below its line, inside the plot. */}
-            <span className="gvPctLabel" style={c === 100 ? { color: C.muted, top: 2 } : { color: C.muted, bottom: 2 }}>{c}%</span>
+            <span className="gvPctLabel" style={c === 100 ? { color: C.muted, top: 2 } : { color: C.muted, bottom: 2 }}>{pctWords(c)}</span>
           </span>
         ))}
         {/* UNDER the columns, so the dots (drawn in them) sit on top of it. */}
-        <MarginLine periods={s.periods} kind={kind} className="gvDeskLine" />
+        <MarginLine periods={s.periods} kind={kind} floor={floor} className="gvDeskLine" />
       </>}
       render={(p, i) => {
         const v = marginPct(p, kind);
         if (v === null) return <span className="gvDotWrap" />;
-        const at = Math.min(v, 100);
+        const at = marginPos(v, floor);
         return (
           <span className="gvDotWrap">
-            <span className="gvDot" style={{ bottom: `calc(${at}% - 5px)`, background: C.margin }} />
+            <span className="gvDot" style={{ bottom: `calc(${at}% - 5px)`, background: marginColour(v) }} />
             {i === newest ? (
               // Above the dot, or below it when the dot is near the top of the plot.
               <span className="gvVal" style={at > 75 ? { top: `calc(${100 - at}% + 7px)` } : { bottom: `calc(${at}% + 7px)` }}>
-                {v}%
+                {pctWords(v)}
               </span>
             ) : null}
           </span>
@@ -359,7 +399,7 @@ function Detail({ p, one, notReported, showProfit, margin }: { p: GvPeriod; one:
         <dt>Gross margin</dt>
         <dd>
           {p.grossText !== null
-            ? <strong>{p.grossText}</strong>
+            ? <><strong>{p.grossText}</strong>{p.grossNote ? <div className="gvNote">{p.grossNote}</div> : null}</>
             // NOT IN THE FILINGS AT ALL (#563 COWORK #71): said as the filer's, not as a gap of ours.
             : margin.grossAbsent ? <span style={{ color: C.muted }}>{margin.grossAbsent}</span>
               : p.grossNote ? <span style={{ color: C.muted }}>{p.grossNote}</span> : nr}

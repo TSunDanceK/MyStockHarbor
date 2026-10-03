@@ -6,7 +6,8 @@
 // quarters and for the years, which measure the third chart draws:
 //   gross       at least one period has a gross margin filed (today's chart)
 //   operating   no gross margin in any period: operating margin instead (ORCL)
-//   none        neither: no chart, a reason line (or operating losses throughout)
+//   none        neither: no chart, a reason line
+// each split by whether any period draws below 0% (owner, 3 Oct: the scale moves down),
 // plus how many of the non-gross filers are banks (SIC 6000–6299) and up to 15
 // symbols per bucket. SEC-derived values only.
 //   relay task: write-margin-kind-census (credentialled for the read)
@@ -40,8 +41,8 @@ for (let i = 0; i < SYMS.length; i += 25) {
       for (const mode of ["quarters", "years"]) {
         const sr = data[mode];
         if (!sr || !sr.periods.length) { add(mode, "no series", s); continue; }
-        const kind = sr.margin.kind === "none" && /a loss in each/.test(sr.margin.note ?? "") ? "none (operating losses throughout)" : sr.margin.kind;
-        add(mode, kind, s);
+        const neg = sr.periods.some((p) => (sr.margin.kind === "operating" ? p.opPct : p.grossPct) < 0);
+        add(mode, `${sr.margin.kind}${neg ? " (some below 0%)" : ""}`, s);
       }
     } catch (e) { failed++; console.log(`  ${s}: view failed: ${String(e).slice(0, 120)}`); }
   });

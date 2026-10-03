@@ -78,11 +78,11 @@ export type GvPeriod = {
    * #552 COWORK #117): no profit bar and no figure, and this says why.
    */
   profitUnchecked?: string | null;
-  /** Gross margin, whole %, for the dot; null with `grossNote` saying why. */
+  /** Gross margin, whole %, for the dot (negative is drawn below zero, red); null with `grossNote` saying why. */
   grossPct: number | null;
   /** The same margin at one decimal for the panel ("43.4%"), or null. */
   grossText: string | null;
-  /** Why there is no gross margin. Set whenever grossPct is null: a missing dot always says why. */
+  /** Why there is no gross margin. Set whenever grossPct is null (a missing dot always says why); on a negative one, what it means. */
   grossNote: string | null;
   /**
    * Operating margin for the chart when the series falls back to it (#563
@@ -153,15 +153,17 @@ export function grossMargin(
   if (gross == null || !Number.isFinite(gross)) {
     return { pct: null, text: null, note: hasSales ? EMPTY_REASONS.notCaptured : EMPTY_REASONS.needsRevenue };
   }
-  if (gross < 0) return { pct: null, text: null, note: "The direct costs of sales were more than the sales" };
+  // NEGATIVE IS DRAWN, BELOW ZERO, IN RED (owner, 3 Oct): the chart's scale
+  // moves down to take it. The note says what a negative gross margin means.
+  if (gross < 0) return { pct: Math.round(gross), text: `−${Math.abs(gross).toFixed(1)}%`, note: "The direct costs of sales were more than the sales" };
   return { pct: Math.round(gross), text: `${gross.toFixed(1)}%`, note: null };
 }
 
 /**
  * A's operating margin as the chart's dot, when the series has no gross margin
  * at all (#563 COWORK #71). The same rules as grossMargin: a refusal and a
- * missing figure each say why. An operating loss has no dot on the 0–100%
- * scale; its panel row and note give the figure in words.
+ * missing figure each say why. An operating loss is drawn below zero, in red
+ * (owner, 3 Oct); the panel's operating row words it.
  */
 export function operatingMarginDot(
   m: number | null,
@@ -172,7 +174,7 @@ export function operatingMarginDot(
   if (m == null || !Number.isFinite(m)) {
     return { pct: null, text: null, note: hasSales ? EMPTY_REASONS.notCaptured : EMPTY_REASONS.needsRevenue };
   }
-  if (m < 0) return { pct: null, text: null, note: `An operating loss: ${marginWords(m, "operating", false)}` };
+  if (m < 0) return { pct: Math.round(m), text: `−${Math.abs(m).toFixed(1)}%`, note: null };
   return { pct: Math.round(m), text: `${m.toFixed(1)}%`, note: null };
 }
 
@@ -206,12 +208,10 @@ const filersOf = (name: string | null) => (name ? `${name}'s` : "This company's"
 /**
  * The series' margin chart: gross, operating for the whole series, or none.
  * `grossFiled` counts the periods with a gross margin figure at all (a negative
- * one counts: gross margin IS filed there, it just draws no dot). `opFiled`
- * counts periods with an operating margin; `opDrawn` those with a dot (not a
- * loss). An operating loss in every period draws no dot on a 0–100% scale, so
- * that case is "none" too, with its own reason: never an empty grid.
+ * one counts and is drawn below zero). `opDrawn` counts periods with an
+ * operating margin dot: a loss is drawn too, below zero (owner, 3 Oct).
  */
-export function marginChoice(grossFiled: number, opFiled: number, opDrawn: number, name: string | null, many: string): GvMargin {
+export function marginChoice(grossFiled: number, opDrawn: number, name: string | null, many: string): GvMargin {
   if (grossFiled > 0) return { kind: "gross", note: null, grossAbsent: null };
   const whose = filersOf(name);
   const grossAbsent = `Not stated in ${name ? `${name}'s` : "this company's"} filings`;
@@ -225,9 +225,7 @@ export function marginChoice(grossFiled: number, opFiled: number, opDrawn: numbe
   const mid = name ? `${name}'s` : "this company's";
   return {
     kind: "none",
-    note: opFiled > 0
-      ? `No margin chart: ${mid} filings don't state a cost of sales line, so gross margin can't be worked out, and operating margin was a loss in each of these ${many} (see each one's figures below).`
-      : `No margin chart: ${mid} filings don't state a cost of sales line, and operating margin isn't available for these ${many}.`,
+    note: `No margin chart: ${mid} filings don't state a cost of sales line, and operating margin isn't available for these ${many}.`,
     grossAbsent,
   };
 }
@@ -368,7 +366,7 @@ export function buildGrowthVisuals(
     const grossFiled = ordered.filter((p) => isFiniteNum(marginOf.get(p.label)?.gross)).length;
     quarters = {
       one, many, periods, profitMissing: profitChecked ? null : profitWaitsForOneOffs(one),
-      margin: marginChoice(grossFiled, ordered.filter((p) => isFiniteNum(marginOf.get(p.label)?.operating)).length, periods.filter((p) => p.opPct !== null).length, name, many),
+      margin: marginChoice(grossFiled, periods.filter((p) => p.opPct !== null).length, name, many),
       summary: summaryLine(periods, ordered.map((p) => growthOf.get(p.label)?.revenueYoY), one, many),
     };
   }
@@ -404,7 +402,7 @@ export function buildGrowthVisuals(
     const yw = periodWords("year");
     years = {
       one: yw.one, many: yw.many, periods,
-      margin: marginChoice(view.annual.filter((a) => isFiniteNum(a.gross)).length, view.annual.filter((a) => isFiniteNum(a.operating)).length, periods.filter((p) => p.opPct !== null).length, name, yw.many),
+      margin: marginChoice(view.annual.filter((a) => isFiniteNum(a.gross)).length, periods.filter((p) => p.opPct !== null).length, name, yw.many),
       profitMissing: profitChecked ? null : profitWaitsForOneOffs(yw.one),
       summary: summaryLine(periods, view.annual.map((a) => a.revenueYoY), yw.one, yw.many),
     };

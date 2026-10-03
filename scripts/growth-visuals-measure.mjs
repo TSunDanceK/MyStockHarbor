@@ -33,6 +33,12 @@ const M = await loadCards();
 const set = JSON.parse(fs.readFileSync("data/sec/factset-fixture-ONDS.json", "utf8"));
 // ORCL=1 (#563 COWORK #71): ONDS reshaped as a filer with no cost of sales line
 // and a positive operating margin, so the third chart is operating margin.
+// LOSS=1: the same, keeping ONDS's own operating losses, so the operating
+// margin chart's scale moves below zero (owner, 3 Oct).
+if (process.env.LOSS) {
+  const k = (f) => M.SEC_FIELD_KEYS.indexOf(f);
+  for (const p of [...set.quarters, ...set.years]) { p.v[k("grossProfit")] = null; p.v[k("costOfRevenue")] = null; }
+}
 if (process.env.ORCL) {
   const k = (f) => M.SEC_FIELD_KEYS.indexOf(f);
   set.entityName = "ORACLE CORP";
@@ -76,11 +82,13 @@ for (const width of [360, 1280]) {
       fill, barsInside: fills.every((f) => f.inside), deskLine: shown(".gvDeskLine") };
   });
   // ORCL=1 has no one-off quarter, so no tag is expected there.
-  const tagsOk = (process.env.ORCL ? true : r.tags.length > 0) && r.tags.every((t) => t.inView && t.onTop);
+  const tagsOk = (process.env.ORCL || process.env.LOSS ? true : r.tags.length > 0) && r.tags.every((t) => t.inView && t.onTop);
   const layoutOk = (width < 481 ? r.phoneLine && !r.marginChart : !r.phoneLine && r.marginChart && r.deskLine) &&
     !!r.fill && r.fill.min >= 0.6 && r.fill.max <= 0.7 && r.barsInside && r.clipped.length === 0;
   if (!tagsOk || !layoutOk) failures++;
   console.log(`${width}px: tags ${JSON.stringify(r.tags)} · margin line over sales ${r.phoneLine} · separate margin chart ${r.marginChart} · bars fill ${r.fill ? `${Math.round(r.fill.min * 100)}–${Math.round(r.fill.max * 100)}%` : "none"} of a slot, inside it ${r.barsInside} · clipped labels ${JSON.stringify(r.clipped)} · card ${r.cardH}px — ${tagsOk && layoutOk ? "OK" : "FAIL"}`);
+  // SHOT=<prefix> also saves <prefix>-<width>.png, the screenshot a phone check asks for.
+  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}-${width}.png`, fullPage: true });
   await page.close();
 }
 await browser.close();
