@@ -13,6 +13,7 @@ import {
 import type { NewsItem } from "@/lib/server/news/types";
 import { unstable_cache } from "next/cache";
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { beginTiming } from "./server/timing";
 import { readNewsTechHistory } from "./server/newsTechHistory";
@@ -166,6 +167,12 @@ function parseRss(xml: string): NewsItem[] {
 // for an actual zero). Treating a non-positive price as "no data" avoids
 // that class of bug regardless of which upstream returns it.
 async function fetchQuote(symbol: string): Promise<Quote | null> {
+  // NO FMP QUOTE ON THE TIINGO HERO PATH (#553 COWORK #131/#132, spend cut 2).
+  // This ran on every base-data build (the news page, /api/internal-news,
+  // /api/discovery-strip), but with NEWS_HERO=tiingo the page shows the Tiingo
+  // price; FMP's was only the fallback for a Tiingo miss, which now reads
+  // "Price not available right now", as it will once the key is gone anyway.
+  if (priceProviderFor("NEWS_HERO") === "tiingo") return null;
   return fetchFmpQuote(symbol);
 }
 

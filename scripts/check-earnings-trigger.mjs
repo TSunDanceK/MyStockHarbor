@@ -200,19 +200,29 @@ if (!triggerList) {
 }
 const quarterlyEndpoints = (triggerList.match(/"quarterly"/g) ?? []).length;
 const clockEndpoints = (triggerList.match(/"clock"/g) ?? []).length;
+const retiredEndpoints = (triggerList.match(/"retired"/g) ?? []).length;
 check(
   "every endpoint fetchOne calls is classified exactly once",
-  quarterlyEndpoints + clockEndpoints === 8,
-  `${clockEndpoints} clock + ${quarterlyEndpoints} quarterly = ` +
-    `${clockEndpoints + quarterlyEndpoints} of fetchOne's 8 blocks`
+  quarterlyEndpoints + clockEndpoints + retiredEndpoints === 8,
+  `${clockEndpoints} clock + ${quarterlyEndpoints} quarterly + ${retiredEndpoints} retired = ` +
+    `${clockEndpoints + quarterlyEndpoints + retiredEndpoints} of fetchOne's 8 blocks`
+);
+// RULING CHANGED (#553 COWORK #132, spend cut 1). These three fed only hidden
+// Pickers columns, so they are retired rather than kept on the clock. Never
+// moved to the quarterly trigger: if one comes back it goes back on the clock,
+// for the between-filings reason this check used to state.
+check(
+  "the analyst and rating endpoints are retired (hidden columns), never on the quarterly trigger",
+  ["price-target-summary", "grades-consensus", "analyst-estimates"].every((e) =>
+    new RegExp(`"${e}": "retired"`).test(triggerList)
+  ) && !/"(price-target-summary|grades-consensus|analyst-estimates)": "quarterly"/.test(triggerList),
+  "they feed only lib/pickerHiddenFields.ts columns; a downgrade is a between-filings event"
 );
 check(
-  "the analyst and rating endpoints stay on the clock",
+  "each retired endpoint's fetch block is gated on it",
   ["price-target-summary", "grades-consensus", "analyst-estimates"].every((e) =>
-    new RegExp(`"${e}": "clock"`).test(triggerList)
-  ),
-  "a downgrade happens BETWEEN filings — an earnings-triggered fetch would not " +
-    "see it until the next quarter, which is worse than the cost it saves"
+    new RegExp(`if \\(endpointOn\\("${e}"\\)\\) try \\{`).test(cacheSrc)
+  ) && /CLOCK_CALLS = Object\.values\(ENDPOINT_TRIGGERS\)\.filter\(\(t\) => t === "clock"\)/.test(cacheSrc)
 );
 check(
   "the per-symbol call count is counted from that list, not stated",

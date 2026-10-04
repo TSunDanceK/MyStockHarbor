@@ -28,9 +28,11 @@ process.env.UPSTASH_REDIS_REST_TOKEN = "t";
 
 // Upstash REST, stubbed: the client asks for base64 values and auto-pipelines.
 const POOL = {
-  "BRK-B": { price: 470, ts: 1_000, volume: 1 },
-  AAPL: { price: 230, ts: 1_000, volume: 1 },
-  "BF-B": { price: 40, ts: 1_000, volume: 1 },
+  // Fresh rows: an FMP row older than FMP_POOL_ROW_MAX_AGE_MS shows no figures
+  // when the key is unset (#553 COWORK #132, F3), and this check runs keyless.
+  "BRK-B": { price: 470, ts: Date.now(), volume: 1 },
+  AAPL: { price: 230, ts: Date.now(), volume: 1 },
+  "BF-B": { price: 40, ts: Date.now(), volume: 1 },
 };
 const net = { hmgetFields: [] };
 const b64 = (s) => Buffer.from(s, "utf8").toString("base64");

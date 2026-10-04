@@ -196,11 +196,18 @@ async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
     allSymbols.push(...symbols);
   }
 
+  const onTiingo = poolOnTiingo();
+  // NO FMP WEEK / MONTH / YTD ON THE TIINGO GATE (#553 COWORK #131/#132, F2).
+  // This path runs on Tiingo only when the eod-last blob is missing. The FMP
+  // perf fields in msh:stockdata stopped updating when PICKERS moved to Tiingo
+  // (stock-price-change is no longer called; each write carries the previous
+  // value forward), so reading them here would show frozen pre-flip figures
+  // as current. "—" until the blob is back is the honest answer; off the gate
+  // the FMP figures are still live and still used.
   const [pool, extended] = await Promise.all([
     readPricePoolBulk(allSymbols).catch(() => new Map()),
-    readCachedStockDataBulk(allSymbols).catch(() => new Map()),
+    onTiingo ? Promise.resolve(new Map()) : readCachedStockDataBulk(allSymbols).catch(() => new Map()),
   ]);
-  const onTiingo = poolOnTiingo();
 
   const now = Date.now();
   const dayRule = dayWindow(now);

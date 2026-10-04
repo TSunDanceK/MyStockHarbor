@@ -149,7 +149,8 @@ check(
 check(
   "a failed screener read does not start a sweep",
   /if \(!result\.ok \|\| !result\.symbols\.length\)/.test(job) &&
-    /sweep\.skipped = "screener-unavailable"/.test(job),
+    // #553 COWORK #132 (F1): the same branch names a missing key separately.
+    /sweep\.skipped = (noFmpKey \? "no-fmp-key" : )?"screener-unavailable"/.test(job),
   "a failed read returns no symbols, which would read as the ENTIRE universe " +
     "being absent and start corroboration against every symbol at once"
 );
@@ -1063,7 +1064,8 @@ const warm = readCodeOnly("app/api/jobs/warm-picker-universe/route.ts");
 // file: these routes record twice, and the catch-block record carries only
 // { error }. Three assertions in #416 passed against a record that could never
 // have held the fields they were testing for.
-const recIdx = job.indexOf('await recordJobRun("warm-screener-fundamentals", result.ok, {');
+// #553 COWORK #132 (F1): a missing FMP key is a healthy skip, so the summary records `result.ok || noFmpKey`.
+const recIdx = job.indexOf('await recordJobRun("warm-screener-fundamentals", result.ok || noFmpKey, {');
 const record = recIdx === -1 ? "" : job.slice(recIdx);
 check(
   "the sweep's run record was located",
