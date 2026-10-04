@@ -373,16 +373,18 @@ export default async function RootLayout({
                 <div
                   style={{
                     fontWeight: 800,
-                    fontSize: 14,
+                    fontSize: "0.875rem",
                     color: "#f8fafc",
                   }}
                 >
                   MyStockHarbor
                 </div>
 
+                {/* FINE PRINT ON PURPOSE (#563 COWORK #102): the disclaimer and the © line sit at --fs-fine. */}
                 <div
+                  data-fine-print
                   style={{
-                    fontSize: 12,
+                    fontSize: "var(--fs-fine)",
                     lineHeight: 1.55,
                     color: "rgba(241,245,249,0.78)",
                   }}
@@ -421,7 +423,7 @@ export default async function RootLayout({
                   <details key={column.heading} className="footer-col" open>
                     <summary
                       style={{
-                        fontSize: 12,
+                        fontSize: "var(--fs-label)",
                         fontWeight: 700,
                         color: "#e2e8f0",
                       }}
@@ -450,10 +452,11 @@ export default async function RootLayout({
               <CrawlableNav />
 
               <div
+                data-fine-print
                 style={{
                   borderTop: "1px solid rgba(255,255,255,0.08)",
                   paddingTop: 10,
-                  fontSize: 12,
+                  fontSize: "var(--fs-fine)",
                   color: "rgba(241,245,249,0.56)",
                 }}
               >

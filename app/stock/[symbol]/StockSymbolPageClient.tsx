@@ -1026,7 +1026,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">Day range</div>
                 <DayRange low={quote?.dayLow} high={quote?.dayHigh} last={quote?.price} />
-                <div className="stock-stat-sub">52wk {formatRange(quote?.yearLow, quote?.yearHigh)}</div>
+                <div className="stock-stat-sub">52wk <span style={{ whiteSpace: "nowrap" }}>{formatRange(quote?.yearLow, quote?.yearHigh)}</span></div>
               </div>
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">Volume</div>
@@ -1203,7 +1203,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                           printed; a REFUSAL'S reason is on hover/tap of the dash
                           or word instead (#552 COWORK #98 §1). */}
                       {item.value != null && item.reason ? (
-                        <div style={{ marginTop: 4, fontSize: "var(--fs-label)", lineHeight: 1.4, opacity: 0.55 }}>{item.reason}</div>
+                        <div data-fine-print style={{ marginTop: 4, fontSize: "var(--fs-fine)", lineHeight: 1.45, opacity: 0.6 }}>{item.reason}</div>
                       ) : null}
                     </div>
                   ))}

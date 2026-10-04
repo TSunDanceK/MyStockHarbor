@@ -57,7 +57,7 @@ const RULES = {
       hi > 0 && lo > hi && /hsHigh" style="[^"]*color:#22c55e/.test(out) && /hsLow" style="[^"]*color:#ef4444/.test(out) &&
       out.includes("$110.00") && out.includes("$100.00") && /data-pos="75\.0"/.test(out) && /left:calc\(75% - 4px\)/.test(out) &&
       html(M, "DayRange", { low: null, high: 110, last: 100 }).includes("—") &&
-      /<DayRange low=\{quote\?\.dayLow\} high=\{quote\?\.dayHigh\} last=\{quote\?\.price\} \/>\s*<div className="stock-stat-sub">52wk \{formatRange\(quote\?\.yearLow, quote\?\.yearHigh\)\}<\/div>/.test(M.page);
+      /<DayRange low=\{quote\?\.dayLow\} high=\{quote\?\.dayHigh\} last=\{quote\?\.price\} \/>\s*<div className="stock-stat-sub">52wk <span style=\{\{ whiteSpace: "nowrap" \}\}>\{formatRange\(quote\?\.yearLow, quote\?\.yearHigh\)\}<\/span><\/div>/.test(M.page);
   },
   "the Trend score's line is decorative (aria-hidden), over the chart's window, in the score's colour; the number and word stay": ({ M }) => {
     const closes = Array.from({ length: 300 }, (_, i) => 100 + Math.sin(i / 9) * 10);
