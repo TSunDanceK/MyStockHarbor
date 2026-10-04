@@ -929,6 +929,24 @@ export type SecEarningsView = {
   balanceSheetSpreadDays: number | null;
   incomeStatement: ViewCell[];
   /**
+   * THE TRAFFIC LIGHTS' BASE (#552 COWORK #137 §2): the income lines of the
+   * latest period and of the period it is compared with (the same quarter a
+   * year earlier, or the prior fiscal year: `priorYearOf`, as the growth rows),
+   * IN THE REPORTING CURRENCY, so a rate move never colours a line. Gross
+   * profit is computed where it is not filed, as the table does. Null when no
+   * comparison period is on file. See lib/lineTrend.ts for the rules.
+   */
+  incomeTrendBase: {
+    label: string;
+    nowLabel: string;
+    now: Record<string, number | null>;
+    then: Record<string, number | null>;
+    /** Either period's revenue line is incomplete in its tagged data (revenueLineIncomplete). */
+    revenueIncomplete: boolean;
+    /** Each period's one-off flag, by the SAME rule as view.oneOffs: true flagged, "unchecked" not checkable. */
+    oneOff: { now: boolean | "unchecked"; then: boolean | "unchecked" };
+  } | null;
+  /**
    * Whether the stored expense lines actually sum to the filed operating income.
    * Measured to fail on 5 of 32 probe quarters (ARM, MU) by 1-7%, always because
    * the filer expenses something the stored breakdown has no line for. The card
@@ -1580,8 +1598,13 @@ export function buildSecEarningsView(
   // EACH PERIOD'S OWN INCOME ROWS, for the per-period one-off check: the table
   // basis's periods and every stored fiscal year (#552 COWORK #117). Labels are
   // distinct across the two ("Q1 FY2026" / "FY2025"); a label in both is one row.
+  const oneOffRowsOf = (p: StoredPeriod) => withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(p, k, label))));
+  const oneOffFlag = (p: StoredPeriod): boolean | "unchecked" => {
+    const rows = oneOffRowsOf(p);
+    return !oneOffCheckable(rows) ? "unchecked" : largeNonOperatingNote(rows) !== null;
+  };
   const oneOffRows: [string, ViewCell[]][] = [...new Map(
-    [...q, ...set.years].map((p) => [periodLabel(p), withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(p, k, label))))] as const)
+    [...q, ...set.years].map((p) => [periodLabel(p), oneOffRowsOf(p)] as const)
   )];
 
   // Does the stored breakdown actually reach the filed operating income? If it
@@ -1739,6 +1762,24 @@ export function buildSecEarningsView(
         }
       : null,
     incomeStatement: incomeRows,
+    incomeTrendBase: yearAgo
+      ? (() => {
+          const figures = (p: StoredPeriod) => {
+            const h = home(p);
+            const out: Record<string, number | null> = Object.fromEntries(PL.map(([k]) => [k, valueOf(h, k)]));
+            if (out.grossProfit === null && h) out.grossProfit = nullableDiff(h);
+            return out;
+          };
+          return {
+            label: periodLabel(yearAgo),
+            nowLabel: periodLabel(latest),
+            now: figures(latest),
+            then: figures(yearAgo),
+            revenueIncomplete: revenueLineIncomplete(latest) || revenueLineIncomplete(yearAgo),
+            oneOff: { now: oneOffFlag(latest), then: oneOffFlag(yearAgo) },
+          };
+        })()
+      : null,
     largeNonOperating: largeNonOperating(incomeRows) !== null,
     largeNonOperatingNote: largeNonOperatingNote(incomeRows),
     incomeStatementComplete,

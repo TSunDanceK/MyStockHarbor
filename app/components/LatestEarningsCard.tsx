@@ -69,11 +69,20 @@ function formatGrowth(value: number | null | undefined, digits = 1) {
   return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
-/** A LEVEL. No sign on a positive — a margin of 50% is not "+50%". */
+/**
+ * A LEVEL. No sign on a positive — a margin of 50% is not "+50%". A loss-maker's
+ * margin keeps its minus sign (a true minus, "−") and is drawn in red (#552
+ * COWORK #144); one that rounds to zero carries no sign at all.
+ */
 function formatLevel(value: number | null | undefined, digits = 1) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return `${value.toFixed(digits)}%`;
+  const s = Math.abs(value).toFixed(digits);
+  return `${value < 0 && Number(s) !== 0 ? "−" : ""}${s}%`;
 }
+/** A margin below zero, as printed: one that rounds to 0.0% is not a loss on the page. */
+const isLoss = (value: number | null | undefined, digits = 1) =>
+  typeof value === "number" && Number.isFinite(value) && value < 0 && Number(Math.abs(value).toFixed(digits)) !== 0;
+const LOSS_TEXT = "#ef4444";
 
 function formatPlainDate(value: string | null | undefined) {
   if (!value) return "—";
@@ -331,10 +340,10 @@ export default function LatestEarningsCard({
                 />
               </>
             ) : null}
-            <EarningsMetric label="Gross margin" value={formatLevel(snapshot.margins.gross)} meta={snapshot.marginReasons.gross} />
-            <EarningsMetric label="Operating margin" value={formatLevel(snapshot.margins.operating)} meta={snapshot.marginReasons.operating} />
+            <EarningsMetric label="Gross margin" value={formatLevel(snapshot.margins.gross)} loss={isLoss(snapshot.margins.gross)} meta={snapshot.marginReasons.gross} />
+            <EarningsMetric label="Operating margin" value={formatLevel(snapshot.margins.operating)} loss={isLoss(snapshot.margins.operating)} meta={snapshot.marginReasons.operating} />
             {SHOW_CHARTED_METRIC_TILES ? (
-              <EarningsMetric label="Net margin" value={formatLevel(snapshot.margins.net)} meta={snapshot.marginReasons.net} />
+              <EarningsMetric label="Net margin" value={formatLevel(snapshot.margins.net)} loss={isLoss(snapshot.margins.net)} meta={snapshot.marginReasons.net} />
             ) : null}
           </div>
 
@@ -500,7 +509,7 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
         ))}
         {dots.map((d) => <circle key={d.i} data-margin-dot="" cx={d.x} cy={d.y} r={3} fill={C.margin} />)}
         {last ? (
-          <text data-margin-latest="" x={last.x} y={last.y - 6} textAnchor="middle" fontSize={9} fontWeight={800} fill={C.margin}>
+          <text data-margin-latest="" x={last.x} y={last.y - 6} textAnchor="middle" fontSize={9} fontWeight={800} fill={isLoss(last.v) ? LOSS_TEXT : C.margin}>
             {formatLevel(last.v)}
           </text>
         ) : null}
@@ -534,17 +543,20 @@ function EarningsMetric({
   meta,
   tone,
   note,
+  loss = false,
 }: {
   label: string;
   value: string;
   meta?: string | null;
   tone?: ToneKey;
   note?: string | null;
+  /** A loss-maker's margin: its minus sign, in red (#552 COWORK #144). */
+  loss?: boolean;
 }) {
   return (
     <div style={earningsMetricStyle(tone)}>
       <div style={earningsMiniLabelStyle}>{label}</div>
-      <div style={earningsMetricValueStyle}>{value}</div>
+      <div data-loss={loss ? "" : undefined} style={loss ? { ...earningsMetricValueStyle, color: LOSS_TEXT } : earningsMetricValueStyle}>{value}</div>
       {meta && meta !== "—" ? <div style={earningsMetricMetaStyle(tone)}>{meta}</div> : null}
       {/* HOW THE NUMBER WAS ARRIVED AT, where it was not simply filed. A
           differenced quarterly cash figure or a computed margin is not the

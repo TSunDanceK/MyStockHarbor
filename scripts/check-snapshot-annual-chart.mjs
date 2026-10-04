@@ -111,6 +111,12 @@ const RULES = {
       const tiles = [...r.text.matchAll(/(EPS \(diluted[^)]*\)|Gross margin|Operating margin|Net margin|Revenue|Net income)/g)].map((x) => x[1]);
       return tiles.some((t) => t.startsWith("EPS")) && tiles.includes("Gross margin") && tiles.includes("Operating margin");
     }) && !/>Net margin<\/div><div[^>]*>/.test(m.AAPL.markup.replace(/data-snapshot-legend=""[\s\S]*?<\/div>/, "")),
+  "5. a loss-maker's margin keeps its minus sign, in red; a positive one does not (#552 COWORK #144)": (m) => {
+    const op = m.BYND.snapshot.margins.operating;
+    const tile = /data-loss=""[^>]*>([^<]*)</.exec(m.BYND.markup);
+    return typeof op === "number" && op < 0 && Boolean(tile) && /^−\d/.test(tile[1]) && /color:#ef4444/.test(tile[0])
+      && !/data-loss=""/.test(m.AAPL.markup);
+  },
   "4b. the bank shape (no gross margin) says why, and still charts": (m) =>
     /data-snapshot-chart=""/.test(m.BANK.markup) && m.BANK.snapshot.marginReasons.gross !== null && m.BANK.text.includes(m.BANK.snapshot.marginReasons.gross),
 };
@@ -133,6 +139,8 @@ const MUTANTS = [
   ["the margin line in another colour", once("<path key={d} d={d} fill=\"none\" stroke={C.margin}", "<path key={d} d={d} fill=\"none\" stroke={C.sales}")],
   ["no reason line when too few years", once("reason: drawable < 2", "reason: drawable < 0")],
   ["the charted tiles shown again", once("const SHOW_CHARTED_METRIC_TILES = false;", "const SHOW_CHARTED_METRIC_TILES = true;")],
+  ["a loss-maker's margin in white again", once("loss={isLoss(snapshot.margins.operating)}", "loss={false}")],
+  ["a negative margin printed with no sign", once("return `${value < 0 && Number(s) !== 0 ? \"−\" : \"\"}${s}%`;", "return `${s}%`;")],
   ["the year's tap note dropped", once("<ReasonedValue text={y.short} reason={yearNote(y)} />", "<span>{y.short}</span>")],
 ];
 for (const [label, mutate] of MUTANTS) {
