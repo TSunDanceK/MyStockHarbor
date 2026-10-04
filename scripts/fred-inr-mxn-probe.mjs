@@ -46,7 +46,9 @@ const ecb = async (ccy) => {
 const eu = await ecb("USD");
 console.log(`ECB USD leg: status ${eu.status}${eu.err ? ` err=${eu.err}` : ""}, ${eu.out.size} rows`);
 
-for (const [ccy, id] of [["INR", "DEXINUS"], ["MXN", "DEXMXUS"]]) {
+// PAIRS (#552 COWORK #140): "CNY:DEXCHUS" measures CNY the same way; default INR and MXN.
+const PAIRS = (process.env.PAIRS || "INR:DEXINUS,MXN:DEXMXUS").split(",").map((p) => p.split(":"));
+for (const [ccy, id] of PAIRS) {
   console.log("\n" + "=".repeat(74));
   console.log(`${ccy}: FRED ${id}, ${from} .. ${to}`);
   console.log("=".repeat(74));
