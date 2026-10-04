@@ -74,8 +74,9 @@ async function handleGET(req: NextRequest) {
     });
     // durationMs (#553 COWORK #113/#114): the run's own time, beside its
     // stoppedEarly ("time-budget" when WARM_PICKERS_SEC_BUDGET_MS ran out).
+    console.log("[warm-pickers-sec]", `durationMs=${result.durationMs ?? null}`, JSON.stringify(result));
     const gateRefused = Object.fromEntries(Object.entries(gate.refused).map(([why, syms]) => [why, syms.length]));
-    console.log("[warm-pickers-sec]", `durationMs=${result.durationMs ?? null}`, JSON.stringify({ ...result, gateRefused }));
+    console.log("[warm-pickers-sec] seed gate refused", JSON.stringify(gateRefused));
     await recordJobRun("warm-pickers-sec", result.ok, {
       durationMs: result.durationMs ?? null,
       targets: result.symbols,

@@ -17,6 +17,7 @@ const { SEC_FACTS_INDEX_KEY } = await import("../lib/server/secManifest.ts");
 const { secSeedRefusal } = await import("../lib/server/secSeedGate.ts");
 const { cikForSymbol } = await import("../lib/server/secColdFetch.ts");
 const { PICKERS_SEC_KEY } = await import("../lib/server/pickersSecFundamentals.ts");
+const { dotDashSpellings } = await import("../lib/server/secManifest.ts");
 
 const [stored, rows] = await Promise.all([redis.smembers(SEC_FACTS_INDEX_KEY), redis.hkeys(PICKERS_SEC_KEY)]);
 const rowSet = new Set((rows ?? []).map((s) => String(s).toUpperCase()));
@@ -31,7 +32,7 @@ for (const s0 of stored ?? []) {
 const total = [...byReason.values()].reduce((t, v) => t + v.length, 0);
 console.log(`stored sets (index) ${stored?.length ?? 0} · failing the gate ${total} · SEC picker rows ${rowSet.size}`);
 for (const [why, syms] of [...byReason].sort((a, b) => b[1].length - a[1].length)) {
-  const withRow = syms.filter((s) => rowSet.has(s) || rowSet.has(s.replace(/\./g, "-")) || rowSet.has(s.replace(/-/g, ".")));
+  const withRow = syms.filter((s) => dotDashSpellings(s).some((k) => rowSet.has(k)));
   console.log(`\n${why}: ${syms.length} (with a picker row today: ${withRow.length})`);
   console.log(`  ${syms.sort().join(", ")}`);
 }
