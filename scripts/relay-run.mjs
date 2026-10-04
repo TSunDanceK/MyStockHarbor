@@ -1368,6 +1368,8 @@ const TASKS = {
   // task, added on a ruling. See scripts/lib/fmp-purge-plan.mjs.
   "write-fmp-purge-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--pool-figures", "--market-state", "--insight-snapshots", "--meters"], writes: true },
   "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
+  // READS ONLY: the fair value gap census (Relay B, #553 COWORK #140). GET + ~260 MGET.
+  "write-fvg-census": { script: "scripts/fvg-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
