@@ -8,6 +8,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
+import { DayRange, PositionBar, PriceChange, TrendSpark } from "./HeaderStripParts";
+import { rsiPosition, volumePosition } from "@/lib/headerStrip";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import ConfluenceCard from "./ConfluenceCard";
@@ -340,12 +342,8 @@ function formatChangeLabel(change: number | null | undefined, changePercent: num
   return `${sign}${change.toFixed(2)} (${sign}${changePercent.toFixed(2)}%)`;
 }
 
-function changeTone(change: number | null | undefined): "green" | "yellow" | "red" {
-  if (typeof change !== "number") return "yellow";
-  if (change > 0) return "green";
-  if (change < 0) return "red";
-  return "yellow";
-}
+// changeTone retired 2026-10-04 (#563 COWORK #99 §4): the change's colour now
+// comes with its arrow, from lib/headerStrip.ts changeDirection.
 
 type MacroSupportResult = {
   lower: number; upper: number; level: number; distancePct: number; touches: number; volumeRatio: number | null;
@@ -1018,21 +1016,27 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">Price</div>
                 <div className="stock-stat-value">{typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}</div>
-                <div className="stock-stat-sub" style={formatChangeLabel(quote?.change, quote?.changePercentage) ? { color: toneColor(changeTone(quote?.change)), opacity: 0.9, fontWeight: 700 } : undefined}>
-                  {formatChangeLabel(quote?.change, quote?.changePercentage) ?? quote?.date ?? "—"}
+                {/* THE HEADER STRIP (#563 COWORK #99 §4): ▲/▼ beside the signed change, and spoken words for it. */}
+                <div className="stock-stat-sub" style={formatChangeLabel(quote?.change, quote?.changePercentage) ? { opacity: 1 } : undefined}>
+                  {formatChangeLabel(quote?.change, quote?.changePercentage)
+                    ? <PriceChange change={quote?.change} pct={quote?.changePercentage} label={formatChangeLabel(quote?.change, quote?.changePercentage)!} />
+                    : quote?.date ?? "—"}
                 </div>
               </div>
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">Day range</div>
-                <div className="stock-stat-value" style={{ fontSize: "0.9375rem" }}>{formatRange(quote?.dayLow, quote?.dayHigh)}</div>
+                <DayRange low={quote?.dayLow} high={quote?.dayHigh} last={quote?.price} />
                 <div className="stock-stat-sub">52wk {formatRange(quote?.yearLow, quote?.yearHigh)}</div>
               </div>
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">Volume</div>
                 <div className="stock-stat-value" style={{ color: toneColor(volumeTone(quote?.volume, quote?.avgVolume)) }}>{formatCompactNumber(quote?.volume)}</div>
+                <PositionBar pos={volumePosition(quote?.volume, quote?.avgVolume)} ticks={[50]} colour={toneColor(volumeTone(quote?.volume, quote?.avgVolume))} />
                 <div className="stock-stat-sub">{quote?.volumeLabel ? `50-day avg ${formatCompactNumber(quote?.avgVolume)} · ${quote.volumeLabel}` : `Avg ${formatCompactNumber(quote?.avgVolume)}`}</div>
               </div>
-              <div className="stock-stat-cell">
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                {/* The chart window's closes, faint, behind the score (decorative; the number and word are the content). */}
+                <TrendSpark closes={closes.slice(-240)} colour={trendTone ? toneColor(trendTone) : "rgba(203,213,225,0.8)"} />
                 <div className="stock-stat-label">Trend score</div>
                 <div className="stock-stat-value" style={trendTone ? { color: toneColor(trendTone) } : undefined}>{trendScore.known ? `${trendScore.passed}/${trendScore.total}` : "—"}</div>
                 <div className="stock-stat-sub">{trend ?? "Not enough history yet"}</div>
@@ -1040,6 +1044,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">RSI (14)</div>
                 <div className="stock-stat-value" style={{ color: toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null)) }}>{typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}</div>
+                <PositionBar pos={rsiPosition(typeof lastRsi === "number" ? lastRsi : null)} ticks={[30, 70]} colour={toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null))} />
                 <div className="stock-stat-sub">{typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought" : lastRsi <= 30 ? "Oversold" : "Neutral") : "—"}</div>
               </div>
               {!valuationLoading && valuation ? (

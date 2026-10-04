@@ -20,7 +20,7 @@ const GLOBALS = "app/globals.css";
 export const SCOPE = [
   "app/stock/[symbol]/StockSymbolPageClient.tsx", "app/stock/[symbol]/ConfluenceCard.tsx", "app/stock/[symbol]/KeyLevelsCard.tsx",
   "app/stock/[symbol]/TapNote.tsx", "app/stock/[symbol]/LevelsSignals.tsx", "app/stock/[symbol]/PerformanceStrip.tsx",
-  "app/stock/[symbol]/StockPriceChart.tsx", "app/stock/[symbol]/StockTickerJump.tsx",
+  "app/stock/[symbol]/StockPriceChart.tsx", "app/stock/[symbol]/StockTickerJump.tsx", "app/stock/[symbol]/HeaderStripParts.tsx",
   "app/markets/spx/page.tsx", "app/markets/spx/SPXChartClient.tsx", "app/markets/spx/LevelsGlanceCard.tsx", "app/markets/spx/MarketMoodCard.tsx",
   "app/components/ReturnsToggleCard.tsx", "app/components/ReturnsBarChart.tsx", "app/components/ShareButton.tsx",
 ];
