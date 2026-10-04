@@ -59,17 +59,18 @@ export type PerfStrip = {
   asOf: string | null;
   asOfWords: string | null;
   end: number | null;
-  /** Set when the end is today's in-session partial bar: its own "hh:mm" (ET). */
-  live: { time: string | null } | null;
+  /** Set when the end is today's IEX bar: its own "hh:mm" (ET), and whether the session is still running (#77). */
+  live: { time: string | null; phase: "session" | "afterClose" } | null;
   chips: PerfChip[];
 };
 
 /** Dated, finite, oldest first; today's partial bar kept only when in session (sessionBar.ts). */
-function usable(bars: readonly KeyBar[] | null | undefined, nowMs: number | undefined): { bars: KeyBar[]; time: string | null; live: boolean } {
-  const l = nowMs === undefined ? { bars: (bars ?? []).filter((b) => !b.partial), live: null, time: null } : liveBars(bars ?? [], nowMs);
+function usable(bars: readonly KeyBar[] | null | undefined, nowMs: number | undefined): { bars: KeyBar[]; time: string | null; live: boolean; phase: "session" | "afterClose" | null } {
+  const l = nowMs === undefined ? { bars: (bars ?? []).filter((b) => !b.partial), live: null, time: null, phase: null } : liveBars(bars ?? [], nowMs);
   const out = l.bars.filter((b) => b && /^\d{4}-\d{2}-\d{2}$/.test(b.date) && typeof b.close === "number" && Number.isFinite(b.close))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  return { bars: out, time: l.time, live: !!l.live && out[out.length - 1] === l.live };
+  const live = !!l.live && out[out.length - 1] === l.live;
+  return { bars: out, time: l.time, live, phase: live ? l.phase : null };
 }
 
 const DAY = 86_400_000;
@@ -118,7 +119,10 @@ export function performanceStrip(bars: readonly KeyBar[] | null | undefined, spy
   // SPY ON THE SAME END DAY: a stock's today-so-far is never set against SPY's yesterday.
   const spyEndAny = closeOnOrBefore(spy, last.date);
   const spyEnd = spyEndAny && spyEndAny.date === last.date ? spyEndAny : null;
-  const endWords = u.live ? `last price, ${u.time ? `${u.time} ET` : "today"}` : `close, ${dateWords(last.date)}`;
+  // In session "last price, 14:32 ET"; after the close, before the nightly job, "close, 16:00 ET (IEX)" (#77).
+  const endWords = u.live
+    ? u.phase === "afterClose" ? `close, ${u.time ? `${u.time} ET` : "today"} (IEX)` : `last price, ${u.time ? `${u.time} ET` : "today"}`
+    : `close, ${dateWords(last.date)}`;
   const first = s[0].date;
   const chips = PERF_PERIODS.map((p): PerfChip => {
     const target = p.ytd ? `${Number(last.date.slice(0, 4)) - 1}-12-31` : monthsBefore(last.date, p.months!);
@@ -141,5 +145,5 @@ export function performanceStrip(bars: readonly KeyBar[] | null | undefined, spy
       : ` ${spyReason}`;
     return { key: p.key, pct, reason: null, from, spyPct, spyReason, diffPts, note: `${head}${vs} ${PRICE_ONLY}` };
   });
-  return { asOf: last.date, asOfWords: dateWords(last.date), end: last.close, live: u.live ? { time: u.time } : null, chips };
+  return { asOf: last.date, asOfWords: dateWords(last.date), end: last.close, live: u.live ? { time: u.time, phase: u.phase ?? "session" } : null, chips };
 }
