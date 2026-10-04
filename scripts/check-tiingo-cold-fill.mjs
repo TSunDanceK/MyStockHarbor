@@ -298,6 +298,10 @@ console.log("\n=== 5. The words and the page ===\n");
 check("the words, exactly as the owner kept them (COWORK #121 §3, #123)",
   S.preparingWords("XYZ") === "Price data for XYZ is being prepared; it may take a few minutes.");
 const clientSrc = raw(FILES.client);
+check("a hidden tab that becomes visible asks the store and refreshes if filled (#553 COWORK #129)",
+  /document\.addEventListener\("visibilitychange", onVisible\);/.test(clientSrc) &&
+  /if \(document\.visibilityState !== "visible"\) return;\s*try \{\s*if \(\(await tiingoColdFillStatus\(symbol, tokenRef\.current\)\)\.ready\) router\.refresh\(\);/.test(clientSrc) &&
+  /return \(\) => document\.removeEventListener\("visibilitychange", onVisible\);/.test(clientSrc));
 check("the client panel shows the same words while waiting, filling, queued or given up",
   (clientSrc.match(/is being prepared; it may take a few minutes\./g) ?? []).length >= 2);
 const pageSrc = raw(FILES.page);

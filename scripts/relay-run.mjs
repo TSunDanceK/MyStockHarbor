@@ -49,6 +49,8 @@ const TASKS = {
   "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
   // DEXINUS / DEXMXUS before they become primaries (#552 COWORK #132 (c)). Read-only and uncredentialled likewise.
   "fred-inr-mxn": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [] },
+  // DEXCHUS before it becomes CNY's primary (#552 COWORK #140). Read-only and uncredentialled likewise.
+  "fred-cny": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "CNY:DEXCHUS" } },
   // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
   // and every FRED series the adapter names; touches no store, so read-only.
   "fx-filer-diagnosis": {
