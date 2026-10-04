@@ -7,7 +7,7 @@ import Link from "next/link";
 import GrowthVisuals, { SeeAllTheNumbers } from "./GrowthVisuals";
 import { anyDerived, buildGrowthVisuals, GROSS_MARGIN_MEANS } from "@/lib/growthVisuals";
 import {
-  CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, INTEREST_IN_OTHER_INCOME, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
+  CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, INTEREST_IN_OTHER_INCOME, INTEREST_WITHIN_FILED_OTHER, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
   filingCreditText, filingNoticeText, isCrossing, periodWords, retiredSource,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
@@ -233,6 +233,9 @@ const EMPTY_SHORT: Record<string, string> = {
   // SENTENCES THAT WERE CELL VALUES (#552 COWORK #124): the short word in the
   // cell, the sentence its note. AVAV's interest row overflowed a 360 px card.
   [INTEREST_IN_OTHER_INCOME]: "In other income",
+  // AAPL's interest row (#552 COWORK #137 §1): its sentence printed in the value
+  // column and overlapped the label at desktop card width.
+  [INTEREST_WITHIN_FILED_OTHER]: NOT_REPORTED,
   ["Not found in the filing\u2019s tagged data"]: "Not tagged",
 };
 const EMPTY_FULL: Record<string, string> = {
@@ -242,6 +245,7 @@ const EMPTY_FULL: Record<string, string> = {
   [EMPTY_REASONS.noRevenueLine]: `${EMPTY_REASONS.noRevenueLine}: the company publishes no revenue figure this page reads.`,
   [NOT_REPORTED]: "The company\u2019s SEC filing has no figure for that line. It may be zero, or included under another heading.",
   [INTEREST_IN_OTHER_INCOME]: "The company files interest inside other income (net), shown below, not on its own line.",
+  [INTEREST_WITHIN_FILED_OTHER]: `${INTEREST_WITHIN_FILED_OTHER}: the filing reports other income / expense as one total, with no interest line of its own.`,
   ["Not found in the filing\u2019s tagged data"]: "Not found in the filing\u2019s tagged data: the company\u2019s filing doesn\u2019t tag this total, so there is no figure to show.",
 };
 
@@ -416,6 +420,9 @@ function CardDerivedWord({ note }: { note: string }) {
 }
 const DERIVED_MARK_STYLE = { marginRight: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8" } as const;
 
+/** More than three words: a reason, not a value word. */
+export const isSentence = (s: string) => s.trim().split(/\s+/).length > 3;
+
 /** A cell's value, with its derived mark. `—` when the filer did not publish it. */
 export function CellValue(
   { cell, compact = false, currency = true, empty = NOT_REPORTED, short = false, emptyTitle }:
@@ -434,8 +441,12 @@ export function CellValue(
   // THE SHORT WORD, ITS REASON ON TAP (#552 COWORK #124): never a sentence
   // in the cell, and never a dotted word that opens nothing.
   if (cell.val == null) {
-    const word = short || EMPTY_SHORT[empty] ? (EMPTY_SHORT[empty] ?? empty) : empty;
-    return <ReasonedValue text={word} reason={emptyTitle ?? EMPTY_FULL[empty] ?? null} style={MUTED_VALUE} />;
+    // NO SENTENCE EVER PRINTS IN THE VALUE COLUMN (#552 COWORK #137 §1): one
+    // with no short form reads "Not reported", the sentence its tap note.
+    const sentence = !EMPTY_SHORT[empty] && isSentence(empty);
+    const word = sentence ? NOT_REPORTED : short || EMPTY_SHORT[empty] ? (EMPTY_SHORT[empty] ?? empty) : empty;
+    const reason = emptyTitle ?? EMPTY_FULL[empty] ?? (sentence ? empty : null);
+    return <ReasonedValue text={word} reason={reason} style={MUTED_VALUE} />;
   }
   return (
     <>
