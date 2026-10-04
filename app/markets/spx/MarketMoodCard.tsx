@@ -45,7 +45,7 @@ export function MoodSpark({ spark }: { spark: { d: string; r: number }[] }) {
         <line x1={0} x2={W} y1={H / 2} y2={H / 2} stroke="rgba(255,255,255,0.18)" strokeDasharray="3 3" strokeWidth={1} vectorEffect="non-scaling-stroke" />
         <polyline points={pts} fill="none" stroke="rgba(241,245,249,0.85)" strokeWidth={1.6} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
       </svg>
-      <figcaption style={{ marginTop: 4, fontSize: 10.5, color: "rgba(203,213,225,0.62)" }}>Last {spark.length} sessions · the dashed line is 50</figcaption>
+      <figcaption style={{ marginTop: 4, fontSize: "var(--fs-read)", lineHeight: 1.5, color: "rgba(203,213,225,0.72)" }}>Last {spark.length} sessions · the dashed line is 50</figcaption>
     </figure>
   );
 }
@@ -58,7 +58,7 @@ export default function MarketMoodCard({ view, credit }: { view: MoodCardView | 
     return (
       <aside className="moodCard" style={{ ...cardStyle, border: `1px solid ${TONE.amber.border}`, background: TONE.amber.bg }}>
         <div style={eyebrowStyle}>Market Mood</div>
-        <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.5, color: "rgba(241,245,249,0.72)" }}>
+        <p style={{ margin: "10px 0 0", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)" }}>
           Market Mood will appear after tonight&apos;s update.
         </p>
       </aside>
@@ -73,7 +73,7 @@ export default function MarketMoodCard({ view, credit }: { view: MoodCardView | 
     <aside className="moodCard" style={{ ...cardStyle, border: `1px solid ${t.border}`, background: t.bg }}>
       <div ref={head} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <h2 style={eyebrowStyle}>Market Mood</h2>
-        <span style={{ fontSize: 12, color: "rgba(203,213,225,0.72)" }}><NoteButton note={note}>What goes into it?</NoteButton></span>
+        <span style={{ fontSize: "var(--fs-read)", color: "rgba(203,213,225,0.72)" }}><NoteButton note={note}>What goes into it?</NoteButton></span>
       </div>
       <FlowPanel note={note} anchor={head} phone={phone} label="What goes into Market Mood" pointerX={180}>
         <ul className="moodInputs" style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 4 }}>
@@ -83,7 +83,7 @@ export default function MarketMoodCard({ view, credit }: { view: MoodCardView | 
             </li>
           ))}
         </ul>
-        <p className="moodNoteText" style={{ margin: "8px 0 0", fontSize: 11, color: "rgba(203,213,225,0.7)" }}>{moodNoteText(inputs.length)}</p>
+        <p className="moodNoteText" style={{ margin: "8px 0 0", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(203,213,225,0.7)" }}>{moodNoteText(inputs.length)}</p>
       </FlowPanel>
 
       <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "56px minmax(0, 1fr)", gap: 14, alignItems: "center" }}>
@@ -95,19 +95,19 @@ export default function MarketMoodCard({ view, credit }: { view: MoodCardView | 
           <div style={{ position: "absolute", bottom: 0, width: 42, height: 42, borderRadius: 999, border: "3px solid rgba(255,255,255,0.48)", background: t.bulb, boxShadow: `0 0 20px ${t.glow}`, boxSizing: "border-box" }} />
         </div>
         <div style={{ minWidth: 0 }}>
-          <div className="moodValue" style={{ fontSize: 38, lineHeight: 1, fontWeight: 950, letterSpacing: "-0.06em" }}>
-            {day.r}<span style={{ fontSize: 16, fontWeight: 700, opacity: 0.7, letterSpacing: 0 }}>/100</span>
+          <div className="moodValue" style={{ fontSize: "2.375rem", lineHeight: 1, fontWeight: 950, letterSpacing: "-0.06em" }}>
+            {day.r}<span style={{ fontSize: "1rem", fontWeight: 700, opacity: 0.7, letterSpacing: 0 }}>/100</span>
           </div>
-          <div className="moodLabel" style={{ marginTop: 8, fontSize: 18, fontWeight: 950, color: t.text }}>{label}</div>
-          <div className="moodDate" style={{ marginTop: 6, fontSize: 12, color: "rgba(203,213,225,0.72)" }}>Reading for {dayWords(day.d)}</div>
-          <div style={{ marginTop: 4, fontSize: 12, color: "rgba(203,213,225,0.72)" }}>{day.n} market measures · 0 = extreme fear, 100 = extreme greed</div>
+          <div className="moodLabel" style={{ marginTop: 8, fontSize: "1.125rem", fontWeight: 950, color: t.text }}>{label}</div>
+          <div className="moodDate" data-fine-print style={{ marginTop: 6, fontSize: "var(--fs-fine)", color: "rgba(203,213,225,0.72)" }}>Reading for {dayWords(day.d)}</div>
+          <div style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: 1.45, color: "rgba(203,213,225,0.72)" }}>{day.n} market measures · 0 = extreme fear, 100 = extreme greed</div>
         </div>
       </div>
       <MoodSpark spark={spark} />
-      {credit ? <p className="moodCredit" style={{ margin: "10px 0 0", fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.62)" }}>Daily prices: {credit}</p> : null}
+      {credit ? <p className="moodCredit" data-fine-print style={{ margin: "10px 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(203,213,225,0.62)" }}>Daily prices: {credit}</p> : null}
     </aside>
   );
 }
 
 const cardStyle: CSSProperties = { borderRadius: 20, padding: 18, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)", minWidth: 0, boxSizing: "border-box", position: "relative" };
-const eyebrowStyle: CSSProperties = { margin: 0, fontSize: 12, fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(241,245,249,0.82)" };
+const eyebrowStyle: CSSProperties = { margin: 0, fontSize: "var(--fs-label)", fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(241,245,249,0.82)" };

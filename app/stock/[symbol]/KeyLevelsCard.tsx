@@ -75,7 +75,7 @@ export function RowNoteBody({ bar }: { bar: NonNullable<BarRow["bar"]> }) {
         ))}
       </ul>
       {n.verdict ? <div className="klVerdict" data-tone={n.tone} style={{ marginTop: 6, fontWeight: 800, color: TONE_COLOUR[n.tone] }}>{n.verdict}</div> : null}
-      {n.extra.map((x) => <div key={x} className="klExtra" style={{ marginTop: 4, fontSize: 11, color: C.muted }}>{x}</div>)}
+      {n.extra.map((x) => <div key={x} className="klExtra" style={{ marginTop: 4, fontSize: "var(--fs-label)", color: C.muted }}>{x}</div>)}
     </div>
   );
 }
@@ -87,11 +87,11 @@ function KeyRow({ r, phone }: { r: BarRow; phone: boolean }) {
   return (
     <div className="klRow" style={{ marginTop: 12 }}>
       <div ref={head} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 800, color: C.value }}>
-          {r.title}{r.since ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, color: C.muted }}>{r.since}</span> : null}
+        <span style={{ fontSize: "0.75rem", fontWeight: 800, color: C.value }}>
+          {r.title}{r.since ? <span style={{ marginLeft: 6, fontSize: "var(--fs-label)", fontWeight: 600, color: C.muted }}>{r.since}</span> : null}
         </span>
         {r.bar ? (
-          <span className="klRange" style={{ fontSize: 11, color: C.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+          <span className="klRange" style={{ fontSize: "var(--fs-label)", color: C.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
             <NoteButton note={note}>{r.bar.range}</NoteButton>
           </span>
         ) : null}
@@ -116,7 +116,7 @@ function KeyRow({ r, phone }: { r: BarRow; phone: boolean }) {
               <div className="klDot" style={{ position: "absolute", top: 9, width: 10, height: 10, marginLeft: -5, left: `${r.bar.dot}%`, borderRadius: 999, background: TONE_COLOUR[r.bar.tone], border: "1.5px solid #f8fafc", boxSizing: "border-box", zIndex: 2 }} />
             </div>
           </div>
-          {r.bar.flat ? <div className="klFlat" style={{ marginTop: 2, fontSize: 10, color: C.muted }}>No range yet</div> : null}
+          {r.bar.flat ? <div className="klFlat" style={{ marginTop: 2, fontSize: "var(--fs-label)", color: C.muted }}>No range yet</div> : null}
         </>
       ) : (
         <p className="klReason" style={{ ...noteStyle, marginTop: 4 }}>{r.reason}</p>
@@ -156,13 +156,13 @@ export default function KeyLevelsCard({
       <div className="klEyebrow" style={eyebrowStyle}>Day · week · month</div>
       <div ref={head} style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <h2 style={titleStyle}>Key levels</h2>
-        <span style={{ fontSize: 12, color: C.muted }}><NoteButton note={what}>What are these?</NoteButton></span>
+        <span style={{ fontSize: "var(--fs-read)", color: C.muted }}><NoteButton note={what}>What are these?</NoteButton></span>
       </div>
       <FlowPanel note={what} anchor={head} phone={phone} label="What are these?" pointerX={200}>
         <div className="klWhat">{KEY_LEVELS_NOTE}</div>
       </FlowPanel>
       {k.asOf && last != null ? (
-        <p className="klAsOf" style={noteStyle}>
+        <p className="klAsOf" data-fine-print style={noteStyle}>
           {hasPrice || k.live ? "Last price" : "Last close"} <strong style={{ color: C.value }}>{priceWords(last)}</strong> ·{" "}
           {k.live
             ? k.live.phase === "afterClose"
@@ -181,7 +181,7 @@ export default function KeyLevelsCard({
         </HowToRead>
       ) : null}
       {k.reasons.length && !rows.length ? k.reasons.map((r) => <p key={r} className="klReason" style={noteStyle}>{r}</p>) : null}
-      {credit ? <p className="klCredit" style={noteStyle}>Daily prices: {credit}</p> : null}
+      {credit ? <p className="klCredit" data-fine-print style={noteStyle}>Daily prices: {credit}</p> : null}
     </section>
   );
 }
@@ -195,9 +195,9 @@ const cardStyle: CSSProperties = {
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
   minWidth: 0,
 };
-const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: C.label };
-const titleStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.12, letterSpacing: "-0.03em" };
-const noteStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: 11, lineHeight: 1.5, color: C.muted };
+const eyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: C.label };
+const titleStyle: CSSProperties = { margin: 0, fontSize: "1.375rem", lineHeight: 1.12, letterSpacing: "-0.03em" };
+const noteStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, color: C.muted };
 /** Each side of the track keeps this much room, so a dot or ◇ at either end stays inside the card. */
 export const GUTTER = 6;
 const trackStyle: CSSProperties = { position: "relative", height: 26, marginTop: 4, cursor: "help" };

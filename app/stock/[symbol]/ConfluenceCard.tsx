@@ -74,7 +74,7 @@ export function ZoneNoteBody({ mark, price }: { mark: ZoneMark; price: number })
           </li>
         ))}
       </ul>
-      <div className="czNoteFoot" style={{ marginTop: 6, fontSize: 11, color: C.muted }}>{ZONE_NOTE_FOOTER}</div>
+      <div className="czNoteFoot" style={{ marginTop: 6, fontSize: "var(--fs-label)", color: C.muted }}>{ZONE_NOTE_FOOTER}</div>
     </div>
   );
 }
@@ -101,12 +101,12 @@ function ZoneLabel({ mark, index, price, offset, phone, onPush }: {
     <>
       <div ref={label} {...note.owner} className="czLabel" data-side={mark.side}
         style={{ position: "absolute", left: PILLAR_X + ZONE_LABEL_OFFSET, right: 0, top: mark.labelY + offset, transform: "translateY(-50%)", lineHeight: 1.25, minWidth: 0 }}>
-        <div className="czCount" style={{ fontSize: 12.5, fontWeight: 850, color: ZONE_COLOUR[mark.side], whiteSpace: "nowrap" }}>
+        <div className="czCount" style={{ fontSize: "0.78125rem", fontWeight: 850, color: ZONE_COLOUR[mark.side], whiteSpace: "nowrap" }}>
           <NoteButton note={note}>{countWords(mark.zone)}</NoteButton>
-          {mark.side === "inside" ? null : <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}> · {zoneDistance(mark.zone, price)}</span>}
+          {mark.side === "inside" ? null : <span style={{ fontSize: "var(--fs-label)", fontWeight: 600, color: C.muted }}> · {zoneDistance(mark.zone, price)}</span>}
         </div>
-        <div className="czRange" style={{ fontSize: 11, color: C.muted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{rangeWords(mark.zone)}</div>
-        {mark.side === "inside" ? <div className="czInside" style={{ fontSize: 11, fontWeight: 700, color: C.value, whiteSpace: "nowrap" }}>{zoneDistance(mark.zone, price)}</div> : null}
+        <div className="czRange" style={{ fontSize: "var(--fs-label)", color: C.muted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{rangeWords(mark.zone)}</div>
+        {mark.side === "inside" ? <div className="czInside" style={{ fontSize: "var(--fs-label)", fontWeight: 700, color: C.value, whiteSpace: "nowrap" }}>{zoneDistance(mark.zone, price)}</div> : null}
       </div>
       {note.open ? (
         phone
@@ -142,8 +142,8 @@ function Ladder({ c, marks }: { c: Confluence; marks: ZoneMark[] }) {
       {/* THE PRICE: at its true height on the fixed scale, labelled on the pillar's left. */}
       <div className="czDot" style={{ position: "absolute", left: PILLAR_X - 6, top: priceY + dotOff - 6, width: 12, height: 12, borderRadius: 999, background: "#f8fafc", border: "2px solid #0b1220", boxSizing: "border-box", zIndex: 2 }} />
       <div className="czPrice" style={{ position: "absolute", left: 0, width: PILLAR_X - 12, top: priceY + dotOff, transform: "translateY(-50%)", textAlign: "right", lineHeight: 1.15 }}>
-        <div style={{ fontSize: 10, color: C.muted }}>price</div>
-        <div style={{ fontSize: 11.5, fontWeight: 850, color: C.value, fontVariantNumeric: "tabular-nums" }}>{priceWords(price)}</div>
+        <div style={{ fontSize: "var(--fs-label)", color: C.muted }}>price</div>
+        <div style={{ fontSize: "var(--fs-label)", fontWeight: 850, color: C.value, fontVariantNumeric: "tabular-nums" }}>{priceWords(price)}</div>
       </div>
       <svg className="czLeaders" width={ZONE_LABEL_OFFSET - BAND_HALF - ZONE_LEADER_GAP} height={ZONE_LADDER_HEIGHT + extra} aria-hidden="true" style={{ position: "absolute", top: 0, left: PILLAR_X + BAND_HALF }}>
         {marks.map((m, i) => (
@@ -185,13 +185,13 @@ export default function ConfluenceCard({
       <div className="czEyebrow" style={eyebrowStyle}>Confluence</div>
       <div ref={head} style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <h2 style={titleStyle}>Price zones</h2>
-        <span style={{ fontSize: 12, color: C.muted }}><NoteButton note={what}>What are these?</NoteButton></span>
+        <span style={{ fontSize: "var(--fs-read)", color: C.muted }}><NoteButton note={what}>What are these?</NoteButton></span>
       </div>
       <FlowPanel note={what} anchor={head} phone={phone} label="What are these?" pointerX={200}>
         <div className="czWhat">{whatText}</div>
       </FlowPanel>
 
-      {marks.length && c.scale && c.price !== null ? <Ladder c={c} marks={marks} /> : <p className="czReason" style={noteStyle}>{c.reason}</p>}
+      {marks.length && c.scale && c.price !== null ? <Ladder c={c} marks={marks} /> : <p className="czReason" style={readStyle}>{c.reason}</p>}
 
       {/* THE SMALL PRINT, FOLDED (#88 §1): the key, the kinds' dots and the hedge. The Tiingo credit stays below, outside. */}
       <HowToRead>
@@ -201,7 +201,7 @@ export default function ConfluenceCard({
         </ul>
         <p className="czNoteText" style={{ margin: "6px 0 0" }}>{CONFLUENCE_NOTE}</p>
       </HowToRead>
-      {credit ? <p className="czCredit" style={noteStyle}>Daily prices: {credit}</p> : null}
+      {credit ? <p className="czCredit" data-fine-print style={noteStyle}>Daily prices: {credit}</p> : null}
     </section>
   );
 }
@@ -215,6 +215,7 @@ const cardStyle: CSSProperties = {
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
   minWidth: 0,
 };
-const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: C.label };
-const titleStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.12, letterSpacing: "-0.03em" };
-const noteStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: 11, lineHeight: 1.5, color: C.muted };
+const eyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: C.label };
+const titleStyle: CSSProperties = { margin: 0, fontSize: "1.375rem", lineHeight: 1.12, letterSpacing: "-0.03em" };
+const noteStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, color: C.muted };
+const readStyle: CSSProperties = { ...noteStyle, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)" };

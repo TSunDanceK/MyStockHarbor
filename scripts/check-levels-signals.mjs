@@ -131,7 +131,7 @@ const rules = {
     /class="lsBand" style="position:absolute;left:calc\(50% - 11px\);width:22px/.test(aaplHtml) &&
     (aaplHtml.match(/class="lsTick" data-key="[^"]+" style="position:absolute;left:calc\(50% - (5|8)px\)/g) ?? []).length === 4 &&
     /data-key="last" style="position:absolute;left:calc\(50% - 8px\);[^"]*width:16px;height:6px/.test(aaplHtml) &&
-    /data-key="last"[^>]*data-label-side="[a-z]+"[^>]*>[^]*?font-size:14px;font-weight:900/.test(aaplHtml),
+    /data-key="last"[^>]*data-label-side="[a-z]+"[^>]*>[^]*?font-size:0.875rem;font-weight:900/.test(aaplHtml),
   "leaders stop short of the label's edge, so no line crosses text": ({ aaplHtml, M }) => {
     const w = M.LABEL_OFFSET - M.LEADER_GAP;
     return M.LEADER_GAP >= 4 && (aaplHtml.match(new RegExp(`<svg class="lsLeaders lsLeaders-(right|left)" width="${w}"`, "g")) ?? []).length === 2 &&
@@ -276,7 +276,7 @@ const mutants = [
   ["labels: stacked to the minimum gap on each side, in order, inside the ladder", "l", (s) => s.replace("const ys = stackLabels(idx.map((i) => placed[i].y), LABEL_GAP, height, LABEL_GAP / 2);", "const ys = idx.map((i) => placed[i].y);")],
   ["labels alternate sides down the pillar: right, left, right, …", "l", (s) => s.replace('const sides: LabelSide[] = placed.map((_, i) => (i % 2 === 0 ? "right" : "left"));', 'const sides: LabelSide[] = placed.map(() => "right");')],
   ["the pillar is centred; the anchor keeps its bolder marker and label", "c", (s) => s.replace('left: "calc(50% - 1px)", top: 0, bottom: 0, width: 2', "left: 10, top: 0, bottom: 0, width: 2")],
-  ["the pillar is centred; the anchor keeps its bolder marker and label", "c", (s) => s.replace('fontSize: m.key === "last" ? 14 : 13, fontWeight: m.key === "last" ? 900 : 800', "fontSize: 13, fontWeight: 800")],
+  ["the pillar is centred; the anchor keeps its bolder marker and label", "c", (s) => s.replace('fontSize: m.key === "last" ? "0.875rem" : "0.8125rem", fontWeight: m.key === "last" ? 900 : 800', 'fontSize: "0.8125rem", fontWeight: 800')],
   ["leaders stop short of the label's edge, so no line crosses text", "l", (s) => s.replace("export const LEADER_GAP = 4;", "export const LEADER_GAP = -10;")],
   ["leaders stop short of the label's edge, so no line crosses text", "c", (s) => s.replace("width={LABEL_OFFSET - LEADER_GAP}", "width={LABEL_OFFSET + 20}")],
   ["the Signals column keeps its width", "c", (s) => s.replace(".lsGrid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px; }", ".lsGrid { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 1fr); gap: 28px; }")],
@@ -291,11 +291,11 @@ const mutants = [
   ["MACD: where it sits against its signal line, never Bullish or Bearish", "l", (s) => s.replace('return tone === "green" ? "above" : tone === "red" ? "below" : "near";', 'return tone === "green" ? "below" : tone === "red" ? "above" : "near";')],
   ["MACD: where it sits against its signal line, never Bullish or Bearish", "c", (s) => s.replace('{macd === "above" ? "▲ " : macd === "below" ? "▼ " : "– "}', "")],
   ["never colour alone: each label's colour matches its side, which matches its height", "c", (s) => s.replace('fontWeight: m.key === "last" ? 900 : 800, color: SIDE_COLOUR[m.side] }}', 'fontWeight: m.key === "last" ? 900 : 800, color: SIDE_COLOUR.above }}')],
-  ["never colour alone: each label's colour matches its side, which matches its height", "c", (s) => s.replace("{marks.length > 1 ? <p className=\"lsKey\" style={noteStyle}>{LADDER_KEY}</p> : null}", "")],
+  ["never colour alone: each label's colour matches its side, which matches its height", "c", (s) => s.replace("{marks.length > 1 ? <p className=\"lsKey\" style={readStyle}>{LADDER_KEY}</p> : null}", "")],
   ["short history: each missing piece says why", "c", (s) => s.replace("p.ma200 == null ? `MA200: ${p.ma200Missing ?? \"not available\"}` : null,", "null,")],
   ["the notes describe, and nothing reads as advice", "c", (s) => s.replace('rsi: "RSI (14) compares', 'rsi: "A buy signal when RSI (14) compares')],
   ["the notes describe, and nothing reads as advice", "c", (s) => s.replace("return partial ? `As of today's trading so far (${dateWords(asOf)}).` : `As of the close on ${dateWords(asOf)}.`;", "return \"\";")],
-  ["the Tiingo credit only when it is passed", "c", (s) => s.replace("{p.credit ? <p className=\"lsCredit\" style={{ ...noteStyle, gridColumn: \"1 / -1\" }}>Daily prices: {p.credit}</p> : null}", "<p className=\"lsCredit\">Daily prices: {p.credit ?? \"Tiingo\"}</p>")],
+  ["the Tiingo credit only when it is passed", "c", (s) => s.replace("{p.credit ? <p className=\"lsCredit\" data-fine-print style={{ ...noteStyle, gridColumn: \"1 / -1\" }}>Daily prices: {p.credit}</p> : null}", "<p className=\"lsCredit\">Daily prices: {p.credit ?? \"Tiingo\"}</p>")],
 ];
 const MS = fs.readFileSync(MACD, "utf8"), SSs = fs.readFileSync(SESS, "utf8");
 mutants.push(
