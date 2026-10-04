@@ -794,8 +794,8 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // "EPS surprise: 0.00", which read as "came in exactly in line".
   const coalesceCell = (src) =>
     src.replace(
-      "  if (cell.val == null) {\n    const word",
-      "  if (false) {\n    const word"
+      "  if (cell.val == null) {\n    // NO SENTENCE EVER PRINTS",
+      "  if (false) {\n    // NO SENTENCE EVER PRINTS"
     ).replace(
       "? money(cell.val, compact && !cell.perShare, cell.perShare)",
       "? money(cell.val ?? 0, compact && !cell.perShare, cell.perShare)"

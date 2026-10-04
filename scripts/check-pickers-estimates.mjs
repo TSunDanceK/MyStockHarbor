@@ -331,7 +331,7 @@ function wiringRules(jobSrc, seedSrc) {
   const j = stripComments(jobSrc, { file: JOB });
   const sd = stripComments(seedSrc, { file: SEED });
   const fails = [];
-  if (!/warmPickersSec\(symbols, \(s\) => \(\{[\s\S]*?\bsic: registrantFor\(s\)\?\.sic \?\? null,[\s\S]*?\}\)\)/.test(j)) fails.push("the job passes registrantFor(s)?.sic as the filer's SIC");
+  if (!/warmPickersSec\(symbols, \(s\) => \(\{[\s\S]*?\bsic: registrantFor\(s\)\?\.sic \?\? null,[\s\S]*?\}\)(?:\)|,)/.test(j)) fails.push("the job passes registrantFor(s)?.sic as the filer's SIC");
   if (!/warmPickersSec\(symbols, \(s\) => \(\{[\s\S]*?\bsic: REGISTRANTS\[s\]\?\.sic \?\? null,[\s\S]*?\}\), Date\.now\(\), KEY\)/.test(sd)) fails.push("the seed passes REGISTRANTS[s]?.sic as the filer's SIC");
   return fails;
 }
