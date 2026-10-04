@@ -69,6 +69,22 @@ export function macdSeries(bars: readonly { date: string; close: number }[], win
   return { points, crossIndex, run, runFillsWindow: run >= points.length };
 }
 
+/**
+ * The MACD pill's tone, decided as StockSymbolPageClient's buildMacd decides it
+ * (for pages without it, #563 COWORK #90): "yellow" when the histogram is within
+ * max(0.1% of the last close, 0.03) of zero, else "green" above the signal line,
+ * "red" below; null under 35 closes. scripts/check-spx-page.mjs lifts buildMacd
+ * and asserts the same tone on the same closes.
+ */
+export function macdTone(closes: readonly number[]): "green" | "yellow" | "red" | null {
+  if (closes.length < 35) return null;
+  const s = macdSeries(closes.map((close, i) => ({ date: String(i), close })), 1);
+  const p = s?.points[s.points.length - 1];
+  if (!p) return null;
+  const quiet = Math.max(closes[closes.length - 1] * 0.001, 0.03);
+  return Math.abs(p.hist) <= quiet ? "yellow" : p.hist > 0 ? "green" : "red";
+}
+
 /** "for 6 sessions", "for 30+ sessions", "for 1 session". */
 export function runWords(s: MacdSeries): string {
   if (s.runFillsWindow) return `for ${s.points.length}+ sessions`;

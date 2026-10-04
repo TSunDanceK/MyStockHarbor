@@ -1,15 +1,33 @@
 import type React from "react";
+import fs from "node:fs";
+import path from "node:path";
 import type { Metadata } from "next";
 import AffiliateLink from "../../components/AffiliateLink";
 import SPXChartClient from "./SPXChartClient";
 import { getDailyHistory } from "@/lib/server/historyCache";
-import { getSpxMarketAnalysis } from "@/lib/ai-market";
+// RETIRED 2026-10-04 (#563 COWORK #90): the AI "market backdrop" (getSpxMarketAnalysis,
+// lib/ai-market.ts) is no longer called here: undated, no inputs, and able to
+// contradict the dated weekly copy. The module stays; the old page is kept in
+// ./_retired/spx-page-2026-10-04.tsx.txt.
 import { buildMarketMoodScore } from "@/lib/market-mood";
 import { rsiWilder as sharedRsiWilder, lastNum } from "@/lib/indicators";
 import PageShareBar from "@/app/components/PageShareBar";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { readTiingoHistory } from "@/lib/server/marketData/read";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { performanceStrip } from "@/lib/ta/performance";
+import { computeMacroSupport } from "@/lib/ta/macroSupport";
+import { macdTone } from "@/lib/ta/macdSeries";
+import { indexWords, isStale, parseSpxWeekly, weeklyDate, type SectionKey, type SpxWeekly } from "@/lib/spxWeekly";
+import { FAQ, WEEKLY_CHART_EXPLAINER, faqJsonLd, trendWords } from "@/lib/spxPage";
+import { dailyReturnBars, monthlyReturnBars, weeklyReturnBars } from "@/lib/closeReturns";
+import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
+import PerformanceStrip from "@/app/stock/[symbol]/PerformanceStrip";
+import StockPriceChart from "@/app/stock/[symbol]/StockPriceChart";
+import ConfluenceCard from "@/app/stock/[symbol]/ConfluenceCard";
+import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
+import LevelsSignals from "@/app/stock/[symbol]/LevelsSignals";
+import LevelsGlanceCard from "./LevelsGlanceCard";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +65,7 @@ export const metadata: Metadata = {
 
 type Point = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -80,7 +99,7 @@ type SpxChartRead = {
 async function getSpyPointsTiingo(): Promise<Point[] | null> {
   const eod = await readTiingoHistory("SPY").catch(() => null);
   const points = (eod?.bars ?? [])
-    .map(([date, , high, low, close, volume]) => ({ date, close, high, low, volume }))
+    .map(([date, open, high, low, close, volume]) => ({ date, open, close, high, low, volume }))
     .filter((point) => point.date && Number.isFinite(point.close) && point.close > 0);
   return points.length ? points : null;
 }
@@ -96,6 +115,7 @@ async function getSpxChartPoints(): Promise<SpxChartRead> {
     const mapped = points
       .map((point) => ({
         date: String(point?.date ?? ""),
+        open: point?.open == null ? undefined : Number(point.open),
         close: Number(point?.close),
         high: point?.high == null ? undefined : Number(point.high),
         low: point?.low == null ? undefined : Number(point.low),
@@ -191,1194 +211,349 @@ function secondaryBtn(): React.CSSProperties {
   };
 }
 
-function infoCardStyle(): React.CSSProperties {
-  return {
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.04)",
-    padding: 18,
-  };
+/** A moving average for every bar (null until `window` closes), for the price chart's lines. */
+function maSeries(values: number[], window: number): (number | null)[] {
+  let sum = 0;
+  return values.map((v, i) => {
+    sum += v;
+    if (i >= window) sum -= values[i - window];
+    return i >= window - 1 ? sum / window : null;
+  });
 }
 
-function sectionCardStyle(): React.CSSProperties {
-  return {
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.04)",
-    padding: 18,
-  };
+/**
+ * THE WEEKLY FIGURES (#563 COWORK #90): content/markets/spx-weekly.json, read at
+ * render time and checked (lib/spxWeekly.ts). A file that fails the check shows
+ * no weekly figures, never wrong ones, and says so in the server log.
+ */
+function readWeekly(): SpxWeekly | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(process.cwd(), "content/markets/spx-weekly.json"), "utf8"));
+    const r = parseSpxWeekly(raw);
+    if (r.ok) return r.data;
+    console.error("[spx] content/markets/spx-weekly.json failed its check:", r.problems.join("; "));
+  } catch (err) {
+    console.error("[spx] content/markets/spx-weekly.json could not be read:", err);
+  }
+  return null;
 }
 
-function statLabelStyle(): React.CSSProperties {
-  return {
-    fontSize: 12,
-    opacity: 0.72,
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-  };
-}
-
-function marketMoodCardStyle(score: number): React.CSSProperties {
-  const tone = score >= 56 ? "green" : score <= 44 ? "red" : "yellow";
-
-  return {
-    borderRadius: 20,
-    border:
-      tone === "green"
-        ? "1px solid rgba(34,197,94,0.30)"
-        : tone === "red"
-        ? "1px solid rgba(248,113,113,0.30)"
-        : "1px solid rgba(250,204,21,0.30)",
-    background:
-      tone === "green"
-        ? "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(7,16,12,0.96))"
-        : tone === "red"
-        ? "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(18,10,10,0.96))"
-        : "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
-    padding: 18,
-    minHeight: "auto",
-    height: "fit-content",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-  };
-}
-
-function thermometerFillStyle(score: number): React.CSSProperties {
-  const safeScore = Math.max(0, Math.min(100, score));
-
-  return {
-    position: "absolute",
-    left: 7,
-    right: 7,
-    bottom: 7,
-    height: `${Math.max(7, safeScore)}%`,
-    borderRadius: 999,
-    background:
-      "linear-gradient(0deg, #ef4444 0%, #f97316 28%, #eab308 50%, #84cc16 72%, #22c55e 100%)",
-    boxShadow: "0 0 18px rgba(34,197,94,0.35)",
-  };
-}
-
-const overviewCardHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
+const C = {
+  muted: "rgba(203,213,225,0.66)",
+  value: "#f1f5f9",
+  rule: "rgba(255,255,255,0.10)",
+  amber: "#fbbf24",
 };
 
-function overviewIconStyle(type: "green" | "red" | "blue"): React.CSSProperties {
-  return {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flex: "0 0 auto",
-    fontSize: 22,
-    fontWeight: 950,
-    background:
-      type === "green"
-        ? "rgba(34,197,94,0.18)"
-        : type === "red"
-        ? "rgba(239,68,68,0.18)"
-        : "rgba(59,130,246,0.18)",
-    border:
-      type === "green"
-        ? "1px solid rgba(34,197,94,0.34)"
-        : type === "red"
-        ? "1px solid rgba(239,68,68,0.34)"
-        : "1px solid rgba(59,130,246,0.34)",
-    color:
-      type === "green"
-        ? "#4ade80"
-        : type === "red"
-        ? "#f87171"
-        : "#60a5fa",
-  };
+function card(extra?: React.CSSProperties): React.CSSProperties {
+  return { borderRadius: 18, border: "1px solid rgba(148,163,184,0.22)", background: "linear-gradient(135deg, rgba(148,163,184,0.06), rgba(255,255,255,0.02))", padding: 18, minWidth: 0, ...extra };
+}
+const eyebrow: React.CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.85)" };
+const h2: React.CSSProperties = { margin: "6px 0 0", fontSize: 24, lineHeight: 1.15, letterSpacing: "-0.03em" };
+const small: React.CSSProperties = { margin: "8px 0 0", fontSize: 12, lineHeight: 1.5, color: C.muted };
+
+/**
+ * THE WRITE-UP UNDER A VISUAL (#563 COWORK #91): 2–4 sentences from the weekly
+ * file saying what the visual shows this week. Dated when the file is stale.
+ */
+function WriteUp({ weekly, k, stale }: { weekly: SpxWeekly | null; k: SectionKey; stale: boolean }) {
+  const sec = weekly?.sections[k];
+  if (!weekly || !sec) return null;
+  return (
+    <div className="spxWriteUp" data-section={k} style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.rule}` }}>
+      {sec.heading ? <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>{sec.heading}</h3> : null}
+      <p style={{ margin: sec.heading ? "6px 0 0" : 0, fontSize: 15, lineHeight: 1.65, opacity: 0.88 }}>{sec.body}</p>
+      {stale ? <p style={{ ...small, color: C.amber, fontWeight: 700 }}>From the weekly update of {weeklyDate(weekly.asOf)}.</p> : null}
+    </div>
+  );
 }
 
-function themedOverviewCardStyle(type: "green" | "red" | "blue"): React.CSSProperties {
-  return {
-    borderRadius: 16,
-    padding: 16,
-    border:
-      type === "green"
-        ? "1px solid rgba(34,197,94,0.24)"
-        : type === "red"
-        ? "1px solid rgba(239,68,68,0.24)"
-        : "1px solid rgba(59,130,246,0.24)",
-    background:
-      type === "green"
-        ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(255,255,255,0.03))"
-        : type === "red"
-        ? "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(255,255,255,0.03))"
-        : "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(255,255,255,0.03))",
-  };
+/** A hero tile: label, value, a line under it; `dated` lifts the date out when the weekly file is stale. */
+function Tile({ label, value, sub, tone, dated }: { label: string; value: React.ReactNode; sub: React.ReactNode; tone?: string; dated?: boolean }) {
+  return (
+    <div className="spxTile" style={{ ...card({ padding: 14 }) }}>
+      <div style={{ fontSize: 10.5, fontWeight: 850, letterSpacing: "0.08em", textTransform: "uppercase", color: C.muted }}>{label}</div>
+      <div style={{ marginTop: 6, fontSize: 24, fontWeight: 900, letterSpacing: "-0.03em", color: tone ?? C.value, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ marginTop: 4, fontSize: 11.5, lineHeight: 1.4, color: dated ? C.amber : C.muted, fontWeight: dated ? 750 : 400 }}>{sub}</div>
+    </div>
+  );
 }
 
-
-function insightCardStyle(type: "red" | "blue" | "yellow"): React.CSSProperties {
-  return {
-    borderRadius: 18,
-    border:
-      type === "red"
-        ? "1px solid rgba(239,68,68,0.24)"
-        : type === "blue"
-        ? "1px solid rgba(59,130,246,0.24)"
-        : "1px solid rgba(250,204,21,0.24)",
-    background:
-      type === "red"
-        ? "linear-gradient(135deg, rgba(239,68,68,0.11), rgba(255,255,255,0.035))"
-        : type === "blue"
-        ? "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(255,255,255,0.035))"
-        : "linear-gradient(135deg, rgba(250,204,21,0.12), rgba(255,255,255,0.035))",
-    padding: 18,
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
-  };
-}
-
-function insightIconStyle(type: "red" | "blue" | "yellow"): React.CSSProperties {
-  return {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flex: "0 0 auto",
-    fontSize: 21,
-    background:
-      type === "red"
-        ? "rgba(239,68,68,0.16)"
-        : type === "blue"
-        ? "rgba(59,130,246,0.16)"
-        : "rgba(250,204,21,0.16)",
-    border:
-      type === "red"
-        ? "1px solid rgba(239,68,68,0.34)"
-        : type === "blue"
-        ? "1px solid rgba(59,130,246,0.34)"
-        : "1px solid rgba(250,204,21,0.34)",
-    boxShadow:
-      type === "red"
-        ? "0 0 18px rgba(239,68,68,0.16)"
-        : type === "blue"
-        ? "0 0 18px rgba(59,130,246,0.16)"
-        : "0 0 18px rgba(250,204,21,0.16)",
-  };
-}
-
-function sectionEyebrowStyle(type: "green" | "red" | "blue" | "yellow"): React.CSSProperties {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 12,
-    fontWeight: 950,
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
-    color:
-      type === "green"
-        ? "#86efac"
-        : type === "red"
-        ? "#fca5a5"
-        : type === "blue"
-        ? "#93c5fd"
-        : "#fde68a",
-  };
+/** The render time: the session rule and the weekly file's staleness are judged against it (force-dynamic, per request). */
+function renderTime(): number {
+  return Date.now();
 }
 
 export default async function SPXPage() {
-  const { points: spxChartPoints, ok: chartOk, series: chartSeries } = await getSpxChartPoints();
-  const marketAnalysis = await getSpxMarketAnalysis();
+  const { points, ok: chartOk, series: chartSeries } = await getSpxChartPoints();
+  const weekly = readWeekly();
+  const nowMs = renderTime();
+  const stale = weekly ? isStale(weekly.asOf, nowMs) : false;
 
-  const closes = spxChartPoints.map((point) => point.close);
+  const closes = points.map((point) => point.close);
   const lastClose = closes.length ? closes[closes.length - 1] : null;
   const ma50 = movingAverage(closes, 50);
   const ma200 = movingAverage(closes, 200);
   const rsi = rsiWilder(closes, 14);
+  // buildMarketMoodScore starts at 50 and only moves with real inputs, so a failed
+  // read would show a confident "50/100". Compute it only when the read answered.
+  // RENAMED "Trend score" (owner, #563 COWORK #90): it reads the price trend, not mood.
+  const trend = chartOk ? buildMarketMoodScore({ lastClose, ma50, ma200, rsi }) : null;
 
-  // buildMarketMoodScore starts at 50 and only moves when it has real inputs,
-  // so on a failed read every branch is skipped and it returns a confident
-  // "50/100 -- Neutral". That is a specific market assessment derived from zero
-  // data, rendered identically to a real one, on a page about the S&P 500.
-  // Compute it only when the read actually answered.
-  const marketMood = chartOk
-    ? buildMarketMoodScore({ lastClose, ma50, ma200, rsi })
-    : null;
+  // LIVE (#90): every figure below is SPY's (Tiingo), the series the page draws.
+  const onSpy = chartSeries === "SPY";
+  const credit = onSpy ? <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a> : undefined;
+  const liveLabel = onSpy ? "Shown on SPY, the ETF that tracks the S&P 500" : "Shown on the S&P 500 index";
+  const bars = points.filter((p) => Number.isFinite(p.open) && Number.isFinite(p.high) && Number.isFinite(p.low)) as Required<Pick<Point, "date" | "open" | "high" | "low" | "close">>[];
+  const strip = performanceStrip(points, null, nowMs, { benchmark: false });
+  const macro = lastClose !== null ? computeMacroSupport(points, lastClose) : null;
+  // Price zones and Levels to watch read the same zones: one input object, passed to both (#93).
+  const zoneInput = { bars, lastPrice: lastClose, nowMs, ma50, ma200, macro: macro ? { lower: macro.lower, upper: macro.upper } : null };
+  const ma50s = maSeries(closes, 50), ma200s = maSeries(closes, 200);
+  const fromAth = weekly ? (weekly.indexClose / weekly.ath.level - 1) * 100 : null;
+  const trendTone = trend ? (trend.score >= 56 ? "#86efac" : trend.score <= 44 ? "#fca5a5" : "#fde68a") : C.value;
+
+  const faqLd = faqJsonLd();
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#06080d",
-        color: "#f1f5f9",
-        fontFamily: "system-ui, Arial",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 1080,
-          margin: "0 auto",
-          padding: 24,
-        }}
-      >
+    <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }} />
+      <div className="spxWrap" style={{ maxWidth: 1080, margin: "0 auto", padding: 24, boxSizing: "border-box" }}>
         <PageShareBar
           url="https://www.mystockharbor.com/markets/spx"
           title="S&P 500 (SPX) Analysis | MyStockHarbor"
           text="S&P 500 market analysis — trend, moving averages, RSI and what's happening right now 📊 MyStockHarbor"
         />
 
-        <div style={{ display: "grid", gap: 14 }}>
-          <div style={{ display: "grid", gap: 14 }}>
-            <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
-              MARKET ANALYSIS
+        <div style={{ display: "grid", gap: 16 }}>
+          {/* 1. HERO: the H1, the week's dated line, four tiles (two weekly, one live, one weekly). */}
+          <section className="spxHero" style={card({ border: "1px solid rgba(59,130,246,0.24)", background: "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(15,23,42,0.92))", padding: 22 })}>
+            <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>MARKET ANALYSIS</div>
+            <h1 style={{ margin: "10px 0 0", fontSize: 38, lineHeight: 1.1, letterSpacing: "-0.9px", maxWidth: 820, fontWeight: 500 }}>
+              S&amp;P 500 (SPX) Analysis (2026) – What the Market Is Actually Doing Right Now
+            </h1>
+            {/* THE INTRO (#91): 2–3 sentences, the page's main text, visible. */}
+            {weekly ? <p className="spxIntro" style={{ margin: "12px 0 0", fontSize: 17, lineHeight: 1.65, opacity: 0.92, maxWidth: 820 }}>{weekly.intro}</p> : null}
+            {weekly ? (
+              <p className="spxOneLiner" style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.6, opacity: 0.92, maxWidth: 820 }}>
+                {stale ? <strong style={{ color: C.amber }}>Last weekly update: {weeklyDate(weekly.asOf)}. </strong> : <span style={{ color: C.muted }}>In one line, {weeklyDate(weekly.asOf)}: </span>}
+                {weekly.oneLiner}
+              </p>
+            ) : null}
+            <div className="spxTiles" style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+              {weekly ? <Tile label="S&P 500 close" value={indexWords(weekly.indexClose)} sub={`Index close, ${weeklyDate(weekly.asOf)}`} dated={stale} /> : null}
+              {weekly && fromAth !== null ? (
+                <Tile label="From the record high" value={`${fromAth >= 0 ? "+" : "−"}${Math.abs(fromAth).toFixed(1)}%`}
+                  sub={`Record close ${indexWords(weekly.ath.level)} on ${weeklyDate(weekly.ath.date)}`} dated={stale} />
+              ) : null}
+              <Tile label="Trend score" value={trend ? `${trend.score}/100` : "—"} tone={trendTone}
+                sub={trend ? `${trendWords(trend.score)} · a price-trend score from SPY's moving averages and RSI (14), not sentiment` : "SPY's price history couldn't be loaded just now"} />
+              {weekly ? (
+                <Tile label="Sentiment" value={`${weekly.sentiment.fearGreed} · ${weekly.sentiment.label}`}
+                  sub={`${weekly.sentiment.source}, ${weeklyDate(weekly.sentiment.date)}`} dated={stale} />
+              ) : null}
             </div>
-          </div>
-
-          <section
-            className="spxHeroGrid"
-            style={{
-              borderRadius: 22,
-              border: "1px solid rgba(59,130,246,0.22)",
-              background:
-                "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(15,23,42,0.92))",
-              padding: 22,
-              boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) 330px",
-              gap: 22,
-              alignItems: "start",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(250,204,21,0.28)",
-                  background: "rgba(250,204,21,0.12)",
-                  color: "#fde68a",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: "0.35px",
-                }}
-              >
-                SPX GUIDE
-              </div>
-
-              <h1
-                style={{
-                  margin: "12px 0 0",
-                  fontSize: 42,
-                  lineHeight: 1.08,
-                  letterSpacing: "-0.9px",
-                  maxWidth: 760,
-                  fontWeight: 500,
-                }}
-              >
-                S&amp;P 500 (SPX) Analysis (2026) – What the Market Is Actually Doing Right Now
-              </h1>
-
-              <div
-                style={{
-                  marginTop: 14,
-                  maxWidth: 760,
-                  fontSize: 19,
-                  lineHeight: 1.7,
-                  opacity: 0.92,
-                }}
-              >
-                The S&amp;P 500 closed at 7,722.72 on Friday, October 2 — up 0.73% on the day after a much weaker-than-expected September jobs report cut the odds of another Fed rate hike this month. Even with Friday's bounce, the index finished the week down modestly and sits about 1% below its record closing high of 7,798.99 set on August 13, after the 10-year Treasury yield touched a 24-year high near 5.3% just two days earlier. Market breadth stayed thin through it all, with September's gains confined almost entirely to technology stocks.
-              </div>
-
-              <div
-                style={{
-                  marginTop: 16,
-                  display: "flex",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <AffiliateLink
-                  href="/api/go/tradingview"
-                  eventLabel="SPX Page Hero CTA TradingView"
-                  style={primaryBtn()}
-                >
-                  Use TradingView for SPX Charts →
-                </AffiliateLink>
-
-                <AffiliateLink
-                  href="/api/go/etoro"
-                  eventLabel="SPX Page Hero CTA eToro"
-                  style={secondaryBtn()}
-                >
-                  Visit eToro →
-                </AffiliateLink>
-              </div>
-
-
-            </div>
-
-            {marketMood ? (
-              <aside style={marketMoodCardStyle(marketMood.score)}>
-                <div style={statLabelStyle()}>Market mood</div>
-
-                <div
-                  style={{
-                    marginTop: 12,
-                    display: "grid",
-                    gridTemplateColumns: "64px minmax(0, 1fr)",
-                    gap: 14,
-                    alignItems: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      position: "relative",
-                      minHeight: 230,
-                      height: "100%",
-                      display: "flex",
-                      alignItems: "stretch",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        position: "relative",
-                        width: 34,
-                        height: "100%",
-                        minHeight: 210,
-                        borderRadius: 999,
-                        border: "3px solid rgba(255,255,255,0.48)",
-                        background: "rgba(2,6,23,0.62)",
-                        overflow: "hidden",
-                        boxShadow: "0 0 24px rgba(255,255,255,0.10)",
-                      }}
-                    >
-                      <div style={thermometerFillStyle(marketMood.score)} />
-                    </div>
-
-                    <div
-                      style={{
-                        position: "absolute",
-                        bottom: 0,
-                        width: 48,
-                        height: 48,
-                        borderRadius: 999,
-                        border: "3px solid rgba(255,255,255,0.48)",
-                        background:
-                          marketMood.score >= 56
-                            ? "#22c55e"
-                            : marketMood.score <= 44
-                            ? "#ef4444"
-                            : "#eab308",
-                        boxShadow:
-                          marketMood.score >= 56
-                            ? "0 0 20px rgba(34,197,94,0.45)"
-                            : marketMood.score <= 44
-                            ? "0 0 20px rgba(239,68,68,0.45)"
-                            : "0 0 20px rgba(234,179,8,0.42)",
-                      }}
-                    />
-
-
-                  </div>
-
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 38,
-                        lineHeight: 1,
-                        fontWeight: 950,
-                        letterSpacing: "-0.06em",
-                      }}
-                    >
-                      {marketMood.score}/100
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 10,
-                        fontSize: 18,
-                        fontWeight: 950,
-                        color:
-                          marketMood.score >= 56
-                            ? "#86efac"
-                            : marketMood.score <= 44
-                            ? "#fecaca"
-                            : "#fde68a",
-                      }}
-                    >
-                      {marketMood.label}
-                    </div>
-
-                    <p
-                      style={{
-                        margin: "10px 0 0",
-                        fontSize: 13,
-                        lineHeight: 1.55,
-                        opacity: 0.82,
-                      }}
-                    >
-                      MyStockHarbor mood read based on SPX trend, moving averages and RSI momentum.
-                    </p>
-
-                    <div
-                      style={{
-                        marginTop: 10,
-                        paddingTop: 10,
-                        borderTop: "1px solid rgba(255,255,255,0.12)",
-                        display: "grid",
-                        gap: 8,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 950,
-                          letterSpacing: "0.08em",
-                          opacity: 0.72,
-                        }}
-                      >
-                        KEY DRIVERS
-                      </div>
-
-                      <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
-                        • Price vs MA50 and MA200
-                      </div>
-                      <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
-                        • MA50 vs MA200 structure
-                      </div>
-                      <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
-                        • RSI momentum reading
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </aside>
-            ) : (
-              // The read failed, so there is no mood to report. Saying so is
-              // the only honest option: the alternative is a 50/100 Neutral
-              // gauge that looks exactly like a real reading.
-              <aside style={marketMoodCardStyle(50)}>
-                <div style={statLabelStyle()}>Market mood</div>
-                <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.5, color: "rgba(241,245,249,0.72)" }}>
-                  We couldn&apos;t load the S&amp;P 500 price history just now, so the
-                  mood reading is unavailable. This is a problem on our side, not a
-                  market with no data &mdash; it should return on a refresh.
-                </div>
-              </aside>
-            )}
-
-<div
-  style={{
-    marginTop: 16,
-    padding: "14px 16px",
-    borderRadius: 16,
-    border: "1px solid rgba(34,197,94,0.32)",
-    background:
-      "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(8,18,30,0.92))",
-    fontSize: 15,
-    lineHeight: 1.65,
-    color: "#e5e7eb",
-    maxWidth: "100%",
-    gridColumn: "1 / -1",
-    display: "flex",
-    gap: 14,
-    alignItems: "flex-start",
-  }}
->
-  <div
-    style={{
-      width: 42,
-      height: 42,
-      borderRadius: 999,
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      flex: "0 0 auto",
-      background: "rgba(34,197,94,0.18)",
-      border: "1px solid rgba(34,197,94,0.34)",
-      color: "#4ade80",
-      fontSize: 22,
-      boxShadow: "0 0 18px rgba(34,197,94,0.20)",
-    }}
-  >
-    💡
-  </div>
-
-  <div>
-    <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
-    the SPX closed at 7,722.72 on Friday, October 2 — a 0.73% gain that still left the index down roughly 0.3% for the week and about 1% below its all-time high closing record of 7,798.99 set on Wednesday, August 13. The bounce followed a September jobs report that badly missed expectations — just 29,000 jobs added versus roughly 90,000 forecast, with unemployment rising to 4.2% — which cut market-implied odds of an October Fed rate hike from around 64% to roughly 16%. That relief came after a rough final week of September, when the 10-year Treasury yield touched 5.297%, its highest level in 24 years, and the index fell 0.4% for the month, a rare down month in an otherwise strong 2026. Breadth stayed thin: September's gains were almost entirely confined to technology, which rose about 5% for the month while financials, materials and REITs each fell roughly 7%. Retail investors have now been net sellers for nine straight weeks even as hedge funds kept buying, and the CNN Fear &amp; Greed Index sits at 31 (&ldquo;Fear&rdquo;) — a notably cautious reading for an index trading within 1% of a record high.
-  </div>
-</div>
           </section>
 
-          {marketAnalysis ? (
-            <section
-              style={{
-                marginTop: 4,
-                border: "1px solid rgba(59,130,246,0.22)",
-                borderRadius: 18,
-                padding: 18,
-                background:
-                  "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(6,10,18,0.98))",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: "0.08em",
-                  color: "#dbeafe",
-                }}
-              >
-                MARKET OVERVIEW
-              </div>
-
-              <h2
-                style={{
-                  margin: "10px 0 0",
-                  fontSize: 26,
-                  letterSpacing: "-0.03em",
-                }}
-              >
-                Current S&amp;P 500 market backdrop
-              </h2>
-
-              <p
-                style={{
-                  marginTop: 10,
-                  opacity: 0.82,
-                  lineHeight: 1.7,
-                  maxWidth: 820,
-                }}
-              >
-                {marketAnalysis.summary}
-              </p>
-
-              <div
-                style={{
-                  marginTop: 16,
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: 14,
-                }}
-              >
-<div style={themedOverviewCardStyle("green")}>
-  <div style={overviewCardHeaderStyle}>
-    <div style={overviewIconStyle("green")}>↗</div>
-    <div style={{ ...statLabelStyle(), color: "#4ade80", opacity: 1 }}>
-      Bullish factors
-    </div>
-  </div>
-
-  <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-    {marketAnalysis.bullish.map((item) => (
-      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
-        • {item}
-      </div>
-    ))}
-  </div>
-</div>
-
-<div style={themedOverviewCardStyle("red")}>
-  <div style={overviewCardHeaderStyle}>
-    <div style={overviewIconStyle("red")}>🛡</div>
-    <div style={{ ...statLabelStyle(), color: "#f87171", opacity: 1 }}>
-      Risk factors
-    </div>
-  </div>
-
-  <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-    {marketAnalysis.bearish.map((item) => (
-      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
-        • {item}
-      </div>
-    ))}
-  </div>
-</div>
-
-<div style={themedOverviewCardStyle("blue")}>
-  <div style={overviewCardHeaderStyle}>
-    <div style={overviewIconStyle("blue")}>👁</div>
-    <div style={{ ...statLabelStyle(), color: "#60a5fa", opacity: 1 }}>
-      What to watch
-    </div>
-  </div>
-
-  <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-    {marketAnalysis.watch.map((item) => (
-      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
-        • {item}
-      </div>
-    ))}
-  </div>
-</div>
-
-              </div>
-
-              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>
-                Updated: {new Date(marketAnalysis.generatedAt).toLocaleString("en-GB")}
-              </div>
+          {/* 2. PERFORMANCE (live). */}
+          {strip.chips.length ? (
+            <section style={card()}>
+              <div style={eyebrow}>Performance</div>
+              <p style={{ ...small, marginTop: 4 }}>{liveLabel}</p>
+              <PerformanceStrip strip={strip} credit={credit} />
+              <WriteUp weekly={weekly} k="performance" stale={stale} />
             </section>
           ) : null}
 
-          <section
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 14,
-            }}
-            className="spxTopGrid"
-          >
-            <div style={insightCardStyle("yellow")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={insightIconStyle("yellow")}>📈</div>
-                <div>
-                  <div style={{ ...statLabelStyle(), color: "#fde68a", opacity: 1 }}>
-                    A weak jobs report, not a Fed meeting
-                  </div>
-                  <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Soft labor data cooled Fed rate-hike fears
-                  </div>
+          {/* 3. PRICE CHART with MA50 / MA200 (live). */}
+          {points.length ? (
+            <section style={card()}>
+              <div style={eyebrow}>Price chart</div>
+              <h2 style={h2}>{onSpy ? "SPY" : "S&P 500"} with MA50 and MA200</h2>
+              <p style={{ ...small, marginTop: 4 }}>{liveLabel}</p>
+              <div style={{ marginTop: 12 }}>
+                <StockPriceChart symbol={onSpy ? "SPY" : "SPX"} data={points.slice(-240)} ma50={ma50s.slice(-240)} ma200={ma200s.slice(-240)} height={320} credit={credit ?? null} />
+              </div>
+              <WriteUp weekly={weekly} k="chart" stale={stale} />
+            </section>
+          ) : (
+            <section style={card()}><p style={{ margin: 0, fontSize: 14, color: C.muted }}>We couldn&apos;t load the S&amp;P 500 price history just now. This is a problem on our side, not a market with no data; it should return on a refresh.</p></section>
+          )}
+
+          {/* 4. PRICE ZONES + KEY LEVELS (live): the stock page's cards, replacing hand-typed levels. */}
+          {bars.length ? (
+            <section style={{ display: "grid", gap: 4, minWidth: 0 }}>
+            <div className="spxLevels" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16, alignItems: "start" }}>
+              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+                <ConfluenceCard {...zoneInput} credit={credit} />
+                <p style={{ ...small, margin: "0 4px" }}>{liveLabel}</p>
+              </div>
+              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+                <KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} credit={credit} />
+                <p style={{ ...small, margin: "0 4px" }}>{liveLabel}</p>
+                {/* LEVELS TO WATCH (#93): the same zones as Price zones (same inputs), in the space under Key levels; after it on a phone. */}
+                <div style={{ marginTop: 10, minWidth: 0 }}>
+                  <LevelsGlanceCard {...zoneInput} shownOn={onSpy ? "Shown on SPY" : "Shown on the S&P 500 index"} credit={credit} />
                 </div>
               </div>
-              <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The SPX closed Friday, October 2 at 7,722.72, up 0.73% on the day, after September payrolls came in far weaker than expected — just 29,000 jobs added versus roughly 90,000 forecast, with unemployment rising to 4.2%. That miss cut market-implied odds of an October Fed rate hike from about 64% to roughly 16%, reversing much of the rate-hike anxiety that had built up through late September. Even so, the index finished the week lower overall, after the 10-year Treasury yield touched a 24-year high near 5.3% just two days earlier.
-              </div>
             </div>
+            {weekly ? <div style={card({ paddingTop: 4 })}><WriteUp weekly={weekly} k="levels" stale={stale} /></div> : null}
+            </section>
+          ) : null}
 
-            <div style={insightCardStyle("red")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-<div style={insightIconStyle("red")}>
-  <span
-    style={{
-      fontSize: 20,
-      lineHeight: "20px",
-      height: 20,
-      display: "block",
-      transform: "translateY(-1px)",
-    }}
-  >
-    ⚠
-  </span>
-</div>
-                <div>
-                  <div style={{ ...statLabelStyle(), color: "#fca5a5", opacity: 1 }}>
-                    Under the surface
-                  </div>
-                  <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Breadth stayed thin through a down month for everything but tech
-                  </div>
-                </div>
+          {/* 5. PRICE LEVELS & SIGNALS (live). */}
+          {points.length ? (
+            <section style={card()}>
+              <div style={eyebrow}>Technical indicators</div>
+              <h2 style={h2}>Price levels &amp; signals</h2>
+              <p style={{ ...small, marginTop: 4 }}>{liveLabel}</p>
+              <div style={{ marginTop: 12 }}>
+                <LevelsSignals
+                  last={lastClose}
+                  ma50={ma50}
+                  ma200={ma200}
+                  zone={macro}
+                  zoneMissing="No repeated weekly support zone found"
+                  rsi={rsi}
+                  macdTone={macdTone(closes)}
+                  macdBars={points}
+                  asOf={points[points.length - 1].date}
+                  credit={credit}
+                />
               </div>
-              <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                September turned into a rare down month for the S&amp;P 500, and the weakness was far from evenly spread: technology stocks rose roughly 5% for the month while financials, materials and REITs each fell around 7%. Retail investors have been net sellers for nine straight weeks, even as hedge funds kept buying, and the CNN Fear &amp; Greed Index reads 31 (&ldquo;Fear&rdquo;) as of October 2 — a fearful posture for an index still within 1% of a record high. A rally this narrow, even when the index itself holds up, tends to be more fragile than one built on broad participation.
+              <WriteUp weekly={weekly} k="signals" stale={stale} />
+            </section>
+          ) : null}
+
+          {/* 6. CLOSE-OVER-CLOSE (live): B's card (#553 COWORK #115) on SPY's closes. */}
+          {points.length ? (
+            // B's card brings its own frame (as on the stock page); a second card's padding
+            // around it left its three tabs too wide at 320 px.
+            <section className="spxChange" style={{ minWidth: 0, padding: "4px 2px" }}>
+              <div style={eyebrow}>Price action</div>
+              <h2 style={h2}>Daily, weekly or monthly close-over-close change</h2>
+              <p style={{ ...small, marginTop: 4 }}>{liveLabel}</p>
+              <div style={{ marginTop: 12 }}>
+                <ReturnsToggleCard symbol={onSpy ? "SPY" : "SPX"} daily={dailyReturnBars(points, 20)} weekly={weeklyReturnBars(points, 12)} monthly={monthlyReturnBars(points, 12)} />
               </div>
-            </div>
+              {credit ? <p style={small}>Daily prices: {credit}</p> : null}
+              <WriteUp weekly={weekly} k="change" stale={stale} />
+            </section>
+          ) : null}
 
-            <div style={insightCardStyle("blue")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={insightIconStyle("blue")}>🔎</div>
-                <div>
-                  <div style={{ ...statLabelStyle(), color: "#93c5fd", opacity: 1 }}>
-                    Weekly chart
-                  </div>
-                  <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Weekly trend intact, daily chart digesting the pullback
-                  </div>
-                </div>
-              </div>
-              <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                On the daily chart, the index is working through its second soft week in a row after touching 7,798.99 in mid-August, with price now oscillating around its own 50-day and 200-day moving averages in the high-7,600s rather than sitting clearly above or below them. RSI(14) remains in neutral territory, not flagging as overbought or oversold. The weekly chart stays more constructive, with price still comfortably above its rising 50-week and 200-week averages, and the index sitting roughly 1% below its all-time high — a reminder that short-term wobbles like this one usually look smaller zoomed out.
-              </div>
-            </div>
-          </section>
-
-          <section
-            style={{
-              ...sectionCardStyle(),
-              border: "1px solid rgba(59,130,246,0.22)",
-              background:
-                "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(255,255,255,0.035))",
-            }}
-          >
-            <div style={sectionEyebrowStyle("blue")}>
-              <span aria-hidden="true">🌊</span>
-              Market read
-            </div>
-
-            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
-              What's actually happening in the market right now?
-            </h2>
-
-            <div
-              style={{
-                marginTop: 14,
-                opacity: 0.87,
-                lineHeight: 1.75,
-                fontSize: 16,
-                maxWidth: 930,
-                display: "grid",
-                gap: 14,
-              }}
-            >
-              <p style={{ margin: 0 }}>
-                The S&amp;P 500 spent the back half of this week absorbing a genuine scare before Friday's relief rally. It closed at 7,722.72 on October 2, up 0.73% on the day but still down roughly 0.3% for the week, and sits about 1% below its record closing high of 7,798.99 set on Wednesday, August 13. Sell-side year-end targets remain little changed: Goldman Sachs and JPMorgan are both positioned around the 8,000 level, while UBS's 8,100 call and Ed Yardeni's more cautious outlook near 7,900 are both still within reach if the rally extends.
-              </p>
-
-              <p style={{ margin: 0 }}>
-                The real story this week was the labor market reversing a rate-hike scare. Through late September, persistently sticky inflation had pushed some Fed officials toward favoring another rate hike, and the 10-year Treasury yield climbed as high as 5.297% on September 30 — its highest level in 24 years — as markets priced in meaningfully higher odds of tighter policy; the index fell 0.4% for the month as a result, a rare down month in an otherwise strong 2026. Friday's September jobs report flipped that script: just 29,000 jobs were added versus roughly 90,000 expected, and the unemployment rate rose to 4.2%, cutting the market-implied odds of an October hike from around 64% to about 16%. Stocks rallied on the relief, but the index still finished the week lower than where it started, a reminder of how much ground September's yield spike had already cost it.
-              </p>
-
-              <div
-                style={{
-                  borderRadius: 16,
-                  border: "1px solid rgba(239,68,68,0.24)",
-                  background:
-                    "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(8,18,30,0.82))",
-                  padding: 16,
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "flex-start",
-                }}
-              >
-                <div style={overviewIconStyle("red")}>⚠️</div>
-                <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#fca5a5" }}>Watch the yield path and the breadth:</strong> a 10-year Treasury yield that touched a 24-year high just days before Friday's rally is arguably a bigger swing factor for stock valuations right now than any single Fed meeting, since it raises the discount rate applied to future earnings and competes directly with equities for investor capital. Underneath the headline bounce, breadth is still a live concern — September's gains were almost entirely confined to technology (up roughly 5% for the month) while financials, materials and REITs each fell around 7%, and retail investors have been net sellers for nine straight weeks running. RSI remains neutral, not stretched in either direction. From here, whether bond yields keep easing off their late-September highs and whether participation broadens beyond a handful of mega-cap tech names look more likely to decide the next leg than any single headline.
-                </div>
-              </div>
-
-              <p style={{ margin: 0 }}>
-                Zooming out to the <strong>weekly chart</strong>, the picture stays constructive: price sits comfortably above its rising 50-week and 200-week moving averages, both well below the current level, even though the daily chart has spent the past two weeks oscillating around its own 50-day and 200-day moving averages rather than clearly above them. This stretch — a bond-yield scare that cost the index a down month, followed by a jobs-data relief rally — is the kind of volatility a genuine uptrend can usually absorb, keeping the 7,900–8,100 range of targets from Yardeni, JPMorgan, Goldman Sachs and UBS as the more relevant markers for the rest of the year, provided bond yields keep easing rather than resuming their climb.
-              </p>
-            </div>
-          </section>
-
-          <section
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.15fr 0.85fr",
-              gap: 16,
-            }}
-            className="spxContextGrid"
-          >
-            <div
-              style={{
-                ...sectionCardStyle(),
-                border: "1px solid rgba(59,130,246,0.22)",
-                background:
-                  "linear-gradient(135deg, rgba(59,130,246,0.07), rgba(255,255,255,0.035))",
-              }}
-            >
-              <div style={sectionEyebrowStyle("blue")}>
-                <span aria-hidden="true">🧭</span>
-                Timeframe context
-              </div>
-
-              <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
-                Why the weekly chart still matters more
-              </h2>
-
-              <div
-                style={{
-                  marginTop: 12,
-                  opacity: 0.86,
-                  lineHeight: 1.75,
-                  fontSize: 16,
-                  display: "grid",
-                  gap: 14,
-                }}
-              >
-                <p style={{ margin: 0 }}>
-                  Coming off a week where the labor market, not a Fed decision, did the heavy lifting, the daily chart alone doesn't tell the full story. The weekly chart shows an index that remains comfortably above both its 50-week and 200-week moving averages, levels that sit well below the current ~7,650–7,750 range — this week's volatility still has plenty of support beneath it before the longer-term uptrend would be seriously threatened.
-                </p>
-
-                <p style={{ margin: 0 }}>
-                  The bigger picture: the S&amp;P 500 sits about 1% below the record closing high of 7,798.99 it set on August 13, after falling 0.4% in September, a rare down month in an otherwise strong 2026. The pullback was driven by a sharp run-up in bond yields — the 10-year Treasury touched a 24-year high near 5.3% on September 30 — rather than any deterioration in the earnings backdrop, and Friday's rally on weak jobs data shows how quickly that yield pressure can reverse once the data turns. The index remains within the range of year-end targets running from Yardeni's roughly 7,900 up to UBS's 8,100.
-                </p>
-
-                <p style={{ margin: 0 }}>
-                  The real question isn't whether the August record was real — a run of strong earnings and a resilient economy made it real, and the index is still within 1% of it. It's whether bond yields keep easing from their late-September highs now that the labor market has cooled, and whether breadth can broaden out from here rather than staying concentrated in a handful of AI-linked mega-caps while most other sectors lag.
-                </p>
-
-                <p style={{ margin: 0 }}>
-                  <strong>With the index within 1% of its all-time high but market breadth still thin and bond yields only just off a 24-year high, the primary uptrend gets the benefit of the doubt for now — provided the labor-market relief that drove Friday's rally isn't a one-week story.</strong>
-                </p>
-              </div>
-            </div>
-
-            <div
-              style={{
-                borderRadius: 18,
-                border: "1px solid rgba(250,204,21,0.26)",
-                background:
-                  "linear-gradient(135deg, rgba(250,204,21,0.13), rgba(249,115,22,0.08), rgba(8,13,23,0.96))",
-                padding: 18,
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-              }}
-            >
-              <div style={sectionEyebrowStyle("yellow")}>
-                <span aria-hidden="true">💬</span>
-                Current take
-              </div>
-
-              <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
-                {[
-                  ["📈", "ATH", "record closing high of 7,798.99 set Wednesday, August 13, 2026 — the index pulled back through late September as bond yields spiked, then bounced to close at 7,722.72 on Friday, October 2, about 1% below that record"],
-                  ["⚠️", "Risk", "the 10-year Treasury yield touched a 24-year high of 5.297% on September 30 as some Fed officials pushed for another rate hike on sticky inflation; a much weaker-than-expected September jobs report (29,000 jobs added vs. roughly 90,000 expected) then cut the odds of an October hike from about 64% to roughly 16%"],
-                  ["🔎", "Weekly structure", "still bullish on the weekly chart, comfortably above its 50-week and 200-week moving averages; on the daily chart the index is working through its second soft week in a row around its own 50-day and 200-day moving averages, with RSI in neutral territory"],
-                  ["🟡", "Current stance", "within about 1% of a new record after a week where a labor-market miss did more to move stocks than any Fed headline; breadth remains thin and the path of bond yields from here is the next big catalyst to watch"],
-                ].map(([icon, label, text]) => (
-                  <div
-                    key={label}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "32px minmax(0, 1fr)",
-                      gap: 10,
-                      alignItems: "flex-start",
-                      padding: "10px 0",
-                      borderBottom: "1px solid rgba(255,255,255,0.08)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 999,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: "rgba(250,204,21,0.12)",
-                        border: "1px solid rgba(250,204,21,0.22)",
-                        fontSize: 15,
-                      }}
-                    >
-                      {icon}
-                    </div>
-                    <div style={{ lineHeight: 1.55 }}>
-                      <strong style={{ color: "#fde68a" }}>{label}:</strong> {text}
-                    </div>
+          {/* 7. THIS WEEK IN 3 POINTS (weekly, at a glance) BESIDE THE MARKET READ (#91: 250–350 words,
+              replacing the old Simple view / market read / closing prose). */}
+          {weekly ? (
+            <section className="spxRead" style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.5fr)", gap: 16, alignItems: "start" }}>
+            <div style={card()}>
+              <div style={eyebrow}>This week in 3 points</div>
+              <div className="spxPoints" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 12 }}>
+                {weekly.points.map((pt) => (
+                  <div key={pt.label} className="spxPoint" style={card({ padding: 14 })}>
+                    <div style={{ fontSize: 13, fontWeight: 850, color: C.value }}>{pt.label}</div>
+                    <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.55, opacity: 0.88 }}>{pt.text}</p>
+                    {/^breadth$/i.test(pt.label) ? (
+                      <div className="spxBreadth" style={{ marginTop: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: C.muted }}>
+                          <span>Stocks above their 200-day average</span>
+                          <strong style={{ color: C.value }}>{weekly.breadth.pct200 !== null ? `${weekly.breadth.pct200}%` : "—"}</strong>
+                        </div>
+                        <div aria-hidden="true" style={{ marginTop: 5, height: 8, borderRadius: 4, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                          {weekly.breadth.pct200 !== null ? <div style={{ width: `${weekly.breadth.pct200}%`, height: "100%", background: "#38bdf8" }} /> : null}
+                        </div>
+                        <div style={{ marginTop: 4, fontSize: 11, color: stale ? C.amber : C.muted }}>
+                          {weekly.breadth.pct200 !== null ? `${weekly.breadth.source}, ${weeklyDate(weekly.breadth.date)}` : `Not in this week's update (${weeklyDate(weekly.breadth.date)})`}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
             </div>
-          </section>
+            <article className="spxMarketRead" style={card()}>
+              <div style={eyebrow}>Market read</div>
+              <h2 style={h2}>What moved the S&amp;P 500 this week</h2>
+              <p style={{ ...small, marginTop: 4, color: stale ? C.amber : C.muted, fontWeight: stale ? 700 : 400 }}>Week to {weeklyDate(weekly.asOf)}</p>
+              {weekly.marketRead.map((para, i) => <p key={i} style={{ margin: "12px 0 0", fontSize: 15.5, lineHeight: 1.7, opacity: 0.9 }}>{para}</p>)}
+            </article>
+            </section>
+          ) : null}
 
-          <section
-            style={{
-              ...sectionCardStyle(),
-              border: "1px solid rgba(59,130,246,0.22)",
-              background:
-                "linear-gradient(135deg, rgba(59,130,246,0.07), rgba(255,255,255,0.035))",
-            }}
-          >
-            <div style={sectionEyebrowStyle("blue")}>
-              <span aria-hidden="true">📈</span>
-              Weekly chart
+          {/* 8. WHAT TO WATCH (weekly). */}
+          {weekly ? (
+            <section style={card()}>
+              <div style={eyebrow}>What to watch</div>
+              <div className="spxWatch" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+                {([["What would weaken the picture", weekly.watchDown, "#f87171"], ["What would strengthen it", weekly.watchUp, "#4ade80"]] as const).map(([title, items, colour]) => (
+                  <div key={title} style={card({ padding: 14 })}>
+                    <div style={{ fontSize: 13, fontWeight: 850, color: colour }}>{title}</div>
+                    <ul style={{ margin: "8px 0 0", paddingLeft: 18, display: "grid", gap: 6 }}>
+                      {items.map((x) => <li key={x} style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.88 }}>{x}</li>)}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p style={small}>Levels mentioned here can be read against the Price zones above.</p>
+            </section>
+          ) : null}
+
+          {/* 9. WEEKLY CHART SNAPSHOT (live). */}
+          <section style={card()}>
+            <div style={eyebrow}>Weekly chart</div>
+            <h2 style={h2}>Weekly SPX chart snapshot</h2>
+            <p style={{ ...small, marginTop: 4 }}>Each bar is one week, with the 50- and 200-week averages: the larger trend behind the daily moves.</p>
+            <div style={{ marginTop: 12 }}>
+              <SPXChartClient chartPoints={points} symbol={chartSeries === "SPY" ? "SPY" : "SPX"} />
             </div>
-
-            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
-              Weekly SPX chart snapshot
-            </h2>
-
-            <div
-              style={{
-                marginTop: 12,
-                opacity: 0.86,
-                lineHeight: 1.7,
-                fontSize: 16,
-                maxWidth: 920,
-              }}
-            >
-              The weekly chart shows the S&amp;P 500 still working off its August record close of 7,798.99, set on Wednesday, August 13. September brought a rare down month for the index — it fell 0.4% as the 10-year Treasury yield climbed to a 24-year high near 5.3% — before Friday's much weaker-than-expected September jobs report eased rate-hike fears and lifted the index to 7,722.72, about 1% below the record. The weekly trend structure remains bullish, with the index comfortably above its rising 50-week and 200-week moving averages. On the daily chart, price is oscillating around its own 50-day and 200-day moving averages in the high-7,600s after the pullback, with RSI(14) in neutral territory. Breadth remains a swing factor to watch — September's gains were concentrated almost entirely in technology, while most other sectors declined, and leadership is still tilted toward a handful of AI-linked mega-caps.
-            </div>
-
-            <div style={{ marginTop: 18 }}>
-              <SPXChartClient chartPoints={spxChartPoints} symbol={chartSeries === "SPY" ? "SPY" : "SPX"} />
-            </div>
-
             {/* THE CHART IS THE ETF ON THE TIINGO PATH, and says so (#563 COWORK
-                #31 §3, wording approved there): the weekly copy above quotes
-                index levels, a SPY chart runs at about a tenth of them. The
-                credit is linked (COWORK #31 §5). */}
+                #31 §3, wording approved there): the weekly copy quotes index
+                levels, a SPY chart runs at about a tenth of them. The credit is
+                linked (COWORK #31 §5). */}
             {chartSeries === "SPY" ? (
               <p style={{ margin: "12px 0 0", fontSize: 13, opacity: 0.7, lineHeight: 1.6 }}>
                 Chart shows the SPDR S&amp;P 500 ETF (SPY). Levels quoted in the text refer to the S&amp;P 500 index.{" "}
                 <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
               </p>
             ) : null}
-          </section>
-
-          <section
-            style={{
-              ...sectionCardStyle(),
-              border: "1px solid rgba(255,255,255,0.12)",
-              background:
-                "linear-gradient(135deg, rgba(15,23,42,0.96), rgba(255,255,255,0.035))",
-            }}
-          >
-            <div style={sectionEyebrowStyle("yellow")}>
-              <span aria-hidden="true">👁</span>
-              What to watch
-            </div>
-
-            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
-              What should investors watch next?
-            </h2>
-
-            <div
-              style={{
-                marginTop: 16,
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 14,
-              }}
-              className="spxTwoCol"
-            >
-              <div style={themedOverviewCardStyle("red")}>
-                <div style={overviewCardHeaderStyle}>
-                  <div style={overviewIconStyle("red")}>
-                    <span
-                      style={{
-                        fontSize: 20,
-                        lineHeight: "20px",
-                        height: 20,
-                        display: "block",
-                        transform: "translateY(-1px)",
-                      }}
-                    >
-                      ⚠
-                    </span>
-                  </div>
-                  <div style={{ ...statLabelStyle(), color: "#f87171", opacity: 1 }}>
-                    Signs the rally is losing steam
-                  </div>
-                </div>
-
-                <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
-                  <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    SPX closes a full week below its daily 200-day moving average, rather than oscillating around it as it has for the past two weeks
-                  </li>
-                  <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The 10-year Treasury yield pushes back above its late-September high near 5.3%, rather than continuing to ease on the back of softer labor data
-                  </li>
-                  <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Market breadth narrows further from September's tech-only gains, or the CNN Fear &amp; Greed Index (currently 31, &ldquo;Fear&rdquo;) slides deeper into fear territory
-                  </li>
-                  <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The labor-market weakness that drove Friday's rally turns out to be a one-off rather than the start of a trend, reviving the Fed rate-hike concerns behind September's bond selloff
-                  </li>
-                </ul>
-              </div>
-
-              <div style={themedOverviewCardStyle("green")}>
-                <div style={overviewCardHeaderStyle}>
-                  <div style={overviewIconStyle("green")}>↗</div>
-                  <div style={{ ...statLabelStyle(), color: "#4ade80", opacity: 1 }}>
-                    Signs the rally keeps running
-                  </div>
-                </div>
-
-                <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
-                  <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Price clears its record closing high of 7,798.99 and pushes into the 7,900–8,100 range of year-end targets from Yardeni, JPMorgan, Goldman Sachs and UBS
-                  </li>
-                  <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The 10-year Treasury yield continues to ease back from its 24-year high near 5.3%, taking pressure off equity valuations
-                  </li>
-                  <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Breadth broadens beyond technology, with financials, materials and REITs stabilizing after a weak September
-                  </li>
-                  <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Retail selling — currently a nine-week streak — ends and participation in the rally widens rather than narrows further
-                  </li>
-                </ul>
-              </div>
+            {/* WHY THE WEEKLY CHART MATTERS (#91): evergreen, visible, ~150–200 words. */}
+            <div className="spxWeeklyWhy" style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.rule}` }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Why the weekly chart matters</h3>
+              {WEEKLY_CHART_EXPLAINER.map((para, i) => <p key={i} style={{ margin: "8px 0 0", fontSize: 15, lineHeight: 1.7, opacity: 0.88 }}>{para}</p>)}
             </div>
           </section>
 
-          <section
-            style={{
-              ...sectionCardStyle(),
-              border: "1px solid rgba(250,204,21,0.22)",
-              background:
-                "linear-gradient(135deg, rgba(250,204,21,0.08), rgba(255,255,255,0.035))",
-            }}
-          >
-            <div style={sectionEyebrowStyle("yellow")}>
-              <span aria-hidden="true">⚖</span>
-              Balanced view
-            </div>
-
-            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
-              So is this a buying opportunity or a reason to be cautious?
-            </h2>
-
-            <div
-              style={{
-                marginTop: 14,
-                opacity: 0.86,
-                lineHeight: 1.75,
-                fontSize: 16,
-                maxWidth: 920,
-                display: "grid",
-                gap: 14,
-              }}
-            >
-              <p style={{ margin: 0 }}>
-                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX closed at 7,722.72 on Friday, October 2, about 1% below its record close of 7,798.99 set on August 13 — and the index absorbed a genuine bond-market scare in late September without breaking its longer-term uptrend. Sell-side calls are little changed: JPMorgan and Goldman Sachs still hold roughly 8,000 targets and UBS is at 8,100, while Yardeni's more cautious call near 7,900 is within reach if the rally extends.
-              </p>
-
-              <div
-                style={{
-                  borderRadius: 16,
-                  border: "1px solid rgba(59,130,246,0.24)",
-                  background:
-                    "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(8,18,30,0.82))",
-                  padding: 16,
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "flex-start",
-                }}
-              >
-                <div style={overviewIconStyle("blue")}>🧭</div>
-                <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> this week showed how quickly a rate-hike scare can reverse once the data turns. A 10-year Treasury yield at a 24-year high in late September reflected real concern that the Fed might hike rather than hold — some officials had been pushing for exactly that on sticky inflation — and a single weak jobs report was enough to cut those odds from roughly 64% to 16% and spark Friday's bounce. But breadth remains narrow, with September's gains confined almost entirely to technology while most other sectors fell, and retail investors have been selling for nine straight weeks even as the index trades within 1% of a record. None of that means the uptrend is over, but a rally this dependent on a single data print and a narrow slice of the market has less margin for error than the index-level numbers alone suggest.
-                </div>
-              </div>
-
-              <p style={{ margin: 0 }}>
-                The SPX near 7,700–7,750 is within easy reach of a new all-time high, with sell-side targets still mostly pointing higher into next year. But with bond yields only just off a 24-year high, breadth still thin, and leadership concentrated in a handful of AI names, chasing a fresh record at this level looks less compelling than watching whether this week's relief rally has real staying power.
-              </p>
+          {/* 10. CHARTING TOOLS: moved here from the hero (owner, #90). */}
+          <section style={card({ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" })}>
+            <div style={{ fontSize: 14, lineHeight: 1.5, color: C.muted, maxWidth: 520 }}>To study the S&amp;P 500 chart in more detail, some readers use these platforms.</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <AffiliateLink href="/api/go/tradingview" eventLabel="SPX Page CTA TradingView" style={primaryBtn()}>TradingView →</AffiliateLink>
+              <AffiliateLink href="/api/go/etoro" eventLabel="SPX Page CTA eToro" style={secondaryBtn()}>eToro →</AffiliateLink>
             </div>
           </section>
 
-          <section
-            style={{
-              borderRadius: 20,
-              border: "1px solid rgba(34,197,94,0.24)",
-              background:
-                "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08), rgba(8,13,23,0.96))",
-              padding: 20,
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-            }}
-          >
-            <div style={sectionEyebrowStyle("green")}>
-              <span aria-hidden="true">✅</span>
-              Best next step
-            </div>
-
-            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
-              Check the weekly structure before making a decision
-            </h2>
-
-            <div
-              style={{
-                marginTop: 12,
-                maxWidth: 900,
-                lineHeight: 1.7,
-                opacity: 0.9,
-                fontSize: 16,
-              }}
-            >
-              Use <strong>TradingView</strong> to study the SPX weekly chart yourself — look at where price sits relative to the MA50 and MA200, and check whether breadth is improving or deteriorating. Use <strong>eToro</strong> if you want a simpler route into the market once you've done that work.
-            </div>
-
-            <div
-              style={{
-                marginTop: 16,
-                display: "flex",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <AffiliateLink
-                href="/api/go/tradingview"
-                eventLabel="SPX Bottom CTA TradingView"
-                style={primaryBtn()}
-              >
-                Visit TradingView →
-              </AffiliateLink>
-
-              <AffiliateLink
-                href="/api/go/etoro"
-                eventLabel="SPX Bottom CTA eToro"
-                style={secondaryBtn()}
-              >
-                Visit eToro →
-              </AffiliateLink>
+          {/* 11. FAQ: native <details>, closed; the FAQPage JSON-LD above carries the same words. */}
+          <section className="spxFaq" style={card()}>
+            <div style={eyebrow}>FAQ</div>
+            <h2 style={h2}>Common questions about the S&amp;P 500 page</h2>
+            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              {FAQ.map((f) => (
+                <details key={f.q} className="spxFaqItem" style={{ borderTop: `1px solid ${C.rule}`, paddingTop: 8 }}>
+                  <summary style={{ cursor: "pointer", fontSize: 15, fontWeight: 750 }}>{f.q}</summary>
+                  <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, opacity: 0.85 }}>{f.a}</p>
+                </details>
+              ))}
             </div>
           </section>
         </div>
       </div>
-
       <style>{`
-        .topNavShowDesktop {
-          display: inline;
-        }
-
-        .topNavShowMobile {
-          display: none;
-        }
-
         @media (max-width: 900px) {
-          .spxHeroGrid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .spxTopGrid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .spxTwoCol {
-            grid-template-columns: 1fr !important;
-          }
-
-          .spxContextGrid {
-            grid-template-columns: 1fr !important;
-          }
+          .spxTiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .spxLevels, .spxPoints, .spxWatch, .spxRead { grid-template-columns: minmax(0, 1fr) !important; }
         }
-
-        @media (max-width: 760px) {
-          .topNavRow {
-            display: grid !important;
-            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.05fr) 60px 60px !important;
-            gap: 8px !important;
-            align-items: stretch !important;
-          }
-
-          .topNavRow a {
-            width: 100% !important;
-            min-width: 0 !important;
-            min-height: 40px !important;
-            padding: 8px 10px !important;
-            font-size: 12px !important;
-            border-radius: 12px !important;
-            gap: 6px !important;
-            justify-content: center !important;
-          }
-
-          .topNavIconOnlyMobile {
-            padding-left: 0 !important;
-            padding-right: 0 !important;
-          }
-
-          .topNavHideOnMobile {
-            display: none !important;
-          }
-
-          .topNavShowDesktop {
-            display: none !important;
-          }
-
-          .topNavShowMobile {
-            display: inline !important;
-          }
+        @media (max-width: 640px) {
+          .spxWrap { padding: 16px !important; }
+          .spxHero h1 { font-size: 28px !important; }
         }
       `}</style>
     </main>
