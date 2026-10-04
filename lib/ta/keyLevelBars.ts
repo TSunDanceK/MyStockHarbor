@@ -106,7 +106,9 @@ export function barRows(k: KeyLevels, last: number): BarRow[] {
   const s = sharedScale(k, last);
   return k.periods.map((p) => {
     const title = PERIOD_WORDS[p.key].title;
-    const since = p.from ? (p.key === "day" ? shortDate(p.from) : `from ${shortDate(p.from)}`) : null;
+    // TODAY SO FAR (#563 COWORK #75): the Day row says so, with the bar's own time.
+    const liveDay = p.key === "day" && !!k.live;
+    const since = p.from ? (liveDay ? `today so far${k.live!.time ? ` · ${k.live!.time} ET` : ""}` : p.key === "day" ? shortDate(p.from) : `from ${shortDate(p.from)}`) : null;
     const sp = span(p);
     if (!s || !sp || !p.from) {
       const reason = p.reason ?? p.levels.low.reason ?? p.levels.high.reason ?? "This period can't be drawn from the prices on file.";
@@ -118,7 +120,7 @@ export function barRows(k: KeyLevels, last: number): BarRow[] {
       isNum(open) ? `Open ${against(open, last)}.` : p.levels.open.reason ?? "",
       `High ${against(sp.high, last)}.`,
       `Low ${against(sp.low, last)}.`,
-      isNum(open) ? `Opened at ${priceWords(open)} on ${dayWords(p.from)}. ${TONE_WORDS[tone]}` : "",
+      isNum(open) ? `Opened at ${priceWords(open)} ${liveDay ? "today" : `on ${dayWords(p.from)}`}. ${TONE_WORDS[tone]}` : "",
     ].filter(Boolean);
     return {
       key: p.key,

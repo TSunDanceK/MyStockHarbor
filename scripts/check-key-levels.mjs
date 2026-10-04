@@ -43,13 +43,14 @@ const check = (label, ok, detail = "") => {
 
 const LIB = "lib/ta/keyLevels.ts";
 const BARS = "lib/ta/keyLevelBars.ts";
+const SESS = "lib/ta/sessionBar.ts";
 const CARD = "app/stock/[symbol]/KeyLevelsCard.tsx";
 const PAGE = "app/stock/[symbol]/StockSymbolPageClient.tsx";
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 
 /** The two modules and the card (with A's ReasonedValue), one transpiled unit. */
-async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8"), barsLib = fs.readFileSync(BARS, "utf8")) {
-  const unit = `${reasonedValueUnit()}\n${strip(lib)}\n${strip(barsLib)}\n${strip(card).replace("export default function KeyLevelsCard", "export function KeyLevelsCard")}\n`;
+async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8"), barsLib = fs.readFileSync(BARS, "utf8"), sess = fs.readFileSync(SESS, "utf8")) {
+  const unit = `${reasonedValueUnit()}\n${strip(sess)}\n${strip(lib)}\n${strip(barsLib)}\n${strip(card).replace("export default function KeyLevelsCard", "export function KeyLevelsCard")}\n`;
   const js = ts.transpileModule(unit, {
     fileName: "keylevels.tsx",
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" },
@@ -113,7 +114,7 @@ const lv = (k, key) => k.periods.find((p) => p.key === key);
 const values = (p) => ["open", "high", "low", "close"].map((f) => p.levels[f].value);
 
 /** Everything the rules read, for one load. */
-async function measure(M) {
+let measure = async function measureAll(M) {
   const K = Object.fromEntries(Object.entries(F).map(([n, b]) => [n, M.keyLevels(b)]));
   const render = (props) => renderToStaticMarkup(React.createElement(M.KeyLevelsCard, props));
   const fullHtml = render({ bars: F.monthMidWeek, lastPrice: null });
@@ -255,19 +256,58 @@ const rules = {
     !/Daily prices:/.test(full) && /Daily prices: Tiingo credit/.test(credited),
 };
 
+// ── In session or not (#563 COWORK #75/#76) ─────────────────────────────────
+// Bars to Thu 1 Oct plus today's partial (Fri 2 Oct, "today so far (IEX), 14:32 ET").
+const ET = (date, hhmm) => Date.parse(`${date}T${hhmm}:00-04:00`); // EDT, UTC−4 in October/September
+const THU = F.monthMidWeek.filter((b) => b.date <= "2026-10-01");
+const PART = { date: "2026-10-02", open: 190, high: 260, low: 150, close: 240, partial: true, label: "today so far (IEX), 14:32 ET" };
+const sessionCases = async (M) => {
+  const render = (props) => visibleText(renderToStaticMarkup(React.createElement(M.KeyLevelsCard, props)));
+  const inS = M.keyLevels([...THU, PART], { nowMs: ET("2026-10-02", "14:32") });
+  const stale = M.keyLevels([...THU, PART], { nowMs: ET("2026-10-03", "12:00") }); // Saturday: a Friday partial left over
+  const after = M.keyLevels([...THU, PART], { nowMs: ET("2026-10-02", "17:30") }); // after the close
+  const pre = M.keyLevels([...THU, { ...PART, date: "2026-10-05" }], { nowMs: ET("2026-10-05", "08:00") }); // pre-market Monday
+  const sat = M.keyLevels(F.monthMidWeek, { nowMs: ET("2026-10-03", "12:00") }); // Saturday, no partial
+  const staleMon = M.keyLevels([...THU, PART], { nowMs: ET("2026-10-05", "10:00") }); // in session Monday, a Friday partial left over
+  const hol = M.keyLevels(F.holiday.filter((b) => b.date <= "2026-09-04"), { nowMs: ET("2026-09-07", "11:00") }); // Labor Day
+  return {
+    inS, stale, after, pre, sat, hol, staleMon,
+    inText: render({ bars: [...THU, PART], lastPrice: 240, nowMs: ET("2026-10-02", "14:32") }),
+    satText: render({ bars: [...THU, PART], lastPrice: 240, nowMs: ET("2026-10-03", "12:00") }),
+  };
+};
+Object.assign(rules, {
+  "in session: the Day column is today so far, the week and month include it, labelled with the bar's own time": ({ S, M }) => {
+    const d = lv(S.inS, "day"), w = lv(S.inS, "week"), m = lv(S.inS, "month");
+    return S.inS.asOf === "2026-10-02" && S.inS.live?.time === "14:32" &&
+      values(d).every((v, i) => v === [190, 260, 150, 240][i]) && w.levels.high.value === 260 && m.levels.low.value === 150 &&
+      m.from === "2026-10-01" && w.from === "2026-09-28" &&
+      /today so far, 14:32 ET \(IEX\)/.test(S.inText) && /today so far · 14:32 ET/.test(S.inText) && !/as of the close/.test(S.inText) &&
+      M.inSession(ET("2026-10-02", "09:30")) && !M.inSession(ET("2026-10-02", "09:29")) && !M.inSession(ET("2026-10-02", "16:00"));
+  },
+  "out of session: the last completed session, never a stale or out-of-hours partial": ({ S }) =>
+    [S.stale, S.after, S.staleMon].every((k) => k.live === null && k.asOf === "2026-10-01" && lv(k, "day").levels.high.value !== 260) &&
+    S.pre.live === null && S.pre.asOf === "2026-10-01" &&
+    /as of the close on Thu 1 Oct 2026/.test(S.satText) && !/today so far/.test(S.satText),
+  "a Saturday and a market holiday: the last close, no 'today so far'": ({ S, M }) =>
+    S.sat.live === null && S.sat.asOf === "2026-10-02" && S.hol.live === null && S.hol.asOf === "2026-09-04" &&
+    !M.inSession(ET("2026-10-03", "12:00")) && !M.inSession(ET("2026-10-04", "12:00")),
+});
+
 const staticRules = {
   "no fetch, no Redis, no provider reads in any file": (l, c, _p, b) =>
     ![l, c, b].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory|historyForSurface|readSurfaceInputs/.test(s)),
   "the modules import only each other; the card only React's types, A's ReasonedValue and the modules": (l, c, _p, b) => {
     const imports = [...c.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
     const barImports = [...b.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
-    return !/^import\b/m.test(l) && barImports.length === 1 && barImports[0] === "./keyLevels" &&
+    const libImports = [...l.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
+    return libImports.length === 1 && libImports[0] === "./sessionBar" && barImports.length === 1 && barImports[0] === "./keyLevels" &&
       imports.every((i) => i === "react" || i === "@/app/components/EstimatedValue" || i === "@/lib/ta/keyLevels" || i === "@/lib/ta/keyLevelBars") &&
       /^import type \{[^}]*\} from "react";$/m.test(c) && /^import \{ ReasonedValue \} from "@\/app\/components\/EstimatedValue";$/m.test(c);
   },
   "placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars": (_l, _c, p) => {
     const side = p.slice(p.indexOf('<aside className="stock-page-sidebar">'), p.indexOf("</aside>"));
-    return /<KeyLevelsCard bars=\{history\} lastPrice=\{quote\?\.price \?\? null\} credit=\{shownProvider === "tiingo" \? historyCredit : undefined\} \/>[\s{}]*<LatestEarningsCard /.test(side) &&
+    return /<KeyLevelsCard bars=\{history\} lastPrice=\{quote\?\.price \?\? null\} nowMs=\{renderedAt\} credit=\{shownProvider === "tiingo" \? historyCredit : undefined\} \/>[\s{}]*<LatestEarningsCard /.test(side) &&
       (p.match(/<KeyLevelsCard /g) ?? []).length === 1 && /^import KeyLevelsCard from "\.\/KeyLevelsCard";$/m.test(p);
   },
   "a tap on the bar opens its row's note": (_l, c) =>
@@ -279,6 +319,8 @@ const staticRules = {
 };
 
 console.log("\n=== 1. Fixtures through lib/ta/keyLevels.ts and the card ===\n");
+const measure0 = measure;
+measure = async (M) => ({ ...(await measure0(M)), S: await sessionCases(M) });
 const base = await measure(await load());
 for (const [name, rule] of Object.entries(rules)) check(name, rule(base));
 
@@ -288,7 +330,17 @@ const code = (s, f) => stripComments(s, { file: f });
 for (const [name, rule] of Object.entries(staticRules)) check(name, rule(code(L, LIB), code(Cd, CARD), code(P, PAGE), code(Bs, BARS)));
 
 console.log("\n=== 3. Mutants: each must FAIL its rule ===\n");
+const SS = fs.readFileSync(SESS, "utf8");
 const mutants = [
+  ["in session: the Day column is today so far, the week and month include it, labelled with the bar's own time", "l", (s) => s.replace("  const sess = sessionBars(bars, opts.nowMs);", "  const sess = sessionBars(bars);")],
+  ["in session: the Day column is today so far, the week and month include it, labelled with the bar's own time", "s", (s) => s.replace('const time = (/(\\d{1,2}:\\d{2}) ET/.exec(last.label ?? "") ?? [])[1] ?? null;', "const time = null;")],
+  ["in session: the Day column is today so far, the week and month include it, labelled with the bar's own time", "b", (s) => s.replace("const liveDay = p.key === \"day\" && !!k.live;", "const liveDay = false;")],
+  ["in session: the Day column is today so far, the week and month include it, labelled with the bar's own time", "s", (s) => s.replace('return weekday >= 1 && weekday <= 5 && hhmm >= SESSION_OPEN && hhmm < SESSION_CLOSE;', 'return weekday >= 1 && weekday <= 5 && hhmm >= SESSION_OPEN && hhmm <= SESSION_CLOSE;')],
+  ["out of session: the last completed session, never a stale or out-of-hours partial", "s", (s) => s.replace(" && last.date === easternNow(nowMs).date;", ";")],
+  ["out of session: the last completed session, never a stale or out-of-hours partial", "s", (s) => s.replace("Number.isFinite(nowMs) && inSession(nowMs) && last.date", "Number.isFinite(nowMs) && last.date")],
+  ["out of session: the last completed session, never a stale or out-of-hours partial", "c", (s) => s.replace("{k.live ? <>today so far", "{true ? <>today so far")],
+  ["a Saturday and a market holiday: the last close, no 'today so far'", "s", (s) => s.replace("return weekday >= 1 && weekday <= 5 && hhmm", "return hhmm")],
+
   ["a Monday: the week is that one session; the month from Thu 1 Oct", "l", (s) => s.replace("const sinceMonday = (d.getUTCDay() + 6) % 7;", "const sinceMonday = (d.getUTCDay() + 5) % 7;")],
   ["a Monday holiday: the week opens at Tuesday's open", "l", (s) => s.replace("const firstIn = bars.findIndex((b) => b.date >= start);", "const firstIn = bars.findIndex((b) => b.date === start);")],
   ["the owner's example: day Fri 2 Oct, week from Mon 28 Sep, month from Thu 1 Oct", "l", (s) => s.replace('periodFrom("month", closed, monthStart(last.date)),', 'periodFrom("month", closed, isoWeekMonday(last.date)),')],
@@ -314,14 +366,14 @@ const mutants = [
   ["the scale takes in a last price outside every range", "b", (s) => s.replace("dot: toPct(last, s),", "dot: toPct(k.lastClose ?? last, s),")],
   ["colour: green above the open, red below, neutral within a hair", "b", (s) => s.replace('return pct > 0 ? "up" : "down";', 'return pct > 0 ? "down" : "up";')],
   ["colour: green above the open, red below, neutral within a hair", "b", (s) => s.replace('  if (Math.abs(pct) < LEVEL_WITH_OPEN_PCT) return "flat";\n', "")],
-  ["never colour alone: the dot sits right of the tick when green, left when red, and the note says so", "b", (s) => s.replace("on ${dayWords(p.from)}. ${TONE_WORDS[tone]}`", "on ${dayWords(p.from)}.`")],
+  ["never colour alone: the dot sits right of the tick when green, left when red, and the note says so", "b", (s) => s.replace("`on ${dayWords(p.from)}`}. ${TONE_WORDS[tone]}`", "`on ${dayWords(p.from)}`}.`")],
   ["never colour alone: the dot sits right of the tick when green, left when red, and the note says so", "b", (s) => s.replace("const tone = toneOf(last, open);", "const tone = toneOf(open ?? last, last);")],
-  ["each bar has its tap note: open, high and low against the last price, and the open's day", "b", (s) => s.replace("`Opened at ${priceWords(open)} on ${dayWords(p.from)}.", "`Opened at ${priceWords(open)}.")],
+  ["each bar has its tap note: open, high and low against the last price, and the open's day", "b", (s) => s.replace("`Opened at ${priceWords(open)} ${liveDay ? \"today\" : `on ${dayWords(p.from)}`}.", "`Opened at ${priceWords(open)}.")],
   ["each bar has its tap note: open, high and low against the last price, and the open's day", "b", (s) => s.replace("`High ${against(sp.high, last)}.`", "`High ${priceWords(sp.high)}.`")],
   ["each bar has its tap note: open, high and low against the last price, and the open's day", "c", (s) => s.replace("<ReasonedValue text={r.bar.range} reason={r.bar.note} />", "{r.bar.range}")],
   ["low–high labels, whole dollars from $10,000", "b", (s) => s.replace('priceWords(v).replace(/^\\$/, "")', "v.toFixed(2)")],
-  ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace('{hasPrice ? "Last price" : "Last close"}', '{"Last price"}')],
-  ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace("· as of the close on {k.asOfWords}", "· as of {k.asOfWords}")],
+  ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace('{hasPrice || k.live ? "Last price" : "Last close"}', '{"Last price"}')],
+  ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace("<>as of the close on {k.asOfWords}</>", "<>as of {k.asOfWords}</>")],
   ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace("              {r.bar.open !== null ? (", "              {false ? (")],
   ["the card measures from the page's last price, coloured by tone", "c", (s) => s.replace("const last = hasPrice ? lastPrice : k.lastClose;", "const last = k.lastClose;")],
   ["the card measures from the page's last price, coloured by tone", "c", (s) => s.replace('up: "#22c55e", down: "#ef4444"', 'up: "#ef4444", down: "#22c55e"')],
@@ -336,9 +388,10 @@ for (const [name, which, mutate] of mutants) {
   const l2 = which === "l" ? mutate(L) : L;
   const c2 = which === "c" ? mutate(Cd) : Cd;
   const b2 = which === "b" ? mutate(Bs) : Bs;
-  const changed = l2 !== L || c2 !== Cd || b2 !== Bs;
+  const s2 = which === "s" ? mutate(SS) : SS;
+  const changed = l2 !== L || c2 !== Cd || b2 !== Bs || s2 !== SS;
   let bites = false;
-  try { bites = !rules[name](await measure(await load(l2, c2, b2))); } catch { bites = true; }
+  try { bites = !rules[name](await measure(await load(l2, c2, b2, s2))); } catch { bites = true; }
   check(`mutant bites: ${name}`, changed && bites, changed ? "" : "the mutation did not apply");
 }
 const staticMutants = [

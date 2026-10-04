@@ -29,7 +29,7 @@ let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("/opt/node22/lib/node_modules/playwright")); }
 
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
-const unit = `${reasonedValueUnit()}\n${strip(fs.readFileSync("lib/ta/keyLevels.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/keyLevelBars.ts", "utf8"))}\n${strip(fs.readFileSync("app/stock/[symbol]/KeyLevelsCard.tsx", "utf8")).replace("export default function KeyLevelsCard", "export function KeyLevelsCard")}\n`;
+const unit = `${reasonedValueUnit()}\n${strip(fs.readFileSync("lib/ta/sessionBar.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/keyLevels.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/keyLevelBars.ts", "utf8"))}\n${strip(fs.readFileSync("app/stock/[symbol]/KeyLevelsCard.tsx", "utf8")).replace("export default function KeyLevelsCard", "export function KeyLevelsCard")}\n`;
 const tmp = `scripts/.key-levels-measure-${process.pid}.mjs`;
 fs.writeFileSync(tmp, ts.transpileModule(unit, { fileName: "k.tsx", compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText);
 let M;
@@ -59,6 +59,8 @@ const cards = [
   ["~$25,000", { bars: bars(120), lastPrice: 25012.5, credit }],
   ["under $1", { bars: bars(0.004), lastPrice: 0.7012, credit }],
   ["open = high = last", { bars: overlap(), lastPrice: overlap().at(-1).open, credit }],
+  // #563 COWORK #75: in session, the Day row reads "today so far · 14:32 ET".
+  ["in session", { bars: [...bars(1.2).slice(0, -1), { date: "2026-10-02", open: 239, high: 246, low: 236, close: 244, partial: true, label: "today so far (IEX), 14:32 ET" }], lastPrice: 244, nowMs: Date.parse("2026-10-02T14:32:00-04:00"), credit }],
 ].map(([name, props]) => `<div class="probe" data-name="${name}">${renderToStaticMarkup(React.createElement(M.KeyLevelsCard, props))}</div>`).join("");
 const doc = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>
 body{margin:0;background:#06080d;color:#e2e8f0;font-family:system-ui,sans-serif}

@@ -44,15 +44,22 @@ function openRowNote(e: MouseEvent<HTMLElement>) {
 export default function KeyLevelsCard({
   bars,
   lastPrice,
+  nowMs,
   credit,
 }: {
   bars: readonly KeyBar[];
   /** The page's last price; the latest close stands in when there is none. */
   lastPrice?: number | null;
+  /**
+   * The page's render time (#563 COWORK #75/#76): in session, today's partial
+   * bar counts (the Day column is today so far); otherwise the last completed
+   * session. Without it, completed sessions only.
+   */
+  nowMs?: number;
   /** The linked Tiingo credit, passed only when the bars are Tiingo's. */
   credit?: ReactNode;
 }) {
-  const k = keyLevels(bars);
+  const k = keyLevels(bars, { nowMs });
   const hasPrice = typeof lastPrice === "number" && Number.isFinite(lastPrice) && lastPrice > 0;
   const last = hasPrice ? lastPrice : k.lastClose;
   const rows = k.asOf && last != null ? barRows(k, last) : [];
@@ -67,7 +74,8 @@ export default function KeyLevelsCard({
       </div>
       {k.asOf && last != null ? (
         <p className="klAsOf" style={noteStyle}>
-          {hasPrice ? "Last price" : "Last close"} <strong style={{ color: C.value }}>{priceWords(last)}</strong> · as of the close on {k.asOfWords}
+          {hasPrice || k.live ? "Last price" : "Last close"} <strong style={{ color: C.value }}>{priceWords(last)}</strong> ·{" "}
+          {k.live ? <>today so far{k.live.time ? `, ${k.live.time} ET` : ""} (IEX)</> : <>as of the close on {k.asOfWords}</>}
         </p>
       ) : null}
 
