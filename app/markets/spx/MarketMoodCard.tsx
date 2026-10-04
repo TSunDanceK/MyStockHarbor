@@ -59,7 +59,7 @@ export default function MarketMoodCard({ view, credit }: { view: MoodCardView | 
       <aside className="moodCard" style={{ ...cardStyle, border: `1px solid ${TONE.amber.border}`, background: TONE.amber.bg }}>
         <div style={eyebrowStyle}>Market Mood</div>
         <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.5, color: "rgba(241,245,249,0.72)" }}>
-          The Market Mood reading isn&apos;t available just now. This is a problem on our side, not a market with no data; it should return after the next nightly update.
+          Market Mood will appear after tonight&apos;s update.
         </p>
       </aside>
     );

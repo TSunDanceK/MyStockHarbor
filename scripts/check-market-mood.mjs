@@ -9,7 +9,7 @@
 // labels at their band edges; the inputs on fixture bars (fear at the lows,
 // greed at the highs; junk only with LQD; ETFs kept out of the stock tallies);
 // what is stored is scores only; no route exposes the series; the nightly
-// write and the read; LQD in both universe writes; no VIX or put/call; no CNN
+// write, the one-off seed on a night already done (#97), and the read; LQD in both universe writes; no VIX or put/call; no CNN
 // text on the page; the card's face, tap note and Tiingo credit; nothing that
 // can push the page sideways at 320–430 px. A mutant each.
 //
@@ -134,7 +134,12 @@ const RULES = {
   "the nightly write: one SET under msh:tiingo:, after a complete night, before the Pickers build; the page reads through MOOD_TAG": ({ src }) => {
     const w = code(src.write, F.write), r = code(src.read, F.read), eod = code(src.eod, F.eod);
     return /export const TIINGO_MOOD_KEY = `\$\{TIINGO_PREFIX\}mood:v1`;/.test(src.keys) &&
-      (w.match(/redis\.\w+\(/g) ?? []).join() === "redis.set(" && /redis\.set\(TIINGO_MOOD_KEY, JSON\.stringify\(m\), \{ ex: TIINGO_EOD_TTL_SECONDS \}\);\s*revalidateTag\(MOOD_TAG, "max"\);/.test(w) &&
+      (w.match(/\b(?:redis|r)\.set\(/g) ?? []).length === 1 && /r\.set\(TIINGO_MOOD_KEY, JSON\.stringify\(m\), \{ ex: TIINGO_EOD_TTL_SECONDS \}\);\s*revalidateTag\(MOOD_TAG, "max"\);/.test(w) &&
+      [...w.matchAll(/\b(?:redis|r)\.(\w+)\s*[<(]/g)].every((x) => ["set", "get", "mget"].includes(x[1])) &&
+      // #97: the seed runs once (a reading on file ends it at 1 GET), only on a night already done, and stops before writing at its deadline.
+      /if \(\(await redis\.get<unknown>\(TIINGO_MOOD_KEY\)\) !== null\) return \{ mood: "on file" \};/.test(w) &&
+      /for \(let i = 0; i < symbols\.length; i \+= SEED_MGET_CHUNK\) \{\s*if \(Date\.now\(\) > deadline\) return/.test(w) &&
+      /if \("skipped" in eod && eod\.skipped === "already-complete"\) Object\.assign\(mood, await seedMarketMoodIfMissing\(startedAt \+ FUNCTION_MS - MOOD_SEED_RESERVE_MS\)\);/.test(eod) &&
       /computeMarketMood\(bars, MOOD_EXCLUDE\)/.test(w) && /MOOD_EXCLUDE: readonly string\[\] = \[\.\.\.uniqueEtfs, \.\.\.POOL_BENCHMARK_ETFS\]/.test(w) &&
       /return async \(bars: Map<string, EodBar\[\]>\) => \{\s*Object\.assign\(out, await writeMarketMood\(bars\)\);\s*await next\(bars\);\s*\};/.test(eod) &&
       /runTiingoEod\(Date\.now\(\), withMood\(pickersOnBars\(req, startedAt, onBars\), mood\)\)/.test(eod) &&
@@ -168,7 +173,7 @@ const RULES = {
       M.moodNoteText(6) === "Our reading of market mood from 6 public market measures on our own data. A description, not a forecast. Option-market data isn't included." &&
       /\{moodNoteText\(inputs\.length\)\}/.test(src.card) && /\{x\.line\}<\/span><strong[^>]*>\{day\.s\[x\.key\]\}<\/strong>/.test(src.card) &&
       /<MarketMoodCard view=\{mood\} credit=\{<a href=\{TIINGO_URL\}[^\n]*>\{TIINGO_CREDIT\}<\/a>\} \/>/.test(src.pageCode) &&
-      none.includes("isn&#x27;t available just now") && !/\b50\b/.test(none.replace(/<[^>]+>/g, ""));
+      none.replace(/<[^>]+>/g, "").includes("Market Mood will appear after tonight&#x27;s update.") && !/problem on our side|\b50\b/.test(none.replace(/<[^>]+>/g, ""));
   },
   "nothing in the card or the hero can push the page sideways at 320–430 px": ({ src }) => {
     const c = code(src.card, F.card);
@@ -205,7 +210,10 @@ const MUTANTS = [
   [R[4], "lib", (s) => s.replace("const p = Math.round(percentileAt(inputs[k], i));", "const p = percentileAt(inputs[k], i);")],
   [R[5], "page", (s) => s.replace("<MarketMoodCard view={mood} credit=", "<MarketMoodCard view={mood} series={await readMarketMood()} credit=")],
   [R[5], "files", null],
-  [R[6], "write", (s) => s.replace("    revalidateTag(MOOD_TAG, \"max\");\n", "")],
+  [R[6], "write", (s) => s.replace("  revalidateTag(MOOD_TAG, \"max\");\n", "")],
+  [R[6], "write", (s) => s.replace('    if ((await redis.get<unknown>(TIINGO_MOOD_KEY)) !== null) return { mood: "on file" };\n', "")],
+  [R[6], "write", (s) => s.replace('      if (Date.now() > deadline) return { mood: "seed stopped: time (the next run tries again)", moodSeedReads: reads };\n', "")],
+  [R[6], "eod", (s) => s.replace('if ("skipped" in eod && eod.skipped === "already-complete") Object.assign(', "Object.assign(")],
   [R[6], "eod", (s) => s.replace("    Object.assign(out, await writeMarketMood(bars));\n    await next(bars);", "    await next(bars);\n    Object.assign(out, await writeMarketMood(bars));")],
   [R[6], "keys", (s) => s.replace("export const TIINGO_MOOD_KEY = `${TIINGO_PREFIX}mood:v1`;", "export const TIINGO_MOOD_KEY = \"msh:mood:v1\";")],
   [R[7], "universe", (s) => s.replace("      mood: MOOD_ETFS,\n    });\n    const written", "    });\n    const written")],
@@ -216,6 +224,7 @@ const MUTANTS = [
   [R[10], "card", (s) => s.replace("{moodNoteText(inputs.length)}", "{moodNoteText(6)}")],
   [R[10], "page", (s) => s.replace(/<MarketMoodCard view=\{mood\} credit=\{<a[^\n]*\/>/, "<MarketMoodCard view={mood} credit={credit} />")],
   [R[10], "card", (s) => s.replace("Reading for {dayWords(day.d)}", "Latest reading")],
+  [R[10], "card", (s) => s.replace("Market Mood will appear after tonight&apos;s update.", "Market Mood isn&apos;t available just now. This is a problem on our side.")],
   [R[11], "card", (s) => s.replace("minWidth: 0, boxSizing: \"border-box\", position: \"relative\"", "minWidth: 320, boxSizing: \"border-box\", position: \"relative\"")],
   [R[11], "page", (s) => s.replace("          .spxHeroGrid { grid-template-columns: minmax(0, 1fr) !important; }\n", "")],
 ];

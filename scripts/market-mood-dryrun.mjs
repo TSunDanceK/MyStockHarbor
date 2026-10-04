@@ -60,4 +60,6 @@ const year = m.days.slice(-252).filter((d) => d.r !== null);
 console.log(`\na year (${year.length} sessions with a reading):`);
 for (const { label } of MOOD_LABELS) { const c = year.filter((d) => moodLabel(d.r) === label).length; console.log(`  ${label.padEnd(13)} ${String(c).padStart(4)}  ${((c / Math.max(1, year.length)) * 100).toFixed(0)}%`); }
 for (const d of ["2026-03-30", "2026-08-13"]) { const x = m.days.find((y) => y.d === d); console.log(`  ${d}: ${x?.r ?? "—"} ${x?.r != null ? moodLabel(x.r) : ""}`); }
+// The card's exact view (dates and 0–100 scores only), so it can be rendered offline for a preview (#97).
+if (v) console.log(`\nview ${JSON.stringify({ day: v.day, label: v.label, spark: v.spark })}`);
 console.log(`\nRedis commands ${commands} (GET/MGET only)`);
