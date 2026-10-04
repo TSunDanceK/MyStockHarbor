@@ -36,6 +36,7 @@
 // forecast. Nothing here says a level will hold, or what a reader should do.
 import { closedBars, dateWords, keyLevels, monthStart, isoWeekMonday, priceWords, type KeyBar, type PeriodKey } from "./keyLevels";
 import { emaSeries } from "./macdSeries";
+import { stackLabels } from "./priceLadder";
 import { liveBars } from "./sessionBar";
 
 /** Levels within K_ATR × ATR(14) of a zone's lowest member join it. */
@@ -104,7 +105,7 @@ export type Confluence = {
   reason: string | null;
 };
 
-const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const isPrice = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 // ── indicators ──────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ export function atr(bars: readonly KeyBar[], period = 14): number | null {
   const tr: number[] = [];
   for (let i = 1; i < bars.length; i++) {
     const b = bars[i], pc = bars[i - 1].close;
-    if (!isNum(b.high) || !isNum(b.low) || !isNum(pc)) return null;
+    if (!isPrice(b.high) || !isPrice(b.low) || !isPrice(pc)) return null;
     tr.push(Math.max(b.high - b.low, Math.abs(b.high - pc), Math.abs(b.low - pc)));
   }
   if (tr.length < period) return null;
@@ -152,7 +153,7 @@ export function reverseRsi(closes: readonly number[], target: number, period = 1
   const last = closes[closes.length - 1], rs = target / (100 - target), m = period - 1;
   if (s.rsi === target) return last;
   const price = target > s.rsi ? last + m * (rs * s.avgLoss - s.avgGain) : last - m * (s.avgGain / rs - s.avgLoss);
-  return isNum(price) && price > 0 ? price : null;
+  return isPrice(price) && price > 0 ? price : null;
 }
 
 /**
@@ -175,7 +176,7 @@ export function reverseMacd(closes: readonly number[]): number | null {
   if (s === null || f === null || g === null) return null;
   const a12 = 2 / 13, a26 = 2 / 27;
   const x = (s - (f * (1 - a12) - g * (1 - a26))) / (a12 - a26);
-  return isNum(x) && x > 0 ? x : null;
+  return isPrice(x) && x > 0 ? x : null;
 }
 
 // ── the levels ──────────────────────────────────────────────────────────────
@@ -186,7 +187,7 @@ type Range = { high: number; highDate: string; low: number; lowDate: string; clo
 function groups(bars: readonly KeyBar[], keyOf: (date: string) => string): { key: string; r: Range }[] {
   const out: { key: string; r: Range }[] = [];
   for (const b of bars) {
-    if (!isNum(b.high) || !isNum(b.low) || !isNum(b.close)) continue;
+    if (!isPrice(b.high) || !isPrice(b.low) || !isPrice(b.close)) continue;
     const k = keyOf(b.date), g = out[out.length - 1];
     if (!g || g.key !== k) { out.push({ key: k, r: { high: b.high, highDate: b.date, low: b.low, lowDate: b.date, close: b.close, closeDate: b.date } }); continue; }
     if (b.high > g.r.high) { g.r.high = b.high; g.r.highDate = b.date; }
@@ -202,12 +203,12 @@ export function swings(bars: readonly KeyBar[], n = SWING_N, lookback = SWING_LO
   const from = Math.max(n, bars.length - lookback);
   for (let i = from; i < bars.length - n; i++) {
     const b = bars[i];
-    if (!isNum(b.high) || !isNum(b.low)) continue;
+    if (!isPrice(b.high) || !isPrice(b.low)) continue;
     let hi = true, lo = true;
     for (let j = i - n; j <= i + n && (hi || lo); j++) {
       if (j === i) continue;
       const o = bars[j];
-      if (!isNum(o.high) || !isNum(o.low)) { hi = lo = false; break; }
+      if (!isPrice(o.high) || !isPrice(o.low)) { hi = lo = false; break; }
       if (j < i ? o.high >= b.high : o.high > b.high) hi = false;
       if (j < i ? o.low <= b.low : o.low < b.low) lo = false;
     }
@@ -244,15 +245,15 @@ export function confluenceLevels(inp: ConfluenceInput): { price: number | null; 
   const all = inp.bars ?? [];
   // NOW figures: completed sessions plus today's partial bar while it counts (in session, or after the close until EOD).
   const live = inp.nowMs === undefined ? { bars: closedBars(all), live: null, phase: null } : liveBars(closedOrPartial(all), inp.nowMs);
-  const bars = live.bars.filter((b) => isNum(b.close));
+  const bars = live.bars.filter((b) => isPrice(b.close));
   const closed = closedBars(all);
   const lastBar = bars[bars.length - 1];
-  const price = isNum(inp.lastPrice) && inp.lastPrice > 0 ? inp.lastPrice : lastBar ? lastBar.close : null;
+  const price = isPrice(inp.lastPrice) && inp.lastPrice > 0 ? inp.lastPrice : lastBar ? lastBar.close : null;
   const levels: ConfLevel[] = [];
   const omitted: string[] = [];
   if (!lastBar || price === null) return { price, levels, omitted, bars };
   const add = (label: string, value: number | null | undefined, tier: Tier, src: string, date: string | null, rank: number, derived?: string) => {
-    if (isNum(value) && value > 0) levels.push({ label, value, tier, src, date, rank, ...(derived ? { derived } : {}) });
+    if (isPrice(value) && value > 0) levels.push({ label, value, tier, src, date, rank, ...(derived ? { derived } : {}) });
   };
 
   // On the page: MA50, MA200, the macro support zone.
@@ -294,7 +295,7 @@ export function confluenceLevels(inp: ConfluenceInput): { price: number | null; 
 
   // The 52-week high and low (to the latest price's bar).
   const yearAgo = new Date(Date.parse(`${lastBar.date}T00:00:00Z`) - 365 * 86_400_000).toISOString().slice(0, 10);
-  const year = bars.filter((b) => b.date > yearAgo && isNum(b.high) && isNum(b.low));
+  const year = bars.filter((b) => b.date > yearAgo && isPrice(b.high) && isPrice(b.low));
   if (year.length) {
     const hi = year.reduce((a, b) => (b.high! > a.high! ? b : a)), lo = year.reduce((a, b) => (b.low! < a.low! ? b : a));
     add("52-week high", hi.high, "structural", `${hi.date}:high`, hi.date, 0);
@@ -320,7 +321,7 @@ export function confluenceLevels(inp: ConfluenceInput): { price: number | null; 
 }
 
 /** Bars that are closed, or a labelled partial (liveBars keeps the partial only while it counts). */
-const closedOrPartial = (bars: readonly KeyBar[]) => bars.filter((b) => b && /^\d{4}-\d{2}-\d{2}$/.test(b.date) && isNum(b.close));
+const closedOrPartial = (bars: readonly KeyBar[]) => bars.filter((b) => b && /^\d{4}-\d{2}-\d{2}$/.test(b.date) && isPrice(b.close));
 
 const PREV_LABEL: Record<PeriodKey, string> = { day: "Previous close", week: "Last week's close", month: "Last month's close" };
 
@@ -369,6 +370,13 @@ const toZone = (ms: Member[]): Zone => ({
   count: ms.length,
 });
 
+/** Every qualifying zone within WINDOW_PCT of the price, lowest first. */
+export function allZones(members: readonly Member[], band: number, price: number): Zone[] {
+  const near = members.filter((m) => Math.abs(m.value - price) / price * 100 <= WINDOW_PCT);
+  const step = roundStep(price);
+  return bandMerge(near, band).map((ms) => withRound(ms, band, step)).filter(qualifies).map(toZone);
+}
+
 /** The zones: nearest SHOWN above and below, and any holding the price. */
 export function confluence(inp: ConfluenceInput, opts: { k?: number } = {}): Confluence {
   const { price, levels, omitted, bars } = confluenceLevels(inp);
@@ -378,9 +386,7 @@ export function confluence(inp: ConfluenceInput, opts: { k?: number } = {}): Con
   const a = atr(bars);
   if (a === null || a <= 0) return empty("Not enough daily highs and lows on file to measure the price's usual range.");
   const band = (opts.k ?? K_ATR) * a;
-  const members = dedupe(levels).filter((m) => Math.abs(m.value - price) / price * 100 <= WINDOW_PCT);
-  const step = roundStep(price);
-  const zones = bandMerge(members, band).map((ms) => withRound(ms, band, step)).filter(qualifies).map(toZone);
+  const zones = allZones(dedupe(levels), band, price);
   const inside = zones.find((z) => z.lo <= price && price <= z.hi) ?? null;
   const above = zones.filter((z) => z.lo > price).sort((x, y) => x.lo - y.lo).slice(0, SHOWN);
   const below = zones.filter((z) => z.hi < price).sort((x, y) => y.hi - x.hi).slice(0, SHOWN);
@@ -401,8 +407,18 @@ export function heightPct(v: number, scale: { lo: number; hi: number }): number 
 /** "3 levels" */
 export const countWords = (z: Zone) => `${z.count} level${z.count === 1 ? "" : "s"}`;
 
-/** "$325.81–$327.40" (one price when the zone is one price). */
-export const rangeWords = (z: Zone) => (z.lo === z.hi ? priceWords(z.lo) : `${priceWords(z.lo)}–${priceWords(z.hi)}`);
+/**
+ * "$325.81–$327.40" (one price when the zone is one price). When both ends
+ * print the same at the usual precision ($1.08–$1.08), two more decimals.
+ */
+export function rangeWords(z: Zone): string {
+  if (z.lo === z.hi) return priceWords(z.lo);
+  const a = priceWords(z.lo), b = priceWords(z.hi);
+  if (a !== b) return `${a}–${b}`;
+  const dp = (Math.abs(z.hi) < 1 ? 4 : Math.abs(z.hi) >= 10_000 ? 0 : 2) + 2;
+  const fine = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp })}`;
+  return `${fine(z.lo)}–${fine(z.hi)}`;
+}
 
 /** "2.1% below" / "1.4% above", from the price to the zone's nearer edge; "price inside zone". */
 export function zoneDistance(z: Zone, price: number): string {
@@ -420,4 +436,46 @@ export function zoneNote(z: Zone): string {
   });
   const shared = z.members.filter((m) => m.labels.length > 1).length;
   return `${countWords(z)}${shared ? ", one bar's price counted once where names share it" : ""}: ${lines.join(" ")} ${CONFLUENCE_NOTE}`;
+}
+
+// ── the ladder's layout ─────────────────────────────────────────────────────
+
+/** The ladder's drawn height, in px. */
+export const ZONE_LADDER_HEIGHT = 220;
+/** The least room between two zone labels (up to three lines and a little air), in px. */
+export const ZONE_LABEL_GAP = 42;
+
+export type ZoneMark = {
+  zone: Zone;
+  side: "above" | "below" | "inside";
+  /** The band's top and bottom (its high and low) at true height, in px from the top. */
+  top: number;
+  bottom: number;
+  /** Where its label sits after stacking, in px from the top. */
+  labelY: number;
+};
+
+/** Height from the top of the ladder for a price on the fixed scale. */
+export const ladderTop = (v: number, scale: { lo: number; hi: number }, height = ZONE_LADDER_HEIGHT) => height * (1 - heightPct(v, scale) / 100);
+
+/**
+ * The zones on the fixed scale (#83 §3): each band at its true price range,
+ * the labels on one side, stacked at least ZONE_LABEL_GAP apart in price order
+ * (the ladder's own stacking rule, lib/ta/priceLadder.ts stackLabels). The
+ * price dot is placed by ladderTop(price): it moves, the scale doesn't.
+ */
+export function zoneLadder(c: Confluence, height = ZONE_LADDER_HEIGHT): ZoneMark[] {
+  if (!c.scale || c.price === null) return [];
+  const sc = c.scale;
+  const all = [
+    ...c.above.map((z) => ({ zone: z, side: "above" as const })),
+    ...(c.inside ? [{ zone: c.inside, side: "inside" as const }] : []),
+    ...c.below.map((z) => ({ zone: z, side: "below" as const })),
+  ].sort((a, b) => b.zone.hi - a.zone.hi);
+  const marks = all.map((m) => {
+    const top = ladderTop(m.zone.hi, sc, height), bottom = ladderTop(m.zone.lo, sc, height);
+    return { ...m, top, bottom, labelY: (top + bottom) / 2 };
+  });
+  const ys = stackLabels(marks.map((m) => m.labelY), ZONE_LABEL_GAP, height, ZONE_LABEL_GAP / 2);
+  return marks.map((m, i) => ({ ...m, labelY: ys[i] }));
 }

@@ -10,6 +10,7 @@ import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
+import ConfluenceCard from "./ConfluenceCard";
 import KeyLevelsCard from "./KeyLevelsCard";
 import PerformanceStrip from "./PerformanceStrip";
 import type { PerfStrip } from "@/lib/ta/performance";
@@ -1122,6 +1123,11 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 </div>
               </div>
 
+              {/* Price zones (#563 COWORK #83/#84): C's confluence card, directly above Key levels. */}
+              <div className="sp-slot sp-confluence">
+                <ConfluenceCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} ma50={typeof lastMA50 === "number" ? lastMA50 : null} ma200={typeof lastMA200 === "number" ? lastMA200 : null} macro={macroSupport ? { lower: macroSupport.lower, upper: macroSupport.upper } : null} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              </div>
+
               {/* Key levels (#563 COWORK #64): C's card, from the bars already held. */}
               <div className="sp-slot sp-keylevels">
                 <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
@@ -1461,6 +1467,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           .stock-page-sidebar, .stock-page-main { display: contents; }
           .stock-page-sidebar > *, .stock-page-main > * { order: 85; min-width: 0; }
           .sp-chart { order: 10; }
+          .sp-confluence { order: 15; }
           .sp-keylevels { order: 20; }
           .sp-signals { order: 30; }
           .sp-earnings { order: 40; }
@@ -1471,7 +1478,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           .sp-changestock { order: 90; }
           .sp-explore { order: 95; }
           .sp-faq { order: 99; }
-          .sp-keylevels, .sp-earnings, .sp-changestock { margin-top: 24px; }
+          .sp-confluence, .sp-keylevels, .sp-earnings, .sp-changestock { margin-top: 24px; }
           /* Mobile: show the inline change stock, hide the sidebar one */
           .mobile-change-stock { display: block; }
           .sidebar-change-stock { display: none !important; }
