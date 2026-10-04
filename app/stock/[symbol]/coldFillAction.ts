@@ -8,7 +8,8 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { checkBotId } from "botid/server";
 import { verifyQuoteToken } from "@/lib/server/quoteToken";
-import { cikForSymbol, coldSecConfigured, fetchColdSubmissions, fillColdSymbol, type ColdFillOutcome } from "@/lib/server/secColdFetch";
+import { cikForSymbol, coldSecConfigured, fetchColdSubmissions, fillColdSymbol, queueColdSymbol, type ColdFillOutcome } from "@/lib/server/secColdFetch";
+import { admitColdVisitor } from "@/lib/server/coldVisitorCap";
 import { factSetExists } from "@/lib/server/secFactStore";
 import { seedColdReportDates } from "@/lib/server/secColdReportDates";
 import {
@@ -17,6 +18,7 @@ import {
   coldFillBotGate,
   coldFillDayGate,
   coldFillPreGate,
+  coldFillVisitorGate,
   countColdFillAttempt,
   countColdFillDay,
   countColdFillOutcome,
@@ -39,7 +41,6 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
     tokenOk,
     symbolOk,
     hasCik: symbolOk && cikForSymbol(clean) !== null,
-    ipCount: 0,
     attemptCount: 0,
   });
   if (early) return { ok: false, refused: early };
@@ -51,8 +52,7 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
     return { ok: false, refused: reason };
   };
 
-  const ip = clientIpFrom(await headers());
-  const counts = await countColdFillAttempt(ip);
+  const counts = await countColdFillAttempt();
   const limited = coldFillPreGate({ tokenOk, symbolOk, hasCik: true, ...counts });
   if (limited) return refuse(limited);
 
@@ -65,7 +65,16 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
     bot = null;
   }
   const botRefusal = coldFillBotGate(bot);
+  // A VERIFIED CRAWLER QUEUES, BEHIND PEOPLE; any other bot queues nothing.
+  if (botRefusal === "crawler") await queueColdSymbol(clean, "crawler");
   if (botRefusal) return refuse(botRefusal);
+
+  // THE SHARED VISITOR CAP (B's coldVisitorCap, #552 COWORK #132): 20 new
+  // tickers a person a UTC day, Tiingo and SEC together. Over it, QUEUE only.
+  // Fails closed: an uncountable visitor fetches nothing and queues nothing.
+  const visitorRefusal = coldFillVisitorGate(await admitColdVisitor(clientIpFrom(await headers()), clean));
+  if (visitorRefusal === "visitor-cap") await queueColdSymbol(clean, "person");
+  if (visitorRefusal) return refuse(visitorRefusal);
 
   // THE DAY'S FILLS, counted only for a request BotID called human.
   const dayRefusal = coldFillDayGate(await countColdFillDay());

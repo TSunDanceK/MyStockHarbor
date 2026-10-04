@@ -44,12 +44,18 @@ console.log("1. the client always settles");
     ["a malformed reply", async () => null, "poll"],
     ["another visitor's fill in flight", async () => ({ ok: false, refused: "in-flight" }), "poll"],
     ["queued for the job", async () => ({ ok: true, outcome: "queued" }), "poll"],
-    ["busy", async () => ({ ok: true, outcome: "busy" }), "poll"],
+    // …these end on the QUEUED sentence: no fill was started, so polling for
+    // one would only end in "taking longer than expected" (#552 COWORK #132).
+    ["busy (the minute budget spent)", async () => ({ ok: true, outcome: "busy" }), "queued"],
+    ["deferred (a scheduled SEC job's window)", async () => ({ ok: true, outcome: "deferred" }), "queued"],
+    ["a person over the shared visitor cap", async () => ({ ok: false, refused: "visitor-cap" }), "queued"],
+    ["a verified crawler (queued behind people)", async () => ({ ok: false, refused: "crawler" }), "queued"],
     // …and these end the sequence.
     ["a bot refusal (no fill is coming from it)", async () => ({ ok: false, refused: "bot" }), "slow"],
     ["filled", async () => ({ ok: true, outcome: "filled" }), "filled"],
     ["no usable data", async () => ({ ok: true, outcome: "no-data" }), "none"],
-    ["an over-limit address", async () => ({ ok: false, refused: "ip-limit" }), "waiting"],
+    ["a visitor that could not be counted (fails closed)", async () => ({ ok: false, refused: "visitor-unknown" }), "waiting"],
+    ["the site over its day's fills", async () => ({ ok: false, refused: "day-limit" }), "waiting"],
   ];
   for (const [name, call, want] of cases) {
     const got = phase(await within(S.settleColdFill(call, TIMEOUT)));
@@ -58,6 +64,8 @@ console.log("1. the client always settles");
   check("the ceiling is about 12 s", S.COLD_FILL_SETTLE_MS === 12_000, String(S.COLD_FILL_SETTLE_MS));
   check("the fallback is the ruled sentence",
     S.COLD_FILL_WORDS.slow === "This is taking longer than usual; figures will appear once the company's filings are read.");
+  check("the queued sentence is the ruled one (COWORK #132), hedged on hours, not minutes",
+    S.COLD_FILL_WORDS.queued === "SEC filing figures for this company are being prepared; they may take a few hours to appear.");
 
   // MUTATION: the timer removed. The hung case must then NOT settle, or the
   // assertion above is not what is guarding it.
@@ -85,7 +93,7 @@ console.log("\n3. the day counters");
   const attemptAt = action.indexOf("await countColdFillAttempt(");
   const firstRefuse = action.indexOf("return refuse(");
   check("every refusal after the attempt counter is counted by word", attemptAt > 0 && firstRefuse > attemptAt &&
-    !/return \{ ok: false, refused: (limited|botRefusal|dayRefusal|"in-flight") \}/.test(action));
+    !/return \{ ok: false, refused: (limited|botRefusal|visitorRefusal|dayRefusal|"in-flight") \}/.test(action));
   check("the free refusals are not counted (they return before any counter)",
     /if \(early\) return \{ ok: false, refused: early \};/.test(action) && action.indexOf("if (early)") < attemptAt);
   check("every fill outcome is counted", /await countColdFillOutcome\(outcome\);/.test(action));

@@ -38,6 +38,7 @@ export function coldFillWords(view: ColdFillView, symbol: string, fixed: Record<
     case "still": return `Still reading ${symbol}'s SEC filings; this can take up to a minute for a company we haven't loaded before.`;
     case "gave-up": return "Taking longer than expected.";
     case "loaded": return "SEC data loaded — updating the page.";
+    case "queued": return `SEC filing figures for ${symbol} are being prepared; they may take a few hours to appear.`;
     default: return fixed[view];
   }
 }
