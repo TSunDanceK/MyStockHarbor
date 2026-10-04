@@ -969,7 +969,10 @@ export default async function StockEarningsPage({ params }: Props) {
               {/* EVERY FINANCIAL CARD BELOW READS THE SEC FACT SET. When the
                   symbol has none yet, one honest card says so rather than six
                   cards of dashes. */}
-              {nextReport ? <NextReportCard outlook={nextReport} /> : null}
+              {/* NO NEXT-REPORT BOX FOR A FUND (#552 COWORK #152): a fund has no
+                  earnings date to estimate. A census-named note keeps it: its
+                  card points at the issuer, whose reports these are. */}
+              {nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <NextReportCard outlook={nextReport} /> : null}
 
               {/* THREE OUTCOMES, NOT TWO. "no readable XBRL" is a successful
                   fetch of nothing usable -- an IFRS filer, or a company with no

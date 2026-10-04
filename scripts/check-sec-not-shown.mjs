@@ -14,7 +14,10 @@
 //   3. a fund is never "awaiting" a read, so its pages stay indexable — also
 //      in the sitemap's bulk test and the queue;
 //   4. the card's words, the scorer's sentence (the stock page's tile) and
-//      the earnings page's branch.
+//      the earnings page's branch;
+//   5. (#552 COWORK #152) a fund's earnings page has no next-report box (a
+//      census-named note keeps it), and a not-shown tile has no "Reported
+//      figures from the company's own SEC filings" footer.
 // A mutation for each.
 //
 //   node scripts/check-sec-not-shown.mjs
@@ -22,6 +25,7 @@ import "./lib/register-ts-app.mjs";
 import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { loadCards, html, visibleText, React } from "./lib/render-cards.mjs";
+import { loadSnapshot } from "./lib/render-snapshot.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -98,6 +102,34 @@ const page = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
 check("the earnings page draws the card for not-shown, ahead of the derivative card",
   /data\.cold\.status === "not-shown" \? \(\s*<SecNotShownCard symbol=\{clean\} kind=\{data\.cold\.kind\} primary=\{data\.cold\.primary\} \/>/.test(page)
   && page.indexOf('data.cold.status === "not-shown"') < page.indexOf('data.cold.status === "not-issuer-equity"'));
+
+console.log("\n5. the tidy-ups (#552 COWORK #152)");
+const NEXT_GUARD = '{nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <NextReportCard outlook={nextReport} /> : null}';
+const SNAP_RULE = 'if (cold.status === "not-shown") return { ...snap, sourceNote: null };';
+const TILE_GUARD = "{snapshot.sourceNote ? <div style={earningsSourceStyle}>{snapshot.sourceNote}</div> : null}";
+const nextRule = (p) => p.includes(NEXT_GUARD) && (p.match(/<NextReportCard /g) ?? []).length === 1;
+const snapRule = (src) => src.includes(SNAP_RULE);
+check("a fund's earnings page has no next-report box; a census-named note keeps it", nextRule(readCodeOnly("app/stock/[symbol]/earnings/page.tsx")));
+check("a not-shown snapshot carries no source footer", snapRule(readCodeOnly("lib/server/secEarningsSnapshot.ts")));
+const S = await loadSnapshot();
+const aapl = JSON.parse(fs.readFileSync("data/sec/factset-fixture-AAPL.json", "utf8"));
+const view = S.buildSecEarningsView(aapl);
+const snap = S.buildSecEarningsSnapshot({ symbol: "AAPL", view, score: S.scoreFromSec(view, "AAPL", { status: "ready", set: aapl, cold: false }), reported: null, nextReport: { kind: "none", headline: "", value: null, hedge: "" } });
+const tileText = (sn) => visibleText(html(React.createElement(S.default, { snapshot: sn, symbol: "SPY" })));
+const tileRule = (render) => /Reported figures from the company/.test(render(snap)) && !/Reported figures from the company/.test(render({ ...snap, sourceNote: null }));
+check("the tile prints the footer only when there is one", tileRule(tileText));
+{
+  const pageSrc = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
+  check("MUTATION: the fund's next-report box back → caught", !nextRule(pageSrc.replace(NEXT_GUARD, "{nextReport ? <NextReportCard outlook={nextReport} /> : null}")));
+  const snapSrc = readCodeOnly("lib/server/secEarningsSnapshot.ts");
+  check("MUTATION: the not-shown footer back → caught", !snapRule(snapSrc.replace(SNAP_RULE, "")));
+  const Sm = await loadSnapshot((src) => {
+    if (src.split(TILE_GUARD).length !== 2) throw new Error("tile guard anchor");
+    return src.replace(TILE_GUARD, "<div style={earningsSourceStyle}>{snapshot.sourceNote ?? \"Reported figures from the company's own SEC filings.\"}</div>");
+  });
+  const mText = (sn) => visibleText(html(React.createElement(Sm.default, { snapshot: sn, symbol: "SPY" })));
+  check("MUTATION: the tile prints a footer regardless → caught", !tileRule(mText));
+}
 
 console.log("\nmutants: each must break a rule");
 const MUTANTS = [

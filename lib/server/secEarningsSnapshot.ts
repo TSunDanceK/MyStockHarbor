@@ -342,7 +342,12 @@ export type SecEarningsSnapshot = {
    * parse gave the newer period. Null otherwise.
    */
   filingNotice: string | null;
-  sourceNote: string;
+  /**
+   * The "Reported figures from the company's own SEC filings…" footer. NULL on
+   * a not-shown symbol (a fund, a census-named note; #552 COWORK #152): its
+   * tile says one thing, the reason, and no footer about figures it never has.
+   */
+  sourceNote: string | null;
   /**
    * THE SMALL ANNUAL CHART (#552 COWORK #134): the last four fiscal years'
    * revenue, net income and net margin, from the same view. Null when
@@ -716,5 +721,6 @@ function snapshotFrom(
   // page's card offers the human-gated fill instead of a fixed sentence.
   const snap = buildSecEarningsSnapshot({ symbol: clean, view, score, reported, nextReport: next });
   if (cold.status === "pending") return { ...snap, awaitingRead: true };
+  if (cold.status === "not-shown") return { ...snap, sourceNote: null };
   return annualForm ? { ...snap, annualNote: annualOnlyNote(annualForm) } : snap;
 }
