@@ -23,6 +23,7 @@ import { buildAndWriteReportDates, carryEventQueued, reportDatesQueue, withPrede
 import dueStripCut from "@/data/due-strip.json";
 import rewindowPriorityFile from "@/data/sec/rewindow-priority.json";
 import { makeJobBudget, FETCH_TIMEOUT_MS, JOB_BUDGET_MS, REPORT_DATES_RESERVE_MS } from "@/lib/server/jobBudget";
+import { secSeedRefusal } from "@/lib/server/secSeedGate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -332,7 +333,13 @@ export function populationQueues(
    * ones whose page changes when the re-read lands. Order only: the same
    * symbols, the same allowance, no extra requests.
    */
-  priority: ReadonlySet<string> = new Set()
+  priority: ReadonlySet<string> = new Set(),
+  /**
+   * THE SEED GATE'S RULE ON POPULATE (#552 COWORK #147 1a): an entry seeded
+   * before the gate existed and failing it now is never populated. Populate
+   * only: a set already stored keeps its re-reads until the owner rules on it.
+   */
+  refusal: (symbol: string, cik: string | null) => string | null = () => null
 ) {
   const entries = Object.entries(manifest.symbols).filter(([, e]) => e.cik);
 
@@ -344,7 +351,7 @@ export function populationQueues(
     .map(([s]) => s);
 
   const populate = entries
-    .filter(([, e]) => !e.needsReverify && e.contentHash === null)
+    .filter(([s, e]) => !e.needsReverify && e.contentHash === null && !refusal(s, e.cik))
     .map(([s]) => s)
     .sort();
 
@@ -523,7 +530,7 @@ export async function GET(req: NextRequest) {
   const requested = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());
   if (requested.length) console.log(`[sec-facts] re-read requested: ${requested.join(", ")}`);
 
-  const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY);
+  const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY, secSeedRefusal);
   // CAPTURED BEFORE THE FACT-SET LOOP CLEARS IT. A symbol queued for a re-read
   // by an 8-K or 6-K ("unconfirmed") filed since Sep 20 has no lastEventFiled
   // yet (the field is new), and the loop sets needsReverify false as it goes.

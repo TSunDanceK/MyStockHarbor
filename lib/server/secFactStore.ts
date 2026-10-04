@@ -11,7 +11,7 @@
 // the I/O and nothing else.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
-import { SEC_FACTS_INDEX_KEY, SEC_FACTS_PREFIX } from "./secManifest";
+import { SEC_FACTS_INDEX_KEY, SEC_FACTS_PREFIX, dotDashSpellings } from "./secManifest";
 import { secFieldsHash } from "./secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import type { StoredFactSet } from "./secFactCodec";
@@ -36,7 +36,17 @@ export const factKey = (symbol: string) => `${SEC_FACTS_PREFIX}:${symbol.toUpper
 export async function readFactSet(symbol: string): Promise<StoredFactSet | null> {
   if (!redis) return null;
   try {
-    const raw = await redis.get<StoredFactSet>(factKey(symbol));
+    // DOT OR DASH, WHICHEVER IT WAS WRITTEN UNDER (#552 COWORK #147 1a). A set
+    // is keyed by the spelling that wrote it (the manifest's BRK.B, a cold
+    // fill's BRK-B), and a reader asking by the other found nothing: some of
+    // warm-pickers-sec's `noFactSet` were spelling misses, not missing data.
+    // The asked spelling first, so a hit costs the one GET it always did; a
+    // miss on a dotted or dashed ticker costs one more.
+    let raw: StoredFactSet | null = null;
+    for (const spelling of dotDashSpellings(symbol)) {
+      raw = await redis.get<StoredFactSet>(factKey(spelling));
+      if (raw) break;
+    }
     if (!raw || typeof raw !== "object") return null;
     // THE GATE. Not a warning, not a best-effort decode: a mismatch means the
     // positional arrays mean something else, and reading them anyway is the
@@ -72,7 +82,8 @@ export async function readFactSet(symbol: string): Promise<StoredFactSet | null>
 export async function factSetExists(symbol: string): Promise<boolean | null> {
   if (!redis) return null;
   try {
-    return (await redis.exists(factKey(symbol))) > 0;
+    // Either spelling (see readFactSet): one EXISTS over both keys.
+    return (await redis.exists(...dotDashSpellings(symbol).map(factKey))) > 0;
   } catch {
     return null;
   }
@@ -92,7 +103,7 @@ export async function factSetPresence(
   if (!syms.length) return { exists: new Map(), changedAt: new Map() };
   try {
     const p = redis.pipeline();
-    for (const s of syms) p.exists(factKey(s));
+    for (const s of syms) p.exists(...dotDashSpellings(s).map(factKey));
     p.hmget(SEC_FIGURES_CHANGED_KEY, ...syms);
     const out = (await p.exec()) as unknown[];
     const stamps = (out[syms.length] ?? {}) as Record<string, unknown> | null;
