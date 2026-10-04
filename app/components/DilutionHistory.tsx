@@ -26,6 +26,10 @@ export type DilutionHistoryData = {
   splits?: { date: string; ratio: number }[];
   dropped?: string[];
   startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; ratio?: number };
+  /** Fiscal-year-average points, by date (#552 COWORK #136); the rest are quarterly. */
+  yearEnds?: string[];
+  /** Fiscal years left out as another basis, by date. */
+  refusedYears?: string[];
   withheld?:
     | { reason: "units-unconfirmed"; factor: number | null }
     | { reason: "cut-too-short"; factor: null; cut?: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; since?: string };
@@ -64,8 +68,12 @@ function fmtDateShort(value: string | null) {
  * stable-share large cap. The axis now spans at least ±2.5% around the mean,
  * widened to take in the data; it is NOT anchored at zero, so real dilution
  * (a 15% rise) still fills the chart.
+ *
+ * ±10% SINCE #552 COWORK #136: at ±2.5% AAPL's −5.5% over two and a half years
+ * filled the whole plot and read as dramatic as a doubling. At ±10% a 5% drift
+ * takes about a quarter of the height, and a heavy diluter (+100%) still fills it.
  */
-export const SHARE_AXIS_MIN_HALF_SPAN = 0.025;
+export const SHARE_AXIS_MIN_HALF_SPAN = 0.1;
 
 export function shareAxis(values: number[]): { lo: number; hi: number } {
   const minV = Math.min(...values);
@@ -94,11 +102,60 @@ export function formatShareChange(changePercent: number | null): string {
  * never a judgement. Within ±SHARE_FLAT_PCT it is "roughly unchanged".
  */
 export const SHARE_FLAT_PCT = 1;
-export function threeYearWords(pct: number | null): { label: string; tone: "up" | "down" | "flat" | "none" } {
+export function threeYearWords(pct: number | null, phrase: string = LAST_3_YEARS): { label: string; tone: "up" | "down" | "flat" | "none" } {
   if (pct === null || !Number.isFinite(pct)) return { label: "Recent history too short", tone: "none" };
-  if (pct > SHARE_FLAT_PCT) return { label: "Share count has risen over the last 3 years", tone: "up" };
-  if (pct < -SHARE_FLAT_PCT) return { label: "Share count has fallen over the last 3 years", tone: "down" };
-  return { label: "Share count roughly unchanged over the last 3 years", tone: "flat" };
+  if (pct > SHARE_FLAT_PCT) return { label: `Share count has risen over ${phrase}`, tone: "up" };
+  if (pct < -SHARE_FLAT_PCT) return { label: `Share count has fallen over ${phrase}`, tone: "down" };
+  return { label: `Share count roughly unchanged over ${phrase}`, tone: "flat" };
+}
+
+/**
+ * THE SPAN, NAMED AS LONG AS IT IS (#552 COWORK #141). The trend window's base
+ * may sit up to 6 months before the 3-year cut, and its end up to 6 months
+ * before the newest point, so a "3-year" figure can span 3½ years (BKNG: Dec
+ * 2022 to Jun 2026). Within ±3 months of 3 years, ending at the newest point,
+ * it is "the last 3 years"; otherwise its length to the quarter-year, "3½ years".
+ */
+export const LAST_3_YEARS = "the last 3 years";
+export const SPAN_3_YEARS_TOLERANCE_DAYS = 92;
+export function spanPhrase(baseDate: string, endDate: string, endIsNewest: boolean): string {
+  const d = (Date.parse(endDate) - Date.parse(baseDate)) / 86_400_000;
+  if (endIsNewest && Math.abs(d - 3 * 365.25) <= SPAN_3_YEARS_TOLERANCE_DAYS) return LAST_3_YEARS;
+  const q = Math.round((d / 365.25) * 4) / 4;
+  const whole = Math.floor(q);
+  const frac = ["", "¼", "½", "¾"][Math.round((q - whole) * 4)];
+  return `${whole}${frac} years`;
+}
+
+/**
+ * THE HEADLINE OVER THE CHART (#552 COWORK #136 (b)): the move in words, with
+ * an arrow, hedged. From the 3-year figure where there is one, else since the
+ * first point. Direction is in the arrow AND the words, never colour alone.
+ */
+/**
+ * THE SAME SPAN AS THE TILE (#552 COWORK #138): where the 3-year window's end
+ * stepped back from the newest point to find a base (COWORK #120), the
+ * headline names that window, as the tile does, rather than "the last 3 years".
+ */
+export const NEWEST_SPAN_WORDS = "the newest span on file";
+
+export function shareHeadline(
+  three: { pct: number; from: string; to: string; endIsNewest: boolean; phrase: string } | null,
+  sincePct: number | null,
+  since: string | null,
+): string | null {
+  const pct = three ? three.pct : sincePct;
+  if (pct === null || !Number.isFinite(pct)) return null;
+  const when = three
+    ? three.phrase === LAST_3_YEARS
+      ? `over ${LAST_3_YEARS}`
+      : `over ${three.phrase}, from ${three.from} to ${three.to}${three.endIsNewest ? "" : `, ${NEWEST_SPAN_WORDS}`},`
+    : since ? `since ${since}` : "";
+  // "–", NOT "≈": that glyph is reserved for estimates (check-estimate-glyph-reserved).
+  if (Math.abs(pct) <= SHARE_FLAT_PCT) return `– Share count roughly unchanged ${when.replace(/,$/, "")}`.trim();
+  return pct < 0
+    ? `▼ Down ${Math.abs(pct).toFixed(1)}% ${when.replace(/,$/, "")}, which may reflect buybacks`
+    : `▲ Up ${pct.toFixed(1)}% ${when.replace(/,$/, "")}: more shares can spread the same earnings and ownership thinner`;
 }
 
 /** "20-for-1" / "1-for-10". */
@@ -127,7 +184,10 @@ export function withheldWords(w: NonNullable<DilutionHistoryData["withheld"]>): 
 export function seriesNotes(data: DilutionHistoryData): string[] {
   const out: string[] = [];
   for (const s of data.splits ?? []) {
-    out.push(`Earlier counts are adjusted for a ${splitWords(s.ratio)} split (${fmtDateShort(s.date)}), using the company's own restated figures.`);
+    // NO DATE (#552 COWORK #138): s.date is where the step sits in the series
+    // (a fiscal year-end), not when the split took effect, and the stored set
+    // carries no effective date. AAPL read "Sept 2012" for its June 2014 7-for-1.
+    out.push(`Earlier counts are adjusted for a ${splitWords(s.ratio)} split, using the company's own restated figures.`);
   }
   const st = data.startedAfter;
   if (st?.reason === "listing") out.push("Starts at the company's first report after listing.");
@@ -183,10 +243,20 @@ export default function DilutionHistory({
   const threePct = data?.threeYear && data.threeYear.pct !== null ? data.threeYear.pct : null;
   // THE WINDOW'S ACTUAL ENDS, NEVER "LATEST" (#552 COWORK #120): the end may
   // step back up to 6 months from the newest point to find a base.
-  const threeWindow = data?.threeYear && data.threeYear.pct !== null && data.threeYear.end
-    ? `${fmtDateDay(data.threeYear.base.date)} to ${fmtDateDay(data.threeYear.end.date)}`
+  const threeSpan = data?.threeYear && data.threeYear.pct !== null && data.threeYear.end ? data.threeYear : null;
+  // WHEN THE END STEPPED BACK, THE TILE SAYS SO (#552 COWORK #138), and the
+  // headline names the same span: one window, stated the same way twice.
+  const endIsNewest = threeSpan ? threeSpan.end!.date === last.date : true;
+  const threeWindow = threeSpan
+    ? `${fmtDateDay(threeSpan.base.date)} to ${fmtDateDay(threeSpan.end!.date)}${endIsNewest ? "" : ` · ${NEWEST_SPAN_WORDS}`}`
     : null;
-  const trend = threeYearWords(threePct);
+  const phrase = threeSpan ? spanPhrase(threeSpan.base.date, threeSpan.end!.date, endIsNewest) : LAST_3_YEARS;
+  const trend = threeYearWords(threePct, phrase);
+  const headline = shareHeadline(
+    threeSpan ? { pct: threeSpan.pct as number, from: fmtDateShort(threeSpan.base.date) ?? threeSpan.base.date, to: fmtDateShort(threeSpan.end!.date) ?? threeSpan.end!.date, endIsNewest, phrase } : null,
+    changePercent,
+    fmtDateShort(first.date),
+  );
   const trendColor = trend.tone === "up" ? RED : trend.tone === "down" ? GREEN : BLUE;
 
   // -- Chart geometry (server-rendered SVG, no client JS) --------------------
@@ -250,7 +320,13 @@ export default function DilutionHistory({
         buybacks.
       </p>
 
-      <div style={{ marginTop: 18 }}>
+      {headline ? (
+        <div style={{ marginTop: 14, fontSize: 14, fontWeight: 800, lineHeight: 1.4, color: trendColor }} data-share-headline="">
+          {headline}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: headline ? 10 : 18 }}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           width={width}
@@ -312,7 +388,8 @@ export default function DilutionHistory({
             years, which carries the colour and the words, and since the first
             point, in plain ink. */}
         <div style={cellStyle} data-share-three-year="">
-          <div style={cellLabelStyle}>Over the last 3 years</div>
+          {/* THE SAME SPAN AS THE HEADLINE AND THE DATE LINE (#552 COWORK #141). */}
+          <div style={cellLabelStyle}>Over {phrase}</div>
           <div style={{ ...cellValueStyle, color: trendColor }}>
             {threePct === null ? "—" : formatShareChange(threePct)}
           </div>
@@ -331,8 +408,11 @@ export default function DilutionHistory({
 
       <div style={sourceStyle}>
         {data?.basis === "annual+quarters" ? (
-          // THE OWNER'S WORDING (#517).
-          <>Annual share counts from SEC filings, latest quarters appended. {symbol} — {points.length} data points
+          // THE BASIS, SAID (#552 COWORK #136): quarterly averages plus
+          // fiscal-year averages, which fill the year-ends no quarter covers.
+          <>Weighted-average basic shares from {symbol}&apos;s own SEC filings: quarterly averages plus{" "}
+          {data.yearEnds?.length ?? 0} fiscal-year average{(data.yearEnds?.length ?? 0) === 1 ? "" : "s"} (a year&apos;s
+          figure averages all twelve months; a fourth quarter has no share count of its own) — {points.length} data points
           from {fmtDateShort(first.date)} to {fmtDateShort(last.date)}.</>
         ) : (
           <>Weighted-average basic shares from {symbol}&apos;s own SEC filings
@@ -346,6 +426,9 @@ export default function DilutionHistory({
         {data?.basis === "quarter"
           ? " Covers the last 12 quarters on file; fourth quarters have no separately filed share count and are not plotted."
           : data?.basis === "year" ? " Covers the fiscal years on file." : ""}
+        {data?.refusedYears?.length
+          ? ` ${data.refusedYears.length === 1 ? "One fiscal-year figure is" : `${data.refusedYears.length} fiscal-year figures are`} left out: outside the range of that year's own quarterly figures, so likely on another basis.`
+          : null}
         {notes.length ? <> {notes.join(" ")}</> : null}
       </div>
 

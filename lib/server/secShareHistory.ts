@@ -54,6 +54,14 @@ export type ShareHistory = {
    * set written before `as` existed.
    */
   basis: "annual+quarters" | "quarter" | "year";
+  /**
+   * The drawn points that are FISCAL-YEAR averages rather than quarterly ones
+   * (#552 COWORK #136), by date: the years before the first stored quarter and
+   * the year-ends inside the window, where no fourth quarter is filed.
+   */
+  yearEnds?: string[];
+  /** Fiscal years refused as another basis (SHARE_YEAR_BASIS_TOLERANCE), by date. */
+  refusedYears?: string[];
   /** The line breaks between these consecutive points (more than SHARE_GAP_MAX_DAYS apart). */
   gaps?: { from: string; to: string }[];
   /** Splits scaled away, from the filer's restated comparatives: points before `date` × `ratio`. */
@@ -134,27 +142,68 @@ const seriesOf = (periods: StoredPeriod[]): ShareHistoryPoint[] =>
     .filter((p): p is ShareHistoryPoint => typeof p.shares === "number" && p.shares > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-/** The raw series, as before: the long history where the set carries it, else quarters, else years. */
-export function rawShareSeries(set: StoredFactSet): { points: ShareHistoryPoint[]; basis: ShareHistory["basis"] } | null {
-  // ── THE LONG HISTORY, WHERE THE SET CARRIES IT ────────────────────────────
-  // Yearly points back as far as companyfacts goes UP TO THE FIRST STORED
-  // QUARTER, then every stored quarter — the owner's shape (2026-09-22, #517),
-  // chosen over widening retention. A year that ends on or after the first
-  // quarter is left to the quarters, so no stretch is drawn twice.
-  if (set.as?.length) {
-    const quarters = seriesOf(set.quarters ?? []);
-    const firstQuarter = quarters[0]?.date ?? "9999-12-31";
-    const years = set.as
-      .filter(([date, v]) => typeof v === "number" && v > 0 && date < firstQuarter)
-      .map(([date, shares]) => ({ date, shares }));
-    const points = [...years, ...quarters];
-    if (points.length >= MIN_SHARE_POINTS) return { points, basis: "annual+quarters" };
-  }
+/**
+ * A fiscal-year average sits within this factor of its own year's quarterly
+ * averages (#552 COWORK #136). The year's weighted average IS the average of its
+ * quarters' (one more quarter than the three filed on their own), so a figure
+ * outside their range widened by this much is on another basis — ADS against
+ * ordinary shares, a class, a unit slip — and is not mixed in.
+ */
+export const SHARE_YEAR_BASIS_TOLERANCE = 0.1;
+
+/**
+ * THE RAW SERIES: QUARTERS PLUS FISCAL-YEAR AVERAGES (#552 COWORK #136).
+ *
+ * The quarters (the store's 12-quarter window) and every fiscal year the set
+ * carries — the long `as` history where present, else the stored years — on
+ * one time axis. A fiscal year that ends on a stored quarter's date is left to
+ * the quarter; one that ends where no quarter was filed on its own (the fourth
+ * quarter, whose share count is never filed separately) fills that slot, so
+ * the series no longer skips every year-end and spans up to the full annual
+ * history.
+ *
+ * SAME CONCEPT, A WIDER WINDOW: both are weighted-average basic shares (the
+ * same resolve() and concept, see ExtractResult.annualShares); a year's figure
+ * averages twelve months rather than three, and the footnote says so. A year
+ * inside the quarter window whose figure falls outside its own quarters'
+ * range by more than SHARE_YEAR_BASIS_TOLERANCE is refused as another basis,
+ * and named in `refusedYears`.
+ */
+export function rawShareSeries(set: StoredFactSet): {
+  points: ShareHistoryPoint[];
+  basis: ShareHistory["basis"];
+  yearPoints: number;
+  refusedYears: string[];
+} | null {
   const quarters = seriesOf(set.quarters ?? []);
-  if (quarters.length >= MIN_SHARE_POINTS) return { points: quarters, basis: "quarter" };
-  const years = seriesOf(set.years ?? []);
-  if (years.length >= MIN_SHARE_POINTS) return { points: years, basis: "year" };
-  return null;
+  const yearSource: ShareHistoryPoint[] = set.as?.length
+    ? set.as.filter(([, v]) => typeof v === "number" && v > 0).map(([date, shares]) => ({ date, shares }))
+    : seriesOf(set.years ?? []);
+  const quarterDates = new Set(quarters.map((q) => q.date));
+  const firstQuarter = quarters[0]?.date ?? "9999-12-31";
+  const years: ShareHistoryPoint[] = [];
+  const refusedYears: string[] = [];
+  for (const y of yearSource) {
+    if (quarterDates.has(y.date)) continue;
+    if (y.date >= firstQuarter) {
+      // THE BASIS CHECK, against this fiscal year's own quarters.
+      const ownAll = quarters.filter((q) => q.date < y.date && days(q.date, y.date) < 366).map((q) => q.shares);
+      // A SLIPPED QUARTER IS NOT A BOUND: one filed ×1000 off (ONDS Q1 2025)
+      // would otherwise stretch the range far enough to admit a slipped year.
+      const mid = ownAll.slice().sort((a, b) => a - b)[Math.floor(ownAll.length / 2)];
+      const own = ownAll.filter((v) => v / mid <= SHARE_SCALE_MAX_STEP && mid / v <= SHARE_SCALE_MAX_STEP);
+      if (own.length) {
+        const lo = Math.min(...own) * (1 - SHARE_YEAR_BASIS_TOLERANCE);
+        const hi = Math.max(...own) * (1 + SHARE_YEAR_BASIS_TOLERANCE);
+        if (y.shares < lo || y.shares > hi) { refusedYears.push(y.date); continue; }
+      }
+    }
+    years.push(y);
+  }
+  const points = [...years, ...quarters].sort((a, b) => a.date.localeCompare(b.date));
+  if (points.length < MIN_SHARE_POINTS) return null;
+  const basis: ShareHistory["basis"] = !quarters.length ? "year" : years.length ? "annual+quarters" : "quarter";
+  return { points, basis, yearPoints: years.length, refusedYears };
 }
 
 /**
@@ -328,11 +377,26 @@ export function sharesUnconfirmed(
  * corrections above. `listedFrom`: the first periodic report's own period end
  * (data/sec/first-periodic.json), or null when unknown.
  */
+/**
+ * A FISCAL YEAR THAT STARTED BEFORE THE LISTING IS NOT A LISTED YEAR (#552
+ * COWORK #136). Its twelve-month average mixes in pre-listing months (CRCL's
+ * FY2025 against its first 10-Q for June 2025) and reads as a false step. The
+ * listing date is the first periodic report's period END, so a year counts as
+ * listed only when it ends at least this long after it: the year began no
+ * earlier than that first reported quarter.
+ */
+export const SHARE_YEAR_AFTER_LISTING_DAYS = 273;
+
 export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?: string | null } = {}): ShareHistory | null {
   if (!set) return null;
-  const raw = rawShareSeries(set);
-  if (!raw) return null;
-  const fixed = correctShareSeries(raw.points, set.asr ?? [], opts.listedFrom ?? null, set.asf ?? []);
+  const rawAll = rawShareSeries(set);
+  if (!rawAll) return null;
+  const listedFrom = opts.listedFrom ?? null;
+  const filedQuarters = new Set(seriesOf(set.quarters ?? []).map((q) => q.date));
+  const raw = listedFrom
+    ? { ...rawAll, points: rawAll.points.filter((p) => filedQuarters.has(p.date) || p.date < listedFrom || days(listedFrom, p.date) >= SHARE_YEAR_AFTER_LISTING_DAYS) }
+    : rawAll;
+  const fixed = correctShareSeries(raw.points, set.asr ?? [], listedFrom, set.asf ?? []);
   // THE UNITS CHECK (#552 COWORK #121). PAC's kept segment read 505.28B
   // shares; the cover page says 505.28M. The newest counts must agree with the
   // cover-page count within SHARE_UNITS_MAX_FACTOR (wide enough for a cover
@@ -355,9 +419,13 @@ export function buildShareHistory(set: StoredFactSet | null, opts: { listedFrom?
     };
   }
   const gaps = shareGaps(fixed.points, fixed.dropped);
+  // QUARTERS WITH A SHARE COUNT: a stored Q4 row carries none, and its slot is a year's.
+  const yearEnds = fixed.points.filter((p) => !filedQuarters.has(p.date)).map((p) => p.date);
   return {
     points: fixed.points,
     basis: raw.basis,
+    ...(yearEnds.length ? { yearEnds } : {}),
+    ...(raw.refusedYears.length ? { refusedYears: raw.refusedYears } : {}),
     ...(gaps.length ? { gaps } : {}),
     ...(fixed.splits.length ? { splits: fixed.splits } : {}),
     ...(fixed.dropped.length ? { dropped: fixed.dropped } : {}),
