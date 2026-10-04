@@ -24,6 +24,8 @@ import {
   REFUSAL_CELL_WORD, REFUSAL_WORDS, fyPeNote, fyPeRatio, valuationMultiples, type EpsBasis, type MultipleInputs, type ValuationFigure, type ValuationInputs,
 } from "@/lib/server/secValuation";
 import { readableDate } from "@/lib/server/secEstimates";
+import { isBankSic, peSectorOf, readPeSectorMedians } from "@/lib/server/peSectorMedians";
+import { peSectorLine } from "@/lib/peSectorLine";
 import { symbolSpellings } from "@/lib/symbolSpellings.mjs";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
@@ -661,6 +663,17 @@ export default async function StockPage({ params }: Props) {
     // or "FY2025", never a bare "TTM" over a fiscal-year figure.
     peBasis: peBasisLabel(peEps),
     peBasisNote: fyPe ? null : peBasisNote(inputs?.eps),
+    // P/E VS ITS SECTOR'S MEDIAN (#552 COWORK #147 §2): on the trailing P/E
+    // only (never the FY fallback, which the medians are not built on), never
+    // for a bank. One Data Cache read; no Redis command on a hit. The rules
+    // and the words are lib/peSectorLine.ts.
+    peSector: await (async () => {
+      if (fyPe || !pe?.ok || isBankSic(registrantFor(upper)?.sic)) return null;
+      const sector = peSectorOf(upper);
+      const medians = sector ? await readPeSectorMedians().catch(() => null) : null;
+      const line = peSectorLine(figure(pe), sector, medians?.sectors[sector as string], medians?.asOf ? readableDate(medians.asOf) : "");
+      return line ? { glyph: line.glyph, text: line.text, note: line.note } : null;
+    })(),
   };
 
   // OLD BEHAVIOUR, REMOVED: this threw when there was no history and no price.
