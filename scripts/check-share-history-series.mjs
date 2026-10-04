@@ -191,9 +191,10 @@ const RULES = {
     const h = b.buildShareHistory(set(AAPL_TAIL)), s = b.buildShareHistory(set(SHORT_END));
     return h?.threeYear?.pct !== null && h.threeYear.end.date === "2025-12-27" && h.threeYear.base.date === "2022-09-24"
       && Math.abs(h.threeYear.pct - ((14748158000 - 16215963000) / 16215963000) * 100) < 1e-9
-      && /Share count has fallen over the last 3 years/.test(render(c, h))
+      // 24 Sept 2022 to 27 Dec 2025 is 3¼ years, and is named so (#552 COWORK #141).
+      && /Share count has fallen over 3¼ years/.test(render(c, h))
       // The tile names the window's actual ends, never "latest" (#552 COWORK #120).
-      && /data-share-three-window="">24 Sept? 2022 to 27 Dec 2025</.test(render(c, h)) && !/latest/i.test(render(c, h).match(/data-share-three-year[\s\S]*?<\/div><\/div>/)?.[0] ?? "x latest")
+      && /data-share-three-window="">24 Sept? 2022 to 27 Dec 2025( · the newest span on file)?</.test(render(c, h)) && !/latest/i.test(render(c, h).match(/data-share-three-year[\s\S]*?<\/div><\/div>/)?.[0] ?? "x latest")
       && s?.threeYear?.pct === null;
   },
 };
@@ -231,7 +232,7 @@ const MUTANTS = [
   ["the 6-month base window removed", (s) => once(s, "days(base.date, cut) > SHARE_TREND_BASE_MAX_DAYS || ", ""), null],
   ["the line drawn across a gap", null, (s) => once(s, "if (gapStarts.has(c.p.date)) segments.push([]);", "")],
   ["the window caption dropped", null, (s) => once(s, "          {threeWindow ? (", "          {false ? (")],
-  ["the colour from first-vs-last again", null, (s) => once(s, "const trend = threeYearWords(threePct);", "const trend = threeYearWords(changePercent);")],
+  ["the colour from first-vs-last again", null, (s) => once(s, "const trend = threeYearWords(threePct, phrase);", "const trend = threeYearWords(changePercent, phrase);")],
 ];
 for (const [label, bm, cm] of MUTANTS) check(`MUTATION: ${label} → caught`, await caught(bm, cm));
 
