@@ -16,7 +16,8 @@
 //   Earnings      (A's score: Good +1, Mixed 0, Weak −1) NOT IN THIS CENSUS: it
 //                 needs each symbol's stored SEC set; it changes quarterly, so it
 //                 moves the distribution a little and the flip rate hardly at all
-//   Words         total ≥ 3 Strong · 1–2 Firm · 0 Neutral · −1 to −2 Soft · ≤ −3 Weak
+//   Words         A (draft): total ≥ 3 Strong · 1–2 Firm · 0 Neutral · −1 to −2 Soft · ≤ −3 Weak
+//                 B (symmetric, wider Neutral): 4 Strong · 2–3 Firm · −1 to +1 Neutral · −2 to −3 Soft · −4 Weak
 //   Missing       an input with too little history is left out; fewer than 2
 //                 inputs → "Not enough data"
 //
@@ -55,7 +56,11 @@ globalThis.fetch = async (input, init) => {
 
 const SESSIONS = 60;
 const WORDS = ["Strong", "Firm", "Neutral", "Soft", "Weak"];
-const word = (t) => (t >= 3 ? "Strong" : t >= 1 ? "Firm" : t === 0 ? "Neutral" : t >= -2 ? "Soft" : "Weak");
+// Two cut-off sets for the ruling: A the draft; B symmetric with a wider Neutral.
+const CUTS = {
+  A: (t) => (t >= 3 ? "Strong" : t >= 1 ? "Firm" : t === 0 ? "Neutral" : t >= -2 ? "Soft" : "Weak"),
+  B: (t) => (t >= 4 ? "Strong" : t >= 2 ? "Firm" : t >= -1 ? "Neutral" : t >= -3 ? "Soft" : "Weak"),
+};
 
 const redis = FIXTURE ? null : (await import("@upstash/redis")).Redis.fromEnv();
 const { tiingoEodKey, TIINGO_UNIVERSE_KEY } = await import("../lib/server/marketData/keys.ts");
@@ -130,8 +135,8 @@ function score(c, i, rsi, spyIdx) {
   return inputs >= 2 ? total : null;
 }
 
-const latest = Object.fromEntries([...WORDS, "Not enough data"].map((w) => [w, 0]));
-const flips = { none: [], hold2: [], hold3: [] };
+const latest = Object.fromEntries(Object.keys(CUTS).map((k) => [k, Object.fromEntries([...WORDS, "Not enough data"].map((w) => [w, 0]))]));
+const flips = Object.fromEntries(Object.keys(CUTS).map((k) => [k, { none: [], hold2: [], hold3: [] }]));
 const totals = new Map();
 let read = 0, scored = 0;
 for (let i = 0; i < symbols.length; i += 250) {
@@ -142,11 +147,13 @@ for (let i = 0; i < symbols.length; i += 250) {
     const c = b.map((x) => x[4]), rsi = rsiSeries(c), at = new Map(b.map((x, k) => [x[0], k]));
     const seq = days.map((d) => { const k = at.get(d), s = spyAt.get(d); return k === undefined || s === undefined ? undefined : score(c, k, rsi, s); });
     const last = seq[seq.length - 1];
-    latest[last === undefined || last === null ? "Not enough data" : word(last)]++;
+    for (const [k, word] of Object.entries(CUTS)) latest[k][last === undefined || last === null ? "Not enough data" : word(last)]++;
     if (typeof last === "number") totals.set(last, (totals.get(last) ?? 0) + 1);
-    const ws = seq.filter((x) => typeof x === "number").map(word);
-    if (ws.length < SESSIONS * 0.9) continue;
+    const nums = seq.filter((x) => typeof x === "number");
+    if (nums.length < SESSIONS * 0.9) continue;
     scored++;
+    for (const [k, word] of Object.entries(CUTS)) {
+    const ws = nums.map(word);
     const count = (hold) => {
       let shown = ws[0], cand = null, run = 0, n = 0;
       for (const w of ws.slice(1)) {
@@ -156,7 +163,8 @@ for (let i = 0; i < symbols.length; i += 250) {
       }
       return n;
     };
-    flips.none.push(count(1)); flips.hold2.push(count(2)); flips.hold3.push(count(3));
+    flips[k].none.push(count(1)); flips[k].hold2.push(count(2)); flips[k].hold3.push(count(3));
+    }
   }
 }
 
@@ -164,13 +172,17 @@ const pct = (x, n) => `${((x / Math.max(1, n)) * 100).toFixed(1)}%`;
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[s.length >> 1] : 0; };
 const mean = (a) => (a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : "—");
 console.log(`universe ${symbols.length} · with bars ${read} · scored over ${SESSIONS} sessions ${scored} · window ${days[0]} → ${days[days.length - 1]} · Redis commands ${commands}`);
-console.log("\n=== The latest session: each word's share ===");
-const n = Object.values(latest).reduce((a, b) => a + b, 0);
-for (const [w, c] of Object.entries(latest)) console.log(`  ${w.padEnd(16)} ${String(c).padStart(5)}  ${pct(c, n)}`);
+for (const k of Object.keys(CUTS)) {
+  console.log(`\n=== Cut-offs ${k}: each word's share on the latest session ===`);
+  const n = Object.values(latest[k]).reduce((a, b) => a + b, 0);
+  for (const [w, c] of Object.entries(latest[k])) console.log(`  ${w.padEnd(16)} ${String(c).padStart(5)}  ${pct(c, n)}`);
+}
 console.log(`  totals: ${[...totals.entries()].sort((a, b) => a[0] - b[0]).map(([t, c]) => `${t >= 0 ? "+" : ""}${t}: ${c}`).join(" · ")}`);
-console.log(`\n=== Word changes per symbol over ${SESSIONS} sessions (${scored} symbols) ===`);
-for (const [k, a] of Object.entries(flips)) {
-  const label = k === "none" ? "no hysteresis" : `hold ${k.slice(4)} sessions`;
-  console.log(`  ${label.padEnd(16)} median ${med(a)} · mean ${mean(a)} · ≥ 6 changes ${pct(a.filter((x) => x >= 6).length, a.length)} · ≥ 10 ${pct(a.filter((x) => x >= 10).length, a.length)} · none ${pct(a.filter((x) => x === 0).length, a.length)}`);
+for (const c of Object.keys(CUTS)) {
+  console.log(`\n=== Cut-offs ${c}: word changes per symbol over ${SESSIONS} sessions (${scored} symbols) ===`);
+  for (const [k, a] of Object.entries(flips[c])) {
+    const label = k === "none" ? "no hysteresis" : `hold ${k.slice(4)} sessions`;
+    console.log(`  ${label.padEnd(16)} median ${med(a)} · mean ${mean(a)} · ≥ 6 changes ${pct(a.filter((x) => x >= 6).length, a.length)} · ≥ 10 ${pct(a.filter((x) => x >= 10).length, a.length)} · none ${pct(a.filter((x) => x === 0).length, a.length)}`);
+  }
 }
 console.log(`\nRedis commands ${commands} (GET/MGET only)`);
