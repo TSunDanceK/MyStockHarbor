@@ -29,14 +29,15 @@ const check = (label, ok, detail = "") => {
 };
 
 const KL = "lib/ta/keyLevels.ts";
+const SESS = "lib/ta/sessionBar.ts";
 const LIB = "lib/ta/performance.ts";
 const CARD = "app/stock/[symbol]/PerformanceStrip.tsx";
 const PAGE = "app/stock/[symbol]/page.tsx";
 const CLIENT = "app/stock/[symbol]/StockSymbolPageClient.tsx";
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 
-async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8"), kl = fs.readFileSync(KL, "utf8")) {
-  const unit = `${reasonedValueUnit()}\n${strip(kl)}\n${strip(lib)}\n${strip(card).replace("export default function PerformanceStrip", "export function PerformanceStrip")}\n`;
+async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8"), kl = fs.readFileSync(KL, "utf8"), sess = fs.readFileSync(SESS, "utf8")) {
+  const unit = `${reasonedValueUnit()}\n${strip(sess)}\n${strip(kl)}\n${strip(lib)}\n${strip(card).replace("export default function PerformanceStrip", "export function PerformanceStrip")}\n`;
   const js = ts.transpileModule(unit, { fileName: "p.tsx", compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText;
   const tmp = `scripts/.check-performance-strip-${process.pid}.mjs`;
   fs.writeFileSync(tmp, js);
@@ -60,6 +61,7 @@ const at = (b, d) => b.find((x) => x.date === d).close;
 const near = (a, b) => typeof a === "number" && Math.abs(a - b) < 1e-9;
 
 async function measure(M) {
+  const S = sessionCases(M);
   const full = M.performanceStrip(STOCK, SPY);
   const chip = (s, k) => s.chips.find((c) => c.key === k);
   const listed = M.performanceStrip(STOCK.filter((b) => b.date >= "2024-03-01"), SPY);
@@ -68,11 +70,34 @@ async function measure(M) {
   const noSpy = M.performanceStrip(STOCK, null);
   const render = (strip, credit) => renderToStaticMarkup(React.createElement(M.PerformanceStrip, { strip, credit }));
   const fullHtml = render(full), listedHtml = render(listed);
-  return { M, full, listed, gap, partial, noSpy, chip, fullHtml, fullText: visibleText(fullHtml), listedHtml, listedText: visibleText(listedHtml),
+  return { M, S, full, listed, gap, partial, noSpy, chip, fullHtml, fullText: visibleText(fullHtml), listedHtml, listedText: visibleText(listedHtml),
     credited: visibleText(render(full, React.createElement("a", { href: "#" }, "Tiingo credit"))) };
 }
 
+// ── In session or not (#563 COWORK #75/#76) ─────────────────────────────────
+const ET = (date, hhmm) => Date.parse(`${date}T${hhmm}:00-04:00`);
+const THU = STOCK.filter((b) => b.date <= "2026-10-01"), SPY_THU = SPY.filter((b) => b.date <= "2026-10-01");
+const PART = { date: "2026-10-02", close: 777, partial: true, label: "today so far (IEX), 14:32 ET" };
+const SPY_PART = { date: "2026-10-02", close: 555, partial: true, label: "today so far (IEX), 14:31 ET" };
+const sessionCases = (M) => ({
+  inS: M.performanceStrip([...THU, PART], [...SPY_THU, SPY_PART], ET("2026-10-02", "14:32")),
+  noSpyToday: M.performanceStrip([...THU, PART], SPY_THU, ET("2026-10-02", "14:32")),
+  sat: M.performanceStrip([...THU, PART], [...SPY_THU, SPY_PART], ET("2026-10-03", "12:00")),
+  staleMon: M.performanceStrip([...THU, PART], [...SPY_THU, SPY_PART], ET("2026-10-05", "10:00")),
+  after: M.performanceStrip([...THU, PART], [...SPY_THU, SPY_PART], ET("2026-10-02", "17:30")),
+  hol: M.performanceStrip(STOCK.filter((b) => b.date <= "2026-09-04"), SPY, ET("2026-09-07", "11:00")),
+});
 const rules = {
+  "in session: the end is the latest price, labelled with its time; SPY on the same day": ({ S, chip, M }) => {
+    const c = chip(S.inS, "1Y");
+    return S.inS.end === 777 && S.inS.live?.time === "14:32" && S.inS.asOf === "2026-10-02" &&
+      c.note.includes("to $777.00 (last price, 14:32 ET)") && near(c.spyPct, ((555 - at(SPY, "2025-10-02")) / at(SPY, "2025-10-02")) * 100) &&
+      chip(S.noSpyToday, "1Y").spyPct === null && /no price for the same day/.test(chip(S.noSpyToday, "1Y").spyReason) &&
+      /To the last price, 14:32 ET \(IEX\) · price change only/.test(visibleText(renderToStaticMarkup(React.createElement(M.PerformanceStrip, { strip: S.inS }))));
+  },
+  "out of session: the last close; a stale partial, a Saturday and a holiday never count": ({ S, chip }) =>
+    [S.sat, S.staleMon, S.after].every((x) => x.live === null && x.end === at(STOCK, "2026-10-01") && x.asOf === "2026-10-01" && /\(close, Thu 1 Oct 2026\)/.test(chip(x, "1M").note)) &&
+    S.hol.live === null && S.hol.asOf === "2026-09-04",
   "rolling dates: same calendar date back, month-ends clamped, a weekend or holiday takes the trading day before": ({ M, full, chip }) =>
     M.monthsBefore("2026-10-02", 1) === "2026-09-02" && M.monthsBefore("2026-03-31", 1) === "2026-02-28" &&
     M.monthsBefore("2024-03-31", 1) === "2024-02-29" && M.monthsBefore("2026-10-02", 60) === "2021-10-02" &&
@@ -99,7 +124,7 @@ const rules = {
   "the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once": ({ fullHtml, fullText }) =>
     (fullHtml.match(/class="perfChip"/g) ?? []).length === 6 && /▲ \+\d+\.\d%/.test(fullText) && !/▼/.test(fullText) &&
     /data-tone="up"/.test(fullHtml) && (fullHtml.match(/class="perfSpy"[^>]*>[\d.]+ pts (ahead of|behind) the S&amp;P 500</g) ?? []).length === 6 &&
-    /Closes to Fri 2 Oct 2026 · price change only/.test(fullText),
+    /To the close on Fri 2 Oct 2026 · price change only/.test(fullText),
   "a tap note per chip: the exact dates and closes, hedged": ({ full, fullHtml, M }) =>
     full.chips.every((c) => c.note.includes(M.PRICE_ONLY)) &&
     /^From \$[\d,.]+ \(close, Thu 2 Oct 2025\) to \$[\d,.]+ \(close, Fri 2 Oct 2026\): \+\d+\.\d%\. The S&P 500 \(SPY\) moved \+\d+\.\d% over the same dates: [\d.]+ pts (ahead of|behind) the S&P 500\./.test(full.chips[3].note) &&
@@ -112,7 +137,7 @@ const rules = {
 const staticRules = {
   "no fetch or Redis in the module or the strip": (l, c) => ![l, c].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory/.test(s)),
   "the page builds it from the full series, SPY only beside a Tiingo series, and hands down the strip, not bars": (_l, _c, page, client) =>
-    /const performance = performanceStrip\(historyResult\.points, historyResult\.provider === "tiingo" \? spyPoints : null\);/.test(page) &&
+    /const performance = performanceStrip\(historyResult\.points, historyResult\.provider === "tiingo" \? spyPoints : null, Date\.now\(\)\);/.test(page) &&
     /historyOnTiingo\("CHARTS"\) \? readTiingoHistoryPoints\("SPY"\) : Promise\.resolve\(null\)/.test(page) &&
     /performance=\{performance\}/.test(page) && !/spyPoints=\{|spyBars=\{/.test(page) &&
     /\{performance \? <PerformanceStrip strip=\{performance\} credit=\{historyProvider === "tiingo" \? historyCredit : undefined\} \/> : null\}/.test(client),
@@ -137,21 +162,31 @@ const mutants = [
   ["missing history: '—' with its reason, never estimated", "l", (s) => s.replace("  if (!hit) return null;\n", "  if (!hit) hit = bars[0] ?? null;\n  if (!hit) return null;\n")],
   ["the S&P 500: SPY's change on the same dates, the difference the right way round", "l", (s) => s.replace("const diffPts = spyPct === null ? null : pct - spyPct;", "const diffPts = spyPct === null ? null : spyPct - pct;")],
   ["the S&P 500: SPY's change on the same dates, the difference the right way round", "l", (s) => s.replace("const spyFrom = closeOnOrBefore(spy, from.date);", "const spyFrom = closeOnOrBefore(spy, monthsBefore(from.date, 1));")],
-  ["today so far is never the close", "kl", (s) => s.replace(".filter((b) => b && !b.partial && ", ".filter((b) => b && ")],
+  ["today so far is never the close", "l", (s) => s.replace("{ bars: (bars ?? []).filter((b) => !b.partial), live: null, time: null }", "{ bars: [...(bars ?? [])], live: null, time: null }")],
   ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace('const arrow = c.pct === null ? "" : c.pct > 0 ? "▲ " : c.pct < 0 ? "▼ " : "";', 'const arrow = "";')],
   ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("{c.diffPts !== null ? spyWords(c.diffPts) :", "{c.diffPts !== null ? \"\" :")],
-  ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("Closes to {strip.asOfWords} · price change only", "{strip.asOfWords}")],
+  ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("<>To the close on {strip.asOfWords}</>", "<>{strip.asOfWords}</>")],
   ["a tap note per chip: the exact dates and closes, hedged", "c", (s) => s.replace("reason={c.note}", "reason={null}")],
   ["a tap note per chip: the exact dates and closes, hedged", "l", (s) => s.replace("return { key: p.key, pct, reason: null, from, spyPct, spyReason, diffPts, note: `${head}${vs} ${PRICE_ONLY}` };", "return { key: p.key, pct, reason: null, from, spyPct, spyReason, diffPts, note: `${head}${vs}` };")],
   ["nothing reads as advice; the credit only when passed", "c", (s) => s.replace("{credit ? <> · {credit}</> : null}", "{\" · Tiingo credit\"}")],
 ];
-const KLsrc = fs.readFileSync(KL, "utf8");
+const KLsrc = fs.readFileSync(KL, "utf8"), SSsrc = fs.readFileSync(SESS, "utf8");
+mutants.push(
+  ["in session: the end is the latest price, labelled with its time; SPY on the same day", "l", (s) => s.replace("const spyEnd = spyEndAny && spyEndAny.date === last.date ? spyEndAny : null;", "const spyEnd = spyEndAny;")],
+  ["in session: the end is the latest price, labelled with its time; SPY on the same day", "l", (s) => s.replace('const endWords = u.live ?', "const endWords = false ?")],
+  ["in session: the end is the latest price, labelled with its time; SPY on the same day", "c", (s) => s.replace("{strip.live ? <>To the last price", "{false ? <>To the last price")],
+  ["out of session: the last close; a stale partial, a Saturday and a holiday never count", "s", (s) => s.replace(" && last.date === easternNow(nowMs).date;", ";")],
+  ["out of session: the last close; a stale partial, a Saturday and a holiday never count", "s", (s) => s.replace("Number.isFinite(nowMs) && inSession(nowMs) && last.date", "Number.isFinite(nowMs) && last.date")],
+);
 for (const [n, which, mutate] of mutants) {
   let changed = false, bites = false;
   try {
     if (which === "kl") {
       const m = mutate(KLsrc); changed = m !== KLsrc;
       bites = !rules[n](await measure(await load(L, Cd, m)));
+    } else if (which === "s") {
+      const m = mutate(SSsrc); changed = m !== SSsrc;
+      bites = !rules[n](await measure(await load(L, Cd, KLsrc, m)));
     } else {
       const l2 = which === "l" ? mutate(L) : L, c2 = which === "c" ? mutate(Cd) : Cd;
       changed = l2 !== L || c2 !== Cd;

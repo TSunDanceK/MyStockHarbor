@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("/opt/node22/lib/node_modules/playwright")); }
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
-const unit = `${reasonedValueUnit()}\n${strip(fs.readFileSync("lib/ta/keyLevels.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/performance.ts", "utf8"))}\n${strip(fs.readFileSync("app/stock/[symbol]/PerformanceStrip.tsx", "utf8")).replace("export default function PerformanceStrip", "export function PerformanceStrip")}\n`;
+const unit = `${reasonedValueUnit()}\n${strip(fs.readFileSync("lib/ta/sessionBar.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/keyLevels.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/performance.ts", "utf8"))}\n${strip(fs.readFileSync("app/stock/[symbol]/PerformanceStrip.tsx", "utf8")).replace("export default function PerformanceStrip", "export function PerformanceStrip")}\n`;
 const tmp = `scripts/.performance-strip-measure-${process.pid}.mjs`;
 fs.writeFileSync(tmp, ts.transpileModule(unit, { fileName: "p.tsx", compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText);
 let M;

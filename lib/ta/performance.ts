@@ -9,8 +9,13 @@
 //             in that month takes its last day); a date that wasn't a trading
 //             day takes the NEAREST TRADING DAY BEFORE IT
 //   YTD       against the last close of the previous calendar year
-// CLOSED CANDLES ONLY, as with the Key levels card: Tiingo's "today so far" bar
-// is left out, and the strip says "Closes to Fri 2 Oct 2026" once.
+// THE END IS THE LATEST PRICE (owner ruling, #563 COWORK #75/#76; replaces
+// #69's "closed candles only"): in session, today's partial bar (Tiingo's
+// "today so far (IEX), hh:mm ET", already on the page) is the end, labelled
+// "to the last price, 14:32 ET"; otherwise the last completed session, "to the
+// close on Fri 2 Oct 2026". lib/ta/sessionBar.ts decides from the page's render
+// time; a stale partial, weekends and holidays read the last close. The START
+// of every period is always a completed close. SPY must end on the same day.
 //
 // NEVER ESTIMATED. A period whose start is before the prices on file, or whose
 // nearest earlier close is more than a week from the date (a gap in the
@@ -19,7 +24,8 @@
 //
 // PRICE ONLY: the closes are split-adjusted, not dividend-adjusted, for the
 // stock and for SPY alike. The note says so.
-import { closedBars, dateWords, type KeyBar } from "./keyLevels";
+import { dateWords, type KeyBar } from "./keyLevels";
+import { liveBars } from "./sessionBar";
 
 export type PerfKey = "1M" | "3M" | "YTD" | "1Y" | "3Y" | "5Y";
 export const PERF_PERIODS: readonly { key: PerfKey; months?: number; ytd?: true }[] = [
@@ -49,7 +55,22 @@ export type PerfChip = {
   /** The tap note. */
   note: string;
 };
-export type PerfStrip = { asOf: string | null; asOfWords: string | null; end: number | null; chips: PerfChip[] };
+export type PerfStrip = {
+  asOf: string | null;
+  asOfWords: string | null;
+  end: number | null;
+  /** Set when the end is today's in-session partial bar: its own "hh:mm" (ET). */
+  live: { time: string | null } | null;
+  chips: PerfChip[];
+};
+
+/** Dated, finite, oldest first; today's partial bar kept only when in session (sessionBar.ts). */
+function usable(bars: readonly KeyBar[] | null | undefined, nowMs: number | undefined): { bars: KeyBar[]; time: string | null; live: boolean } {
+  const l = nowMs === undefined ? { bars: (bars ?? []).filter((b) => !b.partial), live: null, time: null } : liveBars(bars ?? [], nowMs);
+  const out = l.bars.filter((b) => b && /^\d{4}-\d{2}-\d{2}$/.test(b.date) && typeof b.close === "number" && Number.isFinite(b.close))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return { bars: out, time: l.time, live: !!l.live && out[out.length - 1] === l.live };
+}
 
 const DAY = 86_400_000;
 const atUtc = (d: string) => new Date(`${d}T00:00:00Z`);
@@ -88,12 +109,16 @@ const money = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigi
 export const PRICE_ONLY = "Price change only; dividends are not included. Past performance, not a forecast.";
 
 /** The strip, from the stock's daily bars and SPY's. */
-export function performanceStrip(bars: readonly KeyBar[] | null | undefined, spyBars: readonly KeyBar[] | null | undefined): PerfStrip {
-  const s = closedBars(bars);
-  const spy = closedBars(spyBars);
-  if (!s.length) return { asOf: null, asOfWords: null, end: null, chips: [] };
+export function performanceStrip(bars: readonly KeyBar[] | null | undefined, spyBars: readonly KeyBar[] | null | undefined, nowMs?: number): PerfStrip {
+  const u = usable(bars, nowMs);
+  const s = u.bars;
+  const spy = usable(spyBars, nowMs).bars;
+  if (!s.length) return { asOf: null, asOfWords: null, end: null, live: null, chips: [] };
   const last = s[s.length - 1];
-  const spyEnd = closeOnOrBefore(spy, last.date);
+  // SPY ON THE SAME END DAY: a stock's today-so-far is never set against SPY's yesterday.
+  const spyEndAny = closeOnOrBefore(spy, last.date);
+  const spyEnd = spyEndAny && spyEndAny.date === last.date ? spyEndAny : null;
+  const endWords = u.live ? `last price, ${u.time ? `${u.time} ET` : "today"}` : `close, ${dateWords(last.date)}`;
   const first = s[0].date;
   const chips = PERF_PERIODS.map((p): PerfChip => {
     const target = p.ytd ? `${Number(last.date.slice(0, 4)) - 1}-12-31` : monthsBefore(last.date, p.months!);
@@ -108,13 +133,13 @@ export function performanceStrip(bars: readonly KeyBar[] | null | undefined, spy
     if (pct === null) return empty("The starting close isn't a usable price.");
     const spyFrom = closeOnOrBefore(spy, from.date);
     const spyPct = spyFrom && spyEnd ? pctChange(spyFrom.close, spyEnd.close) : null;
-    const spyReason = spyPct === null ? "The S&P 500 (SPY) closes for these dates aren't on file." : null;
+    const spyReason = spyPct === null ? (spyEndAny && !spyEnd ? "The S&P 500 (SPY) has no price for the same day on file yet." : "The S&P 500 (SPY) closes for these dates aren't on file.") : null;
     const diffPts = spyPct === null ? null : pct - spyPct;
-    const head = `From ${money(from.close)} (close, ${dateWords(from.date)}) to ${money(last.close)} (close, ${dateWords(last.date)}): ${pctWords(pct)}.`;
+    const head = `From ${money(from.close)} (close, ${dateWords(from.date)}) to ${money(last.close)} (${endWords}): ${pctWords(pct)}.`;
     const vs = spyPct !== null && diffPts !== null
       ? ` The S&P 500 (SPY) moved ${pctWords(spyPct)} over the same dates: ${spyWords(diffPts)}.`
       : ` ${spyReason}`;
     return { key: p.key, pct, reason: null, from, spyPct, spyReason, diffPts, note: `${head}${vs} ${PRICE_ONLY}` };
   });
-  return { asOf: last.date, asOfWords: dateWords(last.date), end: last.close, chips };
+  return { asOf: last.date, asOfWords: dateWords(last.date), end: last.close, live: u.live ? { time: u.time } : null, chips };
 }

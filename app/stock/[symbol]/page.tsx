@@ -549,7 +549,8 @@ export default async function StockPage({ params }: Props) {
   // THE FULL SERIES, not the 500 bars the client gets: 3Y and 5Y need ~1,260
   // sessions and the stored Tiingo history holds ~1,400. Derived % only goes
   // down to the client (no bars in any public JSON).
-  const performance = performanceStrip(historyResult.points, historyResult.provider === "tiingo" ? spyPoints : null);
+  // The render time decides whether today's partial bar is in session (#563 COWORK #75/#76).
+  const performance = performanceStrip(historyResult.points, historyResult.provider === "tiingo" ? spyPoints : null, Date.now());
 
   // ── THE PROFILE BLOCK, FROM FREE SOURCES (brief 2026-09-22 PR 2) ─────────
   // Composed rather than fetched, and no longer from FMP at all: the

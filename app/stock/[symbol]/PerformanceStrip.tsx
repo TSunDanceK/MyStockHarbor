@@ -35,7 +35,8 @@ export default function PerformanceStrip({ strip, credit }: { strip: PerfStrip; 
       </div>
       {strip.asOfWords ? (
         <p style={{ margin: "8px 0 0", fontSize: 12, opacity: 0.6 }}>
-          Closes to {strip.asOfWords} · price change only{credit ? <> · {credit}</> : null}
+          {/* #563 COWORK #75: to the latest price in session, else to the last close. */}
+          {strip.live ? <>To the last price{strip.live.time ? `, ${strip.live.time} ET` : ""} (IEX)</> : <>To the close on {strip.asOfWords}</>} · price change only{credit ? <> · {credit}</> : null}
         </p>
       ) : null}
       <style>{`
