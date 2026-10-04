@@ -21,6 +21,7 @@ import {
 import { SCORE_BANDS, scoreBandNote, toneLabel, type SecEarningsScore } from "@/lib/server/secEarningsScore";
 import { readableDate, readableIsoDates } from "@/lib/server/secEstimates";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
+import { LINE_TREND_FLAT_PCT, NO_COLOUR_LINE, lineTrend, type LineTrend, type Trend } from "@/lib/lineTrend";
 import {
   REFUSAL_WORDS, epsUnitWords, marketCap, peRatio, sharesBasisWords, type ValuationInputs,
 } from "@/lib/server/secValuation";
@@ -1301,8 +1302,87 @@ function PlWaterfall({ view }: { view: SecEarningsView }) {
   );
 }
 
+/**
+ * ── THE TRAFFIC LIGHTS (#552 COWORK #137 §2) ─────────────────────────────
+ *
+ * Each figure against the same quarter a year earlier (or the prior fiscal
+ * year): green improved, white little change, red weaker. The rules are
+ * lib/lineTrend.ts; this only draws them. NEVER COLOUR ALONE: a ▲ / ● / ▼
+ * glyph says the same thing, and the tap note gives the comparison.
+ *
+ * A LOSS IS RED WHATEVER ITS TREND (#552 COWORK #144): a negative figure keeps
+ * its minus sign in red ink, so "a smaller loss" is a green ▲ beside a red
+ * figure, never a loss printed in green.
+ */
+export const TREND_INK: Record<Trend, string | undefined> = { improved: "#22c55e", flat: undefined, weaker: "#ef4444" };
+// LITTLE CHANGE IS A DOT, NOT A DASH: "–" set before "$63.0M" read as a minus
+// sign on the figure (measured on the BYND fixture at 360 px).
+export const TREND_GLYPH: Record<Trend, string> = { improved: "▲", flat: "●", weaker: "▼" };
+export const LOSS_INK = "#ef4444";
+export const TREND_KEY_WORDS = "Costs are compared as a share of revenue. A quick comparison of filed figures, not a rating.";
+
+type TrendBase = NonNullable<SecEarningsView["incomeTrendBase"]>;
+
+/** A figure as this card prints it: compact money, a per-share figure to the cent, a share count without the $. */
+function trendFigureText(cell: ViewCell, v: number): string {
+  if (cell.label.includes("shares")) return scaledAmount(v, false);
+  return money(v, !cell.perShare, cell.perShare);
+}
+
+/** The tap note: the comparison, in words. Null where the line takes no colour in itself. */
+export function trendNote(cell: ViewCell, t: LineTrend, base: TrendBase): string | null {
+  if (t.trend === null) return t.reason === NO_COLOUR_LINE ? null : t.reason;
+  const now = base.now[cell.key], then = base.then[cell.key];
+  // COMPARED IN THE REPORTING CURRENCY (base), SHOWN IN DOLLARS (cell): for a
+  // converted filer the base's figures are not dollars, so the note names no
+  // figures rather than print yen with a $ on them. A share count is never
+  // converted, so it always names both.
+  const sameUnits = now != null && cell.val != null && Math.abs(now - cell.val) <= Math.abs(cell.val) * 1e-9;
+  const vs = sameUnits && then != null
+    ? `${trendFigureText(cell, now as number)} vs ${trendFigureText(cell, then)} in ${base.label}`
+    : `vs ${base.label}, in the company's reporting currency`;
+  if (t.kind === "flip") return `${vs}: ${t.words}.`;
+  if (t.kind === "share") {
+    const words = t.trend === "flat" ? "about the same share" : t.trend === "improved" ? "a lower share" : "a higher share";
+    return `${t.shareNow.toFixed(1)}% of revenue vs ${t.shareThen.toFixed(1)}% in ${base.label}: ${words} of revenue.`;
+  }
+  const move = t.trend === "flat"
+    ? `little change (within ±${LINE_TREND_FLAT_PCT}%)`
+    : `${t.pct > 0 ? "up" : "down"} ${Math.abs(t.pct).toFixed(1)}%`;
+  const shares = cell.key === "sharesDiluted" ? " Fewer shares read as better (buybacks), more as weaker (dilution)." : "";
+  return `${vs}, ${move}.${shares}`;
+}
+
+function TrendFigure({ cell, trend, base }: { cell: ViewCell; trend: LineTrend; base: TrendBase }) {
+  const v = cell.val as number;
+  const note = trendNote(cell, trend, base);
+  const glyph = trend.trend ? TREND_GLYPH[trend.trend] : null;
+  const ink = v < 0 ? LOSS_INK : trend.trend ? TREND_INK[trend.trend] : undefined;
+  return (
+    <span data-line-trend={trend.trend ?? "none"}>
+      <DerivedMark cell={cell} />
+      {glyph ? (
+        <span aria-hidden="true" data-trend-glyph="" style={{ marginRight: 5, fontSize: 10, color: TREND_INK[trend.trend as Trend] ?? "#e2e8f0" }}>{glyph}</span>
+      ) : null}
+      <ReasonedValue text={trendFigureText(cell, v)} reason={note} style={ink ? { color: ink } : undefined} />
+    </span>
+  );
+}
+
+function TrendKey({ label }: { label: string }) {
+  const item = (t: Trend, words: string) => (
+    <span style={{ whiteSpace: "nowrap" }}><span aria-hidden="true" style={{ color: TREND_INK[t] ?? "#e2e8f0" }}>{TREND_GLYPH[t]}</span> {words}</span>
+  );
+  return (
+    <p data-trend-key="" style={{ margin: "4px 0 0", fontSize: 12, lineHeight: 1.5, color: "rgba(203,213,225,0.72)" }}>
+      {item("improved", "Improved")} · {item("flat", "Little change")} · {item("weaker", "Weaker")}, vs {label}. {TREND_KEY_WORDS}
+    </p>
+  );
+}
+
 export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
   const w = periodWords(view.basis);
+  const base = view.incomeTrendBase;
   return (
     <section className="card">
       <div className="eyebrow">Income statement</div>
@@ -1315,17 +1395,21 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
           below carries its existing "partial" explanation instead. A waterfall
           asserts that its bars sum to its total; drawing one that does not is
           worse than drawing nothing. */}
+      {base ? <TrendKey label={base.label} /> : null}
       <PlWaterfall view={view} />
       <div style={{ marginTop: 12 }}>
         {view.incomeStatement.map((c) => (
           <Row key={c.label} label={c.label} sub={c.sub}>
-            <CellValue
-              cell={c}
-              compact
-             
-              currency={!c.label.includes("shares")}
-              empty={c.emptyText ?? (c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED)}
-            />
+            {c.val != null && base
+              ? <TrendFigure cell={c} trend={lineTrend(c.key, base, base.oneOff)} base={base} />
+              : (
+                <CellValue
+                  cell={c}
+                  compact
+                  currency={!c.label.includes("shares")}
+                  empty={c.emptyText ?? (c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED)}
+                />
+              )}
           </Row>
         ))}
       </div>
