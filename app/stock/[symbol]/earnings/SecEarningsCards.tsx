@@ -5,7 +5,7 @@
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
 import Link from "next/link";
 import GrowthVisuals, { SeeAllTheNumbers } from "./GrowthVisuals";
-import { anyDerived, buildGrowthVisuals, GROSS_MARGIN_MEANS } from "@/lib/growthVisuals";
+import { anyDerived, buildGrowthVisuals, introLine, marginMeans } from "@/lib/growthVisuals";
 import {
   CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, INTEREST_IN_OTHER_INCOME, INTEREST_WITHIN_FILED_OTHER, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
   filingCreditText, filingNoticeText, isCrossing, periodWords, retiredSource,
@@ -394,8 +394,10 @@ function NotMeaningful() {
   return <ReasonedValue text="Not meaningful" reason={EMPTY_REASONS.revenueIncomplete} style={MUTED_VALUE} />;
 }
 
+// A NEGATIVE CARRIES "−" (U+2212), not a hyphen (#563 COWORK #72): one minus sign
+// across the picture, its panel and this table.
 const pctLevel = (v: number | null | undefined, digits = 1) =>
-  v == null || !Number.isFinite(v) ? "—" : `${v.toFixed(digits)}%`;
+  v == null || !Number.isFinite(v) ? "—" : `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}%`;
 const ratio = (v: number | null | undefined) =>
   v == null || !Number.isFinite(v) ? "—" : v.toFixed(2);
 
@@ -715,8 +717,8 @@ function MarginDelta({ view }: { view: SecEarningsView }) {
   return (
     <p className="earningsDataNote">
       Operating margin vs <strong>{base}</strong>:{" "}
-      <strong>{latest.operating.toFixed(1)}%</strong> from {prior.operating.toFixed(1)}%{" "}
-      (<strong>{`${pp >= 0 ? "+" : ""}${pp.toFixed(1)}pp`}</strong>){" "}
+      <strong>{pctLevel(latest.operating)}</strong> from {pctLevel(prior.operating)}{" "}
+      (<strong>{`${pp >= 0 ? "+" : "−"}${Math.abs(pp).toFixed(1)}pp`}</strong>){" "}
       <ToneChip tone={tone} word={marginToneWord(tone, { older: prior.operating, newer: latest.operating })} />
     </p>
   );
@@ -761,7 +763,9 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           dropdown is a plain <details> in this server-rendered card, so its text
           is in the page's HTML for readers and crawlers alike, closed or open.
           The gap and Q4 EPS sentences stay visible text there, never hover-only. */}
-      <p>Sales, profit or loss and gross margin each {w.one}, as filed. Tap a {w.one} for its figures.</p>
+      {/* THE MARGIN NAMED IS THE ONE THE CHART DRAWS (#563 COWORK #72): gross,
+          operating when no period files a gross margin, or none. */}
+      <p>{introLine((pictures.quarters ?? pictures.years)?.margin.kind, w.one)}</p>
       {/* THE PICTURE (#563 COWORK #35a/#36): C's charts on one time axis, built
           from this view, keyed to tableBasis like the nouns above; the profit
           chart draws only because the view carries every period's one-off note
@@ -783,7 +787,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
             </>
           ) : null}
         </p>
-        <p>{GROSS_MARGIN_MEANS}</p>
+        {marginMeans((pictures.quarters ?? pictures.years)?.margin.kind) ? <p>{marginMeans((pictures.quarters ?? pictures.years)?.margin.kind)}</p> : null}
         {anyDerived(pictures.quarters) ? (
           <p>* Not filed as a {pictures.quarters!.one} of its own; worked out from the company&rsquo;s filings. Tap the {pictures.quarters!.one} for how.</p>
         ) : null}

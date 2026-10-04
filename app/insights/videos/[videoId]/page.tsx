@@ -7,8 +7,8 @@ import {
   getVideoContent,
   getAllVideoMeta,
   mergeVideoLists,
-  toFallbackVideo,
 } from "@/lib/videoContent";
+import { LATEST_VIDEOS_LIMIT, resolveVideo } from "@/lib/videoResolve";
 import { getVideoStockData } from "@/lib/videoStockData";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { remark } from "remark";
@@ -72,14 +72,15 @@ function fmtPrice(value: number | null): string {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { videoId } = await params;
 
-  const [apiVideo, videoContent] = await Promise.all([
+  // The latest list is the page body's own cached read (same limit, same entry).
+  const [apiVideo, videoContent, apiVideos] = await Promise.all([
     getYouTubeVideoById(videoId),
     Promise.resolve(getVideoContent(videoId)),
+    getLatestYouTubeVideos(LATEST_VIDEOS_LIMIT),
   ]);
 
-  // Same fallback rule as the page body below: written analysis on disk is
-  // enough to describe the page, with or without the YouTube API.
-  const video = apiVideo ?? (videoContent ? toFallbackVideo(videoContent) : null);
+  // Same fallback rule as the page body below (lib/videoResolve.ts).
+  const video = resolveVideo(videoId, apiVideo, apiVideos, videoContent);
 
   if (!video) {
     return {
@@ -132,7 +133,7 @@ export default async function VideoPage({ params }: Props) {
   const [apiVideo, videoContent, apiVideos] = await Promise.all([
     getYouTubeVideoById(videoId),
     Promise.resolve(getVideoContent(videoId)),
-    getLatestYouTubeVideos(20),
+    getLatestYouTubeVideos(LATEST_VIDEOS_LIMIT),
   ]);
 
   // This used to be `if (!video) notFound()` against the API result alone,
@@ -146,8 +147,13 @@ export default async function VideoPage({ params }: Props) {
   // Disk content is now sufficient on its own: toFallbackVideo builds the
   // embed, thumbnail and watch URLs deterministically from the video ID. The
   // API is preferred when present (real title and publish date), and 404
-  // remains correct only when NEITHER source knows this ID.
-  const video = apiVideo ?? (videoContent ? toFallbackVideo(videoContent) : null);
+  // remains correct only when NO source knows this ID.
+  //
+  // THE LATEST LIST IS A SOURCE TOO (#563 COWORK #70). A new video has no
+  // last-known-good copy, so with the hourly budget spent its by-id read is
+  // null, and with no article on disk yet the header's own "Video Breakdowns"
+  // link 404'd (and ISR cached the 404). The list in hand already knows it.
+  const video = resolveVideo(videoId, apiVideo, apiVideos, videoContent);
 
   if (!video) notFound();
 

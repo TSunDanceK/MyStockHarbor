@@ -119,7 +119,7 @@ console.log("\n3. the Growth & Margins badge verb");
   };
   const b = badge(M, "BYND");
   check("BYND's line is rendered", b !== null, b ?? "");
-  check("BYND −50.0% → −44.8% reads \"Improving\"", /-44\.8% from -50\.0%/.test(b) && /Improving/.test(b) && !/Widening/.test(b), b);
+  check("BYND −50.0% → −44.8% reads \"Improving\"", /−44\.8% from −50\.0%/.test(b) && /Improving/.test(b) && !/Widening/.test(b), b);
   const a = badge(M, "AAPL");
   check("AAPL (both ends positive) keeps Widening/Narrowing/Steady", a !== null && /(Widening|Narrowing|Steady)/.test(a) && !/Improving|Worsening/.test(a), a ?? "");
   const Mm = await loadCards(once(
