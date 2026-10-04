@@ -531,10 +531,13 @@ function rules(srcs) {
     /const weeklyReturns = useMemo\(\(\) => computeCloseOverCloseReturns\(weeklyHistory, 12\), \[weeklyHistory\]\);/.test(sc));
   want("one toggle card, Daily first, and no second returns chart beside it",
     (sc.match(/<ReturnsToggleCard /g) ?? []).length === 1 && /daily=\{dailyReturns\} weekly=\{weeklyReturns\}/.test(sc) && !/<ReturnsBarChart /.test(sc));
+  // RE-ANCHORED for C's Price levels ladder (#563 COWORK #68), which replaced the
+  // indicator rows: the same intent, a short history hands its reason to the MA,
+  // and the ladder prints it ("MA200: Not enough price history stored yet").
   want("the MA rows say why on a short history, not a bare \"—\"",
-    /% vs price` : closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : "Distance unavailable"/.test(sc) &&
-    /% vs price` : closes\.length && closes\.length < 50 \? SHORT_HISTORY_NOTE : "Distance unavailable"/.test(sc) &&
-    /className="indicator-row" title=\{"title" in row \? row\.title : undefined\}/.test(sc));
+    /ma200Missing=\{closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : null\}/.test(sc) &&
+    /ma50Missing=\{closes\.length && closes\.length < 50 \? SHORT_HISTORY_NOTE : null\}/.test(sc) &&
+    /<LevelsSignals\s/.test(sc));
   // COWORK #103 nit: keyed on the provider of the series shown, so a
   // client-fetched Tiingo chart is credited and a seeded FMP one is not.
   want("the stock chart is given the credit only while the series shown is Tiingo's",
@@ -605,7 +608,7 @@ const MUTANTS = [
   ["the dashboard seed left on FMP", FILES.dashPage, /historyForSurface\("HISTORY", symbol, \(\) => getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\)/, 'getDailyHistory(symbol, { caller: "dashboard" })'],
   ["the weekly input window changed", FILES.stockClient, /computeCloseOverCloseReturns\(weeklyHistory, 12\)/, "computeCloseOverCloseReturns(weeklyHistory, 20)"],
   ["the old second returns card restored", FILES.stockClient, /<ReturnsToggleCard /, '<ReturnsBarChart symbol={symbol} periodLabel="Weekly" compareLabel="x" bars={weeklyReturns} /><ReturnsToggleCard '],
-  ["a bare \"—\" on a short MA200", FILES.stockClient, /closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : "Distance unavailable"/, '"Distance unavailable"'],
+  ["a bare \"—\" on a short MA200", FILES.stockClient, /ma200Missing=\{closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : null\}/, "ma200Missing={null}"],
 ];
 for (const [label, file, from, to] of MUTANTS) {
   const m = srcs[file].replace(from, to);
