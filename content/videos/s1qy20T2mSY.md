@@ -16,7 +16,7 @@ statValue4: "~$66M"
 
 Every time you ask an AI a question, your words briefly stop being electricity. Inside the data center they are turned into light: laser pulses fired down glass fibre from one rack of chips to the next, so tens of thousands of GPUs can work as one machine. The chips and the power plants get the headlines. Far fewer investors ask where that light comes from.
 
-It comes from lasers grown on indium phosphide (InP) wafers. Only a handful of companies can make those wafers at scale, and AXT Inc is one of them. The stock went from about $4 to above $140 in little more than a year, and it has since been cut roughly in half. Most people think AI's bottleneck is the chips. They may be looking in the wrong place.
+It comes from lasers grown on indium phosphide (InP) wafers. Only a handful of companies can make those wafers at scale, and AXT Inc is one of them. The stock went from about $4 to above $140 in little more than a year, and by the time the video was made it had been cut roughly in half. Most people think AI's bottleneck is the chips. They may be looking in the wrong place.
 
 > **📌 Quick corrections**
 >
@@ -54,7 +54,7 @@ The response has been to spend. Customers are prepaying to hold a place in line,
 
 - **China export permits:** every shipment leaving China needs a permit. Management has said it cannot predict permit timing for any specific customer, and a slowdown might hit revenue directly.
 - **Valuation:** on trailing earnings the P/E sits in the region of 1,000 (the datasheet shows 1,198; different sites use different trailing windows). The price may already assume several years of growth.
-- **Volatility:** the stock peaked above $140 in late May and now trades in the mid-$70s. Leveraged ETFs on AXTI exist in both directions, which may amplify swings.
+- **Volatility:** the stock peaked above $140 in late May and was trading in the mid-$70s when the video was made. Leveraged ETFs on AXTI exist in both directions, which may amplify swings.
 - **Dilution:** April's share sale enlarged the share count, and further raises are possible if expansion costs rise.
 - **Insider selling:** insiders sold about $53M of stock over the past 12 months.
 - **Execution:** tripling, then more than doubling, a crystal-growing operation is hard. Yield problems or delays might leave the backlog unfilled.
