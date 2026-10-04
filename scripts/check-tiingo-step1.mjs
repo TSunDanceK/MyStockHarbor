@@ -356,7 +356,8 @@ const MUTANTS = [
   ["caps at the dashboard's 30,000, not 80% of the contract", (s) => s.replace("TIINGO_HOURLY_CAP = 16_000", "TIINGO_HOURLY_CAP = 30_000")],
   ["the limiter fails OPEN on a Redis error", (s) => s.replace(/throw new TiingoRefused\(`limiter redis error[^;]*;/, "return { hour: 0, day: 0 };")],
   ["the limiter checks > cap as >= (refuses the cap itself)", (s) => s.replace("if (h > TIINGO_HOURLY_CAP)", "if (h >= TIINGO_HOURLY_CAP)")],
-  ["previews may call", (s) => s.replace('if (env.VERCEL_ENV !== "production")', "if (false)")],
+  // The refusal now names the one Preview carve-out (#553 COWORK #123); a job on Preview must still be refused.
+  ["previews may call", (s) => s.replace('const allowed = env.VERCEL_ENV === "production" ||', 'const allowed = true ||')],
   ["the IEX call uses our spelling", (s) => s.replace("new Map(symbols.map((s) => [toTiingo(s), s] as const))", "new Map(symbols.map((s) => [s, s] as const))")],
   ["history reads Tiingo's dividend-adjusted close (basis A)", (s) => s.replace('at("close")', 'at("adjClose")')],
   ["the split is applied FORWARD (to bars after the ex-date)", (s) => s.replace("for (let i = raw.length - 1; i >= 0; i--) {", "for (let i = 0; i < raw.length; i++) {")],
