@@ -231,6 +231,14 @@ const FRED_SERIES: Record<string, { id: string; quote: "usd-per-unit" | "unit-pe
   // ECB stays the fallback for both.
   INR: { id: "DEXINUS", quote: "unit-per-usd" },
   MXN: { id: "DEXMXUS", quote: "unit-per-usd" },
+  // DEXCHUS is CHINESE YUAN RENMINBI to one U.S. DOLLAR (#552, COWORK #140).
+  // ECB, CNY's only route until now, timed out in the 3 Oct 22:49 UTC run;
+  // the FX guard kept BABA, TCOM and BIDU's stored sets. MEASURED (relay
+  // fred-cny, 2026-10-04): 1,933 daily rows from 2019-01-02 to 2026-09-25,
+  // zero "." placeholders, last 6.711, so CNY per USD. Against the ECB cross
+  // over 1,907 shared days: median 0.037%, p95 0.198%, max 1.62%. ECB stays
+  // the fallback.
+  CNY: { id: "DEXCHUS", quote: "unit-per-usd" },
 };
 
 /**

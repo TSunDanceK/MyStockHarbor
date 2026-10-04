@@ -191,7 +191,8 @@ console.log("\nDIRECTION — normalised in the adapter, so no call site can inve
   // INR and MXN (#552 COWORK #132 (c)): the real DEXINUS / DEXMXUS values for
   // 2026-09-25 (relay fred-inr-mxn). Before these, ECB was their only route,
   // and its timeout blanked those filers' sets.
-  for (const [ccy, id, val] of [["INR", "DEXINUS", "95.81"], ["MXN", "DEXMXUS", "17.6932"]]) {
+  // CNY (#552 COWORK #140): DEXCHUS for 2026-09-25 (relay fred-cny), likewise.
+  for (const [ccy, id, val] of [["INR", "DEXINUS", "95.81"], ["MXN", "DEXMXUS", "17.6932"], ["CNY", "DEXCHUS", "6.711"]]) {
     const r = await fx.fredSource(stub(csv(id, val))).fetchSeries(ccy, "2026-09-01", "2026-09-30");
     check(`${id} (${ccy} per USD) is INVERTED to USD per ${ccy}`, near(r[0]?.usdPerUnit, 1 / Number(val), 1e-12),
       `got ${r[0]?.usdPerUnit?.toFixed(6)} (expected ${(1 / Number(val)).toFixed(6)})`);
@@ -205,6 +206,21 @@ console.log("\nDIRECTION — normalised in the adapter, so no call site can inve
       const t = await m.fredSource(stub(csv("DEXINUS", "95.81"))).fetchSeries("INR", "2026-09-01", "2026-09-30");
       return near(t[0]?.usdPerUnit, 1 / 95.81, 1e-12);
     }
+  );
+  await underMutation(
+    "CNY taken as USD per unit (a ~45x error on BABA, TCOM, BIDU)",
+    'CNY: { id: "DEXCHUS", quote: "unit-per-usd" }',
+    'CNY: { id: "DEXCHUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXCHUS", "6.711"))).fetchSeries("CNY", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 6.711, 1e-12);
+    }
+  );
+  await underMutation(
+    "CNY dropped from the FRED map",
+    '  CNY: { id: "DEXCHUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("CNY")
   );
   await underMutation(
     "MXN dropped from the FRED map",

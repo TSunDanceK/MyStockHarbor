@@ -84,7 +84,8 @@ const sessionCases = (M) => ({
   noSpyToday: M.performanceStrip([...THU, PART], SPY_THU, ET("2026-10-02", "14:32")),
   sat: M.performanceStrip([...THU, PART], [...SPY_THU, SPY_PART], ET("2026-10-03", "12:00")),
   staleMon: M.performanceStrip([...THU, PART], [...SPY_THU, SPY_PART], ET("2026-10-05", "10:00")),
-  after: M.performanceStrip([...THU, PART], [...SPY_THU, SPY_PART], ET("2026-10-02", "17:30")),
+  after: M.performanceStrip([...THU, { ...PART, label: "today so far (IEX), 16:00 ET" }], [...SPY_THU, SPY_PART], ET("2026-10-02", "17:30")),
+  pre: M.performanceStrip([...THU, PART], [...SPY_THU, SPY_PART], ET("2026-10-02", "08:30")),
   hol: M.performanceStrip(STOCK.filter((b) => b.date <= "2026-09-04"), SPY, ET("2026-09-07", "11:00")),
 });
 const rules = {
@@ -95,8 +96,11 @@ const rules = {
       chip(S.noSpyToday, "1Y").spyPct === null && /no price for the same day/.test(chip(S.noSpyToday, "1Y").spyReason) &&
       /To the last price, 14:32 ET \(IEX\) · price change only/.test(visibleText(renderToStaticMarkup(React.createElement(M.PerformanceStrip, { strip: S.inS }))));
   },
+  "after the close: the day's final IEX price until the nightly job stores the day (#77)": ({ S, chip, M }) =>
+    S.after.live?.phase === "afterClose" && S.after.end === 777 && chip(S.after, "1M").note.includes("to $777.00 (close, 16:00 ET (IEX))") &&
+    /To the close, 16:00 ET \(IEX\) · price change only/.test(visibleText(renderToStaticMarkup(React.createElement(M.PerformanceStrip, { strip: S.after })))),
   "out of session: the last close; a stale partial, a Saturday and a holiday never count": ({ S, chip }) =>
-    [S.sat, S.staleMon, S.after].every((x) => x.live === null && x.end === at(STOCK, "2026-10-01") && x.asOf === "2026-10-01" && /\(close, Thu 1 Oct 2026\)/.test(chip(x, "1M").note)) &&
+    [S.sat, S.staleMon, S.pre].every((x) => x.live === null && x.end === at(STOCK, "2026-10-01") && x.asOf === "2026-10-01" && /\(close, Thu 1 Oct 2026\)/.test(chip(x, "1M").note)) &&
     S.hol.live === null && S.hol.asOf === "2026-09-04",
   "rolling dates: same calendar date back, month-ends clamped, a weekend or holiday takes the trading day before": ({ M, full, chip }) =>
     M.monthsBefore("2026-10-02", 1) === "2026-09-02" && M.monthsBefore("2026-03-31", 1) === "2026-02-28" &&
@@ -162,7 +166,7 @@ const mutants = [
   ["missing history: '—' with its reason, never estimated", "l", (s) => s.replace("  if (!hit) return null;\n", "  if (!hit) hit = bars[0] ?? null;\n  if (!hit) return null;\n")],
   ["the S&P 500: SPY's change on the same dates, the difference the right way round", "l", (s) => s.replace("const diffPts = spyPct === null ? null : pct - spyPct;", "const diffPts = spyPct === null ? null : spyPct - pct;")],
   ["the S&P 500: SPY's change on the same dates, the difference the right way round", "l", (s) => s.replace("const spyFrom = closeOnOrBefore(spy, from.date);", "const spyFrom = closeOnOrBefore(spy, monthsBefore(from.date, 1));")],
-  ["today so far is never the close", "l", (s) => s.replace("{ bars: (bars ?? []).filter((b) => !b.partial), live: null, time: null }", "{ bars: [...(bars ?? [])], live: null, time: null }")],
+  ["today so far is never the close", "l", (s) => s.replace("{ bars: (bars ?? []).filter((b) => !b.partial), live: null, time: null, phase: null }", "{ bars: [...(bars ?? [])], live: null, time: null, phase: null }")],
   ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace('const arrow = c.pct === null ? "" : c.pct > 0 ? "▲ " : c.pct < 0 ? "▼ " : "";', 'const arrow = "";')],
   ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("{c.diffPts !== null ? spyWords(c.diffPts) :", "{c.diffPts !== null ? \"\" :")],
   ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("<>To the close on {strip.asOfWords}</>", "<>{strip.asOfWords}</>")],
@@ -173,10 +177,12 @@ const mutants = [
 const KLsrc = fs.readFileSync(KL, "utf8"), SSsrc = fs.readFileSync(SESS, "utf8");
 mutants.push(
   ["in session: the end is the latest price, labelled with its time; SPY on the same day", "l", (s) => s.replace("const spyEnd = spyEndAny && spyEndAny.date === last.date ? spyEndAny : null;", "const spyEnd = spyEndAny;")],
-  ["in session: the end is the latest price, labelled with its time; SPY on the same day", "l", (s) => s.replace('const endWords = u.live ?', "const endWords = false ?")],
-  ["in session: the end is the latest price, labelled with its time; SPY on the same day", "c", (s) => s.replace("{strip.live ? <>To the last price", "{false ? <>To the last price")],
+  ["in session: the end is the latest price, labelled with its time; SPY on the same day", "l", (s) => s.replace("  const endWords = u.live\n", "  const endWords = false\n")],
+  ["in session: the end is the latest price, labelled with its time; SPY on the same day", "c", (s) => s.replace(": <>To the last price{strip.live.time", ": <>To the close{strip.live.time")],
   ["out of session: the last close; a stale partial, a Saturday and a holiday never count", "s", (s) => s.replace(" && last.date === easternNow(nowMs).date;", ";")],
-  ["out of session: the last close; a stale partial, a Saturday and a holiday never count", "s", (s) => s.replace("Number.isFinite(nowMs) && inSession(nowMs) && last.date", "Number.isFinite(nowMs) && last.date")],
+  ["out of session: the last close; a stale partial, a Saturday and a holiday never count", "s", (s) => s.replace("Number.isFinite(nowMs) && sinceOpen(nowMs) && last.date", "Number.isFinite(nowMs) && last.date")],
+  ["after the close: the day's final IEX price until the nightly job stores the day (#77)", "l", (s) => s.replace('? u.phase === "afterClose" ? `close, ${u.time ? `${u.time} ET` : "today"} (IEX)`', '? false ? `close, ${u.time ? `${u.time} ET` : "today"} (IEX)`')],
+  ["after the close: the day's final IEX price until the nightly job stores the day (#77)", "c", (s) => s.replace('? strip.live.phase === "afterClose"', "? false")],
 );
 for (const [n, which, mutate] of mutants) {
   let changed = false, bites = false;
