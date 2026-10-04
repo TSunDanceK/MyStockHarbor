@@ -1353,6 +1353,10 @@ const TASKS = {
   "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
   // READS ONLY: which margin the Growth & margins chart draws across the universe (#563 COWORK #71). ~105 MGET.
   "write-margin-kind-census": { script: "scripts/margin-kind-census.mjs", args: () => [], writes: true },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #145): FMP calls and
+  // wire bytes per endpoint per UTC day from the msh:fmp-bytes:v1 meter, for
+  // the FMP key-pull table. One HGETALL per day (DAYS, default 14).
+  "write-fmp-bytes-read": { script: "scripts/fmp-bytes-read.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
