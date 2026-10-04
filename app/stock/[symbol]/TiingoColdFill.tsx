@@ -85,6 +85,26 @@ export default function TiingoColdFill({ symbol, token }: { symbol: string; toke
     return () => { r.cancel(); run.current = null; };
   }, [symbol, router]);
 
+  // A HIDDEN TAB (#553 COWORK #129, BRID): browsers throttle a background tab,
+  // so the fill's reply, the soft refresh or the give-up can all land while
+  // nobody is looking -- and a refresh issued then may never repaint. So when
+  // the tab becomes visible and this panel is still here (the page is still
+  // the cold render), ask the store once and refresh if the history is there.
+  // One status POST per return to the tab; none once the page has refreshed
+  // into the full analysis (this component is no longer mounted).
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        if ((await tiingoColdFillStatus(symbol, tokenRef.current)).ready) router.refresh();
+      } catch {
+        // The run's own poll and Refresh button still stand.
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [symbol, router]);
+
   return (
     <section className="card" aria-live="polite" data-tiingo-cold={view} style={{ marginBottom: 16 }}>
       <div className="eyebrow">Price</div>
