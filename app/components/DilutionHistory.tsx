@@ -102,11 +102,29 @@ export function formatShareChange(changePercent: number | null): string {
  * never a judgement. Within ±SHARE_FLAT_PCT it is "roughly unchanged".
  */
 export const SHARE_FLAT_PCT = 1;
-export function threeYearWords(pct: number | null): { label: string; tone: "up" | "down" | "flat" | "none" } {
+export function threeYearWords(pct: number | null, phrase: string = LAST_3_YEARS): { label: string; tone: "up" | "down" | "flat" | "none" } {
   if (pct === null || !Number.isFinite(pct)) return { label: "Recent history too short", tone: "none" };
-  if (pct > SHARE_FLAT_PCT) return { label: "Share count has risen over the last 3 years", tone: "up" };
-  if (pct < -SHARE_FLAT_PCT) return { label: "Share count has fallen over the last 3 years", tone: "down" };
-  return { label: "Share count roughly unchanged over the last 3 years", tone: "flat" };
+  if (pct > SHARE_FLAT_PCT) return { label: `Share count has risen over ${phrase}`, tone: "up" };
+  if (pct < -SHARE_FLAT_PCT) return { label: `Share count has fallen over ${phrase}`, tone: "down" };
+  return { label: `Share count roughly unchanged over ${phrase}`, tone: "flat" };
+}
+
+/**
+ * THE SPAN, NAMED AS LONG AS IT IS (#552 COWORK #141). The trend window's base
+ * may sit up to 6 months before the 3-year cut, and its end up to 6 months
+ * before the newest point, so a "3-year" figure can span 3½ years (BKNG: Dec
+ * 2022 to Jun 2026). Within ±3 months of 3 years, ending at the newest point,
+ * it is "the last 3 years"; otherwise its length to the quarter-year, "3½ years".
+ */
+export const LAST_3_YEARS = "the last 3 years";
+export const SPAN_3_YEARS_TOLERANCE_DAYS = 92;
+export function spanPhrase(baseDate: string, endDate: string, endIsNewest: boolean): string {
+  const d = (Date.parse(endDate) - Date.parse(baseDate)) / 86_400_000;
+  if (endIsNewest && Math.abs(d - 3 * 365.25) <= SPAN_3_YEARS_TOLERANCE_DAYS) return LAST_3_YEARS;
+  const q = Math.round((d / 365.25) * 4) / 4;
+  const whole = Math.floor(q);
+  const frac = ["", "¼", "½", "¾"][Math.round((q - whole) * 4)];
+  return `${whole}${frac} years`;
 }
 
 /**
@@ -119,17 +137,19 @@ export function threeYearWords(pct: number | null): { label: string; tone: "up" 
  * stepped back from the newest point to find a base (COWORK #120), the
  * headline names that window, as the tile does, rather than "the last 3 years".
  */
-export const NEWEST_SPAN_WORDS = "the newest 3-year span on file";
+export const NEWEST_SPAN_WORDS = "the newest span on file";
 
 export function shareHeadline(
-  three: { pct: number; from: string; to: string; endIsNewest: boolean } | null,
+  three: { pct: number; from: string; to: string; endIsNewest: boolean; phrase: string } | null,
   sincePct: number | null,
   since: string | null,
 ): string | null {
   const pct = three ? three.pct : sincePct;
   if (pct === null || !Number.isFinite(pct)) return null;
   const when = three
-    ? three.endIsNewest ? "over the last 3 years" : `from ${three.from} to ${three.to}, ${NEWEST_SPAN_WORDS},`
+    ? three.phrase === LAST_3_YEARS
+      ? `over ${LAST_3_YEARS}`
+      : `over ${three.phrase}, from ${three.from} to ${three.to}${three.endIsNewest ? "" : `, ${NEWEST_SPAN_WORDS}`},`
     : since ? `since ${since}` : "";
   // "–", NOT "≈": that glyph is reserved for estimates (check-estimate-glyph-reserved).
   if (Math.abs(pct) <= SHARE_FLAT_PCT) return `– Share count roughly unchanged ${when.replace(/,$/, "")}`.trim();
@@ -230,9 +250,10 @@ export default function DilutionHistory({
   const threeWindow = threeSpan
     ? `${fmtDateDay(threeSpan.base.date)} to ${fmtDateDay(threeSpan.end!.date)}${endIsNewest ? "" : ` · ${NEWEST_SPAN_WORDS}`}`
     : null;
-  const trend = threeYearWords(threePct);
+  const phrase = threeSpan ? spanPhrase(threeSpan.base.date, threeSpan.end!.date, endIsNewest) : LAST_3_YEARS;
+  const trend = threeYearWords(threePct, phrase);
   const headline = shareHeadline(
-    threeSpan ? { pct: threeSpan.pct as number, from: fmtDateShort(threeSpan.base.date) ?? threeSpan.base.date, to: fmtDateShort(threeSpan.end!.date) ?? threeSpan.end!.date, endIsNewest } : null,
+    threeSpan ? { pct: threeSpan.pct as number, from: fmtDateShort(threeSpan.base.date) ?? threeSpan.base.date, to: fmtDateShort(threeSpan.end!.date) ?? threeSpan.end!.date, endIsNewest, phrase } : null,
     changePercent,
     fmtDateShort(first.date),
   );
@@ -367,7 +388,8 @@ export default function DilutionHistory({
             years, which carries the colour and the words, and since the first
             point, in plain ink. */}
         <div style={cellStyle} data-share-three-year="">
-          <div style={cellLabelStyle}>Over the last 3 years</div>
+          {/* THE SAME SPAN AS THE HEADLINE AND THE DATE LINE (#552 COWORK #141). */}
+          <div style={cellLabelStyle}>Over {phrase}</div>
           <div style={{ ...cellValueStyle, color: trendColor }}>
             {threePct === null ? "—" : formatShareChange(threePct)}
           </div>

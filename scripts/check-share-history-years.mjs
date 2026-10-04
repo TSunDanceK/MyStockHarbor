@@ -116,9 +116,9 @@ const RULES = {
     !m.listing.withheld && m.listing.points.length >= 4 && !m.listing.points.some((p) => p.date === "2025-12-31") &&
     m.listing.points.every((p) => p.date >= "2025-06-30"),
   "4a. the headline: arrow and hedged words, from the 3-year figure": (m) =>
-    m.C.shareHeadline({ pct: -9.1, from: "Jun 2023", to: "Jun 2026", endIsNewest: true }, -12, "Sept 2021") === "▼ Down 9.1% over the last 3 years, which may reflect buybacks" &&
-    m.C.shareHeadline({ pct: 98.9, from: "Jun 2023", to: "Jun 2026", endIsNewest: true }, null, null).startsWith("▲ Up 98.9% over the last 3 years") &&
-    m.C.shareHeadline({ pct: 0.4, from: "Jun 2023", to: "Jun 2026", endIsNewest: true }, null, null) === "– Share count roughly unchanged over the last 3 years" &&
+    m.C.shareHeadline({ pct: -9.1, from: "Jun 2023", to: "Jun 2026", endIsNewest: true, phrase: "the last 3 years" }, -12, "Sept 2021") === "▼ Down 9.1% over the last 3 years, which may reflect buybacks" &&
+    m.C.shareHeadline({ pct: 98.9, from: "Jun 2023", to: "Jun 2026", endIsNewest: true, phrase: "the last 3 years" }, null, null).startsWith("▲ Up 98.9% over the last 3 years") &&
+    m.C.shareHeadline({ pct: 0.4, from: "Jun 2023", to: "Jun 2026", endIsNewest: true, phrase: "the last 3 years" }, null, null) === "– Share count roughly unchanged over the last 3 years" &&
     m.C.shareHeadline(null, -5.5, "Dec 2023") === "▼ Down 5.5% since Dec 2023, which may reflect buybacks",
   "4c. one span (#552 COWORK #138): where the 3-year end stepped back, the headline and the tile name the same window": (m) => {
     const h = m.render(m.aapl);
@@ -127,8 +127,22 @@ const RULES = {
     const head = (h.match(/data-share-headline="">([^<]*)</) ?? [])[1] ?? "";
     const tile = (h.match(/data-share-three-window="">([^<]*)</) ?? [])[1] ?? "";
     const yr = (d) => d.slice(0, 4);
-    return stepped && head.includes("the newest 3-year span on file") && tile.includes("the newest 3-year span on file") &&
+    return stepped && head.includes("the newest span on file") && tile.includes("the newest span on file") &&
       head.includes(yr(t.base.date)) && head.includes(yr(t.end.date)) && !/over the last 3 years/.test(head);
+  },
+  "4d. the span named as long as it is (#552 COWORK #141): 3½ years reads 3½ in the title, the headline and the trend words; 3.0 reads 'the last 3 years'": (m) => {
+    const pts = (dates) => dates.map(([date, shares]) => ({ date, shares }));
+    const mk = (base, end) => {
+      const points = pts([[base, 100e6], ["2024-06-30", 95e6], ["2025-06-30", 90e6], [end, 80e6]]);
+      return { points, basis: "annual+quarters", threeYear: { pct: -20, base: points[0], end: points.at(-1) } };
+    };
+    const half = m.render(mk("2022-12-31", "2026-06-30"));
+    const three = m.render(mk("2023-06-30", "2026-06-30"));
+    const head = (h) => (h.match(/data-share-headline="">([^<]*)</) ?? [])[1] ?? "";
+    return />Over 3½ years</.test(half) && /over 3½ years, from Dec 2022 to Jun 2026/.test(head(half)) &&
+      /Share count has fallen over 3½ years/.test(half) && !/the last 3 years/.test(half) &&
+      />Over the last 3 years</.test(three) && /over the last 3 years/.test(head(three)) && /fallen over the last 3 years/.test(three) &&
+      m.C.spanPhrase("2022-09-24", "2025-12-27", false) === "3¼ years";
   },
   "5. a split note names no date (the stored step is a year-end, not the effective date): AAPL, NVDA, a reverse split": (m) => {
     const notes = m.C.seriesNotes({ points: [], splits: [{ date: "2012-09-29", ratio: 7 }, { date: "2018-09-29", ratio: 4 }, { date: "2021-01-31", ratio: 4 }, { date: "2024-01-28", ratio: 10 }, { date: "2023-06-30", ratio: 0.1 }] });
@@ -160,6 +174,8 @@ const MUTANTS = [
   ["the headline without its arrow", null, (s) => once(s, "`▼ Down ${", "`Down ${")],
   ["the split's step date printed as if it were the split date", null, (s) => once(s, "a ${splitWords(s.ratio)} split, using", "a ${splitWords(s.ratio)} split (${fmtDateShort(s.date)}), using")],
   ["the headline back on 'the last 3 years' when the end stepped back", null, (s) => once(s, "three.endIsNewest ? \"over the last 3 years\"", "true ? \"over the last 3 years\"")],
+  ["every span called 'the last 3 years' again", null, (s) => once(s, "  if (endIsNewest && Math.abs(d - 3 * 365.25) <= SPAN_3_YEARS_TOLERANCE_DAYS) return LAST_3_YEARS;", "  return LAST_3_YEARS;")],
+  ["the tile title fixed at 'the last 3 years'", null, (s) => once(s, "<div style={cellLabelStyle}>Over {phrase}</div>", "<div style={cellLabelStyle}>Over the last 3 years</div>")],
   ["the footnote's basis dropped", null, (s) => once(s, "quarterly averages plus{\" \"}", "quarters plus{\" \"}")],
 ];
 for (const [label, bm, cm] of MUTANTS) {
