@@ -212,7 +212,7 @@ const rules = {
   "dates and prices in words": ({ M }) =>
     M.dateWords("2026-10-02") === "Fri 2 Oct 2026" && M.dateWords("2026-09-28") === "Mon 28 Sep 2026" &&
     M.priceWords(1234.5) === "$1,234.50" && M.priceWords(0.12345) === "$0.1235" && M.priceWords(25012.5) === "$25,013",
-  "each row on its own scale: the bar is that period's low to high; dot, tick and ◇ at their places in it (#79)": ({ rows, K, M }) => {
+  "each row on its own scale: the bar is that period's low to high; dot, tick and ◇ at their places in it (#79)": ({ rows, K }) => {
     const k = K.monthMidWeek;
     return rows.every((r, i) => {
       const L = k.periods[i].levels, lo = L.low.value, hi = L.high.value, pc = k.periods[i].prevClose;
