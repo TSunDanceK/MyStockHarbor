@@ -222,7 +222,7 @@ console.log("\n4. the budget counts FETCHES, not requests");
 // the function it is in, so a new one in resolveFactSetForRender fails and a
 // new one inside the budget does not.
 {
-  const FETCH_SCOPED = ["claimColdFetch", "bumpExhaustion"];
+  const FETCH_SCOPED = ["claimColdFetch", "bumpExhaustion", "paceSecRequest"];
   const spans = FETCH_SCOPED.map((fn) => {
     const start = code.indexOf(`function ${fn}(`);
     if (start < 0) return { fn, start: -1, end: -1 };

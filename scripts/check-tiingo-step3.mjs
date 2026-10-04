@@ -525,12 +525,14 @@ function rules(srcs) {
 
   // The client: the toggle's inputs are unchanged (#89: no data or calculation change).
   const sc = code[FILES.stockClient];
-  want("the returns inputs are unchanged: 20 daily, 12 weekly, from aggregateWeekly",
-    /const weeklyHistory = useMemo\(\(\) => aggregateWeekly\(history\), \[history\]\);/.test(sc) &&
-    /const dailyReturns = useMemo\(\(\) => computeCloseOverCloseReturns\(history, 20\), \[history\]\);/.test(sc) &&
-    /const weeklyReturns = useMemo\(\(\) => computeCloseOverCloseReturns\(weeklyHistory, 12\), \[weeklyHistory\]\);/.test(sc));
+  // #553 COWORK #115: the same windows (20 daily, 12 weekly), now from
+  // lib/closeReturns.ts with end-of-period labels, plus 12 complete months.
+  want("the returns inputs: 20 daily, 12 weekly, 12 monthly, from the page's own bars",
+    /const dailyReturns = useMemo\(\(\) => dailyReturnBars\(history, 20\), \[history\]\);/.test(sc) &&
+    /const weeklyReturns = useMemo\(\(\) => weeklyReturnBars\(history, 12\), \[history\]\);/.test(sc) &&
+    /const monthlyReturns = useMemo\(\(\) => monthlyReturnBars\(history, 12\), \[history\]\);/.test(sc));
   want("one toggle card, Daily first, and no second returns chart beside it",
-    (sc.match(/<ReturnsToggleCard /g) ?? []).length === 1 && /daily=\{dailyReturns\} weekly=\{weeklyReturns\}/.test(sc) && !/<ReturnsBarChart /.test(sc));
+    (sc.match(/<ReturnsToggleCard /g) ?? []).length === 1 && /daily=\{dailyReturns\} weekly=\{weeklyReturns\} monthly=\{monthlyReturns\}/.test(sc) && !/<ReturnsBarChart /.test(sc));
   // RE-ANCHORED for C's Price levels ladder (#563 COWORK #68), which replaced the
   // indicator rows: the same intent, a short history hands its reason to the MA,
   // and the ladder prints it ("MA200: Not enough price history stored yet").
@@ -607,7 +609,8 @@ const MUTANTS = [
   ["the Tiingo cap raised past what the charts use", FILES.helper, /TIINGO_HISTORY_MAX_DAYS = 2600;/, "TIINGO_HISTORY_MAX_DAYS = 5000;"],
   ["the stock page's history fetch sends no page token", FILES.stockClient, /&days=900`, pageToken \? \{ headers: \{ "x-msh-page-token": pageToken \} \} : undefined\)/, "&days=900`)"],
   ["the dashboard seed left on FMP", FILES.dashPage, /historyForSurface\("HISTORY", symbol, \(\) => getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\)/, 'getDailyHistory(symbol, { caller: "dashboard" })'],
-  ["the weekly input window changed", FILES.stockClient, /computeCloseOverCloseReturns\(weeklyHistory, 12\)/, "computeCloseOverCloseReturns(weeklyHistory, 20)"],
+  ["the weekly input window changed", FILES.stockClient, /weeklyReturnBars\(history, 12\)/, "weeklyReturnBars(history, 20)"],
+  ["the monthly view not handed to the card", FILES.stockClient, / monthly=\{monthlyReturns\}/, ""],
   ["the old second returns card restored", FILES.stockClient, /<ReturnsToggleCard /, '<ReturnsBarChart symbol={symbol} periodLabel="Weekly" compareLabel="x" bars={weeklyReturns} /><ReturnsToggleCard '],
   ["a bare \"—\" on a short MA200", FILES.stockClient, /ma200Missing=\{closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : null\}/, "ma200Missing={null}"],
 ];

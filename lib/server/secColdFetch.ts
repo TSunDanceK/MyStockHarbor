@@ -93,6 +93,7 @@ import { needsReread } from "./secStaleness";
 import { admitSymbolForExtraction } from "./securityKind";
 import { factSetExists, factSetPresence, readFactSet, writeFactSet } from "./secFactStore";
 import { recordColdCik } from "./secColdCik";
+import { inSecJobWindow } from "../secJobWindow.mjs";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
 // ABSENCE. @upstash/redis sends `cache: "no-store"` by default, and one such
@@ -155,6 +156,30 @@ export const SEC_COLD_FETCHES_PER_MINUTE = 20;
  */
 export const SEC_COLD_QUEUE_KEY = "msh:sec:cold-queue:v1";
 export const SEC_COLD_QUEUE_MAX = 500;
+
+/**
+ * CRAWLER ENTRIES SORT BEHIND EVERY PERSON'S (#552 COWORK #132 item 3). The
+ * drain reads the queue oldest-score first, so a verified crawler's entry is
+ * scored this far in the future: ~2286, past any real timestamp, so it can
+ * never crowd a person's pending page out of a run's drain allowance. Order
+ * among crawler entries is still by time.
+ */
+export const SEC_COLD_QUEUE_CRAWLER_OFFSET_MS = 1e13;
+
+/**
+ * COLD SEC REQUESTS PER SECOND, SITE-WIDE (#552 COWORK #132 item 4). One claim
+ * per REQUEST (companyfacts, submissions, a class cover's three, instance
+ * EPS's five), not per fill: the minute bucket above counts fills and so could
+ * not stop a burst of simultaneous fills passing 8/s. At 4/s the cold path and
+ * the scheduled jobs' own ≤8/s cannot together pass SEC's 10/s, and the jobs'
+ * windows are kept clear besides (inSecJobWindow, in fillColdSymbol).
+ */
+export const SEC_COLD_REQUESTS_PER_SECOND = 4;
+/** How many next-second waits one request may take before it gives up (and the symbol queues). */
+export const SEC_COLD_PACE_TRIES = 3;
+const PACE_PREFIX = "msh:sec:cold-pace:v1";
+export const coldPaceKey = (d = new Date()) =>
+  `${secCounterPrefix(PACE_PREFIX)}:${d.toISOString().slice(0, 19)}`;
 
 const RATE_PREFIX = "msh:sec:cold-rate:v1";
 
@@ -433,8 +458,15 @@ async function claimColdFetch(symbol: string): Promise<boolean> {
   }
 }
 
-/** Add to the drain queue, unless it is already at its cap. */
-async function enqueue(symbol: string): Promise<boolean> {
+/**
+ * Add to the drain queue, unless it is already at its cap.
+ *
+ * A PERSON'S ENTRY IS SCORED NOW, a crawler's behind every person's (see
+ * SEC_COLD_QUEUE_CRAWLER_OFFSET_MS). A person re-queuing keeps the older
+ * score (LT), and so promotes a symbol a crawler queued first; a crawler never
+ * moves an entry that exists (NX).
+ */
+async function enqueue(symbol: string, who: "person" | "crawler" = "person"): Promise<boolean> {
   if (!redis) return false;
   // NOTHING TO DRAIN FOR. The cron that reads this queue runs on production,
   // and a preview asking it to fetch a symbol is a preview writing production
@@ -443,11 +475,61 @@ async function enqueue(symbol: string): Promise<boolean> {
   try {
     const size = await redis.zcard(SEC_COLD_QUEUE_KEY);
     if (size >= SEC_COLD_QUEUE_MAX) return false;
-    await redis.zadd(SEC_COLD_QUEUE_KEY, { score: Date.now(), member: symbol.toUpperCase() });
+    const member = symbol.toUpperCase();
+    if (who === "crawler") {
+      await redis.zadd(SEC_COLD_QUEUE_KEY, { nx: true }, { score: SEC_COLD_QUEUE_CRAWLER_OFFSET_MS + Date.now(), member });
+    } else {
+      await redis.zadd(SEC_COLD_QUEUE_KEY, { lt: true }, { score: Date.now(), member });
+    }
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * QUEUE ONLY, NEVER FETCH: a verified crawler, or a person over the shared
+ * visitor cap (#552 COWORK #132 item 3). Called from the human-gated action
+ * after its gates; the same eligibility rules as a fill, so nothing that could
+ * not be filled is queued. Nothing stored is queued either.
+ */
+export async function queueColdSymbol(symbol: string, who: "person" | "crawler"): Promise<boolean> {
+  const clean = symbol.trim().toUpperCase();
+  const cik = cikForSymbol(clean);
+  if (!cik || !admitSymbolForExtraction(clean, cik).admit) return false;
+  if ((await factSetExists(clean)) !== false) return false;
+  return enqueue(clean, who);
+}
+
+/**
+ * ONE CLAIM PER SEC REQUEST on the site-wide per-second bucket (≤4/s). Over it,
+ * wait for the next second and try again, up to SEC_COLD_PACE_TRIES; still
+ * over, throw, and the fill queues the symbol. FAILS CLOSED on a Redis error:
+ * SEC fair access is a hard rule, so an uncountable request is not sent.
+ * No Redis at all (a local run) is not paced, as with the minute bucket.
+ */
+async function paceSecRequest(): Promise<void> {
+  if (!redis) return;
+  for (let t = 0; t < SEC_COLD_PACE_TRIES; t++) {
+    const now = new Date();
+    const key = coldPaceKey(now);
+    let n: number;
+    try {
+      n = await redis.incr(key);
+      if (n === 1) await redis.expire(key, 5);
+    } catch {
+      throw new Error("cold SEC pacing unavailable");
+    }
+    if (n <= SEC_COLD_REQUESTS_PER_SECOND) return;
+    await new Promise((r) => setTimeout(r, 1000 - now.getUTCMilliseconds() + 10));
+  }
+  throw new Error("cold SEC pace exhausted");
+}
+
+/** Every cold SEC request goes through here: paced, then fetched. */
+async function secFetch(url: string, init: RequestInit): Promise<Response> {
+  await paceSecRequest();
+  return fetch(url, init);
 }
 
 /** The queue's head, oldest first, for the cron. */
@@ -484,7 +566,7 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   // here is the shape where one path gains a condition and the other does not.
   const extracted = extractForSymbol(symbol, facts);
   // A CITED MULTI-CLASS FILER'S COVER COMES FROM ITS OWN FILING, per class.
-  const secGet = (url: string) => fetch(url, { headers: { "User-Agent": SEC_UA }, next: { revalidate: SEC_COLD_FETCH_REVALIDATE } });
+  const secGet = (url: string) => secFetch(url, { headers: { "User-Agent": SEC_UA }, next: { revalidate: SEC_COLD_FETCH_REVALIDATE } });
   extracted.coverShares = await withClassCover(symbol, cik, extracted.coverShares, secGet);
   // TWELVE MONTHS OF EPS FROM THE 10-K AND 10-Q where the periods cannot give it. See secInstanceEps.
   extracted.ttmEps = await withInstanceEps(symbol, cik, extracted, secGet);
@@ -518,7 +600,7 @@ export function coldSecConfigured(): boolean {
 export async function fetchColdSubmissions(cik: string): Promise<Submissions> {
   if (!SEC_UA) throw new Error("SEC_USER_AGENT unset");
   if (!(await claimColdFetch(`submissions ${cik}`))) throw new Error("cold rate budget exhausted");
-  const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+  const res = await secFetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
     headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" },
     // THE SAME HINT AS fetchFactsFor, for the same reason: never "no-store".
     next: { revalidate: SEC_COLD_FETCH_REVALIDATE },
@@ -528,7 +610,7 @@ export async function fetchColdSubmissions(cik: string): Promise<Submissions> {
 }
 
 async function fetchFactsFor(cik: string): Promise<CompanyFacts> {
-  const res = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
+  const res = await secFetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
     headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" },
     // NOT `cache: "no-store"`. That hint opts the whole route out of static
     // rendering, and on this route that is a 500 rather than a slow page --
@@ -686,6 +768,8 @@ export type ColdFillOutcome =
   | "queued"
   /** The site-wide minute budget is spent; queued instead. */
   | "busy"
+  /** Inside a scheduled SEC job's window (inSecJobWindow): queued for the next run, not fetched. */
+  | "deferred"
   /** Not a symbol this path serves (no CIK, not the issuer's equity). */
   | "not-eligible"
   /** A preview deployment, or no User-Agent configured: nothing may be fetched. */
@@ -731,6 +815,14 @@ export async function fillColdSymbol(symbol: string): Promise<ColdFillOutcome> {
     } catch {
       // A failed negative-cache read costs one fetch, not correctness.
     }
+  }
+
+  // ── NOT WHILE THE SCHEDULED JOBS ARE READING SEC (#552 COWORK #132) ──────
+  // Their own pacing is ≤8/s; a page's fill on top of it could pass SEC's
+  // 10/s. Inside a window the symbol is queued for the next sec-facts run.
+  if (inSecJobWindow(Date.now())) {
+    await enqueue(clean);
+    return "deferred";
   }
 
   if (!(await claimColdFetch(clean))) {

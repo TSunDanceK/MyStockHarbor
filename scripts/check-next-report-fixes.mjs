@@ -200,9 +200,10 @@ console.log("\n3. WDFC: a cold fill seeds the report-dates record");
   const body = CF.slice(CF.indexOf("export async function fetchColdSubmissions"), CF.indexOf("async function fetchFactsFor"));
   check("...which refuses with no User-Agent and claims the cold minute bucket (secCounterPrefix) before any request",
     /if \(!SEC_UA\) throw/.test(body) && /await claimColdFetch\(/.test(body) &&
-      body.indexOf("await claimColdFetch(") < body.indexOf("await fetch(") && !/cache: "no-store"/.test(body) &&
+      body.indexOf("await claimColdFetch(") < body.indexOf("await secFetch(") && !/cache: "no-store"/.test(body) &&
       /const coldRateKey = \(d = new Date\(\)\) =>\s*`\$\{secCounterPrefix\(RATE_PREFIX\)\}/.test(CF));
-  const claims = (b) => /if \(!SEC_UA\) throw/.test(b) && /await claimColdFetch\(/.test(b) && b.indexOf("await claimColdFetch(") < b.indexOf("await fetch(");
+  // secFetch: every cold SEC request is also paced at ≤4/s (#552 COWORK #132).
+  const claims = (b) => /if \(!SEC_UA\) throw/.test(b) && /await claimColdFetch\(/.test(b) && b.indexOf("await claimColdFetch(") < b.indexOf("await secFetch(");
   const CLAIM = '  if (!(await claimColdFetch(`submissions ${cik}`))) throw new Error("cold rate budget exhausted");\n';
   if (body.split(CLAIM).length !== 2) throw new Error("claim mutation anchor must match once");
   check("MUTATION: the bucket claim removed → an uncounted SEC request from a page view (caught)", claims(body) && !claims(body.replace(CLAIM, "")));
