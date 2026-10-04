@@ -231,6 +231,12 @@ const staticRules0 = {
 };
 const staticRules = {
   ...staticRules0,
+  // #563 COWORK #103: A's ReasonedValue note is position: fixed, and a transform on an
+  // ancestor becomes its containing block (the note collapsed into the label, off the card).
+  "no transform on a ladder label or its body (its tap note is position: fixed)": (_l, c) => {
+    const label = c.match(/className="lsLabel"[\s\S]*?<ReasonedValue/)?.[0] ?? "";
+    return !!label && !/transform:/.test(label) && /position: "absolute", top: m\.labelY, height: 0, display: "flex", alignItems: "center"/.test(label) && !/\.lsLabel[^{]*\{[^}]*transform/.test(c);
+  },
   "no fetch, no Redis, no reads in either file": (l, c) => ![l, c].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory/.test(s)),
   "the module imports only keyLevels; the card only React's types, A's ReasonedValue and the modules": (l, c) => {
     const li = [...l.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
@@ -324,6 +330,8 @@ for (const [name, which, mutate] of mutants) {
   check(`mutant bites: ${name}`, changed && bites, changed ? "" : "the mutation did not apply");
 }
 const staticMutants = [
+  ["no transform on a ladder label or its body (its tap note is position: fixed)", (l, c, p) => [l, c.replace('position: "absolute", top: m.labelY, height: 0,', 'position: "absolute", top: m.labelY, height: 0, transform: "translateY(-50%)",'), p]],
+  ["no transform on a ladder label or its body (its tap note is position: fixed)", (l, c, p) => [l, c.replace('<div className="lsLabelBody" style={{ display: "flex",', '<div className="lsLabelBody" style={{ transform: "translateZ(0)", display: "flex",'), p]],
   ["no fetch, no Redis, no reads in either file", (l, c, p) => [l, `${c}\nconst x = fetch("/api/quote");`, p]],
   ["the module imports only keyLevels; the card only React's types, A's ReasonedValue and the modules", (l, c, p) => [`import { getDailyHistory } from "@/lib/server/historyCache";\n${l}`, c, p]],
   ["the page hands over what it already computes, and the old rows are gone", (l, c, p) => [l, c, p.replace("zone={macroSupport}", "zone={computeMacroSupport(history.slice(-100), lastClose)}")]],
