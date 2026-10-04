@@ -192,7 +192,8 @@ console.log("\nDIRECTION — normalised in the adapter, so no call site can inve
   // 2026-09-25 (relay fred-inr-mxn). Before these, ECB was their only route,
   // and its timeout blanked those filers' sets.
   // CNY (#552 COWORK #140): DEXCHUS for 2026-09-25 (relay fred-cny), likewise.
-  for (const [ccy, id, val] of [["INR", "DEXINUS", "95.81"], ["MXN", "DEXMXUS", "17.6932"], ["CNY", "DEXCHUS", "6.711"]]) {
+  // KRW and ZAR (#552 COWORK #151): DEXKOUS / DEXSFUS for 2026-09-25 (relay fred-krw-zar).
+  for (const [ccy, id, val] of [["INR", "DEXINUS", "95.81"], ["MXN", "DEXMXUS", "17.6932"], ["CNY", "DEXCHUS", "6.711"], ["KRW", "DEXKOUS", "1356.51"], ["ZAR", "DEXSFUS", "16.3021"]]) {
     const r = await fx.fredSource(stub(csv(id, val))).fetchSeries(ccy, "2026-09-01", "2026-09-30");
     check(`${id} (${ccy} per USD) is INVERTED to USD per ${ccy}`, near(r[0]?.usdPerUnit, 1 / Number(val), 1e-12),
       `got ${r[0]?.usdPerUnit?.toFixed(6)} (expected ${(1 / Number(val)).toFixed(6)})`);
@@ -221,6 +222,36 @@ console.log("\nDIRECTION — normalised in the adapter, so no call site can inve
     '  CNY: { id: "DEXCHUS", quote: "unit-per-usd" },\n',
     "",
     (m) => m.fredSource().supports("CNY")
+  );
+  await underMutation(
+    "KRW taken as USD per unit (a ~1.8 million-fold error on LPL, KEP)",
+    'KRW: { id: "DEXKOUS", quote: "unit-per-usd" }',
+    'KRW: { id: "DEXKOUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXKOUS", "1356.51"))).fetchSeries("KRW", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 1356.51, 1e-12);
+    }
+  );
+  await underMutation(
+    "ZAR taken as USD per unit (a ~266x error on HMY)",
+    'ZAR: { id: "DEXSFUS", quote: "unit-per-usd" }',
+    'ZAR: { id: "DEXSFUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXSFUS", "16.3021"))).fetchSeries("ZAR", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 16.3021, 1e-12);
+    }
+  );
+  await underMutation(
+    "KRW dropped from the FRED map",
+    '  KRW: { id: "DEXKOUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("KRW")
+  );
+  await underMutation(
+    "ZAR dropped from the FRED map",
+    '  ZAR: { id: "DEXSFUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("ZAR")
   );
   await underMutation(
     "MXN dropped from the FRED map",
