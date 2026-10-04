@@ -31,14 +31,14 @@ export default function LevelsGlanceCard({ bars, lastPrice, nowMs, ma50, ma200, 
         <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0, display: "grid", gap: 8 }}>
           {lines.map((l) => (
             <li key={l.kind} className="lgLine" data-kind={l.kind} data-side={l.side}
-              style={{ fontSize: l.kind === "main" || l.kind === "inside" ? 14.5 : 13, lineHeight: 1.5, color: "rgba(226,232,240,0.9)", overflowWrap: "anywhere" }}>
+              style={{ fontSize: l.kind === "main" || l.kind === "inside" ? "1.0625rem" : "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.9)", overflowWrap: "anywhere" }}>
               {l.lead ? <strong style={{ color: ZONE_COLOUR[l.side], fontWeight: 850 }}>{l.lead}</strong> : <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: ZONE_COLOUR[l.side], marginRight: 7 }} aria-hidden="true" />}
               {l.text}
             </li>
           ))}
         </ul>
-      ) : <p style={lgNoteStyle}>{c.reason}</p>}
-      <p className="lgCredit" style={lgNoteStyle}>{shownOn}{credit ? <> · Daily prices: {credit}</> : null}</p>
+      ) : <p style={{ ...lgNoteStyle, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)" }}>{c.reason}</p>}
+      <p className="lgCredit" data-fine-print style={lgNoteStyle}>{shownOn}{credit ? <> · Daily prices: {credit}</> : null}</p>
     </section>
   );
 }
@@ -52,6 +52,6 @@ const lgCardStyle: CSSProperties = {
   minWidth: 0,
   boxSizing: "border-box",
 };
-const lgEyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)" };
-const lgTitleStyle: CSSProperties = { margin: "8px 0 0", fontSize: 22, lineHeight: 1.12, letterSpacing: "-0.03em" };
-const lgNoteStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.62)" };
+const lgEyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)" };
+const lgTitleStyle: CSSProperties = { margin: "8px 0 0", fontSize: "1.375rem", lineHeight: 1.12, letterSpacing: "-0.03em" };
+const lgNoteStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(203,213,225,0.62)" };

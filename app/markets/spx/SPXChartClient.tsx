@@ -185,7 +185,7 @@ export default function SPXChartClient({
         >
           <div
             style={{
-              fontSize: 12,
+              fontSize: "0.75rem",
               opacity: 0.72,
               fontWeight: 900,
               textTransform: "uppercase",
@@ -197,7 +197,7 @@ export default function SPXChartClient({
           <div
             style={{
               marginTop: 8,
-              fontSize: 22,
+              fontSize: "1.375rem",
               fontWeight: 900,
             }}
           >
@@ -206,7 +206,7 @@ export default function SPXChartClient({
           <div
             style={{
               marginTop: 8,
-              fontSize: 13,
+              fontSize: "0.8125rem",
               opacity: 0.72,
               lineHeight: 1.45,
             }}
@@ -225,7 +225,7 @@ export default function SPXChartClient({
         >
           <div
             style={{
-              fontSize: 12,
+              fontSize: "0.75rem",
               opacity: 0.72,
               fontWeight: 900,
               textTransform: "uppercase",
@@ -237,7 +237,7 @@ export default function SPXChartClient({
           <div
             style={{
               marginTop: 8,
-              fontSize: 22,
+              fontSize: "1.375rem",
               fontWeight: 900,
               color: "#dbeafe",
             }}
@@ -247,7 +247,7 @@ export default function SPXChartClient({
           <div
             style={{
               marginTop: 8,
-              fontSize: 13,
+              fontSize: "0.8125rem",
               opacity: 0.72,
               lineHeight: 1.45,
             }}
@@ -266,7 +266,7 @@ export default function SPXChartClient({
         >
           <div
             style={{
-              fontSize: 12,
+              fontSize: "0.75rem",
               opacity: 0.72,
               fontWeight: 900,
               textTransform: "uppercase",
@@ -278,7 +278,7 @@ export default function SPXChartClient({
           <div
             style={{
               marginTop: 8,
-              fontSize: 22,
+              fontSize: "1.375rem",
               fontWeight: 900,
               color: "#fde68a",
             }}
@@ -288,7 +288,7 @@ export default function SPXChartClient({
           <div
             style={{
               marginTop: 8,
-              fontSize: 13,
+              fontSize: "0.8125rem",
               opacity: 0.72,
               lineHeight: 1.45,
             }}

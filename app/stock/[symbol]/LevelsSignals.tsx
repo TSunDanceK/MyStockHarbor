@@ -170,18 +170,18 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
                     : { left: 0, right: `calc(50% + ${LABEL_OFFSET}px)`, alignItems: "flex-end", textAlign: "right" as const }),
                 }}>
                 {/* THE ANCHOR STAYS BOLDER on whichever side it falls (#73). */}
-                <span style={{ fontSize: m.key === "last" ? 14 : 13, fontWeight: m.key === "last" ? 900 : 800, color: SIDE_COLOUR[m.side] }}>
+                <span style={{ fontSize: m.key === "last" ? "0.875rem" : "0.8125rem", fontWeight: m.key === "last" ? 900 : 800, color: SIDE_COLOUR[m.side] }}>
                   <ReasonedValue text={m.name} reason={noteFor(m, p, when)} />
                 </span>
-                <span className="lsValue" style={{ fontSize: 12, color: m.key === "last" ? C.value : C.muted, fontWeight: m.key === "last" ? 800 : 600 }}>{m.valueText}</span>
-                {m.distText ? <span className="lsDist" style={{ fontSize: 11.5, color: C.muted }}>{m.distText}</span> : null}
+                <span className="lsValue" style={{ fontSize: "0.75rem", color: m.key === "last" ? C.value : C.muted, fontWeight: m.key === "last" ? 800 : 600 }}>{m.valueText}</span>
+                {m.distText ? <span className="lsDist" style={{ fontSize: "var(--fs-label)", color: C.muted }}>{m.distText}</span> : null}
               </div>
             ))}
           </div>
         ) : null}
-        {marks.length > 1 ? <p className="lsKey" style={noteStyle}>{LADDER_KEY}</p> : null}
-        {missing.map((m) => <p key={m} className="lsMissing" style={noteStyle}>{m}</p>)}
-        {when ? <p style={noteStyle}>{when}</p> : null}
+        {marks.length > 1 ? <p className="lsKey" style={readStyle}>{LADDER_KEY}</p> : null}
+        {missing.map((m) => <p key={m} className="lsMissing" style={readStyle}>{m}</p>)}
+        {when ? <p data-fine-print style={noteStyle}>{when}</p> : null}
       </div>
 
       <div className="lsPart">
@@ -198,12 +198,12 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
                 <div style={{ position: "absolute", left: "70%", right: 0, top: 0, bottom: 0, borderRadius: "0 5px 5px 0", background: "rgba(245,158,11,0.18)" }} />
                 <div className="lsRsiMark" style={{ position: "absolute", left: `${rsiPct(p.rsi)}%`, top: -3, width: 4, height: 16, marginLeft: -2, borderRadius: 2, background: "#f8fafc" }} />
               </div>
-              <div className="lsRsiAxis" style={{ position: "relative", height: 13, fontSize: 10, color: C.muted, marginTop: 3 }}>
+              <div className="lsRsiAxis" style={{ position: "relative", height: 13, fontSize: "var(--fs-label)", color: C.muted, marginTop: 3 }}>
                 {[0, 30, 70, 100].map((t) => <span key={t} style={{ position: "absolute", left: `${t}%`, transform: t === 0 ? "none" : t === 100 ? "translateX(-100%)" : "translateX(-50%)" }}>{t}</span>)}
               </div>
-              <div className="lsRsiZone" style={{ marginTop: 4, fontSize: 13, color: C.muted }}>{rsiZone(p.rsi)}</div>
+              <div className="lsRsiZone" style={{ marginTop: 4, fontSize: "0.8125rem", color: C.muted }}>{rsiZone(p.rsi)}</div>
             </>
-          ) : <p style={noteStyle}>Momentum unavailable: not enough daily prices on file.</p>}
+          ) : <p style={readStyle}>Momentum unavailable: not enough daily prices on file.</p>}
         </div>
         <div style={{ marginTop: 18 }}>
           <div style={gaugeHeadStyle}>
@@ -212,7 +212,7 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
           </div>
           {ms ? <MacdChart s={ms} /> : null}
           {ms ? (
-            <div className="lsMacdKey" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 3, fontSize: 10.5, color: C.muted }}>
+            <div className="lsMacdKey" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 3, fontSize: "var(--fs-label)", color: C.muted }}>
               {/* THE SWATCHES ARE THE LINES THEMSELVES (#563 COWORK #77): solid MACD, dotted signal. */}
               <span className="lsMacdLegend" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                 <svg className="lsSwatchMacd" width="14" height="6" aria-hidden="true"><line x1="0" y1="3" x2="14" y2="3" stroke={MACD_COLOUR.line} strokeWidth="1.5" /></svg>MACD
@@ -222,19 +222,19 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
             </div>
           ) : null}
           {/* THE RUN, NOT A CALL (#74): "below its signal line for 6 sessions". */}
-          <div className="lsMacdLine" style={{ marginTop: 6, fontSize: 13, color: C.muted }}>
+          <div className="lsMacdLine" style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: 1.5, color: C.muted }}>
             {macd ? (macd !== "near" && ms ? `${MACD_WORDS[macd].line} ${runWords(ms)}` : MACD_WORDS[macd].line) : "Momentum unavailable: not enough daily prices on file."}
           </div>
         </div>
       </div>
-      {p.credit ? <p className="lsCredit" style={{ ...noteStyle, gridColumn: "1 / -1" }}>Daily prices: {p.credit}</p> : null}
+      {p.credit ? <p className="lsCredit" data-fine-print style={{ ...noteStyle, gridColumn: "1 / -1" }}>Daily prices: {p.credit}</p> : null}
 
       <style>{`
         .lsGrid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px; }
         .lsPart { min-width: 0; }
         @media (max-width: 640px) { .lsGrid { grid-template-columns: minmax(0, 1fr); gap: 22px; } }
         /* Half a 320 px column per side: labels a size smaller so "$23,700–$24,300" stays on two lines at most. */
-        @media (max-width: 360px) { .lsLabel { line-height: 1.15 !important; } .lsLabel > span:first-child { font-size: 12px !important; } .lsValue, .lsDist { font-size: 11px !important; } }
+        @media (max-width: 360px) { .lsLabel { line-height: 1.15 !important; } .lsLabel > span:first-child { font-size: 0.75rem !important; } .lsValue, .lsDist { font-size: var(--fs-label) !important; } }
       `}</style>
     </div>
   );
@@ -242,8 +242,9 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
 
 function pillStyle(state: "above" | "below" | "near"): CSSProperties {
   const rgb = state === "above" ? "56,189,248" : state === "below" ? "245,158,11" : "148,163,184";
-  return { padding: "3px 9px", borderRadius: 999, fontSize: 12, fontWeight: 800, color: `rgb(${rgb})`, background: `rgba(${rgb},0.12)`, border: `1px solid rgba(${rgb},0.35)`, whiteSpace: "nowrap" };
+  return { padding: "3px 9px", borderRadius: 999, fontSize: "0.75rem", fontWeight: 800, color: `rgb(${rgb})`, background: `rgba(${rgb},0.12)`, border: `1px solid rgba(${rgb},0.35)`, whiteSpace: "nowrap" };
 }
-const partTitleStyle: CSSProperties = { margin: 0, fontSize: 13, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: C.label };
-const noteStyle: CSSProperties = { margin: "8px 0 0 0", fontSize: 11.5, lineHeight: 1.5, color: C.muted };
-const gaugeHeadStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, fontSize: 14 };
+const partTitleStyle: CSSProperties = { margin: 0, fontSize: "0.8125rem", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: C.label };
+const noteStyle: CSSProperties = { margin: "8px 0 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, color: C.muted };
+const readStyle: CSSProperties = { ...noteStyle, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)" };
+const gaugeHeadStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, fontSize: "0.875rem" };

@@ -214,7 +214,7 @@ export default function StockPriceChart({
           while scrubbing; a column 640 px or wider: one line. */}
       <style>{`
         .chart-readout-wrap { container-type: inline-size; }
-        .chart-readout { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 20px; height: 60px; margin-bottom: 8px; font-size: 13px; line-height: 20px; font-variant-numeric: tabular-nums; }
+        .chart-readout { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 20px; height: 60px; margin-bottom: 8px; font-size: 0.8125rem; line-height: 20px; font-variant-numeric: tabular-nums; }
         .chart-readout > span { white-space: nowrap; overflow: hidden; }
         @container (min-width: 640px) {
           .chart-readout { display: flex; column-gap: 14px; height: 20px; }
@@ -296,7 +296,7 @@ export default function StockPriceChart({
             <text
               x={width - padR + 6}
               y={t.y + 4}
-              fontSize={11}
+              fontSize="0.75rem"
               fill="currentColor"
               opacity="0.6"
             >
@@ -318,7 +318,7 @@ export default function StockPriceChart({
             <text
               x={t.x}
               y={height - 10}
-              fontSize={11}
+              fontSize="0.75rem"
               fill="currentColor"
               opacity="0.6"
               textAnchor="middle"
@@ -376,11 +376,11 @@ export default function StockPriceChart({
           gap: 12,
           alignItems: "center",
           flexWrap: "wrap",
-          fontSize: 12,
+          fontSize: "0.75rem",
           opacity: 0.74,
         }}
       >
-        <div>
+        <div data-fine-print>
           {/* 2026-10-03 (#553 COWORK #113/#114): read "2025-10-20 → 2026-10-02";
               now "20 Oct 2025 → 2 Oct 2026" (utcDay: UTC fields, by hand, so the
               server and browser render the same text). */}

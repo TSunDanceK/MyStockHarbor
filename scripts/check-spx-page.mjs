@@ -72,7 +72,7 @@ const RULES = {
   "every live card says it is SPY and carries the Tiingo credit": ({ page }) =>
     /const liveLabel = onSpy \? "Shown on SPY, the ETF that tracks the S&P 500" : "Shown on the S&P 500 index";/.test(page) &&
     (page.match(/\{liveLabel\}/g) ?? []).length === 6 &&
-    /<ReturnsToggleCard [^>]*\/>\s*<\/div>\s*\{credit \? <p style=\{small\}>Daily prices: \{credit\}<\/p> : null\}/.test(page) &&
+    /<ReturnsToggleCard [^>]*\/>\s*<\/div>\s*\{credit \? <p data-fine-print style=\{small\}>Daily prices: \{credit\}<\/p> : null\}/.test(page) &&
     /<PerformanceStrip strip=\{strip\} credit=\{credit\} \/>/.test(page) && /<StockPriceChart [^>]*credit=\{credit \?\? null\} \/>/.test(page) &&
     /<ConfluenceCard [^>]*credit=\{credit\} \/>/.test(page) && /<KeyLevelsCard [^>]*credit=\{credit\} \/>/.test(page) &&
     /<LevelsSignals[\s\S]*?credit=\{credit\}\s*\/>/.test(page) &&
@@ -121,7 +121,7 @@ const MUTANTS = [
   ["the AI market backdrop is not called; the old page is kept, retired and dated", "page", (s) => s.replace('import { buildMarketMoodScore } from "@/lib/market-mood";', 'import { getSpxMarketAnalysis } from "@/lib/ai-market";\nimport { buildMarketMoodScore } from "@/lib/market-mood";')],
   ["every live card says it is SPY and carries the Tiingo credit", "page", (s) => s.replace("<KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} credit={credit} />", "<KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} />")],
   ["every live card says it is SPY and carries the Tiingo credit", "page", (s) => s.replace('"Shown on SPY, the ETF that tracks the S&P 500"', '"Shown on the S&P 500"')],
-  ["every live card says it is SPY and carries the Tiingo credit", "page", (s) => s.replace("<p style={{ ...small, marginTop: 4 }}>{liveLabel}</p>\n              <PerformanceStrip", "<PerformanceStrip")],
+  ["every live card says it is SPY and carries the Tiingo credit", "page", (s) => s.replace("<p data-fine-print style={{ ...small, marginTop: 4 }}>{liveLabel}</p>\n              <PerformanceStrip", "<PerformanceStrip")],
   ["the sections in the brief's order, the platform buttons after the weekly chart", "page", (s) => s.replace("</h1>", '</h1>\n            <AffiliateLink href="/api/go/etoro" eventLabel="x" style={secondaryBtn()}>eToro</AffiliateLink>')],
   ["the FAQ: closed native <details>, its JSON-LD built from the same questions", "page", (s) => s.replace('<details key={f.q} className="spxFaqItem"', '<details open key={f.q} className="spxFaqItem"')],
   ["the FAQ: closed native <details>, its JSON-LD built from the same questions", "words", (s) => s.replace('mainEntity: FAQ.map((f) => ({ "@type": "Question", name: f.q,', 'mainEntity: FAQ.slice(1).map((f) => ({ "@type": "Question", name: f.q,')],
