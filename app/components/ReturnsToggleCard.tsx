@@ -20,26 +20,58 @@
 // (Enter and Space are the buttons' own). The active tab is not shown by
 // colour alone: it carries a check mark, a heavier weight and an underline.
 //
+// MONTHLY (#553 COWORK #115): a third tab, each bar a calendar month's last
+// close vs the previous month's, the last 12 complete months, from the same
+// bars (lib/closeReturns.ts). THE MONTH IN PROGRESS is never shown as a full
+// month. Two treatments, for the owner to choose between on a preview:
+//   "omit" (default)  left out, with a line saying "October so far isn't included."
+//   "show"            drawn as "Oct so far" with a lighter, dashed bar
+// The tiles count complete months only in both. On a PREVIEW deployment only,
+// `?monthPartial=show` switches to the second treatment, so both can be seen on
+// one build; production always uses the default until the owner rules.
+//
 // STYLE SOURCE: the earnings page's Quarters/Years toggle named in COWORK #89
 // was not found in this tree (no such toggle under app/), so the pill shape
 // follows the Pickers data-view tabs (PickerResultPage .viewTab). Swap to the
 // earnings toggle's styling once it is located.
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import ReturnsBarChart, { cardStyle, type ReturnBar } from "./ReturnsBarChart";
 
-export type ReturnsViewKey = "daily" | "weekly";
+export type ReturnsViewKey = "daily" | "weekly" | "monthly";
 
-type View = { key: ReturnsViewKey; tab: string; periodLabel: string; compareLabel: string; bars: ReturnBar[] };
+/** How the month in progress is treated (see the header). */
+export type MonthPartialMode = "omit" | "show";
+
+/** The monthly series as lib/closeReturns.ts's monthlyReturnBars returns it. */
+export type MonthlyInput = { complete: ReturnBar[]; partial: ReturnBar | null; partialMonth: string | null };
+
+type View = { key: ReturnsViewKey; tab: string; periodLabel: string; compareLabel: string; bars: ReturnBar[]; note?: string };
 
 // ReturnsBarChart renders nothing under 3 bars; a view it would blank is not offered.
 const MIN_BARS = 3;
 
-function viewsFor(daily: ReturnBar[], weekly: ReturnBar[]): View[] {
+function monthlyView(monthly: MonthlyInput | undefined, mode: MonthPartialMode): View | null {
+  if (!monthly) return null;
+  const show = mode === "show" && monthly.partial;
+  return {
+    key: "monthly",
+    tab: "Monthly",
+    periodLabel: "Monthly",
+    compareLabel: "previous month's close",
+    bars: show ? [...monthly.complete, monthly.partial as ReturnBar] : monthly.complete,
+    note: monthly.partialMonth && !show ? `${monthly.partialMonth} so far isn't included.` : undefined,
+  };
+}
+
+function viewsFor(daily: ReturnBar[], weekly: ReturnBar[], monthly?: MonthlyInput, mode: MonthPartialMode = "omit"): View[] {
+  const m = monthlyView(monthly, mode);
   const all: View[] = [
     { key: "daily", tab: "Daily", periodLabel: "Daily", compareLabel: "previous day's close", bars: daily },
     { key: "weekly", tab: "Weekly", periodLabel: "Weekly", compareLabel: "previous week's close", bars: weekly },
+    ...(m ? [m] : []),
   ];
-  return all.filter((v) => v.bars.length >= MIN_BARS);
+  // Offered only with enough COMPLETE periods to chart (a partial bar does not count).
+  return all.filter((v) => v.bars.filter((b) => !b.partial).length >= MIN_BARS);
 }
 
 /**
@@ -50,6 +82,8 @@ export function ReturnsToggleView({
   symbol,
   daily,
   weekly,
+  monthly,
+  partialMode = "omit",
   active,
   idBase,
   onSelect,
@@ -58,12 +92,14 @@ export function ReturnsToggleView({
   symbol: string;
   daily: ReturnBar[];
   weekly: ReturnBar[];
+  monthly?: MonthlyInput;
+  partialMode?: MonthPartialMode;
   active: ReturnsViewKey;
   idBase: string;
   onSelect?: (key: ReturnsViewKey, focus: boolean) => void;
   tabRef?: (index: number, el: HTMLButtonElement | null) => void;
 }) {
-  const views = viewsFor(daily, weekly);
+  const views = viewsFor(daily, weekly, monthly, partialMode);
   if (!views.length) return null;
   const current = views.some((v) => v.key === active) ? active : views[0].key;
   const tabbed = views.length > 1;
@@ -116,7 +152,7 @@ export function ReturnsToggleView({
           aria-labelledby={tabbed ? `${idBase}-tab-${v.key}` : undefined}
           hidden={v.key !== current}
         >
-          <ReturnsBarChart bare symbol={symbol} periodLabel={v.periodLabel} compareLabel={v.compareLabel} bars={v.bars} />
+          <ReturnsBarChart bare symbol={symbol} periodLabel={v.periodLabel} compareLabel={v.compareLabel} bars={v.bars} note={v.note} />
         </div>
       ))}
       <style>{`
@@ -132,8 +168,27 @@ export function ReturnsToggleView({
   );
 }
 
-export default function ReturnsToggleCard({ symbol, daily, weekly }: { symbol: string; daily: ReturnBar[]; weekly: ReturnBar[] }) {
+/**
+ * The month-in-progress treatment for this page view: "omit" everywhere, except
+ * a preview deployment asked for `?monthPartial=show` (#553 COWORK #115). A
+ * preview is told by its host: Vercel serves previews on *.vercel.app, and
+ * production only on the site's own domain. Pure; exported for the check.
+ */
+export function partialModeFor(hostname: string, search: string): MonthPartialMode {
+  if (!hostname.endsWith(".vercel.app")) return "omit";
+  return new URLSearchParams(search).get("monthPartial") === "show" ? "show" : "omit";
+}
+
+const noSubscribe = () => () => {};
+
+export default function ReturnsToggleCard({ symbol, daily, weekly, monthly }: { symbol: string; daily: ReturnBar[]; weekly: ReturnBar[]; monthly?: MonthlyInput }) {
   const [active, setActive] = useState<ReturnsViewKey>("daily");
+  // "omit" in the server HTML; a preview's ?monthPartial=show applies on hydration.
+  const partialMode = useSyncExternalStore(
+    noSubscribe,
+    () => partialModeFor(window.location.hostname, window.location.search),
+    () => "omit" as MonthPartialMode
+  );
   const idBase = useId().replace(/:/g, "");
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   return (
@@ -141,6 +196,8 @@ export default function ReturnsToggleCard({ symbol, daily, weekly }: { symbol: s
       symbol={symbol}
       daily={daily}
       weekly={weekly}
+      monthly={monthly}
+      partialMode={partialMode}
       active={active}
       idBase={`returns${idBase}`}
       tabRef={(i, el) => {
@@ -148,7 +205,8 @@ export default function ReturnsToggleCard({ symbol, daily, weekly }: { symbol: s
       }}
       onSelect={(key, focus) => {
         setActive(key);
-        if (focus) tabs.current[key === "daily" ? 0 : 1]?.focus();
+        // By id, not position: a view without enough bars is not offered.
+        if (focus) tabs.current.find((el) => el?.id.endsWith(`-tab-${key}`))?.focus();
       }}
     />
   );
