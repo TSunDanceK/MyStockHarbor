@@ -156,8 +156,10 @@ check("the earnings page likewise",
 {
   const cold = readCodeOnly("lib/server/secColdFetch.ts");
   const fn = cold.slice(cold.indexOf("export async function awaitingSecRead"));
-  check("awaitingSecRead is exactly 'a CIK, admitted, and nothing stored' — and a Redis blip is NOT noindex",
-    /if \(!cik \|\| !admitSymbolForExtraction\(clean, cik\)\.admit\) return false;/.test(fn) &&
+  // A FUND OR CENSUS-NAMED NOTE IS NEVER WAITING (#552 COWORK #151): the seed
+  // gate's refusal joins the test, so those pages stay indexable.
+  check("awaitingSecRead is exactly 'a CIK, admitted, not refused by the seed gate, and nothing stored' — and a Redis blip is NOT noindex",
+    /if \(!cik \|\| !admitSymbolForExtraction\(clean, cik\)\.admit \|\| secSeedRefusal\(clean, cik\)\) return false;/.test(fn) &&
       /return \(await factSetExists\(clean\)\) === false;/.test(fn));
 }
 

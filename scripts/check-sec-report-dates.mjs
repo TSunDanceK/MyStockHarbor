@@ -870,7 +870,9 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
   // history, below the accuracy bar, no record...), rendered by NextReportCard
   // whenever the record was read; check-next-report-band.mjs renders it.
   check("the card renders whatever the outlook says, refusals included",
-    /\{nextReport \? <NextReportCard outlook=\{nextReport\} \/> : null\}/.test(page),
+    // THE ONE EXCEPTION (#552 COWORK #152): a fund (not-shown: fund) has no
+    // earnings date to estimate, so no box. Nothing else may gate it.
+    /\{nextReport(?: && !\(data\.cold\.status === "not-shown" && data\.cold\.kind === "fund"\))? \? <NextReportCard outlook=\{nextReport\} \/> : null\}/.test(page),
     "a blank cannot be told from 'we never looked'");
 
   // ── THE TIMING WORDING RULE REACHES THE EXPLANATORY COPY TOO ───────────
