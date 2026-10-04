@@ -480,6 +480,8 @@ export type SeedResult = {
   withCik: number;
   withoutCik: string[];
   tickerMapPresent: boolean;
+  /** New symbols the seed gate refused (secSeedGate), by reason. Never in the manifest. */
+  refused: Record<string, string[]>;
 };
 
 /**
@@ -519,9 +521,17 @@ export function seedManifest(
   manifest: SecManifest,
   universe: string[],
   cikByTicker: Map<string, TickerEntry>,
-  tickerMapPresent: boolean
+  tickerMapPresent: boolean,
+  /**
+   * THE SEED GATE (#552 COWORK #147 1a): why a NEW symbol may not be seeded,
+   * or null. An entry already in the manifest is left as it is (entries are
+   * never removed); populationQueues applies the same rule to its populate.
+   * Defaults to admitting all, so a caller that passes nothing behaves as before.
+   */
+  refusal: (symbol: string, cik: string | null) => string | null = () => null
 ): SeedResult {
   const withoutCik: string[] = [];
+  const refused: Record<string, string[]> = {};
   let added = 0;
 
   for (const symbol of universe) {
@@ -540,6 +550,8 @@ export function seedManifest(
       if (!existing.exchange && found?.exchange) existing.exchange = found.exchange;
       continue;
     }
+    const why = refusal(symbol, cik);
+    if (why) { (refused[why] ??= []).push(symbol); continue; }
     manifest.symbols[symbol] = emptyEntry(cik, found?.exchange ?? null);
     added++;
   }
@@ -552,6 +564,7 @@ export function seedManifest(
     withCik: Object.values(manifest.symbols).filter((e) => e.cik).length,
     withoutCik,
     tickerMapPresent,
+    refused,
   };
 }
 

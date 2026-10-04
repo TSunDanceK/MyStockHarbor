@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { secSeedRefusal } from "@/lib/server/secSeedGate";
 import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import {
@@ -410,7 +411,9 @@ export async function GET(req: NextRequest) {
     // list above while its notes' ticker BIPI was, so the set lived under a note.
     ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...primaryListingSymbols(), ...POPULAR_SYMBOLS, ...stored.symbols, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
   ];
-  const seed = seedManifest(manifest, universe, tickers.map, tickers.source !== "none");
+  // THE SEED GATE (#552 COWORK #147 1a): no new entry for a preferred, warrant,
+  // note, ETF/trust or a symbol with no CIK. See secSeedGate.
+  const seed = seedManifest(manifest, universe, tickers.map, tickers.source !== "none", secSeedRefusal);
 
   // Reconcile BEFORE the index is read, so a symbol whose CIK moved is matched
   // on its new CIK the same run rather than a day later.
@@ -715,6 +718,8 @@ export async function GET(req: NextRequest) {
       : null,
     seededThisRun: seed.seeded,
     symbolsWithoutCik: seed.withoutCik.slice(0, 20),
+    // NEW SYMBOLS THE SEED GATE KEPT OUT, by reason (#552 COWORK #147 1a).
+    seedRefused: Object.fromEntries(Object.entries(seed.refused).map(([why, syms]) => [why, { count: syms.length, sample: syms.slice(0, 10) }])),
     days,
     filingsBySymbol,
     // What step 3 would take next, in order: amendments first, then real

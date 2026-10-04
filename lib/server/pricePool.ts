@@ -457,6 +457,37 @@ function uniqueClean(symbols: string[]): string[] {
  * module's own writers (warmPricePool, seedColdPricePoolRows) read with
  * `raw: true`, so they merge into FMP rows only.
  */
+/**
+ * An FMP pool row older than this is not shown as a price (#553 COWORK
+ * #131/#132, F3). On the Tiingo gate a symbol Tiingo cannot price keeps its
+ * FMP row; with the FMP key gone that row is never refreshed, and
+ * keepPricePoolAlive resets the hash TTL every run, so without a cut-off the
+ * reader would show a frozen FMP price indefinitely, with no label.
+ */
+export const FMP_POOL_ROW_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Pure: the row a reader may show. A non-Tiingo row older than
+ * FMP_POOL_ROW_MAX_AGE_MS keeps its bookkeeping (ts, failStreak...) but loses
+ * every figure, so the page reads "—". Exported for the checks.
+ */
+export function withoutStaleFmpFigures(row: PricePoolRow, nowMs: number): PricePoolRow {
+  if (row.source === "tiingo" || nowMs - row.ts <= FMP_POOL_ROW_MAX_AGE_MS) return row;
+  return { ...row, price: null, changePct: null, volume: null, open: null, dayHigh: null, dayLow: null, marketCap: null, pe: null };
+}
+
+/** The F3 cut-off applies on the Tiingo gate, or whenever the FMP key is unset. */
+function fmpRowsMayBeStale(): boolean {
+  return priceProviderFor("POOL") === "tiingo" || !process.env.FMP_API_KEY;
+}
+
+function cutStaleFmpRows(rows: Map<string, PricePoolRow>, nowMs: number): Map<string, PricePoolRow> {
+  if (!fmpRowsMayBeStale()) return rows;
+  const out = new Map<string, PricePoolRow>();
+  for (const [k, row] of rows) out.set(k, withoutStaleFmpFigures(row, nowMs));
+  return out;
+}
+
 export async function readPricePoolBulk(
   symbols: string[],
   opts: { raw?: boolean } = {}
@@ -524,13 +555,15 @@ export async function readPricePoolBulk(
     // bare-Node checks of this file) never loads the Data Cache layer.
     try {
       const { overlayTiingoPool } = await import("./tiingoPool");
-      return await overlayTiingoPool(out, symbols, Date.now());
+      return cutStaleFmpRows(await overlayTiingoPool(out, symbols, Date.now()), Date.now());
     } catch {
-      // fail open -- the FMP rows stand (COWORK #56: FMP stays the fallback).
+      // fail open -- the FMP rows stand (COWORK #56: FMP stays the fallback),
+      // subject to the F3 age cut below.
     }
   }
 
-  return out;
+  // RAW READS ARE NOT CUT: writers and the delisting sweep read the stored row.
+  return opts.raw ? out : cutStaleFmpRows(out, Date.now());
 }
 
 export type ColdSeedRow = {

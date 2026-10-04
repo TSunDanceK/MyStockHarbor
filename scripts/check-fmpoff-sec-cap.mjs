@@ -528,7 +528,12 @@ for (const [name, rel, from, to] of [
   const job = stripComments(raw("app/api/jobs/warm-pickers-sec/route.ts"), { file: "app/api/jobs/warm-pickers-sec/route.ts" });
   const uni = stripComments(raw("lib/server/tiingoUniverse.ts"), { file: "lib/server/tiingoUniverse.ts" });
   const loadReadsProd = (c) => /export async function loadSecCapRows\(\)[^{]*\{[\s\S]{0,600}?\.hgetall[^(]*\(PICKERS_SEC_KEY\)/.test(c);
-  const jobUnion = (c) => /const symbols = \[\.\.\.new Set\(\[\.\.\.warm, \.\.\.\(await readTiingoUniverseSymbols\(\)\)\]\)\];/.test(c) && /await warmPickersSec\(symbols,/.test(c);
+  // RE-ANCHORED BY RELAY A (#552 COWORK #148): the union is now named
+  // `universe` and passes A's SEC seed gate before the job reads it; the
+  // property pinned is unchanged (warm first, plus the Tiingo universe, fed to
+  // the job), and the mutant below still drops the universe.
+  const jobUnion = (c) => /const universe = \[\.\.\.new Set\(\[\.\.\.warm, \.\.\.\(await readTiingoUniverseSymbols\(\)\)\]\)\];/.test(c)
+    && /const gate = admittedForSec\(universe, cikForSymbol\);\s*const symbols = gate\.admitted;/.test(c) && /await warmPickersSec\(symbols,/.test(c);
   const capFits = (c) => { const m = /export const MAX_SYMBOLS_PER_RUN = ([\d_]+);/.exec(c); return m ? Number(m[1].replace(/_/g, "")) >= 3000 : false; };
   const uniReader = (c) => /export async function readTiingoUniverseSymbols\(\)[\s\S]{0,300}?parseTiingoUniverse\(await redis\.get<unknown>\(TIINGO_UNIVERSE_KEY\)\)/.test(c);
   check("the cap blob reads the production hash on every deployment (read-only)", loadReadsProd(secMod));

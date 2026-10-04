@@ -616,6 +616,30 @@ check("the census exits with a FATAL rather than throwing when a lift fails",
   check("MUTATION: the priority ignored -> caught", !rule(firstX, plain));
 }
 
+// THE SEED GATE ON POPULATE (#552 COWORK #147 1a): an entry seeded before the
+// gate existed and failing it now (a preferred, an ETF) is never populated;
+// the other queues are untouched, and with no gate the populate is as before.
+{
+  const man = bulkManifest({ reverify: 0, populate: 6, rewindow: 0 });
+  const refused = new Set(["PP1", "PP3"]);
+  const gate = (s) => (refused.has(s) ? "security-kind" : null);
+  const all = M.populationQueues(man);
+  const gated = M.populationQueues(man, undefined, undefined, new Set(), gate);
+  const rule = (g, a) => !g.populate.some((s) => refused.has(s)) && g.populate.length === a.populate.length - 2
+    && a.populate.some((s) => refused.has(s));
+  check("the seed gate's refusals are never populated; the rest are", rule(gated, all),
+    `populate gated: ${gated.populate.join(" ")} · ungated: ${all.populate.join(" ")}`);
+  check("the route passes the seed gate to populationQueues",
+    /populationQueues\(manifest, undefined, undefined, REWINDOW_PRIORITY, secSeedRefusal\)/.test(ROUTE));
+  const Mg = await loadRewindow((src) => {
+    const from = "e.contentHash === null && !refusal(s, e.cik))";
+    if (src.split(from).length !== 2) throw new Error("seed-gate mutation anchor missing");
+    return src.replace(from, "e.contentHash === null)");
+  });
+  check("MUTATION: populate ignores the seed gate -> caught",
+    !rule(Mg.populationQueues(man, undefined, undefined, new Set(), gate), all));
+}
+
 console.log(
   failures
     ? `\n${failures} assertion(s) failed.\n`

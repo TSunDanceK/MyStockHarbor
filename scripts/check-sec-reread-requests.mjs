@@ -74,12 +74,12 @@ console.log("\n2. the cron applies them before building its queues");
 const ROUTE = readCodeOnly("app/api/jobs/sec-facts/route.ts");
 const before = (src) => {
   const a = src.indexOf("applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now())");
-  const q = src.indexOf("const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY);");
+  const q = src.indexOf("const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY, secSeedRefusal);");
   return a > 0 && q > a;
 };
 check("applyRereadRequests runs before populationQueues", before(ROUTE));
 check("MUTATION: applied after the queues are built → caught",
-  !before(once(ROUTE, "const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY);", "const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY);\nconst late = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());").replace("const requested = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());", "const requested = [];")));
+  !before(once(ROUTE, "const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY, secSeedRefusal);", "const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY, secSeedRefusal);\nconst late = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());").replace("const requested = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());", "const requested = [];")));
 
 console.log("\n3. the committed file");
 const FILE = JSON.parse(fs.readFileSync("data/sec/reread-requests.json", "utf8"));
