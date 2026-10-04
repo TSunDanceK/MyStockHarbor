@@ -1359,6 +1359,13 @@ const TASKS = {
   // sets that fail the seed gate (symbol + reason), and how many still have a
   // picker row. 1 SMEMBERS + 1 HKEYS; deletes nothing.
   "write-sec-gate-stored-census": { script: "scripts/sec-gate-stored-census.mjs", args: () => [], writes: true },
+  // THE FMP PURGE (Relay B, #553 COWORK #136). ONLY AFTER THE FMP CANCEL, ON THE
+  // OWNER'S SAY. Dry: counts per group, every opt-in group included (one SCAN
+  // pass + MGETs + 1 HGETALL). Applied: the default groups only; each opt-in
+  // group (pool figures, market:state, FMP-era snapshots, meters) needs its own
+  // task, added on a ruling. See scripts/lib/fmp-purge-plan.mjs.
+  "write-fmp-purge-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--pool-figures", "--market-state", "--insight-snapshots", "--meters"], writes: true },
+  "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
 };
 
 const argv = process.argv.slice(2);
