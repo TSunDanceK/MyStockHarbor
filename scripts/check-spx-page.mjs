@@ -70,7 +70,8 @@ const RULES = {
     fs.existsSync("lib/ai-market.ts") && fs.existsSync(RETIRED) && /^\/\/ RETIRED 2026-10-04 \(#563 COWORK #90\)/.test(read(RETIRED)),
   "every live card says it is SPY and carries the Tiingo credit": ({ page }) =>
     /const liveLabel = onSpy \? "Shown on SPY, the ETF that tracks the S&P 500" : "Shown on the S&P 500 index";/.test(page) &&
-    (page.match(/\{liveLabel\}/g) ?? []).length === 5 &&
+    (page.match(/\{liveLabel\}/g) ?? []).length === 6 &&
+    /<ReturnsToggleCard [^>]*\/>\s*<\/div>\s*\{credit \? <p style=\{small\}>Daily prices: \{credit\}<\/p> : null\}/.test(page) &&
     /<PerformanceStrip strip=\{strip\} credit=\{credit\} \/>/.test(page) && /<StockPriceChart [^>]*credit=\{credit \?\? null\} \/>/.test(page) &&
     /<ConfluenceCard [^>]*credit=\{credit\} \/>/.test(page) && /<KeyLevelsCard [^>]*credit=\{credit\} \/>/.test(page) &&
     /<LevelsSignals[\s\S]*?credit=\{credit\}\s*\/>/.test(page) &&
@@ -78,15 +79,21 @@ const RULES = {
   "the sections in the brief's order, the platform buttons after the weekly chart": ({ page }) => {
     const at = (s) => page.indexOf(s);
     const order = ["<h1", "<Tile label=\"S&P 500 close\"", "<PerformanceStrip", "<StockPriceChart", "<ConfluenceCard", "<KeyLevelsCard", "<LevelsSignals",
-      ">This week in 3 points<", ">What to watch<", "<SPXChartClient", "<AffiliateLink href=\"/api/go/tradingview\"", ">FAQ<"].map(at);
+      "<ReturnsToggleCard", ">This week in 3 points<", ">Market read<", ">What to watch<", "<SPXChartClient", ">Why the weekly chart matters<",
+      "<AffiliateLink href=\"/api/go/tradingview\"", ">FAQ<"].map(at);
     return order.every((x, i) => x >= 0 && (i === 0 || x > order[i - 1])) && (page.match(/<AffiliateLink /g) ?? []).length === 2;
   },
   "the FAQ: closed native <details>, its JSON-LD built from the same questions": ({ page, words }) =>
     /<details key=\{f\.q\} className="spxFaqItem"/.test(page) && !/<details[^>]*\bopen\b/.test(page) &&
     /const faqLd = faqJsonLd\(\);/.test(page) && /<script type="application\/ld\+json" dangerouslySetInnerHTML=\{\{ __html: JSON\.stringify\(faqLd\) \}\} \/>/.test(page) &&
     JSON.stringify(words.faqJsonLd().mainEntity.map((q) => [q.name, q.acceptedAnswer.text])) === JSON.stringify(words.FAQ.map((f) => [f.q, f.a])) &&
-    words.FAQ.length === 4 && words.FAQ.every((f) => !/\b(should|recommend|must)\b/i.test(f.a)) &&
+    words.FAQ.length >= 4 && words.FAQ.length <= 6 && words.FAQ.every((f) => !/\b(should|recommend|must)\b/i.test(f.a)) &&
     /doesn't tell anyone what to do/.test(words.FAQ.find((f) => /buying opportunity/.test(f.q))?.a ?? ""),
+  "'Why the weekly chart matters' is visible, evergreen, about 150–200 words (#91)": ({ page, words }) => {
+    const n = words.WEEKLY_CHART_EXPLAINER.join(" ").split(/\s+/).length;
+    return n >= 150 && n <= 200 && /\{WEEKLY_CHART_EXPLAINER\.map\(\(para, i\) => <p key=\{i\}/.test(page) &&
+      !/<details[^>]*>[^]*?WEEKLY_CHART_EXPLAINER/.test(page) && !/weekly\./.test(words.WEEKLY_CHART_EXPLAINER.join(" "));
+  },
   "the metadata title and description are unchanged": ({ raw }) =>
     (raw.match(new RegExp(`title: "${TITLE.replace(/[|()]/g, "\\$&")}"`, "g")) ?? []).length === 3 &&
     raw.split(DESC).length === 4,
@@ -118,6 +125,8 @@ const MUTANTS = [
   ["the FAQ: closed native <details>, its JSON-LD built from the same questions", "page", (s) => s.replace('<details key={f.q} className="spxFaqItem"', '<details open key={f.q} className="spxFaqItem"')],
   ["the FAQ: closed native <details>, its JSON-LD built from the same questions", "words", (s) => s.replace('mainEntity: FAQ.map((f) => ({ "@type": "Question", name: f.q,', 'mainEntity: FAQ.slice(1).map((f) => ({ "@type": "Question", name: f.q,')],
   ["the FAQ: closed native <details>, its JSON-LD built from the same questions", "words", (s) => s.replace("This page describes the market; it doesn't tell anyone what to do.", "Investors should consider adding on dips.")],
+  ["'Why the weekly chart matters' is visible, evergreen, about 150–200 words (#91)", "page", (s) => s.replace("{WEEKLY_CHART_EXPLAINER.map((para, i) => <p key={i}", "{WEEKLY_CHART_EXPLAINER.slice(0, 0).map((para, i) => <p key={i}")],
+  ["'Why the weekly chart matters' is visible, evergreen, about 150–200 words (#91)", "words", (s) => s.replace('  "The weekly view is also slower to change.', '  "The weekly view is also slower to change. ' + "More words here to pad it. ".repeat(12) + '')],
   ["the metadata title and description are unchanged", "page", (s) => s.replace("Learn how to analyse the S&P 500 (SPX), understand market pullbacks", "Live S&P 500 (SPX) levels, zones and signals")],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");

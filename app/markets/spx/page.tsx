@@ -18,8 +18,10 @@ import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { performanceStrip } from "@/lib/ta/performance";
 import { computeMacroSupport } from "@/lib/ta/macroSupport";
 import { macdTone } from "@/lib/ta/macdSeries";
-import { indexWords, isStale, parseSpxWeekly, weeklyDate, type SpxWeekly } from "@/lib/spxWeekly";
-import { FAQ, faqJsonLd, trendWords } from "@/lib/spxPage";
+import { indexWords, isStale, parseSpxWeekly, weeklyDate, type SectionKey, type SpxWeekly } from "@/lib/spxWeekly";
+import { FAQ, WEEKLY_CHART_EXPLAINER, faqJsonLd, trendWords } from "@/lib/spxPage";
+import { dailyReturnBars, monthlyReturnBars, weeklyReturnBars } from "@/lib/closeReturns";
+import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
 import PerformanceStrip from "@/app/stock/[symbol]/PerformanceStrip";
 import StockPriceChart from "@/app/stock/[symbol]/StockPriceChart";
 import ConfluenceCard from "@/app/stock/[symbol]/ConfluenceCard";
@@ -249,6 +251,22 @@ const eyebrow: React.CSSProperties = { fontSize: 11, fontWeight: 950, letterSpac
 const h2: React.CSSProperties = { margin: "6px 0 0", fontSize: 24, lineHeight: 1.15, letterSpacing: "-0.03em" };
 const small: React.CSSProperties = { margin: "8px 0 0", fontSize: 12, lineHeight: 1.5, color: C.muted };
 
+/**
+ * THE WRITE-UP UNDER A VISUAL (#563 COWORK #91): 2–4 sentences from the weekly
+ * file saying what the visual shows this week. Dated when the file is stale.
+ */
+function WriteUp({ weekly, k, stale }: { weekly: SpxWeekly | null; k: SectionKey; stale: boolean }) {
+  const sec = weekly?.sections[k];
+  if (!weekly || !sec) return null;
+  return (
+    <div className="spxWriteUp" data-section={k} style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.rule}` }}>
+      {sec.heading ? <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>{sec.heading}</h3> : null}
+      <p style={{ margin: sec.heading ? "6px 0 0" : 0, fontSize: 15, lineHeight: 1.65, opacity: 0.88 }}>{sec.body}</p>
+      {stale ? <p style={{ ...small, color: C.amber, fontWeight: 700 }}>From the weekly update of {weeklyDate(weekly.asOf)}.</p> : null}
+    </div>
+  );
+}
+
 /** A hero tile: label, value, a line under it; `dated` lifts the date out when the weekly file is stale. */
 function Tile({ label, value, sub, tone, dated }: { label: string; value: React.ReactNode; sub: React.ReactNode; tone?: string; dated?: boolean }) {
   return (
@@ -311,9 +329,11 @@ export default async function SPXPage() {
             <h1 style={{ margin: "10px 0 0", fontSize: 38, lineHeight: 1.1, letterSpacing: "-0.9px", maxWidth: 820, fontWeight: 500 }}>
               S&amp;P 500 (SPX) Analysis (2026) – What the Market Is Actually Doing Right Now
             </h1>
+            {/* THE INTRO (#91): 2–3 sentences, the page's main text, visible. */}
+            {weekly ? <p className="spxIntro" style={{ margin: "12px 0 0", fontSize: 17, lineHeight: 1.65, opacity: 0.92, maxWidth: 820 }}>{weekly.intro}</p> : null}
             {weekly ? (
-              <p className="spxOneLiner" style={{ margin: "12px 0 0", fontSize: 17, lineHeight: 1.6, opacity: 0.92, maxWidth: 820 }}>
-                {stale ? <strong style={{ color: C.amber }}>Last weekly update: {weeklyDate(weekly.asOf)}. </strong> : <span style={{ color: C.muted }}>{weeklyDate(weekly.asOf)}: </span>}
+              <p className="spxOneLiner" style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.6, opacity: 0.92, maxWidth: 820 }}>
+                {stale ? <strong style={{ color: C.amber }}>Last weekly update: {weeklyDate(weekly.asOf)}. </strong> : <span style={{ color: C.muted }}>In one line, {weeklyDate(weekly.asOf)}: </span>}
                 {weekly.oneLiner}
               </p>
             ) : null}
@@ -338,6 +358,7 @@ export default async function SPXPage() {
               <div style={eyebrow}>Performance</div>
               <p style={{ ...small, marginTop: 4 }}>{liveLabel}</p>
               <PerformanceStrip strip={strip} credit={credit} />
+              <WriteUp weekly={weekly} k="performance" stale={stale} />
             </section>
           ) : null}
 
@@ -350,6 +371,7 @@ export default async function SPXPage() {
               <div style={{ marginTop: 12 }}>
                 <StockPriceChart symbol={onSpy ? "SPY" : "SPX"} data={points.slice(-240)} ma50={ma50s.slice(-240)} ma200={ma200s.slice(-240)} height={320} credit={credit ?? null} />
               </div>
+              <WriteUp weekly={weekly} k="chart" stale={stale} />
             </section>
           ) : (
             <section style={card()}><p style={{ margin: 0, fontSize: 14, color: C.muted }}>We couldn&apos;t load the S&amp;P 500 price history just now. This is a problem on our side, not a market with no data; it should return on a refresh.</p></section>
@@ -357,7 +379,8 @@ export default async function SPXPage() {
 
           {/* 4. PRICE ZONES + KEY LEVELS (live): the stock page's cards, replacing hand-typed levels. */}
           {bars.length ? (
-            <section className="spxLevels" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16, alignItems: "start" }}>
+            <section style={{ display: "grid", gap: 4, minWidth: 0 }}>
+            <div className="spxLevels" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16, alignItems: "start" }}>
               <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
                 <ConfluenceCard bars={bars} lastPrice={lastClose} nowMs={nowMs} ma50={ma50} ma200={ma200} macro={macro ? { lower: macro.lower, upper: macro.upper } : null} credit={credit} />
                 <p style={{ ...small, margin: "0 4px" }}>{liveLabel}</p>
@@ -366,6 +389,8 @@ export default async function SPXPage() {
                 <KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} credit={credit} />
                 <p style={{ ...small, margin: "0 4px" }}>{liveLabel}</p>
               </div>
+            </div>
+            {weekly ? <div style={card({ paddingTop: 4 })}><WriteUp weekly={weekly} k="levels" stale={stale} /></div> : null}
             </section>
           ) : null}
 
@@ -389,16 +414,33 @@ export default async function SPXPage() {
                   credit={credit}
                 />
               </div>
+              <WriteUp weekly={weekly} k="signals" stale={stale} />
             </section>
           ) : null}
 
-          {/* 6. CLOSE-OVER-CLOSE (Daily / Weekly / Monthly): B's card, once #553 COWORK #115 merges. */}
+          {/* 6. CLOSE-OVER-CLOSE (live): B's card (#553 COWORK #115) on SPY's closes. */}
+          {points.length ? (
+            // B's card brings its own frame (as on the stock page); a second card's padding
+            // around it left its three tabs too wide at 320 px.
+            <section className="spxChange" style={{ minWidth: 0, padding: "4px 2px" }}>
+              <div style={eyebrow}>Price action</div>
+              <h2 style={h2}>Daily, weekly or monthly close-over-close change</h2>
+              <p style={{ ...small, marginTop: 4 }}>{liveLabel}</p>
+              <div style={{ marginTop: 12 }}>
+                <ReturnsToggleCard symbol={onSpy ? "SPY" : "SPX"} daily={dailyReturnBars(points, 20)} weekly={weeklyReturnBars(points, 12)} monthly={monthlyReturnBars(points, 12)} />
+              </div>
+              {credit ? <p style={small}>Daily prices: {credit}</p> : null}
+              <WriteUp weekly={weekly} k="change" stale={stale} />
+            </section>
+          ) : null}
 
-          {/* 7. THIS WEEK IN 3 POINTS (weekly). */}
+          {/* 7. THIS WEEK IN 3 POINTS (weekly, at a glance) BESIDE THE MARKET READ (#91: 250–350 words,
+              replacing the old Simple view / market read / closing prose). */}
           {weekly ? (
-            <section style={card()}>
+            <section className="spxRead" style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.5fr)", gap: 16, alignItems: "start" }}>
+            <div style={card()}>
               <div style={eyebrow}>This week in 3 points</div>
-              <div className="spxPoints" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
+              <div className="spxPoints" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 12 }}>
                 {weekly.points.map((pt) => (
                   <div key={pt.label} className="spxPoint" style={card({ padding: 14 })}>
                     <div style={{ fontSize: 13, fontWeight: 850, color: C.value }}>{pt.label}</div>
@@ -420,6 +462,13 @@ export default async function SPXPage() {
                   </div>
                 ))}
               </div>
+            </div>
+            <article className="spxMarketRead" style={card()}>
+              <div style={eyebrow}>Market read</div>
+              <h2 style={h2}>What moved the S&amp;P 500 this week</h2>
+              <p style={{ ...small, marginTop: 4, color: stale ? C.amber : C.muted, fontWeight: stale ? 700 : 400 }}>Week to {weeklyDate(weekly.asOf)}</p>
+              {weekly.marketRead.map((para, i) => <p key={i} style={{ margin: "12px 0 0", fontSize: 15.5, lineHeight: 1.7, opacity: 0.9 }}>{para}</p>)}
+            </article>
             </section>
           ) : null}
 
@@ -459,6 +508,11 @@ export default async function SPXPage() {
                 <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
               </p>
             ) : null}
+            {/* WHY THE WEEKLY CHART MATTERS (#91): evergreen, visible, ~150–200 words. */}
+            <div className="spxWeeklyWhy" style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.rule}` }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Why the weekly chart matters</h3>
+              {WEEKLY_CHART_EXPLAINER.map((para, i) => <p key={i} style={{ margin: "8px 0 0", fontSize: 15, lineHeight: 1.7, opacity: 0.88 }}>{para}</p>)}
+            </div>
           </section>
 
           {/* 10. CHARTING TOOLS: moved here from the hero (owner, #90). */}
@@ -488,7 +542,7 @@ export default async function SPXPage() {
       <style>{`
         @media (max-width: 900px) {
           .spxTiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-          .spxLevels, .spxPoints, .spxWatch { grid-template-columns: minmax(0, 1fr) !important; }
+          .spxLevels, .spxPoints, .spxWatch, .spxRead { grid-template-columns: minmax(0, 1fr) !important; }
         }
         @media (max-width: 640px) {
           .spxWrap { padding: 16px !important; }

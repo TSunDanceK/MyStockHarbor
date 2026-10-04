@@ -56,9 +56,24 @@ const RULES = {
   "the page reads the file through the check, and renders its fields": ({ page }) =>
     /fs\.readFileSync\(path\.join\(process\.cwd\(\), "content\/markets\/spx-weekly\.json"\), "utf8"\)/.test(page) &&
     /const r = parseSpxWeekly\(raw\);\s*if \(r\.ok\) return r\.data;/.test(page) &&
-    ["weekly.oneLiner", "weekly.indexClose", "weekly.ath.level", "weekly.ath.date", "weekly.sentiment.fearGreed", "weekly.sentiment.source", "weekly.points.map", "weekly.breadth.pct200", "weekly.watchDown", "weekly.watchUp"].every((f) => page.includes(f)) &&
+    ["weekly.intro", "weekly.marketRead.map", "weekly.oneLiner", "weekly.indexClose", "weekly.ath.level", "weekly.ath.date", "weekly.sentiment.fearGreed", "weekly.sentiment.source", "weekly.points.map", "weekly.breadth.pct200", "weekly.watchDown", "weekly.watchUp"].every((f) => page.includes(f)) &&
+    ["performance", "chart", "levels", "signals", "change"].every((k) => page.includes(`<WriteUp weekly={weekly} k="${k}" stale={stale} />`)) &&
     // Weekly sections are skipped, not filled with guesses, when the file fails.
-    /\{weekly \? \(\s*<section style=\{card\(\)\}>\s*<div style=\{eyebrow\}>This week in 3 points/.test(page),
+    /\{weekly \? \(\s*<section className="spxRead"[\s\S]*?This week in 3 points[\s\S]*?Market read/.test(page) &&
+    /const sec = weekly\?\.sections\[k\];\s*if \(!weekly \|\| !sec\) return null;/.test(page),
+  "the written analysis has floors and caps (#91): intro, a write-up per visual, the Market read, full-sentence watch lists": ({ M }) => {
+    const ok = (f) => M.parseSpxWeekly(withChange(f)).ok;
+    const para = (n) => "Word ".repeat(Math.ceil(n / 5)).slice(0, n - 1) + ".";
+    return M.INTRO_MIN === 150 && M.INTRO_MAX === 500 && M.SECTION_MIN === 120 && M.SECTION_MAX === 600 && M.MARKET_READ_MIN === 1400 && M.MARKET_READ_MAX === 2200 &&
+      !ok((c) => { c.intro = "Too short."; }) && !ok((c) => { c.intro = `${para(250)} ${para(250)} ${para(80)}`; }) && !ok((c) => { c.intro = para(300); }) &&
+      !ok((c) => { delete c.intro; }) &&
+      !ok((c) => { c.sections.signals.body = "RSI was neutral."; }) && !ok((c) => { c.sections.chart.body = para(601); }) && !ok((c) => { delete c.sections.change; }) &&
+      !ok((c) => { c.sections.levels.heading = "x".repeat(61); }) && ok((c) => { delete c.sections.levels.heading; }) &&
+      !ok((c) => { c.marketRead = [para(700)]; }) && !ok((c) => { c.marketRead = [para(300), para(300), para(300)]; }) &&
+      !ok((c) => { c.marketRead = [para(800), para(800), para(800)]; }) && !ok((c) => { c.marketRead = [para(1300), para(150)]; }) &&
+      !ok((c) => { c.watchUp = c.watchUp.slice(0, 2); }) && !ok((c) => { c.watchDown[0] = "yields rise again, maybe, who knows really"; }) &&
+      !ok((c) => { c.watchDown[1] = "Yields up."; });
+  },
   "stale after 10 days: the hero says 'Last weekly update', the weekly tiles show their dates": ({ M, page }) =>
     M.STALE_DAYS === 10 && !M.isStale("2026-10-02", Date.parse("2026-10-12T00:00:00Z")) && M.isStale("2026-10-02", Date.parse("2026-10-12T00:00:01Z")) &&
     /const stale = weekly \? isStale\(weekly\.asOf, nowMs\) : false;/.test(page) &&
@@ -91,6 +106,13 @@ const MUTANTS = [
   ["no buy / sell / should wording anywhere in the file", "l", (s) => s.replace("  if (advice.length) p.push(", "  if (false) p.push(")],
   ["the page reads the file through the check, and renders its fields", "p", (s) => s.replace("const r = parseSpxWeekly(raw);\n    if (r.ok) return r.data;", "const r = { ok: true, data: raw };\n    if (r.ok) return r.data;")],
   ["the page reads the file through the check, and renders its fields", "p", (s) => s.replace("{weekly.oneLiner}", "")],
+  ["the written analysis has floors and caps (#91): intro, a write-up per visual, the Market read, full-sentence watch lists", "l", (s) => s.replace("export const INTRO_MIN = 150, INTRO_MAX = 500;", "export const INTRO_MIN = 1, INTRO_MAX = 500;")],
+  ["the written analysis has floors and caps (#91): intro, a write-up per visual, the Market read, full-sentence watch lists", "l", (s) => s.replace("if (sentences(r.intro) < 2 || sentences(r.intro) > 3)", "if (false)")],
+  ["the written analysis has floors and caps (#91): intro, a write-up per visual, the Market read, full-sentence watch lists", "l", (s) => s.replace("export const SECTION_MIN = 120, SECTION_MAX = 600, SECTION_HEADING_MAX = 60;", "export const SECTION_MIN = 1, SECTION_MAX = 600, SECTION_HEADING_MAX = 60;")],
+  ["the written analysis has floors and caps (#91): intro, a write-up per visual, the Market read, full-sentence watch lists", "l", (s) => s.replace("export const MARKET_READ_MIN = 1400, MARKET_READ_MAX = 2200, PARAGRAPH_MIN = 200;", "export const MARKET_READ_MIN = 1400, MARKET_READ_MAX = 5000, PARAGRAPH_MIN = 200;")],
+  ["the written analysis has floors and caps (#91): intro, a write-up per visual, the Market read, full-sentence watch lists", "l", (s) => s.replace("if (!/^[A-Z0-9]/.test(t) || !/[.!?]$/.test(t))", "if (false)")],
+  ["the written analysis has floors and caps (#91): intro, a write-up per visual, the Market read, full-sentence watch lists", "l", (s) => s.replace("w.length < 3 || w.length > 4", "w.length < 1 || w.length > 4")],
+  ["the page reads the file through the check, and renders its fields", "p", (s) => s.replace('<WriteUp weekly={weekly} k="signals" stale={stale} />', "")],
   ["stale after 10 days: the hero says 'Last weekly update', the weekly tiles show their dates", "l", (s) => s.replace("export const STALE_DAYS = 10;", "export const STALE_DAYS = 30;")],
   ["stale after 10 days: the hero says 'Last weekly update', the weekly tiles show their dates", "p", (s) => s.replace("const stale = weekly ? isStale(weekly.asOf, nowMs) : false;", "const stale = false;")],
   ["stale after 10 days: the hero says 'Last weekly update', the weekly tiles show their dates", "p", (s) => s.replace("dated={stale} />", "/>")],
