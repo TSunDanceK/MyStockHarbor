@@ -171,7 +171,9 @@ const RULES = {
       text.includes("Market Mood") && text.includes(`${view.day.r} /100`) && text.includes(view.label) && text.includes("Reading for Fri 2 Oct 2026") &&
       text.includes("Daily prices: Market data from Tiingo.com") && (html.match(/<polyline /g) ?? []).length === 1 &&
       M.moodNoteText(6) === "Our reading of market mood from 6 public market measures on our own data. A description, not a forecast. Option-market data isn't included." &&
-      /\{moodNoteText\(inputs\.length\)\}/.test(src.card) && /\{x\.line\}<\/span><strong[^>]*>\{day\.s\[x\.key\]\}<\/strong>/.test(src.card) &&
+      /\{moodNoteText\(inputs\.length\)\}/.test(src.card) &&
+      // #97: the red → green gradient spans the whole tube, so a low reading's fill never ends in green.
+      /backgroundSize: `100% \$\{\(100 \* 100\) \/ fillPct\}%`, backgroundPosition: "bottom"/.test(src.card) && /\{x\.line\}<\/span><strong[^>]*>\{day\.s\[x\.key\]\}<\/strong>/.test(src.card) &&
       /<MarketMoodCard view=\{mood\} credit=\{<a href=\{TIINGO_URL\}[^\n]*>\{TIINGO_CREDIT\}<\/a>\} \/>/.test(src.pageCode) &&
       none.replace(/<[^>]+>/g, "").includes("Market Mood will appear after tonight&#x27;s update.") && !/problem on our side|\b50\b/.test(none.replace(/<[^>]+>/g, ""));
   },
@@ -224,6 +226,7 @@ const MUTANTS = [
   [R[10], "card", (s) => s.replace("{moodNoteText(inputs.length)}", "{moodNoteText(6)}")],
   [R[10], "page", (s) => s.replace(/<MarketMoodCard view=\{mood\} credit=\{<a[^\n]*\/>/, "<MarketMoodCard view={mood} credit={credit} />")],
   [R[10], "card", (s) => s.replace("Reading for {dayWords(day.d)}", "Latest reading")],
+  [R[10], "card", (s) => s.replace('backgroundSize: `100% ${(100 * 100) / fillPct}%`, backgroundPosition: "bottom", ', "")],
   [R[10], "card", (s) => s.replace("Market Mood will appear after tonight&apos;s update.", "Market Mood isn&apos;t available just now. This is a problem on our side.")],
   [R[11], "card", (s) => s.replace("minWidth: 0, boxSizing: \"border-box\", position: \"relative\"", "minWidth: 320, boxSizing: \"border-box\", position: \"relative\"")],
   [R[11], "page", (s) => s.replace("          .spxHeroGrid { grid-template-columns: minmax(0, 1fr) !important; }\n", "")],

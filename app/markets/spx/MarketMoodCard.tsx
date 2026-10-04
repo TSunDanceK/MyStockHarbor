@@ -67,6 +67,8 @@ export default function MarketMoodCard({ view, credit }: { view: MoodCardView | 
   const { day, label, spark } = view;
   const t = TONE[moodTone(day.r)];
   const inputs = MOOD_INPUTS.filter((x) => typeof day.s[x.key] === "number");
+  // The gradient spans the whole tube (red at 0, green at 100), so a fill of 37 ends in orange, not green.
+  const fillPct = Math.max(7, Math.min(100, day.r));
   return (
     <aside className="moodCard" style={{ ...cardStyle, border: `1px solid ${t.border}`, background: t.bg }}>
       <div ref={head} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
@@ -88,7 +90,7 @@ export default function MarketMoodCard({ view, credit }: { view: MoodCardView | 
         {/* THE THERMOMETER: the tube, filled red → green to the reading's height, and the bulb in the reading's tone. */}
         <div className="moodThermo" aria-hidden="true" style={{ position: "relative", height: 170, display: "flex", justifyContent: "center" }}>
           <div style={{ position: "relative", width: 30, height: 150, borderRadius: 999, border: "3px solid rgba(255,255,255,0.48)", background: "rgba(2,6,23,0.62)", overflow: "hidden", boxShadow: "0 0 24px rgba(255,255,255,0.10)", boxSizing: "border-box" }}>
-            <div className="moodFill" style={{ position: "absolute", left: 5, right: 5, bottom: 5, height: `${Math.max(7, Math.min(100, day.r))}%`, borderRadius: 999, background: "linear-gradient(0deg, #ef4444 0%, #f97316 28%, #eab308 50%, #84cc16 72%, #22c55e 100%)", boxShadow: "0 0 18px rgba(34,197,94,0.35)" }} />
+            <div className="moodFill" style={{ position: "absolute", left: 5, right: 5, bottom: 5, height: `${fillPct}%`, borderRadius: 999, background: "linear-gradient(0deg, #ef4444 0%, #f97316 28%, #eab308 50%, #84cc16 72%, #22c55e 100%)", backgroundSize: `100% ${(100 * 100) / fillPct}%`, backgroundPosition: "bottom", backgroundRepeat: "no-repeat", boxShadow: `0 0 18px ${t.glow}` }} />
           </div>
           <div style={{ position: "absolute", bottom: 0, width: 42, height: 42, borderRadius: 999, border: "3px solid rgba(255,255,255,0.48)", background: t.bulb, boxShadow: `0 0 20px ${t.glow}`, boxSizing: "border-box" }} />
         </div>
