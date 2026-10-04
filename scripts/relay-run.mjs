@@ -1353,6 +1353,11 @@ const TASKS = {
   "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
   // READS ONLY: which margin the Growth & margins chart draws across the universe (#563 COWORK #71). ~105 MGET.
   "write-margin-kind-census": { script: "scripts/margin-kind-census.mjs", args: () => [], writes: true },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 CODE-A #137 §4): the P/E
+  // sector-median census, from the SEC picker rows and the stored Tiingo close
+  // through the shipped applySecEarnings, sectors from the FMP-free SIC
+  // classification. 2 HGETALL; prints counts and medians, no prices.
+  "write-pe-sector-census": { script: "scripts/pe-sector-census.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
