@@ -48,9 +48,12 @@ const CARD = "app/stock/[symbol]/KeyLevelsCard.tsx";
 const PAGE = "app/stock/[symbol]/StockSymbolPageClient.tsx";
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 
+/** C's TapNote (#563 COWORK #88/#89), with the two hooks the shared unit doesn't import. */
+const tapNoteUnit = () => `import { useCallback, useLayoutEffect } from "react";\n${strip(fs.readFileSync("app/stock/[symbol]/TapNote.tsx", "utf8"))}`;
+
 /** The two modules and the card (with A's ReasonedValue), one transpiled unit. */
 async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8"), barsLib = fs.readFileSync(BARS, "utf8"), sess = fs.readFileSync(SESS, "utf8")) {
-  const unit = `${reasonedValueUnit()}\n${strip(sess)}\n${strip(lib)}\n${strip(barsLib)}\n${strip(card).replace("export default function KeyLevelsCard", "export function KeyLevelsCard")}\n`;
+  const unit = `${reasonedValueUnit()}\n${tapNoteUnit()}\n${strip(sess)}\n${strip(lib)}\n${strip(barsLib)}\n${strip(card).replace("export default function KeyLevelsCard", "export function KeyLevelsCard")}\n`;
   const js = ts.transpileModule(unit, {
     fileName: "keylevels.tsx",
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" },
@@ -163,6 +166,8 @@ let measure = async function measureAll(M) {
     shortHtml: render({ bars: F.oneBar, lastPrice: 100 }),
     emptyText: visibleText(render({ bars: [], lastPrice: 100 })),
     credited: visibleText(render({ bars: F.monthMidWeek, credit: React.createElement("a", { href: "#" }, "Tiingo credit") })),
+    creditedHtml: render({ bars: F.monthMidWeek, credit: React.createElement("a", { href: "#" }, "Tiingo credit") }),
+    noteHtml: (bar) => renderToStaticMarkup(React.createElement(M.RowNoteBody, { bar })),
   };
 }
 
@@ -272,23 +277,46 @@ const rules = {
     // On a gap the bar is drawn short on the stretched scale, the ◇ at the end, over a grey rail.
     /class="klRail"/.test(gapUpHtml) && /class="klBar" style="[^"]*left:42\.857\d*%;width:57\.142\d*%/.test(gapUpHtml) &&
     /class="klPrev" style="[^"]*left:0%/.test(gapUpHtml) && /class="klPrev" style="[^"]*left:100%/.test(gapDownHtml) &&
-    /◇ previous close/.test(full) && /Previous session's close \$[\d,.]+ \(Thu 1 Oct\) · [\d.]+% (above|below) the last price\./.test(rows[0].bar.note) &&
-    /Last week's close \$[\d,.]+ \(Fri 25 Sep\)/.test(rows[1].bar.note) &&
-    /class="klGap"[^>]*>◇ prev close [\d.]+% below the low</.test(gapUpHtml) && /class="klGap"[^>]*>◇ prev close [\d.]+% above the high</.test(gapDownHtml),
+    /◇ previous close/.test(full) &&
+    rows[0].bar.rowNote.bullets.some((b) => b.key === "prev" && b.label === "Previous session's close" && /^\$[\d,.]+ \(Thu 1 Oct\) — [\d.]+% (above|below)$/.test(b.text)) &&
+    rows[1].bar.rowNote.bullets.some((b) => b.key === "prev" && b.label === "Last week's close" && /^\$[\d,.]+ \(Fri 25 Sep\)/.test(b.text)) &&
+    // The gap's words left the face for the row's note (#88 §1, #89).
+    !/klGap/.test(gapUpHtml + gapDownHtml),
+  "the gap bullet: on gap rows only, after the previous close, with the gap's size (#89)": ({ gapUp, gapDown, rows }) => {
+    const keys = (r) => r.bar.rowNote.bullets.map((b) => b.key);
+    const gap = (r) => r.bar.rowNote.bullets.find((b) => b.key === "gap");
+    return keys(gapUp[0]).join(",") === "open,high,low,prev,gap,last" && gap(gapUp[0]).text === `the previous close is ${((172 - 166) / 172 * 100).toFixed(1)}% below the low` &&
+      gap(gapDown[0]).text === `the previous close is ${((190 - 180) / 180 * 100).toFixed(1)}% above the high` &&
+      [...rows, ...gapUp, ...gapDown].every((r) => !!gap(r) === (r.bar.prev?.gap != null));
+  },
   "colour: green above the open, red below, neutral within a hair": ({ M }) =>
     M.toneOf(101, 100) === "up" && M.toneOf(99, 100) === "down" && M.toneOf(100.04, 100) === "flat" && M.toneOf(100, null) === "flat",
-  "never colour alone: the dot sits right of the tick when green, left when red, and the note says so": ({ rows, outside, M }) =>
-    [...rows, ...outside].every((r) => {
+  "never colour alone: the dot sits right of the tick when green, left when red, and the note says so": ({ rows, outside, split, M }) =>
+    [...rows, ...outside, ...split].every((r) => {
       const b = r.bar;
-      return b.tone === "flat" ? b.note.includes(M.TONE_WORDS.flat)
-        : (b.tone === "up" ? b.dot > b.open : b.dot < b.open) && b.note.includes(M.TONE_WORDS[b.tone]);
+      return b.tone === "flat" ? b.rowNote.verdict === M.VERDICT_WORDS.flat
+        : (b.tone === "up" ? b.dot > b.open : b.dot < b.open) && b.rowNote.verdict === M.VERDICT_WORDS[b.tone];
     }) && outside.every((r) => r.bar.tone === "up"),
-  "each bar has its tap note: open, high and low against the last price, and the open's day": ({ rows, outside, fullHtml, K }) => {
-    const w = rows[1].bar.note, wo = outside[1].bar.note, open = lv(K.monthMidWeek, "week").levels.open.value;
-    return /Opened at \$[\d,.]+ on Mon 28 Sep\./.test(w) && w.includes(`Opened at $${open.toFixed(2)}`) &&
-      /^Open \$[\d,.]+, [\d.]+% below the last price\. High \$[\d,.]+, [\d.]+% below the last price\. Low \$[\d,.]+, [\d.]+% below the last price\./.test(wo) &&
-      (fullHtml.match(/<span class="klRange"[^>]*><span[^>]*><span role="button"/g) ?? []).length === 3;
+  "each row's note (#89): header, then open · high · low · previous close · last price, each once, distances from the last price": ({ rows, outside, fullHtml, K }) => {
+    const n = (r) => r.bar.rowNote, w = n(rows[1]), d = n(rows[0]), wo = n(outside[1]), open = lv(K.monthMidWeek, "week").levels.open.value;
+    const text = (nn, key) => nn.bullets.find((b) => b.key === key)?.text ?? "";
+    return [d, w, n(rows[2])].every((x) => /^open,high,low,prev,(gap,)?last$/.test(x.bullets.map((b) => b.key).join(","))) &&
+      w.title === "Week" && w.when === "from Mon 28 Sep" && d.when === "Fri 2 Oct" && /^\$[\d,.]+–\$[\d,.]+$/.test(w.range) &&
+      text(w, "open").startsWith(`$${open.toFixed(2)} — `) &&
+      /^\$[\d,.]+ — [\d.]+% below the last price$/.test(text(wo, "open")) && /^\$[\d,.]+ — [\d.]+% below$/.test(text(wo, "high")) && /^\$[\d,.]+ — [\d.]+% below$/.test(text(wo, "low")) &&
+      /^\$[\d,.]+ — the close on Fri 2 Oct$/.test(text(d, "last")) &&
+      // The open appears once: one bullet, and its price once in the whole note.
+      rows.every((r) => n(r).bullets.filter((b) => b.key === "open").length === 1 && r.bar.note.split(`$${lv(K.monthMidWeek, r.key).levels.open.value.toFixed(2)}`).length === 2 && !/Opened at/.test(r.bar.note)) &&
+      (fullHtml.match(/<span class="klRange"[^>]*><button type="button" data-note="[^"]+" class="tapNoteBtn"/g) ?? []).length === 3;
   },
+  "the note's verdict follows the open rule, coloured; each bullet carries the card's own mark (#89)": ({ rows, outside, split, noteHtml, M }) =>
+    [...rows, ...outside, ...split].every((r) => {
+      const h = noteHtml(r.bar);
+      const colour = { up: "#22c55e", down: "#ef4444", flat: "#94a3b8" }[r.bar.tone];
+      return new RegExp(`class="klVerdict" data-tone="${r.bar.tone}" style="[^"]*color:${colour}[^"]*">${M.VERDICT_WORDS[r.bar.tone].replace("'", "(?:'|&#x27;)")}<`).test(h) &&
+        (h.match(/class="klBullet" data-key="(open|high|low|prev|gap|last)"/g) ?? []).length === r.bar.rowNote.bullets.length &&
+        (h.match(/<li class="klBullet"[^>]*><span aria-hidden="true" class="noteDot"/g) ?? []).length === r.bar.rowNote.bullets.length;
+    }) && split.some((r) => r.bar.tone === "up") && split.some((r) => r.bar.tone === "down"),
   "low–high labels, whole dollars from $10,000": ({ rows, bigRows, K, M }) => {
     const w = lv(K.monthMidWeek, "week").levels;
     return rows[1].bar.range === `${M.bare(w.low.value)} – ${M.bare(w.high.value)}` && /^\d+\.\d\d – \d+\.\d\d$/.test(rows[1].bar.range) &&
@@ -310,11 +338,17 @@ const rules = {
   "the card is never blank: no bars still gives the reason": ({ emptyText, M }) =>
     emptyText.includes("Key levels") && emptyText.includes(M.NO_BARS_REASON),
   "the notes say what the levels are, and nothing reads as advice": ({ fullHtml, full, rows, M }) =>
-    /What are these\?/.test(full) && M.KEY_LEVELS_NOTE.startsWith("Levels some traders watch") && fullHtml.includes("Levels some traders watch") &&
+    /What are these\?/.test(full) && M.KEY_LEVELS_NOTE.startsWith("Levels some traders watch") &&
     /Bar: that period[’']s low to high · tick: the open · ◇ previous close · dot: the last price, green above the open, red below · grey space between ◇ and the bar: a gap from the previous close\./.test(full) &&
     !/\b(buy|sell|bullish|bearish|support|resistance|target|should|recommend)\b/i.test(`${full} ${M.KEY_LEVELS_NOTE} ${rows.map((r) => r.bar.note).join(" ")}`),
   "the Tiingo credit only when it is passed": ({ full, credited }) =>
     !/Daily prices:/.test(full) && /Daily prices: Tiingo credit/.test(credited),
+  "the small print folded (#88 §1): 'How to read this' closed, holding the key; the credit and the last price outside": ({ creditedHtml }) => {
+    const d = /<details class="howToRead"([^>]*)>([\s\S]*?)<\/details>/.exec(creditedHtml);
+    return !!d && !/\bopen\b/.test(d[1]) && />How to read this ▾</.test(d[2]) && /Bar: that period[’']s low to high/.test(d[2]) &&
+      !/Daily prices/.test(d[2]) && !/class="klAsOf"/.test(d[2]) && creditedHtml.indexOf("Daily prices") > creditedHtml.indexOf("</details>") &&
+      (creditedHtml.match(/Bar: that period/g) ?? []).length === 1;
+  },
 };
 
 // ── In session or not (#563 COWORK #75/#76) ─────────────────────────────────
@@ -364,22 +398,23 @@ Object.assign(rules, {
 const staticRules = {
   "no fetch, no Redis, no provider reads in any file": (l, c, _p, b) =>
     ![l, c, b].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory|historyForSurface|readSurfaceInputs/.test(s)),
-  "the modules import only each other; the card only React's types, A's ReasonedValue and the modules": (l, c, _p, b) => {
+  "the modules import only each other; the card only React, C's TapNote and the modules": (l, c, _p, b) => {
     const imports = [...c.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
     const barImports = [...b.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
     const libImports = [...l.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
     return libImports.length === 1 && libImports[0] === "./sessionBar" && barImports.length === 1 && barImports[0] === "./keyLevels" &&
-      imports.every((i) => i === "react" || i === "@/app/components/EstimatedValue" || i === "@/lib/ta/keyLevels" || i === "@/lib/ta/keyLevelBars") &&
-      /^import type \{[^}]*\} from "react";$/m.test(c) && /^import \{ ReasonedValue \} from "@\/app\/components\/EstimatedValue";$/m.test(c);
+      imports.every((i) => i === "react" || i === "./TapNote" || i === "@/lib/ta/keyLevels" || i === "@/lib/ta/keyLevelBars") &&
+      /^import \{ useRef, type CSSProperties, type ReactNode \} from "react";$/m.test(c) && /^import \{[^}]*\} from "\.\/TapNote";$/m.test(c);
   },
   "placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars": (_l, _c, p) => {
     const side = p.slice(p.indexOf('<aside className="stock-page-sidebar">'), p.indexOf("</aside>"));
     return /<KeyLevelsCard bars=\{history\} lastPrice=\{quote\?\.price \?\? null\} nowMs=\{renderedAt\} credit=\{shownProvider === "tiingo" \? historyCredit : undefined\} \/>[\s{}]*(<\/div>[\s{}]*<div className="sp-slot sp-earnings">[\s{}]*)?<LatestEarningsCard /.test(side) &&
       (p.match(/<KeyLevelsCard /g) ?? []).length === 1 && /^import KeyLevelsCard from "\.\/KeyLevelsCard";$/m.test(p);
   },
-  "a tap on the bar opens its row's note": (_l, c) =>
-    /<div className="klTrack" data-tone=\{r\.bar\.tone\}[^>]*onClick=\{openRowNote\}/.test(c) &&
-    /e\.currentTarget\.closest\("\.klRow"\)\?\.querySelector<HTMLElement>\("\.klRange \[role=\\"button\\"\]"\)\?\.click\(\);/.test(c),
+  "a tap on the bar opens its row's note (the same note as the range label, its own outside-tap owner)": (_l, c) =>
+    /<div className="klTrack" \{\.\.\.note\.owner\} data-tone=\{r\.bar\.tone\}[^>]*onClick=\{note\.toggle\}/.test(c) &&
+    /<span className="klRange"[^>]*>\s*<NoteButton note=\{note\}>\{r\.bar\.range\}<\/NoteButton>/.test(c) &&
+    /<FlowPanel note=\{note\} anchor=\{head\} phone=\{phone\}[^>]*>\s*<RowNoteBody bar=\{r\.bar\} \/>/.test(c),
   "the tick and the dot both stay visible where they meet: the tick is taller, the dot on top, the ◇ above the bar": (_l, c) =>
     /className="klOpen" style=\{\{ position: "absolute", top: 6, height: 18,[^\n]*?zIndex: 1 \}\}/.test(c) &&
     /className="klDot" style=\{\{ position: "absolute", top: 9, width: 10, height: 10,[^\n]*?zIndex: 2 \}\}/.test(c) &&
@@ -446,14 +481,21 @@ const mutants = [
   ["the ◇ is drawn and keyed, its note gives value, date and distance (#78)", "c", (s) => s.replace("tick: the open · ◇ previous close · dot", "tick: the open · dot")],
   ["the ◇ is drawn and keyed, its note gives value, date and distance (#78)", "c", (s) => s.replace(" · grey space between ◇ and the bar: a gap from the previous close.", ".")],
   ["the ◇ is drawn and keyed, its note gives value, date and distance (#78)", "c", (s) => s.replace("left: `${r.bar.from}%`, width: `${r.bar.to - r.bar.from}%`,", "left: 0, right: 0,")],
-  ["the ◇ is drawn and keyed, its note gives value, date and distance (#78)", "b", (s) => s.replace("`${PREV_WORDS[p.key]} ${priceWords(p.prevClose.value)} (${dayWords(p.prevClose.date)})", "`${PREV_WORDS[p.key]} ${priceWords(p.prevClose.value)}")],
+  ["the ◇ is drawn and keyed, its note gives value, date and distance (#78)", "b", (s) => s.replace("text: `${priceWords(p.prevClose.value)} (${dayWords(p.prevClose.date)})", "text: `${priceWords(p.prevClose.value)}")],
+  ["the ◇ is drawn and keyed, its note gives value, date and distance (#78)", "c", (s) => s.replace('{r.bar.flat ? <div className="klFlat"', '{r.bar.prev?.gapWords ? <div className="klGap">◇ {r.bar.prev.gapWords}</div> : null}\n          {r.bar.flat ? <div className="klFlat"')],
+  ["the gap bullet: on gap rows only, after the previous close, with the gap's size (#89)", "b", (s) => s.replace("      if (prev?.gapWords) bullets.push(", "      if (false) bullets.push(")],
+  ["the gap bullet: on gap rows only, after the previous close, with the gap's size (#89)", "b", (s) => s.replace('.replace(/^prev close /, "")', '.replace(/^prev close /, "").replace("below", "above")')],
   ["colour: green above the open, red below, neutral within a hair", "b", (s) => s.replace('return pct > 0 ? "up" : "down";', 'return pct > 0 ? "down" : "up";')],
   ["colour: green above the open, red below, neutral within a hair", "b", (s) => s.replace('  if (Math.abs(pct) < LEVEL_WITH_OPEN_PCT) return "flat";\n', "")],
-  ["never colour alone: the dot sits right of the tick when green, left when red, and the note says so", "b", (s) => s.replace("`on ${dayWords(p.from)}`}. ${TONE_WORDS[tone]}`", "`on ${dayWords(p.from)}`}.`")],
+  ["never colour alone: the dot sits right of the tick when green, left when red, and the note says so", "b", (s) => s.replace("verdict: isNum(open) ? VERDICT_WORDS[tone] : null,", "verdict: isNum(open) ? VERDICT_WORDS.up : null,")],
   ["never colour alone: the dot sits right of the tick when green, left when red, and the note says so", "b", (s) => s.replace("const tone = toneOf(last, open);", "const tone = toneOf(open ?? last, last);")],
-  ["each bar has its tap note: open, high and low against the last price, and the open's day", "b", (s) => s.replace("`Opened at ${priceWords(open)} ${liveDay ? \"today\" : `on ${dayWords(p.from)}`}.", "`Opened at ${priceWords(open)}.")],
-  ["each bar has its tap note: open, high and low against the last price, and the open's day", "b", (s) => s.replace("`High ${against(sp.high, last)}.`", "`High ${priceWords(sp.high)}.`")],
-  ["each bar has its tap note: open, high and low against the last price, and the open's day", "c", (s) => s.replace("<ReasonedValue text={r.bar.range} reason={r.bar.note} />", "{r.bar.range}")],
+  ["each row's note (#89): header, then open · high · low · previous close · last price, each once, distances from the last price", "b", (s) => s.replace('    if (isNum(open)) bullets.push({ key: "open"', '    bullets.push({ key: "last", label: "Last price", text: "" });\n    if (isNum(open)) bullets.push({ key: "open"')],
+  ["each row's note (#89): header, then open · high · low · previous close · last price, each once, distances from the last price", "b", (s) => s.replace('      flat ? FLAT_RANGE_WORDS : "",', '      isNum(open) ? `Opened at ${priceWords(open)}.` : "",\n      flat ? FLAT_RANGE_WORDS : "",')],
+  ["each row's note (#89): header, then open · high · low · previous close · last price, each once, distances from the last price", "b", (s) => s.replace('label: "Open", text: from(open, last, true)', 'label: "Open", text: from(open, last, false)')],
+  ["each row's note (#89): header, then open · high · low · previous close · last price, each once, distances from the last price", "b", (s) => s.replace("p.key === \"day\" ? dayWords(p.from) : `from ${dayWords(p.from)}`,\n      range", "p.key === \"day\" ? dayWords(p.from) : dayWords(p.from),\n      range")],
+  ["each row's note (#89): header, then open · high · low · previous close · last price, each once, distances from the last price", "c", (s) => s.replace("<NoteButton note={note}>{r.bar.range}</NoteButton>", "{r.bar.range}")],
+  ["the note's verdict follows the open rule, coloured; each bullet carries the card's own mark (#89)", "c", (s) => s.replace("color: TONE_COLOUR[n.tone] }}>{n.verdict}", "color: C.value }}>{n.verdict}")],
+  ["the note's verdict follows the open rule, coloured; each bullet carries the card's own mark (#89)", "c", (s) => s.replace("<NoteDot shape={MARK[b.key].shape} colour={MARK[b.key].colour(n.tone)} />", "")],
   ["low–high labels, whole dollars from $10,000", "b", (s) => s.replace('priceWords(v).replace(/^\\$/, "")', "v.toFixed(2)")],
   ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace('{hasPrice || k.live ? "Last price" : "Last close"}', '{"Last price"}')],
   ["the card: three bars, one line with the last price and the as-of close, no Close row", "c", (s) => s.replace("<>as of the close on {k.asOfWords}</>", "<>as of {k.asOfWords}</>")],
@@ -464,8 +506,10 @@ const mutants = [
   ["the card is never blank: no bars still gives the reason", "c", (s) => s.replace("{k.reasons.length && !rows.length ? k.reasons.map(", "{false ? k.reasons.map(")],
   ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace('"Levels some traders watch: ', '"Levels where traders buy: ')],
   ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace("dot: the last price, green above the open, red below", "dot: the last price. Green means buy, red means sell")],
-  ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace('<ReasonedValue text="What are these?" reason={KEY_LEVELS_NOTE} />', "")],
-  ["the Tiingo credit only when it is passed", "c", (s) => s.replace("{credit ? <p style={noteStyle}>Daily prices: {credit}</p> : null}", "<p style={noteStyle}>Daily prices: {credit ?? \"Tiingo\"}</p>")],
+  ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace("<NoteButton note={what}>What are these?</NoteButton>", "")],
+  ["the Tiingo credit only when it is passed", "c", (s) => s.replace('{credit ? <p className="klCredit" style={noteStyle}>Daily prices: {credit}</p> : null}', '<p className="klCredit" style={noteStyle}>Daily prices: {credit ?? "Tiingo"}</p>')],
+  ["the small print folded (#88 §1): 'How to read this' closed, holding the key; the credit and the last price outside", "c", (s) => s.replace('<p className="klKey" style={{ margin: 0 }}>{KEY_LINE}</p>', '<p className="klKey" style={{ margin: 0 }}>{KEY_LINE}</p>\n          {credit ? <p>Daily prices: {credit}</p> : null}')],
+  ["the small print folded (#88 §1): 'How to read this' closed, holding the key; the credit and the last price outside", "c", (s) => s.replace("        <HowToRead>\n          <p className=\"klKey\"", "        <><p className=\"klKey\" style={{ margin: 0 }}>{KEY_LINE}</p></>\n      ) : null}\n      {rows.some((r) => r.bar) ? (\n        <HowToRead>\n          <p className=\"klKey\"")],
 ];
 for (const [name, which, mutate] of mutants) {
   const l2 = which === "l" ? mutate(L) : L;
@@ -480,14 +524,15 @@ for (const [name, which, mutate] of mutants) {
 const staticMutants = [
   ["no fetch, no Redis, no provider reads in any file", (l, c, p, b) => [`${l}\nconst x = fetch("/api/history");`, c, p, b]],
   ["no fetch, no Redis, no provider reads in any file", (l, c, p, b) => [l, c, p, `${b}\nconst x = fetch("/api/history");`]],
-  ["the modules import only each other; the card only React's types, A's ReasonedValue and the modules", (l, c, p, b) => [l, c, p, `import { getDailyHistory } from "@/lib/server/historyCache";\n${b}`]],
-  ["a tap on the bar opens its row's note", (l, c, p, b) => [l, c.replace(" onClick={openRowNote}", ""), p, b]],
-  ["a tap on the bar opens its row's note", (l, c, p, b) => [l, c.replace('.querySelector<HTMLElement>(".klRange [role=\\"button\\"]")?.click();', ';'), p, b]],
+  ["the modules import only each other; the card only React, C's TapNote and the modules", (l, c, p, b) => [l, c, p, `import { getDailyHistory } from "@/lib/server/historyCache";\n${b}`]],
+  ["a tap on the bar opens its row's note (the same note as the range label, its own outside-tap owner)", (l, c, p, b) => [l, c.replace(" onClick={note.toggle}", ""), p, b]],
+  ["a tap on the bar opens its row's note (the same note as the range label, its own outside-tap owner)", (l, c, p, b) => [l, c.replace(" {...note.owner} data-tone=", " data-tone="), p, b]],
+  ["a tap on the bar opens its row's note (the same note as the range label, its own outside-tap owner)", (l, c, p, b) => [l, c.replace("<RowNoteBody bar={r.bar} />", "{r.bar.note}"), p, b]],
   ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top, the ◇ above the bar", (l, c, p, b) => [l, c.replace("top: 6, height: 18, width: 2,", "top: 10, height: 8, width: 2,"), p, b]],
   ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top, the ◇ above the bar", (l, c, p, b) => [l, c.replace('const diamondStyle: CSSProperties = { position: "absolute", top: 0,', 'const diamondStyle: CSSProperties = { position: "absolute", top: 10,'), p, b]],
   ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top, the ◇ above the bar", (l, c, p, b) => [l, c.replace("zIndex: 2 }}", "zIndex: 0 }}"), p, b]],
-  ["the modules import only each other; the card only React's types, A's ReasonedValue and the modules", (l, c, p, b) => [`import { readTiingoHistoryPoints } from "@/lib/server/tiingoHistory";\n${l}`, c, p, b]],
-  ["the modules import only each other; the card only React's types, A's ReasonedValue and the modules", (l, c, p, b) => [l, `import { getDailyHistory } from "@/lib/server/historyCache";\n${c}`, p, b]],
+  ["the modules import only each other; the card only React, C's TapNote and the modules", (l, c, p, b) => [`import { readTiingoHistoryPoints } from "@/lib/server/tiingoHistory";\n${l}`, c, p, b]],
+  ["the modules import only each other; the card only React, C's TapNote and the modules", (l, c, p, b) => [l, `import { getDailyHistory } from "@/lib/server/historyCache";\n${c}`, p, b]],
   ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace('nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />', "nowMs={renderedAt} credit={historyCredit} />")]],
   ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace(/\s*<KeyLevelsCard [^\n]*\n/, "\n")]],
   ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace("<KeyLevelsCard bars={history}", "<KeyLevelsCard bars={history.slice(-5)}")]],

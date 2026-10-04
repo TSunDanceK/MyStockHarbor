@@ -439,10 +439,68 @@ export function zoneNote(z: Zone): string {
   return `${countWords(z)}${shared ? ", one bar's price counted once where names share it" : ""}: ${lines.join(" ")} ${CONFLUENCE_NOTE}`;
 }
 
+// ── the tap note, structured (#563 COWORK #88 §4) ───────────────────────────
+
+/** The kinds a level is grouped by in a zone's note, in order, each with its dot colour (readable on the dark card). */
+export const NOTE_KINDS = [
+  { key: "hl", label: "Highs & lows", colour: "#fb923c" },
+  { key: "oc", label: "Opens & closes", colour: "#60a5fa" },
+  { key: "ma", label: "Moving averages", colour: "#34d399" },
+  { key: "swing", label: "Swing points", colour: "#c084fc" },
+  { key: "pivot", label: "Pivots", colour: "#f472b6" },
+  { key: "round", label: "Round number", colour: "#cbd5e1" },
+  { key: "proj", label: "Projections", colour: "#7dd3fc" },
+] as const;
+export type NoteKind = (typeof NOTE_KINDS)[number]["key"];
+
+/** One name's kind. Macro support (a cluster of weekly swing lows) counts as a swing point. */
+export function kindOfLabel(label: string, tier: Tier): NoteKind {
+  if (tier === "projection") return "proj";
+  if (tier === "round") return "round";
+  if (/^MA(50|200)$/.test(label)) return "ma";
+  if (/^Weekly pivot/.test(label)) return "pivot";
+  if (/^Swing |^Macro support/.test(label)) return "swing";
+  if (/open$|close$/i.test(label)) return "oc";
+  return "hl";
+}
+
+/** A member's kind: the first kind, in NOTE_KINDS order, among its names (a bar's low that is also a swing low reads as a low). */
+export function kindOf(m: Member): NoteKind {
+  const ks = m.labels.map((l) => kindOfLabel(l, m.tier));
+  return NOTE_KINDS.find((k) => ks.includes(k.key))?.key ?? "hl";
+}
+
+export type NoteBullet = { kind: NoteKind; names: string[]; value: number; date: string | null; derived?: string };
+export type ZoneNoteParts = {
+  /** "3 levels", "$236.06–$237.88", "0.9% above" (or "price inside zone"), and the zone's side for its colour. */
+  count: string;
+  range: string;
+  distance: string;
+  side: "above" | "below" | "inside";
+  /** One bullet per independent level, grouped by kind in NOTE_KINDS order; shared prices on one bullet. */
+  bullets: NoteBullet[];
+};
+export const ZONE_NOTE_FOOTER = "One bar's price is counted once. A description, not a forecast.";
+
+export function zoneNoteParts(z: Zone, price: number): ZoneNoteParts {
+  const order = (k: NoteKind) => NOTE_KINDS.findIndex((x) => x.key === k);
+  const bullets = z.members
+    .map((m) => ({ kind: kindOf(m), names: m.labels, value: m.value, date: m.date, ...(m.derived ? { derived: m.derived } : {}) }))
+    .sort((a, b) => order(a.kind) - order(b.kind) || b.value - a.value);
+  const side = z.lo <= price && price <= z.hi ? "inside" : z.lo > price ? "above" : "below";
+  return { count: countWords(z), range: rangeWords(z), distance: zoneDistance(z, price), side, bullets };
+}
+
+/** "Day high · Week high — $237.88 (Fri 2 Oct)"; a projection "≈ $273.14 — the next close that would …". */
+export function bulletWords(b: NoteBullet): string {
+  if (b.kind === "proj") return `${b.names.join(" · ")} — ${ESTIMATE_SIGN} ${priceWords(b.value)}, ${b.derived} (a one-session projection)`;
+  return `${b.names.join(" · ")} — ${priceWords(b.value)}${b.date ? ` (${dateWords(b.date).replace(/ \d{4}$/, "")})` : ""}`;
+}
+
 // ── the ladder's layout ─────────────────────────────────────────────────────
 
-/** The ladder's drawn height, in px. */
-export const ZONE_LADDER_HEIGHT = 220;
+/** The ladder's drawn height, in px (#88 §2: about 320 on desktop, at least 280 on phones; one height for both). */
+export const ZONE_LADDER_HEIGHT = 320;
 /** The least room between two zone labels (up to three lines and a little air), in px. */
 export const ZONE_LABEL_GAP = 42;
 
