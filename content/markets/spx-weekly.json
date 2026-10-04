@@ -31,7 +31,7 @@
   },
   "marketRead": [
     "The real story this week was the labour market reversing a rate-hike scare. Through late September, sticky inflation had pushed some Fed officials toward another hike, and the 10-year Treasury yield touched 5.297% on September 30, its highest level in 24 years. Friday's September jobs report flipped that: just 29,000 jobs were added against roughly 90,000 expected, and unemployment rose to 4.2%, cutting the market-implied odds of an October hike from about 64% to about 16%.",
-    "Under the surface, breadth stayed thin. Technology rose about 5% in September while financials, materials and REITs each fell around 7%, and retail investors have been net sellers for nine straight weeks even as hedge funds kept adding. The CNN Fear & Greed Index sits at 31, in Fear, a cautious reading for an index within about 1% of a record.",
+    "Under the surface, breadth stayed thin. Technology rose about 5% in September while financials, materials and REITs each fell around 7%, and retail investors have been net sellers for nine straight weeks even as hedge funds kept adding.",
     "The bull case: the index absorbed a genuine bond-market scare without breaking its longer-term uptrend, and brokers' year-end targets are little changed, from Yardeni near 7,900 to Goldman Sachs and JPMorgan around 8,000 and UBS at 8,100. The bear case: yields are only just off a 24-year high, leadership is concentrated in a handful of AI-linked mega-caps, and Friday's relief rests on one weak jobs report that may not repeat.",
     "That leaves two questions for the weeks ahead: whether bond yields keep easing from their late-September highs now that the labour market has cooled, and whether breadth can widen beyond technology. The August record was built on strong earnings and a resilient economy; the pullback since was driven by rates rather than profits, which is why the yield path matters more than any single headline right now."
   ],
@@ -54,16 +54,10 @@
     "source": "Not in the 4 Oct weekly update",
     "date": "2026-10-04"
   },
-  "sentiment": {
-    "fearGreed": 31,
-    "label": "Fear",
-    "source": "CNN Fear & Greed Index",
-    "date": "2026-10-04"
-  },
   "watchDown": [
     "The index closes a full week below its daily 200-day moving average, rather than swinging around it as it has for two weeks.",
     "The 10-year Treasury yield climbs back above its late-September high near 5.3%.",
-    "Breadth narrows further from September's technology-only gains, or the Fear & Greed Index slides deeper into fear.",
+    "Breadth narrows further from September's technology-only gains, or more of the index's stocks slip below their averages.",
     "The soft jobs data proves a one-off, reviving the rate-hike concerns behind September's bond-market slide."
   ],
   "watchUp": [

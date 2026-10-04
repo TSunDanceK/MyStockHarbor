@@ -11,6 +11,7 @@ import {
   readLastBuildStats,
   readLastHistoryStats,
 } from "../../../../lib/server/pickersBuilder";
+import { writeMarketMood, type MoodWrite } from "../../../../lib/server/marketMoodWrite";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,7 +85,15 @@ async function handleGET(req: NextRequest) {
   try {
     const startedAt = Date.now();
     const onBars: PickersOnBars = { pickersBuild: "not reached (incomplete night or nothing fetched)" };
-    const result = { ...(await runTiingoEod(Date.now(), pickersOnBars(req, startedAt, onBars))), ...onBars };
+    // MARKET MOOD (#563 COWORK #96): the same complete night's bars, first (about a second, 1 SET),
+    // then the Pickers build as before.
+    const mood: MoodWrite = { mood: "not reached (incomplete night or nothing fetched)" };
+    const pickers = pickersOnBars(req, startedAt, onBars);
+    const both = async (bars: Map<string, EodBar[]>) => {
+      Object.assign(mood, await writeMarketMood(bars));
+      await pickers(bars);
+    };
+    const result = { ...(await runTiingoEod(Date.now(), both)), ...onBars, ...mood };
     console.log("[tiingo-eod]", JSON.stringify(result));
     await recordJobRun("tiingo-eod", result.ok !== false, runSummary(result));
     return NextResponse.json(result, { status: result.ok === false ? 500 : 200 });

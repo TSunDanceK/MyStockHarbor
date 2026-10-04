@@ -86,3 +86,14 @@ export const TIINGO_COLD_QUEUE_KEY = `${TIINGO_PREFIX}cold-queue:v1`;
 export const TIINGO_COLD_NODATA_KEY = `${TIINGO_PREFIX}cold-nodata:v1`;
 /** Counters and the per-symbol lock: `${TIINGO_COLD_COUNTER_PREFIX}<name>:<period>`. */
 export const TIINGO_COLD_COUNTER_PREFIX = `${TIINGO_PREFIX}cold:v1:`;
+
+// ── MARKET MOOD (#563 COWORK #96) ───────────────────────────────────────────
+/**
+ * String: JSON StoredMood (lib/marketMood.ts): the last 300 sessions' 0–100
+ * input scores and readings, computed from the night's bars. Computed values
+ * only, no price, bar or volume; under msh:tiingo: anyway (Tiingo-derived),
+ * so the purge covers it. Written by the tiingo-eod route on a complete night
+ * (1 SET); read by the SPX page through the Data Cache (MOOD_TAG).
+ */
+export const TIINGO_MOOD_KEY = `${TIINGO_PREFIX}mood:v1`;
+export const MOOD_TAG = "market-mood";
