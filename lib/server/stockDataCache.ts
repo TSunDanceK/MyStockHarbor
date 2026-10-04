@@ -129,16 +129,27 @@ async function waitForStockDataBudget(
 // group, the fetch reads the group off the entry, and the per-symbol call count
 // is COUNTED from it rather than stated -- CALLS_PER_SYMBOL used to be a flat 8
 // and would have quietly become a lie the moment the split landed.
+//
+// "retired" (#553 COWORK #131/#132, spend cut 1): listed so the inventory
+// stays complete, NEVER CALLED, and not counted in a symbol's cost. The three
+// analyst endpoints feed only the Pickers columns hidden in
+// lib/pickerHiddenFields.ts (Rating, Analysts, Price Target, PT Upside,
+// Forward P/E), so they were ~17k FMP calls a day for nothing on screen. They
+// stay here, with their fetch blocks, so turning one back on is a deliberate
+// one-word change alongside un-hiding its column -- not an accident.
 const ENDPOINT_TRIGGERS = {
   "ratios-ttm": "clock",
   "income-statement": "quarterly",
   "cash-flow-statement": "quarterly",
   dividends: "quarterly",
-  "price-target-summary": "clock",
-  "grades-consensus": "clock",
-  "analyst-estimates": "clock",
+  "price-target-summary": "retired",
+  "grades-consensus": "retired",
+  "analyst-estimates": "retired",
   "stock-price-change": "clock",
-} as const satisfies Record<string, "clock" | "quarterly">;
+} as const satisfies Record<string, "clock" | "quarterly" | "retired">;
+
+/** Is this endpoint still called? (see "retired" above) */
+const endpointOn = (e: keyof typeof ENDPOINT_TRIGGERS) => (ENDPOINT_TRIGGERS[e] as string) !== "retired";
 
 const CLOCK_CALLS = Object.values(ENDPOINT_TRIGGERS).filter((t) => t === "clock").length;
 const QUARTERLY_CALLS = Object.values(ENDPOINT_TRIGGERS).filter((t) => t === "quarterly").length;
@@ -472,8 +483,9 @@ async function fetchOne(
 
   }
 
-  // 5) price-target-summary -> avg price target + analyst count
-  try {
+  // 5) price-target-summary -> avg price target + analyst count. RETIRED
+  //    (hidden column; see ENDPOINT_TRIGGERS).
+  if (endpointOn("price-target-summary")) try {
     const row = firstRow(await fetchJson(`${base}/price-target-summary?symbol=${s}&apikey=${key}`, tally));
     if (row) {
       out.priceTarget =
@@ -486,16 +498,17 @@ async function fetchOne(
     /* fail open */
   }
 
-  // 6) grades-consensus -> consensus rating label
-  try {
+  // 6) grades-consensus -> consensus rating label. RETIRED (hidden column).
+  if (endpointOn("grades-consensus")) try {
     const row = firstRow(await fetchJson(`${base}/grades-consensus?symbol=${s}&apikey=${key}`, tally));
     if (row) out.rating = str(row.consensus);
   } catch {
     /* fail open */
   }
 
-  // 7) analyst-estimates -> forward EPS (nearest future fiscal year avg)
-  try {
+  // 7) analyst-estimates -> forward EPS (nearest future fiscal year avg).
+  //    RETIRED (Forward P/E is a hidden column).
+  if (endpointOn("analyst-estimates")) try {
     const json = await fetchJson(`${base}/analyst-estimates?symbol=${s}&period=annual&limit=1&apikey=${key}`, tally);
     const row = firstRow(json);
     if (row) {

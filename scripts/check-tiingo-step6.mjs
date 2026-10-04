@@ -232,7 +232,8 @@ const rules = {
     /label: stockData\.peLabel \?\? "P\/E \(TTM\)"/.test(src) && /note: stockData\.peNote \?\? null/.test(src),
   // 8. B13 (#563 COWORK #46): the news price never falls back to Yahoo
   "news data: the quote is FMP only, with no Yahoo quote left": (src) =>
-    /async function fetchQuote\(symbol: string\): Promise<Quote \| null> \{\s*return fetchFmpQuote\(symbol\);\s*\}/.test(src) &&
+    // B's #553 COWORK #132 (spend cut 2) adds a NEWS_HERO=tiingo early return; still FMP-only, no Yahoo.
+    /async function fetchQuote\(symbol: string\): Promise<Quote \| null> \{\s*(?:\/\/[^\n]*\n\s*)*(?:if \(priceProviderFor\("NEWS_HERO"\) === "tiingo"\) return null;\s*)?return fetchFmpQuote\(symbol\);\s*\}/.test(src) &&
     !/fetchYahooQuote|meta\.regularMarketPrice/.test(src),
   "news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close": (src) =>
     /\{heroPrice \? \(/.test(src) && /\) : quote\?\.price != null \? \(/.test(src) &&

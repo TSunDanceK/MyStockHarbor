@@ -194,8 +194,147 @@ async function handleGET(req: NextRequest) {
     tombstonedBySecListing: 0,
     secSkipped: null as string | null,
   };
+  // ─────────────────────────────────────────────────────────────────────────
+  // THE STALE-BAR PASS, AS A CLOSURE SO IT RUNS WITH OR WITHOUT THE SCREENER
+  // (#553 COWORK #131/#132, F1). It reads only this site's own stores (the
+  // newest-bar stamps and its day evidence), never FMP, so a failed or
+  // key-less screener read is no reason to skip it -- it used to be, because
+  // it sat inside the screener branch below.
+  const staleBarPass = async (universe: string[], nowMs: number) => {
+    // THE SAME POOL-DEGRADED GATE AS THE SCREENER BRANCH, on both call sites:
+    // a degraded morning is one where the whole pipeline's evidence is
+    // suspect, not just the price pool's. Without the FMP key nothing writes
+    // the session health, so this skips ("no-session-run") -- and the stamps
+    // below come only from FMP history reads, so the signal is blind then in
+    // any case; the SEC listing pass is the delisting signal that remains.
+    const degraded = poolLooksDegraded(await readPricePoolSessionHealth(), universe.length);
+    if (degraded) {
+      sweep.skipped = `pool-degraded:${degraded}`;
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────────
+    // THE THIRD SIGNAL. Independent of FMP's metadata, which is the point:
+    // both rules above ask FMP whether the symbol is alive, and probe Q5
+    // measured FMP still answering `isActivelyTrading: true` for FB years
+    // after it became META. A symbol that has not printed a daily bar in a
+    // quarter is dead whatever that flag says.
+    //
+    // Runs AFTER the absence pass and skips anything it already handled, so a
+    // symbol carrying all three signals is evicted once and attributed to the
+    // route that found it first.
+    //
+    // Reads two hashes: the bar observations warm-picker-universe flushed at
+    // 07:02 yesterday, and this route's own day evidence. Deliberately not
+    // ~760 reads of msh:history:v7:<SYM> -- see historyCache's note.
+    const stamps = await readNewestBarStamps();
+    sweep.barStampsRead = stamps.size;
+    const staleDayEvidence = await readStaleBarDays(nowMs);
+    const handled = new Set([...sweep.evicted, ...sweep.presetHandEdit]);
+    const staleUpdates: Record<string, string[]> = {};
+    const staleRecovered: string[] = [];
+    const staleBarEvicted: string[] = [];
+
+    for (const symbol of universe) {
+      if (handled.has(symbol)) continue;
+      const stamp = stamps.get(symbol);
+      const behind = stamp ? weekdaysBehindEastern(stamp.newest) : null;
+      const isStale = behind !== null && behind >= EVICTION_STALE_BAR_WEEKDAYS;
+
+      if (!isStale) {
+        // RECOVERING CLEARS THE EVIDENCE, the mirror of clearAbsence. Named
+        // rather than blanket-cleared: only fields the read actually returned
+        // are sent to HDEL, so a clean universe costs no command at all.
+        if (staleDayEvidence.has(symbol)) staleRecovered.push(symbol);
+        continue;
+      }
+
+
+      sweep.staleBarred++;
+      const days = mergeStaleBarDay(
+        (staleDayEvidence.get(symbol) ?? []).join(","),
+        nowMs
+      );
+      staleUpdates[symbol] = days;
+
+      const action = staleBarEvictionAction(
+        symbol,
+        days.length,
+        behind,
+        stamp?.observedAt,
+        nowMs
+      );
+      if (action === "hand-edit") {
+        // THE #404 RULE HOLDS WHATEVER FIRED IT. A curated symbol is never
+        // evicted, only shouted about -- and it reaches the identical alarm
+        // through the identical preset gate, because staleBarEvictionAction
+        // and evictionAction share one.
+        sweep.presetHandEdit.push(symbol);
+        if (await claimPresetHandEditAlarm(symbol)) {
+          console.error(
+            `[screener-fundamentals] PRESET UNIVERSE NEEDS A HAND EDIT: ${symbol} ` +
+              `last printed a daily bar on ${stamp?.newest} -- ${behind} trading ` +
+              `days ago -- across ${days.length} day(s) of evidence. It cannot be ` +
+              `evicted -- it is hardcoded in lib/server/presetUniverse.ts. Check ` +
+              `whether it was renamed, acquired or delisted, then edit that array ` +
+              `and redeploy.`
+          );
+        }
+        continue;
+      }
+      if (action === "evict") {
+        const evicted = await evictSymbol(symbol);
+        sweep.evicted.push(symbol);
+        sweep.evictedByStaleBars++;
+        if (evicted.tombstoned) sweep.tombstonedByStaleBars++;
+        staleBarEvicted.push(`${symbol}@${stamp?.newest}`);
+      }
+    }
+    // Written after the loop so one HSET and one HDEL carry the whole day.
+    // An evicted symbol's field is removed by evictSymbol (PER_SYMBOL_HASHES),
+    // so it is deliberately not re-written here.
+    // ANYTHING IN THE HASH WITH NO EVIDENCE WRITTEN TODAY GOES. That is the
+    // recovered universe symbols above, and also fields for symbols that have
+    // since left the universe entirely -- the loop never reaches those, so
+    // without this line their evidence would sit in the hash forever, which is
+    // the immortal-field problem PER_SYMBOL_HASHES exists to avoid.
+    for (const symbol of staleDayEvidence.keys()) {
+      if (!(symbol in staleUpdates) && !staleRecovered.includes(symbol)) {
+        staleRecovered.push(symbol);
+      }
+    }
+    await writeStaleBarDays(
+      Object.fromEntries(
+        Object.entries(staleUpdates).filter(([sym]) => !sweep.evicted.includes(sym))
+      ),
+      staleRecovered
+    );
+    if (staleBarEvicted.length) {
+      console.warn(
+        `[screener-fundamentals] evicted ${staleBarEvicted.length} symbol(s) whose ` +
+          `newest daily bar is at least ${EVICTION_STALE_BAR_WEEKDAYS} trading days ` +
+          `old, independently of FMP's isActivelyTrading flag: ${staleBarEvicted.join(", ")}`
+      );
+    }
+  };
+
+  // NO FMP KEY IS A HEALTHY SKIP, not a failure (#553 COWORK #132, F1): the
+  // screener and the two FMP-backed signals cannot run, but the stale-bar pass
+  // and the SEC listing pass below need no FMP at all.
+  const noFmpKey = !result.ok && result.reason === "no-fmp-key";
   if (!result.ok || !result.symbols.length) {
-    sweep.skipped = "screener-unavailable";
+    sweep.skipped = noFmpKey ? "no-fmp-key" : "screener-unavailable";
+    try {
+      const { symbols: universe } = await getWarmTargetSymbols(
+        process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com"
+      );
+      sweepUniverse = universe;
+      if (universe.length) {
+        await staleBarPass(universe, Date.now());
+        if (sweep.evicted.length) await deregisterSymbols(sweep.evicted);
+      }
+    } catch (error) {
+      console.warn("[screener-fundamentals] stale-bar pass failed:", error);
+    }
   } else {
     try {
       const present = new Set(result.symbols);
@@ -283,109 +422,7 @@ async function handleGET(req: NextRequest) {
         }
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // THE THIRD SIGNAL. Independent of FMP's metadata, which is the point:
-      // both rules above ask FMP whether the symbol is alive, and probe Q5
-      // measured FMP still answering `isActivelyTrading: true` for FB years
-      // after it became META. A symbol that has not printed a daily bar in a
-      // quarter is dead whatever that flag says.
-      //
-      // Runs AFTER the absence pass and skips anything it already handled, so a
-      // symbol carrying all three signals is evicted once and attributed to the
-      // route that found it first.
-      //
-      // Reads two hashes: the bar observations warm-picker-universe flushed at
-      // 07:02 yesterday, and this route's own day evidence. Deliberately not
-      // ~760 reads of msh:history:v7:<SYM> -- see historyCache's note.
-      const stamps = await readNewestBarStamps();
-      sweep.barStampsRead = stamps.size;
-      const staleDayEvidence = await readStaleBarDays(nowMs);
-      const handled = new Set([...sweep.evicted, ...sweep.presetHandEdit]);
-      const staleUpdates: Record<string, string[]> = {};
-      const staleRecovered: string[] = [];
-      const staleBarEvicted: string[] = [];
-
-      for (const symbol of universe) {
-        if (handled.has(symbol)) continue;
-        const stamp = stamps.get(symbol);
-        const behind = stamp ? weekdaysBehindEastern(stamp.newest) : null;
-        const isStale = behind !== null && behind >= EVICTION_STALE_BAR_WEEKDAYS;
-
-        if (!isStale) {
-          // RECOVERING CLEARS THE EVIDENCE, the mirror of clearAbsence. Named
-          // rather than blanket-cleared: only fields the read actually returned
-          // are sent to HDEL, so a clean universe costs no command at all.
-          if (staleDayEvidence.has(symbol)) staleRecovered.push(symbol);
-          continue;
-        }
-
-
-        sweep.staleBarred++;
-        const days = mergeStaleBarDay(
-          (staleDayEvidence.get(symbol) ?? []).join(","),
-          nowMs
-        );
-        staleUpdates[symbol] = days;
-
-        const action = staleBarEvictionAction(
-          symbol,
-          days.length,
-          behind,
-          stamp?.observedAt,
-          nowMs
-        );
-        if (action === "hand-edit") {
-          // THE #404 RULE HOLDS WHATEVER FIRED IT. A curated symbol is never
-          // evicted, only shouted about -- and it reaches the identical alarm
-          // through the identical preset gate, because staleBarEvictionAction
-          // and evictionAction share one.
-          sweep.presetHandEdit.push(symbol);
-          if (await claimPresetHandEditAlarm(symbol)) {
-            console.error(
-              `[screener-fundamentals] PRESET UNIVERSE NEEDS A HAND EDIT: ${symbol} ` +
-                `last printed a daily bar on ${stamp?.newest} -- ${behind} trading ` +
-                `days ago -- across ${days.length} day(s) of evidence. It cannot be ` +
-                `evicted -- it is hardcoded in lib/server/presetUniverse.ts. Check ` +
-                `whether it was renamed, acquired or delisted, then edit that array ` +
-                `and redeploy.`
-            );
-          }
-          continue;
-        }
-        if (action === "evict") {
-          const evicted = await evictSymbol(symbol);
-          sweep.evicted.push(symbol);
-          sweep.evictedByStaleBars++;
-          if (evicted.tombstoned) sweep.tombstonedByStaleBars++;
-          staleBarEvicted.push(`${symbol}@${stamp?.newest}`);
-        }
-      }
-      // Written after the loop so one HSET and one HDEL carry the whole day.
-      // An evicted symbol's field is removed by evictSymbol (PER_SYMBOL_HASHES),
-      // so it is deliberately not re-written here.
-      // ANYTHING IN THE HASH WITH NO EVIDENCE WRITTEN TODAY GOES. That is the
-      // recovered universe symbols above, and also fields for symbols that have
-      // since left the universe entirely -- the loop never reaches those, so
-      // without this line their evidence would sit in the hash forever, which is
-      // the immortal-field problem PER_SYMBOL_HASHES exists to avoid.
-      for (const symbol of staleDayEvidence.keys()) {
-        if (!(symbol in staleUpdates) && !staleRecovered.includes(symbol)) {
-          staleRecovered.push(symbol);
-        }
-      }
-      await writeStaleBarDays(
-        Object.fromEntries(
-          Object.entries(staleUpdates).filter(([sym]) => !sweep.evicted.includes(sym))
-        ),
-        staleRecovered
-      );
-      if (staleBarEvicted.length) {
-        console.warn(
-          `[screener-fundamentals] evicted ${staleBarEvicted.length} symbol(s) whose ` +
-            `newest daily bar is at least ${EVICTION_STALE_BAR_WEEKDAYS} trading days ` +
-            `old, independently of FMP's isActivelyTrading flag: ${staleBarEvicted.join(", ")}`
-        );
-      }
+      await staleBarPass(universe, nowMs);
 
       if (sweep.evicted.length) {
         await deregisterSymbols(sweep.evicted);
@@ -507,7 +544,9 @@ async function handleGET(req: NextRequest) {
     console.warn("[screener-fundamentals] SEC listing sweep failed:", error);
   }
 
-  await recordJobRun("warm-screener-fundamentals", result.ok, {
+  await recordJobRun("warm-screener-fundamentals", result.ok || noFmpKey, {
+    // Says WHY a run with no screener read is still a healthy run (F1).
+    screenerSkipped: noFmpKey ? "no FMP_API_KEY" : null,
     // Symbols carrying BOTH signals today, and the ones that reached the
     // corroboration threshold. `absent` far above `evicted` is the healthy
     // shape -- it means the corroboration window is doing its job.
