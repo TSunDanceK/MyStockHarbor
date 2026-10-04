@@ -11,7 +11,8 @@ import {
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
-import { awaitingSecRead, cikForSymbol, resolveFactSetForRender } from "@/lib/server/secColdFetch";
+import { awaitingSecRead, cikForSymbol, isSiteFund, resolveFactSetForRender } from "@/lib/server/secColdFetch";
+import { earningsPageIndexable } from "@/lib/stockPageRobots";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import ColdFill from "../ColdFill";
 import { buildSecEarningsView, epsBasisNote, epsBasisShort, periodWords } from "@/lib/server/secEarningsView";
@@ -578,7 +579,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       //
       // AND NOINDEX WHILE A COLD SYMBOL IS NOT YET READ (#535 COWORK #13): the
       // page says "not yet read" until a set is stored, and that is thin too.
-      index: cikForSymbol(clean) !== null && !(await awaitingSecRead(clean)),
+      //
+      // A FUND THE SITE LISTS IS INDEXED WITH OR WITHOUT ITS OWN CIK (#552
+      // COWORK #155): VUG takes the same fund card as SPY, so the same rule.
+      // Through the shared predicate (lib/stockPageRobots.ts), as the sitemap is.
+      index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null || isSiteFund(clean), awaitingSecRead: await awaitingSecRead(clean) }),
       follow: true,
     },
     alternates: { canonical: `https://www.mystockharbor.com/stock/${clean}/earnings` },

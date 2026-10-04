@@ -186,10 +186,10 @@ check("no-cik renders a state rather than 404-ing",
   !/notFound\(\)/.test(pageCode) && /<SecNoRegistrantCard/.test(pageCode),
   "a symbol whose stock page renders must not 404 on its earnings page");
 check("...and that state is noindex, so not 404-ing cannot create thin content",
-  /index: cikForSymbol\(clean\) !== null/.test(pageCode),
+  /index: earningsPageIndexable\(\{ hasCik: cikForSymbol\(clean\) !== null \|\| isSiteFund\(clean\),/.test(pageCode),
   "the sibling page's rule, for the sibling page's reason: this route is enumerated");
 check("...and the work bound still sits before any fetch",
-  /const cik = cikForSymbol\(clean\);\s*\n\s*if \(!cik\) return \{ status: "no-cik" \};/.test(code),
+  /const cik = cikForSymbol\(clean\);[\s\S]{0,600}?\n\s*if \(!cik\) return isSiteFund\(clean\) \? \{ status: "not-shown", kind: "fund", primary: null \} : \{ status: "no-cik" \};/.test(code),
   "the gate, not the response, is what stops an arbitrary string doing work");
 
 console.log("\n3. the timeout");
