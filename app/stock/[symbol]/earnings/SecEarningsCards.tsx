@@ -1705,6 +1705,39 @@ export function SecNoRegistrantCard({ symbol }: { symbol: string }) {
   );
 }
 
+/**
+ * NOT SHOWN: A FUND OR TRUST, OR A NOTE ON A COMPANY'S FILER (#552 COWORK #151).
+ *
+ * The SEC seed gate keeps these out (lib/server/secSeedGate.ts): SPY's filings
+ * hold no operating figures, GLD's and IBIT's describe a trust, and SOMN's
+ * filer is the company whose note it is. Shown as what it is — a settled
+ * answer, not "not yet read" — so the page stays a real, indexable page and
+ * nothing is fetched for it. The words are the scorer's too (noScoreReason),
+ * so the stock page's tile says the same.
+ */
+export const NOT_SHOWN_WORDS = {
+  fund: "SEC filing figures aren't shown for funds and trusts. Their filings describe the fund, not a company's earnings.",
+  security: "SEC filing figures aren't shown for this security. Its filings describe the issuer, not this security.",
+} as const;
+
+export function SecNotShownCard({ symbol, kind, primary }: { symbol: string; kind: "fund" | "security"; primary: string | null }) {
+  return (
+    <section className="card" data-sec-not-shown={kind}>
+      <div className="eyebrow">{kind === "fund" ? "Fund or trust" : "Not this security"}</div>
+      <h2>{kind === "fund" ? `${symbol} is a fund or trust` : `${symbol} is a note, preferred share or similar security`}</h2>
+      <p>{NOT_SHOWN_WORDS[kind]}</p>
+      {kind === "security" && primary ? (
+        <p>
+          For the issuer&apos;s own results, see <a href={`/stock/${primary}/earnings`}>{primary}</a>.
+        </p>
+      ) : null}
+      <p style={{ marginBottom: 0 }}>
+        Price history and market data for {symbol} are on <a href={`/stock/${symbol}`}>its stock page</a>.
+      </p>
+    </section>
+  );
+}
+
 export function SecNotIssuerEquityCard({
   symbol,
   reason,

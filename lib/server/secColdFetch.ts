@@ -94,6 +94,8 @@ import { admitSymbolForExtraction } from "./securityKind";
 import { factSetExists, factSetPresence, readFactSet, writeFactSet } from "./secFactStore";
 import { recordColdCik } from "./secColdCik";
 import { inSecJobWindow } from "../secJobWindow.mjs";
+import { secSeedRefusal } from "./secSeedGate";
+import { nonEquityListingOf } from "./secPrimaryListing";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
 // ABSENCE. @upstash/redis sends `cache: "no-store"` by default, and one such
@@ -236,7 +238,15 @@ export type ColdResult =
       /** Other tickers on the same CIK, so the page can point somewhere real. */
       siblings: string[];
       cik: string;
-    };
+    }
+  /**
+   * NOT SHOWN, AND NOTHING IS ON THE WAY (#552 COWORK #151): a fund or trust
+   * (SPY, GLD, IBIT), or a note / preferred the listing census names on a
+   * common filer's CIK (SOMN). The extraction gate admits these, the SEC seed
+   * gate does not (lib/server/secSeedGate.ts). A real, indexable page: never
+   * "pending", never cold-filled.
+   */
+  | { status: "not-shown"; kind: "fund" | "security"; primary: string | null };
 
 /**
  * The minimum populated fields in a SINGLE period for a page to be worth
@@ -496,7 +506,7 @@ async function enqueue(symbol: string, who: "person" | "crawler" = "person"): Pr
 export async function queueColdSymbol(symbol: string, who: "person" | "crawler"): Promise<boolean> {
   const clean = symbol.trim().toUpperCase();
   const cik = cikForSymbol(clean);
-  if (!cik || !admitSymbolForExtraction(clean, cik).admit) return false;
+  if (!cik || !admitSymbolForExtraction(clean, cik).admit || secSeedRefusal(clean, cik)) return false;
   if ((await factSetExists(clean)) !== false) return false;
   return enqueue(clean, who);
 }
@@ -741,6 +751,14 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
     };
   }
 
+  // 1c. THE SEC SEED GATE'S OTHER ARMS (#552 COWORK #151): a fund or trust, or
+  // a note or preferred named by the listing census, which the extraction gate
+  // above admits. AFTER it, so a derivative keeps its own card; before the
+  // store read, so a set stored before the gate is never shown.
+  const seed = secSeedRefusal(clean, cik);
+  if (seed === "etf") return { status: "not-shown", kind: "fund", primary: null };
+  if (seed) return { status: "not-shown", kind: "security", primary: nonEquityListingOf(clean)?.primary ?? null };
+
   // 2. THE STORE, AND NOTHING AFTER IT.
   //
   // ── THE RENDER NO LONGER FETCHES (2026-09-23, #535 COWORK #13) ──────────
@@ -797,6 +815,8 @@ export async function fillColdSymbol(symbol: string): Promise<ColdFillOutcome> {
   const cik = cikForSymbol(clean);
   if (!cik) return "not-eligible";
   if (!admitSymbolForExtraction(clean, cik).admit) return "not-eligible";
+  // A fund or a census-named note is never cold-filled (#552 COWORK #151).
+  if (secSeedRefusal(clean, cik)) return "not-eligible";
   if (!SEC_UA || !canWriteSecState()) return "unavailable";
 
   const stored = await readFactSet(clean);
@@ -859,7 +879,8 @@ export async function fillColdSymbol(symbol: string): Promise<ColdFillOutcome> {
 export async function awaitingSecRead(symbol: string): Promise<boolean> {
   const clean = symbol.trim().toUpperCase();
   const cik = cikForSymbol(clean);
-  if (!cik || !admitSymbolForExtraction(clean, cik).admit) return false;
+  // A fund or census-named note is a real page, not a waiting one (#552 COWORK #151).
+  if (!cik || !admitSymbolForExtraction(clean, cik).admit || secSeedRefusal(clean, cik)) return false;
   return (await factSetExists(clean)) === false;
 }
 
@@ -877,7 +898,7 @@ export async function sitemapSecState(
   if (!presence) return null;
   const awaiting = new Set(clean.filter((s) => {
     const cik = cikForSymbol(s);
-    return Boolean(cik && admitSymbolForExtraction(s, cik).admit) && presence.exists.get(s) === false;
+    return Boolean(cik && admitSymbolForExtraction(s, cik).admit && !secSeedRefusal(s, cik)) && presence.exists.get(s) === false;
   }));
   return { awaiting, changedAt: presence.changedAt };
 }

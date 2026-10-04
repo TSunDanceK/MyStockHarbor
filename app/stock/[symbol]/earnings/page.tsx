@@ -41,7 +41,7 @@ import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
   SecTrendSummaryCard, SecValuationCard,
-  SecPendingCard, SecNoXbrlCard, SecNoQuartersCard, SecNotIssuerEquityCard,
+  SecPendingCard, SecNoXbrlCard, SecNoQuartersCard, SecNotIssuerEquityCard, SecNotShownCard,
   SecNoRegistrantCard, SecScoreCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
@@ -986,6 +986,9 @@ export default async function StockEarningsPage({ params }: Props) {
                   bare 404 on a symbol whose stock page renders fine. */}
               {noRegistrant ? (
                 <SecNoRegistrantCard symbol={clean} />
+              ) :
+               data.cold.status === "not-shown" ? (
+                <SecNotShownCard symbol={clean} kind={data.cold.kind} primary={data.cold.primary} />
               ) :
                data.cold.status === "not-issuer-equity" ? (
                 <SecNotIssuerEquityCard
