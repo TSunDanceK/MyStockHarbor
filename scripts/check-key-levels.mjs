@@ -109,6 +109,16 @@ const withPartial = [...F.monthMidWeek, { date: "2026-10-05", open: 999, high: 1
 // A bar in the week lacking its high (an FMP row, say): the week's high is withheld.
 const noHigh = F.monthMidWeek.map((b) => (b.date === "2026-09-29" ? { ...b, high: undefined } : b));
 
+// #79/#78 fixtures, all ending Fri 2 Oct 2026 on F.monthMidWeek's history.
+const upTo = (d) => F.monthMidWeek.filter((b) => b.date < d);
+const bar = (date, o, h, l, c) => ({ date, open: o, high: h, low: l, close: c });
+// A falling week and a day that rebounds to its high: near the week's low and the day's high.
+const SPLIT = [...upTo("2026-09-28"), bar("2026-09-28", 200, 210, 195, 200), bar("2026-09-29", 190, 192, 180, 181), bar("2026-09-30", 182, 183, 170, 171), bar("2026-10-01", 172, 173, 165, 166), bar("2026-10-02", 160, 168, 158, 167.5)];
+// Thursday closes at 166; Friday gaps up (172–180) / down (172–180 after a 190 close).
+const GAP_UP = [...upTo("2026-10-01"), bar("2026-10-01", 165, 168, 164, 166), bar("2026-10-02", 175, 180, 172, 178)];
+const GAP_DOWN = [...upTo("2026-10-01"), bar("2026-10-01", 189, 191, 188, 190), bar("2026-10-02", 175, 180, 172, 178)];
+// A flat session: high = low = open = close.
+const FLAT = [...upTo("2026-10-02"), bar("2026-10-02", 170, 170, 170, 170)];
 const near = (a, b) => typeof a === "number" && Math.abs(a - b) < 1e-9;
 const lv = (k, key) => k.periods.find((p) => p.key === key);
 const values = (p) => ["open", "high", "low", "close"].map((f) => p.levels[f].value);
@@ -125,7 +135,14 @@ let measure = async function measureAll(M) {
   return {
     M, K,
     rows: M.barRows(K.monthMidWeek, close),
-    midRows: M.barRows(K.midWeek, K.midWeek.lastClose),
+    split: M.barRows(M.keyLevels(SPLIT), SPLIT.at(-1).close),
+    gapUp: M.barRows(M.keyLevels(GAP_UP), GAP_UP.at(-1).close),
+    gapDown: M.barRows(M.keyLevels(GAP_DOWN), GAP_DOWN.at(-1).close),
+    flat: M.barRows(M.keyLevels(FLAT), FLAT.at(-1).close),
+    flatHtml: render({ bars: FLAT, lastPrice: null }),
+    gapUpHtml: render({ bars: GAP_UP, lastPrice: null }),
+    splitHtml: render({ bars: SPLIT, lastPrice: null }),
+    firstOfMonth: M.keyLevels(F.monthMidWeek.filter((b) => b.date <= "2026-10-01")),
     outside: M.barRows(K.monthMidWeek, 400),
     bigRows: M.barRows(M.keyLevels(big), big[big.length - 1].close),
     pricedHtml,
@@ -195,25 +212,39 @@ const rules = {
   "dates and prices in words": ({ M }) =>
     M.dateWords("2026-10-02") === "Fri 2 Oct 2026" && M.dateWords("2026-09-28") === "Mon 28 Sep 2026" &&
     M.priceWords(1234.5) === "$1,234.50" && M.priceWords(0.12345) === "$0.1235" && M.priceWords(25012.5) === "$25,013",
-  "one shared scale: day inside week inside month, every mark at its own price": ({ rows, midRows, K, M }) => {
-    const right = (b) => b.left + b.width;
-    const inside = (a, b) => a.left >= b.left - 1e-9 && right(a) <= right(b) + 1e-9;
-    // A slight pad either side: 4% of the span, written out here so the constant can't drift silently.
-    const pad = (0.04 / 1.08) * 100;
-    // Wed 30 Sep: the week sits inside September, so day ⊂ week ⊂ month, the month at the padded edges.
-    const [d2, w2, m2] = midRows.map((r) => r.bar);
-    const nested = inside(d2, w2) && inside(w2, m2) && near(m2.left, pad) && near(right(m2), 100 - pad);
-    // Fri 2 Oct: the week (from Mon 28 Sep) reaches back past the month (from Thu 1 Oct), so the
-    // scale spans both: the day inside each, the widest edges at the padding.
-    const [d, w, m] = rows.map((r) => r.bar);
-    const union = inside(d, w) && inside(d, m) && near(Math.min(w.left, m.left), pad) && near(Math.max(right(w), right(m)), 100 - pad);
-    const k = K.monthMidWeek, s = M.sharedScale(k, k.lastClose);
-    return rows.every((r) => r.bar) && nested && union &&
-      ["day", "week", "month"].every((key, i) => near(rows[i].bar.open, M.toPct(lv(k, key).levels.open.value, s)) &&
-        near(rows[i].bar.left, M.toPct(lv(k, key).levels.low.value, s)) && near(rows[i].bar.dot, M.toPct(k.lastClose, s)));
+  "each row on its own scale: the bar is that period's low to high; dot, tick and ◇ at their places in it (#79)": ({ rows, K, M }) => {
+    const k = K.monthMidWeek;
+    return rows.every((r, i) => {
+      const L = k.periods[i].levels, lo = L.low.value, hi = L.high.value, pc = k.periods[i].prevClose;
+      const pct = (v) => ((v - lo) / (hi - lo)) * 100;
+      return near(r.bar.open, pct(L.open.value)) && near(r.bar.dot, Math.max(0, Math.min(100, pct(k.lastClose)))) &&
+        (r.bar.prev.pos === null ? r.bar.prev.pinned !== null : near(r.bar.prev.pos, pct(pc.value)));
+    });
   },
-  "the scale takes in a last price outside every range": ({ outside }) =>
-    outside.every((r) => r.bar.dot > r.bar.left + r.bar.width && r.bar.dot <= 100 && r.bar.dot >= 90),
+  "the rows differ: near the week's low and the day's high at once (#79)": ({ split }) =>
+    split[0].bar.dot > 85 && split[1].bar.dot < 25,
+  "a previous close outside the range is pinned past that edge with its distance (#79)": ({ gapUp, gapDown, M }) =>
+    gapUp[0].bar.prev.pinned === "left" && gapUp[0].bar.prev.pos === null && gapUp[0].bar.prev.gapWords === `prev close ${((172 - 166) / 172 * 100).toFixed(1)}% below the low` &&
+    gapDown[0].bar.prev.pinned === "right" && gapDown[0].bar.prev.gapWords === `prev close ${((190 - 180) / 180 * 100).toFixed(1)}% above the high` &&
+    M.prevMark(175, 172, 180).pinned === null && near(M.prevMark(175, 172, 180).pos, 37.5),
+  "a flat range: centred marks and 'no range yet' (#79)": ({ flat, flatHtml, M }) =>
+    flat[0].bar.flat && flat[0].bar.dot === 50 && flat[0].bar.open === 50 && flat[0].bar.note.includes(M.FLAT_RANGE_WORDS) &&
+    /class="klFlat"[^>]*>No range yet</.test(flatHtml) && !flat[1].bar.flat,
+  "previous closes: the session before, last week's and last month's final sessions; missing ones say why (#78)": ({ K, firstOfMonth, M }) => {
+    const k = K.monthMidWeek, b = F.monthMidWeek, p = (key) => lv(k, key).prevClose;
+    const f = lv(firstOfMonth, "month").prevClose, one = lv(K.oneBar, "day");
+    return p("day").date === "2026-10-01" && near(p("day").value, at(b, "2026-10-01").close) &&
+      p("week").date === "2026-09-25" && near(p("week").value, at(b, "2026-09-25").close) &&
+      p("month").date === "2026-09-30" && f.date === "2026-09-30" && lv(firstOfMonth, "day").prevClose.date === "2026-09-30" &&
+      one.prevClose === null && one.prevReason === M.PREV_MISSING.day;
+  },
+  "the ◇ is drawn and keyed, its note gives value, date and distance (#78)": ({ fullHtml, full, rows, gapUpHtml, splitHtml }) =>
+    (fullHtml.match(/class="klPrev"/g) ?? []).length + (fullHtml.match(/class="klPrevPin /g) ?? []).length === 3 &&
+    // Inside the range (SPLIT's day: Thursday's 166 within Friday's 158–168): drawn in place, not pinned.
+    /class="klPrev" style="[^"]*left:80%/.test(splitHtml) &&
+    /◇ previous close/.test(full) && /Previous session's close \$[\d,.]+ \(Thu 1 Oct\) · [\d.]+% (above|below) the last price\./.test(rows[0].bar.note) &&
+    /Last week's close \$[\d,.]+ \(Fri 25 Sep\)/.test(rows[1].bar.note) &&
+    /class="klPrevPin klPrevPin-left"/.test(gapUpHtml) && /class="klGap"[^>]*>◇ prev close [\d.]+% below the low</.test(gapUpHtml),
   "colour: green above the open, red below, neutral within a hair": ({ M }) =>
     M.toneOf(101, 100) === "up" && M.toneOf(99, 100) === "down" && M.toneOf(100.04, 100) === "flat" && M.toneOf(100, null) === "flat",
   "never colour alone: the dot sits right of the tick when green, left when red, and the note says so": ({ rows, outside, M }) =>
@@ -250,7 +281,7 @@ const rules = {
     emptyText.includes("Key levels") && emptyText.includes(M.NO_BARS_REASON),
   "the notes say what the levels are, and nothing reads as advice": ({ fullHtml, full, rows, M }) =>
     /What are these\?/.test(full) && M.KEY_LEVELS_NOTE.startsWith("Levels some traders watch") && fullHtml.includes("Levels some traders watch") &&
-    /Bar: low to high · tick: the open · dot: the last price\./.test(full) &&
+    /Bar: that period[’']s low to high · tick: the open · ◇ previous close · dot: the last price, green above the open, red below\./.test(full) &&
     !/\b(buy|sell|bullish|bearish|support|resistance|target|should|recommend)\b/i.test(`${full} ${M.KEY_LEVELS_NOTE} ${rows.map((r) => r.bar.note).join(" ")}`),
   "the Tiingo credit only when it is passed": ({ full, credited }) =>
     !/Daily prices:/.test(full) && /Daily prices: Tiingo credit/.test(credited),
@@ -265,13 +296,15 @@ const sessionCases = async (M) => {
   const render = (props) => visibleText(renderToStaticMarkup(React.createElement(M.KeyLevelsCard, props)));
   const inS = M.keyLevels([...THU, PART], { nowMs: ET("2026-10-02", "14:32") });
   const stale = M.keyLevels([...THU, PART], { nowMs: ET("2026-10-03", "12:00") }); // Saturday: a Friday partial left over
-  const after = M.keyLevels([...THU, PART], { nowMs: ET("2026-10-02", "17:30") }); // after the close
+  const after = M.keyLevels([...THU, { ...PART, label: "today so far (IEX), 16:00 ET" }], { nowMs: ET("2026-10-02", "17:30") }); // after the close, before EOD
+  const eodDone = M.keyLevels(F.monthMidWeek, { nowMs: ET("2026-10-03", "01:00") }); // 01:00 ET: the nightly job has stored Friday
   const pre = M.keyLevels([...THU, { ...PART, date: "2026-10-05" }], { nowMs: ET("2026-10-05", "08:00") }); // pre-market Monday
   const sat = M.keyLevels(F.monthMidWeek, { nowMs: ET("2026-10-03", "12:00") }); // Saturday, no partial
   const staleMon = M.keyLevels([...THU, PART], { nowMs: ET("2026-10-05", "10:00") }); // in session Monday, a Friday partial left over
   const hol = M.keyLevels(F.holiday.filter((b) => b.date <= "2026-09-04"), { nowMs: ET("2026-09-07", "11:00") }); // Labor Day
   return {
-    inS, stale, after, pre, sat, hol, staleMon,
+    inS, stale, after, pre, sat, hol, staleMon, eodDone,
+    afterText: render({ bars: [...THU, { ...PART, label: "today so far (IEX), 16:00 ET" }], lastPrice: 240, nowMs: ET("2026-10-02", "17:30") }),
     inText: render({ bars: [...THU, PART], lastPrice: 240, nowMs: ET("2026-10-02", "14:32") }),
     satText: render({ bars: [...THU, PART], lastPrice: 240, nowMs: ET("2026-10-03", "12:00") }),
   };
@@ -285,8 +318,12 @@ Object.assign(rules, {
       /today so far, 14:32 ET \(IEX\)/.test(S.inText) && /today so far · 14:32 ET/.test(S.inText) && !/as of the close/.test(S.inText) &&
       M.inSession(ET("2026-10-02", "09:30")) && !M.inSession(ET("2026-10-02", "09:29")) && !M.inSession(ET("2026-10-02", "16:00"));
   },
+  "after the close: today's final IEX bar until the nightly job stores the day (#77)": ({ S, M }) =>
+    S.after.live?.phase === "afterClose" && S.after.live.time === "16:00" && S.after.asOf === "2026-10-02" && lv(S.after, "day").levels.high.value === 260 &&
+    /close, 16:00 ET \(IEX\)/.test(S.afterText) && /today · close 16:00 ET \(IEX\)/.test(S.afterText) && !/today so far/.test(S.afterText) &&
+    S.eodDone.live === null && S.eodDone.asOf === "2026-10-02" && M.sinceOpen(ET("2026-10-02", "17:30")) && !M.sinceOpen(ET("2026-10-02", "09:00")),
   "out of session: the last completed session, never a stale or out-of-hours partial": ({ S }) =>
-    [S.stale, S.after, S.staleMon].every((k) => k.live === null && k.asOf === "2026-10-01" && lv(k, "day").levels.high.value !== 260) &&
+    [S.stale, S.staleMon].every((k) => k.live === null && k.asOf === "2026-10-01" && lv(k, "day").levels.high.value !== 260) &&
     S.pre.live === null && S.pre.asOf === "2026-10-01" &&
     /as of the close on Thu 1 Oct 2026/.test(S.satText) && !/today so far/.test(S.satText),
   "a Saturday and a market holiday: the last close, no 'today so far'": ({ S, M }) =>
@@ -311,11 +348,12 @@ const staticRules = {
       (p.match(/<KeyLevelsCard /g) ?? []).length === 1 && /^import KeyLevelsCard from "\.\/KeyLevelsCard";$/m.test(p);
   },
   "a tap on the bar opens its row's note": (_l, c) =>
-    /<div className="klTrack" data-tone=\{r\.bar\.tone\} onClick=\{openRowNote\}/.test(c) &&
+    /<div className="klTrack" data-tone=\{r\.bar\.tone\}[^>]*onClick=\{openRowNote\}/.test(c) &&
     /e\.currentTarget\.closest\("\.klRow"\)\?\.querySelector<HTMLElement>\("\.klRange \[role=\\"button\\"\]"\)\?\.click\(\);/.test(c),
-  "the tick and the dot both stay visible where they meet: the tick is taller, the dot on top": (_l, c) =>
-    /className="klOpen" style=\{\{ position: "absolute", top: 0, height: 18,[^\n]*?zIndex: 1 \}\}/.test(c) &&
-    /className="klDot" style=\{\{ position: "absolute", top: 4, width: 10, height: 10,[^\n]*?zIndex: 2 \}\}/.test(c),
+  "the tick and the dot both stay visible where they meet: the tick is taller, the dot on top, the ◇ above the bar": (_l, c) =>
+    /className="klOpen" style=\{\{ position: "absolute", top: 6, height: 18,[^\n]*?zIndex: 1 \}\}/.test(c) &&
+    /className="klDot" style=\{\{ position: "absolute", top: 9, width: 10, height: 10,[^\n]*?zIndex: 2 \}\}/.test(c) &&
+    /const diamondStyle: CSSProperties = \{ position: "absolute", top: 0, width: 7, height: 7,/.test(c) && /className="klBar" style=\{\{ position: "absolute", top: 10, height: 8,/.test(c),
 };
 
 console.log("\n=== 1. Fixtures through lib/ta/keyLevels.ts and the card ===\n");
@@ -337,8 +375,10 @@ const mutants = [
   ["in session: the Day column is today so far, the week and month include it, labelled with the bar's own time", "b", (s) => s.replace("const liveDay = p.key === \"day\" && !!k.live;", "const liveDay = false;")],
   ["in session: the Day column is today so far, the week and month include it, labelled with the bar's own time", "s", (s) => s.replace('return weekday >= 1 && weekday <= 5 && hhmm >= SESSION_OPEN && hhmm < SESSION_CLOSE;', 'return weekday >= 1 && weekday <= 5 && hhmm >= SESSION_OPEN && hhmm <= SESSION_CLOSE;')],
   ["out of session: the last completed session, never a stale or out-of-hours partial", "s", (s) => s.replace(" && last.date === easternNow(nowMs).date;", ";")],
-  ["out of session: the last completed session, never a stale or out-of-hours partial", "s", (s) => s.replace("Number.isFinite(nowMs) && inSession(nowMs) && last.date", "Number.isFinite(nowMs) && last.date")],
-  ["out of session: the last completed session, never a stale or out-of-hours partial", "c", (s) => s.replace("{k.live ? <>today so far", "{true ? <>today so far")],
+  ["out of session: the last completed session, never a stale or out-of-hours partial", "s", (s) => s.replace("return weekday >= 1 && weekday <= 5 && hhmm >= SESSION_OPEN;\n}", "return true;\n}")],
+  ["after the close: today's final IEX bar until the nightly job stores the day (#77)", "s", (s) => s.replace("Number.isFinite(nowMs) && sinceOpen(nowMs) && last.date", "Number.isFinite(nowMs) && inSession(nowMs) && last.date")],
+  ["after the close: today's final IEX bar until the nightly job stores the day (#77)", "b", (s) => s.replace('k.live!.phase === "afterClose" ? `today · close${t} (IEX)`', 'false ? `today · close${t} (IEX)`')],
+  ["out of session: the last completed session, never a stale or out-of-hours partial", "c", (s) => s.replace("<>as of the close on {k.asOfWords}</>", "<>today so far</>")],
   ["a Saturday and a market holiday: the last close, no 'today so far'", "s", (s) => s.replace("return weekday >= 1 && weekday <= 5 && hhmm", "return hhmm")],
 
   ["a Monday: the week is that one session; the month from Thu 1 Oct", "l", (s) => s.replace("const sinceMonday = (d.getUTCDay() + 6) % 7;", "const sinceMonday = (d.getUTCDay() + 5) % 7;")],
@@ -358,12 +398,18 @@ const mutants = [
   ["dates and prices in words", "l", (s) => s.replace("${WEEKDAYS[d.getUTCDay()]}", "${WEEKDAYS[(d.getUTCDay() + 1) % 7]}")],
   ["dates and prices in words", "l", (s) => s.replace("const dp = Math.abs(v) < 1 ? 4 : Math.abs(v) >= WHOLE_DOLLARS_FROM ? 0 : 2;", "const dp = Math.abs(v) < 1 ? 4 : 2;")],
   ["dates and prices in words", "l", (s) => s.replace("const dp = Math.abs(v) < 1 ? 4 : Math.abs(v) >= WHOLE_DOLLARS_FROM ? 0 : 2;", "const dp = Math.abs(v) >= WHOLE_DOLLARS_FROM ? 0 : 2;")],
-  ["one shared scale: day inside week inside month, every mark at its own price", "b", (s) => s.replace("const spans = k.periods.map(span)", "const spans = k.periods.slice(0, 1).map(span)")],
-  ["one shared scale: day inside week inside month, every mark at its own price", "b", (s) => s.replace("width: toPct(sp.high, s) - toPct(sp.low, s),", "width: toPct(sp.high, s),")],
-  ["one shared scale: day inside week inside month, every mark at its own price", "b", (s) => s.replace("open: isNum(open) ? toPct(open, s) : null,", "open: isNum(open) ? toPct(sp.low, s) : null,")],
-  ["one shared scale: day inside week inside month, every mark at its own price", "b", (s) => s.replace("export const SCALE_PAD = 0.04;", "export const SCALE_PAD = 0;")],
-  ["the scale takes in a last price outside every range", "b", (s) => s.replace("  if (isNum(last)) vals.push(last);\n", "")],
-  ["the scale takes in a last price outside every range", "b", (s) => s.replace("dot: toPct(last, s),", "dot: toPct(k.lastClose ?? last, s),")],
+  ["each row on its own scale: the bar is that period's low to high; dot, tick and ◇ at their places in it (#79)", "b", (s) => s.replace("return high > low ? ((v - low) / (high - low)) * 100 : 50;", "return high > low ? ((v - low) / high) * 100 : 50;")],
+  ["the rows differ: near the week's low and the day's high at once (#79)", "b", (s) => s.replace("const raw = rowPct(last, sp.low, sp.high);", "const raw = rowPct(last, k.periods[1].levels.low.value ?? sp.low, k.periods[1].levels.high.value ?? sp.high);")],
+  ["a previous close outside the range is pinned past that edge with its distance (#79)", "b", (s) => s.replace("  if (v < low) return {", "  if (false) return {")],
+  ["a previous close outside the range is pinned past that edge with its distance (#79)", "b", (s) => s.replace("((v - high) / high * 100).toFixed(1)", "((v - high) / v * 100).toFixed(1)")],
+  ["a flat range: centred marks and 'no range yet' (#79)", "b", (s) => s.replace("const flat = !(sp.high > sp.low);", "const flat = false;")],
+  ["a flat range: centred marks and 'no range yet' (#79)", "c", (s) => s.replace('{r.bar.flat ? <div className="klFlat"', '{false ? <div className="klFlat"')],
+  ["previous closes: the session before, last week's and last month's final sessions; missing ones say why (#78)", "l", (s) => s.replace("prevClose: prevOf(closed, closed.length - 1),", "prevClose: prevOf(closed, closed.length - 2),")],
+  ["previous closes: the session before, last week's and last month's final sessions; missing ones say why (#78)", "l", (s) => s.replace("prevClose: prevOf(bars, firstIn), prevReason: null };", "prevClose: prevOf(bars, firstIn - 1), prevReason: null };")],
+  ["previous closes: the session before, last week's and last month's final sessions; missing ones say why (#78)", "l", (s) => s.replace("prevReason: closed.length > 1 ? null : PREV_MISSING.day }", "prevReason: null }")],
+  ["the ◇ is drawn and keyed, its note gives value, date and distance (#78)", "c", (s) => s.replace('<div className="klPrev" style={{ ...diamondStyle, left: `${r.bar.prev.pos}%` }} />', "null")],
+  ["the ◇ is drawn and keyed, its note gives value, date and distance (#78)", "c", (s) => s.replace("tick: the open · ◇ previous close · dot", "tick: the open · dot")],
+  ["the ◇ is drawn and keyed, its note gives value, date and distance (#78)", "b", (s) => s.replace("`${PREV_WORDS[p.key]} ${priceWords(p.prevClose.value)} (${dayWords(p.prevClose.date)})", "`${PREV_WORDS[p.key]} ${priceWords(p.prevClose.value)}")],
   ["colour: green above the open, red below, neutral within a hair", "b", (s) => s.replace('return pct > 0 ? "up" : "down";', 'return pct > 0 ? "down" : "up";')],
   ["colour: green above the open, red below, neutral within a hair", "b", (s) => s.replace('  if (Math.abs(pct) < LEVEL_WITH_OPEN_PCT) return "flat";\n', "")],
   ["never colour alone: the dot sits right of the tick when green, left when red, and the note says so", "b", (s) => s.replace("`on ${dayWords(p.from)}`}. ${TONE_WORDS[tone]}`", "`on ${dayWords(p.from)}`}.`")],
@@ -380,7 +426,7 @@ const mutants = [
   ["a period that can't be built keeps its row, with its reason in place of the bar", "c", (s) => s.replace('<p className="klReason" style={{ ...noteStyle, marginTop: 4 }}>{r.reason}</p>', "null")],
   ["the card is never blank: no bars still gives the reason", "c", (s) => s.replace("{k.reasons.length && !rows.length ? k.reasons.map(", "{false ? k.reasons.map(")],
   ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace('"Levels some traders watch: ', '"Levels where traders buy: ')],
-  ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace("Green when the last price is above the open, red when below.", "Green means buy, red means sell.")],
+  ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace("dot: the last price, green above the open, red below.", "dot: the last price. Green means buy, red means sell.")],
   ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace('<ReasonedValue text="What are these?" reason={KEY_LEVELS_NOTE} />', "")],
   ["the Tiingo credit only when it is passed", "c", (s) => s.replace("{credit ? <p style={noteStyle}>Daily prices: {credit}</p> : null}", "<p style={noteStyle}>Daily prices: {credit ?? \"Tiingo\"}</p>")],
 ];
@@ -400,8 +446,9 @@ const staticMutants = [
   ["the modules import only each other; the card only React's types, A's ReasonedValue and the modules", (l, c, p, b) => [l, c, p, `import { getDailyHistory } from "@/lib/server/historyCache";\n${b}`]],
   ["a tap on the bar opens its row's note", (l, c, p, b) => [l, c.replace(" onClick={openRowNote}", ""), p, b]],
   ["a tap on the bar opens its row's note", (l, c, p, b) => [l, c.replace('.querySelector<HTMLElement>(".klRange [role=\\"button\\"]")?.click();', ';'), p, b]],
-  ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top", (l, c, p, b) => [l, c.replace("top: 0, height: 18, width: 2,", "top: 5, height: 8, width: 2,"), p, b]],
-  ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top", (l, c, p, b) => [l, c.replace("zIndex: 2 }}", "zIndex: 0 }}"), p, b]],
+  ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top, the ◇ above the bar", (l, c, p, b) => [l, c.replace("top: 6, height: 18, width: 2,", "top: 10, height: 8, width: 2,"), p, b]],
+  ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top, the ◇ above the bar", (l, c, p, b) => [l, c.replace('const diamondStyle: CSSProperties = { position: "absolute", top: 0,', 'const diamondStyle: CSSProperties = { position: "absolute", top: 10,'), p, b]],
+  ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top, the ◇ above the bar", (l, c, p, b) => [l, c.replace("zIndex: 2 }}", "zIndex: 0 }}"), p, b]],
   ["the modules import only each other; the card only React's types, A's ReasonedValue and the modules", (l, c, p, b) => [`import { readTiingoHistoryPoints } from "@/lib/server/tiingoHistory";\n${l}`, c, p, b]],
   ["the modules import only each other; the card only React's types, A's ReasonedValue and the modules", (l, c, p, b) => [l, `import { getDailyHistory } from "@/lib/server/historyCache";\n${c}`, p, b]],
   ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace('credit={shownProvider === "tiingo" ? historyCredit : undefined} />', "credit={historyCredit} />")]],

@@ -60,6 +60,11 @@ const cards = [
   ["under $1", { bars: bars(0.004), lastPrice: 0.7012, credit }],
   ["open = high = last", { bars: overlap(), lastPrice: overlap().at(-1).open, credit }],
   // #563 COWORK #75: in session, the Day row reads "today so far · 14:32 ET".
+  // #79: a gap up past the day's low (the ◇ pinned left), and a flat session.
+  ["gap up", { bars: [...bars(1.2).slice(0, -2), { date: "2026-10-01", open: 230, high: 232, low: 229, close: 230 }, { date: "2026-10-02", open: 240, high: 246, low: 238, close: 244 }], lastPrice: 244, credit }],
+  ["flat day", { bars: [...bars(1.2).slice(0, -1), { date: "2026-10-02", open: 240, high: 240, low: 240, close: 240 }], lastPrice: 240, credit }],
+  // #77: after the close, before the nightly job: "today · close 16:00 ET (IEX)".
+  ["after close", { bars: [...bars(1.2).slice(0, -1), { date: "2026-10-02", open: 239, high: 246, low: 236, close: 244, partial: true, label: "today so far (IEX), 16:00 ET" }], lastPrice: 244, nowMs: Date.parse("2026-10-02T17:30:00-04:00"), credit }],
   ["in session", { bars: [...bars(1.2).slice(0, -1), { date: "2026-10-02", open: 239, high: 246, low: 236, close: 244, partial: true, label: "today so far (IEX), 14:32 ET" }], lastPrice: 244, nowMs: Date.parse("2026-10-02T14:32:00-04:00"), credit }],
 ].map(([name, props]) => `<div class="probe" data-name="${name}">${renderToStaticMarkup(React.createElement(M.KeyLevelsCard, props))}</div>`).join("");
 const doc = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>
@@ -94,6 +99,12 @@ for (const width of [320, 360, 390, 414, 430, 1280]) {
         if (tick && (tick.left < t.left - 1 || tick.right > t.right + 1)) bad.push("tick off its track");
         // Both visible where they meet: the tick's ends stick out above and below the dot.
         if (tick && !(tick.top < dot.top - 2 && tick.bottom > dot.bottom + 2)) bad.push("tick hidden by the dot");
+        // The ◇ (#78/#79): above the dot, never hidden by it; a pinned one stays inside the card.
+        const prev = row.querySelector(".klPrev, .klPrevPinMark")?.getBoundingClientRect();
+        if (prev && !(prev.bottom <= dot.top + 1)) bad.push("◇ under the dot");
+        if (prev && (prev.left < c.left || prev.right > c.right)) bad.push("◇ off the card");
+        const gap = row.querySelector(".klGap");
+        if (gap && gap.scrollWidth > gap.clientWidth + 0.5) bad.push("gap words cut");
       }
       return { name: p.dataset.name, cardW: Math.round(c.width), cardH: Math.round(c.height), inView: c.right <= innerWidth + 0.5, bad };
     }),

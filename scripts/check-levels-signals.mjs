@@ -182,16 +182,24 @@ Object.assign(rules, {
     const out = [
       M.liveBars([...DONE, PB("2026-10-02")], ET("2026-10-03", "12:00")), // Saturday, stale Friday partial
       M.liveBars([...DONE, PB("2026-10-02")], ET("2026-10-05", "10:00")), // in-session Monday, stale Friday partial
-      M.liveBars([...DONE, PB("2026-10-02")], ET("2026-10-02", "17:30")), // after the close
       M.liveBars(DONE, ET("2026-09-07", "11:00")), // Labor Day: no new bar
+      M.liveBars([...DONE, PB("2026-10-02")], ET("2026-10-02", "08:30")), // pre-market: a same-day bar before the open
     ];
-    return inS.bars.length === 3 && inS.live?.date === "2026-10-02" && inS.time === "14:32" &&
+    // After the close the day's final IEX bar is kept until the nightly job stores the day (#77).
+    const after = M.liveBars([...DONE, PB("2026-10-02")], ET("2026-10-02", "17:30"));
+    return inS.bars.length === 3 && inS.live?.date === "2026-10-02" && inS.time === "14:32" && inS.phase === "session" &&
+      after.live?.date === "2026-10-02" && after.phase === "afterClose" &&
       out.every((o) => o.live === null && o.bars.length === 2 && o.bars.every((b) => !b.partial));
   },
   "the MACD note says when today's session is included": ({ M }) => {
     const r = (t) => renderToStaticMarkup(React.createElement(M.LevelsSignals, props(AAPL, { macdToday: t })));
-    return /Includes today&#x27;s session so far \(14:32 ET\)\./.test(r("14:32")) && !/Includes today/.test(r(null)) && /As of the close on Fri 2 Oct 2026\./.test(r(null));
+    return /Includes today&#x27;s session so far \(14:32 ET\)\./.test(r({ time: "14:32", phase: "session" })) &&
+      /Includes today&#x27;s session \(close, 16:00 ET, IEX\)\./.test(r({ time: "16:00", phase: "afterClose" })) &&
+      !/Includes today/.test(r(null)) && /As of the close on Fri 2 Oct 2026\./.test(r(null));
   },
+  "the MACD legend draws its lines: solid MACD, dotted signal (#77)": ({ waveHtml }) =>
+    /<svg class="lsSwatchMacd"[^>]*><line [^>]*stroke-width="1\.5"[^>]*>(<\/line>)?<\/svg>MACD/.test(waveHtml) &&
+    /<svg class="lsSwatchSignal"[^>]*><line [^>]*stroke-dasharray="3 3"[^>]*>(<\/line>)?<\/svg>Signal/.test(waveHtml) && !/— MACD ┄ Signal/.test(waveHtml),
   "MACD series: its last point is the page's own reading": ({ M, wave, climb }) => [wave, climb].every((b) => {
     const page = M.page_buildMacd(b.map((x) => x.close)), s = M.macdSeries(b), last = s.points.at(-1);
     return page && Math.abs(last.macd - page.macd) < 1e-9 && Math.abs(last.signal - page.signal) < 1e-9 && Math.abs(last.hist - page.histogram) < 1e-9 && s.points.length === 30;
@@ -218,7 +226,7 @@ Object.assign(rules, {
 const staticRules0 = {
   "MACD in the Signals column: one set of bars for the pill and the chart, today's partial only in session": (_l, _c, p) =>
     /const l = liveBars\(history as \(Point & \{ partial\?: boolean; label\?: string \}\)\[\], renderedAt \?\? NaN\);/.test(p) &&
-    /return \{ tone: buildMacd\(l\.bars\.map\(\(p\) => p\.close\)\)\?\.tone \?\? null, bars: l\.bars, today: l\.live \? l\.time \?\? "" : null \};/.test(p) &&
+    /return \{ tone: buildMacd\(l\.bars\.map\(\(p\) => p\.close\)\)\?\.tone \?\? null, bars: l\.bars, today: l\.live && l\.phase \? \{ time: l\.time, phase: l\.phase \} : null \};/.test(p) &&
     /renderedAt=\{Date\.now\(\)\}/.test(fs.readFileSync("app/stock/[symbol]/page.tsx", "utf8")),
 };
 const staticRules = {
@@ -292,8 +300,10 @@ const mutants = [
 const MS = fs.readFileSync(MACD, "utf8"), SSs = fs.readFileSync(SESS, "utf8");
 mutants.push(
   ["today's partial bar counts only in session and only on its own day (#75/#76)", "s", (s) => s.replace(" && last.date === easternNow(nowMs).date;", ";")],
-  ["today's partial bar counts only in session and only on its own day (#75/#76)", "s", (s) => s.replace("Number.isFinite(nowMs) && inSession(nowMs) && last.date", "Number.isFinite(nowMs) && last.date")],
-  ["the MACD note says when today's session is included", "c", (s) => s.replace("p.macdToday != null ? `Includes today's session so far", "false ? `Includes today's session so far")],
+  ["today's partial bar counts only in session and only on its own day (#75/#76)", "s", (s) => s.replace("Number.isFinite(nowMs) && sinceOpen(nowMs) && last.date", "Number.isFinite(nowMs) && last.date")],
+  ["the MACD note says when today's session is included", "c", (s) => s.replace("return t.phase === \"afterClose\"", "return false")],
+  ["the MACD note says when today's session is included", "c", (s) => s.replace("reason={`${NOTES.macd} ${macdTodayWords(p.macdToday) ?? when}`}", "reason={`${NOTES.macd} ${when}`}")],
+  ["the MACD legend draws its lines: solid MACD, dotted signal (#77)", "c", (s) => s.replace('strokeWidth="1.25" strokeDasharray="3 3" /></svg>Signal', 'strokeWidth="1.25" /></svg>Signal')],
   ["MACD series: its last point is the page's own reading", "m", (s) => s.replace("let cur = avg(values.slice(0, period));", "let cur = values[0];")],
   ["MACD series: its last point is the page's own reading", "m", (s) => s.replace("const sig = emaSeries(macdVals, 9);", "const sig = emaSeries(macdVals, 10);")],
   ["MACD histogram: above zero in the pill's blue, below in its amber", "c", (s) => s.replace("fill={p.hist >= 0 ? MACD_COLOUR.above : MACD_COLOUR.below}", "fill={MACD_COLOUR.above}")],
