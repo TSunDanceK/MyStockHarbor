@@ -25,8 +25,8 @@ import CompanyProfile, {
 import DilutionHistory, {
   type DilutionHistoryData,
 } from "@/app/components/DilutionHistory";
-import type { ReturnBar } from "@/app/components/ReturnsBarChart";
 import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
+import { dailyReturnBars, monthlyReturnBars, weeklyReturnBars } from "@/lib/closeReturns";
 import ShareButton from "@/app/components/ShareButton";
 
 type Quote = {
@@ -375,33 +375,6 @@ function aggregateWeekly(points: Point[]): Point[] {
     else { buckets.set(key, { date: key, close: point.close, high: Math.max(existing.high ?? existing.close, high), low: Math.min(existing.low ?? existing.close, low), volume: (existing.volume ?? 0) + volume }); }
   }
   return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function fmtShortDate(dateStr: string) {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d);
-}
-
-// Close-over-close percentage change for the last `count` periods in an
-// ascending-by-date points array. Works for daily points directly, or for
-// aggregateWeekly(history) to get week-over-week change — same shape, same
-// math, just a different input series.
-function computeCloseOverCloseReturns(points: Point[], count: number): ReturnBar[] {
-  if (points.length < 2) return [];
-  const bars: ReturnBar[] = [];
-  const start = Math.max(1, points.length - count);
-  for (let i = start; i < points.length; i++) {
-    const prev = points[i - 1].close;
-    const close = points[i].close;
-    if (!(prev > 0) || !Number.isFinite(close)) continue;
-    bars.push({
-      date: points[i].date,
-      label: fmtShortDate(points[i].date),
-      changePercent: ((close - prev) / prev) * 100,
-    });
-  }
-  return bars;
 }
 
 function computeMacroSupport(points: Point[], lastClose: number | null): MacroSupportResult | null {
@@ -978,9 +951,12 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
     const l = liveBars(history as (Point & { partial?: boolean; label?: string })[], renderedAt ?? NaN);
     return { tone: buildMacd(l.bars.map((p) => p.close))?.tone ?? null, bars: l.bars, today: l.live && l.phase ? { time: l.time, phase: l.phase } : null };
   }, [history, renderedAt]);
-  const weeklyHistory = useMemo(() => aggregateWeekly(history), [history]);
-  const dailyReturns = useMemo(() => computeCloseOverCloseReturns(history, 20), [history]);
-  const weeklyReturns = useMemo(() => computeCloseOverCloseReturns(weeklyHistory, 12), [weeklyHistory]);
+  // The Price Action card's three series, from the bars the page already holds,
+  // labelled by the END of each period (lib/closeReturns.ts, #553 COWORK #115):
+  // 20 daily, 12 weekly, 12 complete months (+ the month in progress, kept apart).
+  const dailyReturns = useMemo(() => dailyReturnBars(history, 20), [history]);
+  const weeklyReturns = useMemo(() => weeklyReturnBars(history, 12), [history]);
+  const monthlyReturns = useMemo(() => monthlyReturnBars(history, 12), [history]);
 
   // Shared "Learn the indicators" links. Rendered inside the company-profile
   // right-hand column (under the stat cards) when a profile exists, and as a
@@ -1160,10 +1136,10 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               {/* -- Daily / weekly returns --------------------------- */}
               <section className="sp-slot sp-returns" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Price Action</div>
-                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily or weekly close-over-close change</h2>
-                {/* ONE card, Daily | Weekly toggle, Daily first (#552 COWORK #89). Both views server-rendered. */}
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily, weekly or monthly close-over-close change</h2>
+                {/* ONE card, Daily | Weekly | Monthly toggle, Daily first (#552 COWORK #89, #553 COWORK #115). Every view server-rendered. */}
                 <div className="returns-charts-grid">
-                  <ReturnsToggleCard symbol={symbol} daily={dailyReturns} weekly={weeklyReturns} />
+                  <ReturnsToggleCard symbol={symbol} daily={dailyReturns} weekly={weeklyReturns} monthly={monthlyReturns} />
                 </div>
               </section>
 
