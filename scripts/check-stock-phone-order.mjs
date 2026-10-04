@@ -101,7 +101,7 @@ const MUTANTS = [
   ["phones: chart, Price zones, Key levels, signals, Earnings, valuation, price action, summary, profile, change stock, explore, FAQ", (s) => s.replace(".stock-page-sidebar, .stock-page-main { display: contents; }", "")],
   ["anything unlisted (a new section, the hidden analyst block) falls after the profile, before change stock", (s) => s.replace("{ order: 85; min-width: 0; }", "{ order: 0; min-width: 0; }")],
   ["each section in the DOM once, each ordered; no card rendered twice", (s) => s.replace(".sp-earnings { order: 40; }", "")],
-  ["each section in the DOM once, each ordered; no card rendered twice", (s) => s.replace('<div className="sp-slot sp-earnings">', '<div className="sp-slot sp-earnings">\n<KeyLevelsCard bars={history} />')],
+  ["each section in the DOM once, each ordered; no card rendered twice", (s) => s.replace('<div className="sp-slot sp-earnings" data-reading-owner="a">', '<div className="sp-slot sp-earnings" data-reading-owner="a">\n<KeyLevelsCard bars={history} />')],
   ["desktop and tablet unchanged: no ordering or display: contents above 900px, the DOM order as it was", (s) => swap(s, 'className="sp-slot sp-returns"', 'className="sp-slot sp-signals"')],
   ["desktop and tablet unchanged: no ordering or display: contents above 900px, the DOM order as it was", (s) => s.replace("        @media (max-width: 900px) {", "        .stock-page-main { display: contents; }\n        @media (max-width: 900px) {")],
   ["desktop and tablet unchanged: no ordering or display: contents above 900px, the DOM order as it was", (s) => s.replace("        .mobile-change-stock { display: none; }", "        .mobile-change-stock { display: none; }\n        .sp-chart { order: 3; }")],

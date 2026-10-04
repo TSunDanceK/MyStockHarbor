@@ -160,6 +160,7 @@ const writeTiingoUniverse = async () => true;
 // #553 COWORK #120: and refreshes it on the market-closed path.
 const refreshTiingoUniverseOffHours = async () => ({ written: false, reason: "fresh" });
 const STOCK_PAGE_SYMBOLS = ["KO"]; // step 5b: the stock-page symbols join the universe
+const MOOD_ETFS = []; // #563 COWORK #96: Market Mood's ETFs join the universe (asserted in check-market-mood)
 const priceProviderFor = () => "fmp";
 const process = { env: { FMP_API_KEY: "x", NEXT_PUBLIC_SITE_URL: "https://x" } };
 ${getFn}

@@ -729,7 +729,7 @@ export default function PriceChart(props: Props) {
             <text
               x={width - padR + 6}
               y={t.y + 4}
-              fontSize={11}
+              fontSize="0.75rem"
               fill="currentColor"
               opacity="0.6"
             >
@@ -783,7 +783,7 @@ export default function PriceChart(props: Props) {
                   <text
                     x={padL + 8}
                     y={Math.max(padT + 13, yMid - 7)}
-                    fontSize="11"
+                    fontSize="0.75rem"
                     fill={color}
                     fontWeight="800"
                     opacity="0.95"
@@ -817,7 +817,7 @@ export default function PriceChart(props: Props) {
               <text
                 x={width - padR - 6}
                 y={Math.max(padT + 13, y - 6)}
-                fontSize="11"
+                fontSize="0.75rem"
                 fill={color}
                 fontWeight="800"
                 opacity="0.95"
@@ -842,7 +842,7 @@ export default function PriceChart(props: Props) {
             <text
               x={t.x}
               y={height - 10}
-              fontSize={11}
+              fontSize="0.75rem"
               fill="currentColor"
               opacity="0.6"
               textAnchor="middle"
@@ -1275,7 +1275,7 @@ export default function PriceChart(props: Props) {
             gap: 12,
           }}
         >
-          <div style={{ fontSize: 12, opacity: 0.7 }}>
+          <div data-fine-print style={{ fontSize: "var(--fs-fine)", opacity: 0.7 }}>
             {showTradingView
               ? `Live TradingView chart for ${symbol}`
               : // 2026-10-03 (#553 COWORK #113/#114): ISO dates read as "20 Oct 2025" now.
@@ -1307,7 +1307,7 @@ export default function PriceChart(props: Props) {
                 background: !showTradingView ? "rgba(167,139,250,0.28)" : "transparent",
                 color: !showTradingView ? "#ede9fe" : "#8a97ad",
                 fontWeight: 700,
-                fontSize: 12,
+                fontSize: "0.75rem",
                 cursor: "pointer",
                 boxShadow: !showTradingView ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none",
                 whiteSpace: "nowrap",
@@ -1326,7 +1326,7 @@ export default function PriceChart(props: Props) {
                 background: showTradingView ? "rgba(167,139,250,0.28)" : "transparent",
                 color: showTradingView ? "#ede9fe" : "#8a97ad",
                 fontWeight: 700,
-                fontSize: 12,
+                fontSize: "0.75rem",
                 cursor: "pointer",
                 boxShadow: showTradingView ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none",
                 whiteSpace: "nowrap",
@@ -1366,7 +1366,7 @@ export default function PriceChart(props: Props) {
                   color: "#dbeafe",
                   textDecoration: "none",
                   fontWeight: 800,
-                  fontSize: 12,
+                  fontSize: "0.75rem",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -1390,7 +1390,7 @@ export default function PriceChart(props: Props) {
                   color: "#dcfce7",
                   textDecoration: "none",
                   fontWeight: 800,
-                  fontSize: 12,
+                  fontSize: "0.75rem",
                   whiteSpace: "nowrap",
                 }}
               >

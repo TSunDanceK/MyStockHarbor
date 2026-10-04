@@ -374,7 +374,7 @@ export default function LatestEarningsCard({
           </Link>
         </>
       )}
-      <div style={earningsSourceStyle}>{snapshot.sourceNote}</div>
+      {snapshot.sourceNote ? <div style={earningsSourceStyle}>{snapshot.sourceNote}</div> : null}
     </section>
   );
 }

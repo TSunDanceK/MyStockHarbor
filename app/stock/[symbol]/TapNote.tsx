@@ -141,7 +141,7 @@ export function NotePanel({ note, overlay, mode, pointerX = 16, onHeight, childr
         ...(overlay ? { position: "absolute", left: 0, right: 0, top: overlay.top, zIndex: 20 } : { position: "relative", marginTop: NOTE_GAP, marginBottom: NOTE_GAP }),
         boxSizing: "border-box", maxWidth: "100%", padding: "10px 30px 10px 12px", borderRadius: 12,
         background: "#0f172a", border: "1px solid rgba(148,163,184,0.35)", boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
-        fontSize: 12, lineHeight: 1.5, color: "rgba(226,232,240,0.92)", textAlign: "left", whiteSpace: "normal",
+        fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.92)", textAlign: "left", whiteSpace: "normal",
       }}>
       <span aria-hidden="true" className="tapNotePointer" style={{
         position: "absolute", left: pointerX, width: 10, height: 10, background: "#0f172a", transform: "rotate(45deg)",
@@ -149,7 +149,7 @@ export function NotePanel({ note, overlay, mode, pointerX = 16, onHeight, childr
           : { top: -6, borderLeft: "1px solid rgba(148,163,184,0.35)", borderTop: "1px solid rgba(148,163,184,0.35)" }),
       }} />
       <button type="button" className="tapNoteClose" aria-label="Close" onClick={note.close}
-        style={{ all: "unset", cursor: "pointer", position: "absolute", top: 6, right: 9, fontSize: 13, lineHeight: 1, color: "rgba(203,213,225,0.75)", padding: 2 }}>✕</button>
+        style={{ all: "unset", cursor: "pointer", position: "absolute", top: 6, right: 9, fontSize: "0.8125rem", lineHeight: 1, color: "rgba(203,213,225,0.75)", padding: 2 }}>✕</button>
       {children}
     </div>
   );
@@ -169,8 +169,8 @@ export function NoteDot({ colour, shape = "dot" }: { colour: string; shape?: "do
 export function HowToRead({ children }: { children: ReactNode }) {
   return (
     <details className="howToRead" style={{ marginTop: 12 }}>
-      <summary style={{ cursor: "pointer", fontSize: 11.5, fontWeight: 700, color: "rgba(147,197,253,0.85)", listStyle: "none" }}>How to read this ▾</summary>
-      <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.62)" }}>{children}</div>
+      <summary style={{ cursor: "pointer", fontSize: "var(--fs-read)", fontWeight: 700, color: "rgba(147,197,253,0.85)", listStyle: "none" }}>How to read this ▾</summary>
+      <div style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(203,213,225,0.72)" }}>{children}</div>
     </details>
   );
 }

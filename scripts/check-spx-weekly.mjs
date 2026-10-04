@@ -3,7 +3,8 @@
 //
 // Rules: the seeded file passes; the schema and types; the length caps (the
 // one-liner ≤ 160 characters, each point and watch line ≤ 140); dates are real
-// YYYY-MM-DD dates; no buy/sell/"should" wording; the page reads the file
+// YYYY-MM-DD dates; no buy/sell/"should" wording; no third party's sentiment
+// index by name (#96: the sentiment field is gone; Market Mood is ours); the page reads the file
 // through the check and renders its fields; the staleness guard (asOf more
 // than 10 days old → "Last weekly update: <date>" and dated tiles). Mutants:
 // each rule broken once, caught.
@@ -28,18 +29,18 @@ const withChange = (f) => { const c = clone(); f(c); return c; };
 
 const RULES = {
   "the seeded file passes the check": ({ M, file }) => M.parseSpxWeekly(file).ok === true,
-  "the schema and types: required fields, numbers positive, exactly 3 points, a known sentiment label": ({ M }) =>
+  "the schema and types: required fields, numbers positive, exactly 3 points; sentiment removed (#96), ignored if present": ({ M }) =>
     [
       withChange((c) => { delete c.indexClose; }),
       withChange((c) => { c.ath.level = "7798.99"; }),
       withChange((c) => { c.points.pop(); }),
-      withChange((c) => { c.sentiment.label = "Panic"; }),
-      withChange((c) => { c.sentiment.fearGreed = 131; }),
       withChange((c) => { c.breadth.pct200 = 140; }),
       withChange((c) => { c.watchUp = []; }),
       withChange((c) => { c.targets = [{ low: 8100, high: 7900, source: "x" }]; }),
     ].every((bad) => M.parseSpxWeekly(bad).ok === false) &&
-    M.parseSpxWeekly(withChange((c) => { c.breadth.pct200 = 61; c.breadth.pct50 = null; c.targets = [{ low: 7900, high: 8100, source: "Year-end targets" }]; })).ok === true,
+    M.parseSpxWeekly(withChange((c) => { c.breadth.pct200 = 61; c.breadth.pct50 = null; c.targets = [{ low: 7900, high: 8100, source: "Year-end targets" }]; })).ok === true &&
+    // #96: no sentiment field needed; an old file that still has one is read, the field ignored.
+    !("sentiment" in clone()) && M.parseSpxWeekly(withChange((c) => { c.sentiment = { fearGreed: 31, label: "Fear", source: "x", date: "2026-10-02" }; })).ok === true,
   "length caps: the one-liner ≤ 160 characters, each point and watch line ≤ 140": ({ M }) =>
     M.ONE_LINER_MAX === 160 && M.POINT_MAX === 140 && M.WATCH_MAX === 140 &&
     !M.parseSpxWeekly(withChange((c) => { c.oneLiner = "x".repeat(161); })).ok && M.parseSpxWeekly(withChange((c) => { c.oneLiner = "x".repeat(160); })).ok &&
@@ -47,20 +48,25 @@ const RULES = {
     !M.parseSpxWeekly(withChange((c) => { c.watchDown[0] = "x".repeat(141); })).ok,
   "dates are real YYYY-MM-DD dates": ({ M }) =>
     ["2026-02-30", "4 Oct 2026", "2026-10-4", "2026-13-01"].every((d) => !M.isIsoDate(d)) && M.isIsoDate("2026-10-02") &&
-    !M.parseSpxWeekly(withChange((c) => { c.asOf = "2026-02-30"; })).ok && !M.parseSpxWeekly(withChange((c) => { c.sentiment.date = "Sun 4 Oct"; })).ok &&
+    !M.parseSpxWeekly(withChange((c) => { c.asOf = "2026-02-30"; })).ok && !M.parseSpxWeekly(withChange((c) => { c.breadth.date = "Sun 4 Oct"; })).ok &&
     !M.parseSpxWeekly(withChange((c) => { c.ath.date = "2026-8-13"; })).ok,
   "no buy / sell / should wording anywhere in the file": ({ M }) =>
     ["Investors should wait for 7,800", "A good time to buy the dip", "Retail selling continues", "We recommend caution"].every((x) =>
       !M.parseSpxWeekly(withChange((c) => { c.watchDown[1] = x; })).ok) &&
     !M.parseSpxWeekly(withChange((c) => { c.points[0].label = "Should watch"; })).ok,
+  "no third party's sentiment index by name (CNN, Fear & Greed) anywhere in the file (#96)": ({ M }) =>
+    ["The CNN index sits at 31.", "The Fear & Greed Index slides deeper into fear.", "Fear and greed readings stayed cautious all week."].every((x) =>
+      !M.parseSpxWeekly(withChange((c) => { c.watchDown[1] = x; })).ok) &&
+    !M.parseSpxWeekly(withChange((c) => { c.marketRead[0] = `${c.marketRead[0]} CNN's gauge sat in fear.`; })).ok &&
+    M.parseSpxWeekly(withChange((c) => { c.watchDown[1] = "Fear eased as the index held its average."; })).ok,
   "the page reads the file through the check, and renders its fields": ({ page }) =>
     /fs\.readFileSync\(path\.join\(process\.cwd\(\), "content\/markets\/spx-weekly\.json"\), "utf8"\)/.test(page) &&
     /const r = parseSpxWeekly\(raw\);\s*if \(r\.ok\) return r\.data;/.test(page) &&
-    ["weekly.intro", "weekly.marketRead.map", "weekly.oneLiner", "weekly.indexClose", "weekly.ath.level", "weekly.ath.date", "weekly.sentiment.fearGreed", "weekly.sentiment.source", "weekly.points.map", "weekly.breadth.pct200", "weekly.watchDown", "weekly.watchUp"].every((f) => page.includes(f)) &&
+    ["weekly.intro", "weekly.marketRead.map", "weekly.oneLiner", "weekly.indexClose", "weekly.ath.level", "weekly.ath.date", "weekly.points.map", "weekly.breadth.pct200", "weekly.watchDown", "weekly.watchUp"].every((f) => page.includes(f)) &&
     ["performance", "chart", "levels", "signals", "change"].every((k) => page.includes(`<WriteUp weekly={weekly} k="${k}" stale={stale} />`)) &&
     // Weekly sections are skipped, not filled with guesses, when the file fails.
     /\{weekly \? \(\s*<section className="spxRead"[\s\S]*?This week in 3 points[\s\S]*?Market read/.test(page) &&
-    /const sec = weekly\?\.sections\[k\];\s*if \(!weekly \|\| !sec\) return null;/.test(page),
+    /const sec = weekly\?\.sections\[k\];\s*if \(!weekly \|\| !sec\) return null;/.test(page) && !/weekly\.sentiment/.test(page),
   "the written analysis has floors and caps (#91): intro, a write-up per visual, the Market read, full-sentence watch lists": ({ M }) => {
     const ok = (f) => M.parseSpxWeekly(withChange(f)).ok;
     const para = (n) => "Word ".repeat(Math.ceil(n / 5)).slice(0, n - 1) + ".";
@@ -78,7 +84,7 @@ const RULES = {
     M.STALE_DAYS === 10 && !M.isStale("2026-10-02", Date.parse("2026-10-12T00:00:00Z")) && M.isStale("2026-10-02", Date.parse("2026-10-12T00:00:01Z")) &&
     /const stale = weekly \? isStale\(weekly\.asOf, nowMs\) : false;/.test(page) &&
     /\{stale \? <strong style=\{\{ color: C\.amber \}\}>Last weekly update: \{weeklyDate\(weekly\.asOf\)\}\. <\/strong>/.test(page) &&
-    (page.match(/dated=\{stale\}/g) ?? []).length === 3,
+    (page.match(/dated=\{stale\}/g) ?? []).length === 2,
 };
 
 const libSrc = read(LIB), pageSrc = read(PAGE);
@@ -95,9 +101,12 @@ for (const [label, rule] of Object.entries(RULES)) check(label, run(rule, base),
 // [rule, where: "l" lib, "p" page, "f" file, mutation]
 const MUTANTS = [
   ["the seeded file passes the check", "f", (c) => { c.oneLiner = "x".repeat(170); }],
-  ["the schema and types: required fields, numbers positive, exactly 3 points, a known sentiment label", "l", (s) => s.replace('if (!isPos(r.indexClose)) p.push("indexClose: not a positive number");', "")],
-  ["the schema and types: required fields, numbers positive, exactly 3 points, a known sentiment label", "l", (s) => s.replace("r.points.length !== 3", "r.points.length < 1")],
-  ["the schema and types: required fields, numbers positive, exactly 3 points, a known sentiment label", "l", (s) => s.replace("if (!SENTIMENT_LABELS.includes(s.label as (typeof SENTIMENT_LABELS)[number]))", "if (false)")],
+  ["the schema and types: required fields, numbers positive, exactly 3 points; sentiment removed (#96), ignored if present", "l", (s) => s.replace('if (!isPos(r.indexClose)) p.push("indexClose: not a positive number");', "")],
+  ["the schema and types: required fields, numbers positive, exactly 3 points; sentiment removed (#96), ignored if present", "l", (s) => s.replace("r.points.length !== 3", "r.points.length < 1")],
+  ["the schema and types: required fields, numbers positive, exactly 3 points; sentiment removed (#96), ignored if present", "l", (s) => s.replace('if (!(v === null || (typeof v === "number" && v >= 0 && v <= 100)))', "if (false)")],
+  ["no third party's sentiment index by name (CNN, Fear & Greed) anywhere in the file (#96)", "l", (s) => s.replace("export const THIRD_PARTY_INDEX = /\\bCNN\\b|fear\\s*(?:&|and)\\s*greed/i;", "export const THIRD_PARTY_INDEX = /\\bCNN\\b/i;")],
+  ["no third party's sentiment index by name (CNN, Fear & Greed) anywhere in the file (#96)", "l", (s) => s.replace("  if (named.length) p.push(", "  if (false) p.push(")],
+  ["the page reads the file through the check, and renders its fields", "p", (s) => s.replace("{weekly.oneLiner}", "{weekly.oneLiner}{weekly.sentiment?.label}")],
   ["length caps: the one-liner ≤ 160 characters, each point and watch line ≤ 140", "l", (s) => s.replace("export const ONE_LINER_MAX = 160;", "export const ONE_LINER_MAX = 200;")],
   ["length caps: the one-liner ≤ 160 characters, each point and watch line ≤ 140", "l", (s) => s.replace("else if ((pt.text as string).length > POINT_MAX)", "else if (false)")],
   ["dates are real YYYY-MM-DD dates", "l", (s) => s.replace("return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;", "return !Number.isNaN(d.getTime());")],

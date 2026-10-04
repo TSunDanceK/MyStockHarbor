@@ -436,6 +436,13 @@ function noScoreReason(symbol: string, cold: ColdResult, hasSet: boolean): strin
   // will be. For a preferred or a baby bond there is nothing of its own to
   // read, ever -- the filings on that CIK belong to the issuer, and that is
   // the point of refusing them.
+  // A FUND OR A CENSUS-NAMED NOTE (#552 COWORK #151): settled, not pending.
+  // The same words as the earnings page's SecNotShownCard (NOT_SHOWN_WORDS).
+  if (cold.status === "not-shown") {
+    return cold.kind === "fund"
+      ? "SEC filing figures aren't shown for funds and trusts. Their filings describe the fund, not a company's earnings."
+      : "SEC filing figures aren't shown for this security. Its filings describe the issuer, not this security.";
+  }
   if (cold.status === "not-issuer-equity") {
     const parent = cold.siblings.filter((x) => !/[-.]/.test(x)).sort((a, b) => a.length - b.length)[0];
     return cold.reason === "derivative-of-issuer"
