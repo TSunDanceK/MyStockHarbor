@@ -14,6 +14,12 @@
 //   gross margin %       margins[i].gross, A's gross margin: whole % on the dot,
 //                        one decimal in the panel (owner ruling, #563 COWORK #55:
 //                        margins in %, never cents-per-dollar wording)
+//   margin chart         gross margin; when NO period in the series has one filed
+//                        (ORCL, which reports expenses by function with no cost
+//                        of sales line), A's operating margin for the whole
+//                        series instead, said so under the title (#563 COWORK
+//                        #71). Never gross for some periods and operating for
+//                        others. Neither for any period: no chart, and why.
 //   costs vs sales       A's operating / net margins, re-worded only when they
 //                        are beyond ±100% ("about 2.9× sales" for -194.5%)
 //   one-off tag          the note A attaches (largeNonOperatingNote), on the
@@ -35,6 +41,20 @@ import { scaledAmount } from "./server/secPresentation";
 
 /** The one plain sentence explaining gross margin (#563 COWORK #55), printed under "About these figures". */
 export const GROSS_MARGIN_MEANS = "Gross margin is the share of sales left after the direct costs of making them.";
+/** The same sentence when the chart shows operating margin instead (#563 COWORK #71/#72). */
+export const OPERATING_MARGIN_MEANS = "Operating margin is the share of sales left after the costs of running the business, before interest and tax.";
+
+/**
+ * The card's one intro line, following the series' measure (#563 COWORK #72):
+ * "…and gross margin each quarter", "…and operating margin…", or no margin at all.
+ */
+export function introLine(kind: GvMarginKind | undefined, one: string): string {
+  const what = kind === "operating" ? "Sales, profit or loss and operating margin" : kind === "none" ? "Sales and profit or loss" : "Sales, profit or loss and gross margin";
+  return `${what} each ${one}, as filed. Tap a ${one} for its figures.`;
+}
+/** The "About these figures" margin sentence for the series' measure; null when there is no margin chart. */
+export const marginMeans = (kind: GvMarginKind | undefined): string | null =>
+  kind === "operating" ? OPERATING_MARGIN_MEANS : kind === "none" ? null : GROSS_MARGIN_MEANS;
 
 /** Above this year-on-year %, the label reads SMALL_BASE instead (COWORK #26 §2). */
 export const SMALL_BASE_ABOVE_PCT = 200;
@@ -72,18 +92,41 @@ export type GvPeriod = {
    * #552 COWORK #117): no profit bar and no figure, and this says why.
    */
   profitUnchecked?: string | null;
-  /** Gross margin, whole %, for the dot; null with `grossNote` saying why. */
+  /** Gross margin, whole %, for the dot (negative is drawn below zero, red); null with `grossNote` saying why. */
   grossPct: number | null;
   /** The same margin at one decimal for the panel ("43.4%"), or null. */
   grossText: string | null;
-  /** Why there is no gross margin. Set whenever grossPct is null: a missing dot always says why. */
+  /** Why there is no gross margin. Set whenever grossPct is null (a missing dot always says why); on a negative one, what it means. */
   grossNote: string | null;
+  /**
+   * Operating margin for the chart when the series falls back to it (#563
+   * COWORK #71): whole % for the dot, one decimal for the panel, or null with
+   * why. Computed for every period; drawn only when GvSeries.margin.kind is
+   * "operating".
+   */
+  opPct: number | null;
+  opText: string | null;
+  opNote: string | null;
   /** Operating and net margin, worded: "−85.1%" or "costs were about 2.9× sales". */
   operating: string | null;
   net: string | null;
 };
 
-export type GvSeries = { one: string; many: string; periods: GvPeriod[]; summary: string | null; profitMissing: string | null };
+/**
+ * Which margin the series' third chart draws (#563 COWORK #71): gross when any
+ * period has a gross margin filed; operating for the WHOLE series when none
+ * does; none (no chart, `note` says why) when operating is missing too.
+ */
+export type GvMarginKind = "gross" | "operating" | "none";
+export type GvMargin = {
+  kind: GvMarginKind;
+  /** Under the chart's title (operating), or in place of the chart (none). Null for gross. */
+  note: string | null;
+  /** The panel's gross-margin row when no period has one: "Not stated in Oracle's filings". */
+  grossAbsent: string | null;
+};
+
+export type GvSeries = { one: string; many: string; periods: GvPeriod[]; summary: string | null; profitMissing: string | null; margin: GvMargin };
 export type GrowthVisualsData = { quarters: GvSeries | null; years: GvSeries | null };
 
 /** "Q2 FY2026" -> "Q2 '26", "FY2025" -> "FY25"; anything else unchanged. */
@@ -100,6 +143,7 @@ function amount(cell: ViewCell | undefined | null): GvAmount | null {
 }
 
 const isNum = (v: Pct | undefined): v is number => typeof v === "number" && Number.isFinite(v);
+const isFiniteNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 /** A's YoY as a beginner reads it. Crossings and absences say nothing here. */
 export function growthWords(v: Pct | undefined): string | null {
@@ -123,8 +167,81 @@ export function grossMargin(
   if (gross == null || !Number.isFinite(gross)) {
     return { pct: null, text: null, note: hasSales ? EMPTY_REASONS.notCaptured : EMPTY_REASONS.needsRevenue };
   }
-  if (gross < 0) return { pct: null, text: null, note: "The direct costs of sales were more than the sales" };
+  // NEGATIVE IS DRAWN, BELOW ZERO, IN RED (owner, 3 Oct): the chart's scale
+  // moves down to take it. The note says what a negative gross margin means.
+  if (gross < 0) return { pct: Math.round(gross), text: `−${Math.abs(gross).toFixed(1)}%`, note: "The direct costs of sales were more than the sales" };
   return { pct: Math.round(gross), text: `${gross.toFixed(1)}%`, note: null };
+}
+
+/**
+ * A's operating margin as the chart's dot, when the series has no gross margin
+ * at all (#563 COWORK #71). The same rules as grossMargin: a refusal and a
+ * missing figure each say why. An operating loss is drawn below zero, in red
+ * (owner, 3 Oct); the panel's operating row words it.
+ */
+export function operatingMarginDot(
+  m: number | null,
+  refused: boolean,
+  hasSales: boolean
+): { pct: number | null; text: string | null; note: string | null } {
+  if (refused) return { pct: null, text: null, note: EMPTY_REASONS.revenueIncomplete };
+  if (m == null || !Number.isFinite(m)) {
+    return { pct: null, text: null, note: hasSales ? EMPTY_REASONS.notCaptured : EMPTY_REASONS.needsRevenue };
+  }
+  if (m < 0) return { pct: Math.round(m), text: `−${Math.abs(m).toFixed(1)}%`, note: null };
+  return { pct: Math.round(m), text: `${m.toFixed(1)}%`, note: null };
+}
+
+/** Corporate suffixes dropped from a filer's SEC name for the margin note. */
+const NAME_SUFFIX = /\b(corporation|corp|incorporated|inc|company|co|ltd|limited|plc|holdings?|group|n\.?v|s\.?a|ag|se|lp|llc)\.?$/i;
+const SMALL_WORDS = new Set(["of", "and", "the", "for", "&"]);
+
+/**
+ * "ORACLE CORP" -> "Oracle"; "BANK OF AMERICA CORP /DE/" -> "Bank of America".
+ * The filer's own SEC name, title-cased with its legal suffix dropped, for
+ * "Oracle's filings don't state…". Null when there is nothing left to say.
+ */
+export function filerName(entityName: string | null | undefined): string | null {
+  let n = (entityName ?? "").replace(/\s*\/[A-Z]{2,}\/?\s*$/i, "").replace(/[,.]+$/, "").trim();
+  for (let i = 0; i < 3; i++) {
+    const next = n.replace(NAME_SUFFIX, "").replace(/[\s,&]+$/, "").trim();
+    if (next === n || !next) break;
+    n = next;
+  }
+  if (!n) return null;
+  return n.split(/\s+/).map((w, i) => {
+    const lw = w.toLowerCase();
+    if (i > 0 && SMALL_WORDS.has(lw)) return lw;
+    return lw.charAt(0).toUpperCase() + lw.slice(1);
+  }).join(" ");
+}
+
+/** "Oracle's" / "This company's". */
+const filersOf = (name: string | null) => (name ? `${name}'s` : "This company's");
+
+/**
+ * The series' margin chart: gross, operating for the whole series, or none.
+ * `grossFiled` counts the periods with a gross margin figure at all (a negative
+ * one counts and is drawn below zero). `opDrawn` counts periods with an
+ * operating margin dot: a loss is drawn too, below zero (owner, 3 Oct).
+ */
+export function marginChoice(grossFiled: number, opDrawn: number, name: string | null, many: string): GvMargin {
+  if (grossFiled > 0) return { kind: "gross", note: null, grossAbsent: null };
+  const whose = filersOf(name);
+  const grossAbsent = `Not stated in ${name ? `${name}'s` : "this company's"} filings`;
+  if (opDrawn > 0) {
+    return {
+      kind: "operating",
+      note: `${whose} filings don't state a cost of sales line, so gross margin can't be worked out; operating margin is shown instead.`,
+      grossAbsent,
+    };
+  }
+  const mid = name ? `${name}'s` : "this company's";
+  return {
+    kind: "none",
+    note: `No margin chart: ${mid} filings don't state a cost of sales line, and operating margin isn't available for these ${many}.`,
+    grossAbsent,
+  };
 }
 
 /**
@@ -212,6 +329,7 @@ export function buildGrowthVisuals(
   opts: { oneOffs?: Record<string, string>; unchecked?: string[] } = {}
 ): GrowthVisualsData {
   const profitChecked = opts.oneOffs !== undefined;
+  const name = filerName(view.entityName);
   // A PERIOD THE RULE COULD NOT RUN ON IS NOT "CHECKED, NONE": no bar for it.
   const unchecked = new Set(opts.unchecked ?? []);
   const oneOffOf = (label: string): string | null =>
@@ -239,6 +357,7 @@ export function buildGrowthVisuals(
       const prior = g?.comparedWith ? byLabel.get(g.comparedWith) : undefined;
       const priorAmount = prior ? amount(prior.revenue) : null;
       const kept = grossMargin(m?.gross ?? null, m?.marginsRefused ?? false, amount(p.revenue) !== null);
+      const op = operatingMarginDot(m?.operating ?? null, m?.marginsRefused ?? false, amount(p.revenue) !== null);
       return {
         label: p.label,
         short: shortLabel(p.label),
@@ -249,14 +368,19 @@ export function buildGrowthVisuals(
         grossPct: kept.pct,
         grossText: kept.text,
         grossNote: kept.note,
+        opPct: op.pct,
+        opText: op.text,
+        opNote: op.note,
         operating: marginWords(m?.operating ?? null, "operating", m?.marginsRefused ?? false),
         net: marginWords(m?.net ?? null, "net", m?.marginsRefused ?? false),
       };
     });
     // A's nouns for the table basis, not a second rule for them.
     const { one, many } = periodWords(view.tableBasis);
+    const grossFiled = ordered.filter((p) => isFiniteNum(marginOf.get(p.label)?.gross)).length;
     quarters = {
       one, many, periods, profitMissing: profitChecked ? null : profitWaitsForOneOffs(one),
+      margin: marginChoice(grossFiled, periods.filter((p) => p.opPct !== null).length, name, many),
       summary: summaryLine(periods, ordered.map((p) => growthOf.get(p.label)?.revenueYoY), one, many),
     };
   }
@@ -271,6 +395,7 @@ export function buildGrowthVisuals(
       const prior = a.comparedWith ? byLabel.get(a.comparedWith) : undefined;
       const priorAmount = prior ? amount(prior.revenue) : null;
       const kept = grossMargin(a.gross, a.marginsRefused, amount(a.revenue) !== null);
+      const op = operatingMarginDot(a.operating, a.marginsRefused, amount(a.revenue) !== null);
       return {
         label: a.label,
         short: shortLabel(a.label),
@@ -281,6 +406,9 @@ export function buildGrowthVisuals(
         grossPct: kept.pct,
         grossText: kept.text,
         grossNote: kept.note,
+        opPct: op.pct,
+        opText: op.text,
+        opNote: op.note,
         operating: marginWords(a.operating, "operating", a.marginsRefused),
         net: marginWords(a.net, "net", a.marginsRefused),
       };
@@ -288,6 +416,7 @@ export function buildGrowthVisuals(
     const yw = periodWords("year");
     years = {
       one: yw.one, many: yw.many, periods,
+      margin: marginChoice(view.annual.filter((a) => isFiniteNum(a.gross)).length, periods.filter((p) => p.opPct !== null).length, name, yw.many),
       profitMissing: profitChecked ? null : profitWaitsForOneOffs(yw.one),
       summary: summaryLine(periods, view.annual.map((a) => a.revenueYoY), yw.one, yw.many),
     };

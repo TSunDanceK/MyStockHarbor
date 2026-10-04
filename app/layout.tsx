@@ -5,6 +5,7 @@ import SiteHeader from "./components/SiteHeader";
 import CrawlableNav from "./components/CrawlableNav";
 import PageViewTracker from "./components/PageViewTracker";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
+import { LATEST_VIDEOS_LIMIT } from "@/lib/videoResolve";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -68,7 +69,11 @@ export default async function RootLayout({
   // getLatestYouTubeVideos — see lib/youtube.ts) so the global header's
   // "Video Breakdowns" nav link always points at whichever video is
   // currently newest, without any client-side fetch or hardcoded video ID.
-  const [latestVideo] = await getLatestYouTubeVideos(1);
+  //
+  // THE PAGE'S OWN LIST (#563 COWORK #70): the same limit the video page reads,
+  // so one cache entry answers both and the link's id is always in the list the
+  // page falls back to. With limit 1 it was a separate 24-hour entry.
+  const [latestVideo] = await getLatestYouTubeVideos(LATEST_VIDEOS_LIMIT);
   const latestVideoId = latestVideo?.id ?? null;
 
   const footerLinkStyle: React.CSSProperties = {

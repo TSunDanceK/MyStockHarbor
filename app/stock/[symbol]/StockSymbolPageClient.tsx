@@ -1117,7 +1117,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </div>
 
               {/* Key levels (#563 COWORK #64): C's card, from the bars already held. */}
-              <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
 
               {/* Earnings snapshot — sidebar */}
               <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} />
