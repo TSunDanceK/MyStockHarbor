@@ -8,9 +8,14 @@
 //   the dot    the last price, (last − low) / (high − low)
 //   the tick   where the period opened
 //   ◇          the previous period's close (#78): the session before the day,
-//              last week's close, last month's close. Outside the range (a
-//              gap) it is pinned just beyond the edge it lies past, with an
-//              arrow and its distance ("prev close 1.8% below the low").
+//              last week's close, last month's close.
+// A GAP IS EMPTY TRACK (owner change, #563 COWORK #81; replaces #79's pinned
+// diamond): when the previous close lies outside the low–high range, the row's
+// scale stretches to include it, min(low, prev) → max(high, prev). The coloured
+// bar then spans only low → high, the ◇ sits at the stretched end, and the
+// plain grey track between them is the size of the gap. The note under the row
+// gives the exact figure ("prev close 1.8% below the low"). A gap too small to
+// see (under MIN_GAP_PCT of the track) keeps the ◇ that far from the bar's end.
 // So a price can sit near the week's low and the day's high at once, and the
 // rows show it. A running period has an open but no close; the previous
 // period's close is the useful "close" level.
@@ -35,14 +40,20 @@ export const TONE_WORDS: Record<Tone, string> = {
 };
 export const FLAT_RANGE_WORDS = "No range yet: this period's high and low are the same price.";
 
+/** A gap narrower than this % of the track still leaves the ◇ this far from the bar's end. */
+export const MIN_GAP_PCT = 4;
+
 export type PrevMark = {
-  /** Its place in the row's range, in % (0 = the low, 100 = the high); null when pinned outside. */
-  pos: number | null;
-  /** Past which edge it is pinned when outside the range, or null when inside. */
-  pinned: "left" | "right" | null;
-  /** "prev close 1.8% below the low" when pinned; null when inside. */
+  /** Its place on the row's scale, in % (0 = the left end, 100 = the right end). */
+  pos: number;
+  /** Which side of the range it lies on when it is a gap, or null when inside. */
+  gap: "below" | "above" | null;
+  /** "prev close 1.8% below the low" on a gap; null when inside. */
   gapWords: string | null;
 };
+
+/** A row's scale: the low–high range, stretched to take in a previous close outside it. */
+export type RowScale = { lo: number; hi: number };
 
 export type BarRow = {
   key: PeriodKey;
@@ -51,11 +62,14 @@ export type BarRow = {
   since: string | null;
   /** The bar, or null when the period (or its low or high) can't be built. */
   bar: {
-    /** True when the high equals the low: the marks sit centred, and the note says "no range yet". */
+    /** True when the high equals the low: "no range yet". */
     flat: boolean;
-    /** The open's tick, in % of the row's range, or null when the open isn't on file. */
+    /** The coloured bar's ends (the low and the high), in % of the row's scale: 0 and 100 with no gap. */
+    from: number;
+    to: number;
+    /** The open's tick, in % of the row's scale, or null when the open isn't on file. */
     open: number | null;
-    /** The last price, in % of the row's range (held to 0–100: a price past the range sits at the edge, and the note says so). */
+    /** The last price, in % of the row's scale (held to 0–100: a price past it sits at the edge, and the note says so). */
     dot: number;
     tone: Tone;
     /** The previous period's close, or null with the reason in the note. */
@@ -90,11 +104,30 @@ export function toneOf(last: number, open: number | null): Tone {
   return pct > 0 ? "up" : "down";
 }
 
-/** The previous close in a row: at its place in the range, or pinned past an edge with its distance from it. */
-export function prevMark(v: number, low: number, high: number): PrevMark {
-  if (v < low) return { pos: null, pinned: "left", gapWords: `prev close ${((low - v) / low * 100).toFixed(1)}% below the low` };
-  if (v > high) return { pos: null, pinned: "right", gapWords: `prev close ${((v - high) / high * 100).toFixed(1)}% above the high` };
-  return { pos: rowPct(v, low, high), pinned: null, gapWords: null };
+/** "prev close 1.8% below the low" / "prev close 3.2% above the high"; null inside the range. */
+export function gapWords(v: number, low: number, high: number): string | null {
+  if (v < low) return `prev close ${((low - v) / low * 100).toFixed(1)}% below the low`;
+  if (v > high) return `prev close ${((v - high) / high * 100).toFixed(1)}% above the high`;
+  return null;
+}
+
+/**
+ * The row's scale (#81): low → high, stretched to the previous close when it
+ * lies outside. A gap under MIN_GAP_PCT of the track is widened to it, so the
+ * ◇ never sits on the bar's end; the note carries the exact size.
+ */
+export function rowScale(low: number, high: number, prev: number | null): RowScale {
+  if (prev === null || (prev >= low && prev <= high)) return { lo: low, hi: high };
+  const m = MIN_GAP_PCT / 100;
+  if (prev < low) return { lo: Math.min(prev, high > low ? (low - m * high) / (1 - m) : prev), hi: high };
+  return { lo: low, hi: Math.max(prev, high > low ? (high - m * low) / (1 - m) : prev) };
+}
+
+/** The previous close on the row's scale: in place inside the range, at the stretched end on a gap. */
+export function prevMark(v: number, low: number, high: number, sc: RowScale = rowScale(low, high, v)): PrevMark {
+  const gap = v < low ? "below" : v > high ? "above" : null;
+  const pos = gap === "below" ? 0 : gap === "above" ? 100 : rowPct(v, sc.lo, sc.hi);
+  return { pos, gap, gapWords: gapWords(v, low, high) };
 }
 
 /** A price without its "$", for the small low–high labels: "330.61", "24,240". */
@@ -127,8 +160,10 @@ export function barRows(k: KeyLevels, last: number): BarRow[] {
     const flat = !(sp.high > sp.low);
     const open = p.levels.open.value;
     const tone = toneOf(last, open);
-    const prev = p.prevClose ? prevMark(p.prevClose.value, sp.low, sp.high) : null;
-    const raw = rowPct(last, sp.low, sp.high);
+    const sc = rowScale(sp.low, sp.high, p.prevClose?.value ?? null);
+    const at = (v: number) => rowPct(v, sc.lo, sc.hi);
+    const prev = p.prevClose ? prevMark(p.prevClose.value, sp.low, sp.high, sc) : null;
+    const raw = at(last);
     const outside = !flat && (last < sp.low ? "The last price is below this period's low." : last > sp.high ? "The last price is above this period's high." : "");
     const prevDist = p.prevClose ? distanceWords(p.prevClose.value, last) : null;
     const parts = [
@@ -148,7 +183,9 @@ export function barRows(k: KeyLevels, last: number): BarRow[] {
       since,
       bar: {
         flat,
-        open: isNum(open) ? rowPct(open, sp.low, sp.high) : null,
+        from: sc.hi > sc.lo ? at(sp.low) : 0,
+        to: sc.hi > sc.lo ? at(sp.high) : 100,
+        open: isNum(open) ? at(open) : null,
         dot: Math.max(0, Math.min(100, raw)),
         tone,
         prev,

@@ -60,8 +60,12 @@ const cards = [
   ["under $1", { bars: bars(0.004), lastPrice: 0.7012, credit }],
   ["open = high = last", { bars: overlap(), lastPrice: overlap().at(-1).open, credit }],
   // #563 COWORK #75: in session, the Day row reads "today so far · 14:32 ET".
-  // #79: a gap up past the day's low (the ◇ pinned left), and a flat session.
+  // #81: a gap up past the day's low (the scale stretched, grey track between ◇ and the bar),
+  // a gap down past the high, a tiny gap (the ◇ held clear of the bar's end), a 7% gap, and a flat session.
   ["gap up", { bars: [...bars(1.2).slice(0, -2), { date: "2026-10-01", open: 230, high: 232, low: 229, close: 230 }, { date: "2026-10-02", open: 240, high: 246, low: 238, close: 244 }], lastPrice: 244, credit }],
+  ["gap down", { bars: [...bars(1.2).slice(0, -2), { date: "2026-10-01", open: 255, high: 258, low: 254, close: 256 }, { date: "2026-10-02", open: 240, high: 246, low: 238, close: 244 }], lastPrice: 244, credit }],
+  ["tiny gap", { bars: [...bars(1.2).slice(0, -2), { date: "2026-10-01", open: 236, high: 238.5, low: 235, close: 237.8 }, { date: "2026-10-02", open: 240, high: 246, low: 238, close: 244 }], lastPrice: 244, credit }],
+  ["7% gap", { bars: [...bars(1.2).slice(0, -2), { date: "2026-10-01", open: 223, high: 224, low: 220, close: 222 }, { date: "2026-10-02", open: 240, high: 246, low: 238, close: 244 }], lastPrice: 244, credit }],
   ["flat day", { bars: [...bars(1.2).slice(0, -1), { date: "2026-10-02", open: 240, high: 240, low: 240, close: 240 }], lastPrice: 240, credit }],
   // #77: after the close, before the nightly job: "today · close 16:00 ET (IEX)".
   ["after close", { bars: [...bars(1.2).slice(0, -1), { date: "2026-10-02", open: 239, high: 246, low: 236, close: 244, partial: true, label: "today so far (IEX), 16:00 ET" }], lastPrice: 244, nowMs: Date.parse("2026-10-02T17:30:00-04:00"), credit }],
@@ -99,8 +103,13 @@ for (const width of [320, 360, 390, 414, 430, 1280]) {
         if (tick && (tick.left < t.left - 1 || tick.right > t.right + 1)) bad.push("tick off its track");
         // Both visible where they meet: the tick's ends stick out above and below the dot.
         if (tick && !(tick.top < dot.top - 2 && tick.bottom > dot.bottom + 2)) bad.push("tick hidden by the dot");
-        // The ◇ (#78/#79): above the dot, never hidden by it; a pinned one stays inside the card.
-        const prev = row.querySelector(".klPrev, .klPrevPinMark")?.getBoundingClientRect();
+        // The ◇ (#78/#81): above the dot, never hidden by it, inside the card; on a gap, clear of the bar's end.
+        const prevEl = row.querySelector(".klPrev"), prev = prevEl?.getBoundingClientRect();
+        const bar = row.querySelector(".klBar").getBoundingClientRect(), side = track.dataset.gap;
+        if (prev && side === "below" && !(prev.right < bar.left)) bad.push("◇ on the bar's low end");
+        if (prev && side === "above" && !(prev.left > bar.right)) bad.push("◇ on the bar's high end");
+        if (side && !(bar.width < t.width - 20)) bad.push("gap bar not shorter");
+        if (!side && Math.abs(bar.width - row.querySelector(".klInner").getBoundingClientRect().width) > 1) bad.push("no-gap bar not full width");
         if (prev && !(prev.bottom <= dot.top + 1)) bad.push("◇ under the dot");
         if (prev && (prev.left < c.left || prev.right > c.right)) bad.push("◇ off the card");
         const gap = row.querySelector(".klGap");

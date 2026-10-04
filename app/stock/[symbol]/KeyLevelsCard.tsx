@@ -2,9 +2,11 @@
 // this week's and this month's range, in the stock page's sidebar directly
 // above the earnings snapshot.
 //
-// Each period is one bar from its low (left) to its high (right), with a tick
-// where it opened and a dot at the last price, all three on one shared scale so
-// the day sits inside the week and the week inside the month. The geometry is
+// Each period is one row on its own scale (#79): a bar from its low to its high,
+// a tick where it opened, a dot at the last price and a ◇ at the previous
+// period's close. When that close lies outside the range, the scale stretches
+// to include it and the grey track between the ◇ and the bar is the gap (#81).
+// The geometry is
 // lib/ta/keyLevelBars.ts; the levels are lib/ta/keyLevels.ts over the daily bars
 // the page already holds. No fetch, no Redis, no hooks of its own, so it renders
 // in the server HTML with the rest of the page.
@@ -99,12 +101,13 @@ export default function KeyLevelsCard({
           </div>
           {r.bar ? (
             <>
-              {/* EACH ROW ON ITS OWN SCALE (#79): the bar fills the track, low to high; gutters either
-                  side hold a previous close that lies outside the range. */}
-              <div className="klTrack" data-tone={r.bar.tone} data-flat={r.bar.flat ? "1" : undefined} onClick={openRowNote} style={trackStyle} aria-hidden="true">
+              {/* EACH ROW ON ITS OWN SCALE (#79): low to high fills the track; on a gap the scale
+                  stretches to the previous close, and the empty track between ◇ and the bar is the gap (#81). */}
+              <div className="klTrack" data-tone={r.bar.tone} data-flat={r.bar.flat ? "1" : undefined} data-gap={r.bar.prev?.gap ?? undefined} onClick={openRowNote} style={trackStyle} aria-hidden="true">
                 <div className="klInner" style={{ position: "absolute", left: GUTTER, right: GUTTER, top: 0, bottom: 0 }}>
-                  <div className="klBar" style={{ position: "absolute", top: 10, height: 8, left: 0, right: 0, borderRadius: 4, background: TONE_COLOUR[r.bar.tone], opacity: r.bar.flat ? 0.2 : 0.45 }} />
-                  {r.bar.prev && r.bar.prev.pos !== null ? (
+                  <div className="klRail" style={{ position: "absolute", top: 10, height: 8, left: 0, right: 0, borderRadius: 4, background: C.track }} />
+                  <div className="klBar" style={{ position: "absolute", top: 10, height: 8, left: `${r.bar.from}%`, width: `${r.bar.to - r.bar.from}%`, minWidth: 4, borderRadius: 4, background: TONE_COLOUR[r.bar.tone], opacity: r.bar.flat ? 0.2 : 0.45 }} />
+                  {r.bar.prev ? (
                     <div className="klPrev" style={{ ...diamondStyle, left: `${r.bar.prev.pos}%` }} />
                   ) : null}
                   {r.bar.open !== null ? (
@@ -112,14 +115,8 @@ export default function KeyLevelsCard({
                   ) : null}
                   <div className="klDot" style={{ position: "absolute", top: 9, width: 10, height: 10, marginLeft: -5, left: `${r.bar.dot}%`, borderRadius: 999, background: TONE_COLOUR[r.bar.tone], border: "1.5px solid #f8fafc", boxSizing: "border-box", zIndex: 2 }} />
                 </div>
-                {r.bar.prev && r.bar.prev.pinned ? (
-                  <div className={`klPrevPin klPrevPin-${r.bar.prev.pinned}`} style={{ position: "absolute", top: 0, display: "flex", alignItems: "center", gap: 1, fontSize: 8, lineHeight: "8px", color: C.prev, ...(r.bar.prev.pinned === "left" ? { left: 0 } : { right: 0, flexDirection: "row-reverse" }) }}>
-                    <span>{r.bar.prev.pinned === "left" ? "◂" : "▸"}</span>
-                    <span className="klPrevPinMark" style={{ ...diamondStyle, position: "static", marginLeft: 0 }} />
-                  </div>
-                ) : null}
               </div>
-              {r.bar.prev?.gapWords ? <div className="klGap" style={{ marginTop: 2, fontSize: 10, color: C.muted, textAlign: r.bar.prev.pinned === "left" ? "left" : "right" }}>◇ {r.bar.prev.gapWords}</div> : null}
+              {r.bar.prev?.gapWords ? <div className="klGap" style={{ marginTop: 2, fontSize: 10, color: C.muted, textAlign: r.bar.prev.gap === "below" ? "left" : "right" }}>◇ {r.bar.prev.gapWords}</div> : null}
               {r.bar.flat ? <div className="klFlat" style={{ marginTop: 2, fontSize: 10, color: C.muted }}>No range yet</div> : null}
             </>
           ) : (
@@ -130,7 +127,7 @@ export default function KeyLevelsCard({
 
       {rows.some((r) => r.bar) ? (
         <p className="klKey" style={noteStyle}>
-          Bar: that period&rsquo;s low to high · tick: the open · ◇ previous close · dot: the last price, green above the open, red below.
+          Bar: that period&rsquo;s low to high · tick: the open · ◇ previous close · dot: the last price, green above the open, red below · grey space between ◇ and the bar: a gap from the previous close.
         </p>
       ) : null}
       {k.reasons.length && !rows.length ? k.reasons.map((r) => <p key={r} className="klReason" style={noteStyle}>{r}</p>) : null}
@@ -150,8 +147,8 @@ const cardStyle: CSSProperties = {
 const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: C.label };
 const titleStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.12, letterSpacing: "-0.03em" };
 const noteStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: 11, lineHeight: 1.5, color: C.muted };
-/** Each side of the track keeps this much room for a previous close pinned outside the range. */
-export const GUTTER = 16;
+/** Each side of the track keeps this much room, so a dot or ◇ at either end stays inside the card. */
+export const GUTTER = 6;
 const trackStyle: CSSProperties = { position: "relative", height: 26, marginTop: 4, cursor: "help" };
 /** The previous close: a small hollow diamond, above the bar so it never hides the tick or the dot. */
 const diamondStyle: CSSProperties = { position: "absolute", top: 0, width: 7, height: 7, marginLeft: -3.5, transform: "rotate(45deg)", border: `1.5px solid ${C.prev}`, boxSizing: "border-box", background: "transparent", zIndex: 3 };
