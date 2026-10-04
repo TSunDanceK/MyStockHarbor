@@ -4,7 +4,8 @@ import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { getDailyHistory } from "@/lib/server/historyCache";
-import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
+import { historyForSurface, historyOnTiingo, readTiingoHistoryPoints } from "@/lib/server/tiingoHistory";
+import { performanceStrip } from "@/lib/ta/performance";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { searchSymbols } from "@/lib/server/symbolSearch";
 import {
@@ -506,7 +507,7 @@ export default async function StockPage({ params }: Props) {
   }
 
   // Fetch everything in parallel — none of these block each other.
-  const [historyResult, quoteResult, companyName, secFacts, fundamentals, directory] =
+  const [historyResult, quoteResult, companyName, secFacts, fundamentals, directory, spyPoints] =
     await Promise.all([
       // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
       // unreachable) stays distinguishable from a read that legitimately
@@ -534,12 +535,22 @@ export default async function StockPage({ params }: Props) {
       readCachedFundamentalsBulk([upper], { raw: true }).then((m) => m.get(upper) ?? null, () => null),
       // Nasdaq Trader's directory for the heading, memoised per process.
       getCompanyNameMap().catch(() => new Map<string, string>()),
+      // THE PERFORMANCE STRIP'S BENCHMARK (#563 COWORK #69): SPY's stored
+      // Tiingo bars through B's Data Cache reader, read-only. 1 GET per 24 h
+      // cache miss, shared by every stock page (key is the symbol, not the
+      // page). Only beside a Tiingo series: one provider per comparison.
+      historyOnTiingo("CHARTS") ? readTiingoHistoryPoints("SPY") : Promise.resolve(null),
     ]);
 
   const quote = quoteResult.quote;
   const points: Point[] = historyResult.points.filter(
     (p) => p.date && Number.isFinite(p.close)
   );
+  // THE FULL SERIES, not the 500 bars the client gets: 3Y and 5Y need ~1,260
+  // sessions and the stored Tiingo history holds ~1,400. Derived % only goes
+  // down to the client (no bars in any public JSON).
+  // The render time decides whether today's partial bar is in session (#563 COWORK #75/#76).
+  const performance = performanceStrip(historyResult.points, historyResult.provider === "tiingo" ? spyPoints : null, Date.now());
 
   // ── THE PROFILE BLOCK, FROM FREE SOURCES (brief 2026-09-22 PR 2) ─────────
   // Composed rather than fetched, and no longer from FMP at all: the
@@ -824,6 +835,7 @@ export default async function StockPage({ params }: Props) {
         // MA200 line was undefined over roughly half the visible chart, which
         // is why the client re-fetched 900 bars on every load.
         initialHistory={points.slice(-500)}
+        performance={performance}
         // The render time (#563 COWORK #75/#76): whether today's partial bar is
         // in session is decided against this, not the browser's clock, so the
         // server HTML and the hydrated page agree.
