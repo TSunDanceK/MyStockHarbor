@@ -475,7 +475,8 @@ export function supportedSymbols(rows: SupportedTickerRow[], nowMs: number): str
  * DEL, ~12 commands a run at ~30,000 symbols.
  */
 export async function runTiingoSupported(nowMs = Date.now()) {
-  const refusal = tiingoCallRefusal();
+  // The one job also allowed on Preview (#553 COWORK #127): see tiingo.ts.
+  const refusal = tiingoCallRefusal(process.env, "supported-list");
   if (refusal) return { ok: true, skipped: `tiingo: ${refusal}` };
   let fetched;
   try {

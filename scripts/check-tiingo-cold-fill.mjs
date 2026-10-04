@@ -110,6 +110,11 @@ async function carveOut(A) {
   want("production: the cold fill may call", A.tiingoCallRefusal(env({ VERCEL_ENV: "production" }), "cold-fill") === null);
   want("Preview: the cold fill may call (owner, COWORK #123)", A.tiingoCallRefusal(env({ VERCEL_ENV: "preview" }), "cold-fill") === null);
   want("Preview: a job may NOT call", A.tiingoCallRefusal(env({ VERCEL_ENV: "preview" })) !== null && A.tiingoCallRefusal(env({ VERCEL_ENV: "preview" }), "job") !== null);
+  // #553 COWORK #127: the supported-ticker download alone joins it on Preview.
+  want("Preview: the supported-list download may call (owner, COWORK #127)", A.tiingoCallRefusal(env({ VERCEL_ENV: "preview" }), "supported-list") === null);
+  want("production: the supported-list download may call", A.tiingoCallRefusal(env({ VERCEL_ENV: "production" }), "supported-list") === null);
+  want("development: the supported-list download may not", A.tiingoCallRefusal(env({ VERCEL_ENV: "development" }), "supported-list") !== null);
+  want("an unknown path on Preview is refused", A.tiingoCallRefusal(env({ VERCEL_ENV: "preview" }), "quotes") !== null);
   want("development: neither may call", A.tiingoCallRefusal(env({ VERCEL_ENV: "development" }), "cold-fill") !== null && A.tiingoCallRefusal(env({})) !== null);
   want("next build: never", A.tiingoCallRefusal(env({ VERCEL_ENV: "production", NEXT_PHASE: "phase-production-build" }), "cold-fill") !== null);
   want("no key: never", A.tiingoCallRefusal({ VERCEL_ENV: "production" }, "cold-fill") !== null);
@@ -120,14 +125,25 @@ const aFails = await carveOut(A);
 for (const f of aFails) check(f, false);
 check("the carve-out is exactly the cold-fill path on Preview", aFails.length === 0);
 await mutants(FILES.adapter, [
-  ["Preview opened to every caller", /\(path === "cold-fill" && env\.VERCEL_ENV === "preview"\)/, '(env.VERCEL_ENV === "preview")'],
-  ["the carve-out removed", /\|\| \(path === "cold-fill" && env\.VERCEL_ENV === "preview"\)/, ""],
+  ["Preview opened to every caller", /\(PREVIEW_PATHS\.has\(path\) && env\.VERCEL_ENV === "preview"\)/, '(env.VERCEL_ENV === "preview")'],
+  ["the carve-out removed", /\|\| \(PREVIEW_PATHS\.has\(path\) && env\.VERCEL_ENV === "preview"\)/, ""],
+  ["the jobs added to the Preview paths", /new Set\(\["cold-fill", "supported-list"\]\)/, 'new Set(["cold-fill", "supported-list", "job"])'],
+  ["the supported-list path dropped from Preview", /new Set\(\["cold-fill", "supported-list"\]\)/, 'new Set(["cold-fill"])'],
+  ["the cold-fill path dropped from Preview", /new Set\(\["cold-fill", "supported-list"\]\)/, 'new Set(["supported-list"])'],
   ["the build guard dropped", /if \(env\.NEXT_PHASE === "phase-production-build"\) return "next build";/, ""],
 ], carveOut);
 const adapterSrc = raw(FILES.adapter);
 check("the limiter and the request both take the caller's path (no default 'job' refusal on the cold path)",
   /const refusal = tiingoCallRefusal\(process\.env, path\);/.test(adapterSrc) && /const refusal = tiingoCallRefusal\(process\.env, opts\.path \?\? "job"\);/.test(adapterSrc));
 check("the history request carries the caller's abort signal (the 3 s budget)", /signal: opts\.signal,/.test(adapterSrc));
+{
+  const jobs = raw(FILES.jobs);
+  const sup = jobs.slice(jobs.indexOf("export async function runTiingoSupported"));
+  check("only tiingo-supported uses the supported-list path (its refusal and its one reserved download)",
+    /const refusal = tiingoCallRefusal\(process\.env, "supported-list"\);/.test(sup) &&
+    /await reserveTiingoRequests\(1, nowMs, "supported-list"\);\s*const refusal = tiingoCallRefusal\(process\.env, "supported-list"\);/.test(adapterSrc) &&
+    (jobs.match(/"supported-list"/g) ?? []).length === 1 && (adapterSrc.replace(/^\s*\/\/.*$/gm, "").match(/"supported-list"/g) ?? []).length === 4);
+}
 const coldSrc = raw(FILES.cold);
 check("only the action asks for the cold-fill path; the queue job uses the job path",
   /fillTiingoColdSymbol\(sym, \{ path: "cold-fill" \}\)/.test(raw(FILES.action)) && /fillTiingoColdSymbol\(sym, \{ path: "job",/.test(coldSrc) && !/path: "cold-fill"/.test(coldSrc));

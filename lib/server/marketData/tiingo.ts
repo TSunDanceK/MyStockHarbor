@@ -15,8 +15,11 @@
 //   * WHO: besides the jobs, the stock-page cold fill
 //     (lib/server/marketData/coldFill.ts) may call here, behind its own gates
 //     (supported list, visitor cap, BotID, global caps, lock).
-//   * WHERE: that path alone (`"cold-fill"`) may also run on Preview, through
-//     the same limiter and caps, so it can be accepted on a preview. Every other
+//   * WHERE: that path (`"cold-fill"`) may also run on Preview, through the
+//     same limiter and caps, so it can be accepted on a preview. So may the
+//     tiingo-supported job's one daily download (`"supported-list"`, #553
+//     COWORK #127): the cold fill's admission list, a static file rather than an
+//     API query, without which a preview's cold fills all refuse. Every other
 //     call (`"job"`, the default) stays production-only.
 //
 // THE LIMITER COUNTS REQUESTS ITSELF, AND FAILS CLOSED. Tiingo sends no
@@ -60,7 +63,10 @@ export class TiingoHttpError extends Error {
 }
 
 /** Which caller is asking: the scheduled jobs, or the stock-page cold fill (see the header). */
-export type TiingoCallPath = "job" | "cold-fill";
+export type TiingoCallPath = "job" | "cold-fill" | "supported-list";
+
+/** The paths that may also run on Preview (owner rulings, #553 COWORK #123 and #127). */
+const PREVIEW_PATHS: ReadonlySet<TiingoCallPath> = new Set(["cold-fill", "supported-list"]);
 
 /** Why a Tiingo call may not run here, or null when it may. */
 export function tiingoCallRefusal(
@@ -68,7 +74,7 @@ export function tiingoCallRefusal(
   path: TiingoCallPath = "job"
 ): string | null {
   if (env.NEXT_PHASE === "phase-production-build") return "next build";
-  const allowed = env.VERCEL_ENV === "production" || (path === "cold-fill" && env.VERCEL_ENV === "preview");
+  const allowed = env.VERCEL_ENV === "production" || (PREVIEW_PATHS.has(path) && env.VERCEL_ENV === "preview");
   if (!allowed) return `not production (${env.VERCEL_ENV ?? "unset"})`;
   if (!env.TIINGO_API_KEY) return "no key";
   return null;
@@ -336,8 +342,8 @@ export async function fetchSupportedTickers(
   inflateRaw: (b: Buffer) => Buffer,
   nowMs = Date.now()
 ): Promise<{ rows: SupportedTickerRow[]; bytes: number }> {
-  await reserveTiingoRequests(1, nowMs);
-  const refusal = tiingoCallRefusal();
+  await reserveTiingoRequests(1, nowMs, "supported-list");
+  const refusal = tiingoCallRefusal(process.env, "supported-list");
   if (refusal) throw new TiingoRefused(refusal);
   const res = await fetch(SUPPORTED_TICKERS_URL, { cache: "no-store" });
   if (res.status !== 200) throw new TiingoHttpError(res.status, "supported tickers");
