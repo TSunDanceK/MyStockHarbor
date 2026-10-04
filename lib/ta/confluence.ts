@@ -421,11 +421,15 @@ export function rangeWords(z: Zone): string {
   return `${fine(z.lo)}–${fine(z.hi)}`;
 }
 
-/** "2.1% below" / "1.4% above", from the price to the zone's nearer edge; "price inside zone". */
+/**
+ * "2.1% below" / "1.4% above", from the price to the zone's nearer edge; "price
+ * inside zone". Under 0.05% it reads "just above" / "just below", not "0.0%" (#563 COWORK #94).
+ */
 export function zoneDistance(z: Zone, price: number): string {
   if (z.lo <= price && price <= z.hi) return "price inside zone";
-  const edge = z.lo > price ? z.lo : z.hi;
-  return `${(Math.abs(edge - price) / price * 100).toFixed(1)}% ${z.lo > price ? "above" : "below"}`;
+  const edge = z.lo > price ? z.lo : z.hi, side = z.lo > price ? "above" : "below";
+  const pct = (Math.abs(edge - price) / price * 100).toFixed(1);
+  return pct === "0.0" ? `just ${side}` : `${pct}% ${side}`;
 }
 
 /** The tap note: each member, higher timeframes first, projections with "≈". */

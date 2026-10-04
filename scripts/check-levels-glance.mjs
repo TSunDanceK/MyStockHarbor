@@ -7,7 +7,7 @@
 //
 // Rules: the main line is the shown zone with the most levels, a tie to the
 // nearer; no duplicate line when the main zone is also the nearest; the inside
-// wording; the numbers match the Price zones card on the same bars (and the page
+// wording; "just above / below" for a 0.0% distance (#94); the numbers match the Price zones card on the same bars (and the page
 // passes both one input object); no advice words; nothing that can push the
 // page sideways at 320–430 px; placement after Key levels, with the SPY label
 // and the Tiingo credit. A mutant each.
@@ -21,15 +21,15 @@ import { reasonedValueUnit } from "./lib/render-cards.mjs";
 import { stripComments } from "./lib/source-code.mjs";
 
 const LIB = "lib/ta/levelsGlance.ts", CARD = "app/markets/spx/LevelsGlanceCard.tsx", PAGE = "app/markets/spx/page.tsx";
-const DEPS = ["lib/ta/sessionBar.ts", "lib/ta/keyLevels.ts", "lib/ta/macdSeries.ts", "lib/ta/priceLadder.ts", "lib/ta/confluence.ts"];
+const DEPS = ["lib/ta/sessionBar.ts", "lib/ta/keyLevels.ts", "lib/ta/macdSeries.ts", "lib/ta/priceLadder.ts"], ZONES = "lib/ta/confluence.ts";
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 const read = (f) => fs.readFileSync(f, "utf8");
 
 let n = 0;
-async function load(lib, card) {
+async function load(lib, card, zonesLib = read(ZONES)) {
   const tap = `import { useCallback, useLayoutEffect } from "react";\n${strip(read("app/stock/[symbol]/TapNote.tsx"))}`;
   const zones = strip(read("app/stock/[symbol]/ConfluenceCard.tsx")).replace("export default function ConfluenceCard", "export function ConfluenceCard");
-  const unit = `${reasonedValueUnit()}\n${tap}\n${DEPS.map((f) => strip(read(f))).join("\n")}\n${zones}\n${strip(lib)}\n${strip(card).replace("export default function LevelsGlanceCard", "export function LevelsGlanceCard")}\n`;
+  const unit = `${reasonedValueUnit()}\n${tap}\n${DEPS.map((f) => strip(read(f))).join("\n")}\n${strip(zonesLib)}\n${zones}\n${strip(lib)}\n${strip(card).replace("export default function LevelsGlanceCard", "export function LevelsGlanceCard")}\n`;
   const tmp = `scripts/.check-levels-glance-${process.pid}-${n++}.mjs`;
   fs.writeFileSync(tmp, ts.transpileModule(unit, { fileName: "c.tsx", compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText);
   try { return await import(`${process.cwd()}/${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
@@ -109,6 +109,17 @@ const RULES = {
           zonesCard.includes(cw) && (l.kind === "inside" || zonesCard.includes(dist)) && glanceCard.includes(said.replace(/^: /, ": "));
       });
     }),
+  "a distance that rounds to 0.0% reads 'just above' / 'just below', in this card and the Price zones label (#94)": ({ M }) => {
+    const c = conf(770, [Z(770.2, 771.4, 3), Z(775, 776, 6)], [Z(769.8, 769.9, 2)]);
+    const ls = M.glanceLines(c), said = ls.map((l) => (l.lead ?? "") + l.text);
+    const zonesCard = text(renderToStaticMarkup(React.createElement(M.ConfluenceCard, { ...FIXTURES[0], credit: CREDIT })));
+    return M.zoneDistance(Z(770.2, 771, 2), 770) === "just above" && M.zoneDistance(Z(769, 769.9, 2), 770) === "just below" &&
+      M.zoneDistance(Z(771, 772, 2), 770) === "0.1% above" && M.zoneDistance(Z(774, 775, 2), 770) === "0.5% above" &&
+      said.includes("Nearest above: around $770.80 (3 levels, just above).") && said.includes("Nearest below: around $769.85 (2 levels, just below).") &&
+      M.glanceLines(conf(770, [Z(770.1, 771, 7)], []))[0].text === ": 7 levels cluster here, just above the last price." &&
+      !said.some((x) => /0\.0%/.test(x)) && !/0\.0% (above|below)/.test(zonesCard) &&
+      /\{zoneDistance\(mark\.zone, price\)\}/.test(read("app/stock/[symbol]/ConfluenceCard.tsx"));
+  },
   "no advice or forecast words in the card": ({ M, card, lib }) =>
     [...Object.values(S), ...FIXTURES.map((p) => M.confluence(p))].every((c) => M.glanceLines(c).every((l) => !ADVICE.test(`${l.lead ?? ""}${l.text}`))) &&
     !ADVICE.test(stripComments(card, { file: CARD }).replace(/import[^;]+;/g, "")) && !ADVICE.test(stripComments(lib, { file: LIB }).replace(/import[^;]+;/g, "")),
@@ -124,11 +135,11 @@ const RULES = {
   },
 };
 
-const src = { lib: read(LIB), card: read(CARD), page: read(PAGE) };
+const src = { lib: read(LIB), card: read(CARD), page: read(PAGE), zones: read(ZONES) };
 let failures = 0;
 const check = (label, ok) => { console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}`); if (!ok) failures++; };
 const run = (rule, m) => { try { return !!rule(m); } catch { return false; } };
-const measure = async (s) => ({ ...s, page: stripComments(s.page, { file: PAGE }), M: await load(s.lib, s.card) });
+const measure = async (s) => ({ ...s, page: stripComments(s.page, { file: PAGE }), M: await load(s.lib, s.card, s.zones) });
 
 console.log("=== Rules ===");
 const base = await measure(src);
@@ -143,10 +154,12 @@ const MUTANTS = [
   [R[2], "lib", (s) => s.replace("if (main !== c.inside) {", "if (true) {")],
   [R[3], "lib", (s) => s.replace("priceWords((z.lo + z.hi) / 2)", "priceWords(z.lo)")],
   [R[3], "page", (s) => s.replace("<LevelsGlanceCard {...zoneInput} shownOn=", "<LevelsGlanceCard {...zoneInput} ma200={null} shownOn=")],
-  [R[4], "lib", (s) => s.replace("cluster here,", "should hold here,")],
-  [R[5], "card", (s) => s.replace('overflowWrap: "anywhere"', 'whiteSpace: "nowrap"')],
-  [R[6], "card", (s) => s.replace("<> · Daily prices: {credit}</>", "<> {credit}</>")],
-  [R[6], "page", (s) => s.replace(/\n\s*\{\/\* LEVELS TO WATCH[^\n]*\n\s*<div style=\{\{ marginTop: 10, minWidth: 0 \}\}>\n\s*<LevelsGlanceCard[^\n]*\n\s*<\/div>/, "").replace("<ConfluenceCard {...zoneInput} credit={credit} />", '<LevelsGlanceCard {...zoneInput} shownOn={onSpy ? "Shown on SPY" : "Shown on the S&P 500 index"} credit={credit} />\n<ConfluenceCard {...zoneInput} credit={credit} />')],
+  [R[4], "zones", (s) => s.replace('return pct === "0.0" ? `just ${side}` : `${pct}% ${side}`;', "return `${pct}% ${side}`;")],
+  [R[4], "zones", (s) => s.replace('return pct === "0.0" ? `just ${side}` : `${pct}% ${side}`;', 'return pct === "0.0" ? `just ${side === "above" ? "below" : "above"}` : `${pct}% ${side}`;')],
+  [R[5], "lib", (s) => s.replace("cluster here,", "should hold here,")],
+  [R[6], "card", (s) => s.replace('overflowWrap: "anywhere"', 'whiteSpace: "nowrap"')],
+  [R[7], "card", (s) => s.replace("<> · Daily prices: {credit}</>", "<> {credit}</>")],
+  [R[7], "page", (s) => s.replace(/\n\s*\{\/\* LEVELS TO WATCH[^\n]*\n\s*<div style=\{\{ marginTop: 10, minWidth: 0 \}\}>\n\s*<LevelsGlanceCard[^\n]*\n\s*<\/div>/, "").replace("<ConfluenceCard {...zoneInput} credit={credit} />", '<LevelsGlanceCard {...zoneInput} shownOn={onSpy ? "Shown on SPY" : "Shown on the S&P 500 index"} credit={credit} />\n<ConfluenceCard {...zoneInput} credit={credit} />')],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");
 for (const [label, where, mutate] of MUTANTS) {
