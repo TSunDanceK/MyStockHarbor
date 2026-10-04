@@ -1,4 +1,4 @@
-**CODE-B #134 — stretch (z-score) vs RSI study, read-only (COWORK #141)**
+**CODE-B #135 — stretch (z-score) vs RSI study, read-only (COWORK #141)**
 
 OWNER: The stretch score picks **different days from RSI, but not better ones**.
 - Only about 30–40% of the days overlap, so the signals pick different days.
