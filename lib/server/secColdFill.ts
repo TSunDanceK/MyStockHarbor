@@ -22,9 +22,12 @@
 //
 // ── ORDER: CHEAPEST FIRST, THE PAID CHECK LAST ────────────────────────────
 // BotID deep analysis is billed per call, so every free refusal runs before it:
-// token (CPU), symbol and CIK (committed file), the site's daily attempt
-// counter (one INCR). Only a request that clears all of those costs a deep
-// analysis. The visitor's count runs AFTER the verdict, because an over-cap
+// token (CPU), symbol and CIK (committed file), then this ADDRESS's attempts
+// this hour (one INCR, #552 COWORK #147), then the site's daily attempt
+// counter (one INCR). The address ceiling comes FIRST so one noisy client
+// cannot spend the site's day of attempts for everyone: a request refused
+// there never touches the site counter. Only a request that clears all of
+// those costs a deep analysis. The visitor's count runs AFTER the verdict, because an over-cap
 // PERSON is queued and an over-cap bot is not, so the verdict has to be known;
 // one address's attempts stay bounded by the site's 1,000 a day and by the
 // edge firewall's 25 /stock requests per 10 minutes (secColdFetch.ts). The
@@ -52,6 +55,13 @@ export function clientIpFrom(h: Headers): string {
   return first || h.get("x-real-ip")?.trim() || "unknown";
 }
 
+/**
+ * BotID ATTEMPTS one address may make in an hour (#552 COWORK #147). Counts
+ * attempts, not tickers: B's 20-new-tickers-a-day cap (coldVisitorCap) stays
+ * the only visitor FILL cap. This only stops one address spending the site's
+ * 1,000 daily attempts — paid deep analyses — on everyone else's behalf.
+ */
+export const COLD_FILL_ATTEMPTS_PER_IP_PER_HOUR = 30;
 /** Cold fills the whole site may trigger in a UTC day — counted AFTER BotID says human. */
 export const COLD_FILL_PER_DAY = 300;
 /**
@@ -73,6 +83,8 @@ export type ColdFillRefusal =
   | "not-eligible"
   | "day-limit"
   | "attempt-limit"
+  /** One address over its hourly BotID attempts: refused, nothing queued. */
+  | "attempt-ip"
   | "bot"
   /** A verified crawler: QUEUED for the scheduled job, behind people. */
   | "crawler"
@@ -86,6 +98,8 @@ export type ColdFillGateInput = {
   tokenOk: boolean;
   symbolOk: boolean;
   hasCik: boolean;
+  /** This address's attempts this hour, INCLUDING this one. Absent before it is counted. */
+  ipAttemptCount?: number;
   /** The site's attempts put to BotID today, INCLUDING this one. */
   attemptCount: number;
   /** BotID's verdict. Null only when the gate refused before asking. */
@@ -100,6 +114,7 @@ export function coldFillPreGate(i: Omit<ColdFillGateInput, "bot">): ColdFillRefu
   if (!i.tokenOk) return "token";
   if (!i.symbolOk) return "symbol";
   if (!i.hasCik) return "not-eligible";
+  if ((i.ipAttemptCount ?? 0) > COLD_FILL_ATTEMPTS_PER_IP_PER_HOUR) return "attempt-ip";
   if (i.attemptCount > COLD_FILL_ATTEMPTS_PER_DAY) return "attempt-limit";
   return null;
 }
@@ -150,6 +165,17 @@ async function bump(key: string, ttlS: number): Promise<number | null> {
   }
 }
 
+const ipAttemptKey = (ip: string, d = new Date()) =>
+  `${secCounterPrefix("msh:sec:cold-fill-attempt-ip:v1")}:${ip}:${d.toISOString().slice(0, 13)}`;
+
+/**
+ * Count this attempt against the ADDRESS's hour, before anything else is
+ * counted. FAILS CLOSED: with Redis unreachable it reads over the ceiling.
+ */
+export async function countColdFillIpAttempt(ip: string): Promise<number> {
+  return (await bump(ipAttemptKey(ip), 2 * 3600)) ?? COLD_FILL_ATTEMPTS_PER_IP_PER_HOUR + 1;
+}
+
 /**
  * Count this attempt against the site's daily attempts.
  *
@@ -172,7 +198,7 @@ export const coldFillOutcomeKey = (d = new Date()) =>
 
 /**
  * WHAT EACH COUNTED ATTEMPT ENDED AS, by word (#535 COWORK #19 §1c): a refusal
- * reason (attempt-limit, bot, crawler, visitor-cap, visitor-unknown,
+ * reason (attempt-ip, attempt-limit, bot, crawler, visitor-cap, visitor-unknown,
  * day-limit, in-flight) or a fill
  * outcome (filled, no-data, queued, busy, …). One HINCRBY on a day hash.
  *

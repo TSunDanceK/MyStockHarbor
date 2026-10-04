@@ -54,6 +54,7 @@ console.log("1. the client always settles");
     ["a bot refusal (no fill is coming from it)", async () => ({ ok: false, refused: "bot" }), "slow"],
     ["filled", async () => ({ ok: true, outcome: "filled" }), "filled"],
     ["no usable data", async () => ({ ok: true, outcome: "no-data" }), "none"],
+    ["one address over its hourly attempts (nothing queued)", async () => ({ ok: false, refused: "attempt-ip" }), "waiting"],
     ["a visitor that could not be counted (fails closed)", async () => ({ ok: false, refused: "visitor-unknown" }), "waiting"],
     ["the site over its day's fills", async () => ({ ok: false, refused: "day-limit" }), "waiting"],
   ];
@@ -90,10 +91,11 @@ console.log("\n2. the component goes through the settle rule");
 console.log("\n3. the day counters");
 {
   const action = readCodeOnly("app/stock/[symbol]/coldFillAction.ts");
-  const attemptAt = action.indexOf("await countColdFillAttempt(");
+  // The FIRST counter is the address's (#552 COWORK #147).
+  const attemptAt = action.indexOf("await countColdFillIpAttempt(");
   const firstRefuse = action.indexOf("return refuse(");
   check("every refusal after the attempt counter is counted by word", attemptAt > 0 && firstRefuse > attemptAt &&
-    !/return \{ ok: false, refused: (limited|botRefusal|visitorRefusal|dayRefusal|"in-flight") \}/.test(action));
+    !/return \{ ok: false, refused: (ipLimited|limited|botRefusal|visitorRefusal|dayRefusal|"in-flight") \}/.test(action));
   check("the free refusals are not counted (they return before any counter)",
     /if \(early\) return \{ ok: false, refused: early \};/.test(action) && action.indexOf("if (early)") < attemptAt);
   check("every fill outcome is counted", /await countColdFillOutcome\(outcome\);/.test(action));

@@ -20,6 +20,7 @@ import {
   coldFillPreGate,
   coldFillVisitorGate,
   countColdFillAttempt,
+  countColdFillIpAttempt,
   countColdFillDay,
   countColdFillOutcome,
   releaseColdFillLock,
@@ -52,6 +53,12 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
     return { ok: false, refused: reason };
   };
 
+  // THE ADDRESS FIRST (#552 COWORK #147): one noisy client is refused here,
+  // before it can spend the site's daily attempts. Nothing is queued.
+  const ip = clientIpFrom(await headers());
+  const ipLimited = coldFillPreGate({ tokenOk, symbolOk, hasCik: true, ipAttemptCount: await countColdFillIpAttempt(ip), attemptCount: 0 });
+  if (ipLimited) return refuse(ipLimited);
+
   const counts = await countColdFillAttempt();
   const limited = coldFillPreGate({ tokenOk, symbolOk, hasCik: true, ...counts });
   if (limited) return refuse(limited);
@@ -72,7 +79,7 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
   // THE SHARED VISITOR CAP (B's coldVisitorCap, #552 COWORK #132): 20 new
   // tickers a person a UTC day, Tiingo and SEC together. Over it, QUEUE only.
   // Fails closed: an uncountable visitor fetches nothing and queues nothing.
-  const visitorRefusal = coldFillVisitorGate(await admitColdVisitor(clientIpFrom(await headers()), clean));
+  const visitorRefusal = coldFillVisitorGate(await admitColdVisitor(ip, clean));
   if (visitorRefusal === "visitor-cap") await queueColdSymbol(clean, "person");
   if (visitorRefusal) return refuse(visitorRefusal);
 
