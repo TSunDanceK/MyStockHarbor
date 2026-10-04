@@ -1368,6 +1368,8 @@ const TASKS = {
   // task, added on a ruling. See scripts/lib/fmp-purge-plan.mjs.
   "write-fmp-purge-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--pool-figures", "--market-state", "--insight-snapshots", "--meters"], writes: true },
   "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
+  // READS ONLY: why a stock page is noindex (Relay B, #553 COWORK #143). SYMBOLS input; ~4 commands a symbol.
+  "write-noindex-diagnosis": { script: "scripts/noindex-diagnosis.mjs", args: () => [], needsTypescript: true, writes: true },
   // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
 };
