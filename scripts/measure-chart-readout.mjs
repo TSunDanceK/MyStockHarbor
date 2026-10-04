@@ -1,0 +1,222 @@
+// THE STOCK PAGE CHART'S READOUT IN A REAL BROWSER (#553 COWORK #136).
+//
+// Runs the shipped StockPriceChart (and lib/chartReadout, lib/utcDate),
+// transpiled as-is, in Chromium with React's own browser build, inside a
+// column like the stock page's (16 px gutter, no global box-sizing). At each
+// width it checks:
+//   - no sideways scroll, and the chart's border stays inside its column
+//     (CODE-C #74: it ran 2 px past);
+//   - the default readout is the last bar, "Latest close";
+//   - hovering a bar shows that bar's date, close and change, draws the
+//     marker, and makes NO network request; leaving returns to the latest;
+//   - a touch drag scrubs the same way and lifting returns to the latest;
+//   - ←/→ step a bar once the chart is focused, Esc returns to the latest;
+//   - the readout strip sits above the chart, never over it, keeps one
+//     height while scrubbing (the chart doesn't jump) and cuts nothing off.
+// Writes chart-readout-390.png (a touch drag in progress) and
+// chart-readout-1280.png (a hover) to SHOTS (default /tmp).
+//
+//   node scripts/measure-chart-readout.mjs     # widths 320 360 375 390 414 430 1280
+//
+// NOT IN check-all: it needs Chromium and Playwright (installed globally in
+// the sandbox). check-chart-readout holds the rules and mutants.
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import ts from "typescript";
+
+const ROOT = process.cwd();
+const SHOTS = path.resolve(process.env.SHOTS || "/tmp");
+const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
+const cjs = (src, fileName) => ts.transpileModule(src, {
+  fileName,
+  compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react", esModuleInterop: true },
+}).outputText;
+
+// Every module the page needs, as CommonJS, wired by a tiny require().
+const MODULES = {
+  react: read("node_modules/react/cjs/react.development.js"),
+  "react/jsx-runtime": read("node_modules/react/cjs/react-jsx-runtime.development.js"),
+  "react-dom": read("node_modules/react-dom/cjs/react-dom.development.js"),
+  "react-dom/client": read("node_modules/react-dom/cjs/react-dom-client.development.js"),
+  scheduler: read("node_modules/scheduler/cjs/scheduler.development.js"),
+  "@/lib/utcDate": cjs(read("lib/utcDate.ts"), "utcDate.ts"),
+  "@/lib/chartReadout": cjs(read("lib/chartReadout.ts"), "chartReadout.ts"),
+  chart: cjs(read("app/stock/[symbol]/StockPriceChart.tsx"), "StockPriceChart.tsx"),
+};
+
+// 240 weekday bars ending Fri 2 Oct 2026, with MA50/MA200 computed from them.
+function bars() {
+  const out = [];
+  const d = new Date(Date.UTC(2026, 9, 2));
+  let i = 0;
+  while (out.length < 440) {
+    if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) {
+      out.unshift({ date: d.toISOString().slice(0, 10), close: 0 });
+      i++;
+    }
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  // SCALE=10 tries four-digit prices and three-digit moves on the narrowest phones.
+  const scale = Number(process.env.SCALE || 1);
+  out.forEach((p, k) => { p.close = Number(((180 + 25 * Math.sin(k / 23) + 8 * Math.sin(k / 5) + k * 0.06) * scale).toFixed(2)); });
+  const ma = (k, w) => (k + 1 >= w ? out.slice(k + 1 - w, k + 1).reduce((s, p) => s + p.close, 0) / w : null);
+  const ma50 = out.map((_, k) => ma(k, 50));
+  const ma200 = out.map((_, k) => ma(k, 200));
+  return { data: out.slice(-240), ma50: ma50.slice(-240), ma200: ma200.slice(-240) };
+}
+const SERIES = bars();
+
+const page = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{margin:0;padding:16px;background:#020617;color:#f8fafc;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}#col{max-width:1100px;margin:0 auto}</style></head>
+<body><div id="col"><section><h2 style="margin:0 0 16px">ABC with MA50 and MA200</h2><div id="root"></div></section></div>
+<script>
+window.process = { env: { NODE_ENV: "development" } };
+const SOURCES = ${JSON.stringify(MODULES)};
+const cache = {};
+function require(name) {
+  if (cache[name]) return cache[name].exports;
+  if (!(name in SOURCES)) throw new Error("no module " + name);
+  const module = { exports: {} };
+  cache[name] = module;
+  new Function("module", "exports", "require", "process", SOURCES[name])(module, module.exports, require, window.process);
+  return module.exports;
+}
+window.SERIES = ${JSON.stringify(SERIES)};
+window.requests = 0;
+const realFetch = window.fetch;
+window.fetch = (...a) => { window.requests++; return realFetch(...a); };
+const React = require("react");
+const Chart = require("chart").default;
+const credit = React.createElement("a", { href: "#credit" }, "Market data from Tiingo.com");
+require("react-dom/client").createRoot(document.getElementById("root")).render(
+  React.createElement(Chart, { symbol: "ABC", data: SERIES.data, ma50: SERIES.ma50, ma200: SERIES.ma200, height: 360, credit })
+);
+</script></body></html>`;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const dayText = (iso) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+const n = SERIES.data.length;
+const PAD = { width: 920, padL: 38, padR: 60 };
+
+const globalRoot = execFileSync("npm", ["root", "-g"], { encoding: "utf8" }).trim();
+const { chromium } = createRequire(path.join(globalRoot, "noop.js"))("playwright");
+const browser = await chromium.launch();
+const file = path.join(SHOTS, "chart-readout.html");
+fs.writeFileSync(file, page);
+
+let bad = 0;
+const say = (ok, label, detail = "") => { console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`); if (!ok) bad++; };
+
+for (const width of (process.env.WIDTHS || "320,360,375,390,414,430,1280").split(",").map(Number)) {
+  const phone = width < 700;
+  const ctx = await browser.newContext({ viewport: { width, height: 900 }, hasTouch: phone, isMobile: phone, deviceScaleFactor: 2 });
+  const p = await ctx.newPage();
+  const errors = [];
+  p.on("pageerror", (e) => errors.push(String(e)));
+  p.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  await p.goto(`file://${file}`);
+  await p.waitForSelector("[data-chart-readout]");
+  let netAfterLoad = 0;
+  p.on("request", () => netAfterLoad++);
+  console.log(`\n=== ${width} px ===`);
+
+  const state = () => p.evaluate(() => {
+    const strip = document.querySelector("[data-chart-readout]");
+    const svg = document.querySelector("svg[tabindex]");
+    const col = document.getElementById("root");
+    const s = strip.getBoundingClientRect(), v = svg.getBoundingClientRect(), c = col.getBoundingClientRect();
+    return {
+      text: strip.textContent, kind: strip.dataset.chartReadout,
+      marker: document.querySelector("[data-chart-marker]")?.dataset.chartMarker ?? null,
+      stripBottom: s.bottom, stripH: s.height, svgTop: v.top, svgLeft: v.left, svgRight: v.right, svgW: v.width,
+      colLeft: c.left, colRight: c.right,
+      scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth,
+      requests: window.requests,
+      clipped: [...strip.children].filter((c) => c.scrollWidth > c.clientWidth + 0.5).map((c) => c.textContent),
+    };
+  });
+  const s0 = await state();
+  const last = SERIES.data[n - 1];
+  say(s0.scrollW <= s0.clientW, "no sideways scroll", `${s0.scrollW} vs ${s0.clientW}`);
+  say(s0.svgRight <= s0.colRight + 0.5 && s0.svgLeft >= s0.colLeft - 0.5, "the chart's border stays inside its column (CODE-C #74)", `chart ${s0.svgLeft.toFixed(1)}–${s0.svgRight.toFixed(1)}, column ${s0.colLeft.toFixed(1)}–${s0.colRight.toFixed(1)}`);
+  say(s0.kind === "latest" && s0.text.startsWith(`Latest close · ${dayText(last.date)}`) && s0.text.includes(last.close.toFixed(2)) && s0.marker === null, "default: the last bar, \"Latest close\", no marker", s0.text);
+  say(s0.stripBottom <= s0.svgTop, "the readout strip sits above the chart, not over it", `strip bottom ${s0.stripBottom.toFixed(1)}, chart top ${s0.svgTop.toFixed(1)}`);
+
+  // The page x of bar i.
+  const xOf = (st, i) => st.svgLeft + 1 + ((PAD.padL + (i * (PAD.width - PAD.padL - PAD.padR)) / (n - 1)) / PAD.width) * (st.svgW - 2);
+  const yMid = s0.svgTop + 100;
+  const picks = [0, 37, 120, 200, n - 2];
+  const heights = new Set([s0.stripH]);
+  const clipped = new Set(s0.clipped);
+  const readMatches = (st, i) => {
+    const b = SERIES.data[i], prev = SERIES.data[i - 1];
+    const d = prev ? b.close - prev.close : null;
+    const ch = d === null ? "no previous close shown" : `${d > 0 ? "+" : d < 0 ? "-" : ""}${Math.abs(d).toFixed(2)}`;
+    return st.marker === String(i) && st.text.includes(dayText(b.date)) && st.text.includes(b.close.toFixed(2)) && st.text.includes(ch);
+  };
+
+  if (!phone) {
+    let ok = true, why = "";
+    for (const i of picks) {
+      await p.mouse.move(xOf(s0, i), yMid);
+      const st = await state();
+      heights.add(st.stripH);
+      st.clipped.forEach((t) => clipped.add(t));
+      if (!readMatches(st, i)) { ok = false; why = `bar ${i}: ${st.text} (marker ${st.marker})`; break; }
+    }
+    say(ok, "hover: each bar's own date, close and change, with the marker", why);
+    await p.mouse.move(xOf(s0, 150), yMid);
+    await p.screenshot({ path: path.join(SHOTS, "chart-readout-1280.png"), fullPage: true });
+    await p.mouse.move(5, 5);
+    const out = await state();
+    say(out.kind === "latest" && out.marker === null, "leaving the chart returns to \"Latest close\"", out.text);
+  } else {
+    // A finger: down on the chart, drag sideways, lift.
+    const touch = (type, x) => p.evaluate(([type, x, y]) => {
+      const svg = document.querySelector("svg[tabindex]");
+      svg.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: "touch", pointerId: 7, isPrimary: true, clientX: x, clientY: y }));
+    }, [type, x, yMid]);
+    let ok = true, why = "";
+    await touch("pointerdown", xOf(s0, picks[0]));
+    for (const i of picks) {
+      await touch("pointermove", xOf(s0, i));
+      const st = await state();
+      heights.add(st.stripH);
+      st.clipped.forEach((t) => clipped.add(t));
+      if (!readMatches(st, i)) { ok = false; why = `bar ${i}: ${st.text} (marker ${st.marker})`; break; }
+    }
+    say(ok, "touch drag: each bar's own date, close and change, with the marker", why);
+    const during = await state();
+    say(during.stripBottom <= during.svgTop, "while dragging the strip stays above the chart", `strip bottom ${during.stripBottom.toFixed(1)}, chart top ${during.svgTop.toFixed(1)}`);
+    if (width === 390) {
+      await touch("pointermove", xOf(s0, 150));
+      await p.screenshot({ path: path.join(SHOTS, "chart-readout-390.png"), fullPage: true });
+    }
+    await touch("pointerup", xOf(s0, 150));
+    const up = await state();
+    say(up.kind === "latest" && up.marker === null, "lifting the finger returns to \"Latest close\"", up.text);
+  }
+  say(clipped.size === 0, "nothing in the readout is cut off", [...clipped][0] ?? "");
+  say(heights.size === 1, "the strip keeps one height while scrubbing (the chart doesn't jump)", [...heights].join(", "));
+
+  // Keyboard.
+  await p.focus("svg[tabindex]");
+  for (let k = 0; k < 3; k++) await p.keyboard.press("ArrowLeft");
+  const k3 = await state();
+  await p.keyboard.press("ArrowRight");
+  const k2 = await state();
+  await p.keyboard.press("Escape");
+  const kEsc = await state();
+  say(readMatches(k3, n - 4) && readMatches(k2, n - 3) && kEsc.kind === "latest" && kEsc.marker === null, "keys: ← ← ← steps back three bars, → one forward, Esc to the latest", `${k3.marker} ${k2.marker} ${kEsc.kind}`);
+
+  const fin = await state();
+  say(fin.requests === 0 && netAfterLoad === 0, "no network request on hover, drag or keys", `fetch ${fin.requests}, requests ${netAfterLoad}`);
+  say(fin.scrollW <= fin.clientW, "still no sideways scroll after scrubbing", `${fin.scrollW} vs ${fin.clientW}`);
+  say(errors.length === 0, "no page errors", errors[0] ?? "");
+  await ctx.close();
+}
+await browser.close();
+console.log(`\n${bad === 0 ? "ALL PASS" : `${bad} FAILURE(S)`}  (screenshots in ${SHOTS})`);
+process.exit(bad === 0 ? 0 : 1);
