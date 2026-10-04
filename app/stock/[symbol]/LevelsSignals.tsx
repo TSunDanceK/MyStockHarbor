@@ -66,12 +66,20 @@ export type LevelsSignalsProps = {
   /** The bars the page's MACD reading comes from, for the mini chart (#563 COWORK #74). */
   macdBars?: readonly { date: string; close: number }[];
   /** Set ("14:32", or "") when those bars end with today's in-session partial bar (#563 COWORK #75). */
-  macdToday?: string | null;
+  macdToday?: { time: string | null; phase: "session" | "afterClose" } | null;
 };
 
 /** The histogram's colours: the pill's own "above" blue and "below" amber. */
 export const MACD_COLOUR = { above: "rgb(56,189,248)", below: "rgb(245,158,11)", line: "rgba(241,245,249,0.85)", signal: "rgba(203,213,225,0.7)" } as const;
 export const MACD_CHART_H = 64;
+
+/** "Includes today's session so far (14:32 ET)." / "Includes today's session (close, 16:00 ET, IEX)." (#75/#77), or null. */
+export function macdTodayWords(t: LevelsSignalsProps["macdToday"]): string | null {
+  if (!t) return null;
+  return t.phase === "afterClose"
+    ? `Includes today's session (close${t.time ? `, ${t.time} ET` : ""}, IEX).`
+    : `Includes today's session so far${t.time ? ` (${t.time} ET)` : ""}.`;
+}
 
 /**
  * THE MINI MACD CHART (#563 COWORK #74): the histogram (MACD − signal) as bars
@@ -199,13 +207,17 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
         </div>
         <div style={{ marginTop: 18 }}>
           <div style={gaugeHeadStyle}>
-            <span style={{ fontWeight: 800, color: C.value }}><ReasonedValue text="MACD" reason={`${NOTES.macd} ${p.macdToday != null ? `Includes today's session so far${p.macdToday ? ` (${p.macdToday} ET)` : ""}.` : when}`} /></span>
+            <span style={{ fontWeight: 800, color: C.value }}><ReasonedValue text="MACD" reason={`${NOTES.macd} ${macdTodayWords(p.macdToday) ?? when}`} /></span>
             {macd ? <span className="lsMacdPill" data-state={macd} style={pillStyle(macd)}>{macd === "above" ? "▲ " : macd === "below" ? "▼ " : "– "}{MACD_WORDS[macd].pill}</span> : <span>—</span>}
           </div>
           {ms ? <MacdChart s={ms} /> : null}
           {ms ? (
             <div className="lsMacdKey" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 3, fontSize: 10.5, color: C.muted }}>
-              <span>— MACD ┄ Signal</span>
+              {/* THE SWATCHES ARE THE LINES THEMSELVES (#563 COWORK #77): solid MACD, dotted signal. */}
+              <span className="lsMacdLegend" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <svg className="lsSwatchMacd" width="14" height="6" aria-hidden="true"><line x1="0" y1="3" x2="14" y2="3" stroke={MACD_COLOUR.line} strokeWidth="1.5" /></svg>MACD
+                <svg className="lsSwatchSignal" width="14" height="6" aria-hidden="true" style={{ marginLeft: 6 }}><line x1="0" y1="3" x2="14" y2="3" stroke={MACD_COLOUR.signal} strokeWidth="1.25" strokeDasharray="3 3" /></svg>Signal
+              </span>
               {ms.crossIndex !== null ? <span className="lsMacdCrossed">crossed {shortDate(ms.points[ms.crossIndex].date)}</span> : null}
             </div>
           ) : null}

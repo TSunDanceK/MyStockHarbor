@@ -975,7 +975,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
   // the pill and its mini chart agree and a stale partial never counts.
   const macdLive = useMemo(() => {
     const l = liveBars(history as (Point & { partial?: boolean; label?: string })[], renderedAt ?? NaN);
-    return { tone: buildMacd(l.bars.map((p) => p.close))?.tone ?? null, bars: l.bars, today: l.live ? l.time ?? "" : null };
+    return { tone: buildMacd(l.bars.map((p) => p.close))?.tone ?? null, bars: l.bars, today: l.live && l.phase ? { time: l.time, phase: l.phase } : null };
   }, [history, renderedAt]);
   const weeklyHistory = useMemo(() => aggregateWeekly(history), [history]);
   const dailyReturns = useMemo(() => computeCloseOverCloseReturns(history, 20), [history]);

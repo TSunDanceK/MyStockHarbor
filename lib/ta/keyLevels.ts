@@ -61,7 +61,22 @@ export type PeriodLevels = {
   levels: Record<LevelField, Level>;
   /** Why the whole period is withheld, or null. */
   reason: string | null;
+  /**
+   * The PREVIOUS period's close (#563 COWORK #78): the session before the day,
+   * the final session of the prior week or month. A running period has an open
+   * but no close, so these are the useful "close" levels. Null with prevReason.
+   */
+  prevClose: { value: number; date: string } | null;
+  prevReason: string | null;
 };
+
+/** The previous period's close is not on file (a recent listing). */
+export const PREV_MISSING: Record<PeriodKey, string> = {
+  day: "The session before isn't in the prices on file.",
+  week: "Last week's close isn't in the prices on file.",
+  month: "Last month's close isn't in the prices on file.",
+};
+export const PREV_WORDS: Record<PeriodKey, string> = { day: "Previous session's close", week: "Last week's close", month: "Last month's close" };
 
 export type KeyLevels = {
   /** The closed candle everything is built from ("2026-10-02"), or null with no bars. */
@@ -74,7 +89,7 @@ export type KeyLevels = {
   /** One line per withheld period or level, for under the grid. Empty when all shown. */
   reasons: string[];
   /** Set when the latest bar is today's in-session partial: its own "hh:mm" (ET), or null if its label has none. */
-  live: { time: string | null } | null;
+  live: { time: string | null; phase: "session" | "afterClose" } | null;
 };
 
 export const NO_BARS_REASON = "No daily prices are on file for this stock yet, so no levels can be shown.";
@@ -139,12 +154,13 @@ export function closedBars(bars: readonly KeyBar[] | null | undefined): KeyBar[]
  * when `nowMs` (the page's render time) is in session and the bar is today's.
  * Without `nowMs`, completed sessions only.
  */
-export function sessionBars(bars: readonly KeyBar[] | null | undefined, nowMs?: number): { bars: KeyBar[]; time: string | null; live: boolean } {
-  if (nowMs === undefined) return { bars: closedBars(bars), time: null, live: false };
+export function sessionBars(bars: readonly KeyBar[] | null | undefined, nowMs?: number): { bars: KeyBar[]; time: string | null; live: boolean; phase: "session" | "afterClose" | null } {
+  if (nowMs === undefined) return { bars: closedBars(bars), time: null, live: false, phase: null };
   const l = liveBars(bars ?? [], nowMs);
   const valid = l.bars.filter((b) => b && typeof b.date === "string" && ISO_DATE.test(b.date) && finite(b.close))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  return { bars: valid, time: l.time, live: !!l.live && valid[valid.length - 1] === l.live };
+  const live = !!l.live && valid[valid.length - 1] === l.live;
+  return { bars: valid, time: l.time, live, phase: live ? l.phase : null };
 }
 
 const none = (reason: string): Level => ({ value: null, reason });
@@ -170,14 +186,20 @@ const withheld = (key: PeriodKey, reason: string): PeriodLevels => ({
   from: null,
   levels: { open: none(reason), high: none(reason), low: none(reason), close: none(reason) },
   reason,
+  prevClose: null,
+  prevReason: reason,
 });
+
+/** The close of the bar just before index `i`, or null. */
+const prevOf = (bars: readonly KeyBar[], i: number) => (i > 0 ? { value: bars[i - 1].close, date: bars[i - 1].date } : null);
 
 /** The period that starts on `start`: withheld unless a bar before it proves its first session is on file. */
 function periodFrom(key: Exclude<PeriodKey, "day">, bars: readonly KeyBar[], start: string): PeriodLevels {
   const firstIn = bars.findIndex((b) => b.date >= start);
   if (firstIn <= 0) return withheld(key, SHORT_REASON[key]);
   const span = bars.slice(firstIn);
-  return { key, from: span[0].date, levels: levelsOver(key, span), reason: null };
+  // firstIn > 0 here, so the prior period's final session is on file.
+  return { key, from: span[0].date, levels: levelsOver(key, span), reason: null, prevClose: prevOf(bars, firstIn), prevReason: null };
 }
 
 /** The day's, this week's and this month's levels from the latest closed candle. */
@@ -196,7 +218,7 @@ export function keyLevels(bars: readonly KeyBar[] | null | undefined, opts: { no
   }
   const last = closed[closed.length - 1];
   const periods: PeriodLevels[] = [
-    { key: "day", from: last.date, levels: levelsOver("day", [last]), reason: null },
+    { key: "day", from: last.date, levels: levelsOver("day", [last]), reason: null, prevClose: prevOf(closed, closed.length - 1), prevReason: closed.length > 1 ? null : PREV_MISSING.day },
     periodFrom("week", closed, isoWeekMonday(last.date)),
     periodFrom("month", closed, monthStart(last.date)),
   ];
@@ -208,7 +230,7 @@ export function keyLevels(bars: readonly KeyBar[] | null | undefined, opts: { no
       if (r && !reasons.includes(r)) reasons.push(r);
     }
   }
-  return { asOf: last.date, asOfWords: dateWords(last.date), lastClose: last.close, periods, reasons, live: sess.live ? { time: sess.time } : null };
+  return { asOf: last.date, asOfWords: dateWords(last.date), lastClose: last.close, periods, reasons, live: sess.live ? { time: sess.time, phase: sess.phase ?? "session" } : null };
 }
 
 /** "2.1% above", "0.4% below", or "at the last price". */
