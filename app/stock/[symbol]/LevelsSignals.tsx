@@ -65,6 +65,8 @@ export type LevelsSignalsProps = {
   extraLevels?: LadderItem[];
   /** The bars the page's MACD reading comes from, for the mini chart (#563 COWORK #74). */
   macdBars?: readonly { date: string; close: number }[];
+  /** Set ("14:32", or "") when those bars end with today's in-session partial bar (#563 COWORK #75). */
+  macdToday?: string | null;
 };
 
 /** The histogram's colours: the pill's own "above" blue and "below" amber. */
@@ -197,7 +199,7 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
         </div>
         <div style={{ marginTop: 18 }}>
           <div style={gaugeHeadStyle}>
-            <span style={{ fontWeight: 800, color: C.value }}><ReasonedValue text="MACD" reason={`${NOTES.macd} ${when}`} /></span>
+            <span style={{ fontWeight: 800, color: C.value }}><ReasonedValue text="MACD" reason={`${NOTES.macd} ${p.macdToday != null ? `Includes today's session so far${p.macdToday ? ` (${p.macdToday} ET)` : ""}.` : when}`} /></span>
             {macd ? <span className="lsMacdPill" data-state={macd} style={pillStyle(macd)}>{macd === "above" ? "▲ " : macd === "below" ? "▼ " : "– "}{MACD_WORDS[macd].pill}</span> : <span>—</span>}
           </div>
           {ms ? <MacdChart s={ms} /> : null}

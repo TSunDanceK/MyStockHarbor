@@ -12,6 +12,7 @@ import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import KeyLevelsCard from "./KeyLevelsCard";
 import LevelsSignals from "./LevelsSignals";
+import { liveBars } from "@/lib/ta/sessionBar";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
 import type { ProfileDividend } from "@/lib/server/secDividend";
 import { isRetiredBlock } from "./retiredBlocks";
@@ -170,6 +171,8 @@ type StockSymbolPageClientProps = {
   historyCredit?: ReactNode;
   // Whose bars `initialHistory` is: "tiingo", "fmp" or "none".
   historyProvider?: string;
+  /** The server's render time (#563 COWORK #75/#76), for "is today's partial bar in session". */
+  renderedAt?: number;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -755,7 +758,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, renderedAt }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   // Whose bars the chart is showing: the seed's provider, or what the client
   // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
@@ -963,6 +966,13 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
   const macroSupport = useMemo(() => computeMacroSupport(history, lastClose), [history, lastClose]);
   const macdSignal = useMemo(() => buildMacd(closes), [closes]);
+  // THE SIGNALS COLUMN'S MACD (#563 COWORK #75/#76): the same buildMacd, over
+  // completed sessions plus today's partial bar only while it is in session, so
+  // the pill and its mini chart agree and a stale partial never counts.
+  const macdLive = useMemo(() => {
+    const l = liveBars(history as (Point & { partial?: boolean; label?: string })[], renderedAt ?? NaN);
+    return { tone: buildMacd(l.bars.map((p) => p.close))?.tone ?? null, bars: l.bars, today: l.live ? l.time ?? "" : null };
+  }, [history, renderedAt]);
   const weeklyHistory = useMemo(() => aggregateWeekly(history), [history]);
   const dailyReturns = useMemo(() => computeCloseOverCloseReturns(history, 20), [history]);
   const weeklyReturns = useMemo(() => computeCloseOverCloseReturns(weeklyHistory, 12), [weeklyHistory]);
@@ -1166,8 +1176,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                   ma50Missing={closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : null}
                   ma200Missing={closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : null}
                   rsi={typeof lastRsi === "number" ? lastRsi : null}
-                  macdTone={macdSignal?.tone ?? null}
-                  macdBars={history}
+                  macdTone={macdLive.tone}
+                  macdBars={macdLive.bars}
+                  macdToday={macdLive.today}
                   asOf={history.length ? history[history.length - 1].date : null}
                   asOfPartial={!!(history[history.length - 1] as { partial?: boolean } | undefined)?.partial}
                   credit={shownProvider === "tiingo" ? historyCredit : undefined}

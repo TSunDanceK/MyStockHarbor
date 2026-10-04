@@ -824,6 +824,10 @@ export default async function StockPage({ params }: Props) {
         // MA200 line was undefined over roughly half the visible chart, which
         // is why the client re-fetched 900 bars on every load.
         initialHistory={points.slice(-500)}
+        // The render time (#563 COWORK #75/#76): whether today's partial bar is
+        // in session is decided against this, not the browser's clock, so the
+        // server HTML and the hydrated page agree.
+        renderedAt={Date.now()}
         initialQuote={quote}
         // Step 4 (#553 COWORK #71/#92): the linked credit, shown by the client
         // under the header stats whenever the quote is a Tiingo one.

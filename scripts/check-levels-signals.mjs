@@ -34,6 +34,7 @@ const KL = "lib/ta/keyLevels.ts";
 const LIB = "lib/ta/priceLadder.ts";
 const CARD = "app/stock/[symbol]/LevelsSignals.tsx";
 const MACD = "lib/ta/macdSeries.ts";
+const SESS = "lib/ta/sessionBar.ts";
 const PAGE = "app/stock/[symbol]/StockSymbolPageClient.tsx";
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 
@@ -47,8 +48,8 @@ const PAGE_MACD = ["avg", "ema", "lastNum", "buildMacd"]
   .map((f, i) => (f ?? `/* missing ${i} */`).replace(/^function (\w+)/, "function page_$1"))
   .join("\n").replace(/\b(avg|ema|lastNum)\(/g, "page_$1(").replace(/function page_page_/g, "function page_");
 
-async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8"), macd = fs.readFileSync(MACD, "utf8")) {
-  const unit = `${reasonedValueUnit()}\n${strip(fs.readFileSync(KL, "utf8"))}\n${strip(lib)}\n${strip(macd)}\n${PAGE_MACD}\nexport { page_buildMacd };\n${strip(card).replace("export default function LevelsSignals", "export function LevelsSignals")}\n`;
+async function load(lib = fs.readFileSync(LIB, "utf8"), card = fs.readFileSync(CARD, "utf8"), macd = fs.readFileSync(MACD, "utf8"), sess = fs.readFileSync(SESS, "utf8")) {
+  const unit = `${reasonedValueUnit()}\n${strip(sess)}\n${strip(fs.readFileSync(KL, "utf8"))}\n${strip(lib)}\n${strip(macd)}\n${PAGE_MACD}\nexport { page_buildMacd };\n${strip(card).replace("export default function LevelsSignals", "export function LevelsSignals")}\n`;
   const js = ts.transpileModule(unit, {
     fileName: "ls.tsx",
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" },
@@ -172,7 +173,25 @@ const rules = {
     !/Daily prices:/.test(aaplText) && /Daily prices: Tiingo credit/.test(credited),
 };
 
+const ET = (date, hhmm) => Date.parse(`${date}T${hhmm}:00-04:00`);
+const PB = (date) => ({ date, close: 1, partial: true, label: "today so far (IEX), 14:32 ET" });
+const DONE = [{ date: "2026-09-30", close: 1 }, { date: "2026-10-01", close: 1 }];
 Object.assign(rules, {
+  "today's partial bar counts only in session and only on its own day (#75/#76)": ({ M }) => {
+    const inS = M.liveBars([...DONE, PB("2026-10-02")], ET("2026-10-02", "14:32"));
+    const out = [
+      M.liveBars([...DONE, PB("2026-10-02")], ET("2026-10-03", "12:00")), // Saturday, stale Friday partial
+      M.liveBars([...DONE, PB("2026-10-02")], ET("2026-10-05", "10:00")), // in-session Monday, stale Friday partial
+      M.liveBars([...DONE, PB("2026-10-02")], ET("2026-10-02", "17:30")), // after the close
+      M.liveBars(DONE, ET("2026-09-07", "11:00")), // Labor Day: no new bar
+    ];
+    return inS.bars.length === 3 && inS.live?.date === "2026-10-02" && inS.time === "14:32" &&
+      out.every((o) => o.live === null && o.bars.length === 2 && o.bars.every((b) => !b.partial));
+  },
+  "the MACD note says when today's session is included": ({ M }) => {
+    const r = (t) => renderToStaticMarkup(React.createElement(M.LevelsSignals, props(AAPL, { macdToday: t })));
+    return /Includes today&#x27;s session so far \(14:32 ET\)\./.test(r("14:32")) && !/Includes today/.test(r(null)) && /As of the close on Fri 2 Oct 2026\./.test(r(null));
+  },
   "MACD series: its last point is the page's own reading": ({ M, wave, climb }) => [wave, climb].every((b) => {
     const page = M.page_buildMacd(b.map((x) => x.close)), s = M.macdSeries(b), last = s.points.at(-1);
     return page && Math.abs(last.macd - page.macd) < 1e-9 && Math.abs(last.signal - page.signal) < 1e-9 && Math.abs(last.hist - page.histogram) < 1e-9 && s.points.length === 30;
@@ -196,7 +215,14 @@ Object.assign(rules, {
   },
 });
 
+const staticRules0 = {
+  "MACD in the Signals column: one set of bars for the pill and the chart, today's partial only in session": (_l, _c, p) =>
+    /const l = liveBars\(history as \(Point & \{ partial\?: boolean; label\?: string \}\)\[\], renderedAt \?\? NaN\);/.test(p) &&
+    /return \{ tone: buildMacd\(l\.bars\.map\(\(p\) => p\.close\)\)\?\.tone \?\? null, bars: l\.bars, today: l\.live \? l\.time \?\? "" : null \};/.test(p) &&
+    /renderedAt=\{Date\.now\(\)\}/.test(fs.readFileSync("app/stock/[symbol]/page.tsx", "utf8")),
+};
 const staticRules = {
+  ...staticRules0,
   "no fetch, no Redis, no reads in either file": (l, c) => ![l, c].some((s) => /fetch\(|redis|Redis|unstable_cache|readTiingo|getDailyHistory/.test(s)),
   "the module imports only keyLevels; the card only React's types, A's ReasonedValue and the modules": (l, c) => {
     const li = [...l.matchAll(/^import[\s\S]*?from\s*"([^"]+)";$/gm)].map((m) => m[1]);
@@ -210,7 +236,7 @@ const staticRules = {
     return /<LevelsSignals\s/.test(sec) && !/className="indicator-rows|MACD Signal|Support Quality|macdSignal\?\.label/.test(p) && !/Key levels &amp; signals/.test(p) &&
       /last=\{lastClose\}/.test(sec) && /ma50=\{typeof lastMA50 === "number" \? lastMA50 : null\}/.test(sec) &&
       /ma200=\{typeof lastMA200 === "number" \? lastMA200 : null\}/.test(sec) && /zone=\{macroSupport\}/.test(sec) &&
-      /rsi=\{typeof lastRsi === "number" \? lastRsi : null\}/.test(sec) && /macdTone=\{macdSignal\?\.tone \?\? null\}/.test(sec) &&
+      /rsi=\{typeof lastRsi === "number" \? lastRsi : null\}/.test(sec) && /macdTone=\{macdLive\.tone\}/.test(sec) && /macdBars=\{macdLive\.bars\}/.test(sec) && /macdToday=\{macdLive\.today\}/.test(sec) &&
       /ma50Missing=\{closes\.length && closes\.length < 50 \? SHORT_HISTORY_NOTE : null\}/.test(sec) &&
       /ma200Missing=\{closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : null\}/.test(sec) &&
       /credit=\{shownProvider === "tiingo" \? historyCredit : undefined\}/.test(sec) &&
@@ -263,8 +289,11 @@ const mutants = [
   ["the notes describe, and nothing reads as advice", "c", (s) => s.replace("return partial ? `As of today's trading so far (${dateWords(asOf)}).` : `As of the close on ${dateWords(asOf)}.`;", "return \"\";")],
   ["the Tiingo credit only when it is passed", "c", (s) => s.replace("{p.credit ? <p className=\"lsCredit\" style={{ ...noteStyle, gridColumn: \"1 / -1\" }}>Daily prices: {p.credit}</p> : null}", "<p className=\"lsCredit\">Daily prices: {p.credit ?? \"Tiingo\"}</p>")],
 ];
-const MS = fs.readFileSync(MACD, "utf8");
+const MS = fs.readFileSync(MACD, "utf8"), SSs = fs.readFileSync(SESS, "utf8");
 mutants.push(
+  ["today's partial bar counts only in session and only on its own day (#75/#76)", "s", (s) => s.replace(" && last.date === easternNow(nowMs).date;", ";")],
+  ["today's partial bar counts only in session and only on its own day (#75/#76)", "s", (s) => s.replace("Number.isFinite(nowMs) && inSession(nowMs) && last.date", "Number.isFinite(nowMs) && last.date")],
+  ["the MACD note says when today's session is included", "c", (s) => s.replace("p.macdToday != null ? `Includes today's session so far", "false ? `Includes today's session so far")],
   ["MACD series: its last point is the page's own reading", "m", (s) => s.replace("let cur = avg(values.slice(0, period));", "let cur = values[0];")],
   ["MACD series: its last point is the page's own reading", "m", (s) => s.replace("const sig = emaSeries(macdVals, 9);", "const sig = emaSeries(macdVals, 10);")],
   ["MACD histogram: above zero in the pill's blue, below in its amber", "c", (s) => s.replace("fill={p.hist >= 0 ? MACD_COLOUR.above : MACD_COLOUR.below}", "fill={MACD_COLOUR.above}")],
@@ -278,16 +307,19 @@ for (const [name, which, mutate] of mutants) {
   const l2 = which === "l" ? mutate(L) : L;
   const c2 = which === "c" ? mutate(Cd) : Cd;
   const m2 = which === "m" ? mutate(MS) : MS;
-  const changed = l2 !== L || c2 !== Cd || m2 !== MS;
+  const s2 = which === "s" ? mutate(SSs) : SSs;
+  const changed = l2 !== L || c2 !== Cd || m2 !== MS || s2 !== SSs;
   let bites = false;
-  try { bites = !rules[name](await measure(await load(l2, c2, m2))); } catch { bites = true; }
+  try { bites = !rules[name](await measure(await load(l2, c2, m2, s2))); } catch { bites = true; }
   check(`mutant bites: ${name}`, changed && bites, changed ? "" : "the mutation did not apply");
 }
 const staticMutants = [
   ["no fetch, no Redis, no reads in either file", (l, c, p) => [l, `${c}\nconst x = fetch("/api/quote");`, p]],
   ["the module imports only keyLevels; the card only React's types, A's ReasonedValue and the modules", (l, c, p) => [`import { getDailyHistory } from "@/lib/server/historyCache";\n${l}`, c, p]],
   ["the page hands over what it already computes, and the old rows are gone", (l, c, p) => [l, c, p.replace("zone={macroSupport}", "zone={computeMacroSupport(history.slice(-100), lastClose)}")]],
-  ["the page hands over what it already computes, and the old rows are gone", (l, c, p) => [l, c, p.replace('macdTone={macdSignal?.tone ?? null}', 'macdTone="green"')]],
+  ["the page hands over what it already computes, and the old rows are gone", (l, c, p) => [l, c, p.replace('macdTone={macdLive.tone}', 'macdTone="green"')]],
+  ["MACD in the Signals column: one set of bars for the pill and the chart, today's partial only in session", (l, c, p) => [l, c, p.replace("liveBars(history as (Point & { partial?: boolean; label?: string })[], renderedAt ?? NaN)", "{ bars: history, live: null, time: null }")]],
+  ["MACD in the Signals column: one set of bars for the pill and the chart, today's partial only in session", (l, c, p) => [l, c, p.replace("tone: buildMacd(l.bars.map((p) => p.close))?.tone ?? null", "tone: buildMacd(closes)?.tone ?? null")]],
   ["the page hands over what it already computes, and the old rows are gone", (l, c, p) => [l, c, p.replace('credit={shownProvider === "tiingo" ? historyCredit : undefined}\n', "credit={historyCredit}\n")]],
 ];
 for (const [name, mutate] of staticMutants) {
