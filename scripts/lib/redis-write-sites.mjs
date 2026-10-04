@@ -54,6 +54,8 @@ export const WRITE_SITES = [
   { file: "lib/server/marketData/jobs.ts", key: "TIINGO_EOD_LAST_KEY", cls: "listed", candidate: "TIINGO_EOD_LAST_KEY", count: 2 },
   // Step 5: the Tiingo jobs' symbols-only universe (~6 B a symbol), one SET per in-session warm-price-pool run,
   // and off hours only when the key is absent or older than 6 h (#553 COWORK #120).
+  // Market Mood (#563 COWORK #96): one ~33 KB series of 0–100 scores, 1 SET a complete night.
+  { file: "lib/server/marketMoodWrite.ts", key: "TIINGO_MOOD_KEY", cls: "row" },
   { file: "lib/server/tiingoUniverse.ts", key: "TIINGO_UNIVERSE_KEY", cls: "small" },
   // The stock-page cold fill (#553 COWORK #121): one symbol's history per SET (the nightly job's row shape), and its per-symbol lock.
   { file: "lib/server/marketData/coldFill.ts", key: "tiingoEodKey(sym", cls: "row" },

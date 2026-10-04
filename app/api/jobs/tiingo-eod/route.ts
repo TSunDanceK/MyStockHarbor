@@ -72,6 +72,14 @@ function pickersOnBars(req: NextRequest, startedAt: number, out: PickersOnBars) 
   };
 }
 
+/** MARKET MOOD (#563 COWORK #96): the same complete night's bars, first (about a second, 1 SET), then `next` (the Pickers build). */
+function withMood(next: (bars: Map<string, EodBar[]>) => Promise<void>, out: MoodWrite) {
+  return async (bars: Map<string, EodBar[]>) => {
+    Object.assign(out, await writeMarketMood(bars));
+    await next(bars);
+  };
+}
+
 function isAuthorized(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return true;
@@ -88,12 +96,7 @@ async function handleGET(req: NextRequest) {
     // MARKET MOOD (#563 COWORK #96): the same complete night's bars, first (about a second, 1 SET),
     // then the Pickers build as before.
     const mood: MoodWrite = { mood: "not reached (incomplete night or nothing fetched)" };
-    const pickers = pickersOnBars(req, startedAt, onBars);
-    const both = async (bars: Map<string, EodBar[]>) => {
-      Object.assign(mood, await writeMarketMood(bars));
-      await pickers(bars);
-    };
-    const result = { ...(await runTiingoEod(Date.now(), both)), ...onBars, ...mood };
+    const result = { ...(await runTiingoEod(Date.now(), withMood(pickersOnBars(req, startedAt, onBars), mood))), ...onBars, ...mood };
     console.log("[tiingo-eod]", JSON.stringify(result));
     await recordJobRun("tiingo-eod", result.ok !== false, runSummary(result));
     return NextResponse.json(result, { status: result.ok === false ? 500 : 200 });

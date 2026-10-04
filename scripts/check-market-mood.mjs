@@ -136,8 +136,8 @@ const RULES = {
     return /export const TIINGO_MOOD_KEY = `\$\{TIINGO_PREFIX\}mood:v1`;/.test(src.keys) &&
       (w.match(/redis\.\w+\(/g) ?? []).join() === "redis.set(" && /redis\.set\(TIINGO_MOOD_KEY, JSON\.stringify\(m\), \{ ex: TIINGO_EOD_TTL_SECONDS \}\);\s*revalidateTag\(MOOD_TAG, "max"\);/.test(w) &&
       /computeMarketMood\(bars, MOOD_EXCLUDE\)/.test(w) && /MOOD_EXCLUDE: readonly string\[\] = \[\.\.\.uniqueEtfs, \.\.\.POOL_BENCHMARK_ETFS\]/.test(w) &&
-      /const both = async \(bars: Map<string, EodBar\[\]>\) => \{\s*Object\.assign\(mood, await writeMarketMood\(bars\)\);\s*await pickers\(bars\);\s*\};/.test(eod) &&
-      /runTiingoEod\(Date\.now\(\), both\)/.test(eod) &&
+      /return async \(bars: Map<string, EodBar\[\]>\) => \{\s*Object\.assign\(out, await writeMarketMood\(bars\)\);\s*await next\(bars\);\s*\};/.test(eod) &&
+      /runTiingoEod\(Date\.now\(\), withMood\(pickersOnBars\(req, startedAt, onBars\), mood\)\)/.test(eod) &&
       (r.match(/redis\.\w+[<(]/g) ?? []).join() === "redis.get<" &&
       /unstable_cache\(loadMood, \["tiingo-mood-v1"\], \{ tags: \[MOOD_TAG\], revalidate: 24 \* 60 \* 60 \}\)/.test(r) && /Redis\.fromEnv\(PAGE_READ_CACHE\)/.test(r);
   },
@@ -206,7 +206,7 @@ const MUTANTS = [
   [R[5], "page", (s) => s.replace("<MarketMoodCard view={mood} credit=", "<MarketMoodCard view={mood} series={await readMarketMood()} credit=")],
   [R[5], "files", null],
   [R[6], "write", (s) => s.replace("    revalidateTag(MOOD_TAG, \"max\");\n", "")],
-  [R[6], "eod", (s) => s.replace("      Object.assign(mood, await writeMarketMood(bars));\n      await pickers(bars);", "      await pickers(bars);\n      Object.assign(mood, await writeMarketMood(bars));")],
+  [R[6], "eod", (s) => s.replace("    Object.assign(out, await writeMarketMood(bars));\n    await next(bars);", "    await next(bars);\n    Object.assign(out, await writeMarketMood(bars));")],
   [R[6], "keys", (s) => s.replace("export const TIINGO_MOOD_KEY = `${TIINGO_PREFIX}mood:v1`;", "export const TIINGO_MOOD_KEY = \"msh:mood:v1\";")],
   [R[7], "universe", (s) => s.replace("      mood: MOOD_ETFS,\n    });\n    const written", "    });\n    const written")],
   [R[7], "pool", (s) => s.replace("      mood: MOOD_ETFS,\n", "")],
