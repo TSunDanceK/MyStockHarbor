@@ -1355,6 +1355,8 @@ const TASKS = {
   "write-margin-kind-census": { script: "scripts/margin-kind-census.mjs", args: () => [], writes: true },
   // READS ONLY: the confluence ladder's census before the build (#563 COWORK #83 §4). GET + ~110 MGET.
   "write-confluence-census": { script: "scripts/confluence-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY: the strength badge's census before the build (#563 COWORK #99 §5). 1 GET + ~105 MGET; counts and percentages only.
+  "write-strength-badge-census": { script: "scripts/strength-badge-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #148): the stored SEC
   // sets that fail the seed gate (symbol + reason), and how many still have a
   // picker row. 1 SMEMBERS + 1 HKEYS; deletes nothing.
