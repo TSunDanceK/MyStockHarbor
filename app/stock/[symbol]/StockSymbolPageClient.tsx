@@ -80,6 +80,8 @@ type StockValuationData = {
   /** Why a figure is blank, in words; null where it has a value. From SEC. */
   reasons?: Partial<Record<"peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda", string | null>>;
   sourceNote: string;
+  /** "▲ Above sector median (21.5×)" and its note, or null for no line (lib/peSectorLine.ts). */
+  peSector?: { glyph: string; text: string; note: string } | null;
   /** "TTM to 26 Jul 2026" or "FY2025": which twelve months the P/E is on. */
   peBasis?: string | null;
   /** The derived-Q4 caveat, when the TTM includes one. */
@@ -1048,7 +1050,14 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                       ? formatValuationMultiple(valuation.peRatio)
                       : <ReasonedValue text={valuation.words?.peRatio ?? "—"} reason={valuation.reasons?.peRatio} />}
                   </div>
-                  <div className="stock-stat-sub">See valuation ↓</div>
+                  {/* P/E VS ITS SECTOR (#552 COWORK #147 §2): the glyph and the
+                      words carry it, in the page's ordinary ink (a comparison,
+                      not a verdict); the note names the peers and the date. */}
+                  <div className="stock-stat-sub" data-pe-sector={valuation.peSector ? "" : undefined}>
+                    {valuation.peSector
+                      ? <><span aria-hidden="true">{valuation.peSector.glyph} </span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></>
+                      : "See valuation ↓"}
+                  </div>
                 </div>
               ) : null}
             </div>
