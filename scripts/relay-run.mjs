@@ -1354,6 +1354,8 @@ const TASKS = {
   // READS ONLY: which margin the Growth & margins chart draws across the universe (#563 COWORK #71). ~105 MGET.
   "write-margin-kind-census": { script: "scripts/margin-kind-census.mjs", args: () => [], writes: true },
   // READS ONLY: the confluence ladder's census before the build (#563 COWORK #83 §4). GET + ~110 MGET.
+  // READS ONLY: the stock page on phones on real tickers (#563 COWORK #87). GET + ~30 MGET; widths and pass/fail only.
+  "write-phone-scroll-probe": { script: "scripts/phone-scroll-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-confluence-census": { script: "scripts/confluence-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
