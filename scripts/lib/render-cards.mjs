@@ -108,6 +108,9 @@ export async function loadCards(mutate = (src) => src) {
     // THE ESTIMATE LAYER, which secValuation reads (#552 COWORK #112).
     stripImports("lib/server/secEstimates.ts"),
     stripImports("lib/server/secValuation.ts"),
+    // THE TRAFFIC-LIGHT RULES (#552 COWORK #137 §2), for SecIncomeStatementCard.
+    // Import-free, so the whole file joins as is.
+    stripImports("lib/lineTrend.ts"),
   ].join("\n");
   const cards = fs
     .readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8")
