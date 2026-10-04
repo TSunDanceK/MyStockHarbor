@@ -13,6 +13,7 @@
 // stripped):
 //   - the phone order, from the ≤900px block's `order` values
 //   - every section in the DOM once (no card rendered twice), each with an order
+//   - the sidebar never sticky (owner ruling, #86: it scrolls with the page)
 //   - desktop and tablet unchanged: no ordering or display: contents outside
 //     the ≤900px block, and the desktop DOM order as it was
 // Mutants: each rule broken once, caught.
@@ -83,6 +84,9 @@ const RULES = {
     JSON.stringify(r.dom.filter((d) => DESKTOP_MAIN.includes(d))) === JSON.stringify(DESKTOP_MAIN) &&
     // The sidebar keeps Key levels then Earnings, after the desktop Change stock.
     /<aside className="stock-page-sidebar">[\s{}]*<div className="sidebar-change-stock"[\s\S]*?sp-confluence[\s\S]*?sp-keylevels[\s\S]*?sp-earnings[\s\S]*?<\/aside>/.test(r.code),
+  "the sidebar scrolls with the page: never sticky, at any width (owner ruling, #86)": (r) =>
+    /\.stock-page-sidebar \{\s*display: flex;\s*flex-direction: column;\s*gap: 16px;\s*\}/.test(r.rest) &&
+    !/position:\s*sticky/.test(r.rest + r.phone),
 };
 
 const src = fs.readFileSync(FILE, "utf8");
@@ -101,6 +105,8 @@ const MUTANTS = [
   ["desktop and tablet unchanged: no ordering or display: contents above 900px, the DOM order as it was", (s) => swap(s, 'className="sp-slot sp-returns"', 'className="sp-slot sp-signals"')],
   ["desktop and tablet unchanged: no ordering or display: contents above 900px, the DOM order as it was", (s) => s.replace("        @media (max-width: 900px) {", "        .stock-page-main { display: contents; }\n        @media (max-width: 900px) {")],
   ["desktop and tablet unchanged: no ordering or display: contents above 900px, the DOM order as it was", (s) => s.replace("        .mobile-change-stock { display: none; }", "        .mobile-change-stock { display: none; }\n        .sp-chart { order: 3; }")],
+  ["the sidebar scrolls with the page: never sticky, at any width (owner ruling, #86)", (s) => s.replace("          gap: 16px;\n        }", "          gap: 16px;\n          position: sticky;\n          top: 20px;\n        }")],
+  ["the sidebar scrolls with the page: never sticky, at any width (owner ruling, #86)", (s) => s.replace("          .stock-page-sidebar, .stock-page-main { display: contents; }", "          .stock-page-sidebar, .stock-page-main { display: contents; }\n          .sp-earnings { position: sticky; top: 0; }")],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");
 for (const [label, mutate] of MUTANTS) {

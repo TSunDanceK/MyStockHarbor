@@ -1443,12 +1443,13 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           align-items: start;
         }
         .stock-page-main { min-width: 0; }
+        /* THE SIDEBAR SCROLLS WITH THE PAGE (owner ruling, #563 COWORK #86): it is
+           taller than a screen, and a sticky sidebar kept the Earnings snapshot out
+           of view until the end of the main column. */
         .stock-page-sidebar {
           display: flex;
           flex-direction: column;
           gap: 16px;
-          position: sticky;
-          top: 20px;
         }
 
         /* Desktop: show sidebar change stock, hide inline one */
