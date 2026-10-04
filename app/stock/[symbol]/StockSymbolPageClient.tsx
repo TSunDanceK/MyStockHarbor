@@ -1123,29 +1123,22 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </div>
 
               {/* Key levels (#563 COWORK #64): C's card, from the bars already held. */}
-              <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              <div className="sp-slot sp-keylevels">
+                <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              </div>
 
               {/* Earnings snapshot — sidebar */}
-              <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} />
+              <div className="sp-slot sp-earnings">
+                <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} />
+              </div>
 
             </aside>
 
             {/* ---- MAIN COLUMN ------------------------------------ */}
             <div className="stock-page-main">
 
-              {/* -- Change stock — mobile only, above chart ---------- */}
-              <div className="mobile-change-stock" style={sideCardStyle()}>
-                <div style={sideCardHeaderStyle()}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
-                  <div style={{ marginTop: 3, fontSize: 12, opacity: 0.50, lineHeight: 1.4 }}>Search another ticker to view its stock analysis page.</div>
-                </div>
-                <div style={sideCardBodyStyle()}>
-                  <StockTickerJump currentSymbol={symbol} />
-                </div>
-              </div>
-
               {/* -- Chart section ----------------------------------- */}
-              <section style={{ marginTop: 20 }}>
+              <section className="sp-slot sp-chart" style={{ marginTop: 20 }}>
                 <div style={sectionLabelStyle}>Chart View</div>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
                   <h2 style={sectionHeadingStyle}>{symbol} with MA50 and MA200</h2>
@@ -1159,7 +1152,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </section>
 
               {/* -- Daily / weekly returns --------------------------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-returns" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Price Action</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily or weekly close-over-close change</h2>
                 {/* ONE card, Daily | Weekly toggle, Daily first (#552 COWORK #89). Both views server-rendered. */}
@@ -1169,7 +1162,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </section>
 
               {/* -- Technical indicators ---------------------------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-signals" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Technical Indicators</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Price levels &amp; signals</h2>
                 {/* #563 COWORK #68: the same figures as pictures, handed over as computed above. */}
@@ -1192,7 +1185,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </section>
 
               {/* -- Valuation multiples (SEC filings, TTM) ----------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-valuation" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Valuation</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>{symbol} valuation multiples (TTM)</h2>
                 <div className="valuationGrid">
@@ -1326,7 +1319,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
 
 
               {/* -- Chart summaries --------------------------------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-summary" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Chart Summary</div>
                 <div>
                   {[
@@ -1351,30 +1344,43 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                      column, instead of sitting in its own full-width section
                      further down the page. Falls back to a standalone
                      section when there's no profile to attach it to. -- */}
-              {profile ? (
-                <CompanyProfile
-                  profile={profile}
-                  symbol={symbol}
-                  dividend={dividend}
-                  belowDescription={<DilutionHistory data={shareHistory} symbol={symbol} embedded />}
-                  belowStats={learnIndicatorsAside}
-                />
-              ) : (
-                <>
-                  <DilutionHistory data={shareHistory} symbol={symbol} />
+              <div className="sp-slot sp-profile">
+                {profile ? (
+                  <CompanyProfile
+                    profile={profile}
+                    symbol={symbol}
+                    dividend={dividend}
+                    belowDescription={<DilutionHistory data={shareHistory} symbol={symbol} embedded />}
+                    belowStats={learnIndicatorsAside}
+                  />
+                ) : (
+                  <>
+                    <DilutionHistory data={shareHistory} symbol={symbol} />
 
-                  {/* -- Learn more (standalone fallback when no company
-                         profile is available to host it in the right column) -- */}
-                  <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-                    <div style={sectionLabelStyle}>Learn More</div>
-                    <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
-                    {learnRows}
-                  </section>
-                </>
-              )}
+                    {/* -- Learn more (standalone fallback when no company
+                           profile is available to host it in the right column) -- */}
+                    <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                      <div style={sectionLabelStyle}>Learn More</div>
+                      <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
+                      {learnRows}
+                    </section>
+                  </>
+                )}
+              </div>
+
+              {/* -- Change stock — phones only (#563 COWORK #82: near the end, after the page's figures) -- */}
+              <div className="mobile-change-stock sp-slot sp-changestock" style={sideCardStyle()}>
+                <div style={sideCardHeaderStyle()}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
+                  <div style={{ marginTop: 3, fontSize: 12, opacity: 0.50, lineHeight: 1.4 }}>Search another ticker to view its stock analysis page.</div>
+                </div>
+                <div style={sideCardBodyStyle()}>
+                  <StockTickerJump currentSymbol={symbol} />
+                </div>
+              </div>
 
               {/* -- Explore more ------------------------------------ */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-explore" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Explore More</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>More stock opportunities</h2>
                 <div className="explore-grid">
@@ -1396,7 +1402,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </section>
 
               {/* -- FAQ --------------------------------------------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, paddingBottom: 40 }}>
+              <section className="sp-slot sp-faq" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, paddingBottom: 40 }}>
                 <div style={sectionLabelStyle}>FAQ</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 18 }}>Common questions about {symbol}</h2>
                 <div style={{ display: "grid", gap: 16 }}>
@@ -1444,10 +1450,29 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         .sidebar-change-stock { display: block; }
 
         @media (max-width: 900px) {
-          .stock-page-layout { grid-template-columns: 1fr !important; }
-          .stock-page-sidebar { position: static !important; order: 2; }
-          .stock-page-main { order: 1; }
-          /* Mobile: show inline change stock above chart, hide sidebar one */
+          .stock-page-layout { grid-template-columns: minmax(0, 1fr) !important; gap: 0; }
+          /* PHONES, MOST USEFUL FIRST (#563 COWORK #82). The sidebar and the main
+             column step aside (display: contents), so their sections become one
+             column ordered below. Each section is in the DOM once; desktop and
+             tablet above 900px never read these rules. The phone-only Change
+             stock copy sits near the end of the DOM too, so reading order follows
+             what is seen; Key levels and the Earnings snapshot stay first in the
+             DOM (the sidebar), read before the chart by a screen reader. */
+          .stock-page-sidebar, .stock-page-main { display: contents; }
+          .stock-page-sidebar > *, .stock-page-main > * { order: 85; min-width: 0; }
+          .sp-chart { order: 10; }
+          .sp-keylevels { order: 20; }
+          .sp-signals { order: 30; }
+          .sp-earnings { order: 40; }
+          .sp-valuation { order: 50; }
+          .sp-returns { order: 60; }
+          .sp-summary { order: 70; }
+          .sp-profile { order: 80; }
+          .sp-changestock { order: 90; }
+          .sp-explore { order: 95; }
+          .sp-faq { order: 99; }
+          .sp-keylevels, .sp-earnings, .sp-changestock { margin-top: 24px; }
+          /* Mobile: show the inline change stock, hide the sidebar one */
           .mobile-change-stock { display: block; }
           .sidebar-change-stock { display: none !important; }
         }
