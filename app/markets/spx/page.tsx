@@ -27,6 +27,7 @@ import StockPriceChart from "@/app/stock/[symbol]/StockPriceChart";
 import ConfluenceCard from "@/app/stock/[symbol]/ConfluenceCard";
 import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
 import LevelsSignals from "@/app/stock/[symbol]/LevelsSignals";
+import LevelsGlanceCard from "./LevelsGlanceCard";
 
 export const dynamic = "force-dynamic";
 
@@ -306,6 +307,8 @@ export default async function SPXPage() {
   const bars = points.filter((p) => Number.isFinite(p.open) && Number.isFinite(p.high) && Number.isFinite(p.low)) as Required<Pick<Point, "date" | "open" | "high" | "low" | "close">>[];
   const strip = performanceStrip(points, null, nowMs, { benchmark: false });
   const macro = lastClose !== null ? computeMacroSupport(points, lastClose) : null;
+  // Price zones and Levels to watch read the same zones: one input object, passed to both (#93).
+  const zoneInput = { bars, lastPrice: lastClose, nowMs, ma50, ma200, macro: macro ? { lower: macro.lower, upper: macro.upper } : null };
   const ma50s = maSeries(closes, 50), ma200s = maSeries(closes, 200);
   const fromAth = weekly ? (weekly.indexClose / weekly.ath.level - 1) * 100 : null;
   const trendTone = trend ? (trend.score >= 56 ? "#86efac" : trend.score <= 44 ? "#fca5a5" : "#fde68a") : C.value;
@@ -382,12 +385,16 @@ export default async function SPXPage() {
             <section style={{ display: "grid", gap: 4, minWidth: 0 }}>
             <div className="spxLevels" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16, alignItems: "start" }}>
               <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
-                <ConfluenceCard bars={bars} lastPrice={lastClose} nowMs={nowMs} ma50={ma50} ma200={ma200} macro={macro ? { lower: macro.lower, upper: macro.upper } : null} credit={credit} />
+                <ConfluenceCard {...zoneInput} credit={credit} />
                 <p style={{ ...small, margin: "0 4px" }}>{liveLabel}</p>
               </div>
               <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
                 <KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} credit={credit} />
                 <p style={{ ...small, margin: "0 4px" }}>{liveLabel}</p>
+                {/* LEVELS TO WATCH (#93): the same zones as Price zones (same inputs), in the space under Key levels; after it on a phone. */}
+                <div style={{ marginTop: 10, minWidth: 0 }}>
+                  <LevelsGlanceCard {...zoneInput} shownOn={onSpy ? "Shown on SPY" : "Shown on the S&P 500 index"} credit={credit} />
+                </div>
               </div>
             </div>
             {weekly ? <div style={card({ paddingTop: 4 })}><WriteUp weekly={weekly} k="levels" stale={stale} /></div> : null}
