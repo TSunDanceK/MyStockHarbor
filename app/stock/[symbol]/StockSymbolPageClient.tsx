@@ -13,6 +13,8 @@ import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import KeyLevelsCard from "./KeyLevelsCard";
 import PerformanceStrip from "./PerformanceStrip";
 import type { PerfStrip } from "@/lib/ta/performance";
+import LevelsSignals from "./LevelsSignals";
+import { liveBars } from "@/lib/ta/sessionBar";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
 import type { ProfileDividend } from "@/lib/server/secDividend";
 import { isRetiredBlock } from "./retiredBlocks";
@@ -173,6 +175,8 @@ type StockSymbolPageClientProps = {
   historyProvider?: string;
   /** The performance strip (#563 COWORK #69), computed server-side from the full series. */
   performance?: PerfStrip;
+  /** The server's render time (#563 COWORK #75/#76), for "is today's partial bar in session". */
+  renderedAt?: number;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -758,7 +762,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, performance }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, performance, renderedAt }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   // Whose bars the chart is showing: the seed's provider, or what the client
   // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
@@ -966,6 +970,13 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
   const macroSupport = useMemo(() => computeMacroSupport(history, lastClose), [history, lastClose]);
   const macdSignal = useMemo(() => buildMacd(closes), [closes]);
+  // THE SIGNALS COLUMN'S MACD (#563 COWORK #75/#76): the same buildMacd, over
+  // completed sessions plus today's partial bar only while it is in session, so
+  // the pill and its mini chart agree and a stale partial never counts.
+  const macdLive = useMemo(() => {
+    const l = liveBars(history as (Point & { partial?: boolean; label?: string })[], renderedAt ?? NaN);
+    return { tone: buildMacd(l.bars.map((p) => p.close))?.tone ?? null, bars: l.bars, today: l.live ? l.time ?? "" : null };
+  }, [history, renderedAt]);
   const weeklyHistory = useMemo(() => aggregateWeekly(history), [history]);
   const dailyReturns = useMemo(() => computeCloseOverCloseReturns(history, 20), [history]);
   const weeklyReturns = useMemo(() => computeCloseOverCloseReturns(weeklyHistory, 12), [weeklyHistory]);
@@ -1112,7 +1123,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </div>
 
               {/* Key levels (#563 COWORK #64): C's card, from the bars already held. */}
-              <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
 
               {/* Earnings snapshot — sidebar */}
               <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} />
@@ -1160,28 +1171,24 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               {/* -- Technical indicators ---------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Technical Indicators</div>
-                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Key levels &amp; signals</h2>
-                <div className="indicator-rows">
-                  {[
-                    { label: "MA50", value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—", sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : "Distance unavailable", tone: metricToneFromPct(ma50Pct), title: closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : undefined },
-                    { label: "MA200", value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—", sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : "Distance unavailable", tone: metricToneFromPct(ma200Pct), title: closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : undefined },
-                    { label: "RSI (14)", value: typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—", sub: typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought zone" : lastRsi <= 30 ? "Oversold zone" : "Neutral zone") : "Momentum unavailable", tone: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
-                    { label: "MACD Signal", value: macdSignal?.label ?? "—", sub: macdSignal?.meta ?? "Momentum unavailable", tone: macdSignal?.tone ?? "yellow" as "green" | "yellow" | "red" },
-                    { label: "Macro Support", value: macroSupport ? `$${macroSupport.lower.toFixed(2)}–$${macroSupport.upper.toFixed(2)}` : "Not identified", sub: macroSupport ? `${macroSupport.distancePct.toFixed(1)}% below price · ${macroSupport.touches} touches` : "No repeated weekly support zone found", tone: supportTone(macroSupport?.distancePct ?? null) },
-                    { label: "Support Quality", value: macroSupport ? `${macroSupport.touches} touches` : "—", sub: macroSupport?.volumeRatio != null ? `${macroSupport.volumeRatio.toFixed(1)}× zone volume` : "Volume data unavailable", tone: supportQualityTone(macroSupport) },
-                  ].map((row) => (
-                    <div key={row.label} className="indicator-row" title={"title" in row ? row.title : undefined}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 110, flex: "0 0 auto" }}>
-                        <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(row.tone), boxShadow: `0 0 5px ${toneColor(row.tone)}66`, flex: "0 0 auto" }} />
-                        <span style={{ fontSize: 14, fontWeight: 700, color: "rgba(226,232,240,0.75)" }}>{row.label}</span>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: toneColor(row.tone) }}>{row.value}</span>
-                        <span style={{ fontSize: 13, opacity: 0.50, marginLeft: 8 }}>{row.sub}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Price levels &amp; signals</h2>
+                {/* #563 COWORK #68: the same figures as pictures, handed over as computed above. */}
+                <LevelsSignals
+                  last={lastClose}
+                  ma50={typeof lastMA50 === "number" ? lastMA50 : null}
+                  ma200={typeof lastMA200 === "number" ? lastMA200 : null}
+                  zone={macroSupport}
+                  zoneMissing="No repeated weekly support zone found"
+                  ma50Missing={closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : null}
+                  ma200Missing={closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : null}
+                  rsi={typeof lastRsi === "number" ? lastRsi : null}
+                  macdTone={macdLive.tone}
+                  macdBars={macdLive.bars}
+                  macdToday={macdLive.today}
+                  asOf={history.length ? history[history.length - 1].date : null}
+                  asOfPartial={!!(history[history.length - 1] as { partial?: boolean } | undefined)?.partial}
+                  credit={shownProvider === "tiingo" ? historyCredit : undefined}
+                />
               </section>
 
               {/* -- Valuation multiples (SEC filings, TTM) ----------- */}

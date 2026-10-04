@@ -17,18 +17,28 @@
 // needs no special case. Sat 3 Oct 2026: the day is Fri 2 Oct, the week opens
 // at Mon 28 Sep's open, the month at Thu 1 Oct's open.
 //
-// A CLOSED CANDLE ONLY. Tiingo's "today so far" bar (`partial: true`, from the
-// hourly pool row) is left out: the card says "as of the close on …", and a
-// session still trading has no close yet.
+// TODAY SO FAR, IN SESSION ONLY (owner ruling, #563 COWORK #75/#76; this
+// replaces #64's "closed candles only"). With the page's render time, Tiingo's
+// "today so far" bar (`partial: true`, from the hourly pool row) counts while
+// the market is open and the bar is really today's: the Day column is today so
+// far, and the week and month include it. Out of session (weekends, holidays,
+// pre-market, after the close, or a stale partial from an earlier day) it is
+// dropped and everything reads off the last completed session, "as of the
+// close on …". Without a render time: completed sessions only. lib/ta/
+// sessionBar.ts decides; nothing here invents a bar.
 //
 // NEVER A GUESSED LEVEL. A week or month whose first session may be missing
 // from the series (no bar on file before the period starts) is withheld with
 // its reason, as is a level whose bars lack the field it needs. The card shows
 // what it can and says why for the rest; it is never blank.
 
+import { liveBars } from "./sessionBar";
+
 /** A daily bar as the stock page holds it: `open`/`high`/`low` can be absent. */
 export type KeyBar = {
   date: string;
+  /** The partial bar's own label, "today so far (IEX), hh:mm ET". */
+  label?: string;
   close: number;
   open?: number;
   high?: number;
@@ -63,6 +73,8 @@ export type KeyLevels = {
   periods: PeriodLevels[];
   /** One line per withheld period or level, for under the grid. Empty when all shown. */
   reasons: string[];
+  /** Set when the latest bar is today's in-session partial: its own "hh:mm" (ET), or null if its label has none. */
+  live: { time: string | null } | null;
 };
 
 export const NO_BARS_REASON = "No daily prices are on file for this stock yet, so no levels can be shown.";
@@ -122,6 +134,19 @@ export function closedBars(bars: readonly KeyBar[] | null | undefined): KeyBar[]
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
+/**
+ * The bars a "now" reading uses: completed sessions, plus today's partial bar
+ * when `nowMs` (the page's render time) is in session and the bar is today's.
+ * Without `nowMs`, completed sessions only.
+ */
+export function sessionBars(bars: readonly KeyBar[] | null | undefined, nowMs?: number): { bars: KeyBar[]; time: string | null; live: boolean } {
+  if (nowMs === undefined) return { bars: closedBars(bars), time: null, live: false };
+  const l = liveBars(bars ?? [], nowMs);
+  const valid = l.bars.filter((b) => b && typeof b.date === "string" && ISO_DATE.test(b.date) && finite(b.close))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return { bars: valid, time: l.time, live: !!l.live && valid[valid.length - 1] === l.live };
+}
+
 const none = (reason: string): Level => ({ value: null, reason });
 
 /** O/H/L/C over `span` (the period's bars, oldest first), each with its reason if absent. */
@@ -156,8 +181,9 @@ function periodFrom(key: Exclude<PeriodKey, "day">, bars: readonly KeyBar[], sta
 }
 
 /** The day's, this week's and this month's levels from the latest closed candle. */
-export function keyLevels(bars: readonly KeyBar[] | null | undefined): KeyLevels {
-  const closed = closedBars(bars);
+export function keyLevels(bars: readonly KeyBar[] | null | undefined, opts: { nowMs?: number } = {}): KeyLevels {
+  const sess = sessionBars(bars, opts.nowMs);
+  const closed = sess.bars;
   if (!closed.length) {
     return {
       asOf: null,
@@ -165,6 +191,7 @@ export function keyLevels(bars: readonly KeyBar[] | null | undefined): KeyLevels
       lastClose: null,
       periods: (["day", "week", "month"] as const).map((k) => withheld(k, NO_BARS_REASON)),
       reasons: [NO_BARS_REASON],
+      live: null,
     };
   }
   const last = closed[closed.length - 1];
@@ -181,7 +208,7 @@ export function keyLevels(bars: readonly KeyBar[] | null | undefined): KeyLevels
       if (r && !reasons.includes(r)) reasons.push(r);
     }
   }
-  return { asOf: last.date, asOfWords: dateWords(last.date), lastClose: last.close, periods, reasons };
+  return { asOf: last.date, asOfWords: dateWords(last.date), lastClose: last.close, periods, reasons, live: sess.live ? { time: sess.time } : null };
 }
 
 /** "2.1% above", "0.4% below", or "at the last price". */
