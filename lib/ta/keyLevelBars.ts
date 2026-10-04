@@ -55,6 +55,29 @@ export type PrevMark = {
 /** A row's scale: the low–high range, stretched to take in a previous close outside it. */
 export type RowScale = { lo: number; hi: number };
 
+/** A row note's bullets, in this order; each with the card's own mark beside it. */
+export type RowBulletKey = "open" | "high" | "low" | "prev" | "gap" | "last";
+export type RowBullet = { key: RowBulletKey; label: string; text: string };
+export type RowNote = {
+  /** "Day", "Week", "Month". */
+  title: string;
+  /** "Fri 2 Oct", "from Mon 28 Sep", "today so far, 14:32 ET (IEX)". */
+  when: string;
+  /** "$233.60–$237.88" */
+  range: string;
+  tone: Tone;
+  bullets: RowBullet[];
+  /** "Above this period's open" / "Below …" / "Level with …"; null without an open. */
+  verdict: string | null;
+  /** What else is true and has no bullet: no range yet, a level not on file, the price outside the range. */
+  extra: string[];
+};
+export const VERDICT_WORDS: Record<Tone, string> = {
+  up: "Above this period's open",
+  down: "Below this period's open",
+  flat: "Level with this period's open",
+};
+
 export type BarRow = {
   key: PeriodKey;
   title: string;
@@ -76,7 +99,9 @@ export type BarRow = {
     prev: PrevMark | null;
     /** "330.61 – 334.54": the low and high, printed at the row's ends. */
     range: string;
-    /** The tap note: exact open/high/low, the previous close, each against the last price. */
+    /** The tap note (#563 COWORK #89): a header, one bullet per level, and the verdict. */
+    rowNote: RowNote;
+    /** The same note as plain text, one fact per sentence. */
     note: string;
   } | null;
   /** Why there is no bar, or null. */
@@ -133,10 +158,10 @@ export function prevMark(v: number, low: number, high: number, sc: RowScale = ro
 /** A price without its "$", for the small low–high labels: "330.61", "24,240". */
 export const bare = (v: number) => priceWords(v).replace(/^\$/, "");
 
-/** "$340.37, 2.0% above the last price" */
-function against(v: number, last: number): string {
+/** "$236.06 — 0.9% above the last price" (full), "$237.88 — 1.7% above" (short); "— at the last price" when level. */
+function from(v: number, last: number, full: boolean): string {
   const d = distanceWords(v, last);
-  return `${priceWords(v)}${d ? `, ${d === "at the last price" ? d : `${d} the last price`}` : ""}`;
+  return `${priceWords(v)}${d ? ` — ${d === "at the last price" ? d : full ? `${d} the last price` : d}` : ""}`;
 }
 
 /** "Mon 28 Sep": dateWords without the year. */
@@ -165,17 +190,39 @@ export function barRows(k: KeyLevels, last: number): BarRow[] {
     const prev = p.prevClose ? prevMark(p.prevClose.value, sp.low, sp.high, sc) : null;
     const raw = at(last);
     const outside = !flat && (last < sp.low ? "The last price is below this period's low." : last > sp.high ? "The last price is above this period's high." : "");
-    const prevDist = p.prevClose ? distanceWords(p.prevClose.value, last) : null;
-    const parts = [
+    // THE NOTE (#563 COWORK #89): each fact once, every distance from the last price.
+    const lastWhen = liveDay
+      ? (k.live!.phase === "afterClose" ? `the close${t ? `,${t}` : ""} (IEX)` : `today so far${t ? `,${t}` : ""} (IEX)`)
+      : k.asOf ? `the close on ${dayWords(k.asOf)}` : "the latest close";
+    const bullets: RowBullet[] = [];
+    if (isNum(open)) bullets.push({ key: "open", label: "Open", text: from(open, last, true) });
+    bullets.push({ key: "high", label: "High", text: from(sp.high, last, !isNum(open)) });
+    bullets.push({ key: "low", label: "Low", text: from(sp.low, last, false) });
+    if (p.prevClose) {
+      bullets.push({ key: "prev", label: PREV_WORDS[p.key], text: `${priceWords(p.prevClose.value)} (${dayWords(p.prevClose.date)})${distanceWords(p.prevClose.value, last) ? ` — ${distanceWords(p.prevClose.value, last)}` : ""}` });
+      if (prev?.gapWords) bullets.push({ key: "gap", label: "Gap", text: `the previous close is ${prev.gapWords.replace(/^prev close /, "")}` });
+    }
+    bullets.push({ key: "last", label: "Last price", text: `${priceWords(last)} — ${lastWhen}` });
+    const extra = [
       flat ? FLAT_RANGE_WORDS : "",
-      isNum(open) ? `Open ${against(open, last)}.` : p.levels.open.reason ?? "",
-      `High ${against(sp.high, last)}.`,
-      `Low ${against(sp.low, last)}.`,
-      p.prevClose
-        ? `${PREV_WORDS[p.key]} ${priceWords(p.prevClose.value)} (${dayWords(p.prevClose.date)})${prevDist ? ` · ${prevDist === "at the last price" ? prevDist : `${prevDist} the last price`}` : ""}.`
-        : p.prevReason ?? "",
-      isNum(open) ? `Opened at ${priceWords(open)} ${liveDay ? "today" : `on ${dayWords(p.from)}`}. ${TONE_WORDS[tone]}` : "",
+      isNum(open) ? "" : p.levels.open.reason ?? "",
+      p.prevClose ? "" : p.prevReason ?? "",
       outside || "",
+    ].filter(Boolean);
+    const rowNote: RowNote = {
+      title,
+      when: liveDay ? lastWhen.replace(/^the close/, "today, close") : p.key === "day" ? dayWords(p.from) : `from ${dayWords(p.from)}`,
+      range: flat ? priceWords(sp.low) : `${priceWords(sp.low)}–${priceWords(sp.high)}`,
+      tone,
+      bullets,
+      verdict: isNum(open) ? VERDICT_WORDS[tone] : null,
+      extra,
+    };
+    const parts = [
+      `${rowNote.title} · ${rowNote.when} · ${rowNote.range}.`,
+      ...bullets.map((b) => `${b.label} ${b.text}.`),
+      rowNote.verdict ? `${rowNote.verdict}.` : "",
+      ...extra,
     ].filter(Boolean);
     return {
       key: p.key,
@@ -190,6 +237,7 @@ export function barRows(k: KeyLevels, last: number): BarRow[] {
         tone,
         prev,
         range: `${bare(sp.low)} – ${bare(sp.high)}`,
+        rowNote,
         note: parts.join(" "),
       },
       reason: null,
