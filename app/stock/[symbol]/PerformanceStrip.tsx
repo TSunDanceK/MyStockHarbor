@@ -27,7 +27,8 @@ export default function PerformanceStrip({ strip, credit }: { strip: PerfStrip; 
                 <ReasonedValue text={c.pct === null ? "—" : `${arrow}${pctWords(c.pct)}`} reason={c.note} />
               </div>
               <div className="perfSpy" style={{ marginTop: 2, fontSize: 10.5, lineHeight: 1.3, color: C.muted }}>
-                {c.diffPts !== null ? spyWords(c.diffPts) : c.pct === null ? "" : "S&P 500: not on file"}
+                {/* No line against the S&P 500 on a page that is the S&P 500 (#563 COWORK #90). */}
+                {!strip.benchmark ? "" : c.diffPts !== null ? spyWords(c.diffPts) : c.pct === null ? "" : "S&P 500: not on file"}
               </div>
             </div>
           );

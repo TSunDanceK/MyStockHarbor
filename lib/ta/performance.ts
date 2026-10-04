@@ -61,6 +61,8 @@ export type PerfStrip = {
   end: number | null;
   /** Set when the end is today's IEX bar: its own "hh:mm" (ET), and whether the session is still running (#77). */
   live: { time: string | null; phase: "session" | "afterClose" } | null;
+  /** False on a page that is itself the S&P 500 (#563 COWORK #90): no second line against it. */
+  benchmark: boolean;
   chips: PerfChip[];
 };
 
@@ -110,11 +112,12 @@ const money = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigi
 export const PRICE_ONLY = "Price change only; dividends are not included. Past performance, not a forecast.";
 
 /** The strip, from the stock's daily bars and SPY's. */
-export function performanceStrip(bars: readonly KeyBar[] | null | undefined, spyBars: readonly KeyBar[] | null | undefined, nowMs?: number): PerfStrip {
+export function performanceStrip(bars: readonly KeyBar[] | null | undefined, spyBars: readonly KeyBar[] | null | undefined, nowMs?: number, opts: { benchmark?: boolean } = {}): PerfStrip {
+  const benchmark = opts.benchmark !== false;
   const u = usable(bars, nowMs);
   const s = u.bars;
   const spy = usable(spyBars, nowMs).bars;
-  if (!s.length) return { asOf: null, asOfWords: null, end: null, live: null, chips: [] };
+  if (!s.length) return { asOf: null, asOfWords: null, end: null, live: null, benchmark, chips: [] };
   const last = s[s.length - 1];
   // SPY ON THE SAME END DAY: a stock's today-so-far is never set against SPY's yesterday.
   const spyEndAny = closeOnOrBefore(spy, last.date);
@@ -135,6 +138,10 @@ export function performanceStrip(bars: readonly KeyBar[] | null | undefined, spy
     }
     const pct = pctChange(from.close, last.close);
     if (pct === null) return empty("The starting close isn't a usable price.");
+    if (!benchmark) {
+      const head = `From ${money(from.close)} (close, ${dateWords(from.date)}) to ${money(last.close)} (${endWords}): ${pctWords(pct)}.`;
+      return { key: p.key, pct, reason: null, from, spyPct: null, spyReason: null, diffPts: null, note: `${head} ${PRICE_ONLY}` };
+    }
     const spyFrom = closeOnOrBefore(spy, from.date);
     const spyPct = spyFrom && spyEnd ? pctChange(spyFrom.close, spyEnd.close) : null;
     const spyReason = spyPct === null ? (spyEndAny && !spyEnd ? "The S&P 500 (SPY) has no price for the same day on file yet." : "The S&P 500 (SPY) closes for these dates aren't on file.") : null;
@@ -145,5 +152,5 @@ export function performanceStrip(bars: readonly KeyBar[] | null | undefined, spy
       : ` ${spyReason}`;
     return { key: p.key, pct, reason: null, from, spyPct, spyReason, diffPts, note: `${head}${vs} ${PRICE_ONLY}` };
   });
-  return { asOf: last.date, asOfWords: dateWords(last.date), end: last.close, live: u.live ? { time: u.time, phase: u.phase ?? "session" } : null, chips };
+  return { asOf: last.date, asOfWords: dateWords(last.date), end: last.close, live: u.live ? { time: u.time, phase: u.phase ?? "session" } : null, benchmark, chips };
 }

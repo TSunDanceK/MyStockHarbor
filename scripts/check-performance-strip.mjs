@@ -71,7 +71,8 @@ async function measure(M) {
   const render = (strip, credit) => renderToStaticMarkup(React.createElement(M.PerformanceStrip, { strip, credit }));
   const fullHtml = render(full), listedHtml = render(listed);
   return { M, S, full, listed, gap, partial, noSpy, chip, fullHtml, fullText: visibleText(fullHtml), listedHtml, listedText: visibleText(listedHtml),
-    credited: visibleText(render(full, React.createElement("a", { href: "#" }, "Tiingo credit"))) };
+    credited: visibleText(render(full, React.createElement("a", { href: "#" }, "Tiingo credit"))),
+    self: M.performanceStrip(STOCK, SPY, undefined, { benchmark: false }), selfText: visibleText(render(M.performanceStrip(STOCK, SPY, undefined, { benchmark: false }))) };
 }
 
 // ── In session or not (#563 COWORK #75/#76) ─────────────────────────────────
@@ -125,6 +126,9 @@ const rules = {
       chip(noSpy, "1Y").spyPct === null && /aren't on file/.test(chip(noSpy, "1Y").spyReason);
   },
   "today so far is never the close": ({ partial }) => partial.asOf === "2026-10-02" && partial.end === at(STOCK, "2026-10-02"),
+  "on a page that is the S&P 500 (#563 COWORK #90): no line or note against it, the same changes": ({ self, full, selfText }) =>
+    self.benchmark === false && full.benchmark === true && !/S&P 500|SPY/.test(selfText) &&
+    self.chips.every((c, i) => c.pct === full.chips[i].pct && c.spyPct === null && c.diffPts === null && !/S&P 500|SPY/.test(c.note)),
   "the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once": ({ fullHtml, fullText }) =>
     (fullHtml.match(/class="perfChip"/g) ?? []).length === 6 && /▲ \+\d+\.\d%/.test(fullText) && !/▼/.test(fullText) &&
     /data-tone="up"/.test(fullHtml) && (fullHtml.match(/class="perfSpy"[^>]*>[\d.]+ pts (ahead of|behind) the S&amp;P 500</g) ?? []).length === 6 &&
@@ -167,8 +171,10 @@ const mutants = [
   ["the S&P 500: SPY's change on the same dates, the difference the right way round", "l", (s) => s.replace("const diffPts = spyPct === null ? null : pct - spyPct;", "const diffPts = spyPct === null ? null : spyPct - pct;")],
   ["the S&P 500: SPY's change on the same dates, the difference the right way round", "l", (s) => s.replace("const spyFrom = closeOnOrBefore(spy, from.date);", "const spyFrom = closeOnOrBefore(spy, monthsBefore(from.date, 1));")],
   ["today so far is never the close", "l", (s) => s.replace("{ bars: (bars ?? []).filter((b) => !b.partial), live: null, time: null, phase: null }", "{ bars: [...(bars ?? [])], live: null, time: null, phase: null }")],
+  ["on a page that is the S&P 500 (#563 COWORK #90): no line or note against it, the same changes", "c", (s) => s.replace('{!strip.benchmark ? "" : c.diffPts', "{c.diffPts")],
+  ["on a page that is the S&P 500 (#563 COWORK #90): no line or note against it, the same changes", "l", (s) => s.replace("    if (!benchmark) {", "    if (false) {")],
   ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace('const arrow = c.pct === null ? "" : c.pct > 0 ? "▲ " : c.pct < 0 ? "▼ " : "";', 'const arrow = "";')],
-  ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("{c.diffPts !== null ? spyWords(c.diffPts) :", "{c.diffPts !== null ? \"\" :")],
+  ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("c.diffPts !== null ? spyWords(c.diffPts) :", "c.diffPts !== null ? \"\" :")],
   ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("<>To the close on {strip.asOfWords}</>", "<>{strip.asOfWords}</>")],
   ["a tap note per chip: the exact dates and closes, hedged", "c", (s) => s.replace("reason={c.note}", "reason={null}")],
   ["a tap note per chip: the exact dates and closes, hedged", "l", (s) => s.replace("return { key: p.key, pct, reason: null, from, spyPct, spyReason, diffPts, note: `${head}${vs} ${PRICE_ONLY}` };", "return { key: p.key, pct, reason: null, from, spyPct, spyReason, diffPts, note: `${head}${vs}` };")],

@@ -292,7 +292,7 @@ const mutants = [
   ["videos: gated, FMP path kept after a Tiingo miss", (s) => s.replace("if (tiingo) return tiingo;", "return tiingo;")],
   ["videos: market cap and P/E through A's modules, not copied", (s) => s.replace("peRatio(valuation, surface.price)", "surface.price / 20")],
   ["news hero: gated, and the FMP title reads skipped only when Tiingo answered", (s) => s.replace('priceProviderFor("NEWS_HERO") !== "tiingo") return null', "false) return null")],
-  ["SPX: the linked credit under the chart", (s) => s.replace("<a href={TIINGO_URL}", "<span data-href={TIINGO_URL}")],
+  ["SPX: the linked credit under the chart", (s) => s.replaceAll("<a href={TIINGO_URL}", "<span data-href={TIINGO_URL}")],
   ["video page: the linked credit with the label", (s) => s.replace(/<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "{TIINGO_CREDIT}")],
   ["news hero: the label and the linked credit", (s) => s.replace("{heroPrice.label}", "")],
   ["SPX: the approved caption, shown only for SPY", (s) => s.replace("Levels quoted in the text refer to the S&amp;P 500 index.", "")],

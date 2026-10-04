@@ -1,0 +1,25 @@
+{
+  "asOf": "2026-10-02",
+  "indexClose": 7722.72,
+  "ath": { "level": 7798.99, "date": "2026-08-13" },
+  "oneLiner": "Up 0.73% on Friday after a weak September jobs report cut rate-hike odds; about 1% below the August 13 record close.",
+  "points": [
+    { "label": "Catalyst", "text": "September payrolls rose 29,000 against about 90,000 expected; October hike odds fell from about 64% to about 16%." },
+    { "label": "Breadth", "text": "September's gains were mostly technology (about +5%); financials, materials and REITs fell around 7% each." },
+    { "label": "Rates", "text": "The 10-year Treasury yield touched 5.297% on September 30, a 24-year high, before easing after the jobs data." }
+  ],
+  "breadth": { "pct200": null, "source": "Not in the 4 Oct weekly update", "date": "2026-10-04" },
+  "sentiment": { "fearGreed": 31, "label": "Fear", "source": "CNN Fear & Greed Index", "date": "2026-10-04" },
+  "watchDown": [
+    "A full week of closes below the 200-day average, rather than swings around it",
+    "The 10-year yield back above its late-September high near 5.3%",
+    "Breadth narrowing further, or Fear & Greed sliding deeper into fear",
+    "The soft jobs data proving a one-off, reviving rate-hike concerns"
+  ],
+  "watchUp": [
+    "A close above the 7,798.99 record, toward the 7,900–8,100 year-end targets from Yardeni, JPMorgan, Goldman Sachs and UBS",
+    "The 10-year yield easing further from its 24-year high",
+    "Financials, materials and REITs stabilising after a weak September",
+    "Nine straight weeks of net retail outflows coming to an end"
+  ]
+}
