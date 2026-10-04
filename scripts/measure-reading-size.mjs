@@ -12,9 +12,9 @@
 //                   AAPL earnings snapshot built from SEC's own figures
 //   /markets/spx    the SPX server page, with fixture SPY bars and a fixture
 //                   Market Mood series
-//   /stock/AAPL/earnings   A's page: REPORT-ONLY until A's PR lands
-//                   (#552 COWORK #153); it needs a stored SEC set, so when it
-//                   can't be rendered offline the report says so
+//   /stock/AAPL/earnings   A's page, ENFORCED since A's PR (#552 COWORK #153),
+//                   rendered from the committed AAPL fact-set fixture
+//                   (measure-stubs/sec-cold-fetch.mjs)
 // and checks each at 390 and 1280 px (and 320–430 px for sideways scroll and
 // content spilling out of its card). FAILS when a visible text node of six
 // words or more, or one ending in . ? !, computes under 16px outside an
@@ -39,6 +39,7 @@ process.env.MEASURE_STUBS = JSON.stringify({
   "@/lib/server/historyCache": "scripts/lib/measure-stubs/history-cache.mjs",
   "@/lib/server/marketData/read": "scripts/lib/measure-stubs/tiingo-read.mjs",
   "@/lib/server/marketMoodRead": "scripts/lib/measure-stubs/mood-read.mjs",
+  "@/lib/server/secColdFetch": "scripts/lib/measure-stubs/sec-cold-fetch.mjs",
 });
 process.env.PRICE_PROVIDER_SPX = "tiingo";
 delete process.env.UPSTASH_REDIS_REST_URL;
@@ -85,7 +86,7 @@ async function earningsPage() {
 const PAGES = [
   { name: "/stock/AAPL", render: stockPage, enforce: true },
   { name: "/markets/spx", render: spxPage, enforce: true },
-  { name: "/stock/AAPL/earnings", render: earningsPage, enforce: false },
+  { name: "/stock/AAPL/earnings", render: earningsPage, enforce: true },
 ];
 
 // ── the browser pass ────────────────────────────────────────────────────────
@@ -112,11 +113,10 @@ function scan() {
   return out;
 }
 
-/** Nodes inside A's components (data-reading-owner="a") are reported, not failed, until A's PR (#552 COWORK #153). */
+/** Every node is judged; A's components (data-reading-owner="a") are enforced since A's PR (#552 COWORK #153). */
 function judge(nodes, readMin = 16, floor = 12) {
   const bad = [];
   for (const x of nodes) {
-    if (x.a) continue;
     if (x.px < floor - 0.01) bad.push(`under ${floor}px (${x.px}px): "${x.text}" ${x.where}`);
     else if (x.sentence && !x.fine && x.px < readMin - 0.01) bad.push(`sentence under ${readMin}px (${x.px}px): "${x.text}" ${x.where}`);
   }

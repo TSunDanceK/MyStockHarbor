@@ -321,7 +321,7 @@ export default function DilutionHistory({
       </p>
 
       {headline ? (
-        <div style={{ marginTop: 14, fontSize: 14, fontWeight: 800, lineHeight: 1.4, color: trendColor }} data-share-headline="">
+        <div style={{ marginTop: 14, fontSize: "var(--fs-read)", fontWeight: 800, lineHeight: "var(--lh-read)", color: trendColor }} data-share-headline="">
           {headline}
         </div>
       ) : null}
@@ -355,7 +355,7 @@ export default function DilutionHistory({
             </g>
           ))}
           {gapLabels.map((g) => (
-            <text key={`gap-${g.key}`} x={g.x} y={padTop + plotH / 2} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="middle" data-share-gap="">
+            <text key={`gap-${g.key}`} x={g.x} y={padTop + plotH / 2} fontSize="0.75rem" fill="rgba(203,213,225,0.55)" textAnchor="middle" data-share-gap="">
               no filing data
             </text>
           ))}
@@ -366,14 +366,14 @@ export default function DilutionHistory({
             </circle>
           ))}
           {axisTicks.map((t, i) => (
-            <text key={`axis-${i}`} x={width - 2} y={t.y + 4} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="end">
+            <text key={`axis-${i}`} x={width - 2} y={t.y + 4} fontSize="0.75rem" fill="rgba(203,213,225,0.55)" textAnchor="end">
               {fmtShares(t.v)}
             </text>
           ))}
-          <text x={padX} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)">
+          <text x={padX} y={height - 8} fontSize="0.75rem" fill="rgba(203,213,225,0.55)">
             {fmtDateShort(first.date)}
           </text>
-          <text x={padX + plotW} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="end">
+          <text x={padX + plotW} y={height - 8} fontSize="0.75rem" fill="rgba(203,213,225,0.55)" textAnchor="end">
             {fmtDateShort(last.date)}
           </text>
         </svg>
@@ -393,9 +393,9 @@ export default function DilutionHistory({
           <div style={{ ...cellValueStyle, color: trendColor }}>
             {threePct === null ? "—" : formatShareChange(threePct)}
           </div>
-          <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4, color: "rgba(203,213,225,0.72)" }}>{trend.label}</div>
+          <div style={{ marginTop: 4, fontSize: "var(--fs-label)", lineHeight: 1.4, color: "rgba(203,213,225,0.72)" }}>{trend.label}</div>
           {threeWindow ? (
-            <div style={{ marginTop: 2, fontSize: 12, lineHeight: 1.4, color: "rgba(203,213,225,0.55)" }} data-share-three-window="">
+            <div style={{ marginTop: 2, fontSize: "var(--fs-fine)", lineHeight: 1.4, color: "rgba(203,213,225,0.55)" }} data-fine-print="" data-share-three-window="">
               {threeWindow}
             </div>
           ) : null}
@@ -406,7 +406,7 @@ export default function DilutionHistory({
         </div>
       </div>
 
-      <div style={sourceStyle}>
+      <div style={sourceStyle} data-fine-print="">
         {data?.basis === "annual+quarters" ? (
           // THE BASIS, SAID (#552 COWORK #136): quarterly averages plus
           // fiscal-year averages, which fill the year-ends no quarter covers.
@@ -457,11 +457,11 @@ export default function DilutionHistory({
   );
 }
 
-const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
-const headingStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
-const embeddedHeadingStyle: CSSProperties = { margin: 0, fontSize: 17, lineHeight: 1.2, letterSpacing: "-0.02em", fontWeight: 700 };
-const subStyle: CSSProperties = { marginTop: 10, marginBottom: 0, fontSize: 14, lineHeight: 1.7, color: "rgba(241,245,249,0.72)", maxWidth: 760 };
+const eyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
+const headingStyle: CSSProperties = { margin: 0, fontSize: "1.375rem", lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
+const embeddedHeadingStyle: CSSProperties = { margin: 0, fontSize: "1.0625rem", lineHeight: 1.2, letterSpacing: "-0.02em", fontWeight: 700 };
+const subStyle: CSSProperties = { marginTop: 10, marginBottom: 0, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)", maxWidth: 760 };
 const cellStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", minWidth: 0 };
-const cellLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
-const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: 14, fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
-const sourceStyle: CSSProperties = { marginTop: 12, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.55)" };
+const cellLabelStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
+const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: "0.875rem", fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
+const sourceStyle: CSSProperties = { marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(203,213,225,0.55)" };
