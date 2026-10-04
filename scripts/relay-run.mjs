@@ -1370,6 +1370,8 @@ const TASKS = {
   "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
   // READS ONLY: the fair value gap census (Relay B, #553 COWORK #140). GET + ~260 MGET.
   "write-fvg-census": { script: "scripts/fvg-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY: the stretch (z-score) vs RSI study (Relay B, #553 COWORK #141). GET + HGETALL + ~260 MGET.
+  "write-stretch-study": { script: "scripts/stretch-study.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
