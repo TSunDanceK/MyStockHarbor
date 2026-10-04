@@ -1351,6 +1351,8 @@ const TASKS = {
   "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
   // READS ONLY: which margin the Growth & margins chart draws across the universe (#563 COWORK #71). ~105 MGET.
   "write-margin-kind-census": { script: "scripts/margin-kind-census.mjs", args: () => [], writes: true },
+  // READS ONLY: the confluence ladder's census before the build (#563 COWORK #83 §4). GET + ~110 MGET.
+  "write-confluence-census": { script: "scripts/confluence-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
