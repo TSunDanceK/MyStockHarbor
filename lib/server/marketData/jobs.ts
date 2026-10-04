@@ -29,6 +29,7 @@
 // The bulk file is fetched first, but ONLY as the gate that tonight's date has
 // landed; its rows are not stored. If it has not landed, the run stops and the
 // 02:45 retry tries again. A night already complete is skipped (1 GET).
+import { inflateRawSync } from "node:zlib";
 import { revalidateTag } from "next/cache";
 import { Redis } from "@upstash/redis";
 import { PRICE_POOL_KEY } from "../pricePool";
@@ -44,9 +45,15 @@ import {
   TIINGO_QUOTES_META_FIELD,
   TIINGO_QUOTES_TTL_SECONDS,
   TIINGO_UNIVERSE_KEY,
+  TIINGO_REQUESTED_KEY,
+  TIINGO_SUPPORTED_KEY,
+  TIINGO_SUPPORTED_MARKER,
+  TIINGO_SUPPORTED_TTL_SECONDS,
+  TIINGO_COLD_NODATA_KEY,
   tiingoEodKey,
 } from "./keys";
 import { eodLastRow } from "./eodLast";
+import { EOD_WINDOW_BARS, EOD_MIN_BARS, eodStartDate } from "./eodWindow";
 import { parseTiingoUniverse } from "../tiingoUniverse";
 import {
   TiingoHttpError,
@@ -54,15 +61,17 @@ import {
   fetchEodHistory,
   fetchEodLanded,
   fetchIexQuotes,
+  fetchSupportedTickers,
   reserveTiingoRequests,
   tiingoCallRefusal,
 } from "./tiingo";
 import type { EodBar, StoredEod } from "./types";
+import type { SupportedTickerRow } from "./tiingo";
 import { isDebtListing, retickeredOut } from "./universe";
 import { isPriceExcluded } from "../../priceExcluded.mjs";
 import { loadTickerMap } from "../secTickerMap";
 import { readLastSeenCiks } from "../secListing";
-import { lookupBySpelling } from "../../symbolSpellings.mjs";
+import { lookupBySpelling, toDashed } from "../../symbolSpellings.mjs";
 import { pctOfRequestLimit } from "../chunkByBytes";
 
 /**
@@ -73,27 +82,9 @@ import { pctOfRequestLimit } from "../chunkByBytes";
  */
 export const QUOTE_CADENCE_MINUTES = 15;
 
-/**
- * The window we keep, as today's FMP history does: MAX_CACHED_HISTORY_DAYS is a
- * BAR count (1,400 sessions), not calendar days.
- *
- * FIXED 2026-09-30 (#553 step 2). This read 1,400 CALENDAR days, about 960
- * bars. The step 2 parity run caught it: Weekly MA200 (200 weekly closes) went
- * 39 -> 0 on Tiingo's bars, and the all-time-high screens saw a shorter past.
- * So the request now covers EOD_WINDOW_BARS sessions (252 a year, plus 2%) and
- * the stored series keeps the last EOD_WINDOW_BARS of them.
- */
-export const EOD_WINDOW_BARS = 1400;
-export const EOD_WINDOW_DAYS = Math.ceil(((EOD_WINDOW_BARS * 365.25) / 252) * 1.02);
-/**
- * Fewer bars than this is not a history, and is not stored (mirrors
- * historyCache's MIN_QUALIFIED_POINTS). Measured on the first night
- * (2026-09-26, CODE-B #50): Tiingo answered BK with 5 rows since 2022 and the
- * job stored them as BK's history, which a chart or MA200 would have read as
- * the whole record. A short answer now deletes the key instead, so a reader
- * falls back to FMP rather than to a truncated series.
- */
-export const EOD_MIN_BARS = 30;
+// The stored window (EOD_WINDOW_BARS / _DAYS, EOD_MIN_BARS, eodStartDate) lives
+// in eodWindow.ts, shared with the stock-page cold fill; re-exported here.
+export { EOD_WINDOW_BARS, EOD_WINDOW_DAYS, EOD_MIN_BARS, eodStartDate } from "./eodWindow";
 /** A night is "landed" when at least this share of the universe has tonight's date in the bulk file. */
 export const EOD_LANDED_SHARE = 0.9;
 const EOD_CONCURRENCY = 8;
@@ -130,7 +121,12 @@ async function universe(): Promise<{ symbols: string[]; retickered: string[]; re
   const stored = parseTiingoUniverse(await mustRedis().get<unknown>(TIINGO_UNIVERSE_KEY));
   const keys = stored ? stored.symbols : await mustRedis().hkeys(PRICE_POOL_KEY);
   const universeSource = stored ? "tiingo-universe" : "pool-hkeys";
-  const pool = [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
+  // THE COLD-FILLED SYMBOLS (#553 COWORK #121 §4): kept fresh while people view
+  // them, capped at 1,000 and dropped after 30 days unviewed (coldFill.ts).
+  // 1 ZRANGE; an unreadable set just leaves them out of this run.
+  const requestedRaw = await mustRedis().zrange<string[]>(TIINGO_REQUESTED_KEY, 0, -1).catch(() => [] as string[]);
+  const requested = Array.isArray(requestedRaw) ? requestedRaw : [];
+  const pool = [...new Set([...keys, ...requested].map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
     .filter((s) => !isDebtListing(s) && !isPriceExcluded(s))
     .sort();
   const live = loadTickerMap();
@@ -187,10 +183,6 @@ export async function runTiingoQuotes(nowMs = Date.now()) {
 }
 
 // ── nightly ─────────────────────────────────────────────────────────────────
-
-export function eodStartDate(nowMs: number): string {
-  return new Date(nowMs - EOD_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
-}
 
 /** Tonight's date has landed for enough of the universe. Exported for the checks. */
 export function eodLanded(counts: Map<string, number>, expected: string, universeSize: number): boolean {
@@ -447,4 +439,67 @@ export function runSummary(result: Record<string, unknown>): Record<string, stri
     out[k] = v === null || v === undefined ? null : typeof v === "object" ? JSON.stringify(v) : (v as string | number | boolean);
   }
   return out;
+}
+
+// ── supported tickers (daily) ───────────────────────────────────────────────
+// THE COLD FILL'S ADMISSION LIST (#553 COWORK #121 §2): only a ticker Tiingo
+// carries may cost a cold-fill call, so random strings never do. Tiingo's own
+// daily file, filtered to what a US stock page can show: USD-priced stocks and
+// ETFs still trading (an endDate within SUPPORTED_RECENT_DAYS).
+
+/** A ticker whose endDate is older than this is treated as no longer trading. */
+export const SUPPORTED_RECENT_DAYS = 14;
+/** Fewer rows than this after the filter is a bad file, not a list: keep yesterday's. */
+export const SUPPORTED_MIN_ROWS = 5_000;
+const SUPPORTED_SADD_CHUNK = 5_000;
+
+/** Pure: the symbols to keep, in our dashed upper-case spelling. Exported for the checks. */
+export function supportedSymbols(rows: SupportedTickerRow[], nowMs: number): string[] {
+  const since = new Date(nowMs - SUPPORTED_RECENT_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const out = new Set<string>();
+  for (const r of rows) {
+    if (r.priceCurrency !== "USD") continue;
+    if (r.assetType !== "Stock" && r.assetType !== "ETF") continue;
+    if (!r.endDate || r.endDate < since) continue;
+    const sym = r.ticker.trim().toUpperCase();
+    if (/^[A-Z0-9][A-Z0-9.-]{0,9}$/.test(sym)) out.add(toDashed(sym));
+  }
+  return [...out].sort();
+}
+
+/**
+ * Replace msh:tiingo:supported:v1 whole: build a temp set, then RENAME over the
+ * live one (so a reader never sees half a list), EXPIRE, and clear the no-data
+ * set (a symbol Tiingo answered empty for gets one more try a day). 1 Tiingo
+ * request; Redis: DEL + ceil(n/5,000) SADD + 1 SADD marker + RENAME + EXPIRE +
+ * DEL, ~12 commands a run at ~30,000 symbols.
+ */
+export async function runTiingoSupported(nowMs = Date.now()) {
+  // The one job also allowed on Preview (#553 COWORK #127): see tiingo.ts.
+  const refusal = tiingoCallRefusal(process.env, "supported-list");
+  if (refusal) return { ok: true, skipped: `tiingo: ${refusal}` };
+  let fetched;
+  try {
+    fetched = await fetchSupportedTickers((b) => inflateRawSync(b), nowMs);
+  } catch (err) {
+    const r = refusalResult(err);
+    if (r) return r;
+    throw err;
+  }
+  const symbols = supportedSymbols(fetched.rows, nowMs);
+  if (symbols.length < SUPPORTED_MIN_ROWS) {
+    return { ok: false, error: "too few supported symbols; kept the stored list", rows: fetched.rows.length, kept: symbols.length };
+  }
+  const r = mustRedis();
+  const tmp = `${TIINGO_SUPPORTED_KEY}:building`;
+  await r.del(tmp);
+  for (let i = 0; i < symbols.length; i += SUPPORTED_SADD_CHUNK) {
+    const chunk = symbols.slice(i, i + SUPPORTED_SADD_CHUNK);
+    await r.sadd(tmp, chunk[0], ...chunk.slice(1));
+  }
+  await r.sadd(tmp, TIINGO_SUPPORTED_MARKER);
+  await r.rename(tmp, TIINGO_SUPPORTED_KEY);
+  await r.expire(TIINGO_SUPPORTED_KEY, TIINGO_SUPPORTED_TTL_SECONDS);
+  await r.del(TIINGO_COLD_NODATA_KEY);
+  return { ok: true, rows: fetched.rows.length, symbols: symbols.length, bytesDownloaded: fetched.bytes };
 }

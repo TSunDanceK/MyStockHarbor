@@ -91,6 +91,14 @@
     {
       "path": "/api/jobs/tiingo-eod",
       "schedule": "45 0,2 * * *"
+    },
+    {
+      "path": "/api/jobs/tiingo-supported",
+      "schedule": "25 3 * * *"
+    },
+    {
+      "path": "/api/jobs/tiingo-cold-queue",
+      "schedule": "3-59/10 * * * *"
     }
   ]
 }

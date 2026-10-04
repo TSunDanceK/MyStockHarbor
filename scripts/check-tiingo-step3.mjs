@@ -590,7 +590,8 @@ const MUTANTS = [
   ["a CSV download from /api/history", FILES.route, /: getCacheControlHeader\(\),/, ': getCacheControlHeader(), "Content-Disposition": "attachment; filename=history.csv",'],
   ["/api/history on the CHARTS gate", FILES.route, /historyForSurface\("HISTORY", /, 'historyForSurface("CHARTS", '],
   ["/api/history's monthly roll-up dropped", FILES.route, /const points = carryPartialLabel\(daily, aggregate\(daily, interval\)\);/, "const points = daily;"],
-  ["the stock page's metadata read left on FMP", FILES.stockPage, /historyForSurface\("CHARTS", upper, \(\) => getDailyHistory\(upper, \{ caller: "stock-page" \}\)\)/, 'getDailyHistory(upper, { caller: "stock-page" })'],
+  // The read now carries the cold-fill option (#553 COWORK #121), so the mutant takes the whole call.
+  ["the stock page's metadata read left on FMP", FILES.stockPage, /historyForSurface\("CHARTS", upper, \(\) => getDailyHistory\(upper, \{ caller: "stock-page" \}\), \{[\s\S]*?\}\)/, 'getDailyHistory(upper, { caller: "stock-page" })'],
   ["the stock page hands the credit down whatever the provider", FILES.stockPage, /historyResult\.provider === "tiingo" \|\| historyOnTiingo\("HISTORY"\) \?/, "true ?"],
   ["the stock page passes no seed provider", FILES.stockPage, /historyProvider=\{historyResult\.provider\}/, ""],
   ["the stock chart credited by the seed, not the provider (COWORK #103)", FILES.stockClient, /credit=\{shownProvider === "tiingo" \? historyCredit : null\}/, "credit={seededHistory ? historyCredit : null}"],

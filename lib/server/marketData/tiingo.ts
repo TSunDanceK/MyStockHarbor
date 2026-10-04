@@ -11,6 +11,17 @@
 // production's stores, so tiingoCallRefusal() refuses anything that is not a
 // production runtime, and refuses `next build` outright.
 //
+// ONE CARVE-OUT EACH, BOTH OWNER-APPROVED (#553 COWORK #121/#123):
+//   * WHO: besides the jobs, the stock-page cold fill
+//     (lib/server/marketData/coldFill.ts) may call here, behind its own gates
+//     (supported list, visitor cap, BotID, global caps, lock).
+//   * WHERE: that path (`"cold-fill"`) may also run on Preview, through the
+//     same limiter and caps, so it can be accepted on a preview. So may the
+//     tiingo-supported job's one daily download (`"supported-list"`, #553
+//     COWORK #127): the cold fill's admission list, a static file rather than an
+//     API query, without which a preview's cold fills all refuse. Every other
+//     call (`"job"`, the default) stays production-only.
+//
 // THE LIMITER COUNTS REQUESTS ITSELF, AND FAILS CLOSED. Tiingo sends no
 // rate-limit headers at all (CODE-B #47: none on any of 27 responses), so the
 // only meter is ours. Caps are 80% of the contract's 20,000/hour and
@@ -21,6 +32,7 @@
 // NOTHING HERE STORES ANYTHING. Callers (jobs.ts) decide what is written, under
 // the msh:tiingo: prefix that scripts/tiingo-purge.mjs lists and deletes (§7).
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "../redisCacheMode";
 import { toTiingo } from "../../symbolSpellings.mjs";
 import type { EodBar, StoredQuote } from "./types";
 
@@ -50,16 +62,30 @@ export class TiingoHttpError extends Error {
   }
 }
 
+/** Which caller is asking: the scheduled jobs, or the stock-page cold fill (see the header). */
+export type TiingoCallPath = "job" | "cold-fill" | "supported-list";
+
+/** The paths that may also run on Preview (owner rulings, #553 COWORK #123 and #127). */
+const PREVIEW_PATHS: ReadonlySet<TiingoCallPath> = new Set(["cold-fill", "supported-list"]);
+
 /** Why a Tiingo call may not run here, or null when it may. */
-export function tiingoCallRefusal(env: Record<string, string | undefined> = process.env): string | null {
+export function tiingoCallRefusal(
+  env: Record<string, string | undefined> = process.env,
+  path: TiingoCallPath = "job"
+): string | null {
   if (env.NEXT_PHASE === "phase-production-build") return "next build";
-  if (env.VERCEL_ENV !== "production") return `not production (${env.VERCEL_ENV ?? "unset"})`;
+  const allowed = env.VERCEL_ENV === "production" || (PREVIEW_PATHS.has(path) && env.VERCEL_ENV === "preview");
+  if (!allowed) return `not production (${env.VERCEL_ENV ?? "unset"})`;
   if (!env.TIINGO_API_KEY) return "no key";
   return null;
 }
 
+// PAGE_READ_CACHE because the stock page now reaches this module through the
+// cold-fill server action (#553 COWORK #121), and check-page-read-cache counts
+// that as page-reachable. The limiter's INCRBY/EXPIRE are POSTs, which no
+// cache mode stores, so this changes nothing about what the limiter counts.
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv({ ...PAGE_READ_CACHE }) : null;
 
 function hourAndDay(nowMs: number) {
   const iso = new Date(nowMs).toISOString();
@@ -70,8 +96,12 @@ function hourAndDay(nowMs: number) {
  * Reserve `n` requests against both caps. 4 commands (one pipeline).
  * Throws TiingoRefused when over a cap, on any Redis error, or with no Redis.
  */
-export async function reserveTiingoRequests(n: number, nowMs = Date.now()): Promise<{ hour: number; day: number }> {
-  const refusal = tiingoCallRefusal();
+export async function reserveTiingoRequests(
+  n: number,
+  nowMs = Date.now(),
+  path: TiingoCallPath = "job"
+): Promise<{ hour: number; day: number }> {
+  const refusal = tiingoCallRefusal(process.env, path);
   if (refusal) throw new TiingoRefused(refusal);
   if (!redis) throw new TiingoRefused("no redis for the limiter");
   const { hour, day } = hourAndDay(nowMs);
@@ -97,12 +127,17 @@ export async function reserveTiingoRequests(n: number, nowMs = Date.now()): Prom
 }
 
 /** One request. Callers reserve first; this only refuses where calls may not run. */
-async function tiingoGet(pathAndQuery: string, what: string): Promise<{ text: string; bytes: number }> {
-  const refusal = tiingoCallRefusal();
+async function tiingoGet(
+  pathAndQuery: string,
+  what: string,
+  opts: { path?: TiingoCallPath; signal?: AbortSignal } = {}
+): Promise<{ text: string; bytes: number }> {
+  const refusal = tiingoCallRefusal(process.env, opts.path ?? "job");
   if (refusal) throw new TiingoRefused(refusal);
   const res = await fetch(`${API}${pathAndQuery}`, {
     headers: { Authorization: `Token ${process.env.TIINGO_API_KEY}`, "Content-Type": "application/json" },
     cache: "no-store",
+    signal: opts.signal,
   });
   const text = await res.text();
   if (res.status !== 200) throw new TiingoHttpError(res.status, what);
@@ -235,9 +270,83 @@ export async function fetchEodLanded(nowMs = Date.now()): Promise<{ counts: Map<
   return { counts, bytes: r.bytes };
 }
 
-/** One symbol's adjusted daily bars since `startDate`. The CALLER reserves (in blocks). */
-export async function fetchEodHistory(symbol: string, startDate: string): Promise<{ bars: EodBar[]; bytes: number }> {
+/**
+ * One symbol's adjusted daily bars since `startDate`. The CALLER reserves (in
+ * blocks). `opts.path` is "cold-fill" only from coldFill.ts; `opts.signal`
+ * bounds the request (the cold fill's 3 s timeout).
+ */
+export async function fetchEodHistory(
+  symbol: string,
+  startDate: string,
+  opts: { path?: TiingoCallPath; signal?: AbortSignal } = {}
+): Promise<{ bars: EodBar[]; bytes: number }> {
   const t = toTiingo(symbol);
-  const r = await tiingoGet(`/tiingo/daily/${encodeURIComponent(t)}/prices?format=csv&startDate=${startDate}`, "eod history");
+  const r = await tiingoGet(`/tiingo/daily/${encodeURIComponent(t)}/prices?format=csv&startDate=${startDate}`, "eod history", opts);
   return { bars: parseEodCsv(r.text), bytes: r.bytes };
+}
+
+// ── supported tickers (the tiingo-supported job) ─────────────────────────────
+
+/** Tiingo's daily list of every ticker it carries: a zip holding one CSV. */
+const SUPPORTED_TICKERS_URL = "https://apimedia.tiingo.com/docs/tiingo/daily/supported_tickers.zip";
+
+/**
+ * Pure: the first file in a zip, inflated. Reads the central directory (the
+ * local headers may defer their sizes to a data descriptor). Stored (0) and
+ * deflate (8) only; anything else throws. Exported for the checks.
+ */
+export function firstZipEntry(zip: Buffer, inflateRaw: (b: Buffer) => Buffer): Buffer {
+  let eocd = -1;
+  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 22 - 65_535); i--) {
+    if (zip.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("zip: no end of central directory");
+  const cd = zip.readUInt32LE(eocd + 16);
+  if (zip.readUInt32LE(cd) !== 0x02014b50) throw new Error("zip: bad central directory");
+  const method = zip.readUInt16LE(cd + 10);
+  const size = zip.readUInt32LE(cd + 20);
+  const local = zip.readUInt32LE(cd + 42);
+  if (zip.readUInt32LE(local) !== 0x04034b50) throw new Error("zip: bad local header");
+  const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+  const body = zip.subarray(start, start + size);
+  if (method === 0) return Buffer.from(body);
+  if (method === 8) return inflateRaw(body);
+  throw new Error(`zip: method ${method}`);
+}
+
+export type SupportedTickerRow = { ticker: string; exchange: string; assetType: string; priceCurrency: string; endDate: string };
+
+/** Pure: the CSV's rows (ticker,exchange,assetType,priceCurrency,startDate,endDate). Exported for the checks. */
+export function parseSupportedTickers(csv: string): SupportedTickerRow[] {
+  const lines = csv.split(/\r?\n/).filter(Boolean);
+  const h = csvFields(lines[0] ?? "").map((f) => f.trim());
+  const at = (n: string) => h.indexOf(n);
+  const [iT, iX, iA, iP, iE] = [at("ticker"), at("exchange"), at("assetType"), at("priceCurrency"), at("endDate")];
+  if ([iT, iX, iA, iP, iE].some((i) => i < 0)) return [];
+  const out: SupportedTickerRow[] = [];
+  for (const line of lines.slice(1)) {
+    const f = csvFields(line);
+    out.push({
+      ticker: String(f[iT] ?? "").trim(),
+      exchange: String(f[iX] ?? "").trim(),
+      assetType: String(f[iA] ?? "").trim(),
+      priceCurrency: String(f[iP] ?? "").trim(),
+      endDate: String(f[iE] ?? "").trim().slice(0, 10),
+    });
+  }
+  return out;
+}
+
+/** The supported-tickers list. 1 request, reserved here. */
+export async function fetchSupportedTickers(
+  inflateRaw: (b: Buffer) => Buffer,
+  nowMs = Date.now()
+): Promise<{ rows: SupportedTickerRow[]; bytes: number }> {
+  await reserveTiingoRequests(1, nowMs, "supported-list");
+  const refusal = tiingoCallRefusal(process.env, "supported-list");
+  if (refusal) throw new TiingoRefused(refusal);
+  const res = await fetch(SUPPORTED_TICKERS_URL, { cache: "no-store" });
+  if (res.status !== 200) throw new TiingoHttpError(res.status, "supported tickers");
+  const zip = Buffer.from(await res.arrayBuffer());
+  return { rows: parseSupportedTickers(firstZipEntry(zip, inflateRaw).toString("utf8")), bytes: zip.length };
 }

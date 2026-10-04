@@ -118,6 +118,12 @@ export const JOBS = {
   // 00:45 is after Tiingo's evening corrections; 02:45 retries a night whose
   // date had not landed, and is one GET when the first run completed.
   "tiingo-eod": { label: "Tiingo EOD history re-pull (daily 00:45, retry 02:45)", instrumented: true, cron: "45 0,2 * * *" },
+  // The stock-page cold fill (#553 COWORK #121/#123). Tiingo's supported-ticker
+  // list, the cold fill's admission set, daily after the EOD retry.
+  "tiingo-supported": { label: "Tiingo supported-ticker list (daily 03:25)", instrumented: true, cron: "25 3 * * *" },
+  // Fills symbols the cold fill queued (crawlers, capped visitors, timeouts),
+  // around the clock, so "it may take a few minutes" holds at night too.
+  "tiingo-cold-queue": { label: "Tiingo cold-fill queue (every 10 min from :03)", instrumented: true, cron: "3-59/10 * * * *" },
 } as const;
 
 /**

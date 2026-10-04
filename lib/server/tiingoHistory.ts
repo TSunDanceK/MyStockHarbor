@@ -99,6 +99,12 @@ export async function readTiingoHistoryPoints(
 export type HistoryForSurfaceDeps = {
   env?: Record<string, string | undefined>;
   readInputs?: (symbol: string) => Promise<Inputs>;
+  /**
+   * On a Tiingo miss, skip the FMP leg when this says so (#553 COWORK #121
+   * §6): the stock page passes "is this a cold symbol the Tiingo cold fill
+   * will store?", and renders "being prepared" instead of FMP's bars.
+   */
+  skipFmp?: () => Promise<boolean>;
 };
 
 /**
@@ -120,6 +126,7 @@ export async function historyForSurface(
   const tiingo = await readTiingoHistoryPoints(symbol, deps.readInputs);
   if (tiingo) return { points: tiingo, provider: "tiingo" };
   if (!env.FMP_API_KEY) return { points: [], provider: "none" };
+  if (deps.skipFmp && (await deps.skipFmp().catch(() => false))) return { points: [], provider: "none" };
   return { points: await fmp(), provider: "fmp" };
 }
 

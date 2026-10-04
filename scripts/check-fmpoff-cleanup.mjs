@@ -298,6 +298,9 @@ async function runFetchQuote(src, { provider, key, tiingo, fmp }) {
     `const __q = globalThis.__FMPOFF_QUOTE__;\n` +
     `const priceProviderFor = (s) => (s === "STOCK_PAGE" ? __q.provider : "fmp");\n` +
     `const readTiingoQuote = async () => __q.tiingo;\n` +
+    // #553 COWORK #121: a cold Tiingo symbol skips FMP; these runs are not cold.
+    `const isColdTiingoCandidate = async () => false;\n` +
+    `const EMPTY_QUOTE = { price: null };\n` +
     `const fmpFetch = async () => __q.fmp();\n` +
     `const toDashed = (s) => s;\n` +
     `type InitialQuote = any; type QuoteOutcome = string;\n` +
