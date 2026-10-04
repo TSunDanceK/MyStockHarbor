@@ -20,6 +20,7 @@
 // COPY IS DESCRIPTIVE: areas some traders watch, a description, not a forecast.
 import type { CSSProperties, ReactNode } from "react";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
+import { ESTIMATE_SIGN } from "@/app/components/estimateMark";
 import { priceWords, type KeyBar } from "@/lib/ta/keyLevels";
 import {
   CONFLUENCE_NOTE, ZONE_LADDER_HEIGHT, confluence, countWords, ladderTop, rangeWords, zoneDistance, zoneLadder, zoneNote,
@@ -36,8 +37,9 @@ export const ZONE_LABEL_OFFSET = 24;
 const ZONE_LEADER_GAP = 4;
 const BAND_HALF = 11;
 
+/** "≈" is A's estimate mark (app/components/estimateMark.ts): a projection is derived, not filed. */
 export const ZONES_KEY =
-  "Band: a zone's lowest to highest level · dot: the last price · tap a zone's count for its levels; ≈ marks a one-session projection.";
+  `Band: a zone's lowest to highest level · dot: the last price · tap a zone's count for its levels; ${ESTIMATE_SIGN} marks a one-session projection.`;
 
 const C = {
   label: "rgba(147,197,253,0.82)",

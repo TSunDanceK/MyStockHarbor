@@ -35,6 +35,7 @@
 // COPY IS DESCRIPTIVE: areas some traders watch, a description, not a
 // forecast. Nothing here says a level will hold, or what a reader should do.
 import { closedBars, dateWords, keyLevels, monthStart, isoWeekMonday, priceWords, type KeyBar, type PeriodKey } from "./keyLevels";
+import { ESTIMATE_SIGN } from "../../app/components/estimateMark";
 import { emaSeries } from "./macdSeries";
 import { stackLabels } from "./priceLadder";
 import { liveBars } from "./sessionBar";
@@ -431,7 +432,7 @@ export function zoneDistance(z: Zone, price: number): string {
 export function zoneNote(z: Zone): string {
   const lines = z.members.map((m) => {
     const names = m.labels.join(" · ");
-    if (m.tier === "projection") return `≈ ${priceWords(m.value)}: ${m.derived} (a one-session projection).`;
+    if (m.tier === "projection") return `${ESTIMATE_SIGN} ${priceWords(m.value)}: ${m.derived} (a one-session projection).`;
     return `${names} ${priceWords(m.value)}${m.date ? ` (${dateWords(m.date).replace(/ \d{4}$/, "")})` : ""}.`;
   });
   const shared = z.members.filter((m) => m.labels.length > 1).length;

@@ -20,6 +20,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { reasonedValueUnit } from "./lib/render-cards.mjs";
 import { grabFunction } from "./lib/earnings-plan.mjs";
+import { stripComments } from "./lib/source-code.mjs";
 
 const LIB = "lib/ta/confluence.ts", CARD = "app/stock/[symbol]/ConfluenceCard.tsx", PAGE = "app/stock/[symbol]/StockSymbolPageClient.tsx";
 const DEPS = ["lib/ta/sessionBar.ts", "lib/ta/keyLevels.ts", "lib/ta/macdSeries.ts", "lib/ta/priceLadder.ts"];
@@ -155,7 +156,7 @@ const RULES = {
       (p.match(/<ConfluenceCard\b/g) ?? []).length === 1 && /^import ConfluenceCard from "\.\/ConfluenceCard";$/m.test(p);
   },
   "no fetch, no Redis, no provider reads": () =>
-    [read(LIB), read(CARD)].every((s) => !/\bfetch\(|redis|upstash|tiingo|fmp/i.test(s.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, ""))),
+    [[LIB, read(LIB)], [CARD, read(CARD)]].every(([f, s]) => !/\bfetch\(|redis|upstash|tiingo|fmp/i.test(stripComments(s, { file: f }))),
 };
 function up2(c) { return c.above.length === 2 && c.below.length === 2; }
 
@@ -187,9 +188,9 @@ const MUTANTS = [
   ["a fixed scale: the shown zones and the price, padded; the dot at its true height, never centred", "l", (s) => s.replace("scale: { lo: lo - pad, hi: hi + pad }, levels:", "scale: { lo: price - Math.max(price - lo, hi - price) - pad, hi: price + Math.max(price - lo, hi - price) + pad }, levels:")],
   ["a fixed scale: the shown zones and the price, padded; the dot at its true height, never centred", "c", (s) => s.replace("top: ladderTop(c.price, c.scale) - 6,", "top: ZONE_LADDER_HEIGHT / 2 - 6,")],
   ["zone labels: stacked apart on one side, each band at its own price range", "l", (s) => s.replace("const ys = stackLabels(marks.map((m) => m.labelY), ZONE_LABEL_GAP, height, ZONE_LABEL_GAP / 2);", "const ys = marks.map((m) => m.labelY);")],
-  ["projections marked ≈ in the tap note, as one-session projections", "l", (s) => s.replace("return `≈ ${priceWords(m.value)}: ${m.derived} (a one-session projection).`;", "return `${priceWords(m.value)}: ${m.derived}.`;")],
+  ["projections marked ≈ in the tap note, as one-session projections", "l", (s) => s.replace("return `${ESTIMATE_SIGN} ${priceWords(m.value)}: ${m.derived} (a one-session projection).`;", "return `${priceWords(m.value)}: ${m.derived}.`;")],
   ["the copy describes, never forecasts or advises", "l", (s) => s.replace("Some traders watch areas like this; a description, not a forecast.", "Price will likely bounce at these zones.")],
-  ["the copy describes, never forecasts or advises", "c", (s) => s.replace('"Band: a zone\'s lowest to highest level', '"Buy near a zone · Band: a zone\'s lowest to highest level')],
+  ["the copy describes, never forecasts or advises", "c", (s) => s.replace("`Band: a zone's lowest to highest level", "`Buy near a zone · Band: a zone's lowest to highest level")],
   ["placement: its own card directly above Key levels in the sidebar, once", "p", (s) => s.replace('<div className="sp-slot sp-confluence">', '<div className="sp-slot sp-confluence-moved">')],
   ["no fetch, no Redis, no provider reads", "l", (s) => s.replace("export const K_ATR = 0.35;", "export const K_ATR = 0.35;\nconst probe = () => fetch(\"/api/x\");")],
 ];
