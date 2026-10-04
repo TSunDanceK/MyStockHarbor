@@ -310,7 +310,9 @@ check("...nor the FMP history (both page and metadata reads)",
   (pageSrc.match(/historyForSurface\("CHARTS", upper, \(\) => getDailyHistory\(upper, \{ caller: "stock-page(-meta)?" \}\), \{\s*(?:\/\/[^\n]*\n\s*)*skipFmp: \(\) => isColdTiingoCandidate\(upper\),/g) ?? []).length === 2 &&
   /if \(deps\.skipFmp && \(await deps\.skipFmp\(\)\.catch\(\(\) => false\)\)\) return \{ points: \[\], provider: "none" \};/.test(raw("lib/server/tiingoHistory.ts")));
 check("the preparing page mounts the cold fill with a page token", /<TiingoColdFill symbol=\{upper\} token=\{mintQuoteToken\(\)\} \/>/.test(pageSrc));
-check("the preparing state is noindex (hasData is false) and titled so", /\$\{upper\} \| Price data being prepared \| MyStockHarbor/.test(pageSrc) && /index: hasData && /.test(pageSrc));
+check("the preparing state is noindex (hasData is false) and titled so", /\$\{upper\} \| Price data being prepared \| MyStockHarbor/.test(pageSrc) &&
+  // Through the shared predicate since #553 COWORK #143: hasData false is noindex there.
+  /index: stockPageIndexable\(\{ hasData, /.test(pageSrc) && /return i\.hasData && /.test(raw("lib/stockPageRobots.ts")));
 check("an off-universe Tiingo page keeps its symbol in the requested set (one touch a view)",
   /historyResult\.provider === "tiingo" && !inCommittedUniverse\(upper\) \? \(\s*<TiingoRequestedTouch/.test(pageSrc));
 check("the candidate test needs the Tiingo stock-page path, no stored bars, and a supported ticker",

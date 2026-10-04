@@ -150,7 +150,9 @@ check("the reading words are the ruled ones",
   words.includes("Reading this company's SEC filings — this can take a few seconds.") &&
     words.includes("This is taking longer than usual; figures will appear once the company's filings are read."));
 check("the stock page is noindex while a cold symbol is not yet read",
-  /index: hasData && !\(await awaitingSecRead\(upper\)\)/.test(readCodeOnly("app/stock/[symbol]/page.tsx")));
+  // Through the shared predicate since #553 COWORK #143 (lib/stockPageRobots.ts, the sitemap's too).
+  /index: stockPageIndexable\(\{ hasData, awaitingSecRead: hasData && \(await awaitingSecRead\(upper\)\) \}\)/.test(readCodeOnly("app/stock/[symbol]/page.tsx")) &&
+    /return i\.hasData && !i\.awaitingSecRead;/.test(readCodeOnly("lib/stockPageRobots.ts")));
 check("the earnings page likewise",
   /index: cikForSymbol\(clean\) !== null && !\(await awaitingSecRead\(clean\)\)/.test(readCodeOnly("app/stock/[symbol]/earnings/page.tsx")));
 {

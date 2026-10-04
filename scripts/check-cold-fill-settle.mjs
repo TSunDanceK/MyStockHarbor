@@ -109,8 +109,11 @@ console.log("\n4. what Google is sent");
   const sm = readCodeOnly("app/sitemap.ts");
   check("the sitemap asks the pages' own rule for every curated symbol", /sitemapSecState\(stockSymbols\)/.test(sm));
   check("/stock/X and /stock/X/earnings both drop an awaiting symbol",
-    /stockSymbols\.filter\(renderable\)/.test(sm) && /!etfSymbols\.has\(symbol\) && renderable\(symbol\)/.test(sm));
-  check("an unanswerable read keeps everything (null → nothing dropped)", /!sec\?\.awaiting\.has\(symbol\)/.test(sm));
+    // Each through its page's own predicate since #553 COWORK #143 (lib/stockPageRobots.ts).
+    /stockSymbols\.filter\(renderable\)/.test(sm) && /!etfSymbols\.has\(symbol\) && earningsRenderable\(symbol\)/.test(sm) &&
+    /stockPageIndexable\(\{ hasData: hasData\(symbol\), awaitingSecRead: awaiting\(symbol\) \}\)/.test(sm) &&
+    /earningsPageIndexable\(\{ hasCik: cikForSymbol\(symbol\) !== null, awaitingSecRead: awaiting\(symbol\) \}\)/.test(sm));
+  check("an unanswerable read keeps everything (null → nothing dropped)", /const awaiting = \(symbol: string\) => Boolean\(sec\?\.awaiting\.has\(symbol\)\);/.test(sm) && /eodLast === null \|\| /.test(sm));
   check("/earnings lastmod is when the figures changed, never a re-read time", /sec\?\.changedAt\.get\(symbol\)/.test(sm) && !/verifiedAt|manifest/i.test(sm));
   const store = readCodeOnly("lib/server/secFactStore.ts");
   const w = store.slice(store.indexOf("export async function writeFactSet"));
