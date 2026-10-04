@@ -169,6 +169,8 @@ type StockSymbolPageClientProps = {
   historyCredit?: ReactNode;
   // Whose bars `initialHistory` is: "tiingo", "fmp" or "none".
   historyProvider?: string;
+  /** The server's render time (#563 COWORK #75/#76), for "is today's partial bar in session". */
+  renderedAt?: number;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -754,7 +756,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, renderedAt }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   // Whose bars the chart is showing: the seed's provider, or what the client
   // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
@@ -1106,7 +1108,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </div>
 
               {/* Key levels (#563 COWORK #64): C's card, from the bars already held. */}
-              <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
 
               {/* Earnings snapshot — sidebar */}
               <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} />
