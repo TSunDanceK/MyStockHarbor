@@ -1359,6 +1359,10 @@ const TASKS = {
   // sets that fail the seed gate (symbol + reason), and how many still have a
   // picker row. 1 SMEMBERS + 1 HKEYS; deletes nothing.
   "write-sec-gate-stored-census": { script: "scripts/sec-gate-stored-census.mjs", args: () => [], writes: true },
+  // ONE-OFF, run from its branch (Relay A, #552 COWORK #150, owner ruling): the
+  // stored SEC sets that fail the seed gate. Dry by default; SYMBOLS carries
+  // mode=delete confirm=sec-gate-stored [hold=SYM,...]. See the script header.
+  "write-sec-gate-delete": { script: "scripts/sec-gate-delete.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
