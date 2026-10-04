@@ -239,6 +239,20 @@ const FRED_SERIES: Record<string, { id: string; quote: "usd-per-unit" | "unit-pe
   // over 1,907 shared days: median 0.037%, p95 0.198%, max 1.62%. ECB stays
   // the fallback.
   CNY: { id: "DEXCHUS", quote: "unit-per-usd" },
+  // DEXKOUS is SOUTH KOREAN WON to one U.S. DOLLAR, DEXSFUS SOUTH AFRICAN RAND
+  // to one U.S. DOLLAR (#552 COWORK #151). ECB, their only route until now,
+  // timed out in the 4 Oct 16:20 UTC sec-facts run; the FX guard kept LPL's,
+  // KEP's (KRW) and HMY's (ZAR) stored sets. ECB timed out twice more while
+  // they were being measured. MEASURED (relay fred-krw-zar, 2026-10-04): each
+  // 1,933 daily rows from 2019-01-02 to 2026-09-25, zero "." placeholders.
+  //   DEXKOUS last 1356.51, so KRW per USD. Against the ECB cross: median
+  //     0.134%, p95 0.480%, max 1.74%.
+  //   DEXSFUS last 16.3021, so ZAR per USD. Against the ECB cross over 1,907
+  //     shared days: median 0.287%, p95 0.989%, max 2.69% (rand volatility
+  //     between the two fixing times, as with MXN).
+  // ECB stays the fallback for both.
+  KRW: { id: "DEXKOUS", quote: "unit-per-usd" },
+  ZAR: { id: "DEXSFUS", quote: "unit-per-usd" },
 };
 
 /**
