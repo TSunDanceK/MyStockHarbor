@@ -3,6 +3,7 @@ import { Redis } from "@upstash/redis";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPricePool, keepPricePoolAlive, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS } from "../../../../lib/server/pricePool";
+import { MOOD_ETFS } from "../../../../lib/marketMood";
 import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
 import { planTiingoUniverse, writeTiingoUniverse, refreshTiingoUniverseOffHours, STOCK_PAGE_SYMBOLS } from "../../../../lib/server/tiingoUniverse";
 import { priceProviderFor } from "../../../../lib/server/marketData/provider";
@@ -203,6 +204,8 @@ export async function GET(req: NextRequest) {
       video: POOL_VIDEO_TICKERS,
       // Step 5b (the owner's widening): every symbol with a stock page.
       stockPages: STOCK_PAGE_SYMBOLS,
+      // Market Mood's inputs (#563 COWORK #96 ruling 2): SPY, TLT, HYG and LQD (LQD is new: +1 request a night).
+      mood: MOOD_ETFS,
     });
     const tiingoUniverseWritten = await writeTiingoUniverse(tiingoUniverse);
 

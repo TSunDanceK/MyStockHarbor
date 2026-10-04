@@ -6,6 +6,7 @@
 //     both run on the same bars and must agree (the copy can't drift)
 //   - lib/ta/macdSeries.ts macdTone is the stock page's buildMacd tone, exactly
 //   - the gauge is "Trend score" in trend words, not "Market mood" / Fear-Greed
+//     (Market Mood is its own card since #96: check-market-mood.mjs)
 //   - the AI market backdrop is gone (no call), the old page kept, retired
 //   - every LIVE card says it is SPY and carries the Tiingo credit
 //   - the sections in the brief's order; the platform buttons out of the hero
@@ -61,7 +62,7 @@ const RULES = {
     return cases.every((c) => macd.macdTone(c) === (P.buildMacd(c)?.tone ?? null)) && tones.has("green") && tones.has("red") && tones.has(null);
   },
   "the gauge is 'Trend score', in trend words, not 'Market mood' or Fear / Greed": ({ page, words }) =>
-    /<Tile label="Trend score"/.test(page) && !/Market mood|marketMood/.test(page) &&
+    /<Tile label="Trend score"/.test(page) && !/<Tile label="Market [Mm]ood"/.test(page) &&
     /not sentiment/.test(page) && /\$\{trendWords\(trend\.score\)\}/.test(page) && !/trend\.label/.test(page) &&
     [0, 20, 40, 50, 60, 80, 100].every((s) => !/fear|greed/i.test(words.trendWords(s))) &&
     words.trendWords(80) === "Strong uptrend" && words.trendWords(50) === "Mixed" && words.trendWords(20) === "Strong downtrend",

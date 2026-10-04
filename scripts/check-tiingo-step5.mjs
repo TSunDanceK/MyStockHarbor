@@ -409,6 +409,7 @@ const warmPricePool = async (syms, now, opts) => { S().log.push("warm"); S().war
 const POOL_BENCHMARK_ETFS = ["SPY"];
 const POOL_VIDEO_TICKERS = ["IFNNY"];
 const STOCK_PAGE_SYMBOLS = ["KO"];
+const MOOD_ETFS = []; // #563 COWORK #96: Market Mood's ETFs join the universe (asserted in check-market-mood)
 const isActiveMarketWindow = () => S().open;
 const keepPricePoolAlive = async () => { S().log.push("keepalive"); return true; };
 const planTiingoUniverse = (parts) => ({ symbols: Object.values(parts).flat(), sources: {}, dropped: { debt: 0, excluded: 0 } });

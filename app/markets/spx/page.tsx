@@ -28,6 +28,9 @@ import ConfluenceCard from "@/app/stock/[symbol]/ConfluenceCard";
 import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
 import LevelsSignals from "@/app/stock/[symbol]/LevelsSignals";
 import LevelsGlanceCard from "./LevelsGlanceCard";
+import MarketMoodCard from "./MarketMoodCard";
+import { readMarketMood } from "@/lib/server/marketMoodRead";
+import { moodView } from "@/lib/marketMood";
 
 export const dynamic = "force-dynamic";
 
@@ -313,6 +316,8 @@ export default async function SPXPage() {
   const fromAth = weekly ? (weekly.indexClose / weekly.ath.level - 1) * 100 : null;
   const trendTone = trend ? (trend.score >= 56 ? "#86efac" : trend.score <= 44 ? "#fca5a5" : "#fde68a") : C.value;
 
+  // MARKET MOOD (#563 COWORK #96): our own reading, computed nightly; replaces the weekly Sentiment tile.
+  const mood = moodView(await readMarketMood());
   const faqLd = faqJsonLd();
 
   return (
@@ -326,8 +331,10 @@ export default async function SPXPage() {
         />
 
         <div style={{ display: "grid", gap: 16 }}>
-          {/* 1. HERO: the H1, the week's dated line, four tiles (two weekly, one live, one weekly). */}
+          {/* 1. HERO: the H1, the week's dated line, three tiles (two weekly, one live) and Market Mood (nightly). */}
           <section className="spxHero" style={card({ border: "1px solid rgba(59,130,246,0.24)", background: "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(15,23,42,0.92))", padding: 22 })}>
+            <div className="spxHeroGrid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 300px", gap: 18, alignItems: "start" }}>
+            <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>MARKET ANALYSIS</div>
             <h1 style={{ margin: "10px 0 0", fontSize: 38, lineHeight: 1.1, letterSpacing: "-0.9px", maxWidth: 820, fontWeight: 500 }}>
               S&amp;P 500 (SPX) Analysis (2026) – What the Market Is Actually Doing Right Now
@@ -340,7 +347,7 @@ export default async function SPXPage() {
                 {weekly.oneLiner}
               </p>
             ) : null}
-            <div className="spxTiles" style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+            <div className="spxTiles" style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
               {weekly ? <Tile label="S&P 500 close" value={indexWords(weekly.indexClose)} sub={`Index close, ${weeklyDate(weekly.asOf)}`} dated={stale} /> : null}
               {weekly && fromAth !== null ? (
                 <Tile label="From the record high" value={`${fromAth >= 0 ? "+" : "−"}${Math.abs(fromAth).toFixed(1)}%`}
@@ -348,10 +355,10 @@ export default async function SPXPage() {
               ) : null}
               <Tile label="Trend score" value={trend ? `${trend.score}/100` : "—"} tone={trendTone}
                 sub={trend ? `${trendWords(trend.score)} · a price-trend score from SPY's moving averages and RSI (14), not sentiment` : "SPY's price history couldn't be loaded just now"} />
-              {weekly ? (
-                <Tile label="Sentiment" value={`${weekly.sentiment.fearGreed} · ${weekly.sentiment.label}`}
-                  sub={`${weekly.sentiment.source}, ${weeklyDate(weekly.sentiment.date)}`} dated={stale} />
-              ) : null}
+              </div>
+            </div>
+            {/* MARKET MOOD (#96): the owner's thermometer, our own reading, where the weekly "Sentiment" tile was. */}
+            <MarketMoodCard view={mood} credit={<a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>} />
             </div>
           </section>
 
@@ -549,6 +556,7 @@ export default async function SPXPage() {
       <style>{`
         @media (max-width: 900px) {
           .spxTiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .spxHeroGrid { grid-template-columns: minmax(0, 1fr) !important; }
           .spxLevels, .spxPoints, .spxWatch, .spxRead { grid-template-columns: minmax(0, 1fr) !important; }
         }
         @media (max-width: 640px) {

@@ -7,7 +7,8 @@
 // Everything LIVE on the page (trend score, performance, levels, signals,
 // charts) comes from SPY's bars instead; this file carries what a price series
 // can't: the index's own close, its all-time high, the week's three points,
-// breadth, sentiment and what to watch.
+// breadth and what to watch. (Sentiment is Market Mood's now, computed nightly
+// from our own data: lib/marketMood.ts, #563 COWORK #96.)
 //
 // STALE: an asOf more than STALE_DAYS old makes the hero read "Last weekly
 // update: <date>" and the weekly tiles show their dates, so old figures never
@@ -28,9 +29,10 @@ export const WATCH_MIN = 40;
 /** The visuals that each get a write-up beneath them. */
 export const SECTION_KEYS = ["performance", "chart", "levels", "signals", "change"] as const;
 export type SectionKey = (typeof SECTION_KEYS)[number];
-export const SENTIMENT_LABELS = ["Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed"] as const;
 /** Advice words a reader could take as a call; never in the weekly copy. */
 export const FORBIDDEN = /\b(buy|buying|sell|selling|should|must|recommend(?:s|ed)?)\b/i;
+/** A third party's sentiment index, by name: the page has its own Market Mood (#563 COWORK #96). Never in the weekly copy. */
+export const THIRD_PARTY_INDEX = /\bCNN\b|fear\s*(?:&|and)\s*greed/i;
 
 export type SpxWeekly = {
   /** The session the figures describe (the index close's date), YYYY-MM-DD. */
@@ -48,7 +50,6 @@ export type SpxWeekly = {
   points: { label: string; text: string }[];
   /** % of S&P 500 stocks above their 200-day (and 50-day) average; null when the week's research has none. */
   breadth: { pct200: number | null; pct50?: number | null; source: string; date: string };
-  sentiment: { fearGreed: number; label: (typeof SENTIMENT_LABELS)[number]; source: string; date: string };
   targets?: { low: number; high: number; source: string }[];
   watchDown: string[];
   watchUp: string[];
@@ -119,12 +120,6 @@ export function parseSpxWeekly(raw: unknown): SpxWeeklyRead {
       if (!(v === null || (typeof v === "number" && v >= 0 && v <= 100))) p.push(`breadth.${k}: a % from 0 to 100, or null`);
     }
   }
-  const s = r.sentiment;
-  if (!isObj(s) || !isStr(s.source) || !isIsoDate(s.date)) p.push("sentiment: needs source and date");
-  else {
-    if (!(typeof s.fearGreed === "number" && Number.isInteger(s.fearGreed) && s.fearGreed >= 0 && s.fearGreed <= 100)) p.push("sentiment.fearGreed: a whole number from 0 to 100");
-    if (!SENTIMENT_LABELS.includes(s.label as (typeof SENTIMENT_LABELS)[number])) p.push(`sentiment.label: one of ${SENTIMENT_LABELS.join(", ")}`);
-  }
   if (r.targets !== undefined && !(Array.isArray(r.targets) && r.targets.every((t) => isObj(t) && isPos(t.low) && isPos(t.high) && (t.low as number) <= (t.high as number) && isStr(t.source))))
     p.push("targets: each needs low ≤ high and a source");
   for (const k of ["watchDown", "watchUp"] as const) {
@@ -138,6 +133,9 @@ export function parseSpxWeekly(raw: unknown): SpxWeeklyRead {
   }
   const advice = strings(raw).filter((x) => FORBIDDEN.test(x));
   if (advice.length) p.push(`advice wording: ${advice.map((x) => `"${x.match(FORBIDDEN)![0]}"`).join(", ")}`);
+  // REMOVED 2026-10-04 (#96): `sentiment`. A file that still carries it is read as before, the field ignored.
+  const named = strings(raw).filter((x) => THIRD_PARTY_INDEX.test(x));
+  if (named.length) p.push(`a third party's sentiment index by name: ${named.map((x) => `"${x.match(THIRD_PARTY_INDEX)![0]}"`).join(", ")}`);
   return p.length ? { ok: false, problems: p } : { ok: true, data: raw as unknown as SpxWeekly };
 }
 
