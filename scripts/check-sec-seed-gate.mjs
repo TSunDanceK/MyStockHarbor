@@ -10,7 +10,8 @@
 //   2. the seed, RUN: a refused NEW symbol gets no manifest entry and is
 //      reported by reason; an entry already there is left as it is;
 //   3. the wiring: sec-daily-index seeds through the gate (the populate side
-//      is check-sec-rewindow's);
+//      is check-sec-rewindow's), and warm-pickers-sec builds no picker row for
+//      a refused symbol even where a set is stored (#552 COWORK #148);
 //   4. readFactSet / factSetExists find a set under either spelling: BRK-B
 //      resolves to the BRK.B set and the other way round, a hit on the asked
 //      spelling still costs ONE read.
@@ -89,6 +90,16 @@ const RULES = {
     MAN.seedManifest(m, ["AAPL", "STRK"], map, true);
     return Object.keys(m.symbols).sort().join() === "AAPL,STRK";
   },
+  "warm-pickers-sec's filter: STRK, SPY and FITB-PA get no picker row; AAPL and a no-CIK symbol are kept": async (G) => {
+    const r = G.admittedForSec(["AAPL", "STRK", "SPY", "FITB-PA", "ZZZZQ"], cikOf);
+    return r.admitted.join() === "AAPL,ZZZZQ" && r.refused["non-equity"]?.join() === "STRK"
+      && r.refused.etf?.join() === "SPY" && r.refused["security-kind"]?.join() === "FITB-PA";
+  },
+  "warm-pickers-sec reads only the admitted symbols (stored sets that fail the gate become no row)": async () => {
+    const w = readCodeOnly("app/api/jobs/warm-pickers-sec/route.ts");
+    return /const gate = admittedForSec\(universe, cikForSymbol\);\s*const symbols = gate\.admitted;/.test(w)
+      && w.indexOf("const symbols = gate.admitted;") < w.indexOf("await warmPickersSec(symbols,");
+  },
   "sec-daily-index seeds through the gate": async () =>
     /seedManifest\(manifest, universe, tickers\.map, tickers\.source !== "none", secSeedRefusal\)/.test(readCodeOnly("app/api/jobs/sec-daily-index/route.ts")),
 };
@@ -159,11 +170,18 @@ const GATE_MUTANTS = [
   ["ETFs admitted", once('if (ETFS.has(toDashed(clean))) return "etf";', "")],
   ["notes admitted", once('if (nonEquityListingOf(clean)) return "non-equity";', "")],
   ["no-CIK symbols admitted", once('if (!cik) return "no-cik";', "")],
+  ["warm-pickers-sec's filter ignores the gate", once("const why = cik ? secSeedRefusal(s, cik) : null;", "const why = null;")],
 ];
 for (const [label, mutate] of GATE_MUTANTS) {
   let caught = false;
   try { const G = await loadGate(mutate); caught = await bites(RULES, async () => G); } catch (e) { console.log(`    ${e.message}`); }
   check(`MUTATION: ${label} → caught`, caught);
+}
+{
+  const W = readCodeOnly("app/api/jobs/warm-pickers-sec/route.ts");
+  const mutated = W.replace("const symbols = gate.admitted;", "const symbols = universe;");
+  check("MUTATION: warm-pickers-sec reads the whole universe again → caught",
+    mutated !== W && !/const gate = admittedForSec\(universe, cikForSymbol\);\s*const symbols = gate\.admitted;/.test(mutated));
 }
 {
   const DI = readCodeOnly("app/api/jobs/sec-daily-index/route.ts");

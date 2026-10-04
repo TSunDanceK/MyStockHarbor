@@ -17,6 +17,8 @@ import { warmPickersSec } from "../../../../lib/server/pickersSecFundamentals";
 import { registrantFor } from "../../../../lib/server/stockProfile";
 import { adsRatioFor } from "../../../../lib/server/secAdsMap";
 import { citedCoverFor, nonEquityListingOf } from "../../../../lib/server/secPrimaryListing";
+import { admittedForSec } from "../../../../lib/server/secSeedGate";
+import { cikForSymbol } from "../../../../lib/server/secColdFetch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +44,14 @@ async function handleGET(req: NextRequest) {
     // (earnings calendar, sector weights) caps a row from this hash only, so it
     // must hold every symbol the overlay prices. Warm targets first, so the run
     // cap can never drop a Pickers symbol. +1 GET for the universe key.
-    const symbols = [...new Set([...warm, ...(await readTiingoUniverseSymbols())])];
+    const universe = [...new Set([...warm, ...(await readTiingoUniverseSymbols())])];
+    // THE SEC SEED GATE (#552 COWORK #148): a preferred, warrant, note or ETF
+    // gets no SEC picker row, even where a set is stored under its ticker from
+    // before the gate (it would carry the PARENT's figures). Dropped before any
+    // read, so its old row is pruned like any symbol that left the universe.
+    // Committed files only: no Redis cost.
+    const gate = admittedForSec(universe, cikForSymbol);
+    const symbols = gate.admitted;
     // The cited ADS ratio (#553 COWORK #44), as the stock and earnings pages
     // pass it: absent keeps the depositary-share refusal. A committed file, so
     // no Redis cost. And A's non-common listings (#553 COWORK #67): a note,
@@ -65,12 +74,14 @@ async function handleGET(req: NextRequest) {
     });
     // durationMs (#553 COWORK #113/#114): the run's own time, beside its
     // stoppedEarly ("time-budget" when WARM_PICKERS_SEC_BUDGET_MS ran out).
-    console.log("[warm-pickers-sec]", `durationMs=${result.durationMs ?? null}`, JSON.stringify(result));
+    const gateRefused = Object.fromEntries(Object.entries(gate.refused).map(([why, syms]) => [why, syms.length]));
+    console.log("[warm-pickers-sec]", `durationMs=${result.durationMs ?? null}`, JSON.stringify({ ...result, gateRefused }));
     await recordJobRun("warm-pickers-sec", result.ok, {
       durationMs: result.durationMs ?? null,
       targets: result.symbols,
       written: result.written,
       noFactSet: result.noFactSet,
+      gateRefused: JSON.stringify(gateRefused),
       stoppedEarly: result.stoppedEarly,
       commands: result.commands,
       pruned: result.pruned ?? null,

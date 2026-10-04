@@ -32,3 +32,26 @@ export function secSeedRefusal(symbol: string, cik: string | null | undefined): 
   if (!admitSymbolForExtraction(clean, cik).admit) return "security-kind";
   return null;
 }
+
+/**
+ * THE SAME RULE FOR A JOB THAT READS STORED SETS DIRECTLY (#552 COWORK #148).
+ * warm-pickers-sec builds a picker row from whatever set is stored under a
+ * symbol, so a set stored before the gate existed (a preferred's, under its
+ * parent's figures) would still become a row. Filtered here, before any read.
+ * A symbol with no CIK has no set to read, so it is kept: dropping it would
+ * change nothing but the job's counts. Pure.
+ */
+export function admittedForSec(
+  symbols: string[],
+  cikOf: (symbol: string) => string | null,
+): { admitted: string[]; refused: Record<string, string[]> } {
+  const admitted: string[] = [];
+  const refused: Record<string, string[]> = {};
+  for (const s of symbols) {
+    const cik = cikOf(s);
+    const why = cik ? secSeedRefusal(s, cik) : null;
+    if (why) (refused[why] ??= []).push(s);
+    else admitted.push(s);
+  }
+  return { admitted, refused };
+}
