@@ -215,7 +215,7 @@ export async function runTiingoEod(
 
   const meta = await r.get<{ asOf?: string } | string>(TIINGO_EOD_META_KEY);
   const metaAsOf = typeof meta === "string" ? (JSON.parse(meta) as { asOf?: string }).asOf : meta?.asOf;
-  if (metaAsOf === expected) return { ok: true, skipped: "already-complete", asOf: expected };
+  if (metaAsOf === expected) return { ok: true, skipped: "already-complete", asOf: expected, ...(await backfillEod(nowMs, started)) };
 
   const { symbols, retickered, retickerGuard, universeSource } = await universe();
   if (!symbols.length) return { ok: false, error: "empty universe", universeSource };
@@ -355,6 +355,83 @@ export async function runTiingoEod(
     largestWriteRequestBytes,
     eodLastRows,
     ms: Date.now() - started,
+  };
+}
+
+// ── backfill (a complete night, a wider universe) ───────────────────────────
+// #553 COWORK #124. The universe grew (5b, ~760 -> ~2,600) AFTER the night was
+// marked complete, so the run answered "already-complete" and the new symbols
+// waited for the next night. Now an already-complete run fetches the universe
+// symbols with NO entry in eod-last (the newest-bar hash every pool reader
+// uses), up to EOD_BACKFILL_PER_RUN, and adds them to it. A manual run repeats
+// until `backfilled` is 0; the 02:45 retry does the same each night.
+//
+// Same per-symbol path and the same shared limiter as the night itself.
+// Symbols Tiingo answers short or empty for stay missing (they are not stored
+// as histories) and are retried by later runs: `backfillNoData` counts them.
+//
+// Commands: HKEYS eod-last (1) + the universe's own reads; per 100 symbols, 4
+// for the limiter, 4 SET pipelines of 25 (100) and 1 HSET.
+
+/** Symbols one backfill run fetches at most: ~32 s at the 2 Oct rate, 1,000 Tiingo requests. */
+export const EOD_BACKFILL_PER_RUN = 1_000;
+
+async function backfillEod(nowMs: number, started: number) {
+  const r = mustRedis();
+  const { symbols } = await universe();
+  const have = new Set(((await r.hkeys(TIINGO_EOD_LAST_KEY)) ?? []).map(String));
+  const missing = symbols.filter((s) => !have.has(s));
+  const todo = missing.slice(0, EOD_BACKFILL_PER_RUN);
+  if (!todo.length) return { backfilled: 0, backfillMissing: 0 };
+  const start = eodStartDate(nowMs);
+  const bars = new Map<string, EodBar[]>();
+  let noData = 0;
+  let failed = 0;
+  let stoppedBy: string | null = null;
+  try {
+    await reserveTiingoRequests(todo.length, nowMs);
+  } catch (err) {
+    return { backfilled: 0, backfillMissing: missing.length, backfillStoppedBy: err instanceof TiingoRefused ? err.reason : "limiter error" };
+  }
+  let next = 0;
+  const worker = async () => {
+    while (!stoppedBy && next < todo.length) {
+      if (Date.now() - started > EOD_BUDGET_MS) { stoppedBy = "time budget"; return; }
+      const sym = todo[next++];
+      try {
+        const got = await fetchEodHistory(sym, start);
+        if (got.bars.length >= EOD_MIN_BARS) bars.set(sym, got.bars.slice(-EOD_WINDOW_BARS));
+        else noData++;
+      } catch (err) {
+        failed++;
+        if (err instanceof TiingoHttpError && err.status === 429) stoppedBy = "HTTP 429";
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: EOD_CONCURRENCY }, worker));
+  const entries = [...bars.entries()];
+  for (let i = 0; i < entries.length; i += EOD_WRITE_CHUNK) {
+    const p = r.pipeline();
+    const fields: Record<string, string> = {};
+    for (const [sym, b] of entries.slice(i, i + EOD_WRITE_CHUNK)) {
+      const value: StoredEod = { asOf: b[b.length - 1][0], fetchedAt: nowMs, basis: "split", bars: b };
+      p.set(tiingoEodKey(sym), JSON.stringify(value), { ex: TIINGO_EOD_TTL_SECONDS });
+      const row = eodLastRow(b);
+      if (row) fields[sym] = JSON.stringify(row);
+    }
+    // Added to the night's summary hash, so a pool reader sees the symbol now
+    // and the next backfill run does not fetch it again. HSET keeps the
+    // hash's TTL from the night that wrote it.
+    if (Object.keys(fields).length) p.hset(TIINGO_EOD_LAST_KEY, fields);
+    await p.exec();
+  }
+  if (entries.length) revalidateTag(EOD_TAG, "max");
+  return {
+    backfilled: entries.length,
+    backfillMissing: missing.length - entries.length,
+    backfillNoData: noData,
+    backfillFailed: failed,
+    backfillStoppedBy: stoppedBy,
   };
 }
 

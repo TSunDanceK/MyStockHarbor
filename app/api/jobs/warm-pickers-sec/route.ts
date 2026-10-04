@@ -10,7 +10,7 @@
 // MAX_SYMBOLS_PER_RUN; the first write error stops it.
 import { NextRequest, NextResponse } from "next/server";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
-import { guardJob } from "../../../../lib/server/jobGuard";
+import { guardCommandsLeft, guardJob } from "../../../../lib/server/jobGuard";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { readTiingoUniverseSymbols } from "../../../../lib/server/tiingoUniverse";
 import { warmPickersSec } from "../../../../lib/server/pickersSecFundamentals";
@@ -58,7 +58,11 @@ async function handleGET(req: NextRequest) {
       // A's cited 20-F / 40-F cover counts (#552 COWORK #86b, #92 Q2), as the
       // stock and earnings pages pass them; used only when newer than dei.
       citedCover: citedCoverFor(s),
-    }));
+    }), Date.now(), undefined, {
+      // Stop short of the job guard's ceiling, so a stop still flushes, sets
+      // the EXPIRE and logs stoppedEarly: "command-budget" (#553 COWORK #124).
+      commandsLeft: guardCommandsLeft,
+    });
     // durationMs (#553 COWORK #113/#114): the run's own time, beside its
     // stoppedEarly ("time-budget" when WARM_PICKERS_SEC_BUDGET_MS ran out).
     console.log("[warm-pickers-sec]", `durationMs=${result.durationMs ?? null}`, JSON.stringify(result));
