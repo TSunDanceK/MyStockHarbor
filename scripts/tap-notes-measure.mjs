@@ -8,10 +8,11 @@
 //
 // At 1280 px (desktop): a zone's count opens its note anchored below the label
 // (or above, flipped), no wider than the card; a second tap elsewhere leaves one
-// note open; Esc and a tap outside close it; a Key levels range opens its row's
-// note the same way. At 320, 360, 390 and 430 px (phone): the note opens inline,
-// the zone labels below it move down by its height and none overlaps it, a Key
-// levels note pushes its bar down; nothing scrolls sideways, open or closed.
+// note open; Esc and a tap outside close it; Key levels' "What are these?" opens
+// its note the same way (the pole has no row notes since #563 COWORK #115). At
+// 320, 360, 390 and 430 px (phone): the note opens inline, the zone labels below
+// it move down by its height and none overlaps it, the Key levels note pushes
+// the pole down; nothing scrolls sideways, open or closed.
 // Reports the two cards' heights at 1280×800. With an
 // output directory, saves a 390 px and a 1280 px screenshot with a note open.
 //
@@ -89,17 +90,19 @@ const scrolls = (page) => page.evaluate(() => document.documentElement.scrollWid
   await page.locator(".czLabel .tapNoteBtn").nth(0).click();
   const p1b = await panels(page);
   say(p1b.length === 1 && (await page.locator(".czLabel .tapNoteBtn").nth(0).getAttribute("aria-expanded")) === "true", `a second zone's count: its note open, the first closed (${n} zones)`);
-  await page.locator(".klRange .tapNoteBtn").first().click();
-  const p2 = await panels(page), kr = await rect(page, ".tapNotePanel"), kc = await rect(page, ".klCard"), kh = await rect(page, ".klRange");
-  say(p2.length === 1 && p2[0].mode === "overlay" && kr.left >= kc.left - 0.5 && kr.right <= kc.right + 0.5 && (p2[0].flipped ? kr.bottom <= kh.top + 1 : kr.top >= kh.bottom - 1),
-    `a Key levels range: its row's note, anchored ${p2[0]?.flipped ? "above (flipped: below would leave the 800 px viewport)" : "below"}, inside the card; the zone note closed`);
+  // The open zone note floats over the card below it (Key levels' title sits right under Price zones), so it closes first.
+  await page.keyboard.press("Escape");
+  await page.locator(".klCard .tapNoteBtn").first().click();
+  const p2 = await panels(page), kr = await rect(page, ".tapNotePanel"), kc = await rect(page, ".klCard"), kh = await rect(page, ".klCard .tapNoteBtn");
+  say(p2.length === 1 && kr.left >= kc.left - 0.5 && kr.right <= kc.right + 0.5 && (p2[0].flipped ? kr.bottom <= kh.top + 1 : kr.top >= kh.bottom - 1),
+    `Key levels' "What are these?": its note, ${p2[0]?.flipped ? "above" : "below"} the title, inside the card`);
   await page.keyboard.press("Escape");
   say((await panels(page)).length === 0, "Esc closes it");
   await page.locator(".czLabel .tapNoteBtn").first().click();
   await page.mouse.click(5, 5);
   say((await panels(page)).length === 0, "a tap outside closes it");
-  await page.locator(".klTrack").first().click();
-  say((await panels(page)).length === 1, "a tap on a Key levels bar opens its row's note");
+  await page.locator(".klCard .tapNoteBtn").first().click();
+  say((await panels(page)).length === 1, "a tap on Key levels' \"What are these?\" opens its note");
   await page.locator(".tapNoteClose").first().click();
   say((await panels(page)).length === 0, "✕ closes it");
   await page.close();
@@ -122,12 +125,12 @@ for (const width of [320, 360, 390, 430]) {
   if (shots && width === 390) await page.screenshot({ path: path.join(shots, "tap-note-390.png"), clip: { x: 0, y: card.top - 10, width, height: card.height + 20 } });
   await page.keyboard.press("Escape");
   await page.waitForTimeout(50);
-  const trackBefore = await rect(page, ".klTrack");
+  const trackBefore = await rect(page, ".klPole");
   await page.locator(".czLabel .tapNoteBtn").first().click();
-  await page.locator(".klRange .tapNoteBtn").first().click();
+  await page.locator(".klCard .tapNoteBtn").first().click();
   await page.waitForTimeout(50);
-  const kp = await panels(page), kr = await rect(page, ".tapNotePanel"), trackAfter = await rect(page, ".klTrack");
-  say(kp.length === 1 && kp[0].mode === "inline" && trackAfter.top >= kr.bottom - 1 && trackAfter.top > trackBefore.top, `${width} px: Key levels note inline, its bar pushed down; the zone note closed`);
+  const kp = await panels(page), kr = await rect(page, ".tapNotePanel"), trackAfter = await rect(page, ".klPole");
+  say(kp.length === 1 && kp[0].mode === "inline" && trackAfter.top >= kr.bottom - 1 && trackAfter.top > trackBefore.top, `${width} px: Key levels note inline, the pole pushed down; the zone note closed`);
   say(!(await scrolls(page)), `…no sideways scroll with it open`);
   await page.close();
 }

@@ -1,125 +1,98 @@
-// THE "KEY LEVELS" CARD (#563 COWORK #64; range bars, #66/#67): the day's,
-// this week's and this month's range, in the stock page's sidebar directly
-// above the earnings snapshot.
+// THE "KEY LEVELS" CARD (#563 COWORK #64; the pole, #115 "E1, true scale"):
+// the day's, this week's and this month's levels as named ticks on one
+// vertical price pole, in the stock page's sidebar directly above the earnings
+// snapshot (and on /markets/spx).
 //
-// Each period is one row on its own scale (#79): a bar from its low to its high,
-// a tick where it opened, a dot at the last price and a ◇ at the previous
-// period's close. When that close lies outside the range, the scale stretches
-// to include it and the grey track between the ◇ and the bar is the gap (#81).
-// The geometry is
-// lib/ta/keyLevelBars.ts; the levels are lib/ta/keyLevels.ts over the daily bars
-// the page already holds. No fetch, no Redis; it renders in the server HTML with
-// the rest of the page, notes closed (their hooks are TapNote.tsx's).
+// One pole on TRUE price scale: a thin track over this month's low–high, a
+// thicker band over today's, the last price as an accent bar and pill. Each
+// level is a short tick at its true height; its name sits on the left in words,
+// its price on the right (green above the last price, red below) with its %
+// distance. Labels keep a minimum gap and fan out with leader lines. The layout
+// is lib/ta/keyLevelPole.ts over lib/ta/keyLevels.ts (the bars the page already
+// holds). No fetch, no Redis; the card renders in the server HTML.
 //
-// COPY IS DESCRIPTIVE. The colour says where the last price is against the
-// period's open, like a candle on its side, and never alone: the dot against the
-// tick says the same, and the tap note says it in words. Nothing says what a
-// level means for the price or what a reader should do.
+// The labels' measured height sets their spacing after mount (a large text
+// setting, or a wrapped label on a narrow card); the server render uses the
+// rem default. The SVG is aria-hidden, a visually hidden list carries the same
+// levels in words, and nothing here carries a transform.
 //
-// THE TAP NOTE (#563 COWORK #88 §3 / #89) opens beside the tap: the row's
-// low–high label is its button, and a tap on the bar toggles the same note.
-// Anchored below the row's label on desktop, inline under it on a phone
-// (TapNote.tsx). It is a header in the row's colour, one bullet per level with
-// the card's own mark beside it, and the verdict; a gap row adds a "Gap" bullet
-// (the gap's words left the card face, #88 §1). The key sits in a closed "How
-// to read this ▾"; the Tiingo credit stays on the face.
+// COPY IS DESCRIPTIVE: where the levels sit against the last price, never what
+// they mean for it or what a reader should do.
 "use client";
-import { useRef, type CSSProperties, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { keyLevels, priceWords, type KeyBar } from "@/lib/ta/keyLevels";
-import { barRows, type BarRow, type RowBulletKey, type Tone } from "@/lib/ta/keyLevelBars";
-import { FlowPanel, HowToRead, NoteButton, NoteDot, useIsPhone, useTapNote } from "./TapNote";
+import { LABEL_LINE_REM, POLE_KEY, keyLevelPole, poleListWords, poleNumber, type Pole, type PoleSide } from "@/lib/ta/keyLevelPole";
+import { FlowPanel, NoteButton, useIsPhone, useTapNote } from "./TapNote";
 
 export const KEY_LEVELS_NOTE =
   "Levels some traders watch: the open, high, low and close of the latest session, of this week so far and of this month so far, " +
   "taken from daily prices. They describe where the price has been, not where it will go.";
 
-/** The bar, tick and dot colours. Green/red describe the last price against the open; never a call. */
-export const TONE_COLOUR: Record<Tone, string> = { up: "#22c55e", down: "#ef4444", flat: "#94a3b8" };
+/** Green above the last price, red below, muted level with it. Never a call. */
+export const SIDE_COLOUR: Record<PoleSide, string> = { up: "#22c55e", down: "#ef4444", at: "rgba(203,213,225,0.8)" };
 
 const C = {
   label: "rgba(147,197,253,0.82)",
   muted: "rgba(203,213,225,0.62)",
   value: "rgba(241,245,249,0.94)",
-  track: "rgba(255,255,255,0.06)",
-  prev: "rgba(226,232,240,0.85)",
-  tick: "#f1f5f9",
+  leader: "#64748b",
+  month: "#1e293b",
+  day: "#4b5d78",
+  accent: "#7cb3f0",
 };
 
-export const KEY_LINE =
-  "Bar: that period\u2019s low to high · tick: the open · ◇ previous close · dot: the last price, green above the open, red below · grey space between ◇ and the bar: a gap from the previous close.";
+/** The pole column's width, in rem; the SVG draws in tenths of a rem (1 unit = 0.1rem). */
+export const POLE_COL_REM = 2.25;
+const U = 10;
 
-/** Each bullet's mark, as on the card's face (#89). */
-const MARK: Record<RowBulletKey, { shape: "tick" | "up" | "down" | "diamond" | "dot"; colour: (t: Tone) => string }> = {
-  open: { shape: "tick", colour: () => C.tick },
-  high: { shape: "up", colour: () => "rgba(203,213,225,0.8)" },
-  low: { shape: "down", colour: () => "rgba(203,213,225,0.8)" },
-  prev: { shape: "diamond", colour: () => C.prev },
-  gap: { shape: "diamond", colour: () => C.prev },
-  last: { shape: "dot", colour: (t) => TONE_COLOUR[t] },
-};
-
-/** A row's note (#89): header, a bullet per level with its mark, the verdict, then anything without a bullet. */
-export function RowNoteBody({ bar }: { bar: NonNullable<BarRow["bar"]> }) {
-  const n = bar.rowNote;
+/** The pole, its ticks and leaders: decorative (the labels and the hidden list are the content). */
+export function PoleSvg({ pole }: { pole: Pole }) {
+  const W = POLE_COL_REM * U, H = pole.height * U, mid = W / 2;
   return (
-    <div className="klNote">
-      <div className="klNoteHead" style={{ fontWeight: 850, color: C.value }}>
-        <span style={{ color: TONE_COLOUR[n.tone] }}>{n.title}</span> · {n.when} <span style={{ fontWeight: 600, color: C.muted }}>· {n.range}</span>
-      </div>
-      <ul className="klBullets" style={{ listStyle: "none", margin: "6px 0 0", padding: 0, display: "grid", gap: 4 }}>
-        {n.bullets.map((b) => (
-          <li key={b.key} className="klBullet" data-key={b.key} style={{ display: "flex", alignItems: "baseline" }}>
-            <NoteDot shape={MARK[b.key].shape} colour={MARK[b.key].colour(n.tone)} />
-            <span><strong style={{ color: C.value, fontWeight: 750 }}>{b.label}{b.key === "gap" ? ":" : ""}</strong> {b.text}</span>
-          </li>
-        ))}
-      </ul>
-      {n.verdict ? <div className="klVerdict" data-tone={n.tone} style={{ marginTop: 6, fontWeight: 800, color: TONE_COLOUR[n.tone] }}>{n.verdict}</div> : null}
-      {n.extra.map((x) => <div key={x} className="klExtra" style={{ marginTop: 4, fontSize: "var(--fs-label)", color: C.muted }}>{x}</div>)}
-    </div>
+    <svg className="klPoleSvg" aria-hidden="true" focusable="false" viewBox={`0 0 ${W} ${H}`}
+      style={{ position: "absolute", left: `calc((100% - ${POLE_COL_REM}rem) / 2.3)`, top: 0, width: `${POLE_COL_REM}rem`, height: `${pole.height}rem`, overflow: "visible", pointerEvents: "none" }}>
+      {pole.month ? <rect className="klMonth" x={mid - 3} y={pole.month.top * U} width={6} height={Math.max(1, (pole.month.bottom - pole.month.top) * U)} rx={3} fill={C.month} /> : null}
+      {pole.day ? <rect className="klDay" x={mid - 7} y={pole.day.top * U} width={14} height={Math.max(2, (pole.day.bottom - pole.day.top) * U)} rx={4} fill={C.day} /> : null}
+      {pole.rows.map((r, i) => {
+        const ty = r.y * U, ly = r.ly * U;
+        if (r.last) {
+          return (
+            <g key={i} className="klLastMark">
+              <line x1={mid - 9.5} x2={mid + 9.5} y1={ty} y2={ty} stroke={C.accent} strokeWidth={3} strokeLinecap="round" />
+              <path d={`M${mid - 10.5} ${ty} l-3 -3 v6 z`} fill={C.accent} />
+              <path d={`M${mid + 9.5} ${ty} L${W} ${ly}`} stroke={C.accent} fill="none" strokeWidth={1} />
+            </g>
+          );
+        }
+        const c = SIDE_COLOUR[r.side];
+        return (
+          <g key={i} className="klTick" data-side={r.side}>
+            <line x1={mid - 9} x2={mid + 9} y1={ty} y2={ty} stroke={c} strokeWidth={2} />
+            <path className="klLeader" d={`M${mid - 9} ${ty} L${mid - 12} ${ly} L0 ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} />
+            <path className="klLeader" d={`M${mid + 9} ${ty} L${mid + 12} ${ly} L${W} ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} />
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
-/** One period's row: its label and range, the bar, and its note. */
-function KeyRow({ r, phone }: { r: BarRow; phone: boolean }) {
-  const note = useTapNote();
-  const head = useRef<HTMLDivElement | null>(null);
+/** One label row at its placed height: name on the left, price and distance (or the last-price pill) on the right. */
+function PoleLabel({ r }: { r: Pole["rows"][number] }) {
   return (
-    <div className="klRow" style={{ marginTop: 12 }}>
-      <div ref={head} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-        <span style={{ fontSize: "0.75rem", fontWeight: 800, color: C.value }}>
-          {r.title}{r.since ? <span style={{ marginLeft: 6, fontSize: "var(--fs-label)", fontWeight: 600, color: C.muted }}>{r.since}</span> : null}
+    <div className="klLabel" data-label={r.label} data-last={r.last ? "1" : undefined} data-side={r.side}
+      style={{ position: "absolute", left: 0, right: 0, top: `calc(${r.ly}rem - ${LABEL_LINE_REM / 2}rem)`, display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${POLE_COL_REM}rem minmax(0, 1.3fr)`, alignItems: "start", fontSize: "var(--fs-label)", lineHeight: 1.25 }}>
+      <span className="klName" style={{ textAlign: "right", color: C.value, paddingRight: 2 }}>{r.last ? "" : r.label}</span>
+      <span />
+      {r.last ? (
+        <span className="klPill" style={{ justifySelf: "start", display: "inline-flex", flexWrap: "wrap", columnGap: "0.45em", whiteSpace: "nowrap", padding: "0 0.45em", marginTop: "-0.15rem", borderRadius: 6, border: `1px solid ${C.accent}`, background: "rgba(124,179,240,0.16)", color: C.value, fontSize: "var(--fs-label)", fontWeight: 800, lineHeight: 1.4 }}>
+          <span>Last price</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{poleNumber(r.value)}</span>
         </span>
-        {r.bar ? (
-          <span className="klRange" style={{ fontSize: "var(--fs-label)", color: C.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-            <NoteButton note={note}>{r.bar.range}</NoteButton>
-          </span>
-        ) : null}
-      </div>
-      {r.bar ? (
-        <>
-          <FlowPanel note={note} anchor={head} phone={phone} label={`${r.title}: its levels`} pointerX={200}>
-            <RowNoteBody bar={r.bar} />
-          </FlowPanel>
-          {/* EACH ROW ON ITS OWN SCALE (#79): low to high fills the track; on a gap the scale
-              stretches to the previous close, and the empty track between ◇ and the bar is the gap (#81). */}
-          <div className="klTrack" {...note.owner} data-tone={r.bar.tone} data-flat={r.bar.flat ? "1" : undefined} data-gap={r.bar.prev?.gap ?? undefined} onClick={note.toggle} style={trackStyle} aria-hidden="true">
-            <div className="klInner" style={{ position: "absolute", left: GUTTER, right: GUTTER, top: 0, bottom: 0 }}>
-              <div className="klRail" style={{ position: "absolute", top: 10, height: 8, left: 0, right: 0, borderRadius: 4, background: C.track }} />
-              <div className="klBar" style={{ position: "absolute", top: 10, height: 8, left: `${r.bar.from}%`, width: `${r.bar.to - r.bar.from}%`, minWidth: 4, borderRadius: 4, background: TONE_COLOUR[r.bar.tone], opacity: r.bar.flat ? 0.2 : 0.45 }} />
-              {r.bar.prev ? (
-                <div className="klPrev" style={{ ...diamondStyle, left: `${r.bar.prev.pos}%` }} />
-              ) : null}
-              {r.bar.open !== null ? (
-                <div className="klOpen" style={{ position: "absolute", top: 6, height: 18, width: 2, marginLeft: -1, left: `${r.bar.open}%`, background: C.tick, borderRadius: 1, zIndex: 1 }} />
-              ) : null}
-              <div className="klDot" style={{ position: "absolute", top: 9, width: 10, height: 10, marginLeft: -5, left: `${r.bar.dot}%`, borderRadius: 999, background: TONE_COLOUR[r.bar.tone], border: "1.5px solid #f8fafc", boxSizing: "border-box", zIndex: 2 }} />
-            </div>
-          </div>
-          {r.bar.flat ? <div className="klFlat" style={{ marginTop: 2, fontSize: "var(--fs-label)", color: C.muted }}>No range yet</div> : null}
-        </>
       ) : (
-        <p className="klReason" style={{ ...noteStyle, marginTop: 4 }}>{r.reason}</p>
+        <span className="klValue" style={{ display: "flex", flexWrap: "wrap", columnGap: "0.5em", paddingLeft: 2, fontVariantNumeric: "tabular-nums" }}>
+          <span style={{ color: SIDE_COLOUR[r.side], fontWeight: 700 }}>{poleNumber(r.value)}</span>
+          <span className="klDist" style={{ color: C.muted, fontSize: "var(--fs-fine)" }}>{r.dist}</span>
+        </span>
       )}
     </div>
   );
@@ -136,7 +109,7 @@ export default function KeyLevelsCard({
   lastPrice?: number | null;
   /**
    * The page's render time (#563 COWORK #75/#76): in session, today's partial
-   * bar counts (the Day column is today so far); otherwise the last completed
+   * bar counts (the Day is today so far); otherwise the last completed
    * session. Without it, completed sessions only.
    */
   nowMs?: number;
@@ -146,10 +119,29 @@ export default function KeyLevelsCard({
   const k = keyLevels(bars, { nowMs });
   const hasPrice = typeof lastPrice === "number" && Number.isFinite(lastPrice) && lastPrice > 0;
   const last = hasPrice ? lastPrice : k.lastClose;
-  const rows = k.asOf && last != null ? barRows(k, last) : [];
   const phone = useIsPhone();
   const what = useTapNote();
   const head = useRef<HTMLDivElement | null>(null);
+  // EACH LABEL'S OWN HEIGHT SETS ITS ROOM (#115: at least about 1.4× the label line height, in rem): after
+  // mount the card measures every label, so one that wrapped (a long name on a narrow card, a large text size)
+  // pushes the next one down by its height, and only it. The pole grows only when the labels need it.
+  const box = useRef<HTMLDivElement | null>(null);
+  const [heights, setHeights] = useState<Record<string, number> | undefined>(undefined);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const fit = () => {
+      const root = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const next: Record<string, number> = {};
+      for (const x of el.querySelectorAll<HTMLElement>(".klLabel")) next[x.dataset.label ?? ""] = Math.round((x.offsetHeight / root) * 100) / 100;
+      setHeights((h) => (h && Object.keys(next).every((key) => Math.abs((h[key] ?? 0) - next[key]) < 0.02) ? h : next));
+    };
+    fit();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, []);
+  const pole = keyLevelPole(k, last, undefined, heights);
   return (
     <section className="klCard" style={cardStyle}>
       {/* "DAY · WEEK · MONTH" (#563 COWORK #77): not "Price levels", which names the main column's ladder. */}
@@ -172,16 +164,26 @@ export default function KeyLevelsCard({
         </p>
       ) : null}
 
-      {rows.map((r) => <KeyRow key={r.key} r={r} phone={phone} />)}
-
-      {/* THE SMALL PRINT, FOLDED (#88 §1). The Tiingo credit stays below, outside. */}
-      {rows.some((r) => r.bar) ? (
-        <HowToRead>
-          <p className="klKey" style={{ margin: 0 }}>{KEY_LINE}</p>
-        </HowToRead>
+      {pole ? (
+        <>
+          <div ref={box} className="klPole" aria-hidden="true" style={{ position: "relative", height: `${pole.height}rem`, marginTop: 12 }}>
+            <PoleSvg pole={pole} />
+            {pole.rows.map((r) => <PoleLabel key={`${r.label}${r.value}`} r={r} />)}
+          </div>
+          {/* The same levels in words, in price order, for screen readers (the pole above is aria-hidden). */}
+          <ul className="klList" style={srOnly}>{poleListWords(pole).map((t) => <li key={t}>{t}</li>)}</ul>
+          {/* The key: a legend at --fs-label as #115 rules, tagged as fine print (not reading text). */}
+          <p className="klKey" data-fine-print style={{ margin: "10px 0 0", fontSize: "var(--fs-label)", lineHeight: 1.45, color: C.muted }}>
+            <strong style={{ color: SIDE_COLOUR.up }}>Green</strong>{POLE_KEY.slice("Green".length, POLE_KEY.indexOf("red"))}<strong style={{ color: SIDE_COLOUR.down }}>red</strong>{POLE_KEY.slice(POLE_KEY.indexOf("red") + 3)}
+          </p>
+        </>
+      ) : k.reasons.map((r) => <p key={r} className="klReason" style={noteStyle}>{r}</p>)}
+      {pole?.skipped || credit ? (
+        <p className="klCredit" data-fine-print style={noteStyle}>
+          {pole?.skipped ? <>{pole.skipped}{credit ? " · " : ""}</> : null}
+          {credit ? <>Daily prices: {credit}</> : null}
+        </p>
       ) : null}
-      {k.reasons.length && !rows.length ? k.reasons.map((r) => <p key={r} className="klReason" style={noteStyle}>{r}</p>) : null}
-      {credit ? <p className="klCredit" data-fine-print style={noteStyle}>Daily prices: {credit}</p> : null}
     </section>
   );
 }
@@ -198,8 +200,4 @@ const cardStyle: CSSProperties = {
 const eyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: C.label };
 const titleStyle: CSSProperties = { margin: 0, fontSize: "1.375rem", lineHeight: 1.12, letterSpacing: "-0.03em" };
 const noteStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, color: C.muted };
-/** Each side of the track keeps this much room, so a dot or ◇ at either end stays inside the card. */
-export const GUTTER = 6;
-const trackStyle: CSSProperties = { position: "relative", height: 26, marginTop: 4, cursor: "help" };
-/** The previous close: a small hollow diamond, above the bar so it never hides the tick or the dot. */
-const diamondStyle: CSSProperties = { position: "absolute", top: 0, width: 7, height: 7, marginLeft: -3.5, transform: "rotate(45deg)", border: `1.5px solid ${C.prev}`, boxSizing: "border-box", background: "transparent", zIndex: 3 };
+const srOnly: CSSProperties = { position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 };

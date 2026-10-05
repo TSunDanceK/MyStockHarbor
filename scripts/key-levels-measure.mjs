@@ -1,128 +1,134 @@
-// THE KEY LEVELS CARD AT PHONE AND DESKTOP WIDTH, MEASURED IN CHROMIUM
-// (#563 COWORK #64). A rendered layout, not an argument about CSS.
+// THE KEY LEVELS POLE IN CHROMIUM (#563 COWORK #115, "E1, true scale").
 //
-// Renders C's card (app/stock/[symbol]/KeyLevelsCard.tsx; range bars, #66/#67)
-// for prices of three widths: about $250, about $25,000 (the widest a pooled
-// stock shows) and under $1 (four decimals), plus a day whose open, high and
-// last price are one price, so the open tick and the price dot sit on top of
-// each other. Each sits where the stock page puts it: below 900 px the sidebar
-// is full width inside the page's 20 px gutter; above, a 300 px sidebar. At
-// 320, 360, 390, 414, 430 and 1280 px it reports whether the page scrolls
-// sideways, whether a row's low–high label collides with its title or leaves
-// the card, whether every tick and dot is inside its track with both still
-// visible where they meet (the tick's ends showing above and below the dot),
-// and the card's height. With an output path, it also saves a 360 px screenshot.
+// Renders C's card (app/stock/[symbol]/KeyLevelsCard.tsx), hydrated, for the
+// fixtures #115 lists: a normal day, a Monday (the Week skipped), the first
+// session of a month (the Month skipped), a flat day, a gap from the previous
+// close, a crowded cluster of levels within 0.3%, and a thin stock whose levels
+// are one price (BRBI's flat run). At 320, 360, 390, 414, 430 and 1280 px, at a
+// 16 px and a 20 px root, it fails when the page scrolls sideways, when a label
+// overlaps another, when any label leaves the card, or when a name or price is
+// cut. With an output directory it saves 1280 and 390 px screenshots.
 //
-// NOT IN check-all: it needs a browser, and the suite must run without one
-// (the same rule as growth-visuals-measure.mjs).
+// NOT IN check-all: it needs a browser, and the suite must run without one.
 //
-//   node scripts/key-levels-measure.mjs [screenshot.png]
+//   node scripts/key-levels-measure.mjs [shots-dir]
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createRequire } from "node:module";
 import ts from "typescript";
-import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { reasonedValueUnit } from "./lib/render-cards.mjs";
 
 const require = createRequire(import.meta.url);
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("/opt/node22/lib/node_modules/playwright")); }
 
-const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
-const unit = `${reasonedValueUnit()}\nimport { useCallback, useLayoutEffect } from "react";\n${strip(fs.readFileSync("app/stock/[symbol]/TapNote.tsx", "utf8"))}\n${strip(fs.readFileSync("lib/ta/sessionBar.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/keyLevels.ts", "utf8"))}\n${strip(fs.readFileSync("lib/ta/keyLevelBars.ts", "utf8"))}\n${strip(fs.readFileSync("app/stock/[symbol]/KeyLevelsCard.tsx", "utf8")).replace("export default function KeyLevelsCard", "export function KeyLevelsCard")}\n`;
-const tmp = `scripts/.key-levels-measure-${process.pid}.mjs`;
-fs.writeFileSync(tmp, ts.transpileModule(unit, { fileName: "k.tsx", compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText);
-let M;
-try { M = await import(`${process.cwd()}/${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
-
-// Weekdays 1 Jul – 2 Oct 2026 (Labor Day closed), scaled to a price level.
-function bars(scale) {
-  const out = [];
-  for (let t = Date.parse("2026-07-01T00:00:00Z"), i = 0; t <= Date.parse("2026-10-02T00:00:00Z"); t += 86_400_000) {
-    const d = new Date(t), date = d.toISOString().slice(0, 10);
-    if (d.getUTCDay() === 0 || d.getUTCDay() === 6 || date === "2026-09-07") continue;
-    const open = (100 + i * 1.5 + (i % 4) * 0.3) * scale;
-    out.push({ date, open, high: open + 2.4 * scale, low: open - 1.3 * scale, close: open + 0.4 * scale });
-    i++;
-  }
+// HYDRATED: the card measures its own labels after mount (their height sets the
+// gap), so it runs as React does in the browser. A tiny CommonJS bundle of every
+// app module the card reaches, as scripts/measure-level-notes.mjs builds one.
+const ENTRY = "app/stock/[symbol]/KeyLevelsCard.tsx";
+const read = (p) => fs.readFileSync(p, "utf8");
+const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
+const resolveFrom = (from, spec) => {
+  const base = spec.startsWith("@/") ? spec.slice(2) : path.posix.normalize(path.posix.join(path.posix.dirname(from), spec));
+  return [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`].find(isFile) ?? null;
+};
+function bundle(entry) {
+  const out = {};
+  const visit = (rel) => {
+    if (out[rel] !== undefined) return;
+    out[rel] = "";
+    let js = ts.transpileModule(read(rel), { fileName: rel, compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react", esModuleInterop: true } }).outputText;
+    js = js.replace(/require\("([^"]+)"\)/g, (m, spec) => {
+      if (!spec.startsWith("@/") && !spec.startsWith(".")) return m;
+      const hit = resolveFrom(rel, spec);
+      if (!hit) throw new Error(`${rel}: cannot resolve ${spec}`);
+      visit(hit);
+      return `require(${JSON.stringify(hit)})`;
+    });
+    out[rel] = js;
+  };
+  visit(entry);
   return out;
 }
-/** The last day opens at its high and the last price is that same open. */
-function overlap() {
-  const b = bars(1.2), last = b[b.length - 1];
-  b[b.length - 1] = { ...last, high: last.open, close: last.open - 0.5, low: last.open - 2 };
-  return b;
-}
-const credit = React.createElement("a", { href: "#" }, "Market data from Tiingo.com");
-const cards = [
-  ["~$250", { bars: bars(1.2), lastPrice: 250.37, credit }],
-  ["~$25,000", { bars: bars(120), lastPrice: 25012.5, credit }],
-  ["under $1", { bars: bars(0.004), lastPrice: 0.7012, credit }],
-  ["open = high = last", { bars: overlap(), lastPrice: overlap().at(-1).open, credit }],
-  // #563 COWORK #75: in session, the Day row reads "today so far · 14:32 ET".
-  // #81: a gap up past the day's low (the scale stretched, grey track between ◇ and the bar),
-  // a gap down past the high, a tiny gap (the ◇ held clear of the bar's end), a 7% gap, and a flat session.
-  ["gap up", { bars: [...bars(1.2).slice(0, -2), { date: "2026-10-01", open: 230, high: 232, low: 229, close: 230 }, { date: "2026-10-02", open: 240, high: 246, low: 238, close: 244 }], lastPrice: 244, credit }],
-  ["gap down", { bars: [...bars(1.2).slice(0, -2), { date: "2026-10-01", open: 255, high: 258, low: 254, close: 256 }, { date: "2026-10-02", open: 240, high: 246, low: 238, close: 244 }], lastPrice: 244, credit }],
-  ["tiny gap", { bars: [...bars(1.2).slice(0, -2), { date: "2026-10-01", open: 236, high: 238.5, low: 235, close: 237.8 }, { date: "2026-10-02", open: 240, high: 246, low: 238, close: 244 }], lastPrice: 244, credit }],
-  ["7% gap", { bars: [...bars(1.2).slice(0, -2), { date: "2026-10-01", open: 223, high: 224, low: 220, close: 222 }, { date: "2026-10-02", open: 240, high: 246, low: 238, close: 244 }], lastPrice: 244, credit }],
-  ["flat day", { bars: [...bars(1.2).slice(0, -1), { date: "2026-10-02", open: 240, high: 240, low: 240, close: 240 }], lastPrice: 240, credit }],
-  // #77: after the close, before the nightly job: "today · close 16:00 ET (IEX)".
-  ["after close", { bars: [...bars(1.2).slice(0, -1), { date: "2026-10-02", open: 239, high: 246, low: 236, close: 244, partial: true, label: "today so far (IEX), 16:00 ET" }], lastPrice: 244, nowMs: Date.parse("2026-10-02T17:30:00-04:00"), credit }],
-  ["in session", { bars: [...bars(1.2).slice(0, -1), { date: "2026-10-02", open: 239, high: 246, low: 236, close: 244, partial: true, label: "today so far (IEX), 14:32 ET" }], lastPrice: 244, nowMs: Date.parse("2026-10-02T14:32:00-04:00"), credit }],
-].map(([name, props]) => `<div class="probe" data-name="${name}">${renderToStaticMarkup(React.createElement(M.KeyLevelsCard, props))}</div>`).join("");
-const doc = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>
-body{margin:0;background:#06080d;color:#e2e8f0;font-family:system-ui,sans-serif}
-.stock-wrap{max-width:1240px;margin:0 auto;padding:0 20px;box-sizing:border-box}
-.side{display:flex;flex-direction:column;gap:16px;width:300px}
-@media (max-width:900px){.side{width:auto}}
-</style></head><body><div class="stock-wrap"><aside class="side">${cards}</aside></div></body></html>`;
+const MODS = {
+  ...bundle(ENTRY),
+  react: read("node_modules/react/cjs/react.development.js"),
+  "react/jsx-runtime": read("node_modules/react/cjs/react-jsx-runtime.development.js"),
+  "react-dom": read("node_modules/react-dom/cjs/react-dom.development.js"),
+  "react-dom/client": read("node_modules/react-dom/cjs/react-dom-client.development.js"),
+  scheduler: read("node_modules/scheduler/cjs/scheduler.development.js"),
+};
 
-const shot = process.argv[2];
+
+// ── fixtures: weekdays from 3 Aug 2026 to `end`, a gentle wave; `tweak` edits the last bars ──
+function bars(end, tweak = (b) => b, base = 230) {
+  const out = [];
+  for (let t = Date.parse("2026-08-03T00:00:00Z"), i = 0; t <= Date.parse(`${end}T00:00:00Z`); t += 86_400_000) {
+    const d = new Date(t);
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+    const c = base * (1 + 0.03 * Math.sin(i / 5) + i * 0.0008);
+    out.push({ date: d.toISOString().slice(0, 10), open: c * 0.997, high: c * 1.008, low: c * 0.992, close: c });
+    i++;
+  }
+  return tweak(out);
+}
+const lastOf = (b) => b[b.length - 1].close;
+const flatEnd = (b) => { const l = b[b.length - 1]; b[b.length - 1] = { ...l, open: l.close, high: l.close, low: l.close }; return b; };
+const gapEnd = (b) => { const p = b[b.length - 2].close, l = b[b.length - 1]; b[b.length - 1] = { ...l, open: p * 1.06, high: p * 1.075, low: p * 1.05, close: p * 1.07 }; return b; };
+const crowd = (b) => { const n = b.length; for (let i = n - 4; i < n; i++) { const c = 250; b[i] = { ...b[i], open: c * (1 + (i - n) * 0.0004), high: c * 1.0012, low: c * 0.9985, close: c * (1 + (i - n + 2) * 0.0003) }; } return b; };
+const flatRun = (b) => b.map((x, i) => (i >= b.length - 12 ? { ...x, open: 11.24, high: 11.24, low: 11.24, close: 11.24 } : x));
+const FIX = [
+  ["normal day", bars("2026-10-08")],
+  ["Monday (Week skipped)", bars("2026-10-05")],
+  ["first of the month (Month skipped)", bars("2026-10-01")],
+  ["flat day", bars("2026-10-08", flatEnd)],
+  ["gap from the previous close", bars("2026-10-08", gapEnd)],
+  ["crowded (6 levels within 0.3%)", bars("2026-10-08", crowd)],
+  ["thin stock, one-price levels", bars("2026-10-08", flatRun, 13)],
+].map(([name, b]) => [name, { bars: b, lastPrice: lastOf(b), credit: "Market data from Tiingo.com" }]);
+
+const CSS = fs.readFileSync("app/globals.css", "utf8").replace(/@import[^;]*;|@tailwind[^;]*;|@theme inline \{[^}]*\}/g, "");
+const docAt = (root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>
+*,::before,::after{box-sizing:border-box}html{font-size:${root}px}body{margin:0;background:#06080d;color:#f1f5f9;font-family:system-ui,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:0 20px}.side{display:flex;flex-direction:column;gap:16px;width:300px}@media (max-width:900px){.side{width:auto}}
+</style></head><body><div class="wrap"><aside class="side">${FIX.map(([n], i) => `<div class="probe" data-name="${n}" id="p${i}"></div>`).join("")}</aside></div>
+<script>
+window.process = { env: { NODE_ENV: "development" } };
+const SOURCES = ${JSON.stringify(MODS).replace(/<\/script/g, "<\\/script")};
+const cache = {};
+function require(name) { if (cache[name]) return cache[name].exports; if (!(name in SOURCES)) throw new Error("no module " + name); const module = { exports: {} }; cache[name] = module; new Function("module", "exports", "require", "process", SOURCES[name])(module, module.exports, require, window.process); return module.exports; }
+const React = require("react"), Card = require(${JSON.stringify(ENTRY)}).default, client = require("react-dom/client");
+${JSON.stringify(FIX.map(([, p]) => p))}.forEach((props, i) => client.createRoot(document.getElementById("p" + i)).render(React.createElement(Card, props)));
+</script></body></html>`;
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "key-levels-measure-"));
+const shots = process.argv[2];
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
 let failures = 0;
-for (const width of [320, 360, 390, 414, 430, 1280]) {
-  const page = await browser.newPage({ viewport: { width, height: 900 } });
-  await page.setContent(doc);
-  const r = await page.evaluate(() => ({
-    pageScrolls: document.documentElement.scrollWidth > innerWidth,
-    probes: [...document.querySelectorAll(".probe")].map((p) => {
-      const card = p.querySelector(".klCard"), c = card.getBoundingClientRect();
-      const bad = [];
-      for (const row of p.querySelectorAll(".klRow")) {
-        const range = row.querySelector(".klRange"), title = row.firstElementChild?.firstElementChild;
-        if (range && title) {
-          const a = title.getBoundingClientRect(), b = range.getBoundingClientRect();
-          if (b.left < a.right + 4 || b.right > c.right - 12 || Math.abs(b.top - a.top) > 6) bad.push(`label ${range.textContent}`);
-        }
-        const track = row.querySelector(".klTrack");
-        if (!track) continue;
-        const t = track.getBoundingClientRect();
-        const dot = row.querySelector(".klDot").getBoundingClientRect(), tick = row.querySelector(".klOpen")?.getBoundingClientRect();
-        if (dot.left < c.left || dot.right > c.right) bad.push("dot off the card");
-        if (tick && (tick.left < t.left - 1 || tick.right > t.right + 1)) bad.push("tick off its track");
-        // Both visible where they meet: the tick's ends stick out above and below the dot.
-        if (tick && !(tick.top < dot.top - 2 && tick.bottom > dot.bottom + 2)) bad.push("tick hidden by the dot");
-        // The ◇ (#78/#81): above the dot, never hidden by it, inside the card; on a gap, clear of the bar's end.
-        const prevEl = row.querySelector(".klPrev"), prev = prevEl?.getBoundingClientRect();
-        const bar = row.querySelector(".klBar").getBoundingClientRect(), side = track.dataset.gap;
-        if (prev && side === "below" && !(prev.right < bar.left)) bad.push("◇ on the bar's low end");
-        if (prev && side === "above" && !(prev.left > bar.right)) bad.push("◇ on the bar's high end");
-        if (side && !(bar.width < t.width - 20)) bad.push("gap bar not shorter");
-        if (!side && Math.abs(bar.width - row.querySelector(".klInner").getBoundingClientRect().width) > 1) bad.push("no-gap bar not full width");
-        if (prev && !(prev.bottom <= dot.top + 1)) bad.push("◇ under the dot");
-        if (prev && (prev.left < c.left || prev.right > c.right)) bad.push("◇ off the card");
-        const gap = row.querySelector(".klGap");
-        if (gap && gap.scrollWidth > gap.clientWidth + 0.5) bad.push("gap words cut");
-      }
-      return { name: p.dataset.name, cardW: Math.round(c.width), cardH: Math.round(c.height), inView: c.right <= innerWidth + 0.5, bad };
-    }),
-  }));
-  const ok = !r.pageScrolls && r.probes.every((p) => p.inView && p.bad.length === 0);
-  if (!ok) failures++;
-  console.log(`${width}px: page scrolls sideways ${r.pageScrolls} · ${r.probes.map((p) => `${p.name}: card ${p.cardW}×${p.cardH}px${p.bad.length ? ` ${JSON.stringify(p.bad)}` : ""}`).join(" · ")} — ${ok ? "OK" : "FAIL"}`);
-  if (shot && width === 360) await page.screenshot({ path: shot, fullPage: true });
-  await page.close();
+for (const root of [16, 20]) {
+  const f = path.join(tmpDir, `p${root}.html`); fs.writeFileSync(f, docAt(root));
+  for (const width of [320, 360, 390, 414, 430, 1280]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    const errors = []; page.on("pageerror", (e) => errors.push(String(e)));
+    await page.goto(`file://${f}`); await page.waitForSelector(".probe .klCard"); await page.waitForTimeout(250);
+    const r = await page.evaluate(() => ({
+      scrolls: document.documentElement.scrollWidth > innerWidth,
+      probes: [...document.querySelectorAll(".probe")].map((p) => {
+        const card = p.querySelector(".klCard").getBoundingClientRect(), bad = [];
+        const labels = [...p.querySelectorAll(".klLabel")].map((l) => ({ l, parts: [...l.querySelectorAll(".klName, .klValue, .klPill")].filter((e) => e.textContent.trim()).map((e) => { const range = document.createRange(); range.selectNodeContents(e); return range.getBoundingClientRect(); }) }));
+        labels.forEach(({ l, parts }) => parts.forEach((b) => { if (b.left < card.left + 4 || b.right > card.right - 4) bad.push(`outside the card: ${l.textContent.trim().slice(0, 30)}`); }));
+        for (const e of p.querySelectorAll(".klName, .klValue, .klPill")) if (e.scrollWidth > e.clientWidth + 0.5) bad.push(`cut: ${e.textContent.trim().slice(0, 30)}`);
+        const boxes = labels.flatMap(({ l, parts }) => parts.map((b) => ({ t: l.textContent.trim().slice(0, 24), b })));
+        boxes.forEach((a, i) => boxes.slice(i + 1).forEach((c) => { if (a.t !== c.t && a.b.right > c.b.left + 1 && c.b.right > a.b.left + 1 && a.b.bottom > c.b.top + 1 && c.b.bottom > a.b.top + 1) bad.push(`overlap: ${a.t} / ${c.t}`); }));
+        return { name: p.dataset.name, labels: labels.length, h: Math.round(card.height), bad: [...new Set(bad)] };
+      }),
+    }));
+    const ok = !r.scrolls && !errors.length && r.probes.every((p) => !p.bad.length && p.labels > 1);
+    if (!ok) failures++;
+    console.log(`${width}px @ ${root}px root: ${ok ? "OK" : "FAIL"}${r.scrolls ? " · SCROLLS SIDEWAYS" : ""}${errors.length ? ` · errors ${errors.join(" ")}` : ""}`);
+    for (const p of r.probes) if (p.bad.length || p.labels < 2) console.log(`    ${p.name} (${p.labels} labels): ${p.bad.join("; ") || "too few labels"}`);
+    if (shots && (width === 1280 || width === 390)) await page.screenshot({ path: path.join(shots, `key-levels-${width}-${root}.png`), fullPage: true });
+    await page.close();
+  }
 }
 await browser.close();
 process.exit(failures ? 1 : 0);
