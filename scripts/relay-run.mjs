@@ -1335,6 +1335,10 @@ const TASKS = {
   // committed floor / none) and empty-cell reason codes per column; counts,
   // symbols and codes only in the log. Redis: GET + one HMGET per page of rows.
   "write-pickers-why-census": { script: "scripts/pickers-why-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // The empty pickers Valuation cells by cause, and a measure of each fix (#552 COWORK #171).
+  // READ-ONLY despite the prefix (enforced in the script: non-read verbs refused). Counts,
+  // symbols and codes only in the log. SEC: one companyfacts per measured filer, ≤ 8/s.
+  "write-pickers-valuation-gap-census": { script: "scripts/pickers-valuation-gap-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // Capex named links, plan (c) (#563 COWORK #19): read-only scan of every tracked
   // filer's latest 10-K/20-F for sentences naming a receiver next to a trade word.
   // Candidates for review only; nothing is published unreviewed. Redis 0.
