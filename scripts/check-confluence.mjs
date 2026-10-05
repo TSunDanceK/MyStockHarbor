@@ -13,6 +13,13 @@
 // dot at its true height; "≈" on projections; the copy has no forecast words;
 // placement directly above Key levels; no fetch or Redis. A mutant each.
 //
+// PRICE GAPS (#563 COWORK #108): B's lib/ta/fairValueGaps.ts is bundled as
+// imported (not copied). Fixtures: a gap that overlaps a shown zone (one more
+// member, a dated note line, the zone's range unmoved), one near but not
+// overlapping, one filled, none; today's partial bar never fills one; gaps
+// never make, move or pick a zone; the card holds no ReasonedValue (so its
+// translateY labels can't capture a fixed note). A mutant each.
+//
 //   node scripts/check-confluence.mjs
 import fs from "node:fs";
 import ts from "typescript";
@@ -23,7 +30,9 @@ import { grabFunction } from "./lib/earnings-plan.mjs";
 import { stripComments } from "./lib/source-code.mjs";
 
 const LIB = "lib/ta/confluence.ts", CARD = "app/stock/[symbol]/ConfluenceCard.tsx", PAGE = "app/stock/[symbol]/StockSymbolPageClient.tsx";
-const DEPS = ["lib/ta/sessionBar.ts", "lib/ta/keyLevels.ts", "lib/ta/macdSeries.ts", "lib/ta/priceLadder.ts"];
+const DEPS = ["lib/ta/sessionBar.ts", "lib/ta/keyLevels.ts", "lib/ta/macdSeries.ts", "lib/ta/priceLadder.ts", "lib/ta/fairValueGaps.ts"];
+// B's detector has its own module-scope isPrice; one bundle can't hold two.
+const depSrc = (f) => (f.endsWith("fairValueGaps.ts") ? strip(read(f)).replace(/\bisPrice\b/g, "fvgIsPrice") : strip(read(f)));
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 
 /** C's TapNote (#563 COWORK #88/#89), with the two hooks the shared unit doesn't import. */
@@ -36,7 +45,7 @@ async function load(lib, card, tap = read("app/stock/[symbol]/TapNote.tsx")) {
   const lifted = ["lastNum", "rsiWilder", "ema", "buildMacd"].map((f) => grabFunction(page, f)).join("\n")
     .replace(/\bfunction ema\(/, "function pageEma(").replace(/\bema\(values, (12|26)\)/g, "pageEma(values, $1)").replace(/\bema\(macdValues, 9\)/, "pageEma(macdValues, 9)")
     .replace(/\bavg\(/g, "pageAvg(");
-  const unit = `${reasonedValueUnit()}\n${tapNoteUnit(tap)}\n${DEPS.map((f) => strip(read(f))).join("\n")}\n${strip(lib)}\n${strip(card).replace("export default function ConfluenceCard", "export function ConfluenceCard")}\n` +
+  const unit = `${reasonedValueUnit()}\n${tapNoteUnit(tap)}\n${DEPS.map(depSrc).join("\n")}\n${strip(lib)}\n${strip(card).replace("export default function ConfluenceCard", "export function ConfluenceCard")}\n` +
     `const pageAvg = (v) => (v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0);\n${lifted}\nexport { rsiWilder as pageRsi, buildMacd as pageMacd };\n`;
   const tmp = `scripts/.check-confluence-${process.pid}-${n++}.mjs`;
   fs.writeFileSync(tmp, ts.transpileModule(unit, { fileName: "c.tsx", compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText);
@@ -65,7 +74,14 @@ const SLIDE = RISING.slice(0, -60).concat(Array.from({ length: 60 }, (_, i) => {
 }));
 // The flat last session: the price sits inside a zone.
 const FLAT = RISING.map((b, i, a) => (i === a.length - 1 ? { ...b, open: b.close, high: b.close, low: b.close } : b));
+// Gap fixtures on a flat series (high 100.5, low 99.5): bar 40's high 100.5, bar 42's low 105.5 → the gap [100.5, 105.5], c2 Tue 4 Aug 2026.
+const FLAT_DAYS = (() => { const out = []; for (let t = Date.parse("2026-06-08T00:00:00Z"); out.length < 80; t += 86_400_000) { const d = new Date(t); if (d.getUTCDay() % 6) out.push(d.toISOString().slice(0, 10)); } return out; })();
+const gapBars = (after) => FLAT_DAYS.map((date, i) => i < 41 ? { date, open: 100, high: 100.5, low: 99.5, close: 100 } : i === 41 ? { date, open: 101, high: 106, low: 100.8, close: 105.5 } : { date, open: 106, high: 106.5, low: after(i), close: 106 });
+const GAP_OPEN = gapBars(() => 105.5), GAP_FILLED = gapBars((i) => (i === 60 ? 103 : 105.5));
+const GAP_TODAY = [...GAP_OPEN, { date: "2026-10-01", open: 106, high: 106, low: 103, close: 104, partial: true }];
 const sma = (b, k) => b.slice(-k).reduce((s, x) => s + x.close, 0) / k;
+// RISING holds unfilled gaps below the price; a macro support zone placed across the lower one makes a shown zone it overlaps.
+const GAP_MACRO = { lower: 249.5, upper: 250.5 };
 const input = (b) => ({ bars: b, ma50: sma(b, 50), ma200: sma(b, 200), macro: null });
 const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
 const FORECAST = /\b(buy|sell|bullish|bearish|will|should|recommend|target|expect|likely|breakout)\b/i;
@@ -75,7 +91,7 @@ function measure(M) {
   const render = (b) => renderToStaticMarkup(React.createElement(M.ConfluenceCard, input(b)));
   const credited = renderToStaticMarkup(React.createElement(M.ConfluenceCard, { ...input(RISING), credit: React.createElement("a", { href: "#" }, "Tiingo credit") }));
   const noteHtml = (c, z, side) => renderToStaticMarkup(React.createElement(M.ZoneNoteBody, { mark: { zone: z, side, top: 0, bottom: 0, labelY: 0 }, price: c.price }));
-  return { M, rising: c(RISING), falling: c(FALLING), shared: c(SHARED), slide: c(SLIDE), flat: c(FLAT), risingHtml: render(RISING), flatHtml: render(FLAT), credited, noteHtml };
+  return { M, rising: c(RISING), falling: c(FALLING), shared: c(SHARED), slide: c(SLIDE), flat: c(FLAT), gapped: M.confluence({ ...input(RISING), macro: GAP_MACRO }), risingHtml: render(RISING), flatHtml: render(FLAT), credited, noteHtml };
 }
 const shownZones = (c) => [...c.above, ...c.below, ...(c.inside ? [c.inside] : [])];
 
@@ -96,7 +112,7 @@ const RULES = {
     const g = M.bandMerge([m(10), m(10.5), m(10.9), m(11.1), m(12)], 1);
     return g.map((z) => z.map((x) => x.value).join(",")).join("|") === "10,10.5,10.9|11.1,12" &&
       near(rising.band, M.K_ATR * rising.atr) && shownZones(rising).every((z) => z.hi - z.lo <= rising.band + 1e-9 &&
-        z.lo === Math.min(...z.members.map((x) => x.value)) && z.hi === Math.max(...z.members.map((x) => x.value)));
+        z.lo === Math.min(...z.members.filter((x) => !x.gap).map((x) => x.value)) && z.hi === Math.max(...z.members.filter((x) => !x.gap).map((x) => x.value)));
   },
   "≥2 independent members, at least one structural: round numbers and projections never alone": ({ M, rising, falling, flat }) => {
     const m = (v, tier) => ({ labels: [tier], value: v, tier, date: null, rank: 2 });
@@ -204,6 +220,54 @@ const RULES = {
     return /<div className="sp-slot sp-confluence">\s*<ConfluenceCard bars=\{history\}[^\n]*\/>\s*<\/div>\s*\{\/\*[^*]*\*\/\}\s*<div className="sp-slot sp-keylevels">/.test(side) &&
       (p.match(/<ConfluenceCard\b/g) ?? []).length === 1 && /^import ConfluenceCard from "\.\/ConfluenceCard";$/m.test(p);
   },
+  "gaps: B's detector at its defaults, imported, not copied; closed bars only": ({ M }) => {
+    const lib = stripComments(read(LIB), { file: LIB });
+    const open = M.zoneGaps(GAP_OPEN), today = M.zoneGaps(GAP_TODAY);
+    return /^import \{ fairValueGaps, type FairValueGap \} from "\.\/fairValueGaps";$/m.test(read(LIB)) && !/function fairValueGaps|function atrSeries/.test(lib) &&
+      /fairValueGaps\(closed\.map\(\(b\) => \(\{ date: b\.date, high: b\.high!, low: b\.low!, close: b\.close \}\)\)\)/.test(lib) &&
+      open.length === 1 && open[0].lower === 100.5 && open[0].upper === 105.5 &&
+      today.length === 1 && today[0].date === open[0].date && M.zoneGaps(GAP_FILLED).length === 0;
+  },
+  "gaps: an overlapping gap adds one structural member and a dated note line; the range stays": ({ M }) => {
+    const [g] = M.zoneGaps(GAP_OPEN);
+    const z = { lo: 100, hi: 101, count: 2, members: [
+      { labels: ["MA50"], value: 100, tier: "structural", date: null, rank: 2 },
+      { labels: ["Swing low"], value: 101, tier: "structural", date: "2026-07-01", rank: 2 }] };
+    const w = M.withGaps(z, [g]), parts = M.zoneNoteParts(w, 110), gb = parts.bullets.find((b) => b.kind === "gap");
+    const edge = M.withGaps({ ...z, lo: 99, hi: g.lower }, [g]);
+    return g.date === "2026-08-04" && w.count === 3 && w.members.length === 3 && w.lo === 100 && w.hi === 101 &&
+      w.members.some((m) => m.gap && m.tier === "structural" && m.labels.join() === "Unfilled price gap") &&
+      !!gb && M.bulletWords(gb) === "Unfilled price gap from Tue 4 Aug 2026" && M.zoneNote(w).includes("Unfilled price gap from Tue 4 Aug 2026.") &&
+      M.NOTE_KINDS.some((k) => k.key === "gap" && k.label === "Price gaps") && edge.count === 3;
+  },
+  "gaps: near but not overlapping, or none, adds nothing": ({ M }) => {
+    const [g] = M.zoneGaps(GAP_OPEN);
+    const z = { lo: 98, hi: 100.4, count: 2, members: [
+      { labels: ["MA50"], value: 98, tier: "structural", date: null, rank: 2 },
+      { labels: ["MA200"], value: 100.4, tier: "structural", date: null, rank: 0 }] };
+    return M.withGaps(z, [g]) === z && M.withGaps(z, []) === z && M.zoneNoteParts(z, 110).bullets.every((b) => b.kind !== "gap");
+  },
+  "gaps: on the page's zones, each shown zone holds exactly the gaps that overlap it, and they never make, move or pick a zone": ({ M, rising, falling, flat, gapped }) => {
+    let withGap = 0;
+    const ok = [[RISING, rising], [FALLING, falling], [FLAT, flat], [RISING, gapped]].every(([bars, c]) => {
+      const gaps = M.zoneGaps(bars), all = M.allZones(c.levels, c.band, c.price);
+      return shownZones(c).every((z) => {
+        const over = gaps.filter((g) => g.lower <= z.hi && g.upper >= z.lo), base = all.find((a) => a.lo === z.lo && a.hi === z.hi);
+        if (over.length) withGap++;
+        return !!base && z.count === base.count + over.length && z.members.filter((m) => m.gap).length === over.length;
+      });
+    });
+    return ok && withGap > 0;
+  },
+  "gaps: the card holds no ReasonedValue (its labels' translateY can't capture a fixed note)": () =>
+    !/ReasonedValue|EstimatedValue/.test(stripComments(read(CARD), { file: CARD })),
+  "gaps: the card says how a gap counts, in plain words, with no forecast": ({ M }) => {
+    const [g] = M.zoneGaps(GAP_OPEN);
+    const note = M.zoneNote(M.withGaps({ lo: 100, hi: 101, count: 2, members: [
+      { labels: ["MA50"], value: 100, tier: "structural", date: null, rank: 2 }, { labels: ["MA200"], value: 101, tier: "structural", date: null, rank: 0 }] }, [g]));
+    return M.GAP_WHAT === "An unfilled price gap (a jump of at least half the usual daily range that prices haven't gone back into, over the last 250 sessions) adds one level to a zone it overlaps; it never makes a zone on its own." &&
+      /\$\{GAP_WHAT\}/.test(read(CARD)) && !FORECAST.test(M.GAP_WHAT) && !FORECAST.test(note) && !FORECAST.test(M.GAP_LABEL);
+  },
   "no fetch, no Redis, no provider reads": () =>
     [[LIB, read(LIB)], [CARD, read(CARD)]].every(([f, s]) => !/\bfetch\(|redis|upstash|tiingo|fmp/i.test(stripComments(s, { file: f }))),
 };
@@ -230,9 +294,9 @@ const MUTANTS = [
   ["reverse RSI: the projected close, run forward through the page's RSI, reads 70 and 30", "l", (s) => s.replace("avgGain = (avgGain * (period - 1) + (d > 0 ? d : 0)) / period;", "avgGain = (avgGain * (period - 1) + (d > 0 ? d : 0)) / (period + 1);")],
   ["reverse MACD: the projected close, run forward through the page's MACD, meets the signal line", "l", (s) => s.replace("const a12 = 2 / 13, a26 = 2 / 27;", "const a12 = 2 / 12, a26 = 2 / 26;")],
   ["a projection beyond 20%, or out of reach, is left out with its reason", "l", (s) => s.replace("if (pct > MAX_PROJECTION_PCT) {", "if (false) {")],
-  ["the nearest 2 qualifying zones above and below; a zone holding the price is 'inside'", "l", (s) => s.replace("const above = zones.filter((z) => z.lo > price).sort((x, y) => x.lo - y.lo).slice(0, SHOWN);", "const above = zones.filter((z) => z.lo > price).sort((x, y) => y.lo - x.lo).slice(0, SHOWN);")],
+  ["the nearest 2 qualifying zones above and below; a zone holding the price is 'inside'", "l", (s) => s.replace("const above = zones.filter((z) => z.lo > price).sort((x, y) => x.lo - y.lo).slice(0, SHOWN)", "const above = zones.filter((z) => z.lo > price).sort((x, y) => y.lo - x.lo).slice(0, SHOWN)")],
   ["the nearest 2 qualifying zones above and below; a zone holding the price is 'inside'", "l", (s) => s.replace("export const SHOWN = 2;", "export const SHOWN = 1;")],
-  ["price inside a zone: shown as 'price inside zone', the next ones out above and below", "l", (s) => s.replace("const inside = zones.find((z) => z.lo <= price && price <= z.hi) ?? null;", "const inside = null;")],
+  ["price inside a zone: shown as 'price inside zone', the next ones out above and below", "l", (s) => s.replace("const inside = insideZone ? withGaps(insideZone, gaps) : null;", "const inside = null;")],
   ["price inside a zone: shown as 'price inside zone', the next ones out above and below", "c", (s) => s.replace('{mark.side === "inside" ? <div className="czInside"', '{false ? <div className="czInside"')],
   ["a fixed scale: the shown zones and the price, padded; the dot at its true height, never centred", "l", (s) => s.replace("scale: { lo: lo - pad, hi: hi + pad }, levels:", "scale: { lo: price - Math.max(price - lo, hi - price) - pad, hi: price + Math.max(price - lo, hi - price) + pad }, levels:")],
   ["a fixed scale: the shown zones and the price, padded; the dot at its true height, never centred", "c", (s) => s.replace("top: priceY + dotOff - 6,", "top: ZONE_LADDER_HEIGHT / 2 - 6 + dotOff,")],
@@ -253,6 +317,18 @@ const MUTANTS = [
   ["one note open at a time; ✕, Esc or a tap outside closes it; the zone labels use it (#88 §3)", "t", (s) => s.replace("const l = (o: string | null) => setOpen(o === id);", "const l = (o: string | null) => { if (o === id) setOpen(true); };")],
   ["one note open at a time; ✕, Esc or a tap outside closes it; the zone labels use it (#88 §3)", "t", (s) => s.replace('if (e.key === "Escape") close();', "")],
   ["one note open at a time; ✕, Esc or a tap outside closes it; the zone labels use it (#88 §3)", "c", (s) => s.replace("if (phone) { onPush(index, bottom, h); return; }", "")],
+  ["gaps: B's detector at its defaults, imported, not copied; closed bars only", "l", (s) => s.replace("const closed = closedBars(bars).filter(", "const closed = [...(bars ?? [])].filter(")],
+  ["gaps: B's detector at its defaults, imported, not copied; closed bars only", "l", (s) => s.replace("return fairValueGaps(closed.map((b) => ({ date: b.date, high: b.high!, low: b.low!, close: b.close })));", "return fairValueGaps(closed.map((b) => ({ date: b.date, high: b.high!, low: b.low!, close: b.close })), { lookback: 20 });")],
+  ["gaps: an overlapping gap adds one structural member and a dated note line; the range stays", "l", (s) => s.replace("count: z.count + added.length };", "count: z.count };")],
+  ["gaps: an overlapping gap adds one structural member and a dated note line; the range stays", "l", (s) => s.replace("return { ...z, members: [...z.members, ...added]", "return { ...z, hi: Math.max(z.hi, ...over.map((g) => g.upper)), members: [...z.members, ...added]")],
+  ["gaps: an overlapping gap adds one structural member and a dated note line; the range stays", "l", (s) => s.replace("return `${GAP_LABEL} from ${dateWords(b.date)}`;", "return `${GAP_LABEL} from ${dateWords(b.date).replace(/ \\d{4}$/, \"\")}`;")],
+  ["gaps: an overlapping gap adds one structural member and a dated note line; the range stays", "l", (s) => s.replace('  if (label === GAP_LABEL) return "gap";\n', "")],
+  ["gaps: near but not overlapping, or none, adds nothing", "l", (s) => s.replace("g.lower <= z.hi && g.upper >= z.lo;", "g.lower <= z.hi + 1 && g.upper >= z.lo - 1;")],
+  ["gaps: on the page's zones, each shown zone holds exactly the gaps that overlap it, and they never make, move or pick a zone", "l", (s) => s.replace("const zones = allZones(dedupe(levels), band, price);", "const zones = [...allZones(dedupe(levels), band, price), ...zoneGaps(inp.bars).map((g) => ({ lo: g.lower, hi: g.upper, members: [], count: 1 }))];")],
+  ["gaps: on the page's zones, each shown zone holds exactly the gaps that overlap it, and they never make, move or pick a zone", "l", (s) => s.replace("const below = zones.filter((z) => z.hi < price).sort((x, y) => y.hi - x.hi).slice(0, SHOWN).map((z) => withGaps(z, gaps));", "const below = zones.filter((z) => z.hi < price).sort((x, y) => y.hi - x.hi).slice(0, SHOWN);")],
+  ["gaps: the card holds no ReasonedValue (its labels' translateY can't capture a fixed note)", "c", (s) => s.replace("<h2 style={titleStyle}>Price zones</h2>", "<h2 style={titleStyle}>Price zones</h2><ReasonedValue value={null} />")],
+  ["gaps: the card says how a gap counts, in plain words, with no forecast", "l", (s) => s.replace('export const GAP_WHAT = "An unfilled price gap (a jump', 'export const GAP_WHAT = "An unfilled price gap (likely to fill; a jump')],
+  ["gaps: the card says how a gap counts, in plain words, with no forecast", "l", (s) => s.replace("return `${GAP_LABEL} from ${dateWords(m.date)}.`;", "return `${GAP_LABEL} from ${dateWords(m.date)}: price will likely fill it.`;")],
   ["no fetch, no Redis, no provider reads", "l", (s) => s.replace("export const K_ATR = 0.35;", "export const K_ATR = 0.35;\nconst probe = () => fetch(\"/api/x\");")],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");
@@ -263,7 +339,7 @@ for (const [label, where, mutate] of MUTANTS) {
   if (mut === src) { check(`mutant bites: ${label}`, false, "the mutation did not apply"); continue; }
   let caught;
   // Rules that read a source file from disk get the mutation on disk, restored after.
-  const onDisk = where === "p" || (where === "l" && label.startsWith("no fetch")) || label.startsWith("one note open");
+  const onDisk = where === "p" || (where === "l" && label.startsWith("no fetch")) || label.startsWith("one note open") || label.startsWith("gaps: the card holds no ReasonedValue");
   if (onDisk) {
     const file = { p: PAGE, l: LIB, c: CARD, t: TAP }[where];
     fs.writeFileSync(file, mut);

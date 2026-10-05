@@ -350,14 +350,14 @@ checks.push(
   checks.push(["prune: a targets read under 50% of the stored rows drops nothing", real.shortSkips]);
   const code = readCodeOnly(MODULE);
   const actsOnPrune = (c) =>
-    /const \{ drop, skipped \} = rowsToPrune\(stored, list\);/.test(c) && /redis\.hdel\(PICKERS_SEC_KEY, \.\.\.drop\)/.test(c) &&
+    /const \{ drop, skipped \} = rowsToPrune\(stored, list\);/.test(c) && /redis\.hdel\(key, \.\.\.drop\)/.test(c) &&
     c.indexOf("const { drop, skipped } = rowsToPrune(stored, list)") > c.lastIndexOf("await flush()");
   checks.push(["the job HDELs exactly what rowsToPrune returns, after the write", actsOnPrune(code)]);
   const mutDrop = exercise(await prune(src.replace("return { drop: stored.filter((f) => !keep.has(f)), skipped: null };", "return { drop: [], skipped: null };")));
   checks.push(["mutant caught: the prune drops nothing (the stale row survives)", !mutDrop.dropsStale]);
   const mutGuard = exercise(await prune(src.replace("if (!targets.length) return { drop: [], skipped: \"no targets\" };", "").replace(/if \(targets\.length < stored\.length \* PRUNE_MIN_TARGET_SHARE\) \{[\s\S]*?\n  \}\n/, "")));
   checks.push(["mutant caught: the guard is removed (a bad targets read wipes the hash)", !mutGuard.emptySkips || !mutGuard.shortSkips]);
-  const mutHdel = readCodeOnly(MODULE).replace(/redis\.hdel\(PICKERS_SEC_KEY, \.\.\.drop\)/, "Promise.resolve(0)");
+  const mutHdel = readCodeOnly(MODULE).replace(/redis\.hdel\(key, \.\.\.drop\)/, "Promise.resolve(0)");
   checks.push(["mutant caught: the job computes the prune but never sends the HDEL", mutHdel !== code && !actsOnPrune(mutHdel)]);
 }
 

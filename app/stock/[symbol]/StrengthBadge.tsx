@@ -63,7 +63,7 @@ export function useStrengthNote() {
   return { note, phone, pointerX, aim };
 }
 
-/** The pill: "Strength · Firm". */
+/** The pill: "Strength · Firm", the same text in the server HTML. */
 export function StrengthPill({ s, badge, place }: { s: ReturnType<typeof useStrengthNote>; badge: StrengthBadge; place: "top" | "under" }) {
   const tone = TONE[badge.word ?? "none"];
   return (
@@ -74,6 +74,9 @@ export function StrengthPill({ s, badge, place }: { s: ReturnType<typeof useStre
         color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}`,
       }}>
         <span style={{ fontWeight: 700, color: "rgba(203,213,225,0.72)" }}>Strength</span>
+        {/* A REAL SEPARATOR IN THE TEXT (#563 COWORK #106): the gap alone left the
+            server HTML reading "StrengthStrong" to crawlers and screen readers. */}
+        <span style={{ color: "rgba(203,213,225,0.5)" }}> · </span>
         <span>{badge.word ?? "Not enough data"}</span>
       </NoteButton>
     </span>

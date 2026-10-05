@@ -21,7 +21,9 @@ import { reasonedValueUnit } from "./lib/render-cards.mjs";
 import { stripComments } from "./lib/source-code.mjs";
 
 const LIB = "lib/ta/levelsGlance.ts", CARD = "app/markets/spx/LevelsGlanceCard.tsx", PAGE = "app/markets/spx/page.tsx";
-const DEPS = ["lib/ta/sessionBar.ts", "lib/ta/keyLevels.ts", "lib/ta/macdSeries.ts", "lib/ta/priceLadder.ts"], ZONES = "lib/ta/confluence.ts";
+const DEPS = ["lib/ta/sessionBar.ts", "lib/ta/keyLevels.ts", "lib/ta/macdSeries.ts", "lib/ta/priceLadder.ts", "lib/ta/fairValueGaps.ts"], ZONES = "lib/ta/confluence.ts";
+// B's gap detector (imported by the zones since #563 COWORK #108) has its own module-scope isPrice; one bundle can't hold two.
+const depSrc = (f) => (f.endsWith("fairValueGaps.ts") ? strip(read(f)).replace(/\bisPrice\b/g, "fvgIsPrice") : strip(read(f)));
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
 const read = (f) => fs.readFileSync(f, "utf8");
 
@@ -29,7 +31,7 @@ let n = 0;
 async function load(lib, card, zonesLib = read(ZONES)) {
   const tap = `import { useCallback, useLayoutEffect } from "react";\n${strip(read("app/stock/[symbol]/TapNote.tsx"))}`;
   const zones = strip(read("app/stock/[symbol]/ConfluenceCard.tsx")).replace("export default function ConfluenceCard", "export function ConfluenceCard");
-  const unit = `${reasonedValueUnit()}\n${tap}\n${DEPS.map((f) => strip(read(f))).join("\n")}\n${strip(zonesLib)}\n${zones}\n${strip(lib)}\n${strip(card).replace("export default function LevelsGlanceCard", "export function LevelsGlanceCard")}\n`;
+  const unit = `${reasonedValueUnit()}\n${tap}\n${DEPS.map(depSrc).join("\n")}\n${strip(zonesLib)}\n${zones}\n${strip(lib)}\n${strip(card).replace("export default function LevelsGlanceCard", "export function LevelsGlanceCard")}\n`;
   const tmp = `scripts/.check-levels-glance-${process.pid}-${n++}.mjs`;
   fs.writeFileSync(tmp, ts.transpileModule(unit, { fileName: "c.tsx", compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText);
   try { return await import(`${process.cwd()}/${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
