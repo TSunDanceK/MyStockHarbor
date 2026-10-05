@@ -31,7 +31,7 @@
 // in secExtract (minorityInterestAt).
 
 /** The methods that passed, by name. Nothing else may carry an estimate. */
-export type EstimateKey = "ev-short-term-debt-untagged" | "pb-parent-equity-derived";
+export type EstimateKey = "ev-short-term-debt-untagged" | "ev-cash-incl-restricted" | "pb-parent-equity-derived";
 
 /**
  * How an estimated or derived figure was made. `kind` decides the marker:
@@ -53,6 +53,14 @@ export const ESTIMATE_METHODS: Record<EstimateKey, { kind: Estimate["kind"]; met
     kind: "estimate",
     method: "short-term debt is not tagged on this balance sheet, so it is counted as zero",
     backtest: "93% of back-tested cases within ±5% of the full figure",
+  },
+  // B1 (#552 COWORK #162 §3): cash untagged, cash INCLUDING restricted cash
+  // filed at the same balance-sheet date, both debt lines filed. Back-test:
+  // BACKTEST_B1.
+  "ev-cash-incl-restricted": {
+    kind: "estimate",
+    method: "cash is not tagged on this balance sheet, so it uses cash including restricted cash",
+    backtest: "BACKTEST_B1_LINE",
   },
   "pb-parent-equity-derived": {
     kind: "derived",
@@ -107,7 +115,14 @@ export function sicAllowsEstimate(sic: string | null | undefined): boolean {
 }
 
 /** The balance-sheet lines EV needs, as stored (null = not tagged). */
-export type EvBalanceSheet = { asOf: string; shortTermDebt: number | null; longTermDebt: number | null; cash: number | null };
+export type EvBalanceSheet = {
+  asOf: string; shortTermDebt: number | null; longTermDebt: number | null; cash: number | null;
+  /**
+   * Cash INCLUDING restricted cash on the SAME balance sheet (`asOf`), for B1
+   * only. Optional: rows written before it existed simply have no fallback.
+   */
+  cashIncludingRestricted?: number | null;
+};
 
 /**
  * ENTERPRISE VALUE: cap + short-term debt + long-term debt − cash.
@@ -121,17 +136,26 @@ export function enterpriseValueOf(
   bs: EvBalanceSheet | null,
   /** The filer's SIC, REQUIRED so no caller can skip the bank gate; null = unknown (no estimate). */
   sic: string | null | undefined,
-): { val: number; est?: Estimate } | { val: null; missing: string[] } {
+): { val: number; est?: Estimate; missing?: string[] } | { val: null; missing: string[] } {
   const missing = [
     ...(bs ? [] : ["the balance sheet"]),
     ...(bs && bs.shortTermDebt === null ? ["short-term debt"] : []),
     ...(bs && bs.longTermDebt === null ? ["long-term debt"] : []),
     ...(bs && bs.cash === null ? ["cash"] : []),
   ];
+  // B1 (#552 COWORK #162 §3): ONLY cash untagged, its incl.-restricted twin
+  // filed on the same balance sheet, both debt lines filed, not a bank. Never
+  // stacked with M2: two estimated lines in one figure were not back-tested.
+  // `missing` names the line the estimate stands in for, so a surface that
+  // does not render the mark refuses with the right word.
+  if (cap !== null && bs && bs.cash === null && bs.shortTermDebt !== null && bs.longTermDebt !== null
+      && typeof bs.cashIncludingRestricted === "number" && sicAllowsEstimate(sic)) {
+    return { val: cap + bs.shortTermDebt + bs.longTermDebt - bs.cashIncludingRestricted, est: estimateOf("ev-cash-incl-restricted", bs.asOf), missing: ["cash"] };
+  }
   if (cap === null || !bs || bs.longTermDebt === null || bs.cash === null) return { val: null, missing };
   if (bs.shortTermDebt === null) {
     if (!sicAllowsEstimate(sic)) return { val: null, missing };
-    return { val: cap + bs.longTermDebt - bs.cash, est: estimateOf("ev-short-term-debt-untagged", bs.asOf) };
+    return { val: cap + bs.longTermDebt - bs.cash, est: estimateOf("ev-short-term-debt-untagged", bs.asOf), missing: ["short-term debt"] };
   }
   return { val: cap + bs.shortTermDebt + bs.longTermDebt - bs.cash };
 }
