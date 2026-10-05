@@ -13,7 +13,8 @@
 // Positions are % of the track's width, 50 being zero; the widest value reaches
 // the track's end (2% inside it).
 //
-// COPY IS DESCRIPTIVE: past price change, "ahead of" / "behind" the S&P 500.
+// COPY IS DESCRIPTIVE: past price change, "ahead of" / "behind" the S&P 500. No
+// "best" / "weakest" tags: ranking returns over different spans misleads (#563 COWORK #113).
 import { LEVEL_WITH_PTS, PRICE_ONLY, pctWords, type PerfKey, type PerfStrip } from "./performance";
 
 export type PerfRow = {
@@ -32,8 +33,6 @@ export type PerfRow = {
   vs: "ahead" | "behind" | "level" | null;
   /** "+13.2 pts vs S&P", "−4.1 pts vs S&P", "level with S&P". */
   vsWords: string | null;
-  /** The period with the highest / lowest return of those shown (two or more rows only). */
-  tag: "best" | "weakest" | null;
 };
 
 export type PerfCard = {
@@ -66,9 +65,6 @@ export const SCALE_NOTE = "The bars use a square-root scale shared by all six ro
 export function performanceCard(strip: PerfStrip): PerfCard {
   const vals = strip.chips.flatMap((c) => [c.pct, strip.benchmark ? c.spyPct : null]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
   const maxAbs = vals.length ? Math.max(...vals.map(Math.abs)) : 0;
-  const shown = strip.chips.filter((c) => c.pct !== null);
-  const best = shown.length >= 2 ? shown.reduce((a, b) => (b.pct! > a.pct! ? b : a)) : null;
-  const worst = shown.length >= 2 ? shown.reduce((a, b) => (b.pct! < a.pct! ? b : a)) : null;
   const rows = strip.chips.map((c): PerfRow => {
     const tone = c.pct === null ? "flat" : c.pct > 0 ? "up" : c.pct < 0 ? "down" : "flat";
     const diff = strip.benchmark ? c.diffPts : null;
@@ -80,7 +76,6 @@ export function performanceCard(strip: PerfStrip): PerfCard {
       barTo: c.pct === null ? null : trackPos(c.pct, maxAbs),
       tick: strip.benchmark && c.spyPct !== null && c.pct !== null ? trackPos(c.spyPct, maxAbs) : null,
       vs, vsWords: diff === null ? null : vsWords(diff),
-      tag: best && best.key === c.key && best.pct! > worst!.pct! ? "best" : worst && worst.key === c.key && best!.pct! > worst.pct! ? "weakest" : null,
     };
   });
   const compared = rows.filter((r) => r.vs !== null);
@@ -92,7 +87,7 @@ export function performanceCard(strip: PerfStrip): PerfCard {
   const note = [
     `Each row is the price change from the close at the start of the period (the nearest trading day before it; for YTD, the last close of the previous year) to ${end}.`,
     PRICE_ONLY,
-    ...(strip.benchmark ? ["The thin tick on each bar is the S&P 500 (SPY) over the same dates. A bar that runs past its tick did better than the S&P 500 over that period; one that stops short did worse."] : []),
+    ...(strip.benchmark ? ["The thin tick on each bar is the S&P 500 (SPY) over the same dates. A bar that ends to the right of its tick did better than the S&P 500 over that period; one that ends to the left did worse."] : []),
     SCALE_NOTE,
     ...rows.filter((r) => r.reason).map((r) => `${r.key}: ${r.reason}`),
   ];

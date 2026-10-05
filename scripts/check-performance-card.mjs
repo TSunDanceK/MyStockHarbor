@@ -8,8 +8,8 @@
 //
 // Rules: the bar's direction from the zero line; the S&P 500 tick on the same
 // scale; the shared square-root scale; the "x of 6" count; a missing period is
-// "—" with its reason in the tap note, never 0; the vs chip; the best/weakest
-// tags; the note (price only, the as-of end, the tick, the scale); the credit
+// "—" with its reason in the tap note, never 0; the vs chip; no "best" /
+// "weakest" tags (#113); the note (price only, the as-of end, the tick, the scale); the credit
 // and stamp as fine print; no advice; placement (left column under Key levels,
 // above Latest earnings; before the chart on a phone); the figures are the
 // strip's, never recomputed; no transform and no ReasonedValue; token sizes.
@@ -108,12 +108,11 @@ const RULES = {
     row(cards.gains, "1Y").vsWords === "+13.2 pts vs S&P" && row(cards.mixed, "1M").vsWords === "−4.7 pts vs S&P" && row(cards.mixed, "1M").vs === "behind" &&
     cards.level.rows.every((r) => r.vs === "level" && r.vsWords === "level with S&P") &&
     /class="pcVs" style="[^"]*color:#86efac[^"]*">\+13\.2 pts vs S&amp;P</.test(html.gains) && /class="pcVs" style="[^"]*color:#fca5a5[^"]*">−4\.7 pts vs S&amp;P</.test(html.mixed),
-  "tags: 'best' on the highest return, 'weakest' on the lowest; none when all are equal": ({ cards }) =>
-    row(cards.gains, "5Y").tag === "best" && row(cards.gains, "1M").tag === "weakest" && row(cards.mixed, "YTD").tag === "weakest" &&
-    cards.gains.rows.filter((r) => r.tag).length === 2 && cards.equal.rows.every((r) => r.tag === null),
+  "no 'best' / 'weakest' tags: returns over different spans aren't ranked (COWORK #113)": ({ cards, html, lib, card }) =>
+    Object.values(cards).every((c) => c.rows.every((r) => !("tag" in r))) && !/pcTag|"best"|"weakest"/.test(lib + card) && !/(best|weakest)/.test(text(html.gains) + text(html.mixed)),
   "the note: price change only, the as-of end, the S&P tick, the scale": ({ M, cards }) => {
     const t = cards.gains.note.join(" ");
-    return t.includes(M.PRICE_ONLY) && /to the close on Fri 2 Oct 2026\./.test(t) && /The thin tick on each bar is the S&P 500 \(SPY\) over the same dates\./.test(t) &&
+    return t.includes(M.PRICE_ONLY) && /to the close on Fri 2 Oct 2026\./.test(t) && t.includes("The thin tick on each bar is the S&P 500 (SPY) over the same dates. A bar that ends to the right of its tick did better than the S&P 500 over that period; one that ends to the left did worse.") &&
       t.includes(M.SCALE_NOTE) && /square-root scale shared by all six rows/.test(M.SCALE_NOTE);
   },
   "the stamp and the Tiingo credit as fine print; the title opens the note": ({ html }) =>
@@ -161,12 +160,14 @@ const MUTANTS = [
   ["a missing period", "lib", (s) => s.replace("    ...rows.filter((r) => r.reason).map((r) => `${r.key}: ${r.reason}`),\n", "")],
   ["the vs chip", "lib", (s) => s.replace('return `${diff > 0 ? "+" : "−"}${d.toFixed(1)} pts vs S&P`;', 'return `${d.toFixed(1)} pts vs S&P`;')],
   ["the vs chip", "card", (s) => s.replace('ahead: { fg: "#86efac", bg: "rgba(34,197,94,0.12)" }, behind: { fg: "#fca5a5"', 'ahead: { fg: "#fca5a5", bg: "rgba(34,197,94,0.12)" }, behind: { fg: "#86efac"')],
-  ["tags:", "lib", (s) => s.replace("b.pct! > a.pct! ? b : a)) : null;\n  const worst", "b.pct! < a.pct! ? b : a)) : null;\n  const worst")],
+  ["no 'best'", "lib", (s) => s.replace("      vs, vsWords: diff === null ? null : vsWords(diff),\n", "      vs, vsWords: diff === null ? null : vsWords(diff),\n      tag: c.pct !== null && c.pct > 50 ? \"best\" : null,\n")],
+  ["no 'best'", "card", (s) => s.replace("        {r.key}\n", "        {r.key}\n        {r.pct !== null && r.pct < 0 ? <div className=\"pcTag\">weakest</div> : null}\n")],
   ["the note:", "lib", (s) => s.replace("    SCALE_NOTE,\n", "")],
   ["the note:", "lib", (s) => s.replace("    PRICE_ONLY,\n", "")],
   ["the stamp and", "card", (s) => s.replace('<p className="pcStamp" data-fine-print style={noteStyle}>', '<p className="pcStamp" style={noteStyle}>')],
   ["the stamp and", "card", (s) => s.replace("<h2 style={titleStyle}><NoteButton note={note}>{strip.benchmark ? \"Performance vs the S&P 500\" : \"Performance\"}</NoteButton></h2>", "<h2 style={titleStyle}>{strip.benchmark ? \"Performance vs the S&P 500\" : \"Performance\"}</h2>")],
   ["no advice", "lib", (s) => s.replace("did better than the S&P 500 over that period", "will likely keep beating the S&P 500")],
+  ["the note:", "lib", (s) => s.replace("A bar that ends to the right of its tick did better", "A bar that runs past its tick did better")],
   ["placement:", "client", (s) => s.replace(".sp-performance { order: 5; }", ".sp-performance { order: 35; }")],
   ["placement:", "client", (s) => {
     const block = /\n {14}\{\/\* Performance vs the S&P 500[\s\S]*?\) : null\}\n/.exec(s)[0];
