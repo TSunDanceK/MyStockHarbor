@@ -273,6 +273,28 @@ console.log("\n## 2. DEBT LINE MISSING — option (c), sum the components");
     console.log(`  BACK-TEST ${k}: ${a.length} filers with the line filed AND ≥ 1 component · sum within 5% of the filed line: ${within(a)} (${pct(within(a), a.length)}) · over by > 5% (double count): ${a.filter((x, i) => x > 0.05).length}`);
   }
   console.log(`  BACK-TEST EV (the ≈ rule): ${evErr.length} filers · within 5%: ${within(evErr)} (${pct(within(evErr), evErr.length)}) · rule: 9 in 10`);
+
+  // 2b. WHAT THE REST TAG INSTEAD: every debt-like instant concept they file at
+  // their stored balance-sheet date, by how many filers file it (names only).
+  const tally = new Map();
+  for (const s of notFilled) {
+    const set = setOf(s); const b = set && balanceSheetInstant(set);
+    if (!set || !b) continue;
+    const f = await companyFacts(set.cik);
+    for (const [tax, concepts] of Object.entries(f?.facts ?? {})) {
+      if (tax === "dei") continue;
+      for (const [c, body] of Object.entries(concepts)) {
+        if (!/Debt|Borrowing|NotesPayable|SeniorNotes|Loans?Payable|CommercialPaper|LineOfCredit|Bonds/i.test(c)) continue;
+        if (/Interest|Expense|Repayment|Proceeds|Payments|Issuance|Extinguishment|Amortization|Fair|Rate|Maturit|Covenant|Term$|Securities|Investments|Receivable/i.test(c)) continue;
+        if (!(body?.units?.USD ?? []).some((x) => x.end === b.e && !x.start)) continue;
+        if (!tally.has(c)) tally.set(c, new Set());
+        tally.get(c).add(s);
+      }
+    }
+  }
+  const top = [...tally.entries()].sort((a, z) => z[1].size - a[1].size).slice(0, 15);
+  console.log(`  2b. the ${notFilled.length} not filled: debt-like concepts filed at their balance-sheet date (filers):`);
+  for (const [c, set] of top) console.log(`    ${c} ${set.size}${set.size <= 6 ? ` (${[...set].join(" ")})` : ""}`);
 }
 
 // ── 3. shares: the balance-sheet count ──────────────────────────────────────
@@ -331,6 +353,18 @@ console.log("\n## 5. SHARE CLASS OR TICKER WITH NO OWN ROW");
   const syms = [...new Set(cc.map((x) => x.s))];
   console.log(`cells: ${cc.length} (${syms.length} symbols)${list(syms)} · codes: ${[...new Set(cc.map((x) => x.code))].join(", ")}`);
   console.log(`  base ticker has a row: ${syms.filter((s) => rows.has(baseOf(s))).length} (P/E could follow the base; the cap-based columns need every class's price)`);
+}
+
+// ── 6. a symbol with no row under its own spelling ─────────────────────────
+console.log("\n## 6. NO FILINGS ROW UNDER THE GRID'S SPELLING");
+{
+  const missing = universe.filter((s) => !rows.has(s));
+  const others = [...new Set(missing.flatMap((s) => dotDashSpellings(s).filter((x) => x !== s)))];
+  const alt = others.length ? await S.readSecPickerRows(others) : new Map();
+  for (const s of missing) {
+    const hit = dotDashSpellings(s).find((x) => x !== s && alt.has(x));
+    console.log(`  ${s}: ${hit ? `a row exists under ${hit} (a spelling gap: all six cells would fill from it)` : `no row under any spelling · registrant ${registrantFor(s) ? "known" : "unknown"} · stored set ${setOf(s) ? "yes" : "no"}`}`);
+  }
 }
 
 console.log(`\nRedis commands: ${meter.commands} (read-only, ${meter.refused} refused) · SEC requests: ${meter.sec} at ≤ 8/s · nothing written`);
