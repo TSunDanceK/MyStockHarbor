@@ -1145,7 +1145,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                     <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
                   </div>
                 </div>
-                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} />
+                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} gapBars={history} />
               </section>
 
               {/* -- Daily / weekly returns --------------------------- */}
