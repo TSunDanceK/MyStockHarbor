@@ -31,7 +31,7 @@ export type PerfRow = {
   tick: number | null;
   /** "ahead" / "behind" / "level" against the S&P 500, or null without a comparison. */
   vs: "ahead" | "behind" | "level" | null;
-  /** "+13.2 pts vs S&P", "−4.1 pts vs S&P", "level with S&P". */
+  /** "13.2 pts vs S&P" (its direction is `vs`, drawn as ▲ / ▼), "level with S&P". */
   vsWords: string | null;
 };
 
@@ -53,11 +53,11 @@ export function trackPos(v: number, maxAbs: number): number {
   return 50 + (signedSqrt(v) / Math.sqrt(maxAbs)) * 48;
 }
 
-/** "+13.2 pts vs S&P" / "−4.1 pts vs S&P" / "level with S&P". */
+/** "13.2 pts vs S&P" / "level with S&P". The direction rides the glyph (#563 COWORK #117), so the words carry no sign. */
 export function vsWords(diff: number): string {
   const d = Math.round(Math.abs(diff) * 10) / 10;
   if (d < LEVEL_WITH_PTS) return "level with S&P";
-  return `${diff > 0 ? "+" : "−"}${d.toFixed(1)} pts vs S&P`;
+  return `${d.toFixed(1)} pts vs S&P`;
 }
 
 export const SCALE_NOTE = "The bars use a square-root scale shared by all six rows (the sign kept), so a one-month move and a five-year move both stay readable on the same ruler.";
