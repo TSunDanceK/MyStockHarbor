@@ -456,7 +456,16 @@ const CASH_FLOW: FieldDef[] = ([
     ], unit: "USD" },
   { key: "dividendsPaid", chain: ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends"], unit: "USD" },
   { key: "buybacks", chain: ["PaymentsForRepurchaseOfCommonStock"], unit: "USD" },
-  { key: "dividendsDeclaredPerShare", chain: ["CommonStockDividendsPerShareDeclared"], unit: "USD/shares" },
+  // THE FILED PER-SHARE DIVIDEND UNDER ITS OTHER CONCEPT (#552 COWORK #160/#162,
+  // CODE-A #169). 71 of 150 Pickers payers with no Div ($) cell file their
+  // per-share dividend ONLY as …PerShareCashPaid (KO 2.04, JNJ 5.14, O 3.217 for
+  // FY2025), so the column read nothing for them. A FILED per-share figure, not a
+  // computed one, so secDividend's rule holds. ONE CONCEPT PER FILER: declared and
+  // paid land in different quarters, so a column never mixes the two; the filer's
+  // newest period decides, and where it files both, Declared (rank 0) wins. The
+  // key keeps its name (renaming it moves secFieldsHash and invalidates every
+  // set); the copy says "as filed" because the set does not record which won.
+  { key: "dividendsDeclaredPerShare", chain: ["CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid"], unit: "USD/shares", oneConceptPerFiler: true },
   // THE FOURTH LEG, AND THE RECONCILIATION IS NOT A CHECK WITHOUT IT. The three
   // activity totals exclude the exchange-rate effect while netChangeInCash's
   // first chain entry (...IncludingExchangeRateEffect) includes it, so the

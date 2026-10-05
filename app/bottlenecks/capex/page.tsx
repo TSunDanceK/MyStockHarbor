@@ -5,6 +5,7 @@ import { RECEIVER_ENTRIES, RECEIVER_GROUPS, readReceiversRecord } from "@/lib/se
 import { readContractsRecord } from "@/lib/server/capexContracts";
 import { readSpendingRecord } from "@/lib/server/capexSpending";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
+import WhyFollowMoney from "./WhyFollowMoney";
 import { normaliseCompanyName } from "@/lib/server/news/companyName";
 import { buildContractRows, buildInsights, buildReceiverGroups, buildSpendingRows, formatAmount, type Insights, type ReceiverView, type SpendingView } from "@/lib/capexPresent";
 
@@ -233,7 +234,6 @@ export default async function CapexPage() {
         .cardName { color: rgba(241,245,249,0.65); font-size: 12.5px; margin-left: 6px; }
         .cardAmt { font-weight: 900; }
         .shareTrack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.06); margin-top: 10px; }
-        .bulletList { margin: 10px 0 0 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; line-height: 1.6; color: rgba(241,245,249,0.8); }
         .spKey { margin: 12px 0 0 0; font-size: 12.5px; font-weight: 800; color: rgba(196,181,253,0.9); }
         .spRow { padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); display: grid; gap: 8px; }
         .spHead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 14px; }
@@ -351,6 +351,9 @@ function InsightColumn({ insights: x, contractsWindow }: { insights: Insights; c
         </section>
       ) : null}
 
+      {/* Why it matters (#563 COWORK #110): directly under "Where the money is going", the page's one explanation. */}
+      <WhyFollowMoney />
+
       {x.topSpenders.length ? (
         <section className="capexCard">
           <div className="cardEyebrow">Who is spending most</div>
@@ -420,15 +423,6 @@ function InsightColumn({ insights: x, contractsWindow }: { insights: Insights; c
         </section>
       ) : null}
 
-      <section className="capexCard">
-        <div className="cardEyebrow">What it means</div>
-        <h3>Reading this page</h3>
-        <ul className="bulletList">
-          <li>Rising capex can signal that companies expect demand to grow; it can also weigh on free cash flow in the short term.</li>
-          <li>Capex as a share of revenue shows how much of each sales dollar is being reinvested.</li>
-          <li>Spending by buyers and sales by suppliers are shown side by side; the page does not link them.</li>
-        </ul>
-      </section>
     </aside>
   );
 }

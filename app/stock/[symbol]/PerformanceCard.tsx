@@ -31,7 +31,6 @@ export function PerfRowView({ r, valueRem }: { r: PerfRow; valueRem: number }) {
     <li className="pcRow" data-key={r.key} data-tone={r.tone} data-vs={r.vs ?? "none"} style={{ ...rowStyle, gridTemplateColumns: `2.75rem minmax(0, 1fr) ${valueRem}rem` }}>
       <div className="pcKey" style={{ fontSize: "var(--fs-label)", fontWeight: 800, letterSpacing: "0.06em", color: C.muted }}>
         {r.key}
-        {r.tag ? <div className="pcTag" data-tag={r.tag} style={{ marginTop: 2, fontSize: "var(--fs-fine)", fontWeight: 700, letterSpacing: 0, color: r.tag === "best" ? C.up : C.down }}>{r.tag}</div> : null}
       </div>
       <div className="pcTrack" aria-hidden="true" style={{ position: "relative", height: 14, borderRadius: 7, background: C.track }}>
         <div className="pcZero" style={{ position: "absolute", left: "50%", top: -3, bottom: -3, width: 1, marginLeft: -0.5, background: C.zero }} />
