@@ -205,6 +205,20 @@ for (const pg of PAGES) {
     else console.log(`  ${width}px: no sideways scroll, nothing wider than its card`);
     await page.close();
   }
+  // THE HEADER CELLS' MINI-GRAPHICS (#563 COWORK #112): each stays inside its own stat cell, 320–1280 px.
+  if (html.includes("stock-stat-cell")) {
+    for (const width of [320, 360, 390, 414, 430, 1280]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.setContent(doc(html));
+      const out = await page.evaluate(() => [...document.querySelectorAll(".stock-stat-cell svg[class^='hs']")].flatMap((g) => {
+        const cell = g.closest(".stock-stat-cell").getBoundingClientRect(), r = g.getBoundingClientRect();
+        return r.left < cell.left - 1 || r.right > cell.right + 1 || r.top < cell.top - 1 || r.bottom > cell.bottom + 1 ? [g.getAttribute("class")] : [];
+      }).concat(document.querySelectorAll(".stock-stat-cell svg[class^='hs']").length ? [] : ["(no graphics rendered)"]));
+      if (out.length) { console.log(`  ${width}px: header graphics outside their cell: ${out.join(", ")} — FAIL`); failures++; }
+      else console.log(`  ${width}px: every header graphic inside its cell`);
+      await page.close();
+    }
+  }
   if (!pg.enforce) continue;
   // A large-text browser setting: the root at 20px. Reading text must follow (rem, not px).
   {

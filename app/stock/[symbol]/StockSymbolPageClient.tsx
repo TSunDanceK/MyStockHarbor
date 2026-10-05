@@ -8,8 +8,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
-import { DayRange, PositionBar, PriceChange, TrendSpark } from "./HeaderStripParts";
-import { rsiPosition, volumePosition } from "@/lib/headerStrip";
+import { DayCandle, DayRange, PeLine, PriceChange, PriceSpark, RsiPane, TrendSpark, VolumeBars } from "./HeaderStripParts";
+import { sectorMedianOf } from "@/lib/headerStrip";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import ConfluenceCard from "./ConfluenceCard";
@@ -1034,7 +1034,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           </div>
           {!priceLoading && !err ? (
             <div className="stock-header-stats" style={{ marginTop: 20 }}>
-              <div className="stock-stat-cell">
+              {/* THE CELLS' MINI-GRAPHICS (#563 COWORK #112): each decorative (aria-hidden), faint, behind or beside the figure, in the cell's colour; no transform. */}
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <PriceSpark closes={closes} prevClose={quote?.previousClose} />
                 <div className="stock-stat-label">Price</div>
                 <div className="stock-stat-value">{typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}</div>
                 {/* THE HEADER STRIP (#563 COWORK #99 §4): ▲/▼ beside the signed change, and spoken words for it. */}
@@ -1044,15 +1046,16 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                     : quote?.date ?? "—"}
                 </div>
               </div>
-              <div className="stock-stat-cell">
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <DayCandle open={quote?.open} high={quote?.dayHigh} low={quote?.dayLow} last={quote?.price} yearLow={quote?.yearLow} yearHigh={quote?.yearHigh} />
                 <div className="stock-stat-label">Day range</div>
                 <DayRange low={quote?.dayLow} high={quote?.dayHigh} last={quote?.price} />
                 <div className="stock-stat-sub">52wk <span style={{ whiteSpace: "nowrap" }}>{formatRange(quote?.yearLow, quote?.yearHigh)}</span></div>
               </div>
-              <div className="stock-stat-cell">
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <VolumeBars vols={history.map((p) => p.volume)} avg={quote?.avgVolume} colour={toneColor(volumeTone(quote?.volume, quote?.avgVolume))} />
                 <div className="stock-stat-label">Volume</div>
                 <div className="stock-stat-value" style={{ color: toneColor(volumeTone(quote?.volume, quote?.avgVolume)) }}>{formatCompactNumber(quote?.volume)}</div>
-                <PositionBar pos={volumePosition(quote?.volume, quote?.avgVolume)} ticks={[50]} colour={toneColor(volumeTone(quote?.volume, quote?.avgVolume))} />
                 <div className="stock-stat-sub">{quote?.volumeLabel ? `50-day avg ${formatCompactNumber(quote?.avgVolume)} · ${quote.volumeLabel}` : `Avg ${formatCompactNumber(quote?.avgVolume)}`}</div>
               </div>
               <div className="stock-stat-cell" style={{ position: "relative" }}>
@@ -1062,14 +1065,16 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 <div className="stock-stat-value" style={trendTone ? { color: toneColor(trendTone) } : undefined}>{trendScore.known ? `${trendScore.passed}/${trendScore.total}` : "—"}</div>
                 <div className="stock-stat-sub">{trend ?? "Not enough history yet"}</div>
               </div>
-              <div className="stock-stat-cell">
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <RsiPane series={rsi14} colour={toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null))} />
                 <div className="stock-stat-label">RSI (14)</div>
                 <div className="stock-stat-value" style={{ color: toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null)) }}>{typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}</div>
-                <PositionBar pos={rsiPosition(typeof lastRsi === "number" ? lastRsi : null)} ticks={[30, 70]} colour={toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null))} />
                 <div className="stock-stat-sub">{typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought" : lastRsi <= 30 ? "Oversold" : "Neutral") : "—"}</div>
               </div>
               {!valuationLoading && valuation ? (
-                <div className="stock-stat-cell">
+                <div className="stock-stat-cell" style={{ position: "relative" }}>
+                  {/* The median is read from A's line ("… sector median (21.5×)"); no quartiles exist, so no band. */}
+                  {valuation.peRatio != null && valuation.peSector ? <PeLine pe={valuation.peRatio} median={sectorMedianOf(valuation.peSector.text)} /> : null}
                   <div className="stock-stat-label">P/E ({valuation.peBasis ?? "TTM"})</div>
                   <div className="stock-stat-value">
                     {valuation.peRatio != null

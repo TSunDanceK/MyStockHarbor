@@ -35,7 +35,10 @@ async function load(lib, parts, page) {
 const html = (M, C, p) => renderToStaticMarkup(React.createElement(M[C], p));
 /** The P/E tile as it stood on main before this PR (A's #741 line, at c2928b1d), which must not change. */
 const PE_BEFORE = "{!valuationLoading && valuation ? (\n                <div className=\"stock-stat-cell\">\n                  <div className=\"stock-stat-label\">P/E ({valuation.peBasis ?? \"TTM\"})</div>\n                  <div className=\"stock-stat-value\">\n                    {valuation.peRatio != null\n                      ? formatValuationMultiple(valuation.peRatio)\n                      : <ReasonedValue text={valuation.words?.peRatio ?? \"—\"} reason={valuation.reasons?.peRatio} />}\n                  </div>\n                  {/* P/E VS ITS SECTOR (#552 COWORK #147 §2): the glyph and the\n                      words carry it, in the page's ordinary ink (a comparison,\n                      not a verdict); the note names the peers and the date. */}\n                  <div className=\"stock-stat-sub\" data-pe-sector={valuation.peSector ? \"\" : undefined}>\n                    {valuation.peSector\n                      ? <><span aria-hidden=\"true\">{valuation.peSector.glyph} </span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></>\n                      : \"See valuation ↓\"}\n                  </div>\n                </div>\n              ) : null}";
-const PE_BLOCK = /\{!valuationLoading && valuation \? \(\s*<div className="stock-stat-cell">\s*<div className="stock-stat-label">P\/E \(\{valuation\.peBasis \?\? "TTM"\}\)<\/div>[\s\S]*?: "See valuation ↓"\}\s*<\/div>\s*<\/div>\s*\) : null\}/;
+// #563 COWORK #112 adds a decorative P/E line inside the cell (and positions the cell); the tile otherwise stays as it was.
+const PE_DECOR = (s) => s.replace('<div className="stock-stat-cell" style={{ position: "relative" }}>', '<div className="stock-stat-cell">')
+  .replace(/\n {18}\{\/\* The median is read from A's line[^\n]*\*\/\}\n {18}\{valuation\.peRatio != null && valuation\.peSector \? <PeLine pe=\{valuation\.peRatio\} median=\{sectorMedianOf\(valuation\.peSector\.text\)\} \/> : null\}/, "");
+const PE_BLOCK = /\{!valuationLoading && valuation \? \(\s*<div className="stock-stat-cell"(?: style=\{\{ position: "relative" \}\})?>(?:\s*\{\/\* The median is read[^\n]*\*\/\}\s*\{valuation\.peRatio != null[^\n]*)?\s*<div className="stock-stat-label">P\/E \(\{valuation\.peBasis \?\? "TTM"\}\)<\/div>[\s\S]*?: "See valuation ↓"\}\s*<\/div>\s*<\/div>\s*\) : null\}/;
 
 const RULES = {
   "the arrow and the sign agree (▲ with +, ▼ with −, none when unchanged), with spoken words": ({ M }) => {
@@ -50,14 +53,19 @@ const RULES = {
     return agree && M.changeDirection(null) === null && M.changeAria(-2.5, -1.1) === "Down 2.50 (1.10%) today" &&
       /<PriceChange change=\{quote\?\.change\} pct=\{quote\?\.changePercentage\} label=\{formatChangeLabel\(quote\?\.change, quote\?\.changePercentage\)!\} \/>/.test(M.page);
   },
-  "the day range: the high on top in green, the low below in red, the bar at the price's place": ({ M }) => {
+  "the day range: the high on top in green, the low below in red; today's candle on the 52-week track, green when last ≥ open": ({ M }) => {
     const out = html(M, "DayRange", { low: 100, high: 110, last: 107.5 });
     const hi = out.indexOf("hsHigh"), lo = out.indexOf("hsLow");
-    return M.rangePosition(100, 110, 107.5) === 75 && M.rangePosition(100, 110, 120) === 100 && M.rangePosition(100, 110, 90) === 0 &&
-      M.rangePosition(100, 100, 100) === 50 && M.rangePosition(110, 100, 105) === null && M.rangePosition(100, 110, null) === null &&
-      hi > 0 && lo > hi && /hsHigh" style="[^"]*color:#22c55e/.test(out) && /hsLow" style="[^"]*color:#ef4444/.test(out) &&
-      out.includes("$110.00") && out.includes("$100.00") && /data-pos="75\.0"/.test(out) && /left:calc\(75% - 4px\)/.test(out) &&
+    const up = M.dayCandle({ open: 102, high: 110, low: 100, last: 107.5, yearLow: 90, yearHigh: 140 }), down = M.dayCandle({ open: 108, high: 110, low: 100, last: 101, yearLow: 90, yearHigh: 140 });
+    const flat = M.dayCandle({ open: 11.24, high: 11.24, low: 11.24, last: 11.24, yearLow: 11.24, yearHigh: 13.67 }), pre = M.dayCandle({ open: null, high: 110, low: 100, last: 105 });
+    const svg = html(M, "DayCandle", { open: 108, high: 110, low: 100, last: 101, yearLow: 90, yearHigh: 140 });
+    return hi > 0 && lo > hi && /hsHigh" style="[^"]*color:#22c55e/.test(out) && /hsLow" style="[^"]*color:#ef4444/.test(out) && out.includes("$110.00") && out.includes("$100.00") &&
       html(M, "DayRange", { low: null, high: 110, last: 100 }).includes("—") &&
+      up.up && !down.up && Math.abs(up.wickTop - 60) < 1e-9 && Math.abs(up.wickBottom - 80) < 1e-9 && Math.abs(up.bodyTop - 65) < 1e-9 && Math.abs(up.bodyBottom - 76) < 1e-9 &&
+      flat.up && flat.bodyBottom - flat.bodyTop >= M.MIN_BODY_PCT - 1e-9 && flat.wickTop === flat.wickBottom && !pre.onYear && pre.wickTop === 0 && pre.wickBottom === 100 &&
+      M.dayCandle({ high: null, low: 1, last: 1 }) === null &&
+      /<svg class="hsCandle" data-up="0" aria-hidden="true"/.test(svg) && /class="hsBody"[^>]*fill="#ef4444"/.test(svg) && /class="hsYear"/.test(svg) &&
+      /<DayCandle open=\{quote\?\.open\} high=\{quote\?\.dayHigh\} low=\{quote\?\.dayLow\} last=\{quote\?\.price\} yearLow=\{quote\?\.yearLow\} yearHigh=\{quote\?\.yearHigh\} \/>/.test(M.page) &&
       /<DayRange low=\{quote\?\.dayLow\} high=\{quote\?\.dayHigh\} last=\{quote\?\.price\} \/>\s*<div className="stock-stat-sub">52wk <span style=\{\{ whiteSpace: "nowrap" \}\}>\{formatRange\(quote\?\.yearLow, quote\?\.yearHigh\)\}<\/span><\/div>/.test(M.page);
   },
   "the Trend score's line is decorative (aria-hidden), over the chart's window, in the score's colour; the number and word stay": ({ M }) => {
@@ -70,17 +78,21 @@ const RULES = {
       /data=\{history\.slice\(-240\)\}/.test(M.page) &&
       /\{trendScore\.known \? `\$\{trendScore\.passed\}\/\$\{trendScore\.total\}` : "—"\}/.test(M.page) && /\{trend \?\? "Not enough history yet"\}/.test(M.page);
   },
-  "the Volume and RSI bars sit on their scales (RSI 0–100 with 30/70 marks, volume 0–2× with 1× in the middle)": ({ M }) => {
-    const bar = html(M, "PositionBar", { pos: 70, ticks: [30, 70] });
-    return M.rsiPosition(70) === 70 && M.rsiPosition(null) === null && M.volumePosition(2e6, 1e6) === 100 && M.volumePosition(1e6, 1e6) === 50 &&
-      M.volumePosition(5e6, 1e6) === 100 && M.volumePosition(1e6, 0) === null && /aria-hidden="true"/.test(bar) && (bar.match(/left:30%|left:70%/g) ?? []).length === 2 &&
-      html(M, "PositionBar", { pos: null }) === "" &&
-      /<PositionBar pos=\{rsiPosition\(typeof lastRsi === "number" \? lastRsi : null\)\} ticks=\{\[30, 70\]\}/.test(M.page) &&
-      /<PositionBar pos=\{volumePosition\(quote\?\.volume, quote\?\.avgVolume\)\} ticks=\{\[50\]\}/.test(M.page);
+  "volume: the last ~30 sessions as bars, the latest brighter, a dashed 50-day average; RSI: the page's own series on a fixed 0–100 pane with the 30–70 band, dashed 70/30, red above, green below": ({ M }) => {
+    const vb = M.volumeBars([1, 2, 4, null, 2], 2), many = M.volumeBars(Array.from({ length: 50 }, (_, i) => i + 1), 10);
+    const vol = html(M, "VolumeBars", { vols: [1, 2, 4, 2], avg: 2, colour: "#fff" });
+    const rp = M.rsiPane([null, 50, 75, 25]), rsi = html(M, "RsiPane", { series: [null, 50, 75, 25], colour: "#fff" });
+    return vb.heights.length === 4 && vb.heights[2] === 100 && vb.avgY === 50 && many.heights.length === 30 && M.volumeBars([5], 1) === null &&
+      /class="hsVolLast"[^>]*fill-opacity="0\.55"/.test(vol) && /class="hsVolAvg"[^>]*stroke-dasharray="3 3"/.test(vol) && /aria-hidden="true"/.test(vol) &&
+      rp.y70 === 9 && rp.y30 === 21 && rp.points === "0.00,15.00 50.00,7.50 100.00,22.50" && rp.last.v === 25 && M.rsiPane([50]) === null &&
+      /class="hsRsiHot" x="0" y="0" width="100" height="9" fill="#ef4444"/.test(rsi) && /class="hsRsiCold" x="0" y="21" width="100" height="9" fill="#22c55e"/.test(rsi) &&
+      /class="hsRsiBand" x="0" y="9" width="100" height="12"/.test(rsi) && /class="hsRsi70"[^>]*stroke-dasharray/.test(rsi) && /class="hsRsi30"[^>]*stroke-dasharray/.test(rsi) && /class="hsRsiDot"/.test(rsi) &&
+      /<VolumeBars vols=\{history\.map\(\(p\) => p\.volume\)\} avg=\{quote\?\.avgVolume\}/.test(M.page) && /<RsiPane series=\{rsi14\}/.test(M.page) &&
+      /const rsi14 = useMemo\(\(\) => rsiWilder\(closes, 14\), \[closes\]\);/.test(M.page) && !/<PositionBar /.test(M.page);
   },
   "the P/E tile and A's sector line are as they were": ({ M }) => {
     const now = M.raw.match(PE_BLOCK)?.[0];
-    return !!now && now === PE_BEFORE;
+    return !!now && PE_DECOR(now) === PE_BEFORE;
   },
   "nothing in the strip can push the page sideways at 320–430 px": ({ M }) =>
     !/nowrap|width:\s*\d{3,}|minWidth:\s*\d{3,}/.test(M.partsSrc) && /width: "calc\(100% - 20px\)"/.test(M.partsSrc) &&
@@ -90,6 +102,28 @@ const RULES = {
     const header = M.page.slice(M.page.indexOf("<header"), M.page.indexOf("</header>"));
     return header.length > 0 && !/PerformanceStrip|perfChip|perfStrip/.test(header) && !/^import PerformanceStrip /m.test(M.page) &&
       /className="stock-header-stats"/.test(header) && /Price: \{quote\.priceLabel\}/.test(header);
+  },
+  "P/E: the sector median as a tick, the stock as a dot, the gap green below and amber above; none for a loss or without the median": ({ M }) => {
+    const below = M.peLine(20, 30), above = M.peLine(40, 30), near = M.peLine(30.2, 30);
+    const svgB = html(M, "PeLine", { pe: 20, median: 30 }), svgA = html(M, "PeLine", { pe: 40, median: 30 });
+    return below.below && !above.below && Math.abs(below.median - 80) < 1e-9 && Math.abs(below.stock - 53.333333333) < 1e-6 && Math.abs(above.stock - 80) < 1e-9 && Math.abs(near.stock - near.median) < 1 &&
+      M.peLine(-5, 30) === null && M.peLine(null, 30) === null && M.peLine(20, null) === null &&
+      M.sectorMedianOf("Above sector median (21.5×)") === 21.5 && M.sectorMedianOf("Near sector median (8×)") === 8 && M.sectorMedianOf("See valuation") === null &&
+      /class="hsPeGap"[^>]*fill="#22c55e"/.test(svgB) && /class="hsPeGap"[^>]*fill="#f59e0b"/.test(svgA) && /class="hsPeMedian" x1="80" x2="80"/.test(svgB) && /aria-hidden="true"/.test(svgB) &&
+      /\{valuation\.peRatio != null && valuation\.peSector \? <PeLine pe=\{valuation\.peRatio\} median=\{sectorMedianOf\(valuation\.peSector\.text\)\} \/> : null\}/.test(M.page);
+  },
+  "price: the last 5 sessions' closes behind the price, a dashed line at the previous close, daily closes only": ({ M }) => {
+    const p = M.priceSpark([1, 2, 3, 4, 5, 6, 7], 6), svg = html(M, "PriceSpark", { closes: [1, 2, 3, 4, 5, 6, 7], prevClose: 6 });
+    return p.points === "0.00,30.00 25.00,22.50 50.00,15.00 75.00,7.50 100.00,0.00" && p.prevY === 7.5 && p.up === true && M.priceSpark([5, 4], 6).up === false &&
+      M.priceSpark([5], 4) === null && /class="hsPrev"[^>]*stroke-dasharray="3 3"/.test(svg) && /stroke="#22c55e"/.test(svg) && /aria-hidden="true"/.test(svg) &&
+      /<PriceSpark closes=\{closes\} prevClose=\{quote\?\.previousClose\} \/>/.test(M.page);
+  },
+  "every mini-graphic is decorative (aria-hidden, no pointer events), absolutely placed in a positioned cell, with no transform": ({ M }) => {
+    const parts = M.partsSrc.slice(M.partsSrc.indexOf("const behind: CSSProperties"));
+    const cells = ["<PriceSpark ", "<DayCandle ", "<VolumeBars ", "<RsiPane ", "<PeLine "];
+    // Each graphic's own cell (the nearest stat cell before it) is positioned.
+    return cells.every((c) => { const i = M.page.indexOf(c); const cell = M.page.lastIndexOf('<div className="stock-stat-cell"', i); return i > 0 && cell > 0 && M.page.startsWith('<div className="stock-stat-cell" style={{ position: "relative" }}>', cell); }) &&
+      (parts.match(/aria-hidden="true" focusable="false"/g) ?? []).length === 5 && !/transform|translate\(|rotate\(|will-change/.test(parts) && /pointerEvents: "none"/.test(parts);
   },
 };
 
@@ -111,11 +145,21 @@ const MUTANTS = [
   [R[0], "lib", (s) => s.replace('export const ARROW: Record<Direction, string> = { up: "▲", down: "▼", flat: "" };', 'export const ARROW: Record<Direction, string> = { up: "▼", down: "▲", flat: "" };')],
   [R[0], "parts", (s) => s.replace(' aria-label={changeAria(change, pct) ?? undefined}', "")],
   [R[1], "parts", (s) => s.replace('<div className="hsHigh" style={{ ...row, color: UP }}><span style={tag}>High</span>{price(high)}</div>\n      <div className="hsLow" style={{ ...row, color: DOWN }}><span style={tag}>Low</span>{price(low)}</div>', '<div className="hsLow" style={{ ...row, color: DOWN }}><span style={tag}>Low</span>{price(low)}</div>\n      <div className="hsHigh" style={{ ...row, color: UP }}><span style={tag}>High</span>{price(high)}</div>')],
-  [R[1], "lib", (s) => s.replace("return Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));", "return Math.max(0, Math.min(100, ((hi - v) / (hi - lo)) * 100));")],
+  [R[1], "lib", (s) => s.replace("up: last >= open, onYear", "up: last > open + 1, onYear")],
+  [R[1], "lib", (s) => s.replace("if (bodyBottom - bodyTop < MIN_BODY_PCT) {", "if (false) {")],
+  [R[1], "parts", (s) => s.replace("const colour = c.up ? UP : DOWN;", "const colour = c.up ? DOWN : UP;")],
   [R[2], "parts", (s) => s.replace('<svg className="hsSpark" aria-hidden="true" focusable="false"', '<svg className="hsSpark" role="img" focusable="false"')],
   [R[2], "page", (s) => s.replace("<TrendSpark closes={closes.slice(-240)}", "<TrendSpark closes={closes.slice(-60)}")],
-  [R[3], "lib", (s) => s.replace("return rangePosition(0, 2, typeof volume === \"number\" ? volume / avg : null);", "return rangePosition(0, 3, typeof volume === \"number\" ? volume / avg : null);")],
-  [R[3], "page", (s) => s.replace("ticks={[30, 70]}", "ticks={[20, 80]}")],
+  [R[3], "lib", (s) => s.replace("avgY: fin(avg) && avg > 0 ? 100 - (avg / top) * 100 : null", "avgY: null")],
+  [R[3], "lib", (s) => s.replace("y70: yOn(70, 0, 100, h), y30: yOn(30, 0, 100, h)", "y70: yOn(80, 0, 100, h), y30: yOn(20, 0, 100, h)")],
+  [R[3], "parts", (s) => s.replace('<rect className="hsRsiHot" x={0} y={0} width={100} height={p.y70} fill={DOWN}', '<rect className="hsRsiHot" x={0} y={0} width={100} height={p.y70} fill={UP}')],
+  [R[3], "page", (s) => s.replace("<RsiPane series={rsi14}", "<RsiPane series={closes}")],
+  [R[7], "lib", (s) => s.replace("return { stock: (pe / top) * 100, median: (median / top) * 100, below: pe < median };", "return { stock: (pe / top) * 100, median: 50, below: pe < median };")],
+  [R[7], "parts", (s) => s.replace('fill={l.below ? UP : "#f59e0b"}', 'fill={l.below ? "#f59e0b" : UP}')],
+  [R[8], "lib", (s) => s.replace("prevY: fin(prevClose) ? yOn(prevClose, lo, hi, h) : null", "prevY: null")],
+  [R[8], "lib", (s) => s.replace("const v = closes.filter(fin).slice(-n);\n  if (v.length < 2) return null;\n  const lo = Math.min(...v, fin(prevClose)", "const v = closes.filter(fin).slice(-20);\n  if (v.length < 2) return null;\n  const lo = Math.min(...v, fin(prevClose)")],
+  [R[9], "parts", (s) => s.replace('style={{ position: "absolute", right: 12, top: 12, bottom: 12, width: 10,', 'style={{ transform: "translateZ(0)", position: "absolute", right: 12, top: 12, bottom: 12, width: 10,')],
+  [R[9], "parts", (s) => s.replace('<svg className="hsVolume" aria-hidden="true" focusable="false"', '<svg className="hsVolume" focusable="false"')],
   [R[4], "page", (s) => s.replace(': "See valuation ↓"}', ': "See the valuation section"}')],
   [R[6], "page", (s) => s.replace("</div>{/* end hero box */}", "{performance ? <PerformanceStrip strip={performance} /> : null}</div>{/* end hero box */}")],
   [R[5], "parts", (s) => s.replace('style={{ position: "relative", height: 4, marginTop: 6,', 'style={{ position: "relative", height: 4, marginTop: 6, minWidth: 220,')],
