@@ -1546,6 +1546,18 @@ async function getDailyHistoryInner(symbol: string, force = false, caller?: stri
     return [] as Point[];
   }
 
+  // NO KEY, NO LOCK (#553 COWORK #146). Past a cache miss the only thing left is
+  // fetchAndCacheDailyHistory, which throws `no-api-key` with FMP_API_KEY unset.
+  // Taking the lock would protect a fetch that cannot happen, and losing it sent
+  // the caller into waitForHistoryCache's 12 s poll (up to 40 GETs) for a winner
+  // that cannot produce anything either. So the same error is thrown here,
+  // before the lock: every caller sees exactly what it saw before (/api/history
+  // still answers 500 with its error cache header, an insight snapshot is still
+  // not written, the pages' .catch(() => []) still applies), minus the wait.
+  if (!process.env.FMP_API_KEY) {
+    throw new FmpHistoryError("Missing FMP_API_KEY environment variable", "no-api-key");
+  }
+
   const lockToken = await acquireHistoryLock(normalized);
 
   // THE LOCK COULD NOT BE TAKEN BECAUSE REDIS ERRORED: skip this symbol this
