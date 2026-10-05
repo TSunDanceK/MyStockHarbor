@@ -1374,6 +1374,8 @@ const TASKS = {
   "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
   // READS ONLY: the dividend pickers census (Relay B, #553 COWORK #149 item 1). GET + MGET + HMGET + HLEN + TTL.
   "write-dividend-census": { script: "scripts/dividend-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY: flat daily bars (Relay B, #553 COWORK #153). GET + ~70 MGET + 1 HGET.
+  "write-flat-bars-census": { script: "scripts/flat-bars-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
