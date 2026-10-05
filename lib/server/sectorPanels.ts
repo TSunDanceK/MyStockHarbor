@@ -14,6 +14,8 @@ import { readTiingoEodLast } from "./marketData/read";
 import { readSecTiingoCaps } from "./tiingoPool";
 import type { PricePoolRow } from "./pricePool";
 import { eodBreadth, eodDayMove, lastCloseRows, type EodLast } from "./marketData/eodLast";
+import { sectorMovers, type Mover } from "../sectorCards";
+import { toDashed } from "../symbolSpellings.mjs";
 
 // ---------------------------------------------------------------------------
 // The four sector panels, all built from caches the site already fills.
@@ -140,6 +142,17 @@ export type SectorPerformanceRow = {
   capSum?: number | null;
   capCovered?: number;
   constituents?: number;
+  /**
+   * THE CARDS' EXTRA FACTS (#553 COWORK #157 item 3), from the same EOD blob:
+   * how many constituents with 200+ stored bars close above their 200-day
+   * mean, out of how many have 200 bars; and the day's movers among the
+   * larger half by tracked cap (lib/sectorCards.ts). Percentages and tickers
+   * only. Optional, like the cap fields: an older cached table has none.
+   */
+  above200?: number;
+  breadthN?: number;
+  gainers?: Mover[];
+  decliners?: Mover[];
 };
 
 export type { DayBasis } from "./lastSession";
@@ -307,6 +320,18 @@ async function buildSectorPerformanceFromEod(eod: Record<string, EodLast>): Prom
     }
     return { capSum: capCovered ? capSum : null, capCovered, constituents: members.length };
   };
+  const cardFacts = (slug: string) => {
+    const members = index.bySlug[slug] ?? [];
+    const breadth = eodBreadth(members, eod);
+    const { gainers, decliners } = sectorMovers(
+      members.map((symbol) => {
+        const r = eod[toDashed(symbol)] ?? null;
+        return { symbol, pct: eodDayMove(r), cap: caps.get(symbol) ?? null, sessionDate: r?.d ?? null };
+      }),
+      date
+    );
+    return { above200: breadth.above200, breadthN: breadth.sampled, gainers, decliners };
+  };
 
   const rows: SectorPerformanceRow[] = SECTORS.map((sector) => {
     const entries = (pick: (r: EodLast) => number | null) =>
@@ -327,6 +352,7 @@ async function buildSectorPerformanceFromEod(eod: Record<string, EodLast>): Prom
       dayBasis: "last-close",
       sessionDate: date,
       ...capTotals(sector.slug),
+      ...cardFacts(sector.slug),
     };
   });
 

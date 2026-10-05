@@ -87,7 +87,7 @@ export default function SectorHeatMap({
         })}
       </div>
 
-      <p className="heatFine">
+      <p className="heatFine" data-fine-print>
         Constituent-weighted, not index prints. Tiles sized by {sizedBy}; no tile is drawn under 5% of the map, so the smallest sectors are approximate.{" "}
         <a href={credit.href} target="_blank" rel="noopener noreferrer" className="heatCredit">{credit.text}</a>
       </p>
