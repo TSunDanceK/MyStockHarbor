@@ -9,7 +9,8 @@
 //
 // Rules: every tick at its true height on a padded scale; the labels at least
 // the gap apart, inside the pole, with leaders from each tick to its label;
-// equal prices (2 dp) one label; green above the last price, red below; the
+// equal prices (2 dp) one label, short past 3 names (named in the fine print);
+// the last label's measured height inside the pole; green above the last price, red below; the
 // Week (and Month) skipped when only the latest session, and said so; the
 // level list; the last-price pill; the hidden list; the key line; "How to read
 // this" gone; the Tiingo credit; no advice; the SVG aria-hidden and no
@@ -65,7 +66,7 @@ async function measure(M, src) {
   const P = { normal: at(NORMAL), monday: at(MONDAY), first: at(FIRST), flat: at(FLAT), gap: at(GAP), crowd: at(CROWD), thin: at(THIN) };
   const render = (b, credit) => renderToStaticMarkup(React.createElement(M.KeyLevelsCard, { bars: b, lastPrice: b[b.length - 1].close, credit }));
   const svg = (p) => renderToStaticMarkup(React.createElement(M.PoleSvg, { pole: p }));
-  return { M, P, html: { normal: render(NORMAL, React.createElement("a", { href: "#" }, "Market data from Tiingo.com")), monday: render(MONDAY), bare: render(NORMAL) }, svg, ...src };
+  return { M, P, html: { normal: render(NORMAL, React.createElement("a", { href: "#" }, "Market data from Tiingo.com")), monday: render(MONDAY), bare: render(NORMAL), thin: render(THIN) }, svg, ...src };
 }
 const names = (p) => p.rows.filter((r) => !r.last).flatMap((r) => r.names);
 
@@ -89,6 +90,20 @@ const RULES = {
     M.samePrice(1.004, 1.0) && !M.samePrice(1.006, 1.0) &&
     P.thin.rows.filter((r) => !r.last).length === 1 && P.thin.rows.find((r) => !r.last).names.length >= 6 &&
     new Set(P.normal.rows.map((r) => Math.round(r.value * 100))).size === P.normal.rows.length - P.normal.rows.filter((r) => !r.last && P.normal.rows.some((q) => q.last && Math.round(q.value * 100) === Math.round(r.value * 100))).length,
+  // A thin stock's flat run put eleven names on one price: a short label, the names in the fine print and the hidden list.
+  "more than 3 names on one price: 'All levels' (or 'n levels'), named in the fine print and the hidden list": ({ M, P, html }) => {
+    const t = P.thin.rows.find((r) => !r.last), two = P.normal.rows.find((r) => r.names.length === 2);
+    return M.MERGE_NAMES_MAX === 3 && t.label === "All levels" && t.full === M.mergeNames(t.names) && /^All levels = 11\.24: Day open, Day high, /.test(P.thin.merged) &&
+      (!two || (two.label === two.full && P.normal.merged === null)) && M.poleListWords(P.thin).some((w) => w.startsWith(`${t.full} $11.24`)) &&
+      /class="klCredit" data-fine-print="true"[^>]*>All levels = 11\.24: Day open/.test(html.thin);
+  },
+  "the last label's measured height counts: the pole grows for it and it stays inside": ({ M }) => {
+    const p0 = M.keyLevelPole(M.keyLevels(NORMAL), NORMAL[NORMAL.length - 1].close);
+    const lastLabel = p0.rows[p0.rows.length - 1].label;
+    const p = M.keyLevelPole(M.keyLevels(NORMAL), NORMAL[NORMAL.length - 1].close, undefined, { [lastLabel]: 30 });
+    const r = p.rows[p.rows.length - 1];
+    return p.height > p0.height && r.ly - M.LABEL_LINE_REM / 2 + 30 <= p.height + 1e-9 && M.stackLabels([10], 1, 10, 0.7, 3)[0] === 7;
+  },
   "green above the last price, red below, muted level with it": ({ M, P, html }) =>
     Object.values(P).every((p) => p.rows.every((r) => r.last || r.side === (M.samePrice(r.value, p.last) ? "at" : r.value > p.last ? "up" : "down"))) &&
     M.SIDE_COLOUR.up === "#22c55e" && M.SIDE_COLOUR.down === "#ef4444" &&
@@ -145,6 +160,10 @@ const MUTANTS = [
   ["labels:", "pole", (s) => s.replace("export const LABEL_GAP_REM = Math.round(LABEL_LINE_REM * 1.4 * 1000) / 1000;", "export const LABEL_GAP_REM = 0.6;")],
   ["equal prices", "pole", (s) => s.replace("export const samePrice = (a: number, b: number) => Math.round(a * 100) === Math.round(b * 100);", "export const samePrice = (a: number, b: number) => a === b;")],
   ["equal prices", "pole", (s) => s.replace('if (tail && split.every(([, t]) => t === tail)) return `${split.map(([h]) => h).join(" & ")} ${tail}`;', "")],
+  ["more than 3 names", "pole", (s) => s.replace("export const MERGE_NAMES_MAX = 3;", "export const MERGE_NAMES_MAX = 30;")],
+  ["more than 3 names", "card", (s) => s.replace("{pole?.merged ? <>{pole.merged}{pole.skipped || credit ? \" · \" : \"\"}</> : null}", "")],
+  ["the last label's measured", "pole", (s) => s.replace("const ys = stackLabels(rows0.map((r) => y(r.value)), gaps, height, EDGE_REM, bottom);", "const ys = stackLabels(rows0.map((r) => y(r.value)), gaps, height);")],
+  ["the last label's measured", "pole", (s) => s.replace("Math.max(sum + gap + 2 * EDGE_REM, sum + EDGE_REM + bottom)", "(sum + gap + 2 * EDGE_REM)")],
   ["green above", "pole", (s) => s.replace(': r.value > last ? "up" : "down",', ': r.value > last ? "down" : "up",')],
   ["green above", "card", (s) => s.replace('{ up: "#22c55e", down: "#ef4444",', '{ up: "#ef4444", down: "#22c55e",')],
   ["the Week skipped", "pole", (s) => s.replace("const weekIsDay = !!week && !!day && !week.reason && week.from === day.from;", "const weekIsDay = false;")],

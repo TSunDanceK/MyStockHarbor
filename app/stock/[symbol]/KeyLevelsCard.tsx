@@ -178,8 +178,9 @@ export default function KeyLevelsCard({
           </p>
         </>
       ) : k.reasons.map((r) => <p key={r} className="klReason" style={noteStyle}>{r}</p>)}
-      {pole?.skipped || credit ? (
+      {pole?.merged || pole?.skipped || credit ? (
         <p className="klCredit" data-fine-print style={noteStyle}>
+          {pole?.merged ? <>{pole.merged}{pole.skipped || credit ? " · " : ""}</> : null}
           {pole?.skipped ? <>{pole.skipped}{credit ? " · " : ""}</> : null}
           {credit ? <>Daily prices: {credit}</> : null}
         </p>

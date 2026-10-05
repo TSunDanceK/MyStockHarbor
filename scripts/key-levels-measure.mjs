@@ -4,10 +4,12 @@
 // fixtures #115 lists: a normal day, a Monday (the Week skipped), the first
 // session of a month (the Month skipped), a flat day, a gap from the previous
 // close, a crowded cluster of levels within 0.3%, and a thin stock whose levels
-// are one price (BRBI's flat run). At 320, 360, 390, 414, 430 and 1280 px, at a
+// are one price (BRBI's flat run); and /markets/spx (#563 COWORK #118), the same
+// card in that page's own two-column levels row, on S&P 500 ETF bars whose Week
+// (from Mon 28 Sep) differs from the Day, so the full set shows. At 320, 360, 390, 414, 430 and 1280 px, at a
 // 16 px and a 20 px root, it fails when the page scrolls sideways, when a label
 // overlaps another, when any label leaves the card, or when a name or price is
-// cut. With an output directory it saves 1280 and 390 px screenshots.
+// cut, or when a label runs out of the pole or over the key and fine print under it. With an output directory it saves 1280 and 390 px screenshots.
 //
 // NOT IN check-all: it needs a browser, and the suite must run without one.
 //
@@ -85,13 +87,18 @@ const FIX = [
   ["gap from the previous close", bars("2026-10-08", gapEnd)],
   ["crowded (6 levels within 0.3%)", bars("2026-10-08", crowd)],
   ["thin stock, one-price levels", bars("2026-10-08", flatRun, 13)],
+  ["/markets/spx (Week from 28 Sep, the close on Fri 2 Oct)", bars("2026-10-02", (b) => b, 740)],
 ].map(([name, b]) => [name, { bars: b, lastPrice: lastOf(b), credit: "Market data from Tiingo.com" }]);
+const SPX = FIX.length - 1;
 
 const CSS = fs.readFileSync("app/globals.css", "utf8").replace(/@import[^;]*;|@tailwind[^;]*;|@theme inline \{[^}]*\}/g, "");
 const docAt = (root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>
 *,::before,::after{box-sizing:border-box}html{font-size:${root}px}body{margin:0;background:#06080d;color:#f1f5f9;font-family:system-ui,sans-serif}
 .wrap{max-width:1240px;margin:0 auto;padding:0 20px}.side{display:flex;flex-direction:column;gap:16px;width:300px}@media (max-width:900px){.side{width:auto}}
-</style></head><body><div class="wrap"><aside class="side">${FIX.map(([n], i) => `<div class="probe" data-name="${n}" id="p${i}"></div>`).join("")}</aside></div>
+.spxWrap{max-width:1080px;margin:24px auto 0;padding:24px}.spxLevels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+@media (max-width:900px){.spxLevels{grid-template-columns:minmax(0,1fr)}}@media (max-width:640px){.spxWrap{padding:16px}}
+</style></head><body><div class="wrap"><aside class="side">${FIX.slice(0, SPX).map(([n], i) => `<div class="probe" data-name="${n}" id="p${i}"></div>`).join("")}</aside></div>
+<div class="spxWrap"><div class="spxLevels"><div class="zones" style="min-height:4rem"></div><div style="display:grid;gap:6px;min-width:0"><div class="probe" data-name="${FIX[SPX][0]}" id="p${SPX}"></div></div></div></div>
 <script>
 window.process = { env: { NODE_ENV: "development" } };
 const SOURCES = ${JSON.stringify(MODS).replace(/<\/script/g, "<\\/script")};
@@ -117,6 +124,13 @@ for (const root of [16, 20]) {
         const labels = [...p.querySelectorAll(".klLabel")].map((l) => ({ l, parts: [...l.querySelectorAll(".klName, .klValue, .klPill")].filter((e) => e.textContent.trim()).map((e) => { const range = document.createRange(); range.selectNodeContents(e); return range.getBoundingClientRect(); }) }));
         labels.forEach(({ l, parts }) => parts.forEach((b) => { if (b.left < card.left + 4 || b.right > card.right - 4) bad.push(`outside the card: ${l.textContent.trim().slice(0, 30)}`); }));
         for (const e of p.querySelectorAll(".klName, .klValue, .klPill")) if (e.scrollWidth > e.clientWidth + 0.5) bad.push(`cut: ${e.textContent.trim().slice(0, 30)}`);
+        // Every label inside the pole's own box, and clear of the key and the fine print under it.
+        const poleBox = p.querySelector(".klPole").getBoundingClientRect();
+        const below = [...p.querySelectorAll(".klKey, .klCredit")].map((e) => e.getBoundingClientRect());
+        labels.forEach(({ l, parts }) => parts.forEach((b) => {
+          if (b.bottom > poleBox.bottom + 1 || b.top < poleBox.top - 1) bad.push(`out of the pole: ${l.textContent.trim().slice(0, 30)}`);
+          if (below.some((k) => b.bottom > k.top + 1 && b.top < k.bottom - 1 && b.right > k.left && b.left < k.right)) bad.push(`over the fine print: ${l.textContent.trim().slice(0, 30)}`);
+        }));
         const boxes = labels.flatMap(({ l, parts }) => parts.map((b) => ({ t: l.textContent.trim().slice(0, 24), b })));
         boxes.forEach((a, i) => boxes.slice(i + 1).forEach((c) => { if (a.t !== c.t && a.b.right > c.b.left + 1 && c.b.right > a.b.left + 1 && a.b.bottom > c.b.top + 1 && c.b.bottom > a.b.top + 1) bad.push(`overlap: ${a.t} / ${c.t}`); }));
         return { name: p.dataset.name, labels: labels.length, h: Math.round(card.height), bad: [...new Set(bad)] };

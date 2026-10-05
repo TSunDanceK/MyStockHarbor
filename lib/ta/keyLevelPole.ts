@@ -12,7 +12,10 @@
 //              The Week is skipped when it is only the latest session (its
 //              first), and so is the Month; the fine print says so ("Week =
 //              today so far" while live, "Week = the latest session" otherwise)
-//   merge      prices equal at 2 dp are one label: "Day & Month high"
+//   merge      prices equal at 2 dp are one label: "Day & Month high"; more
+//              than MERGE_NAMES_MAX names on one price read "All levels" (or
+//              "7 levels"), and the fine print names them (a thin stock's flat
+//              run put eleven names on one price)
 //   side       green above the last price, red below, muted level with it
 //   labels     at least `gap` apart (two passes, down then up, inside the
 //              pole); a label off its tick's height gets a leader line, so
@@ -32,6 +35,9 @@ export const PAD_FRACTION = 0.06;
 /** The labels stay this far inside the pole's ends, in rem. */
 export const EDGE_REM = 0.7;
 
+/** More names than this on one price get a short label, and the fine print names them. */
+export const MERGE_NAMES_MAX = 3;
+
 export const POLE_KEY = "Green: above the last price · red: below · thick band: today's range · thin: this month's";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
@@ -43,8 +49,10 @@ export type PoleSide = "up" | "down" | "at";
 export type PoleLevel = {
   /** Every name the price carries, in order: ["Day high", "Month high"]. */
   names: string[];
-  /** "Day & Month high". */
+  /** "Day & Month high"; "All levels" / "7 levels" past MERGE_NAMES_MAX names. */
   label: string;
+  /** Every name in words, whatever the label: "Day & Month high". */
+  full: string;
   value: number;
   side: PoleSide;
   /** "+0.98%" / "−0.37%" from the last price. */
@@ -69,6 +77,8 @@ export type Pole = {
   day: { top: number; bottom: number } | null;
   /** "Week = today so far" (and the Month on its first session), or null. */
   skipped: string | null;
+  /** The names behind a short label, for the fine print: "All levels = 11.24: Day open, …", or null. */
+  merged: string | null;
   last: number;
 };
 
@@ -93,14 +103,14 @@ export function mergeNames(names: readonly string[]): string {
 
 /**
  * The labels in order, each at least its gap below the one above, inside
- * [edge, height − edge]: down, then up (#115). `gap` is one number, or one per
+ * [edge, height − bottom] (bottom defaults to edge): down, then up (#115). `gap` is one number, or one per
  * label (gap[i] is the room label i needs below label i − 1; gap[0] is unused).
  */
-export function stackLabels(ys: readonly number[], gap: number | readonly number[], height: number, edge = EDGE_REM): number[] {
+export function stackLabels(ys: readonly number[], gap: number | readonly number[], height: number, edge = EDGE_REM, bottom = edge): number[] {
   const g = (i: number) => (typeof gap === "number" ? gap : gap[i]);
   const out = ys.map((y) => Math.min(Math.max(y, edge), height - edge));
   for (let i = 1; i < out.length; i++) if (out[i] < out[i - 1] + g(i)) out[i] = out[i - 1] + g(i);
-  if (out.length && out[out.length - 1] > height - edge) out[out.length - 1] = height - edge;
+  if (out.length && out[out.length - 1] > height - bottom) out[out.length - 1] = height - bottom;
   for (let i = out.length - 2; i >= 0; i--) if (out[i] > out[i + 1] - g(i + 1)) out[i] = out[i + 1] - g(i + 1);
   return out;
 }
@@ -159,18 +169,25 @@ export function keyLevelPole(k: KeyLevels, last: number | null | undefined, gap 
   lo -= span * PAD_FRACTION; hi += span * PAD_FRACTION;
   const rows0 = [...merged.map((m) => ({ names: m.names, value: m.value, last: false })), { names: ["Last price"], value: last, last: true }]
     .sort((a, b) => b.value - a.value || (a.last ? -1 : 1));
-  const labelOf = (r: { names: string[]; last: boolean }) => (r.last ? "Last price" : mergeNames(r.names));
+  const all1 = merged.length === 1;
+  const labelOf = (r: { names: string[]; last: boolean }) =>
+    r.last ? "Last price" : r.names.length > MERGE_NAMES_MAX ? (all1 ? "All levels" : `${r.names.length} levels`) : mergeNames(r.names);
   const gaps = rows0.map((_, i) => (i === 0 ? 0 : Math.max(gap, (heights?.[labelOf(rows0[i - 1])] ?? 0) + LABEL_AIR_REM)));
-  const height = Math.max(POLE_REM, Math.round((gaps.reduce((a, b) => a + b, 0) + gap + 2 * EDGE_REM) * 1000) / 1000);
+  // The last label hangs below its line by its measured height: the pole makes room for it, so it never runs out.
+  const bottom = Math.max(EDGE_REM, (heights?.[labelOf(rows0[rows0.length - 1])] ?? 0) - LABEL_LINE_REM / 2 + LABEL_AIR_REM);
+  const sum = gaps.reduce((a, b) => a + b, 0);
+  const height = Math.max(POLE_REM, Math.round(Math.max(sum + gap + 2 * EDGE_REM, sum + EDGE_REM + bottom) * 1000) / 1000);
   const y = (v: number) => ((hi - v) / (hi - lo)) * height;
-  const ys = stackLabels(rows0.map((r) => y(r.value)), gaps, height);
+  const ys = stackLabels(rows0.map((r) => y(r.value)), gaps, height, EDGE_REM, bottom);
   const rows: PoleLevel[] = rows0.map((r, i) => ({
-    names: r.names, label: labelOf(r), value: r.value,
+    names: r.names, label: labelOf(r), full: r.last ? "Last price" : mergeNames(r.names), value: r.value,
     side: r.last ? "at" : samePrice(r.value, last) ? "at" : r.value > last ? "up" : "down",
     dist: distWords(r.value, last), y: y(r.value), ly: ys[i], ...(r.last ? { last: true } : {}),
   }));
   const band = (a: number | null | undefined, b: number | null | undefined) => (fin(a) && fin(b) ? { top: y(Math.max(a, b)), bottom: y(Math.min(a, b)) } : null);
-  return { height, lo, hi, rows, month: band(monLo, monHi), day: band(dayLo, dayHi), skipped, last };
+  const short = rows.filter((r) => !r.last && r.label !== r.full);
+  const mergedWords = short.length ? short.map((r) => `${r.label} = ${poleNumber(r.value)}: ${r.names.join(", ")}`).join(" · ") : null;
+  return { height, lo, hi, rows, month: band(monLo, monHi), day: band(dayLo, dayHi), skipped, merged: mergedWords, last };
 }
 
 /** The card's levels and pole in one call, from the bars it already holds. */
@@ -182,5 +199,5 @@ export function poleFromBars(bars: readonly KeyBar[], last: number | null | unde
 
 /** The visually hidden list, in price order: "Day high $336.19, 0.98% above the last price". */
 export function poleListWords(p: Pole): string[] {
-  return p.rows.map((r) => r.last ? `Last price ${priceWords(r.value)}` : `${r.label} ${priceWords(r.value)}, ${r.side === "at" ? "at the last price" : `${r.dist.replace(/^[+−]/, "")} ${r.side === "up" ? "above" : "below"} the last price`}`);
+  return p.rows.map((r) => r.last ? `Last price ${priceWords(r.value)}` : `${r.full} ${priceWords(r.value)}, ${r.side === "at" ? "at the last price" : `${r.dist.replace(/^[+−]/, "")} ${r.side === "up" ? "above" : "below"} the last price`}`);
 }
