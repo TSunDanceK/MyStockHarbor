@@ -115,7 +115,8 @@ check("a fund the site lists is indexed with or without its own CIK (VUG as SPY;
 check("MUTATION: the CIK-only index rule back → caught", !page.replace(ROBOTS, "index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null, awaitingSecRead: await awaitingSecRead(clean) }),").includes(ROBOTS));
 
 console.log("\n5. the tidy-ups (#552 COWORK #152)");
-const NEXT_GUARD = '{nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <NextReportCard outlook={nextReport} /> : null}';
+// The phone-order wrapper (#552 COWORK #166) is part of the guarded expression.
+const NEXT_GUARD = '{nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <div className="orderNext"><NextReportCard outlook={nextReport} /></div> : null}';
 const SNAP_RULE = 'if (cold.status === "not-shown") return { ...snap, sourceNote: null };';
 const TILE_GUARD = "{snapshot.sourceNote ? (\n        <details data-snapshot-source=\"\" style={earningsHowStyle}>";
 const nextRule = (p) => p.includes(NEXT_GUARD) && (p.match(/<NextReportCard /g) ?? []).length === 1;

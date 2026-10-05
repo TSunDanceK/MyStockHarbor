@@ -160,55 +160,69 @@ function HBarList({ rows }: { rows: { label: string; value: number | null; tone:
  * change. The final bar is anchored at zero because it is a LEVEL, not a step.
  */
 function Waterfall({
-  steps, total, totalLabel, format,
+  steps, total, subtotals = [], rowOf,
 }: {
   steps: { key: string; label: string; delta: number }[];
   total: number;
-  totalLabel: string;
-  format: (n: number) => string;
+  subtotals?: { afterKey: string; key: string; label: string; value: number }[];
+  /**
+   * EACH BAR'S LABEL AND FIGURE AS ITS STATEMENT ROW PRINTS THEM (#552 COWORK
+   * #168): the row's own label and label note, and its figure with the ▲ ● ▼
+   * mark and the tap note. The bars ARE the top of the statement now, so they
+   * carry everything the table rows they replaced carried.
+   */
+  rowOf: (key: string) => { label: React.ReactNode; value: React.ReactNode };
 }) {
   // THE GEOMETRY IS waterfallGeometry's (secPresentation), so the axis rule
   // is testable without a renderer: the axis spans every running total, a
   // cost that crosses zero floats across it, and a loss sits left of zero in
   // the loss colour (#552 A-queue 1, WKHS Q2 FY2026).
-  const g = waterfallGeometry(steps, total);
+  const g = waterfallGeometry(steps, total, subtotals);
   if (!g) return null;
   const pc = (n: number) => `${n}%`;
   const zero = g.zeroPct === null ? null : <span className="wfZero" style={{ left: pc(g.zeroPct) }} />;
-  return (
-    <div className="waterfall">
-      {g.bars.map((p) => (
-        <div className="wfRow" key={p.key}>
-          <span className="wfLabel">{p.label}</span>
-          <div className="wfTrack">
-            <span
-              className="wfBar"
-              style={{
-                marginLeft: pc(p.leftPct),
-                width: pc(p.widthPct),
-                background: p.delta >= 0 ? toneColor("good") : toneColor("weak"),
-              }}
-            />
-            {zero}
-          </div>
-          <span className="wfValue">{format(p.delta)}</span>
-        </div>
-      ))}
-      <div className="wfRow wfTotal">
-        <span className="wfLabel">{totalLabel}</span>
+  // A SUBTOTAL IS STYLED LIKE THE CLOSING TOTAL: the subtotal blue, or the loss
+  // colour when it is below zero; never the step green/red.
+  const level = (k: string, bar: { leftPct: number; widthPct: number; loss: boolean }, extra: string) => {
+    const r = rowOf(k);
+    return (
+      <div className={`wfRow ${extra}`} key={k} data-wf-key={k}>
+        <span className="wfLabel">{r.label}</span>
         <div className="wfTrack">
           <span
             className="wfBar"
-            style={{
-              marginLeft: pc(g.totalBar.leftPct),
-              width: pc(g.totalBar.widthPct),
-              background: g.totalBar.loss ? toneColor("weak") : "rgba(147,197,253,0.85)",
-            }}
+            style={{ marginLeft: pc(bar.leftPct), width: pc(bar.widthPct), background: bar.loss ? toneColor("weak") : "rgba(147,197,253,0.85)" }}
           />
           {zero}
         </div>
-        <span className="wfValue">{format(total)}</span>
+        <span className="wfValue">{r.value}</span>
       </div>
+    );
+  };
+  return (
+    <div className="waterfall">
+      {g.bars.map((p) => {
+        const r = rowOf(p.key);
+        return [
+          <div className="wfRow" key={p.key} data-wf-key={p.key}>
+            <span className="wfLabel">{r.label}</span>
+            <div className="wfTrack">
+              <span
+                className="wfBar"
+                style={{
+                  marginLeft: pc(p.leftPct),
+                  width: pc(p.widthPct),
+                  background: p.delta >= 0 ? toneColor("good") : toneColor("weak"),
+                }}
+              />
+              {zero}
+            </div>
+            <span className="wfValue">{r.value}</span>
+          </div>,
+          ...g.subtotalBars.filter((st) => st.afterKey === p.key).map((st) => level(st.key, st, "wfSubtotal")),
+        ];
+      })}
+      {level("operatingIncome", g.totalBar, "wfTotal")}
     </div>
   );
 }
@@ -561,7 +575,9 @@ export function SecSnapshotCard({
       ? pending
       : null;
   return (
-    <section className="card">
+    // snapshotCard: the tile grid's container (two across in the right
+    // column, one across where a figure would otherwise wrap; #552 COWORK #166).
+    <section className="card snapshotCard">
       <div className="eyebrow">{w.latest}</div>
       <h2>{view.symbol} latest earnings snapshot</h2>
       <p>
@@ -792,6 +808,11 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
         {anyDerived(pictures.quarters) ? (
           <p>* Not filed as a {pictures.quarters!.one} of its own; worked out from the company&rsquo;s filings. Tap the {pictures.quarters!.one} for how.</p>
         ) : null}
+        {/* ONE "About these figures" PER CARD (#552 COWORK #166 §2). The card
+            had a second one at its foot, below "See all the numbers", carrying
+            only the crossing note and the source; both now live here. */}
+        {crossingNoteHome(view) === "growth" ? <p>{CROSSING_NOTE}</p> : null}
+        <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </details>
       <MarginDelta view={view} />
       {/* THE FULL TABLE, collapsed under "See all the numbers" (#35a §5). */}
@@ -846,10 +867,6 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
         </table>
       </div>
       </SeeAllTheNumbers>
-      <CardDetails>
-        {crossingNoteHome(view) === "growth" ? <p>{CROSSING_NOTE}</p> : null}
-        <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
-      </CardDetails>
     </section>
   );
 }
@@ -1277,29 +1294,32 @@ function balanceShowsNotReported(b: NonNullable<SecEarningsView["balance"]>): bo
  * is waterfallGate's job, and it reads the flag the card's own note reads. All
  * that happens here is drawing.
  */
-function PlWaterfall({ view }: { view: SecEarningsView }) {
+function PlWaterfall({ view, rowOf }: { view: SecEarningsView; rowOf: (key: string) => { label: React.ReactNode; value: React.ReactNode } }) {
   const gate = waterfallGate(view);
   if (!gate.ok) return null;
-  const w = periodWords(view.basis);
   return (
     <div className="chartBlock">
       <div className="chartBlockTitle">From revenue to operating income — {view.latestLabel}</div>
-      <Waterfall
-        steps={gate.steps}
-        total={gate.total}
-        totalLabel="Operating income"
-        format={(n) => shortMoney(n)}
-      />
-      <CardDetails>
-        <p>
-          Each bar starts where the one above it ended, so the drop from revenue to operating income
-          is the sum of the costs between them. Shown only where the filed expense lines actually
-          reach the filed operating income for this {w.one}; where they do not, the table below says
-          so instead.
-        </p>
-      </CardDetails>
+      <Waterfall steps={gate.steps} total={gate.total} subtotals={gate.subtotals} rowOf={rowOf} />
     </div>
   );
+}
+
+/**
+ * WHICH STATEMENT ROWS THE BARS CARRY (#552 COWORK #168), and so leave the
+ * table. LOSSLESS BY CONSTRUCTION: a row leaves the table only when a bar
+ * prints its figure, or (an expense line the filer did not report) a
+ * fine-print line under the bars says so. A filed zero has no bar and no such
+ * line, so it stays in the table; with no bars at all (the gate refused) every
+ * row stays. PURE, so the check runs it on fixtures.
+ */
+export function incomeBarRows(view: SecEarningsView): { barKeys: Set<string>; notReported: string[] } {
+  const gate = waterfallGate(view);
+  if (!gate.ok) return { barKeys: new Set(), notReported: [] };
+  const barKeys = new Set([...gate.steps.map((st) => st.key), ...gate.subtotals.map((st) => st.key), "operatingIncome"]);
+  const notReported = ["researchAndDevelopment", "sellingGeneralAndAdministrative", "otherOperatingExpense"]
+    .filter((k) => !barKeys.has(k) && view.incomeStatement.find((c) => c.key === k)?.val == null);
+  return { barKeys, notReported };
 }
 
 /**
@@ -1383,8 +1403,29 @@ function TrendKey({ label }: { label: string }) {
 export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
   const w = periodWords(view.basis);
   const base = view.incomeTrendBase;
+  const byKey = new Map(view.incomeStatement.map((c) => [c.key, c]));
+  // ONE RENDERING OF A STATEMENT FIGURE, shared by the bars and the table, so
+  // a line carries the same figure, ▲ ● ▼ mark and tap note wherever it sits.
+  const figure = (c: ViewCell) =>
+    c.val != null && base
+      ? <TrendFigure cell={c} trend={lineTrend(c.key, base, base.oneOff)} base={base} />
+      : (
+        <CellValue
+          cell={c}
+          compact
+          currency={!c.label.includes("shares")}
+          empty={c.emptyText ?? (c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED)}
+        />
+      );
+  const rowOf = (key: string) => {
+    const c = byKey.get(key);
+    return c ? { label: <NotedLabel label={c.label} note={c.sub} />, value: figure(c) } : { label: key, value: null };
+  };
+  const { barKeys, notReported } = incomeBarRows(view);
+  const tableRows = view.incomeStatement.filter((c) => !barKeys.has(c.key) && !notReported.includes(c.key));
+  const drawn = barKeys.size > 0;
   return (
-    <section className="card">
+    <section className="card incomeCard">
       <div className="eyebrow">Income statement</div>
       <h3>Full profit &amp; loss — {view.latestLabel}</h3>
       {/* ── THE WATERFALL, ONLY WHERE THE LINES RECONCILE ──────────────────
@@ -1392,42 +1433,50 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
           note below turns on — so the chart and the wording cannot disagree on
           screen. On the ~16% of quarters where the breakdown misses operating
           income (measured: ARM, MU, by 1-7%), no chart is drawn and the table
-          below carries its existing "partial" explanation instead. A waterfall
-          asserts that its bars sum to its total; drawing one that does not is
-          worse than drawing nothing. */}
+          below carries every line with its existing "partial" explanation. A
+          waterfall asserts that its bars sum to its total; drawing one that
+          does not is worse than drawing nothing. */}
       {base ? <TrendKey label={base.label} /> : null}
-      <PlWaterfall view={view} />
-      <div style={{ marginTop: 12 }}>
-        {view.incomeStatement.map((c) => (
-          <Row key={c.label} label={c.label} sub={c.sub}>
-            {c.val != null && base
-              ? <TrendFigure cell={c} trend={lineTrend(c.key, base, base.oneOff)} base={base} />
-              : (
-                <CellValue
-                  cell={c}
-                  compact
-                  currency={!c.label.includes("shares")}
-                  empty={c.emptyText ?? (c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED)}
-                />
-              )}
-          </Row>
-        ))}
-      </div>
-      {/* MEASURED TO FAIL ON 5 OF 32 PROBE QUARTERS (ARM, MU), always because the
-          filer expenses something these lines have no slot for -- restructuring,
-          impairments, amortisation of intangibles. Operating income is taken as
-          filed and is right; it is the BREAKDOWN that is partial, and the card
-          must not imply otherwise. */}
+      {/* THE BARS ARE THE TOP OF THE STATEMENT (#552 COWORK #168, owner
+          request): each carries its row's figure, mark and note, gross profit
+          is a subtotal bar, and the table below starts after operating income. */}
+      <PlWaterfall view={view} rowOf={rowOf} />
+      {notReported.map((k) => (
+        <p key={k} data-fine-print="" data-not-reported-line={k} className="earningsDataNote" style={{ margin: "6px 0 0", fontSize: "var(--fs-fine)" }}>{byKey.get(k)?.label}: not reported</p>
+      ))}
+      {/* ONE "About these figures" PER CARD (#552 COWORK #166 §2 / #168 §3),
+          under the bars. It merges the waterfall's own note with the card's
+          foot note, which this card used to print as a second disclosure. With
+          no bars (the gate refused) it still carries the rest. */}
       <CardDetails>
+        {drawn ? (
+          <p>
+            Each bar starts where the one above it ended, so the drop from revenue to operating income
+            is the sum of the costs between them. Shown only where the filed expense lines actually
+            reach the filed operating income for this {w.one}; where they do not, every line is in
+            the table instead.
+          </p>
+        ) : null}
         <p>{NOT_REPORTED_NOTE}</p>
+        {/* MEASURED TO FAIL ON 5 OF 32 PROBE QUARTERS (ARM, MU), always because
+            the filer expenses something these lines have no slot for --
+            restructuring, impairments, amortisation of intangibles. Operating
+            income is taken as filed and is right; it is the BREAKDOWN that is
+            partial, and the card must not imply otherwise. */}
         {!view.incomeStatementComplete ? (
           <p>
-            The expense lines above do not add up to operating income for this {w.one}: this company
-            reports costs that these categories do not cover. Operating income is as filed.
+            The expense lines in the table below do not add up to operating income for this {w.one}: this
+            company reports costs that these categories do not cover. Operating income is as filed.
           </p>
         ) : null}
         <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </CardDetails>
+      <div style={{ marginTop: 12 }}>
+        {drawn ? <h4 data-below-operating="" className="incomeTableHeading">Below operating income</h4> : null}
+        {tableRows.map((c) => (
+          <Row key={c.label} label={c.label} sub={c.sub}>{figure(c)}</Row>
+        ))}
+      </div>
     </section>
   );
 }
