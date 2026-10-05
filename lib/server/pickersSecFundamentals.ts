@@ -866,13 +866,13 @@ export async function warmPickersSec(
     result.pruneSkipped = result.stoppedEarly;
     console.warn(`[warm-pickers-sec] prune skipped: ${result.stoppedEarly}`);
   } else try {
-    const stored = ((await redis.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
+    const stored = ((await redis.hkeys(key)) ?? []).map(String);
     result.commands++;
     const { drop, skipped } = rowsToPrune(stored, list);
     result.pruneSkipped = skipped;
     if (skipped) console.warn(`[warm-pickers-sec] prune skipped: ${skipped}`);
     if (drop.length) {
-      result.pruned = await redis.hdel(PICKERS_SEC_KEY, ...drop);
+      result.pruned = await redis.hdel(key, ...drop);
       result.commands++;
     } else {
       result.pruned = 0;
