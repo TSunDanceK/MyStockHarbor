@@ -463,8 +463,10 @@ const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
-// The payload's chunk MGET (~4 MB chunks by design) takes the 20 s deadline;
-// everything else here stays on the page's 6 s (#553 CODE-B #144).
+// The payload's chunk MGET and every write of the payload itself (the chunks,
+// up to the 5 MB budget each; the manifest; the reduced fallback) take the 20 s
+// deadline; everything else here stays on the page's 6 s (#553 CODE-B #144,
+// COWORK #156).
 const bulkRedis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv(BULK_READ_CACHE)
@@ -1037,6 +1039,7 @@ function logPayloadWriteSize(entry: CachedPickersPayload, label = "full") {
  */
 async function writePickersChunked(stripped: PickersPayload) {
   if (!redis) return;
+  const writeRedis = bulkRedis ?? redis;
 
   const { signalRecords, ...head } = stripped;
   const records = Array.isArray(signalRecords) ? signalRecords : [];
@@ -1094,7 +1097,7 @@ async function writePickersChunked(stripped: PickersPayload) {
     // this project does not enable no-await-in-loop -- a disable directive for
     // a rule that is off warns as unused, and the next lint cleanup would
     // delete it and take the explanation with it.
-    await redis.set(chunkKeys[i], groups[i], { ex: PICKERS_CHUNK_TTL_SECONDS });
+    await writeRedis.set(chunkKeys[i], groups[i], { ex: PICKERS_CHUNK_TTL_SECONDS });
   }
 
   const manifest: PickersManifest = {
@@ -1111,7 +1114,7 @@ async function writePickersChunked(stripped: PickersPayload) {
   // staler symbol list than the payload it names.
   const symbols = records.map((record) => record.symbol).filter(Boolean);
   account(tryMeasureSet(PICKERS_SYMBOLS_KEY, symbols, PICKERS_SYMBOLS_TTL_SECONDS));
-  await redis.set(PICKERS_SYMBOLS_KEY, symbols, { ex: PICKERS_SYMBOLS_TTL_SECONDS });
+  await writeRedis.set(PICKERS_SYMBOLS_KEY, symbols, { ex: PICKERS_SYMBOLS_TTL_SECONDS });
 
   // LAST, and on its own. Everything it points at is already durable.
   //
@@ -1120,10 +1123,10 @@ async function writePickersChunked(stripped: PickersPayload) {
   // size does NOT fall with the chunk budget. If the head ever grows, this is
   // the body that breaches, and chunking harder would not help.
   account(tryMeasureSet(PICKERS_MANIFEST_KEY, manifest, PICKERS_REDIS_TTL_SECONDS));
-  await redis.set(PICKERS_MANIFEST_KEY, manifest, { ex: PICKERS_REDIS_TTL_SECONDS });
+  await writeRedis.set(PICKERS_MANIFEST_KEY, manifest, { ex: PICKERS_REDIS_TTL_SECONDS });
   // The same manifest again, for the contexts that never build. After the 1h
   // one, so a reader of either always finds complete chunks. +1 SET a build.
-  await redis.set(PICKERS_LAST_GOOD_MANIFEST_KEY, manifest, { ex: PICKERS_LAST_GOOD_TTL_SECONDS });
+  await writeRedis.set(PICKERS_LAST_GOOD_MANIFEST_KEY, manifest, { ex: PICKERS_LAST_GOOD_TTL_SECONDS });
 
   const requests = groups.length + 3;
   const inflationPct =
@@ -1182,7 +1185,8 @@ async function writePickersCache(data: PickersPayload, reduced?: () => PickersPa
     // a day the full one breaches, so its size is the more interesting of the
     // two on exactly the days this instrumentation exists for.
     logPayloadWriteSize(entry, "reduced");
-    await redis.set(PICKERS_REDIS_KEY, entry, {
+    const writeRedis = bulkRedis ?? redis;
+    await writeRedis.set(PICKERS_REDIS_KEY, entry, {
       ex: PICKERS_REDIS_TTL_SECONDS,
     });
     console.warn("[pickers] cached reduced payload (chartPoints stripped outside sections)");

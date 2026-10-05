@@ -6,6 +6,10 @@
 //    BULK_READ_CACHE, PAGE_TIMEOUT_OPTS or JOB_REDIS_OPTS. Each option is the
 //    FUNCTION form, `signal: () => AbortSignal.timeout(ms)`, and the plain form
 //    appears nowhere. The values: 6 s for page paths, 20 s for jobs and bulk.
+// 1b. LARGE WRITES: every Redis write in a function that measures its request
+//    against the byte budget, and the history write, goes out on a 20 s
+//    client (COWORK #156). Found by scanning; two measured-under-1-MB SEC
+//    writes are exempt by name, and that list may shrink, never grow.
 // 2. RUNTIME, against a local server that accepts and never answers, with the
 //    real @upstash/redis client:
 //      - the function form throws at the deadline, without retries;
@@ -98,6 +102,105 @@ console.log("\n1. Every client carries a deadline (scan)");
 const sites = clientSites(files);
 const scan = scanRules(files, modeSrc);
 check(`all ${sites.length} client sites carry a function-form deadline; 6 s / 20 s`, scan.length === 0, scan.slice(0, 4).join("; "));
+
+// ── 1b. large writes take the 20 s client (#553 COWORK #156) ────────────────
+// A write whose request body can pass ~1 MB must not sit on a 6 s client: on a
+// slow link the page deadline would abort a write that was merely large. LARGE
+// WRITES are found by scanning, not from a list: every Redis write inside a
+// function that measures its own request against the byte budget (the codebase
+// measures exactly the writes it knows are big), plus the history write, which
+// is ~120 KB but auto-pipelines ten at a time into ~1.2 MB bodies.
+const MEASURES = /\b(tryMeasureSet|trySetRequestBytes|pipelineRequestBytes|logPayloadWriteSize|chunkByBytes)\(/;
+const NAMED_LARGE = [["lib/server/historyCache.ts", "writeHistoryEntry"]];
+// Measured and under 1 MB, in A's files (claude/upstash-request-size-secstate-2026-09-21.md
+// §7: ~0.6 MB and ~0.3–0.7 MB). May shrink, never grow.
+const UNDER_1MB = [["lib/server/secTickerMap.ts", "~0.6 MB"], ["lib/server/secManifest.ts", "~0.3–0.7 MB"]];
+const SLOW_OK = ["BULK_READ_CACHE", "JOB_REDIS_OPTS"];
+const WRITE_CALL = /\b([A-Za-z_]\w*)(\(\))?\.(set|hset|mset|setex|pipeline|multi)\(/g;
+
+function functionsIn(code) {
+  const out = [];
+  for (const m of code.matchAll(/(?:export )?(?:async )?function (\w+)\s*\(/g)) {
+    const open = code.indexOf(" {\n", m.index);
+    if (open < 0) continue;
+    let depth = 0, j = open + 1;
+    for (; j < code.length; j++) {
+      if (code[j] === "{") depth++;
+      else if (code[j] === "}") { depth--; if (depth === 0) break; }
+    }
+    out.push({ name: m[1], body: code.slice(open + 1, j + 1) });
+  }
+  return out;
+}
+
+/** The deadline option a receiver resolves to, "not-redis", or null (unresolved). */
+function resolveClient(name, body, code, depth = 0) {
+  if (depth > 6) return null;
+  const def = (src) => src.match(new RegExp(`(?:const|let) ${name}\\b(?::[^=\\n]+)?\\s*=\\s*([\\s\\S]*?);`));
+  const m = def(body) ?? def(code);
+  if (!m) {
+    const fn = code.match(new RegExp(`function ${name}\\s*\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`));
+    const ret = fn?.[1].match(/return (\w+);/);
+    return ret ? resolveClient(ret[1], body, code, depth + 1) : null;
+  }
+  const rhs = m[1].trim();
+  const opt = rhs.match(/(?:Redis\.fromEnv|new Redis)\((\w+)/);
+  if (opt) return opt[1];
+  if (/^(new (Map|Set|URLSearchParams|Headers)\b|\[|\{)/.test(rhs)) return "not-redis";
+  const head = rhs.match(/^(\w+)(\(\))?(?:\.(?:pipeline|multi)\(\))?(?:\s*\?\?\s*\w+)?$/);
+  return head ? resolveClient(head[1], body, code, depth + 1) : null;
+}
+
+function largeWriteRules(files) {
+  const fails = [];
+  const want = (label, ok) => { if (!ok) fails.push(label); };
+  const found = [];
+  for (const [file, raw] of Object.entries(files)) {
+    if (!/\.tsx?$/.test(file)) continue;
+    const code = stripComments(raw, { file });
+    for (const fn of functionsIn(code)) {
+      const named = NAMED_LARGE.some(([f, n]) => f === file && n === fn.name);
+      if (!named && !MEASURES.test(fn.body)) continue;
+      if (UNDER_1MB.some(([f]) => f === file)) continue;
+      for (const w of fn.body.matchAll(WRITE_CALL)) {
+        const client = resolveClient(w[1], fn.body, code);
+        if (client === "not-redis") continue;
+        found.push(`${file}::${fn.name}`);
+        want(`${file} ${fn.name}: ${w[1]}${w[2] ?? ""}.${w[3]}( is a large write on ${client ?? "an unresolved client"}, not a 20 s one`, SLOW_OK.includes(client));
+      }
+    }
+  }
+  const where = new Set(found);
+  for (const must of ["lib/server/pickersBuilder.ts::writePickersChunked", "lib/server/pickersBuilder.ts::writePickersCache",
+    "lib/server/historyCache.ts::writeHistoryEntry", "lib/server/playsBuilder.ts::writePlaysCache",
+    "lib/server/marketData/jobs.ts::runTiingoEod"]) {
+    want(`the scan found ${must}`, where.has(must));
+  }
+  want("the measured-under-1-MB exemptions are exactly A's two SEC state writes (may shrink, never grow)",
+    UNDER_1MB.length <= 2 && UNDER_1MB.every(([f]) => ["lib/server/secTickerMap.ts", "lib/server/secManifest.ts"].includes(f)));
+  return { fails, found: where.size };
+}
+
+console.log("\n1b. Large writes take the 20 s client (scan)");
+{
+  const { fails, found } = largeWriteRules(files);
+  check(`every write in the ${found} large-write functions goes out on a 20 s client`, fails.length === 0, fails.slice(0, 4).join("; "));
+  const LARGE_MUTANTS = [
+    ["a 5 MB pickers chunk back on the 6 s client", "lib/server/pickersBuilder.ts", "await writeRedis.set(chunkKeys[i], groups[i]", "await redis.set(chunkKeys[i], groups[i]"],
+    ["the history write back on the 6 s client", "lib/server/historyCache.ts", "    const writeRedis = bulkRedis ?? redis;\n", "    const writeRedis = redis;\n"],
+    ["a plays bulk client built on the page deadline", "lib/server/playsBuilder.ts", "    ? Redis.fromEnv(BULK_READ_CACHE)", "    ? Redis.fromEnv(PAGE_READ_CACHE)"],
+    ["a new measured write on the 6 s client", "lib/server/capexSpending.ts", "\nexport ", "\nasync function bigWrite(v: unknown) {\n  trySetRequestBytes(\"k\", v);\n  await redis.set(\"k\", v);\n}\nexport "],
+  ];
+  for (const [label, file, from, to] of LARGE_MUTANTS) {
+    if (!files[file]?.includes(from)) { check(`mutant "${label}" applies`, false, "the anchor matched nothing"); continue; }
+    const fl = largeWriteRules({ ...files, [file]: files[file].replace(from, to) }).fails;
+    check(`mutant "${label}" is caught`, fl.length > 0, fl[0] ?? "no rule failed");
+  }
+  {
+    const fl = (() => { const saved = UNDER_1MB.slice(); UNDER_1MB.push(["lib/server/pickersBuilder.ts", "?"]); try { return largeWriteRules(files).fails; } finally { UNDER_1MB.length = 0; UNDER_1MB.push(...saved); } })();
+    check('mutant "the exemption list grows to hide the pickers write" is caught', fl.length > 0, fl[0] ?? "no rule failed");
+  }
+}
 
 // ── 2. runtime, against a server that never answers ─────────────────────────
 const hung = [];

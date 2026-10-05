@@ -86,7 +86,7 @@ const BUILDERS = [
   ["lib/server/descendingTrianglesBuilder.ts", "DESCENDING_REDIS_KEY", "desc-tri"],
 ];
 const builderRule = (src, key, tag) => {
-  const i = src.indexOf(`await redis.set(${key}, entry`);
+  const i = src.indexOf(`await writeRedis.set(${key}, entry`); // the 20 s client (#553 COWORK #156)
   if (i < 0) return "payload write not found";
   const before = src.slice(Math.max(0, i - 700), i);
   const after = src.slice(i, i + 700);
@@ -142,7 +142,7 @@ console.log("\n5. Mutants");
 {
   const f = BUILDERS[1][0];
   const src = code(f);
-  const i = src.indexOf(`await redis.set(${BUILDERS[1][1]}, entry`);
+  const i = src.indexOf(`await writeRedis.set(${BUILDERS[1][1]}, entry`);
   const m = src.slice(0, i) + src.slice(i).replace("} catch (error) {", "} catch {");
   check("mutant caught: a builder back on a silent catch", m !== src && builderRule(m, BUILDERS[1][1], BUILDERS[1][2]) !== null);
 }
