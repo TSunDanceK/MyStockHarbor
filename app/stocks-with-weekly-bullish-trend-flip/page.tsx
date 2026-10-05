@@ -75,6 +75,9 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["trendFlipBullishWeekly"],
   sectionIncludes: ["bullish trend flip stocks (weekly)"],
+  // Named on the page (#553 COWORK #161): the section sorts by bars since
+  // the flip, newest first, ties A to Z (pickersBuilder).
+  rankedBy: { label: "most recent weekly Trend Helper flip, newest first", short: "newest flip" },
   maxItems: 36,
 };
 

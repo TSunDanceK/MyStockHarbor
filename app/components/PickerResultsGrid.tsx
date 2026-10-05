@@ -286,6 +286,9 @@ const DEFAULT_METRIC_BY_TAB: Record<TabKey, string> = {
 
 type SortState = { key: string; dir: "asc" | "desc" } | null;
 
+/** The phone Sort list's entry for the page's own ranking (#553 COWORK #161). */
+const RANKING_OPTION = "__ranking";
+
 type DerivedRow = {
   price: number | null;
   changePct: number | null;
@@ -418,6 +421,43 @@ const ICON_LIST = (
     <path d="M4.6 6.5h.8M4.6 12h.8M4.6 17.5h.8" />
     <path d="M9 6.5h10.5M9 12h10.5M9 17.5h10.5" />
   </CtrlIcon>
+);
+
+// THE PREVIEW BUTTON'S THUMBNAILS (#553 COWORK #161, owner pick B). The old
+// "Charts" pill was a hidden feature; the button now shows what it does: a
+// 3 x 2 grid of mini line charts (decorative, not real data) on a dark tile,
+// or, in chart view, a small table of rows. aria-hidden: the label says it.
+const MINI_LINES: { d: string; up: boolean }[] = [
+  { d: "M2 14 L7 11 L11 12 L16 6 L20 4", up: true },
+  { d: "M2 5 L6 8 L11 7 L15 12 L20 14", up: false },
+  { d: "M2 12 L6 13 L10 8 L15 9 L20 5", up: true },
+  { d: "M2 6 L7 7 L11 11 L15 10 L20 13", up: false },
+  { d: "M2 13 L6 9 L10 11 L15 7 L20 6", up: true },
+  { d: "M2 9 L6 6 L11 10 L15 9 L20 4", up: true },
+];
+const THUMB_CHARTS = (
+  <svg className="viewThumb" viewBox="0 0 74 42" aria-hidden="true" focusable="false">
+    <rect x="0" y="0" width="74" height="42" rx="6" fill="#0b1220" />
+    {MINI_LINES.map((m, i) => (
+      <g key={i} transform={`translate(${2 + (i % 3) * 24} ${2 + Math.floor(i / 3) * 20})`}>
+        <rect width="22" height="18" rx="3" fill="#111a2e" />
+        <path d={m.d} fill="none" stroke={m.up ? "#22c55e" : "#ef4444"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    ))}
+  </svg>
+);
+const THUMB_TABLE = (
+  <svg className="viewThumb" viewBox="0 0 74 42" aria-hidden="true" focusable="false">
+    <rect x="0" y="0" width="74" height="42" rx="6" fill="#0b1220" />
+    <rect x="6" y="6" width="62" height="6" rx="2" fill="#1e293b" />
+    {[16, 24, 32].map((y) => (
+      <g key={y}>
+        <rect x="6" y={y} width="16" height="4" rx="1.5" fill="#64748b" />
+        <rect x="27" y={y} width="24" height="4" rx="1.5" fill="#334155" />
+        <rect x="56" y={y} width="12" height="4" rx="1.5" fill="#38bdf8" />
+      </g>
+    ))}
+  </svg>
 );
 
 // A table with a header row and columns: the menu swaps which set of figures
@@ -759,6 +799,7 @@ export default function PickerResultsGrid({
   collapseReasons = false,
   defaultTab = "general",
   screenerControl = null,
+  ranking = null,
 }: {
   entries: ResultEntry[];
   initialVisibleCount?: number;
@@ -791,6 +832,10 @@ export default function PickerResultsGrid({
   // for "which screener", one for "how to view it" -- stacked on top of each
   // other. They're one decision, so they're now one row.
   screenerControl?: ReactNode;
+  // The page's default order in words (PickerResultPage's pageRanking, #553
+  // COWORK #161). Shown above the results while no column sort is applied, and
+  // the way back to it once one is.
+  ranking?: { label: string; short: string } | null;
 }) {
   const { predicates, selectedFilters, setMatchCount, setConditionCounts, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -1279,6 +1324,20 @@ export default function PickerResultsGrid({
           </div>
         ) : null}
         <ScreenerFilterBar matched={filteredEntries.length} total={entries.length} />
+        {/* THE DEFAULT ORDER, SAID (#553 COWORK #161). A re-sorted table looked
+            like a wrong ranking because nothing named the right one. */}
+        {ranking && viewMode === "list" ? (
+          sort ? (
+            <p className="rankLine">
+              Sorted by {activeColumns.find((c) => c.key === sort.key)?.label ?? "a column"}.{" "}
+              <button type="button" className="rankBack" onClick={() => setSort(null)}>
+                Back to {ranking.short} ranking
+              </button>
+            </p>
+          ) : (
+            <p className="rankLine">Ranked by {ranking.label}</p>
+          )
+        ) : null}
       </div>
 
       {/* One control row: which screener, which view, which data tab, which
@@ -1292,14 +1351,26 @@ export default function PickerResultsGrid({
           screener list. */}
       <div className="screenerControls">
         {screenerControl}
+        {/* THE PREVIEW BUTTON (#553 COWORK #161): a thumbnail of what the
+            other view looks like, a bold label and a hint. The docked phone
+            bar keeps the thumbnail and a one-word label; the hint drops. */}
         <button
           type="button"
-          className="viewToggle"
+          className="viewToggle viewPreview"
           onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
-          aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+          aria-pressed={viewMode === "chart"}
+          aria-label={viewMode === "list" ? "View results as charts" : "View results as table"}
         >
-          {viewMode === "list" ? ICON_CHARTS : ICON_LIST}
-          <span className="viewToggleLabel">{viewMode === "list" ? "Charts" : "List"}</span>
+          {viewMode === "list" ? THUMB_CHARTS : THUMB_TABLE}
+          <span className="viewToggleText">
+            <span className="viewToggleLabel">
+              <span className="viewLabelLong">{viewMode === "list" ? "View as charts" : "View as table"}</span>
+              <span className="viewLabelShort">{viewMode === "list" ? "Charts" : "Table"}</span>
+            </span>
+            <span className="viewToggleHint">
+              {viewMode === "list" ? "Every result as a mini price chart" : "Back to the sortable table"}
+            </span>
+          </span>
         </button>
         <span className="ctrlBreak" aria-hidden="true" />
         {viewMode === "list" ? (
@@ -1334,8 +1405,12 @@ export default function PickerResultsGrid({
                 nothing to decode and nothing to cram. */}
             <select
               className="tabSelect"
-              value={`${sortKey}:${sortDir}`}
+              value={ranking && !sort ? RANKING_OPTION : `${sortKey}:${sortDir}`}
               onChange={(e) => {
+                if (e.target.value === RANKING_OPTION) {
+                  setSort(null);
+                  return;
+                }
                 const [key, dir] = e.target.value.split(":");
                 const col = metricColumns.find((c) => c.key === key);
                 if (!col) return;
@@ -1343,6 +1418,9 @@ export default function PickerResultsGrid({
               }}
               aria-label="Sort results"
             >
+              {ranking ? (
+                <option value={RANKING_OPTION}>{sort ? `Back to ${ranking.short} ranking` : `Ranked by ${ranking.label}`}</option>
+              ) : null}
               {metricColumns.flatMap((col) => {
                 // Biggest-first for figures, A-Z for names: the order you'd want
                 // if you picked that column and said nothing else.
@@ -1663,6 +1741,28 @@ export default function PickerResultsGrid({
 
         .viewToggleLabel { display: inline; }
 
+        .rankLine { margin: 6px 0 0; font-size: var(--fs-label); color: rgba(148,163,184,0.95); }
+        .rankBack {
+          margin-left: 4px; padding: 0; border: 0; background: none; cursor: pointer;
+          font: inherit; font-weight: 700; color: #7dd3fc; text-decoration: underline; text-underline-offset: 3px;
+        }
+        .rankBack:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; border-radius: 2px; }
+
+        /* The preview button (#553 COWORK #161). An accent border and a faint
+           accent fill so it reads as a button, not a chip. */
+        .viewToggle.viewPreview {
+          display: inline-flex; align-items: center; gap: 10px; min-height: 44px;
+          padding: 6px 14px 6px 6px; border-radius: 12px; text-align: left;
+          border: 1px solid rgba(56,189,248,0.55); background: rgba(56,189,248,0.08); color: #e2e8f0;
+        }
+        .viewToggle.viewPreview:hover { background: rgba(56,189,248,0.14); border-color: rgba(56,189,248,0.8); }
+        .viewToggle.viewPreview:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+        .viewThumb { width: 74px; height: 42px; flex: 0 0 auto; display: block; }
+        .viewToggleText { display: flex; flex-direction: column; gap: 2px; }
+        .viewLabelLong { font-size: var(--fs-label); font-weight: 800; color: #f1f5f9; }
+        .viewLabelShort { display: none; }
+        .viewToggleHint { font-size: var(--fs-label); font-weight: 500; color: rgba(148,163,184,0.9); white-space: nowrap; }
+
         /* Sized here rather than on the viewBox so one number moves every icon
            in the bar. 15px on desktop, where it sits beside a label on a pill;
            the docked bar scales it up (see globals.css). */
@@ -1796,6 +1896,12 @@ export default function PickerResultsGrid({
           }
           .screenerControls .viewToggle { flex: 0 0 auto; }
           .mSortWrap { min-width: 0; }
+          /* The docked bar: the thumbnail, smaller, and one word; no hint. */
+          .screenerControls .viewPreview .viewThumb { width: 40px; height: 23px; }
+          .screenerControls .viewPreview .viewToggleText { align-items: center; }
+          .screenerControls .viewPreview .viewLabelLong,
+          .screenerControls .viewPreview .viewToggleHint { display: none; }
+          .screenerControls .viewPreview .viewLabelShort { display: inline; }
         }
         @media (max-width: 430px) {
           /* Two columns of label+value stops fitting once the labels are this
