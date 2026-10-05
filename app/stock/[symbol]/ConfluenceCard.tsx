@@ -30,7 +30,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, typ
 import { ESTIMATE_SIGN } from "@/app/components/estimateMark";
 import { priceWords, type KeyBar } from "@/lib/ta/keyLevels";
 import {
-  CONFLUENCE_NOTE, NOTE_KINDS, ZONE_LADDER_HEIGHT, ZONE_NOTE_FOOTER, bulletWords, confluence, countWords, ladderTop, rangeWords, zoneDistance, zoneLadder, zoneNoteParts,
+  CONFLUENCE_NOTE, GAP_WHAT, NOTE_KINDS, ZONE_LADDER_HEIGHT, ZONE_NOTE_FOOTER, bulletWords, confluence, countWords, ladderTop, rangeWords, zoneDistance, zoneLadder, zoneNoteParts,
   type Confluence, type ZoneMark,
 } from "@/lib/ta/confluence";
 import { FlowPanel, HowToRead, NOTE_GAP, NoteButton, NoteDot, NotePanel, anchoredPlacement, pushOffsets, useIsPhone, useTapNote } from "./TapNote";
@@ -179,7 +179,7 @@ export default function ConfluenceCard({
   const phone = useIsPhone();
   const what = useTapNote();
   const head = useRef<HTMLDivElement | null>(null);
-  const whatText = `Levels counted: the moving averages, macro support, the day's, week's and month's open, high and low, the previous closes, last week's and last month's high and low, the 52-week high and low, recent swing highs and lows, weekly pivots, round numbers beside another level, and the next close that would take RSI(14) to 70 or 30 or bring MACD to its signal line. Levels within ${c.band ? priceWords(c.band) : "a fraction of the usual daily range"} of each other form one zone; a zone needs two or more.${c.omitted.length ? ` Left out: ${c.omitted.join(" ")}` : ""}`;
+  const whatText = `Levels counted: the moving averages, macro support, the day's, week's and month's open, high and low, the previous closes, last week's and last month's high and low, the 52-week high and low, recent swing highs and lows, weekly pivots, round numbers beside another level, and the next close that would take RSI(14) to 70 or 30 or bring MACD to its signal line. Levels within ${c.band ? priceWords(c.band) : "a fraction of the usual daily range"} of each other form one zone; a zone needs two or more. ${GAP_WHAT}${c.omitted.length ? ` Left out: ${c.omitted.join(" ")}` : ""}`;
   return (
     <section className="czCard" style={cardStyle}>
       <div className="czEyebrow" style={eyebrowStyle}>Confluence</div>

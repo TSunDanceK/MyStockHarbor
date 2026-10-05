@@ -25,8 +25,8 @@ let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("/opt/node22/lib/node_modules/playwright")); }
 
 const strip = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^"use client";$/m, "");
-const files = ["lib/ta/sessionBar.ts", "lib/ta/keyLevels.ts", "lib/ta/macdSeries.ts", "lib/ta/priceLadder.ts", "lib/ta/confluence.ts"];
-const unit = `${reasonedValueUnit()}\nimport { useCallback, useLayoutEffect } from "react";\n${strip(fs.readFileSync("app/stock/[symbol]/TapNote.tsx", "utf8"))}\n${files.map((f) => strip(fs.readFileSync(f, "utf8"))).join("\n")}\n${strip(fs.readFileSync("app/stock/[symbol]/ConfluenceCard.tsx", "utf8")).replace("export default function ConfluenceCard", "export function ConfluenceCard")}\n`;
+const files = ["lib/ta/sessionBar.ts", "lib/ta/keyLevels.ts", "lib/ta/macdSeries.ts", "lib/ta/priceLadder.ts", "lib/ta/fairValueGaps.ts", "lib/ta/confluence.ts"];
+const unit = `${reasonedValueUnit()}\nimport { useCallback, useLayoutEffect } from "react";\n${strip(fs.readFileSync("app/stock/[symbol]/TapNote.tsx", "utf8"))}\n${files.map((f) => { const src = strip(fs.readFileSync(f, "utf8")); return f.endsWith("fairValueGaps.ts") ? src.replace(/\bisPrice\b/g, "fvgIsPrice") : src; }).join("\n")}\n${strip(fs.readFileSync("app/stock/[symbol]/ConfluenceCard.tsx", "utf8")).replace("export default function ConfluenceCard", "export function ConfluenceCard")}\n`;
 const tmp = `scripts/.confluence-measure-${process.pid}.mjs`;
 fs.writeFileSync(tmp, ts.transpileModule(unit, { fileName: "c.tsx", compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText);
 let M;
