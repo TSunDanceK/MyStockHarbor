@@ -237,7 +237,7 @@ function NavList({
                 const dead = count === 0 && !checked;
                 const rowClass = [
                   "screenerNavItem screenerNavCheckable",
-                  checked ? "checked" : "",
+                  checked ? "checked screenerNavSelected" : "",
                   dead ? "dead" : "",
                 ].filter(Boolean).join(" ");
 
@@ -347,12 +347,15 @@ function NavList({
                 );
               }
 
+              // The page you are on reads like a ticked filter (#553 COWORK
+              // #163): the same screenerNavSelected class, so the two cannot
+              // drift. A link, not a filter: no checkbox, the arrow stays.
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={onNavigate}
-                  className={active ? "screenerNavItem active" : "screenerNavItem"}
+                  className={active ? "screenerNavItem active screenerNavSelected" : "screenerNavItem"}
                   aria-current={active ? "page" : undefined}
                 >
                   <PickerGlyph id={item.glyph} />
@@ -801,10 +804,13 @@ export default function ScreenerNav({
         .screenerNavCheckable {
           cursor: pointer;
         }
-        /* Selected: a faint accent wash and an inset 2px bar on the left. */
-        .screenerNavCheckable.checked {
+        /* Selected: a faint accent wash, an inset 2px bar on the left and a bold
+           label. ONE class for a ticked filter and for the page you are on
+           (#553 COWORK #163), so the two looks cannot drift apart. */
+        .screenerNavSelected {
           background: rgba(56,189,248,0.08); box-shadow: inset 2px 0 0 var(--picker-accent); color: #f8fafc;
         }
+        .screenerNavSelected .screenerNavLabel { font-weight: 800; }
         /* The native input, restyled (#553 COWORK #155): 16px, 5px corners, a
            1.5px slate border; filled accent with a dark tick when checked.
            Still the real <input>, so keyboard and screen readers are unchanged,

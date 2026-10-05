@@ -13,7 +13,9 @@
 //     input and takes keyboard focus with a visible outline;
 //   - ATR Spike reads "none today" with no 0 pill;
 //   - no sideways scroll and no row wider than the list.
-// Writes picker-menu-390.png and picker-menu-1280.png to SHOTS (default /tmp).
+// Writes picker-menu-<page>-390.png and -1280.png to SHOTS (default /tmp).
+// CURRENT_HREF=/cheap-tech-stocks (any preset page) also checks that page's
+// link row wears exactly the ticked-filter look (#553 COWORK #163).
 //
 //   node scripts/measure-picker-menu.mjs     # widths 320 360 390 414 430 1280
 //
@@ -26,6 +28,8 @@ import { createRequire } from "node:module";
 import ts from "typescript";
 
 const ROOT = process.cwd();
+// CURRENT_HREF=/cheap-tech-stocks measures a preset page (#553 COWORK #163).
+const CURRENT = process.env.CURRENT_HREF || "/oversold-stocks-today";
 const SHOTS = path.resolve(process.env.SHOTS || "/tmp");
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const cjs = (src, fileName) => ts.transpileModule(src, {
@@ -37,7 +41,7 @@ const FILTER_CONTEXT = "app/components/PickerFilterContext.tsx";
 const STUBS = {
   "next/link": `const React = require("react");
 module.exports = { __esModule: true, default: function Link(p) { const { href, prefetch, scroll, replace, ...rest } = p; return React.createElement("a", { href: typeof href === "string" ? href : "#", ...rest }); } };`,
-  "next/navigation": `module.exports = { usePathname: () => "/oversold-stocks-today", useSearchParams: () => new URLSearchParams(""), useRouter: () => ({ push() {}, replace() {}, prefetch() {}, back() {}, refresh() {} }) };`,
+  "next/navigation": `module.exports = { usePathname: () => ${JSON.stringify(CURRENT)}, useSearchParams: () => new URLSearchParams(""), useRouter: () => ({ push() {}, replace() {}, prefetch() {}, back() {}, refresh() {} }) };`,
   // The context, with one ticked row and an empty screen.
   [FILTER_CONTEXT]: `const React = require("react");
 const counts = { hasBuySignal: 317, hasSellSignal: 668, oversold: 302, overbought: 135, bestTrendPick: 20, divergencePick: 20,
@@ -105,7 +109,7 @@ function require(name) {
 const React = require("react");
 const Nav = require(${JSON.stringify(NAV)}).default;
 require("react-dom/client").createRoot(document.getElementById("root")).render(
-  React.createElement(Nav, { currentHref: "/oversold-stocks-today", variant: "full", showFilters: true, alwaysFilterMode: true })
+  React.createElement(Nav, { currentHref: ${JSON.stringify(CURRENT)}, variant: "full", showFilters: true, alwaysFilterMode: true })
 );
 </script></body></html>`;
 
@@ -151,7 +155,11 @@ for (const width of (process.env.WIDTHS || "320,360,390,414,430,1280").split(","
     const box = list.querySelector('.screenerNavCheckable input[type="checkbox"]');
     const boxStyle = box ? { appearance: getComputedStyle(box).appearance, w: box.getBoundingClientRect().width, radius: getComputedStyle(box).borderRadius } : null;
     const atr = rows.find((row) => /ATR Spike/.test(row.textContent));
+    // #553 COWORK #163: the current page's link row wears the ticked look.
+    const currentLinks = [...list.querySelectorAll("a.screenerNavItem[aria-current=page]")];
+    const look = (el) => el ? { bg: getComputedStyle(el).backgroundColor, bar: getComputedStyle(el).boxShadow, weight: getComputedStyle(el.querySelector(".screenerNavLabel")).fontWeight } : null;
     return {
+      currentLinks: currentLinks.length, currentLook: look(currentLinks[0]), tickedLook: look(ticked),
       rows: rows.length, rowGlyphs, glyphSizes, labels, headings, textIcons: text,
       wide, pageWide: document.documentElement.scrollWidth > document.documentElement.clientWidth + 0.5,
       tickedBar, boxStyle,
@@ -171,6 +179,11 @@ for (const width of (process.env.WIDTHS || "320,360,390,414,430,1280").split(","
   say(r.atr && r.atr.boxOpacity === "1" && r.atr.rowOpacity === "1", "...and its box is not greyed out (only the name dims)", JSON.stringify(r.atr));
   say(r.wide.length === 0, "no row wider than the list", r.wide.slice(0, 3).join("; "));
   say(!r.pageWide, "no sideways scroll");
+  if (CURRENT !== "/oversold-stocks-today") {
+    say(r.currentLinks === 1 && JSON.stringify(r.currentLook) === JSON.stringify(r.tickedLook), `${CURRENT}: its row, and only it, looks exactly like a ticked filter`, `${r.currentLinks} · ${JSON.stringify(r.currentLook)} vs ${JSON.stringify(r.tickedLook)}`);
+  } else {
+    say(r.currentLinks === 0, "a non-preset page highlights no Popular Screen link row", String(r.currentLinks));
+  }
   // Keyboard focus: Tab to the first checkbox; its outline must show.
   const focus = await p.evaluate((phoneMode) => {
     const list = document.querySelector(phoneMode ? ".screenerOverlayPanel .screenerNavList" : ".screenerSidebar .screenerNavList");
@@ -188,7 +201,7 @@ for (const width of (process.env.WIDTHS || "320,360,390,414,430,1280").split(","
   if (width === 390 || width === 1280) {
     const target = phone ? ".screenerOverlayPanel" : ".screenerSidebar";
     const el = await p.$(target);
-    if (el) await el.screenshot({ path: path.join(SHOTS, `picker-menu-${width}.png`) });
+    if (el) await el.screenshot({ path: path.join(SHOTS, `picker-menu-${CURRENT.slice(1)}-${width}.png`) });
   }
   await ctx.close();
 }
