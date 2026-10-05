@@ -329,6 +329,52 @@ for (const pg of PAGES) {
     await page.close();
   }
 }
+// ── QUALITY OF EARNINGS AND BALANCE SHEET (#552 COWORK #169) ─────────────────
+// Tile figures large and never wrapped or cut (the grid goes 1 across first);
+// the balance chart, its labels and the meter stay inside the card, 320–1280px
+// and at a 20px root. Reading size itself is the page pass above.
+{
+  const html = await earningsPage();
+  console.log("\n/stock/AAPL/earnings quality and balance cards (#552 COWORK #169)");
+  const probe = () => {
+    const out = { tiles: 0, bad: [], cols: 0, balance: 0 };
+    const grid = document.querySelector(".qualityGrid");
+    if (grid) out.cols = getComputedStyle(grid).gridTemplateColumns.split(" ").length;
+    for (const e of document.querySelectorAll(".qualityGrid .metricValue")) {
+      out.tiles++;
+      const lh = parseFloat(getComputedStyle(e).lineHeight) || parseFloat(getComputedStyle(e).fontSize) * 1.25;
+      if (Math.round(e.getBoundingClientRect().height / lh) > 1 || e.scrollWidth > e.clientWidth + 1) out.bad.push(`tile "${e.textContent.trim()}" wraps or cuts`);
+    }
+    for (const card of document.querySelectorAll(".qualityCard, .balanceCard")) {
+      const R = card.getBoundingClientRect();
+      for (const e of card.querySelectorAll(".balanceRowHead, .balanceGapLabel, .balanceLegend, .meterScale span, .meterTrack, .balanceTrack, .convChart, .convPct, .convPeriod, .balanceTotals")) {
+        if (card.classList.contains("balanceCard")) out.balance++;
+        const r = e.getBoundingClientRect();
+        if (r.right > R.right + 1 || r.left < R.left - 1) out.bad.push(`${e.className?.baseVal ?? e.className} "${e.textContent.trim().slice(0, 30)}" outside its card`);
+      }
+    }
+    // THE GAP BOX MEETS THE BAR ENDS: from the shorter bar's end to the longer's.
+    const R = (sel) => document.querySelector(sel)?.getBoundingClientRect();
+    const gap = R(".balanceGap"), segs = [...document.querySelectorAll('.balanceCard [data-seg]')].map((e) => ({ k: e.dataset.seg, r: e.getBoundingClientRect() }));
+    if (gap && segs.length) {
+      const liquidEnd = Math.max(...segs.filter((x) => x.k !== "debt").map((x) => x.r.right)), debtEnd = segs.find((x) => x.k === "debt")?.r.right ?? 0;
+      const [lo, hi] = [Math.min(liquidEnd, debtEnd), Math.max(liquidEnd, debtEnd)];
+      if (Math.abs(gap.left - lo) > 2 || Math.abs(gap.right - hi) > 3) out.bad.push(`gap box ${Math.round(gap.left)}–${Math.round(gap.right)} vs bar ends ${Math.round(lo)}–${Math.round(hi)}`);
+    } else out.bad.push("no gap box");
+    return out;
+  };
+  for (const [label, width, css] of [["320px", 320, ""], ["360px", 360, ""], ["390px", 390, ""], ["430px", 430, ""], ["1280px", 1280, ""], ["1280px, root 20px", 1280, "html { font-size: 20px; }"], ["390px, root 20px", 390, "html { font-size: 20px; }"]]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.setContent(doc(html, css));
+    const r = await page.evaluate(probe);
+    const scrolls = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+    const fail = r.bad.length || !r.tiles || !r.balance || scrolls;
+    console.log(`  ${label}: ${r.tiles} tiles, ${r.cols} across · ${r.balance} balance elements · ${fail ? `${scrolls ? "SCROLLS SIDEWAYS " : ""}${r.bad.slice(0, 4).join("; ")}${!r.tiles || !r.balance ? "CARDS NOT DRAWN" : ""} — FAIL` : "nothing wraps, cuts or leaves its card"}`);
+    if (fail) failures++;
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `quality-balance-${width}${css ? "-root20" : ""}.png`), fullPage: true });
+    await page.close();
+  }
+}
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

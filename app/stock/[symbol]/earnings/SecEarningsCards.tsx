@@ -16,7 +16,8 @@ import {
   GROWTH_BAND_PCT, MARGIN_BAND_PP, fiscalYearEndNote, stalePriceNote, toneBg, toneColor, toneTint,
   toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate, waterfallGeometry,
   TREND_MIN_PERIODS, coverageIsInformative, partialScoreLabel, partialScoreNote, scaledAmount, scoreSummaryLine,
-  type EarningsTone, type ScoreCoverage,
+  CONVERSION_MAX_PCT, CONVERSION_MIN_PERIODS, RATIO_METER_MAX, cashLead, cashTileTone, balanceBars, conversionBars, netPosition, ratioMeter, shareOf,
+  type EarningsTone, type ScoreCoverage, type ShareOf,
 } from "@/lib/server/secPresentation";
 import { SCORE_BANDS, scoreBandNote, toneLabel, type SecEarningsScore } from "@/lib/server/secEarningsScore";
 import { readableDate, readableIsoDates } from "@/lib/server/secEstimates";
@@ -70,34 +71,6 @@ export function ToneChip({ tone, word }: { tone: EarningsTone | null; word: stri
 }
 
 /**
- * ONE HORIZONTAL BAR, SCALED AGAINST THE BIGGEST FIGURE IN ITS OWN LIST.
- *
- * ── WHY A SHARED MAXIMUM AND NOT A PER-ROW ONE ───────────────────────────
- * These lists compare magnitudes — operating cash flow against capex, cash
- * against debt — and that comparison only exists if every bar is drawn to the
- * same scale. A per-row bar normalised to itself is a row of identical full-
- * width bars carrying no information at all while looking like a chart.
- *
- * ABSOLUTE VALUE FOR THE LENGTH, SIGN FOR THE SIDE. Capex is filed negative
- * and free cash flow can be; a length cannot be negative, so the magnitude is
- * the width and the direction is the colour and the printed figure.
- *
- * A NULL DRAWS NOTHING. Not a zero-width bar — see barValue in
- * secPresentation: a mark on the axis reads as a measured zero.
- */
-function HBar({ value, max, tone }: { value: number | null; max: number; tone: EarningsTone | null }) {
-  // NO TRACK FOR A ROW WITH NO VALUE (#552 COWORK #97): an empty track
-  // beside "Not available" reads as a bar at zero.
-  if (value === null || !Number.isFinite(value) || max <= 0) return null;
-  const pct = Math.max(0, Math.min(100, (Math.abs(value) / max) * 100));
-  return (
-    <div className="hbarTrack" aria-hidden="true">
-      <span className="hbarFill" style={{ width: `${pct}%`, background: toneColor(tone) }} />
-    </div>
-  );
-}
-
-/**
  * "ABOUT THESE FIGURES" (#552 COWORK #124): a card's method, sources and
  * footnotes, behind a tap. A native <details> in the server HTML, closed, as
  * with "About this score": indexed, and it works without JS. The card itself
@@ -120,30 +93,6 @@ export function CardDetails({ children }: { children: React.ReactNode }) {
  */
 function NotedLabel({ label, note }: { label: string; note?: string | null }) {
   return note ? <ReasonedValue text={label} reason={note} /> : <>{label}</>;
-}
-
-/**
- * A LIST OF LABELLED MAGNITUDES, each with its bar.
- *
- * The rows carry their own figures as text — the bar is a second encoding of a
- * number the reader can already read, which is what makes it safe to drop for
- * anyone the colour does not reach.
- */
-function HBarList({ rows }: { rows: { label: string; value: number | null; tone: EarningsTone | null; text: React.ReactNode; sub?: string }[] }) {
-  const max = Math.max(0, ...rows.map((r) => (r.value === null || !Number.isFinite(r.value) ? 0 : Math.abs(r.value))));
-  return (
-    <div className="hbarList">
-      {rows.map((r) => (
-        <div className="hbarRow" key={r.label}>
-          <div className="hbarHead">
-            <span className="hbarLabel"><NotedLabel label={r.label} note={r.sub} /></span>
-            <span className="hbarValue">{r.text}</span>
-          </div>
-          <HBar value={r.value} max={max} tone={r.tone} />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 /**
@@ -980,106 +929,97 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
  */
 const shortMoney = (n: number) => scaledAmount(n);
 
-/**
- * The three cash figures as magnitudes against one scale.
- *
- * CAPEX IS FILED NEGATIVE AND IS SHOWN AS SPENDING, not as a negative bar
- * pointing the other way: on this card it is a quantity of cash leaving, and
- * its tone is red because that is what it is, not because the sign is minus.
- * Free cash flow keeps its sign, because a negative one is the finding.
- *
- * ── THE BARS ARE THE ONLY PLACE THESE THREE APPEAR ───────────────────────
- * They used to be followed by three rows repeating the same figures (AVAV:
- * "$13.5M, $44.0M, -$30.5M" twice, one under the other). The rows are gone, so
- * each bar's text now carries everything its row did: the derived mark, and
- * the reason when a figure cannot be calculated. And the list always renders
- * — with no rows below it, returning null on three empty figures would drop
- * the "Not reported" words along with the bars.
- */
-function CashQualityBars({ view }: { view: SecEarningsView }) {
-  const c = view.cashQuality;
-  const w = periodWords(view.basis);
-  const num = (v: number | null | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-  const ocf = num(c.operatingCashFlow.val);
-  const capex = num(c.capex.val);
-  // A PLAIN NUMBER ON THIS ONE, not a ViewCell: free cash flow is derived here
-  // rather than filed, so it has no cell of its own. See the view's shape.
-  const fcf = num(c.freeCashFlow);
-  return (
-    <HBarList
-      rows={[
-        { label: "Operating cash flow", value: ocf, tone: ocf !== null && ocf >= 0 ? "good" : "weak",
-          text: <CellValue cell={c.operatingCashFlow} compact /> },
-        // THE LABEL COMES FROM THE CELL — capex resolves from one concept per
-        // filer and the broader productive-assets one is a different measure.
-        { label: c.capex.label, value: capex, tone: "weak",
-          text: capex === null
-            ? <CellValue cell={c.capex} compact />
-            : <><DerivedMark cell={c.capex} />{shortMoney(Math.abs(capex))}</>,
-          sub: capex === null ? undefined : "cash spent on productive assets" },
-        { label: "Free cash flow", value: fcf, tone: fcf === null ? null : fcf >= 0 ? "good" : "weak",
-          text: (
-            <>
-              {c.freeCashFlowDerived ? (
-                <CardDerivedWord note={`Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this ${w.one} is the difference between two cumulative figures.`} />
-              ) : null}
-              <DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />
-            </>
-          ) },
-      ]}
-    />
-  );
-}
-
-/**
- * The balance sheet as magnitudes: what the company holds against what it owes.
- *
- * NET CASH IS THE ONE THAT CARRIES A VERDICT, and it is the only one toned by
- * sign. Cash and debt are quantities — a large debt is not automatically bad
- * and a large cash pile is not automatically good — so they are drawn in the
- * page's neutral ink rather than being scored.
- *
- * THE ONLY PLACE THESE THREE APPEAR, as on the cash card: the rows that
- * repeated them at a second precision ("$278M" here, "$278.4M" below) are
- * gone, so the bars carry the rows' labels, notes and can't-calculate reasons.
- */
-function BalanceSheetBars({ view }: { view: SecEarningsView }) {
-  // NULLABLE: a filer with no balance sheet on file has none of this, and the
-  // card above already says so in words.
-  const b = view.balance;
-  if (!b) return null;
-  const num = (v: number | null | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-  const cash = num(b.cash?.val);
-  // totalDebt and netCash are DERIVED sums, so they are plain numbers; only
-  // `cash` is a filed cell.
-  const debt = num(b.totalDebt);
-  const net = num(b.netCash);
-  const direction = net === null ? "" : net >= 0 ? "More cash than debt. " : "More debt than cash. ";
-  return (
-    <HBarList
-      rows={[
-        // THE LABEL FOLLOWS THE FIGURE. When the filer published only the
-        // restricted-inclusive total, this IS that total, and calling it "Cash
-        // & equivalents" would overstate what the company can spend.
-        { label: b.cashIncludesRestricted ? "Cash & equivalents (incl. restricted)" : "Cash & equivalents",
-          value: cash, tone: "neutral",
-          text: <CellValue cell={b.cash} compact />,
-          sub: b.cashIncludesRestricted
-            ? "This filer reports cash only including restricted cash, which it cannot freely spend."
-            : undefined },
-        { label: "Total debt", value: debt, tone: "neutral",
-          text: <DerivedValue value={b.totalDebt} missing={b.totalDebtMissing} /> },
-        { label: "Net cash", value: net, tone: net === null ? null : net >= 0 ? "good" : "weak",
-          text: <DerivedValue value={b.netCash} missing={b.netCashMissing} />,
-          sub: `${direction}Cash and short-term investments less total debt.${
-            b.cashIncludesRestricted ? " The cash leg includes restricted cash." : ""
-          }` },
-      ]}
-    />
-  );
-}
-
 const lcFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+
+/** A tile: a large share (or, n/m, the dollar figure), its sub-lines, its ink. */
+function RatioTile({ label, share, tone, of, dollars, nm, missing = null }: {
+  label: string; share: ShareOf; tone: EarningsTone | null; of: string; dollars: React.ReactNode;
+  /** The words after "n/m:" when the share is not meaningful. */
+  nm: string;
+  /** Which input is not on file, when the tile's own figure can't be calculated. */
+  missing?: string | null;
+}) {
+  const ink = tone ? toneColor(tone) : undefined;
+  return (
+    <div className="metricCard" data-ratio-tile={label} style={tone ? { background: toneTint(tone) } : undefined}>
+      <div className="metricLabel">{label}</div>
+      {share.ok ? (
+        <>
+          <div className="metricValue" style={ink ? { color: ink } : undefined}>{Math.round(share.pct)}%</div>
+          <div className="metricSub">{of}</div>
+          <div className="metricSub">{dollars}</div>
+        </>
+      ) : (
+        <>
+          <div className="metricValue">{dollars}</div>
+          <div className="metricSub" data-not-meaningful="">{share.why === "not-meaningful" ? `n/m: ${nm}` : (
+            // THE WORD, ITS REASON ON TAP (#552 COWORK #124): never the sentence inline.
+            <ReasonedValue text={NOT_AVAILABLE} reason={missing ? cantCalculate(missing) : "A figure this share needs is not on file."} style={MUTED_VALUE} />
+          )}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const signedMoney = (v: number) => `${v < 0 ? "−" : "+"}${shortMoney(Math.abs(v))}`;
+
+/** "Q3 FY2026" → ["Q3", "’26"]; "FY2025" → ["FY", "’25"]; anything else as it is. */
+function periodLines(label: string): string[] {
+  const m = label.match(/^(.*?)\s*FY\d{2}(\d{2})$/);
+  return m ? [m[1] || "FY", `\u2019${m[2]}`] : [label];
+}
+
+/** OPERATING CASH FLOW AS % OF NET INCOME, the newest 8 periods (#552 COWORK #169). */
+function ConversionChart({ view }: { view: SecEarningsView }) {
+  const one = periodWords(view.tableBasis).one;
+  const many = periodWords(view.tableBasis).many;
+  const { bars, usable } = conversionBars(view.cashHistory);
+  if (usable < CONVERSION_MIN_PERIODS) {
+    return (
+      <p className="earningsDataNote" data-conversion-hidden="">
+        Fewer than {CONVERSION_MIN_PERIODS} {many} on file with both a profit and operating cash flow, so there is no chart of cash against profit.
+      </p>
+    );
+  }
+  const latest = bars.length - 1;
+  // HTML, NOT SVG TEXT: the labels scale with the reader's root size (the
+  // reading-size measure), which text inside a viewBox does not.
+  const linePct = (100 / CONVERSION_MAX_PCT) * 100;
+  return (
+    <div className="chartBlock" data-conversion-chart="">
+      <div className="chartBlockTitle">Operating cash flow as % of net income — last {bars.length} {many}</div>
+      <p className="conversionSub">Above 100%: more cash came in than the profit reported. Below: less.</p>
+      <div className="convChart" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${bars.length}, minmax(0, 1fr))` }}>
+        <span className="convLine" data-line-100="" style={{ bottom: `calc(var(--conv-axis) + var(--conv-plot) * ${(linePct / 100).toFixed(4)})` }} />
+        {bars.map((b, i) => {
+          const colour = b.pct === null ? null : b.pct >= 100 ? toneColor("good") : toneColor("neutral");
+          return (
+            <div key={b.label} className={`convSlot${i === latest ? " convLatest" : ""}`} data-bar={b.label} data-pct={b.pct === null ? "" : b.pct.toFixed(1)} data-height={b.heightPct.toFixed(2)} data-loss={b.loss ? "1" : "0"}>
+              <div className="convPlot">
+                {b.pct !== null ? <span className="convPct">{Math.round(b.pct)}%</span> : b.loss ? <span className="convLoss">loss</span> : null}
+                {b.pct !== null && b.heightPct > 0 ? (
+                  <span className="convBar" style={{ height: `calc(var(--conv-plot) * ${(b.heightPct / 100).toFixed(4)})`, background: colour ?? undefined, opacity: i === latest ? 1 : 0.62 }} />
+                ) : null}
+              </div>
+              {/* TWO SHORT LINES ("Q3" over "’26"): one line ran into its neighbours at 390px. */}
+              <span className="convPeriod">{periodLines(b.label).map((t) => <span key={t}>{t}</span>)}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="conversionLegend">
+        Dashed line: 100%, cash matches profit · <span style={{ color: toneColor("good") }}>green</span>: 100% or more · <span style={{ color: toneColor("neutral") }}>amber</span>: under
+      </p>
+      {/* THE FIGURES AS TEXT, for a screen reader: the chart itself is aria-hidden. */}
+      <ul className="srOnly">
+        {bars.map((b) => (
+          <li key={b.label}>{b.label}: {b.pct === null ? (b.loss ? `a loss ${one}, no ratio` : "not on file") : `operating cash flow ${Math.round(b.pct)}% of net income`}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   const c = view.cashQuality;
@@ -1094,8 +1034,17 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   // the year — and it implied the rest of the page was quarterly when nothing
   // about KGC is. The condition is the MISMATCH, not the cash basis alone.
   const cashIsOtherPeriod = view.basis === "quarter" && c.basis === "year";
+  const num = (v: number | null | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const ocf = num(c.operatingCashFlow.val), ni = num(c.netIncome.val), capex = num(c.capex.val), sbc = num(c.shareBasedCompensation.val), fcf = num(c.freeCashFlow);
+  // THE PERIOD IN THE LEAD LINE IS THE CARD'S OWN (see the heading below).
+  const when = c.basis === "quarter" ? `this ${periodWords("quarter").one}` : c.basis === "year" ? `in ${c.period}` : `in the ${lcFirst(c.period)}`;
+  const lead = cashLead(ocf, ni);
+  const sOcf = shareOf(ocf, ni), sFcf = shareOf(fcf, ni), sCapex = shareOf(capex === null ? null : Math.abs(capex), ocf), sSbc = shareOf(sbc, fcf);
+  const fcfDerived = c.freeCashFlowDerived ? (
+    <CardDerivedWord note={`Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this ${w.one} is the difference between two cumulative figures.`} />
+  ) : null;
   return (
-    <section className="card">
+    <section className="card qualityCard">
       <div className="eyebrow">Quality of earnings</div>
       {/* THE HEADING NAMES THE CARD'S OWN PERIOD, not the page's latest
           quarter. They differ whenever the filer publishes a cash-flow
@@ -1112,9 +1061,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           not {view.latestLabel}.
         </p>
       ) : null}
-      {/* A FIRST FILER'S YEAR-TO-DATE FRAME (#552 COWORK #37). Its first 10-Q
-          carries cash flow over the year so far and nothing earlier to
-          subtract, so the card is that span, named, rather than "not filed". */}
+      {/* A FIRST FILER'S YEAR-TO-DATE FRAME (#552 COWORK #37). */}
       {c.basis === "year-to-date" ? (
         <p style={{ marginTop: 8, marginBottom: 0 }}>
           <strong>{view.symbol}&apos;s filings so far carry its cash-flow statement for the{" "}
@@ -1123,44 +1070,53 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           including the net income it is compared against — covers those {c.months ?? ""} months.
         </p>
       ) : null}
-      {/* ── THE MAGNITUDES, EACH WITH ITS FIGURE ─────────────────────────────
-          The question this card asks — is the profit turning into cash — is a
-          COMPARISON of three magnitudes, and three numbers in a column is the
-          one shape that makes a comparison hard. The bars are scaled against
-          the largest of them, so operating cash flow against capex is a length
-          a reader can see rather than two figures they have to divide.
-          Every bar prints its figure as text beside its label, so the bar
-          itself is a second encoding and still safe to ignore. */}
-      <CashQualityBars view={view} />
-      <div style={{ marginTop: 12 }}>
-        {/* OPERATING CASH FLOW, CAPEX AND FREE CASH FLOW ARE THE BARS ABOVE —
-            the rows that repeated them are gone (see CashQualityBars). What
-            follows is only what the bars do not show. */}
-        <Row label={c.basis === "quarter" ? "Net income" : "Net income (same period)"}>
-          <CellValue cell={c.netIncome} compact />
-        </Row>
-        {/* BOTH LEGS ARE THE SAME PERIOD. Annual operating cash flow against a
-            quarterly net income reads as roughly 4x cash conversion and would
-            score STRONG for an arithmetic reason alone. cashFrom in
-            secEarningsView selects one period for the whole card. */}
-        <Row
-          label="Cash flow less net income"
-          sub={`Positive means cash is running ahead of reported profit. Both figures are ${c.period}.`}
-        >
-          <DerivedValue value={c.accruals} missing={c.accrualsMissing} />
-        </Row>
-        <Row label="Share-based compensation"><CellValue cell={c.shareBasedCompensation} compact /></Row>
+      {/* THE ANSWER FIRST (#552 COWORK #169, owner's pick): one line, chosen by
+          the figures, describing and never rating. */}
+      {lead ? (
+        <p className="qualityLead" data-lead={lead.kind}>
+          {lead.kind === "loss" ? (
+            <>The company reported a loss {when}; operating cash flow was <strong>{signedMoney(lead.ocf)}</strong>.</>
+          ) : (
+            <>Cash from the business came in{" "}
+              <strong style={{ color: lead.kind === "ahead" ? toneColor("good") : toneColor("neutral") }}>
+                {lead.kind === "ahead" ? "ahead of reported profit" : "behind reported profit"}
+              </strong>{" "}{when}.</>
+          )}
+        </p>
+      ) : null}
+      {/* FOUR SHARES, 2 × 2; EVERY DOLLAR FIGURE THE OLD BARS AND ROWS HELD
+          SITS ON A TILE. Never a percentage of a figure at or below zero. */}
+      <div className="metricGrid qualityGrid">
+        <RatioTile label="Operating cash flow" share={sOcf} tone={cashTileTone("ocf", sOcf)} of="of net income"
+          nm={ni !== null && ni <= 0 ? "net income was a loss" : "a figure is not on file"}
+          // "vs net income", not a bare "vs": a "derived" word on the second
+          // figure must never sit straight after the first (check-earnings-glance 4).
+          dollars={<><CellValue cell={c.operatingCashFlow} compact /> vs net income <CellValue cell={c.netIncome} compact /></>} />
+        <RatioTile label="Free cash flow" share={sFcf} tone={cashTileTone("fcf", sFcf)} of="of net income"
+          nm="net income was a loss" missing={c.freeCashFlowMissing}
+          dollars={<>{fcfDerived}<DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />{fcf !== null ? " after equipment" : null}</>} />
+        <RatioTile label="Spent on equipment" share={sCapex} tone={cashTileTone("capex", sCapex)} of="of operating cash flow"
+          nm="operating cash flow was negative"
+          dollars={capex === null ? <>{c.capex.label} <CellValue cell={c.capex} compact /></> : c.capex.label !== "Capital expenditure"
+            // THE LABEL FOLLOWS THE FIGURE: a filer on the broader concept is named as such.
+            ? <>{c.capex.label}: <DerivedMark cell={c.capex} />{shortMoney(Math.abs(capex))}</>
+            : <><DerivedMark cell={c.capex} />{shortMoney(Math.abs(capex))} capex</>} />
+        <RatioTile label="Paid in shares" share={sSbc} tone={cashTileTone("sbc", sSbc)} of="of free cash flow"
+          nm="free cash flow was negative"
+          dollars={sbc === null ? <CellValue cell={c.shareBasedCompensation} compact /> : <><DerivedMark cell={c.shareBasedCompensation} />{shortMoney(sbc)} share-based pay</>} />
       </div>
-      {/* TRAP 1, AND IT IS WHY EVERY CASH LINE HERE CAN CARRY A DERIVED MARK.
-          US filers report cash flow YEAR-TO-DATE: Q1 covers three months, Q2
-          six, Q3 nine, the 10-K twelve. Read straight, a Q3 figure is roughly
-          three times too large and looks entirely plausible.
-          ── ONE LINE, THE ONE THAT EXPLAINS A MARK ON THIS CARD ──────────────
-          This ran to three sentences under a card that is already mostly
-          sentences (owner review, TSLA/AVAV). The year-to-date sentence stays
-          because it is why a figure here says "derived"; the Not-reported
-          sentence is carried by the income statement and balance sheet. */}
+      <ConversionChart view={view} />
+      {/* ONE "About these figures" (#552 COWORK #166/#169): the ratios, the
+          n/m rule, the loss marker and the year-to-date derivation. */}
       <CardDetails>
+        <p>
+          Operating cash flow and free cash flow are shown as a share of net income, spending on
+          equipment as a share of operating cash flow, and share-based pay as a share of free cash
+          flow. Where the figure divided by is zero or negative — a loss, or negative cash flow —
+          the share is not meaningful (n/m) and the dollar figure is shown instead. In the chart, a
+          loss {periodWords(view.tableBasis).one} has no bar, only a &ldquo;loss&rdquo; marker, and a
+          share above {CONVERSION_MAX_PCT}% is drawn to the top with its true figure.
+        </p>
         <p>
           {c.basis === "year" ? (
             <>Annual cash-flow figures as filed, for {c.period}. Source: {SEC_ATTRIBUTION}.</>
@@ -1209,21 +1165,134 @@ const NOT_IN_TAGGED_DATA = "Not found in the filing\u2019s tagged data";
 const TAG_GAP_LINES = new Set(["interestExpense", "nonOperatingIncomeExpense"]);
 const EPS_LINES = new Set(["epsBasic", "epsDiluted"]);
 
+/**
+ * CASH AGAINST DEBT ON ONE SCALE (#552 COWORK #169). Row 1 is cash (solid
+ * green) and short-term investments (lighter green) as one bar; row 2 is total
+ * debt (red); the dashed box spanning both rows is the gap between their ends —
+ * the net position — on the longer bar's side. Segment labels sit inside only
+ * where they fit; the legend line under the chart carries every figure, so a
+ * label that doesn't fit loses nothing.
+ */
+function CashDebtChart({ b }: { b: NonNullable<SecEarningsView["balance"]> }) {
+  const num = (v: number | null | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const cash = num(b.cash?.val), sti = num(b.shortTermInvestments?.val), debt = num(b.totalDebt);
+  const g = balanceBars(cash, sti, debt);
+  if (!g || debt === null) return null;
+  const pos = netPosition(b.netCash);
+  const net = pos ?? { kind: g.gap.kind, amount: g.gap.amount };
+  const green = toneColor("good"), red = toneColor("weak");
+  const liquidLabel = sti === null ? (b.cashIncludesRestricted ? "Cash (incl. restricted)" : "Cash") : "Cash & short-term investments";
+  // A SEGMENT LABEL ONLY WHERE IT FITS: roughly 8 characters per 10% of track.
+  const fits = (pct: number, text: string) => pct * 0.8 >= text.length;
+  const cashText = `cash ${shortMoney(Math.max(cash ?? 0, 0))}`;
+  const stiText = `inv. ${shortMoney(Math.max(sti ?? 0, 0))}`;
+  const gapInk = net.kind === "cash" ? green : red;
+  return (
+    <div className="chartBlock balanceChart" data-balance-chart="" data-gap-side={g.gap.kind}>
+      <div className="balanceRows">
+        {/* THE GAP BOX spans both rows, from the shorter end to the longer. */}
+        <div className="balanceGap" aria-hidden="true" data-gap={g.gap.kind}
+          style={{ left: `${g.gap.fromPct}%`, width: `${Math.max(g.gap.toPct - g.gap.fromPct, 0)}%`, borderColor: gapInk }} />
+        <div className="balanceRow" data-balance-row="liquid">
+          <div className="balanceRowHead"><span>{liquidLabel}</span><strong>{shortMoney(g.liquid)}</strong></div>
+          <div className="balanceTrack" aria-hidden="true">
+            {g.cashPct > 0 ? (
+              <span className="balanceSeg" data-seg="cash" data-pct={g.cashPct.toFixed(2)} style={{ width: `${g.cashPct}%`, background: green }}>
+                {fits(g.cashPct, cashText) ? cashText : null}
+              </span>
+            ) : null}
+            {g.stiPct > 0 ? (
+              <span className="balanceSeg" data-seg="sti" data-pct={g.stiPct.toFixed(2)} style={{ width: `${g.stiPct}%`, background: green, opacity: 0.55 }}>
+                {fits(g.stiPct, stiText) ? stiText : null}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="balanceRow" data-balance-row="debt">
+          <div className="balanceRowHead"><span>Total debt</span><strong>{shortMoney(debt)}</strong></div>
+          <div className="balanceTrack" aria-hidden="true">
+            {g.debtPct > 0 ? <span className="balanceSeg" data-seg="debt" data-pct={g.debtPct.toFixed(2)} style={{ width: `${g.debtPct}%`, background: red }} /> : null}
+          </div>
+        </div>
+      </div>
+      <div className="balanceGapLabel" data-gap-label={net.kind}
+        style={(g.gap.fromPct + g.gap.toPct) / 2 < 50
+          ? { color: gapInk, textAlign: "left", paddingLeft: `${g.gap.fromPct}%` }
+          : { color: gapInk, textAlign: "right", paddingRight: `${100 - g.gap.toPct}%` }}>
+        net {net.kind} {shortMoney(net.amount)}
+      </div>
+      <BalanceLegend b={b} />
+    </div>
+  );
+}
+
+/**
+ * EVERY FIGURE AS TEXT: a screen reader's version of the chart, the legend for
+ * any segment too narrow to carry its own label, and — where there is no chart
+ * (no debt on file) — the cash figures themselves, so nothing is lost.
+ */
+function BalanceLegend({ b }: { b: NonNullable<SecEarningsView["balance"]> }) {
+  const green = toneColor("good"), red = toneColor("weak");
+  return (
+    <p className="balanceLegend" data-balance-legend="">
+      <span aria-hidden="true" style={{ color: green }}>■</span> {b.cashIncludesRestricted ? "Cash (incl. restricted)" : "Cash"} <CellValue cell={b.cash} compact />
+      {" · "}<span aria-hidden="true" style={{ color: green, opacity: 0.55 }}>■</span> Short-term investments <CellValue cell={b.shortTermInvestments} compact />
+      {" · "}<span aria-hidden="true" style={{ color: red }}>■</span> Total debt <DerivedValue value={b.totalDebt} missing={b.totalDebtMissing} />
+    </p>
+  );
+}
+
+/** SHORT-TERM ASSETS ÷ SHORT-TERM BILLS on a 0–3 track; descriptive only. */
+function CurrentRatioMeter({ b }: { b: NonNullable<SecEarningsView["balance"]> }) {
+  const m = ratioMeter(b.currentRatio);
+  return (
+    <div className="ratioMeter" data-ratio-meter="">
+      <div className="balanceRowHead">
+        <span>Short-term assets ÷ short-term bills (current ratio)</span>
+        <strong data-ratio-value="">
+          {b.currentRatio !== null ? ratio(b.currentRatio) : b.currentRatioMissing ? (
+            <ReasonedValue text={NOT_AVAILABLE} reason={cantCalculate(b.currentRatioMissing)} style={MUTED_VALUE} />
+          ) : (
+            <span style={MUTED_VALUE}>{NOT_REPORTED}</span>
+          )}
+        </strong>
+      </div>
+      {m ? (
+        <>
+          <div className="meterTrack" aria-hidden="true">
+            <span className="meterMark" data-meter-mark="" style={{ left: `${(1 / RATIO_METER_MAX) * 100}%` }} />
+            <span className="meterDot" data-meter-dot={m.pos.toFixed(2)} data-clamped={m.clamped ? "1" : "0"} style={{ left: `${m.pos}%` }} />
+          </div>
+          <div className="meterScale" aria-hidden="true">
+            <span>0</span>
+            <span style={{ left: `${(1 / RATIO_METER_MAX) * 100}%` }} className="meterMarkLabel">1.0 · just covered</span>
+            <span>{RATIO_METER_MAX}{m.clamped ? "+" : ""}</span>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
   const b = view.balance;
   if (!b) return null;
   const spread = view.balanceSheetSpreadDays;
   const apart = spread !== null && Math.abs(spread) > BALANCE_SHEET_SPREAD_DAYS;
+  const num = (v: number | null | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const stiMissing = num(b.shortTermInvestments?.val) === null;
+  const pos = netPosition(b.netCash);
+  // "CASH" WHEN SHORT-TERM INVESTMENTS ARE MISSING (#552 COWORK #169): the
+  // lead names only what was added up.
+  const liquidWords = stiMissing ? "cash" : "cash and short-term investments";
+  const chart = balanceBars(num(b.cash?.val), num(b.shortTermInvestments?.val), num(b.totalDebt)) !== null;
+  const equityLabel = b.equityIncludesNci ? "total equity (incl. noncontrolling interests)" : "equity";
   return (
-    <section className="card">
+    <section className="card balanceCard">
       <div className="eyebrow">Balance sheet</div>
       <h3>Financial position at {readableDate(b.asOf)}</h3>
-      {/* THREE PERIODS, ONE LEDE. The page's opening line says "latest reported
-          quarter" while the income statement, the cash-flow statement and this
-          balance sheet can each be a different period — every one correctly
-          labelled, which is not the same as clear. Said only when the dates are
-          genuinely far apart; on a normal 10-Q filer they coincide and a
-          standing disclaimer would be noise. */}
+      {/* THREE PERIODS, ONE LEDE. Said only when the dates are genuinely far
+          apart; on a normal 10-Q filer they coincide. */}
       {apart ? (
         <p style={{ marginTop: 8, marginBottom: 0 }}>
           This is a <strong>different date</strong> from the income statement above, which covers{" "}
@@ -1232,43 +1301,57 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
           these are {Math.abs(spread!)} days apart.
         </p>
       ) : null}
-      {/* WHAT IT HOLDS AGAINST WHAT IT OWES, as lengths, each with its figure
-          as text; these make the one comparison the card is named for visible
-          without arithmetic. */}
-      <BalanceSheetBars view={view} />
-      <div style={{ marginTop: 12 }}>
-        {/* CASH, TOTAL DEBT AND NET CASH ARE THE BARS ABOVE, at the page's one
-            precision — the rows that repeated them are gone (see
-            BalanceSheetBars). */}
-        <Row label="Short-term investments"><CellValue cell={b.shortTermInvestments} compact /></Row>
-        <Row label="Current ratio">
-          {b.currentRatio !== null ? ratio(b.currentRatio) : b.currentRatioMissing ? (
-            <ReasonedValue text={NOT_AVAILABLE} reason={cantCalculate(b.currentRatioMissing)} style={MUTED_VALUE} />
+      {/* THE ANSWER FIRST (#552 COWORK #169): which is larger, and by how much. */}
+      {pos ? (
+        <p className="qualityLead" data-lead={pos.kind === "cash" ? "net-cash" : "net-debt"}>
+          {pos.kind === "debt" ? (
+            <>Debt is larger than {liquidWords}:{" "}<strong style={{ color: toneColor("weak") }}>net debt of {shortMoney(pos.amount)}</strong>.</>
           ) : (
-            <span style={MUTED_VALUE}>{NOT_REPORTED}</span>
+            <>{liquidWords.charAt(0).toUpperCase() + liquidWords.slice(1)} {stiMissing ? "is" : "are"} larger than debt:{" "}<strong style={{ color: toneColor("good") }}>net cash of {shortMoney(pos.amount)}</strong>.</>
           )}
-        </Row>
-        <Row label="Total assets"><CellValue cell={b.totalAssets} compact /></Row>
-        <Row label="Total liabilities"><CellValue cell={b.totalLiabilities} compact empty={NOT_IN_TAGGED_DATA} /></Row>
-        {/* THE LABEL FOLLOWS THE FIGURE, as the cash row does: a filer that
-            tags only total equity shows that total under its own name. */}
-        <Row
-          label={b.equityIncludesNci ? "Total equity (incl. noncontrolling interests)" : "Shareholders' equity"}
-          strong
-          sub={b.equityIncludesNci
-            ? "This filer tags equity only including any noncontrolling interests, not the parent\u2019s share alone."
-            : undefined}
-        >
-          <CellValue cell={b.stockholdersEquity} compact empty={NOT_IN_TAGGED_DATA} />
-        </Row>
+        </p>
+      ) : null}
+      {chart ? <CashDebtChart b={b} /> : <BalanceLegend b={b} />}
+      <CurrentRatioMeter b={b} />
+      {/* ONE TOTALS LINE, replacing the three rows (#552 COWORK #169). The
+          label follows the figure: a filer that tags only total equity shows
+          it under that name. */}
+      <div className="balanceTotals" data-balance-totals="">
+        {/* "derived" ON THE LABEL, never between two figures, where it would
+            read as belonging to the one before it (check-earnings-glance 4). */}
+        <div className="metricSub">Total assets · <DerivedMark cell={b.totalLiabilities} />liabilities · {equityLabel}</div>
+        <div>
+          <CellValue cell={b.totalAssets} compact />
+          {" · "}
+          <CellValue cell={{ ...b.totalLiabilities, derivedNote: null }} compact empty={NOT_IN_TAGGED_DATA} />
+          {" · "}
+          <strong><CellValue cell={b.stockholdersEquity} compact empty={NOT_IN_TAGGED_DATA} /></strong>
+        </div>
       </div>
-      {/* ONE LINE. "A position at a date, so none of them are derived" explained
-          the ABSENCE of a mark, which no reader goes looking for; the sentence
-          kept is the one that explains words on this card — AVAV shows "Not
-          reported" against total liabilities and equity. */}
-      {/* THE "NOT REPORTED" SENTENCE ONLY WHERE A ROW SAYS IT (#552 COWORK
-          #97): explaining words that aren't on the card is noise. */}
+      {/* ONE "About these figures" (#552 COWORK #166/#169): the net figure,
+          the ratio, why a chart is missing, the not-reported note, the source. */}
       <CardDetails>
+        <p>
+          Net cash is cash and short-term investments less total debt (short-term plus long-term
+          debt); when it is negative it is shown as net debt. In the chart both bars share one
+          scale, and the dashed box marks the difference between their ends.
+          {b.cashIncludesRestricted ? " This filer reports cash only including restricted cash, which it cannot freely spend, so the cash figure and the net figure include it." : ""}
+        </p>
+        {!chart ? (
+          <p data-no-balance-chart="">
+            There is no chart of cash against debt:{" "}
+            {b.totalDebt === null
+              ? (b.totalDebtMissing ? `total debt can't be calculated — ${b.totalDebtMissing} not reported.` : "total debt is not reported.")
+              : "neither cash nor short-term investments is reported."}
+          </p>
+        ) : null}
+        <p>
+          The current ratio is current assets (cash and what the company expects to collect or
+          use within a year) divided by current liabilities (what it owes within a year). At 1.0
+          the two are equal. The meter runs from 0 to {RATIO_METER_MAX}; a ratio above {RATIO_METER_MAX} sits at the
+          end, with its true figure printed.
+        </p>
+        {b.equityIncludesNci ? <p>This filer tags equity only including any noncontrolling interests, not the parent&rsquo;s share alone.</p> : null}
         {balanceShowsNotReported(b) ? <p>{NOT_REPORTED_NOTE}</p> : null}
         <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </CardDetails>
@@ -1276,12 +1359,11 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
   );
 }
 
-/** Whether any row of the balance sheet card prints NOT_REPORTED. */
+/** Whether any figure on the balance sheet card prints NOT_REPORTED. */
 function balanceShowsNotReported(b: NonNullable<SecEarningsView["balance"]>): boolean {
   return b.cash?.val == null
-    || (b.totalDebt === null && !b.totalDebtMissing)
-    || (b.netCash === null && !b.netCashMissing)
     || b.shortTermInvestments?.val == null
+    || (b.totalDebt === null && !b.totalDebtMissing)
     || (b.currentRatio === null && !b.currentRatioMissing)
     || b.totalAssets?.val == null;
 }
