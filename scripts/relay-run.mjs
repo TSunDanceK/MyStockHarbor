@@ -1370,6 +1370,9 @@ const TASKS = {
   "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
   // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #157 §1): how much of the
+  // universe has no stored SEC set, why, and which queue would fill it. ~5 GET/SMEMBERS/ZCARD; counts only.
+  "write-sec-coverage-census": { script: "scripts/sec-coverage-census.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
