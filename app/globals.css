@@ -3,6 +3,17 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* THE READING SIZES (#563 COWORK #100/#101), in rem so a reader's browser
+     "default font size" setting scales the site. Nothing sets html's font-size.
+     --fs-read: every sentence meant to be read (the earnings page's "Investor
+     read" bullet: 16px / 1.65 at the default). --fs-label: short labels that
+     aren't sentences. --fs-fine: fine print only (credits, "as of" stamps,
+     disclaimers, axis ticks), and nothing smaller. Checked by
+     scripts/measure-reading-size.mjs. */
+  --fs-read: 1rem;
+  --lh-read: 1.65;
+  --fs-label: 0.8125rem;
+  --fs-fine: 0.75rem;
 }
 
 @theme inline {

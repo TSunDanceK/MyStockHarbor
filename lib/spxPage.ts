@@ -21,7 +21,7 @@ export const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "What is the trend score?",
-    a: "A 0–100 reading of the price trend: where SPY sits against its 50- and 200-day moving averages, how those averages sit against each other, and its 14-day RSI. It describes trend, not sentiment; sentiment is the Fear & Greed reading beside it.",
+    a: "A 0–100 reading of the price trend: where SPY sits against its 50- and 200-day moving averages, how those averages sit against each other, and its 14-day RSI. It describes trend, not sentiment; the Market Mood reading beside it is the broader measure.",
   },
   {
     q: "Why are the charts on SPY rather than the index?",

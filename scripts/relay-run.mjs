@@ -1357,6 +1357,8 @@ const TASKS = {
   "write-confluence-census": { script: "scripts/confluence-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY: the strength badge's census before the build (#563 COWORK #99 §5). 1 GET + ~105 MGET; counts and percentages only.
   "write-strength-badge-census": { script: "scripts/strength-badge-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY: Market Mood's shipped maths on the stored bars (#563 COWORK #96). 1 GET + ~105 MGET; dates and 0–100 scores only.
+  "write-market-mood-dryrun": { script: "scripts/market-mood-dryrun.mjs", args: () => [], needsTypescript: true, writes: true },
   // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #148): the stored SEC
   // sets that fail the seed gate (symbol + reason), and how many still have a
   // picker row. 1 SMEMBERS + 1 HKEYS; deletes nothing.
@@ -1368,6 +1370,8 @@ const TASKS = {
   // task, added on a ruling. See scripts/lib/fmp-purge-plan.mjs.
   "write-fmp-purge-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--pool-figures", "--market-state", "--insight-snapshots", "--meters"], writes: true },
   "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
+  // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
+  "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
 };
 
 const argv = process.argv.slice(2);

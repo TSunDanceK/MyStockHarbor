@@ -408,7 +408,7 @@ const staticRules = {
   },
   "placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars": (_l, _c, p) => {
     const side = p.slice(p.indexOf('<aside className="stock-page-sidebar">'), p.indexOf("</aside>"));
-    return /<KeyLevelsCard bars=\{history\} lastPrice=\{quote\?\.price \?\? null\} nowMs=\{renderedAt\} credit=\{shownProvider === "tiingo" \? historyCredit : undefined\} \/>[\s{}]*(<\/div>[\s{}]*<div className="sp-slot sp-earnings">[\s{}]*)?<LatestEarningsCard /.test(side) &&
+    return /<KeyLevelsCard bars=\{history\} lastPrice=\{quote\?\.price \?\? null\} nowMs=\{renderedAt\} credit=\{shownProvider === "tiingo" \? historyCredit : undefined\} \/>[\s{}]*(<\/div>[\s{}]*<div className="sp-slot sp-earnings"(?: data-reading-owner="a")?>[\s{}]*)?<LatestEarningsCard /.test(side) &&
       (p.match(/<KeyLevelsCard /g) ?? []).length === 1 && /^import KeyLevelsCard from "\.\/KeyLevelsCard";$/m.test(p);
   },
   "a tap on the bar opens its row's note (the same note as the range label, its own outside-tap owner)": (_l, c) =>
@@ -507,7 +507,7 @@ const mutants = [
   ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace('"Levels some traders watch: ', '"Levels where traders buy: ')],
   ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace("dot: the last price, green above the open, red below", "dot: the last price. Green means buy, red means sell")],
   ["the notes say what the levels are, and nothing reads as advice", "c", (s) => s.replace("<NoteButton note={what}>What are these?</NoteButton>", "")],
-  ["the Tiingo credit only when it is passed", "c", (s) => s.replace('{credit ? <p className="klCredit" style={noteStyle}>Daily prices: {credit}</p> : null}', '<p className="klCredit" style={noteStyle}>Daily prices: {credit ?? "Tiingo"}</p>')],
+  ["the Tiingo credit only when it is passed", "c", (s) => s.replace('{credit ? <p className="klCredit" data-fine-print style={noteStyle}>Daily prices: {credit}</p> : null}', '<p className="klCredit" style={noteStyle}>Daily prices: {credit ?? "Tiingo"}</p>')],
   ["the small print folded (#88 §1): 'How to read this' closed, holding the key; the credit and the last price outside", "c", (s) => s.replace('<p className="klKey" style={{ margin: 0 }}>{KEY_LINE}</p>', '<p className="klKey" style={{ margin: 0 }}>{KEY_LINE}</p>\n          {credit ? <p>Daily prices: {credit}</p> : null}')],
   ["the small print folded (#88 §1): 'How to read this' closed, holding the key; the credit and the last price outside", "c", (s) => s.replace("        <HowToRead>\n          <p className=\"klKey\"", "        <><p className=\"klKey\" style={{ margin: 0 }}>{KEY_LINE}</p></>\n      ) : null}\n      {rows.some((r) => r.bar) ? (\n        <HowToRead>\n          <p className=\"klKey\"")],
 ];

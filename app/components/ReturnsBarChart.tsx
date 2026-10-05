@@ -129,13 +129,13 @@ export default function ReturnsBarChart({
               </rect>
             );
           })}
-          <text x={padX} y={height - 6} fontSize={11} fill="rgba(203,213,225,0.55)">
+          <text x={padX} y={height - 6} fontSize="0.75rem" fill="rgba(203,213,225,0.55)">
             {first.label}
           </text>
           <text
             x={width - padX}
             y={height - 6}
-            fontSize={11}
+            fontSize="0.75rem"
             fill="rgba(203,213,225,0.55)"
             textAnchor="end"
           >
@@ -187,7 +187,7 @@ export const cardStyle: CSSProperties = {
 };
 const bareStyle: CSSProperties = { minWidth: 0 };
 const eyebrowStyle: CSSProperties = {
-  fontSize: 11,
+  fontSize: "var(--fs-label)",
   fontWeight: 900,
   letterSpacing: "0.1em",
   textTransform: "uppercase",
@@ -196,7 +196,7 @@ const eyebrowStyle: CSSProperties = {
 };
 const headingStyle: CSSProperties = {
   margin: 0,
-  fontSize: 16,
+  fontSize: "1rem",
   lineHeight: 1.25,
   letterSpacing: "-0.02em",
   fontWeight: 800,
@@ -204,9 +204,9 @@ const headingStyle: CSSProperties = {
 const subStyle: CSSProperties = {
   marginTop: 8,
   marginBottom: 0,
-  fontSize: 12.5,
-  lineHeight: 1.55,
-  color: "rgba(241,245,249,0.65)",
+  fontSize: "var(--fs-read)",
+  lineHeight: "var(--lh-read)",
+  color: "rgba(241,245,249,0.7)",
 };
 const cellStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.08)",
@@ -216,7 +216,7 @@ const cellStyle: CSSProperties = {
   minWidth: 0,
 };
 const cellLabelStyle: CSSProperties = {
-  fontSize: 9.5,
+  fontSize: "var(--fs-label)",
   fontWeight: 900,
   letterSpacing: "0.06em",
   textTransform: "uppercase",
@@ -224,7 +224,7 @@ const cellLabelStyle: CSSProperties = {
 };
 const cellValueStyle: CSSProperties = {
   marginTop: 4,
-  fontSize: 13,
+  fontSize: "0.8125rem",
   fontWeight: 800,
   letterSpacing: "-0.01em",
   color: "#f1f5f9",

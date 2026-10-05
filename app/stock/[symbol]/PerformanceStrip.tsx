@@ -22,11 +22,11 @@ export default function PerformanceStrip({ strip, credit }: { strip: PerfStrip; 
           const arrow = c.pct === null ? "" : c.pct > 0 ? "▲ " : c.pct < 0 ? "▼ " : "";
           return (
             <div key={c.key} className="perfChip" data-key={c.key} data-tone={tone} style={chipStyle}>
-              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", color: C.muted }}>{c.key}</div>
-              <div className="perfPct" style={{ marginTop: 2, fontSize: 15, fontWeight: 850, color: C[tone], whiteSpace: "nowrap" }}>
+              <div style={{ fontSize: "var(--fs-label)", fontWeight: 800, letterSpacing: "0.07em", color: C.muted }}>{c.key}</div>
+              <div className="perfPct" style={{ marginTop: 2, fontSize: "0.9375rem", fontWeight: 850, color: C[tone], whiteSpace: "nowrap" }}>
                 <ReasonedValue text={c.pct === null ? "—" : `${arrow}${pctWords(c.pct)}`} reason={c.note} />
               </div>
-              <div className="perfSpy" style={{ marginTop: 2, fontSize: 10.5, lineHeight: 1.3, color: C.muted }}>
+              <div className="perfSpy" style={{ marginTop: 2, fontSize: "var(--fs-label)", lineHeight: 1.3, color: C.muted }}>
                 {/* No line against the S&P 500 on a page that is the S&P 500 (#563 COWORK #90). */}
                 {!strip.benchmark ? "" : c.diffPts !== null ? spyWords(c.diffPts) : c.pct === null ? "" : "S&P 500: not on file"}
               </div>
@@ -35,7 +35,7 @@ export default function PerformanceStrip({ strip, credit }: { strip: PerfStrip; 
         })}
       </div>
       {strip.asOfWords ? (
-        <p style={{ margin: "8px 0 0", fontSize: 12, opacity: 0.6 }}>
+        <p data-fine-print style={{ margin: "8px 0 0", fontSize: "var(--fs-fine)", opacity: 0.6 }}>
           {/* #563 COWORK #75: to the latest price in session, else to the last close. */}
           {strip.live
             ? strip.live.phase === "afterClose"
@@ -47,7 +47,7 @@ export default function PerformanceStrip({ strip, credit }: { strip: PerfStrip; 
       <style>{`
         .perfChips { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
         @media (max-width: 640px) { .perfChips { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-        @media (max-width: 360px) { .perfChips { gap: 6px; } .perfChip { padding: 7px 6px !important; } .perfPct { font-size: 13px !important; } }
+        @media (max-width: 360px) { .perfChips { gap: 6px; } .perfChip { padding: 7px 6px !important; } .perfPct { font-size: 0.8125rem !important; } }
       `}</style>
     </div>
   );

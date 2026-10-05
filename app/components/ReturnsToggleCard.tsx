@@ -157,12 +157,14 @@ export function ReturnsToggleView({
       ))}
       <style>{`
         .returns-toggle-head { display: flex; justify-content: flex-start; margin-bottom: 14px; }
-        .returns-toggle { display: inline-flex; gap: 4px; padding: 3px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); }
-        .returns-toggle-tab { display: inline-flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: rgba(226,232,240,0.72); font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; }
+        .returns-toggle { display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 4px; padding: 3px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); }
+        .returns-toggle-tab { display: inline-flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: rgba(226,232,240,0.72); font-family: inherit; font-size: var(--fs-label); font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; }
         .returns-toggle-tab:hover { color: #dbeafe; }
         .returns-toggle-tab:focus-visible { outline: 2px solid rgba(96,165,250,0.9); outline-offset: 2px; }
         .returns-toggle-tab.is-active { font-weight: 900; text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; background: rgba(59,130,246,0.16); border-color: rgba(96,165,250,0.6); color: #eff6ff; }
-        .returns-toggle-check { font-size: 11px; line-height: 1; }
+        .returns-toggle-check { font-size: var(--fs-label); line-height: 1; }
+        /* #563 COWORK #100: room for the label size at 320 px (CSS only). */
+        @media (max-width: 360px) { .returns-toggle-tab { padding: 6px 10px; } }
       `}</style>
     </div>
   );

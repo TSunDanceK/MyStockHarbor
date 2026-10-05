@@ -30,6 +30,7 @@ import { isPriceExcluded } from "../priceExcluded.mjs";
 import { poolField, PRICE_POOL_KEY, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS } from "./pricePool";
 import companyNameSnapshot from "@/data/company-names.json";
 import { priorityStocks, uniqueEtfs } from "../curatedSymbols";
+import { MOOD_ETFS } from "../marketMood";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
@@ -183,6 +184,8 @@ export async function refreshTiingoUniverseOffHours(nowMs = Date.now()): Promise
       etfs: POOL_BENCHMARK_ETFS,
       video: POOL_VIDEO_TICKERS,
       stockPages: STOCK_PAGE_SYMBOLS,
+      // Market Mood's inputs (#563 COWORK #96), as on the in-session write.
+      mood: MOOD_ETFS,
     });
     const written = await writeTiingoUniverse(plan, nowMs);
     return { written, reason: ttl === -2 ? "absent" : "stale", symbols: plan.symbols.length };

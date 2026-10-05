@@ -11,6 +11,7 @@ import {
   readLastBuildStats,
   readLastHistoryStats,
 } from "../../../../lib/server/pickersBuilder";
+import { seedMarketMoodIfMissing, writeMarketMood, type MoodWrite } from "../../../../lib/server/marketMoodWrite";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,8 @@ export const maxDuration = 300;
 // the next hourly or 07:02 build reads the Data Cache instead.
 const FUNCTION_MS = maxDuration * 1000;
 const PICKERS_BUILD_MIN_LEFT_MS = 100_000;
+/** The Market Mood seed stops reading this long before the function's limit (the compute and SET take ~1 s). */
+const MOOD_SEED_RESERVE_MS = 30_000;
 
 type PickersOnBars = { pickersBuild: string; pickers?: Record<string, unknown> };
 
@@ -71,6 +74,14 @@ function pickersOnBars(req: NextRequest, startedAt: number, out: PickersOnBars) 
   };
 }
 
+/** MARKET MOOD (#563 COWORK #96): the same complete night's bars, first (about a second, 1 SET), then `next` (the Pickers build). */
+function withMood(next: (bars: Map<string, EodBar[]>) => Promise<void>, out: MoodWrite) {
+  return async (bars: Map<string, EodBar[]>) => {
+    Object.assign(out, await writeMarketMood(bars));
+    await next(bars);
+  };
+}
+
 function isAuthorized(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return true;
@@ -84,7 +95,13 @@ async function handleGET(req: NextRequest) {
   try {
     const startedAt = Date.now();
     const onBars: PickersOnBars = { pickersBuild: "not reached (incomplete night or nothing fetched)" };
-    const result = { ...(await runTiingoEod(Date.now(), pickersOnBars(req, startedAt, onBars))), ...onBars };
+    // MARKET MOOD (#563 COWORK #96): the same complete night's bars, first (about a second, 1 SET),
+    // then the Pickers build as before.
+    const mood: MoodWrite = { mood: "not reached (incomplete night or nothing fetched)" };
+    const eod = await runTiingoEod(Date.now(), withMood(pickersOnBars(req, startedAt, onBars), mood));
+    // THE FIRST READING (#563 COWORK #97): a night already done seeds Market Mood once from the stored bars if none is on file.
+    if ("skipped" in eod && eod.skipped === "already-complete") Object.assign(mood, await seedMarketMoodIfMissing(startedAt + FUNCTION_MS - MOOD_SEED_RESERVE_MS));
+    const result = { ...eod, ...onBars, ...mood };
     console.log("[tiingo-eod]", JSON.stringify(result));
     await recordJobRun("tiingo-eod", result.ok !== false, runSummary(result));
     return NextResponse.json(result, { status: result.ok === false ? 500 : 200 });
