@@ -24,6 +24,11 @@ export const SCOPE = [
   "app/stock/[symbol]/StockPriceChart.tsx", "app/stock/[symbol]/StockTickerJump.tsx", "app/stock/[symbol]/HeaderStripParts.tsx",
   "app/markets/spx/page.tsx", "app/markets/spx/SPXChartClient.tsx", "app/markets/spx/LevelsGlanceCard.tsx", "app/markets/spx/MarketMoodCard.tsx",
   "app/components/ReturnsToggleCard.tsx", "app/components/ReturnsBarChart.tsx", "app/components/ShareButton.tsx", "app/components/RelatedStocks.tsx",
+  // A's: the earnings page and A's SEC panels on the stock page (#552 COWORK #153).
+  "app/stock/[symbol]/earnings/page.tsx", "app/stock/[symbol]/earnings/SecEarningsCards.tsx", "app/stock/[symbol]/earnings/GrowthVisuals.tsx",
+  "app/stock/[symbol]/earnings/EarningsSymbolPicker.tsx", "app/stock/[symbol]/earnings/NextReportCard.tsx", "app/stock/[symbol]/earnings/ReactionCharts.tsx",
+  "app/stock/[symbol]/ColdFill.tsx", "app/components/LatestEarningsCard.tsx", "app/components/CompanyProfile.tsx",
+  "app/components/DilutionHistory.tsx", "app/components/EstimateKey.tsx",
 ];
 const read = (f) => fs.readFileSync(f, "utf8");
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.name === "node_modules" || e.name.startsWith(".") ? [] : e.isDirectory() ? walk(path.join(d, e.name)) : /\.(css|tsx?)$/.test(e.name) ? [path.join(d, e.name)] : []));
@@ -86,6 +91,9 @@ const MUTANTS = [
   [R[2], "app/markets/spx/MarketMoodCard.tsx", (s) => s.replace('fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)"', 'fontSize: 14, lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)"')],
   [R[2], "app/stock/[symbol]/StockPriceChart.tsx", (s) => s.replace('fontSize="0.75rem"', 'fontSize="0.625rem"')],
   [R[3], "app/stock/[symbol]/StockSymbolPageClient.tsx", (s) => s.replace(/<details className="valuationHow"[\s\S]*?<\/details>/, '<div data-fine-print style={{ marginTop: 4, fontSize: "var(--fs-fine)" }}>{item.reason}</div>')],
+  // A's (#552 COWORK #153): the earnings page's labels and the tile's chart.
+  [R[2], "app/stock/[symbol]/earnings/page.tsx", (s) => s.replace(".metricLabel { font-size: var(--fs-label);", ".metricLabel { font-size: 9.5px;")],
+  [R[2], "app/components/LatestEarningsCard.tsx", (s) => s.replace('const chartGapStyle: CSSProperties = { marginTop: 2, fontSize: "var(--fs-fine)"', "const chartGapStyle: CSSProperties = { marginTop: 2, fontSize: 9")],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");
 for (const [label, file, mutate] of MUTANTS) {

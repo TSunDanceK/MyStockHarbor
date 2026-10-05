@@ -421,7 +421,7 @@ export function DerivedMark({ cell }: { cell: ViewCell }) {
 function CardDerivedWord({ note }: { note: string }) {
   return <ReasonedValue text="derived" reason={note} style={DERIVED_MARK_STYLE} />;
 }
-const DERIVED_MARK_STYLE = { marginRight: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8" } as const;
+const DERIVED_MARK_STYLE = { marginRight: 5, fontSize: "var(--fs-label)", fontWeight: 800, color: "#94a3b8" } as const;
 
 /** More than three words: a reason, not a value word. */
 export const isSentence = (s: string) => s.trim().split(/\s+/).length > 3;
@@ -660,7 +660,7 @@ export function SecSnapshotCard({
         {view.currency ? <p>{conversionNote(view.currency)}</p> : null}
         <p>{w.labelled}</p>
         {crossingNoteHome(view) === "snapshot" ? <p>{CROSSING_NOTE}</p> : null}
-        <p>Source: {SEC_ATTRIBUTION}.</p>
+        <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </CardDetails>
     </section>
   );
@@ -816,7 +816,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                     <ReasonedValue
                       text="gap"
                       reason="No filing on file for the period immediately before this one — these rows are the periods the company published, not a consecutive run."
-                      style={{ marginLeft: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8" }}
+                      style={{ marginLeft: 5, fontSize: "var(--fs-label)", fontWeight: 800, color: "#94a3b8" }}
                     />
                   ) : null}
                 </td>
@@ -848,7 +848,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
       </SeeAllTheNumbers>
       <CardDetails>
         {crossingNoteHome(view) === "growth" ? <p>{CROSSING_NOTE}</p> : null}
-        <p>Source: {SEC_ATTRIBUTION}.</p>
+        <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </CardDetails>
     </section>
   );
@@ -888,7 +888,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
           <strong>{view.symbol}</strong> has fewer — a recent listing or spin-off has no earlier
           year to measure against yet.
         </p>
-        <CardDetails><p>Source: {SEC_ATTRIBUTION}.</p></CardDetails>
+        <CardDetails><p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p></CardDetails>
       </section>
     );
   }
@@ -948,7 +948,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
       </div>
       <CardDetails>
         {crossingNoteHome(view) === "annual" ? <p>{CROSSING_NOTE}</p> : null}
-        <p>Source: {SEC_ATTRIBUTION}.</p>
+        <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </CardDetails>
     </section>
   );
@@ -1253,7 +1253,7 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
           #97): explaining words that aren't on the card is noise. */}
       <CardDetails>
         {balanceShowsNotReported(b) ? <p>{NOT_REPORTED_NOTE}</p> : null}
-        <p>Source: {SEC_ATTRIBUTION}.</p>
+        <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </CardDetails>
     </section>
   );
@@ -1362,7 +1362,7 @@ function TrendFigure({ cell, trend, base }: { cell: ViewCell; trend: LineTrend; 
     <span data-line-trend={trend.trend ?? "none"}>
       <DerivedMark cell={cell} />
       {glyph ? (
-        <span aria-hidden="true" data-trend-glyph="" style={{ marginRight: 5, fontSize: 10, color: TREND_INK[trend.trend as Trend] ?? "#e2e8f0" }}>{glyph}</span>
+        <span aria-hidden="true" data-trend-glyph="" style={{ marginRight: 5, fontSize: "var(--fs-label)", color: TREND_INK[trend.trend as Trend] ?? "#e2e8f0" }}>{glyph}</span>
       ) : null}
       <ReasonedValue text={trendFigureText(cell, v)} reason={note} style={ink ? { color: ink } : undefined} />
     </span>
@@ -1374,7 +1374,7 @@ function TrendKey({ label }: { label: string }) {
     <span style={{ whiteSpace: "nowrap" }}><span aria-hidden="true" style={{ color: TREND_INK[t] ?? "#e2e8f0" }}>{TREND_GLYPH[t]}</span> {words}</span>
   );
   return (
-    <p data-trend-key="" style={{ margin: "4px 0 0", fontSize: 12, lineHeight: 1.5, color: "rgba(203,213,225,0.72)" }}>
+    <p data-trend-key="" style={{ margin: "4px 0 0", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(203,213,225,0.72)" }}>
       {item("improved", "Improved")} · {item("flat", "Little change")} · {item("weaker", "Weaker")}, vs {label}. {TREND_KEY_WORDS}
     </p>
   );
@@ -1426,7 +1426,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
             reports costs that these categories do not cover. Operating income is as filed.
           </p>
         ) : null}
-        <p>Source: {SEC_ATTRIBUTION}.</p>
+        <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </CardDetails>
     </section>
   );
@@ -1506,10 +1506,10 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
 function Row({ label, children, sub, strong }: { label: string; children: React.ReactNode; sub?: string; strong?: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderBottom: "1px solid rgba(148,163,184,0.14)" }}>
-      <div style={{ fontSize: 13.5, fontWeight: strong ? 800 : 600, color: strong ? undefined : "#cbd5e1", minWidth: 0 }}>
+      <div style={{ fontSize: "var(--fs-label)", fontWeight: strong ? 800 : 600, color: strong ? undefined : "#cbd5e1", minWidth: 0 }}>
         <NotedLabel label={label} note={sub} />
       </div>
-      <div style={{ fontSize: 13.5, fontWeight: strong ? 800 : 700, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{children}</div>
+      <div style={{ fontSize: "var(--fs-label)", fontWeight: strong ? 800 : 700, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{children}</div>
     </div>
   );
 }
@@ -1958,7 +1958,7 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
       <CardDetails>
         <p>Typical is the middle value across the {w.many} on file; Latest is the newest {w.one}.</p>
         {t.skewNote ? <p>{t.skewNote}</p> : null}
-        <p>Source: {SEC_ATTRIBUTION}.</p>
+        <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </CardDetails>
     </section>
   );
@@ -2061,7 +2061,7 @@ export function SecValuationCard({
             dollars, so both sides of these figures are dollars.
           </p>
         ) : null}
-        <p>Source: {SEC_ATTRIBUTION}; share price from market data.</p>
+        <p data-fine-print="">Source: {SEC_ATTRIBUTION}; share price from market data.</p>
       </CardDetails>
     </section>
   );

@@ -40,6 +40,7 @@ import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { readTiingoQuote } from "@/lib/server/tiingoQuote";
 import { awaitingSecRead } from "@/lib/server/secColdFetch";
+import { stockPageIndexable } from "@/lib/stockPageRobots";
 import Link from "next/link";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
@@ -483,7 +484,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       //
       // AND NOINDEX WHILE A COLD SYMBOL IS NOT YET READ (#535 COWORK #13): its
       // figures section says "not yet read" until a set is stored.
-      index: hasData && !(await awaitingSecRead(upper)),
+      // The sitemap applies the same predicate (lib/stockPageRobots.ts, #553 COWORK #143).
+      index: stockPageIndexable({ hasData, awaitingSecRead: hasData && (await awaitingSecRead(upper)) }),
       follow: true,
     },
     alternates: {

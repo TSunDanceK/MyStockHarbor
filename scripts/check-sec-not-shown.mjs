@@ -55,6 +55,14 @@ const RULES = {
     }
     return true;
   },
+  "VUG and VOO (series funds, no CIK of their own) are not-shown funds too; an unlisted symbol stays no-cik (#552 COWORK #155)": async (C) => {
+    for (const s of ["VUG", "VOO"]) {
+      if (C.cikForSymbol(s) !== null) return false;
+      const r = await C.resolveFactSetForRender(s);
+      if (r.status !== "not-shown" || r.kind !== "fund") return false;
+    }
+    return (await C.resolveFactSetForRender("ZZZZQ")).status === "no-cik";
+  },
   "SOMN is a not-shown security, pointing at its issuer (SO)": async (C) => {
     const r = await C.resolveFactSetForRender("SOMN");
     return r.status === "not-shown" && r.kind === "security" && r.primary === "SO";
@@ -102,11 +110,14 @@ const page = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
 check("the earnings page draws the card for not-shown, ahead of the derivative card",
   /data\.cold\.status === "not-shown" \? \(\s*<SecNotShownCard symbol=\{clean\} kind=\{data\.cold\.kind\} primary=\{data\.cold\.primary\} \/>/.test(page)
   && page.indexOf('data.cold.status === "not-shown"') < page.indexOf('data.cold.status === "not-issuer-equity"'));
+const ROBOTS = "index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null || isSiteFund(clean), awaitingSecRead: await awaitingSecRead(clean) }),";
+check("a fund the site lists is indexed with or without its own CIK (VUG as SPY; #552 COWORK #155)", page.includes(ROBOTS));
+check("MUTATION: the CIK-only index rule back → caught", !page.replace(ROBOTS, "index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null, awaitingSecRead: await awaitingSecRead(clean) }),").includes(ROBOTS));
 
 console.log("\n5. the tidy-ups (#552 COWORK #152)");
 const NEXT_GUARD = '{nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <NextReportCard outlook={nextReport} /> : null}';
 const SNAP_RULE = 'if (cold.status === "not-shown") return { ...snap, sourceNote: null };';
-const TILE_GUARD = "{snapshot.sourceNote ? <div style={earningsSourceStyle}>{snapshot.sourceNote}</div> : null}";
+const TILE_GUARD = "{snapshot.sourceNote ? <div style={earningsSourceStyle} data-fine-print=\"\">{snapshot.sourceNote}</div> : null}";
 const nextRule = (p) => p.includes(NEXT_GUARD) && (p.match(/<NextReportCard /g) ?? []).length === 1;
 const snapRule = (src) => src.includes(SNAP_RULE);
 check("a fund's earnings page has no next-report box; a census-named note keeps it", nextRule(readCodeOnly("app/stock/[symbol]/earnings/page.tsx")));
@@ -134,6 +145,7 @@ check("the tile prints the footer only when there is one", tileRule(tileText));
 console.log("\nmutants: each must break a rule");
 const MUTANTS = [
   ["funds resolve as before (pending)", once('if (seed === "etf") return { status: "not-shown", kind: "fund", primary: null };', "")],
+  ["a series fund with no CIK falls to the no-cik card again", once('if (!cik) return isSiteFund(clean) ? { status: "not-shown", kind: "fund", primary: null } : { status: "no-cik" };', 'if (!cik) return { status: "no-cik" };')],
   ["the census notes resolve as before", once('if (seed) return { status: "not-shown", kind: "security", primary: nonEquityListingOf(clean)?.primary ?? null };', "")],
   ["a fund cold-filled again", once("if (secSeedRefusal(clean, cik)) return \"not-eligible\";", "")],
   ["a fund awaiting a read again (noindex)", once("if (!cik || !admitSymbolForExtraction(clean, cik).admit || secSeedRefusal(clean, cik)) return false;\n  return (await factSetExists(clean)) === false;", "if (!cik || !admitSymbolForExtraction(clean, cik).admit) return false;\n  return (await factSetExists(clean)) === false;")],

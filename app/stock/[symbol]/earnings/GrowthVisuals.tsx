@@ -61,7 +61,7 @@ const PCT_GUIDES = [0, 50, 100] as const;
  */
 function DerivedTag({ note }: { note: string | null }) {
   if (!note) return null;
-  return <ReasonedValue text="derived" reason={note} style={{ marginRight: 4, fontSize: 11, fontWeight: 800, color: C.muted }} />;
+  return <ReasonedValue text="derived" reason={note} style={{ marginRight: 4, fontSize: "var(--fs-label)", fontWeight: 800, color: C.muted }} />;
 }
 
 /** One chart: a title, the plot as a grid of columns, and the shared axis labels. */
@@ -470,18 +470,18 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
         .gvRoot { display: grid; gap: 6px; margin: 4px 0 12px; }
         .gvSummary { margin: 0 0 4px; font-weight: 700; color: ${C.ink}; }
         .gvToggle { display: inline-flex; gap: 0; justify-self: start; border: 1px solid ${C.rule}; border-radius: 999px; overflow: hidden; }
-        .gvToggle button { background: transparent; color: ${C.muted}; border: 0; padding: 6px 14px; font-weight: 700; cursor: pointer; font: inherit; font-size: 13px; }
+        .gvToggle button { background: transparent; color: ${C.muted}; border: 0; padding: 6px 14px; font-weight: 700; cursor: pointer; font: inherit; font-size: var(--fs-label); }
         .gvToggle button[aria-pressed="true"] { background: rgba(57,135,229,0.18); color: ${C.ink}; }
         .gvChart { margin-top: 10px; }
-        .gvChartHead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-bottom: 4px; font-size: 13px; }
+        .gvChartHead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-bottom: 4px; font-size: var(--fs-label); }
         .gvChartTitle { font-weight: 800; color: ${C.ink}; }
-        .gvLegend { color: ${C.muted}; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; }
+        .gvLegend { color: ${C.muted}; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: var(--fs-label); }
         .gvLegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
         .gvGrid { display: grid; gap: 2px; position: relative; }
         .gvBehind { position: absolute; inset: 0; pointer-events: none; }
         .gvPctGuide { position: absolute; left: 0; right: 0; height: 1px; opacity: 0.7; }
-        .gvPctLabel { position: absolute; left: 0; font-size: 9px; font-weight: 700; line-height: 1; }
-        .gvVal { position: absolute; left: -8px; right: -8px; text-align: center; font-size: 11px; font-weight: 800; color: ${C.ink}; white-space: nowrap; pointer-events: none; }
+        .gvPctLabel { position: absolute; left: 0; font-size: var(--fs-fine); font-weight: 700; line-height: 1; }
+        .gvVal { position: absolute; left: -8px; right: -8px; text-align: center; font-size: var(--fs-fine); font-weight: 800; color: ${C.ink}; white-space: nowrap; pointer-events: none; }
         .gvCol { position: relative; display: block; padding: 0; border: 0; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; }
         .gvCol:focus-visible { outline: 2px solid ${C.sales}; outline-offset: 1px; }
         /* WIDER BARS, SMALLER GAPS (#563 COWORK #60): the pair fills about two
@@ -498,23 +498,23 @@ export default function GrowthVisuals({ data, notReported }: { data: GrowthVisua
         .gvOverCol { position: relative; }
         .gvOneOffStart { left: 0 !important; transform: none !important; }
         .gvOneOffEnd { left: auto !important; right: 0; transform: none !important; }
-        .gvOneOff { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 800; color: ${C.ink}; white-space: nowrap; pointer-events: auto; z-index: 2; background: rgba(11,18,32,0.85); border-radius: 4px; padding: 0 3px; }
+        .gvOneOff { position: absolute; left: 50%; transform: translateX(-50%); font-size: var(--fs-fine); font-weight: 800; color: ${C.ink}; white-space: nowrap; pointer-events: auto; z-index: 2; background: rgba(11,18,32,0.85); border-radius: 4px; padding: 0 3px; }
         .gvPill { left: 50%; right: auto; transform: translateX(-50%); background: rgba(11,18,32,0.85); border-radius: 4px; padding: 0 3px; }
         .gvPhoneOnly { display: none; }
-        .gvRightScale { position: absolute; top: 0; bottom: 0; left: calc(100% + 4px); width: 30px; font-size: 9px; font-weight: 700; }
+        .gvRightScale { position: absolute; top: 0; bottom: 0; left: calc(100% + 4px); width: 30px; font-size: var(--fs-fine); font-weight: 700; }
         .gvRightScale span { position: absolute; left: 0; transform: translateY(50%); line-height: 1; }
         .gvDot { position: absolute; left: calc(50% - 5px); width: 10px; height: 10px; border-radius: 999px; box-shadow: 0 0 0 2px #0b1220; }
         .gvAxis { margin-top: 2px; }
-        .gvTick { text-align: center; font-size: 11px; white-space: nowrap; overflow: hidden; }
-        .gvMissing { margin: 10px 0 0; font-size: 13px; color: ${C.muted}; }
-        .gvDetail { margin-top: 10px; border: 1px solid ${C.rule}; border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+        .gvTick { text-align: center; font-size: var(--fs-fine); white-space: nowrap; overflow: hidden; }
+        .gvMissing { margin: 10px 0 0; font-size: var(--fs-read); line-height: var(--lh-read); color: ${C.muted}; }
+        .gvDetail { margin-top: 10px; border: 1px solid ${C.rule}; border-radius: 12px; padding: 10px 12px; font-size: var(--fs-read); line-height: var(--lh-read); }
         .gvDetailHead { font-weight: 900; margin-bottom: 6px; }
         .gvDetail dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
         .gvDetail dt { color: ${C.muted}; font-weight: 700; }
         .gvDetail dd { margin: 0; }
-        .gvChartNote { margin: 0 0 6px; font-size: 12px; color: ${C.muted}; }
-        .gvNote { font-size: 12px; color: ${C.muted}; margin-top: 2px; }
-        .gvHint { margin-top: 6px; font-size: 12px; color: ${C.muted}; }
+        .gvChartNote { margin: 0 0 6px; font-size: var(--fs-read); line-height: var(--lh-read); color: ${C.muted}; }
+        .gvNote { font-size: var(--fs-read); line-height: var(--lh-read); color: ${C.muted}; margin-top: 2px; }
+        .gvHint { margin-top: 6px; font-size: var(--fs-read); line-height: var(--lh-read); color: ${C.muted}; }
         @media ${PHONE} {
           .gvPhoneOnly { display: inline; }
           svg.gvPhoneOnly, .gvPhoneOnly.gvRightScale { display: block; }
