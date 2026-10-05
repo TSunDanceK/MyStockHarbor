@@ -9,7 +9,7 @@
 //      rather than only for symbols that happen to file.
 // Paced well under SEC's 10 req/s, and time-boxed so it cannot crowd out the
 // rest of the job.
-import { fetchSubmissionsItems } from "./secProvider";
+import { fetchSubmissionsItems, newsCikFor } from "./secProvider";
 import { missingSecFilingItems, writeSecFilingItems } from "./secFilingsStore";
 
 export const SEC_NEWS_BACKFILL_PER_RUN = 150;
@@ -26,12 +26,44 @@ export type SecNewsRun = {
   deferred: number;
 };
 
+/**
+ * WARRANTS ARE LEFT OUT (#553 COWORK #146). A warrant's "news" is its issuer's
+ * filings, which the issuer's own common stock already carries, so fetching it
+ * again is a second SEC request for the same items. A warrant is recognised by
+ * the exchanges' naming convention -- Nasdaq's fifth letter W (RVSNW, ADSEW,
+ * NCPLW), NYSE's WS suffix (ABC-WS, ABC-WS-A) -- AND a CIK shared with another
+ * tracked symbol, so a standalone company whose ticker happens to end in W is
+ * never caught. Funds (SPY, GLD, ...) are not warrants and stay in: their SEC
+ * news is their own.
+ */
+const WARRANT_SPELLING = /^[A-Z]{4}W$|[.-]WS(?:[.-][A-Z])?$/;
+export function warrantSymbols(
+  tracked: string[],
+  cikOf: (symbol: string) => string | undefined = newsCikFor
+): Set<string> {
+  const byCik = new Map<string, number>();
+  const cik = new Map<string, string>();
+  for (const s of tracked) {
+    const c = cikOf(s);
+    if (!c) continue;
+    cik.set(s, c);
+    byCik.set(c, (byCik.get(c) ?? 0) + 1);
+  }
+  const out = new Set<string>();
+  for (const s of tracked) {
+    const c = cik.get(s);
+    if (c && WARRANT_SPELLING.test(s.toUpperCase()) && (byCik.get(c) ?? 0) >= 2) out.add(s);
+  }
+  return out;
+}
+
 export async function refreshSecFilingNews(filedSymbols: string[], tracked: string[]): Promise<SecNewsRun> {
   const deadline = Date.now() + SEC_NEWS_PHASE_MS;
-  const trackedSet = new Set(tracked);
+  const warrants = warrantSymbols(tracked);
+  const trackedSet = new Set(tracked.filter((s) => !warrants.has(s)));
   const filed = [...new Set(filedSymbols)].filter((s) => trackedSet.has(s));
   const filedSet = new Set(filed);
-  const missing = (await missingSecFilingItems(tracked.filter((s) => !filedSet.has(s))))
+  const missing = (await missingSecFilingItems([...trackedSet].filter((s) => !filedSet.has(s))))
     .slice(0, SEC_NEWS_BACKFILL_PER_RUN);
   const queue = [...filed, ...missing];
   const run: SecNewsRun = { filed: filed.length, backfill: missing.length, requests: 0, written: 0, failed: 0, deferred: 0 };
