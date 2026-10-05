@@ -33,7 +33,7 @@ export function PositionBar({ pos, ticks = [], colour = "rgba(241,245,249,0.9)" 
 const price = (v: number) => `$${v.toFixed(2)}`;
 
 /** The day's high on top (green), the low below (red); today's candle on the 52-week range sits beside them (DayCandle). */
-export function DayRange({ low, high, last }: { low: number | null | undefined; high: number | null | undefined; last: number | null | undefined }) {
+export function DayRange({ low, high }: { low: number | null | undefined; high: number | null | undefined; /** Kept for the call site; the candle shows it now. */ last?: number | null }) {
   if (typeof low !== "number" || typeof high !== "number" || !Number.isFinite(low) || !Number.isFinite(high)) return <div className="stock-stat-value">—</div>;
   const row: CSSProperties = { display: "flex", alignItems: "baseline", gap: 6, fontSize: "0.9375rem", fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.2, fontVariantNumeric: "tabular-nums" };
   const tag: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.7, minWidth: "2.4em" };
