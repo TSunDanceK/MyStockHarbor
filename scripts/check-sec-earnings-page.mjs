@@ -821,7 +821,11 @@ console.log("\n7i. the meta description describes the page, not the price chart"
         // no-registrant state is a 200 rather than a 404 and a 200 that can be
         // indexed as thin content is the cost of that. "NOCIK" is the symbol
         // that resolves to nothing; everything else resolves.
-        'const cikForSymbol = (s) => (String(s).toUpperCase() === "NOCIK" ? null : "0000320193");',
+        'const cikForSymbol = (s) => (["NOCIK", "NOCIKFUND"].includes(String(s).toUpperCase()) ? null : "0000320193");',
+        // A FUND THE SITE LISTS WITH NO CIK OF ITS OWN (#552 COWORK #155): "NOCIKFUND".
+        'const isSiteFund = (s) => String(s).toUpperCase() === "NOCIKFUND";',
+        // THE SHARED PREDICATE, from its source (lib/stockPageRobots.ts), not a copy.
+        unexport(grabFunction(readCodeOnly("lib/stockPageRobots.ts"), "earningsPageIndexable")),
         // NOT YET READ (#535 COWORK #13): "COLDX" has a CIK and no stored set.
         'const awaitingSecRead = async (s) => String(s).toUpperCase() === "COLDX";',
         grabFunction(src, "generateMetadata"),
@@ -842,6 +846,9 @@ console.log("\n7i. the meta description describes the page, not the price chart"
       withCik.robots?.index === true, JSON.stringify(withCik.robots));
     check("a symbol with no registrant is noindex",
       without.robots?.index === false, JSON.stringify(without.robots));
+    const fund = await runMeta(pageRaw, labels[0], "NOCIKFUND");
+    check("a fund the site lists is indexable with no CIK of its own, as SPY is (#552 COWORK #155)",
+      fund.robots?.index === true, JSON.stringify(fund.robots));
     check("...and still follow, so a crawler is not stranded",
       without.robots?.follow === true,
       "the card links to a stock page that renders");
@@ -941,6 +948,8 @@ console.log("\n7i. the meta description describes the page, not the price chart"
       // Same stub and same reason as runMeta above — the mutation harness lifts
       // the SAME function, so it needs the same closure.
       'const cikForSymbol = (s) => (String(s).toUpperCase() === "NOCIK" ? null : "0000320193");',
+      'const isSiteFund = () => false;',
+      unexport(grabFunction(readCodeOnly("lib/stockPageRobots.ts"), "earningsPageIndexable")),
       'const awaitingSecRead = async () => false;',
       restoreLeak(metaSrc),
     ].join("\n") + "\nexport { generateMetadata };"

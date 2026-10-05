@@ -132,7 +132,7 @@ console.log("\n4. what Google is sent");
   const idx = readCodeOnly("app/api/jobs/sec-daily-index/route.ts");
   check("the daily index seeds every curated symbol", /\.\.\.PRESET_UNIVERSE, \.\.\.priorityStocks, \.\.\.uniqueEtfs,/.test(idx));
   const earn = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
-  check("a no-CIK earnings page (LAZR) is noindex", /index: cikForSymbol\(clean\) !== null && !\(await awaitingSecRead\(clean\)\)/.test(earn));
+  check("a no-CIK earnings page (LAZR) is noindex, unless it is a fund the site lists (#552 COWORK #155)", /index: earningsPageIndexable\(\{ hasCik: cikForSymbol\(clean\) !== null \|\| isSiteFund\(clean\), awaitingSecRead: await awaitingSecRead\(clean\) \}\)/.test(earn));
 }
 
 if (failures) {

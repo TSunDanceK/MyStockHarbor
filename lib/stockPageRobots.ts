@@ -7,7 +7,8 @@
 //                    the sitemap: the symbol's stored daily bars (eod-last)
 //   awaitingSecRead  both: lib/server/secColdFetch (the sitemap asks for all
 //                    its symbols in one pipelined read, sitemapSecState)
-//   hasCik           the earnings page only (A's route): no CIK, no filings
+//   hasCik           the earnings page only (A's route): a CIK, or a fund the
+//                    site lists (#552 COWORK #155/#156: VUG takes SPY's card)
 //
 // Pure. scripts/check-sitemap-robots.mjs holds the rule and its mutants.
 
@@ -16,7 +17,7 @@ export function stockPageIndexable(i: { hasData: boolean; awaitingSecRead: boole
   return i.hasData && !i.awaitingSecRead;
 }
 
-/** /stock/[symbol]/earnings, as that page's own robots rule reads: a CIK and its SEC set read. */
+/** /stock/[symbol]/earnings, as that page's own robots rule reads: a CIK, or a fund the site lists, and its SEC set read. */
 export function earningsPageIndexable(i: { hasCik: boolean; awaitingSecRead: boolean }): boolean {
   return i.hasCik && !i.awaitingSecRead;
 }

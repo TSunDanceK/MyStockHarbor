@@ -154,7 +154,7 @@ check("the stock page is noindex while a cold symbol is not yet read",
   /index: stockPageIndexable\(\{ hasData, awaitingSecRead: hasData && \(await awaitingSecRead\(upper\)\) \}\)/.test(readCodeOnly("app/stock/[symbol]/page.tsx")) &&
     /return i\.hasData && !i\.awaitingSecRead;/.test(readCodeOnly("lib/stockPageRobots.ts")));
 check("the earnings page likewise",
-  /index: cikForSymbol\(clean\) !== null && !\(await awaitingSecRead\(clean\)\)/.test(readCodeOnly("app/stock/[symbol]/earnings/page.tsx")));
+  /index: earningsPageIndexable\(\{ hasCik: cikForSymbol\(clean\) !== null \|\| isSiteFund\(clean\), awaitingSecRead: await awaitingSecRead\(clean\) \}\)/.test(readCodeOnly("app/stock/[symbol]/earnings/page.tsx")));
 {
   const cold = readCodeOnly("lib/server/secColdFetch.ts");
   const fn = cold.slice(cold.indexOf("export async function awaitingSecRead"));

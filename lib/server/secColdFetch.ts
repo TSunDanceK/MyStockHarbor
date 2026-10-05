@@ -96,6 +96,7 @@ import { recordColdCik } from "./secColdCik";
 import { inSecJobWindow } from "../secJobWindow.mjs";
 import { secSeedRefusal } from "./secSeedGate";
 import { nonEquityListingOf } from "./secPrimaryListing";
+import { uniqueEtfs } from "../curatedSymbols";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
 // ABSENCE. @upstash/redis sends `cache: "no-store"` by default, and one such
@@ -721,12 +722,21 @@ export const NOT_YET_READ = "not yet read";
  *
  * Never throws: every failure path returns a status the page can render.
  */
+const SITE_FUNDS = new Set<string>(uniqueEtfs);
+/** One of the funds the site lists (lib/curatedSymbols.ts), with or without a CIK of its own. */
+export const isSiteFund = (symbol: string) => SITE_FUNDS.has(symbol.trim().toUpperCase());
+
 export async function resolveFactSetForRender(symbol: string): Promise<ColdResult> {
   const clean = symbol.trim().toUpperCase();
 
   // 1. THE CIK GATE, FIRST AND CHEAPEST. No network, no Redis, no write.
   const cik = cikForSymbol(clean);
-  if (!cik) return { status: "no-cik" };
+  // A SERIES FUND WITH NO CIK OF ITS OWN (#552 COWORK #155): VUG, VOO, XLK and
+  // 22 more of the site's funds are series of a multi-fund trust, so SEC's
+  // ticker file names no registrant for them, and they fell to the no-cik
+  // card and noindex while SPY, a trust with its own CIK, got the fund card.
+  // One rule for every fund the site lists: the fund card.
+  if (!cik) return isSiteFund(clean) ? { status: "not-shown", kind: "fund", primary: null } : { status: "no-cik" };
 
   // 1b. THE SECURITY-KIND GATE, IMMEDIATELY AFTER IT AND FOR THE SAME REASONS.
   //

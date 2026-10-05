@@ -210,7 +210,7 @@ console.log("\n3y. A SYMBOL WITH NO CIK GETS A PAGE, NOT A 404");
       /<SecNoRegistrantCard symbol=\{clean\} \/>/.test(PAGE),
     "the branch must mount a card, not fall through to pending");
   check("...and that state is noindex, like the sibling page's no-data state",
-    /index: cikForSymbol\(clean\) !== null/.test(PAGE),
+    /index: earningsPageIndexable\(\{ hasCik: cikForSymbol\(clean\) !== null \|\| isSiteFund\(clean\),/.test(PAGE),
     "a 200 that can be indexed as thin content is the cost of not 404-ing");
 
   // THE COPY MUST NOT GUESS. Measured through the shipped gate: MSTY and JEPI
