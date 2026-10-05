@@ -1,3 +1,8 @@
+// 5 OCT 2026 (#563 COWORK #111): HIDDEN ON THE STOCK PAGE, NOT DELETED. The stock
+// page's header no longer renders this strip; its six periods are the
+// Performance card (PerformanceCard.tsx), which reads the same lib/ta/
+// performance.ts figures. The SPX page still renders it.
+//
 // THE PERFORMANCE STRIP (#563 COWORK #69): six chips under the header strip,
 // 1M · 3M · YTD · 1Y · 3Y · 5Y, each the price change with ▲/▼ and colour (never
 // colour alone: the arrow and the sign say it too) and a second line against

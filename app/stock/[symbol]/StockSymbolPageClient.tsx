@@ -14,7 +14,7 @@ import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import ConfluenceCard from "./ConfluenceCard";
 import KeyLevelsCard from "./KeyLevelsCard";
-import PerformanceStrip from "./PerformanceStrip";
+import PerformanceCard from "./PerformanceCard";
 import type { PerfStrip } from "@/lib/ta/performance";
 import LevelsSignals from "./LevelsSignals";
 import { liveBars } from "@/lib/ta/sessionBar";
@@ -1108,8 +1108,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               Price: {quote.priceLabel}{tiingoCredit ? <> · {tiingoCredit}</> : null}
             </p>
           ) : null}
-          {/* #563 COWORK #69: C's performance strip, under the header strip. */}
-          {performance ? <PerformanceStrip strip={performance} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : null}
+          {/* The 1M–5Y period boxes left the header on 5 Oct 2026 (#563 COWORK #111): they are the Performance card in the left column. */}
           </div>{/* end hero box */}
         </header>
 
@@ -1143,6 +1142,13 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               <div className="sp-slot sp-keylevels">
                 <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
               </div>
+
+              {/* Performance vs the S&P 500 (#563 COWORK #111): C's card, the strip's own figures, under Key levels. */}
+              {performance ? (
+                <div className="sp-slot sp-performance">
+                  <PerformanceCard strip={performance} credit={historyProvider === "tiingo" ? historyCredit : undefined} />
+                </div>
+              ) : null}
 
               {/* Earnings snapshot — sidebar */}
               {/* A'S CARD (#563 COWORK #100): its type sizes are A's PR (#552 COWORK #153); the reading-size measure reports it, report-only. */}
@@ -1487,6 +1493,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
              DOM (the sidebar), read before the chart by a screen reader. */
           .stock-page-sidebar, .stock-page-main { display: contents; }
           .stock-page-sidebar > *, .stock-page-main > * { order: 85; min-width: 0; }
+          .sp-performance { order: 5; }
           .sp-chart { order: 10; }
           .sp-confluence { order: 15; }
           .sp-keylevels { order: 20; }
@@ -1499,7 +1506,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           .sp-changestock { order: 90; }
           .sp-explore { order: 95; }
           .sp-faq { order: 99; }
-          .sp-confluence, .sp-keylevels, .sp-earnings, .sp-changestock { margin-top: 24px; }
+          .sp-confluence, .sp-keylevels, .sp-performance, .sp-earnings, .sp-changestock { margin-top: 24px; }
           /* Mobile: show the inline change stock, hide the sidebar one */
           .mobile-change-stock { display: block; }
           .sidebar-change-stock { display: none !important; }

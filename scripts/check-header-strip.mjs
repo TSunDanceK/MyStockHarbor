@@ -10,7 +10,8 @@
 // place in it; the Trend score's line is decorative (aria-hidden) and drawn
 // over the chart's window; the Volume and RSI bars sit on their scales; the
 // P/E tile and A's sector line are untouched; nothing can push the strip
-// sideways at 320–430 px. A mutant each.
+// sideways at 320–430 px; the header no longer renders the 1M–5Y period boxes
+// (#563 COWORK #111: they are the Performance card). A mutant each.
 //
 //   node scripts/check-header-strip.mjs
 import fs from "node:fs";
@@ -85,6 +86,11 @@ const RULES = {
     !/nowrap|width:\s*\d{3,}|minWidth:\s*\d{3,}/.test(M.partsSrc) && /width: "calc\(100% - 20px\)"/.test(M.partsSrc) &&
     /\.stock-header-stats \{\s*display: grid !important;\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/.test(M.raw) &&
     /\.stock-stat-cell \{\s*flex: 0\.7 1 130px;[\s\S]*?min-width: 0;/.test(M.raw),
+  "the header no longer renders the 1M–5Y period boxes; the stat row and the price stamp stay": ({ M }) => {
+    const header = M.page.slice(M.page.indexOf("<header"), M.page.indexOf("</header>"));
+    return header.length > 0 && !/PerformanceStrip|perfChip|perfStrip/.test(header) && !/^import PerformanceStrip /m.test(M.page) &&
+      /className="stock-header-stats"/.test(header) && /Price: \{quote\.priceLabel\}/.test(header);
+  },
 };
 
 const src = { lib: read(LIB), parts: read(PARTS), page: read(PAGE) };
@@ -111,6 +117,7 @@ const MUTANTS = [
   [R[3], "lib", (s) => s.replace("return rangePosition(0, 2, typeof volume === \"number\" ? volume / avg : null);", "return rangePosition(0, 3, typeof volume === \"number\" ? volume / avg : null);")],
   [R[3], "page", (s) => s.replace("ticks={[30, 70]}", "ticks={[20, 80]}")],
   [R[4], "page", (s) => s.replace(': "See valuation ↓"}', ': "See the valuation section"}')],
+  [R[6], "page", (s) => s.replace("</div>{/* end hero box */}", "{performance ? <PerformanceStrip strip={performance} /> : null}</div>{/* end hero box */}")],
   [R[5], "parts", (s) => s.replace('style={{ position: "relative", height: 4, marginTop: 6,', 'style={{ position: "relative", height: 4, marginTop: 6, minWidth: 220,')],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");

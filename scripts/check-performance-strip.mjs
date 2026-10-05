@@ -148,7 +148,8 @@ const staticRules = {
     /const performance = performanceStrip\(historyResult\.points, historyResult\.provider === "tiingo" \? spyPoints : null, Date\.now\(\)\);/.test(page) &&
     /historyOnTiingo\("CHARTS"\) \? readTiingoHistoryPoints\("SPY"\) : Promise\.resolve\(null\)/.test(page) &&
     /performance=\{performance\}/.test(page) && !/spyPoints=\{|spyBars=\{/.test(page) &&
-    /\{performance \? <PerformanceStrip strip=\{performance\} credit=\{historyProvider === "tiingo" \? historyCredit : undefined\} \/> : null\}/.test(client),
+    // Since #563 COWORK #111 the stock page shows the strip's figures as the Performance card, not the strip.
+    /<PerformanceCard strip=\{performance\} credit=\{historyProvider === "tiingo" \? historyCredit : undefined\} \/>/.test(client) && !/<PerformanceStrip\b/.test(client),
 };
 
 console.log("\n=== 1. Fixtures ===\n");
