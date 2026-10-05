@@ -68,7 +68,16 @@ export function sectorMedians(rows: { sector: string; pe: number }[]): Record<st
   return Object.fromEntries([...by].map(([sector, pes]) => [sector, { median: quantile(pes, 0.5), n: pes.length, spreadPct: halfSampleSpreadPct(pes) }]));
 }
 
-export type PeSectorLine = { word: "Above" | "Near" | "Below"; glyph: "▲" | "●" | "▼"; text: string; note: string };
+export type PeSectorLine = {
+  word: "Above" | "Near" | "Below"; glyph: "▲" | "●" | "▼"; text: string; note: string;
+  /**
+   * THE SECTOR MEDIAN AS A NUMBER (#552 COWORK #164, for C's header P/E
+   * diagram): the same SectorMedian.median the text prints to one decimal,
+   * unrounded, so no caller parses the text. Null only by type: a line
+   * exists only with a median > 0. No quartiles: SectorMedian holds none.
+   */
+  median: number | null;
+};
 
 /** The line under a P/E, or null where the rules say no line. */
 export function peSectorLine(
@@ -87,6 +96,7 @@ export function peSectorLine(
     word,
     glyph,
     text: `${word} sector median (${m.median.toFixed(1)}×)`,
+    median: m.median,
     note:
       `The median trailing P/E of ${m.n} ${sector} companies with a usable twelve-month P/E, ` +
       `from their SEC filings and the latest close${asOf ? `, as of ${asOf}` : ""}. Banks and loss-makers are left out. ` +
