@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { utcDay } from "@/lib/utcDate";
 import { chartReadout, indexAtFraction, shownIndex, stepIndex } from "@/lib/chartReadout";
 import { chartGapZones, inGapWords, zoneAt, type ChartGapZone, type GapInputBar } from "@/lib/chartGaps";
+import { STRETCH_NOTE, stretchHistory, stretchLine } from "@/lib/stretch";
 
 type Point = {
   date: string;
@@ -96,6 +97,7 @@ export default function StockPriceChart({
   // FAIR VALUE GAPS (#553 COWORK #140/#144): off until asked for; the note on a tap.
   const [showGaps, setShowGaps] = useState(false);
   const [gapNote, setGapNote] = useState(false);
+  const [stretchNote, setStretchNote] = useState(false);
   // The pointer's height in the chart, as a price, to say when it is inside a zone.
   const [hoverValue, setHoverValue] = useState<number | null>(null);
 
@@ -115,6 +117,13 @@ export default function StockPriceChart({
 
   const gaps = useMemo(() => chartGapZones(gapBars ?? [], series.map((p) => p.date)), [gapBars, series]);
   const zones = showGaps ? gaps.zones : NO_ZONES;
+  // STRETCH (#553 COWORK #141/#144): this stock's own past, from the same bars;
+  // completed sessions only, like the gaps.
+  const stretch = useMemo(() => {
+    if (!gapBars) return null;
+    const done = gapBars.filter((b) => !b.label && Number.isFinite(b.close));
+    return stretchLine(symbol, stretchHistory(done));
+  }, [gapBars, symbol]);
 
   const x = useMemo(() => {
     return (i: number) =>
@@ -251,6 +260,8 @@ export default function StockPriceChart({
         /* Its own line, always reserved, so the words coming and going never move the chart. */
         .chart-gap-status { flex: 1 0 100%; height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.8; }
         @container (min-width: 640px) { .chart-gap-status { flex: 1 1 auto; } }
+        .chart-stretch { margin: 0 0 8px; font-size: var(--fs-read); line-height: var(--lh-read); }
+        .chart-stretch .chart-gap-why { font-size: var(--fs-label); margin-left: 4px; }
         .chart-gap-note { margin: 0 0 8px; font-size: var(--fs-read); line-height: var(--lh-read); opacity: 0.9; }
       `}</style>
       {/* THE GAP TOGGLE (#553 COWORK #140/#144): off by default; with none, it
@@ -258,6 +269,15 @@ export default function StockPriceChart({
           line beside it also says when the pointer is inside a zone. */}
       {/* Only where the page passes its bars (the SPX page's chart has no toggle). */}
       {gapBars ? (<>
+      {stretch ? (
+        <p className="chart-stretch" data-chart-stretch>
+          {stretch}{" "}
+          <button type="button" className="chart-gap-why" aria-expanded={stretchNote} aria-controls={`${symbol}-stretch-note`} onClick={() => setStretchNote((v) => !v)}>
+            How is this counted?
+          </button>
+        </p>
+      ) : null}
+      {stretchNote ? <p id={`${symbol}-stretch-note`} className="chart-gap-note">{STRETCH_NOTE}</p> : null}
       <div className="chart-gap-row" data-chart-gaps={gaps.zones.length ? (showGaps ? "on" : "off") : "none"}>
         <button
           type="button"

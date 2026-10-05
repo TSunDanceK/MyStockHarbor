@@ -13,6 +13,7 @@ import { NOT_APPLICABLE_CODES, cellMark, cellWhyWords, compareForSort } from "@/
 import { BasisCell, CellWhyNote, WhyMark } from "@/app/components/PickerCellMarks";
 import { perfAsOfLabel, perfWhyText, type PerfKey } from "@/lib/pickerPerf";
 import { EstimateCell, PickerEstimateKey, estimateMarksShown } from "@/app/components/PickerEstimateMarks";
+import { fmtZ, latestStretch } from "@/lib/stretch";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -290,6 +291,8 @@ type DerivedRow = {
   changePct: number | null;
   volume: number | null;
   ma200: number | null;
+  /** z20 from the row's stored closes (#553 COWORK #144): the oversold/overbought pages' Stretch column. */
+  stretch: number | null;
 };
 
 // Price / % change / volume come from the ~15-min price pool when present
@@ -330,7 +333,9 @@ function deriveRow(entry: ResultEntry): DerivedRow {
       ? entry.volume
       : eodVolume;
   const ma200 = last && typeof last.ma200 === "number" && Number.isFinite(last.ma200) ? last.ma200 : null;
-  return { price, changePct, volume, ma200 };
+  // The stored end-of-day closes (72 sessions), never the live pool price: z20 is a closing measure.
+  const stretch = latestStretch(pts.map((p) => p.close).filter((c): c is number => typeof c === "number" && Number.isFinite(c)));
+  return { price, changePct, volume, ma200, stretch };
 }
 
 function num(v: unknown): number | null {
@@ -605,7 +610,11 @@ const COLUMN_DASH_WHY: Record<string, string> = {
   change: "No current price for this stock",
   volume: "No volume for the latest session",
   ma200: "Not enough price history for a 200-day average",
+  stretch: "Not enough price history for a 20-day average",
 };
+
+/** The Stretch column's header tip (#553 COWORK #144). */
+export const STRETCH_TIP = "Stretch: how many standard deviations the last close sits from its 20-day average. Negative is below, positive above. A description, not a forecast.";
 
 const PERF_KEYS = new Set<string>(["perf1w", "perf1m", "perf6m", "perfYtd", "perf1y"]);
 
@@ -962,6 +971,17 @@ export default function PickerResultsGrid({
     };
     const pe: Col = { key: "pe", label: "PE Ratio", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.peRatio), cell: (e, _d, inert) => basisCell(numCell(num(e.peRatio)), num(e.peRatio), e.epsBasis, inert) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
+    // STRETCH (#553 COWORK #144, the study's option (a)): only on the two pages
+    // that screen for it. "-2.3" below, "+2.3" above; sortable on the number.
+    const stretch: Col = {
+      key: "stretch",
+      label: "Stretch (z20)",
+      tip: STRETCH_TIP,
+      sortType: "num",
+      get: (_e, d) => d.stretch,
+      cell: (_e, d) => (d.stretch == null ? MUTED : <span style={{ fontVariantNumeric: "tabular-nums" }}>{d.stretch < 0 ? "-" : "+"}{fmtZ(d.stretch)}</span>),
+    };
+    const stretchPage = /oversold|overbought/i.test(configHref);
 
     const perf1w: Col = { key: "perf1w", label: "1W", sortType: "num", get: (e) => num(e.perf1w), cell: (e) => perfCell(e, "perf1w") };
     const perf1m: Col = { key: "perf1m", label: "1M", sortType: "num", get: (e) => num(e.perf1m), cell: (e) => perfCell(e, "perf1m") };
@@ -1003,6 +1023,8 @@ export default function PickerResultsGrid({
       financials: [symbol, name, marketCap, revenue, opinc, netinc, fcf, eps],
       analysts: [symbol, name, marketCap, rating, analysts, price, ptgt, ptups],
     };
+    // Stretch sits after % Change on the two stretch pages only.
+    if (stretchPage) sets.general.splice(sets.general.indexOf(change) + 1, 0, stretch);
     // THE REGISTRY, APPLIED ONCE: every tab drops the hidden columns, so a
     // hidden column cannot be rendered, sorted or picked as a phone headline.
     for (const tab of Object.keys(sets) as TabKey[]) {
@@ -1011,7 +1033,7 @@ export default function PickerResultsGrid({
     return sets;
     // displayTone is a real dependency: the symbol cell renders the dot, so
     // without it the table keeps the tone it was first built with.
-  }, [isEarnings, displayTone]);
+  }, [isEarnings, displayTone, configHref]);
 
   const activeColumns = columnSets[activeTab];
 
