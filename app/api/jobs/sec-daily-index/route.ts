@@ -38,6 +38,7 @@ import { recordSuccessionEvents, successionEventsOf, type SuccessionEvent } from
 import { CITED_PREDECESSOR_CIKS } from "@/lib/server/secSuccession";
 import { primaryListingSymbols } from "@/lib/server/secPrimaryListing";
 import { POPULAR_SYMBOLS } from "@/lib/server/symbolSearch";
+import { readSecSeedUniverse } from "@/lib/server/secSeedUniverse";
 import {
   readDynamicUniverse,
 } from "@/lib/server/dynamicUniverseCache";
@@ -406,10 +407,15 @@ export async function GET(req: NextRequest) {
     shouldBackfillFactSetIndex({ marker: marker.done, indexSize: stored.symbols.length, dryRun, inspectionOnly })
       ? await backfillFactSetIndex().catch(() => null) : null;
   if (indexBackfill) stored.symbols = (await readFactSetIndex()).symbols;
+  // AND THE PICKERS/TIINGO UNIVERSE, LAST (#552 COWORK #158, CODE-A #165
+  // option 1). 1,675 eligible stocks had no set and no entry, so no cron
+  // queue ever reached them. Seeded here, through the same gate, they join
+  // sec-facts' populate queue: 300 a run, two runs a day. See secSeedUniverse.
+  const seedUniverse = await readSecSeedUniverse();
   const universe = [
     // AND EACH CITED PRIMARY LISTING (#552 COWORK #48): BIP was never in any
     // list above while its notes' ticker BIPI was, so the set lived under a note.
-    ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...primaryListingSymbols(), ...POPULAR_SYMBOLS, ...stored.symbols, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
+    ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...primaryListingSymbols(), ...POPULAR_SYMBOLS, ...stored.symbols, ...(await readDynamicUniverse()).map((e) => e.symbol), ...seedUniverse.symbols]),
   ];
   // THE SEED GATE (#552 COWORK #147 1a): no new entry for a preferred, warrant,
   // note, ETF/trust or a symbol with no CIK. See secSeedGate.
@@ -621,7 +627,13 @@ export async function GET(req: NextRequest) {
     // Plus the fact-set index read (1 SMEMBERS) and the backfill marker (1
     // EXISTS) (#552 COWORK #59/#60). The one-time
     // backfill's SCAN and SADDs are reported on their own line below.
-    redisCommands: (dryRun || inspectionOnly ? 2 : 3) + stored.commands + marker.commands,
+    // Plus the seed universe (#552 COWORK #158): 2 GETs, 3 when the cached
+    // warm-targets key has expired and its fallback is read.
+    redisCommands: (dryRun || inspectionOnly ? 2 : 3) + stored.commands + marker.commands + seedUniverse.commands,
+    seedUniverse: seedUniverse.symbols.length,
+    seedUniverseWarm: seedUniverse.warm,
+    seedUniverseWarmFrom: seedUniverse.warmFrom,
+    seedUniverseTiingo: seedUniverse.tiingo,
     factSetIndex: stored.symbols.length,
     factSetIndexBackfillScanned: indexBackfill?.scanned ?? null,
     factSetIndexBackfillAdded: indexBackfill?.added ?? null,
