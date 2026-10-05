@@ -94,6 +94,13 @@ async function strengthNote() {
   return renderToStaticMarkup(React.createElement("main", { style: { padding: 16 } },
     React.createElement("section", null, React.createElement(NotePanel, { note, label: "Strength", mode: "inline" }, React.createElement(StrengthNoteBody, { badge, credit })))));
 }
+/** The capex page's "Why follow the money?" card (#563 COWORK #110), in the page's card frame; `open` taps "How to use this page". */
+async function capexWhy(open) {
+  const { default: Why } = await import("../app/bottlenecks/capex/WhyFollowMoney.tsx");
+  const css = ".capexCard{border:1px solid rgba(255,255,255,.08);border-radius:22px;padding:18px}.capexCard h3{margin:6px 0 0 0;font-size:18px}.cardEyebrow{font-size:12px;font-weight:950;text-transform:uppercase}";
+  const html = renderToStaticMarkup(React.createElement("main", { style: { padding: 16 } }, React.createElement("style", null, css), React.createElement("aside", null, React.createElement(Why))));
+  return open ? html.replace("<details ", "<details open ") : html;
+}
 async function spxPage() {
   const { default: Page } = await import("../app/markets/spx/page.tsx");
   return renderToStaticMarkup(await Page());
@@ -108,6 +115,8 @@ const PAGES = [
   { name: "/markets/spx", render: spxPage, enforce: true },
   { name: "/stock/AAPL/earnings", render: earningsPage, enforce: true },
   { name: "/stock/AAPL strength note (open)", render: strengthNote, enforce: true },
+  { name: "/bottlenecks/capex why card", render: () => capexWhy(false), enforce: true },
+  { name: "/bottlenecks/capex why card (How to use, open)", render: () => capexWhy(true), enforce: true },
 ];
 
 // ── the browser pass ────────────────────────────────────────────────────────
