@@ -22,10 +22,11 @@ import {
   coldRateKey,
 } from "./secColdFetch";
 import { SEC_COLD_CIK_KEY, SEC_COLD_CIK_MAX } from "./secColdCik";
+import { PAGE_TIMEOUT_OPTS } from "./redisCacheMode";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_TIMEOUT_OPTS)
     : null;
 
 export type SecHealth = {

@@ -31,9 +31,10 @@ import { poolField, PRICE_POOL_KEY, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS } fr
 import companyNameSnapshot from "@/data/company-names.json";
 import { priorityStocks, uniqueEtfs } from "../curatedSymbols";
 import { MOOD_ETFS } from "../marketMood";
+import { JOB_REDIS_OPTS } from "./redisCacheMode";
 
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv(JOB_REDIS_OPTS) : null;
 
 /**
  * EVERY SYMBOL WITH A STOCK PAGE (step 5b, #553 COWORK #98 ruling 2, the owner's

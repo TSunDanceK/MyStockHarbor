@@ -42,6 +42,7 @@ import { registrantFor } from "../../../../lib/server/stockProfile";
 import { lookupBySpelling } from "../../../../lib/symbolSpellings.mjs";
 import { Redis } from "@upstash/redis";
 import { PRICE_POOL_KEY } from "../../../../lib/server/pricePool";
+import { JOB_REDIS_OPTS } from "../../../../lib/server/redisCacheMode";
 
 /**
  * THE PRICE POOL'S SYMBOLS, for the last-seen CIK snapshot (#553 COWORK #70).
@@ -54,7 +55,7 @@ import { PRICE_POOL_KEY } from "../../../../lib/server/pricePool";
 async function readPricePoolSymbols(): Promise<string[]> {
   try {
     if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return [];
-    return ((await Redis.fromEnv().hkeys(PRICE_POOL_KEY)) ?? []).map(String);
+    return ((await Redis.fromEnv(JOB_REDIS_OPTS).hkeys(PRICE_POOL_KEY)) ?? []).map(String);
   } catch {
     return [];
   }
