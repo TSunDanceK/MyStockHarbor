@@ -50,6 +50,7 @@ const MODULES = {
   "@/lib/chartReadout": cjs(read("lib/chartReadout.ts"), "chartReadout.ts"),
   "@/lib/ta/fairValueGaps": cjs(read("lib/ta/fairValueGaps.ts"), "fairValueGaps.ts"),
   "@/lib/chartGaps": cjs(read("lib/chartGaps.ts"), "chartGaps.ts"),
+  "@/lib/stretch": cjs(read("lib/stretch.ts"), "stretch.ts"),
   chart: cjs(read("app/stock/[symbol]/StockPriceChart.tsx"), "StockPriceChart.tsx"),
 };
 
@@ -223,6 +224,15 @@ for (const width of (process.env.WIDTHS || "320,360,375,390,414,430,1280").split
   const kEsc = await state();
   say(readMatches(k3, n - 4) && readMatches(k2, n - 3) && kEsc.kind === "latest" && kEsc.marker === null, "keys: ← ← ← steps back three bars, → one forward, Esc to the latest", `${k3.marker} ${k2.marker} ${kEsc.kind}`);
 
+  // ── Stretch line (#553 COWORK #144): present, reading size, nothing past the column ──
+  const st = await p.evaluate(() => {
+    const el = document.querySelector("[data-chart-stretch]");
+    if (!el) return null;
+    const r = el.getBoundingClientRect(), c = document.getElementById("root").getBoundingClientRect();
+    return { size: getComputedStyle(el).fontSize, inside: r.left >= c.left - 0.5 && r.right <= c.right + 0.5, text: el.textContent };
+  });
+  say(st && st.size === "16px" && st.inside && /standard deviations (above|below) its 20-day average/.test(st.text), "stretch: the line reads at 16 px inside the column", st ? st.text.slice(0, 70) : "missing");
+
   // ── Fair value gaps ──
   const g0 = await p.evaluate(() => ({ state: document.querySelector("[data-chart-gaps]")?.dataset.chartGaps, zones: document.querySelectorAll("[data-chart-gap]").length }));
   say(g0.state === "off" && g0.zones === 0, "gaps: the toggle starts off, nothing drawn", JSON.stringify(g0));
@@ -256,8 +266,8 @@ for (const width of (process.env.WIDTHS || "320,360,375,390,414,430,1280").split
     if (phone) await p.evaluate(([x, y]) => document.querySelector("svg[tabindex]").dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch", pointerId: 9, clientX: x, clientY: y })), [g1.first.x, g1.first.y]);
     else await p.mouse.move(2, 2);
   }
-  await p.click(".chart-gap-why");
-  const note = await p.evaluate(() => { const el = document.querySelector(".chart-gap-note"); return el ? { size: getComputedStyle(el).fontSize, text: el.textContent } : null; });
+  await p.click(`button[aria-controls="ABC-gap-note"]`);
+  const note = await p.evaluate(() => { const el = document.getElementById("ABC-gap-note"); return el ? { size: getComputedStyle(el).fontSize, text: el.textContent } : null; });
   say(note && note.size === "16px" && /A description, not a forecast\.$/.test(note.text), "gaps: the tap note opens at 16 px with the ruled words", note ? note.size : "not shown");
   const fp = await ctx.newPage();
   await fp.goto(`file://${file}?flat`);

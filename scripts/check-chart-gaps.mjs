@@ -153,7 +153,7 @@ try {
     ["the toggle on by default", /useState\(false\);\n  const \[gapNote/, "useState(true);\n  const [gapNote"],
     ["with none, the toggle hidden", /disabled=\{!gaps\.zones\.length\}/, "hidden={!gaps.zones.length}"],
     ["the note open by default", /const \[gapNote, setGapNote\] = useState\(false\);/, "const [gapNote, setGapNote] = useState(true);"],
-    ["the note at label size", /font-size: var\(--fs-read\); line-height: var\(--lh-read\)/, "font-size: var(--fs-label); line-height: 1.4"],
+    ["the note at label size", /\.chart-gap-note \{ margin: 0 0 8px; font-size: var\(--fs-read\); line-height: var\(--lh-read\)/, ".chart-gap-note { margin: 0 0 8px; font-size: var(--fs-label); line-height: 1.4"],
     ["the toggle on every chart (SPX too)", /\{gapBars \? \(<>/, "{true ? (<>"],
     ["the scale not widened", /for \(const z of zones\) vals\.push\(z\.lower, z\.upper\);/, ""],
   ];
