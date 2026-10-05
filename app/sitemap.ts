@@ -6,7 +6,10 @@ import { LESSONS } from "@/app/learn/lessons";
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { SECTORS, sectorNewsPath } from "@/lib/sectors";
 import { NOINDEX_PICKER_PAGES } from "@/lib/noindexPickerPages";
-import { sitemapSecState } from "@/lib/server/secColdFetch";
+import { cikForSymbol, sitemapSecState } from "@/lib/server/secColdFetch";
+import { readTiingoEodLast } from "@/lib/server/marketData/read";
+import { earningsPageIndexable, stockPageIndexable } from "@/lib/stockPageRobots";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 
 // REGENERATED AT MOST DAILY (#535 COWORK #21): the stock entries below depend
 // on which symbols have a stored SEC set, and that changes as the jobs fill
@@ -298,8 +301,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Unanswerable (null) keeps everything, as before this rule: a Redis blip
   // must not empty the sitemap. Measured 2026-09-23: SPY, QQQ and DIA were
   // the three; companyfacts 404s for them, now stored as the empty answer.
-  const sec = await sitemapSecState(stockSymbols);
-  const renderable = (symbol: string) => !sec?.awaiting.has(symbol);
+  //
+  // AND THE PAGES' OWN PREDICATE (#553 COWORK #143): the robots tag and this
+  // entry both come from lib/stockPageRobots.ts, so a URL is never listed while
+  // its page says noindex. hasData here is "the symbol has stored daily bars"
+  // (eod-last, one Data Cache read); unreadable (null) keeps everything, as above.
+  const [sec, eodLast] = await Promise.all([
+    sitemapSecState(stockSymbols),
+    readTiingoEodLast().catch(() => null),
+  ]);
+  const awaiting = (symbol: string) => Boolean(sec?.awaiting.has(symbol));
+  const hasData = (symbol: string) => eodLast === null || Boolean(eodLast[toDashed(symbol)]);
+  const renderable = (symbol: string) => stockPageIndexable({ hasData: hasData(symbol), awaitingSecRead: awaiting(symbol) });
+  const earningsRenderable = (symbol: string) =>
+    earningsPageIndexable({ hasCik: cikForSymbol(symbol) !== null, awaitingSecRead: awaiting(symbol) });
   // lastmod only where a truthful one exists: when the stored figures last
   // changed (stamped by writeFactSet, which runs only on a change). Never a
   // re-read time, which moves daily; absent stays absent.
@@ -330,7 +345,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const etfSymbols = new Set<string>(uniqueEtfs);
 
   const stockEarningsEntries: MetadataRoute.Sitemap = stockSymbols
-    .filter((symbol) => !etfSymbols.has(symbol) && renderable(symbol))
+    .filter((symbol) => !etfSymbols.has(symbol) && earningsRenderable(symbol))
     .map((symbol) => ({
       url: toAbsoluteUrl(`/stock/${symbol}/earnings`),
       ...figuresChangedAt(symbol),
