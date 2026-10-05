@@ -32,7 +32,9 @@ const walk = (d, o = []) => {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {
     const p = path.join(d, e.name);
     if (e.isDirectory()) { if (e.name !== "node_modules") walk(p, o); }
-    else if (/\.tsx?$/.test(e.name)) o.push(path.relative(ROOT, p));
+    // Not the .check-* mutant copies other checks write beside the real
+    // modules while check-all runs them in parallel: a copy is not a site.
+    else if (/\.tsx?$/.test(e.name) && !e.name.startsWith(".check-")) o.push(path.relative(ROOT, p));
   }
   return o;
 };
