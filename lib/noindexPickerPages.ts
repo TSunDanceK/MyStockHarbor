@@ -50,6 +50,17 @@
 // fully internally linked and crawlable-through, exactly like the 22 above.
 // To index them instead, delete those four lines -- app/sitemap.ts already
 // lists them and filters on this array, so nothing else changes.
+// BATCH 1 OF AN INDEXING TEST (2026-10-05, #553 COWORK #152). Five pages left
+// this list once each carried a write-up (bodySections, at least 400 words):
+//   /cheap-tech-stocks (already had one), /overbought-stocks-today,
+//   /volume-spike-stocks, /stocks-trading-above-200-day-moving-average,
+//   /bullish-rsi-divergence-stocks.
+// Copy first, then unblock -- never the reverse: these were noindexed as a thin
+// near-duplicate cluster, and unblocking them thin would recreate that.
+// The rest stay here, with `follow`, as controls. Batch 2 waits on GSC showing
+// indexing or impressions for batch 1 (checked at 2, 4 and 8 weeks).
+// scripts/check-picker-copy-before-index.mjs fails if a page outside this list
+// has no write-up, apart from the keepers named there that predate the rule.
 export const NOINDEX_PICKER_PAGES = [
   "/3-month-high-breakout-stocks",
   "/atr-spike-stocks",
@@ -58,16 +69,12 @@ export const NOINDEX_PICKER_PAGES = [
   "/best-trend-score-stocks",
   "/breakout-signal-stocks",
   "/bullish-macd-divergence-stocks",
-  "/bullish-rsi-divergence-stocks",
-  "/cheap-tech-stocks",
   "/macro-support-resistance-stocks",
-  "/overbought-stocks-today",
   "/stocks-above-50-day-moving-average",
   "/stocks-below-200-day-moving-average",
   "/stocks-below-50-day-moving-average",
   "/stocks-down-20-from-all-time-highs",
   "/stocks-near-weekly-200-day-moving-average",
-  "/stocks-trading-above-200-day-moving-average",
   "/stocks-with-positive-last-earnings",
   "/stocks-with-strong-earnings-growth",
   "/stocks-with-bearish-trend-flip",
@@ -76,7 +83,6 @@ export const NOINDEX_PICKER_PAGES = [
   "/stocks-with-weekly-bullish-trend-flip",
   "/top-stocks-with-buy-signals",
   "/top-stocks-with-sell-signals",
-  "/volume-spike-stocks",
 ] as const;
 
 // Deliberately absent: /bullish-divergence-stocks and /bearish-divergence-

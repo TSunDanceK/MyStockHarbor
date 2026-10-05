@@ -957,6 +957,8 @@ export type MultipleInputs = {
     shortTermDebt: number | null;
     longTermDebt: number | null;
     cash: number | null;
+    /** Cash incl. restricted at the same date, for EV's B1 estimate only (secEstimates). */
+    cashIncludingRestricted?: number | null;
   } | null;
 };
 
@@ -1029,6 +1031,8 @@ export function multipleInputs(set: StoredFactSet): MultipleInputs {
           shortTermDebt: valueOf(b, "shortTermDebt"),
           longTermDebt: valueOf(b, "longTermDebt"),
           cash: valueOf(b, "cash"),
+          // THE SAME INSTANT `b`, never another date (#552 COWORK #162 §3).
+          cashIncludingRestricted: valueOf(b, "cashIncludingRestricted"),
         }
       : null,
   };
@@ -1098,7 +1102,7 @@ export function valuationMultiples(
   // short-term debt is untagged; any other missing line is still refused.
   const evAny = enterpriseValueOf(cap.val, bs, inputs.sic);
   const ev = evAny.val !== null && evAny.est && !opts.withEstimates
-    ? { val: null, missing: ["short-term debt"] }
+    ? { val: null, missing: evAny.missing ?? ["short-term debt"] }
     : evAny;
   const missing = [
     ...(ev.val === null ? ev.missing : []),

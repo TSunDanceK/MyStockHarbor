@@ -34,6 +34,7 @@ import { secUserAgent } from "./userAgent";
 import { readSecFilingItems } from "./secFilingsStore";
 import type { NewsItem, NewsProvider } from "./types";
 import { lookupOneWay, toDashed } from "@/lib/symbolSpellings.mjs";
+import { cikForSymbol } from "../secColdFetch";
 
 const CIK_BY_SYMBOL = cikMap as Record<string, string>;
 
@@ -291,6 +292,30 @@ export function cikFor(
 }
 
 /**
+ * THE NEWS LEG'S CIK, WITH A's MAP BEHIND IT (#553 COWORK #146/#148).
+ *
+ * data/cik-map.json was built against an older universe, so 88 symbols that
+ * Relay A's manifest tracks (with a CIK) had none here, and the SEC news
+ * backfill retried them every night without ever filling them. A's ticker file
+ * (secColdFetch.cikForSymbol, the committed SEC company_tickers map) has all
+ * of them, and the two agree wherever both have a symbol. So: the news map
+ * first, exactly as before, then A's -- imported, not copied, so there is one
+ * source to regenerate.
+ *
+ * `fallback` is a parameter so the check can hand it a crafted resolver.
+ */
+export function newsCikFor(
+  symbol: string,
+  ciks: Record<string, string> = CIK_BY_SYMBOL,
+  fallback: (symbol: string) => string | null = cikForSymbol
+): string | undefined {
+  const own = cikFor(symbol, ciks);
+  if (own) return own;
+  const upper = String(symbol ?? "").trim().toUpperCase();
+  return (upper && fallback(upper)) || undefined;
+}
+
+/**
  * Symbols that cannot be resolved by a ticker join AT ALL, and why.
  *
  * NOT A TODO LIST AND NOT A DENYLIST. It exists so the warning below stops
@@ -320,7 +345,7 @@ async function fetchForSymbol(
   _sinceIso: string | null
 ): Promise<NewsItem[]> {
   const upper = symbol.trim().toUpperCase();
-  const cik = cikFor(upper);
+  const cik = newsCikFor(upper);
 
   if (!cik) {
     // THE REFRESH TRIGGER FOR data/cik-map.json.
@@ -342,7 +367,7 @@ async function fetchForSymbol(
       console.warn(`[sec] ${upper}: no CIK, known-unresolvable — ${known}`);
       return [];
     }
-    console.warn(`[sec] ${upper}: no CIK in data/cik-map.json — regenerate it (relay task "sec", symbols=cik-map)`);
+    console.warn(`[sec] ${upper}: no CIK in data/cik-map.json or A's ticker map — regenerate them (relay task "sec", symbols=cik-map)`);
     return [];
   }
 
@@ -365,7 +390,7 @@ async function fetchForSymbol(
  */
 export async function fetchSubmissionsItems(symbol: string): Promise<NewsItem[] | null> {
   const upper = symbol.trim().toUpperCase();
-  const cik = cikFor(upper);
+  const cik = newsCikFor(upper);
   if (!cik) return null;
   try {
     const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
