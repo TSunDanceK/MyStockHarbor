@@ -77,9 +77,13 @@ console.log("\n4. a cap dash beside a price says why, once (#552 COWORK #117)");
       && !C.capRefusedBesidePrice({ price: 12, marketCap: 3e9, priceCoverage: "covered" })
       && !C.capRefusedBesidePrice({ price: null, marketCap: null, priceCoverage: "covered" })
       && !C.capRefusedBesidePrice({ price: 12, marketCap: null, priceCoverage: "outside-bar-universe" }));
-  const pageRule = (s) => /\{dayData\.items\.some\(capRefusedBesidePrice\) \? \(\s*<p[^>]*>\s*\{CAP_REFUSED_NOTE\}/.test(s);
-  check("the calendar prints CAP_REFUSED_NOTE under the grid only when such a row is on the page", pageRule(PAGE));
-  check("MUTATION: the note printed on every day → caught", !pageRule(once(PAGE, "{dayData.items.some(capRefusedBesidePrice) ? (", "{true ? (")));
+  // SINCE THE WEEK PAGE (#552 COWORK #170) the calendar shows no price and no
+  // market cap column (the cap only sorts the rows), so there is no cap dash to
+  // explain: a note about one would explain a cell that is not on the page.
+  const WEEK = readCodeOnly("app/earnings-calendar/EarningsWeek.tsx");
+  const pageRule = (s, w) => !/CAP_REFUSED_NOTE|PRICE_COVERAGE_NOTE/.test(s) && !/Market cap/i.test(w) && !/columnheader"[^>]*>Price</.test(w);
+  check("the calendar has no cap or price column, and so prints no note about one", pageRule(PAGE, WEEK));
+  check("MUTATION: the cap note printed under the list → caught", !pageRule(once(PAGE, '<EarningsWeek days={weekDaysView} initial={initial} />', '<EarningsWeek days={weekDaysView} initial={initial} /><p>{CAP_REFUSED_NOTE}</p>'), WEEK));
   // HEDGED (#552 COWORK #119): the row carries no reason for its dash, so the
   // note may not state the filings as THE cause, nor promise the stock page
   // explains it. Read from the source text, comments stripped.

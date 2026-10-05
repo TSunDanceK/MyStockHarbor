@@ -1,7 +1,7 @@
 // The earnings-calendar intro, gap message and Backfill control (#552, COWORK
 // #26 items 2-4), checked with a mutation per assertion.
 //
-//   2. The intro no longer promises "EPS/revenue estimates": the SEC-fed grid
+//   2. The intro does not promise "EPS/revenue estimates": the SEC-fed page
 //      shows none, so the sentence described a column that is not there.
 //   3. The day-state note ("Results for this date cannot be listed right
 //      now...") renders ONCE, in the day panel, not also under the heading.
@@ -42,23 +42,27 @@ const PAGE = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/page.tsx"), 
 const BTN = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/BackfillButton.tsx"), "utf8");
 
 // ── items 2 + 3: the intro paragraph ────────────────────────────────────────
-// The intro is the first <p> after the <h1> ("Earnings filed ...").
+// SINCE THE WEEK PAGE (#552 COWORK #170) the intro is the lede under the
+// <h1> "Earnings this week". It says who is ESTIMATED to report next (the
+// owner's own line) — what it must not do is promise EPS or revenue
+// estimates, which no column shows. The day-state note is each empty day's
+// one sentence, built in exactly one place.
 const introOf = (page) => {
   const code = strip(page, "app/earnings-calendar/page.tsx");
-  const h1 = code.indexOf("Earnings filed today");
+  const h1 = code.indexOf("Earnings this week</h1>");
   if (h1 < 0) return null;
   const start = code.indexOf("<p", h1);
   const end = code.indexOf("</p>", start);
   return start < 0 || end < 0 ? null : code.slice(start, end);
 };
-const noteUses = (page) => (strip(page, "app/earnings-calendar/page.tsx").match(/\{\s*dayStateNote\s*\}|:\s*dayStateNote\s*\}/g) ?? []).length;
+const noteUses = (page) => (strip(page, "app/earnings-calendar/page.tsx").match(/dayStateMessage\(/g) ?? []).length;
 
 const pageHolds = (page) => {
   const intro = introOf(page);
   return {
     found: intro != null,
-    noEstimates: intro != null && !/estimate/i.test(intro),
-    noNoteInIntro: intro != null && !/dayStateNote/.test(intro),
+    noEstimates: intro != null && !/(EPS|revenue)[^<]*estimate|estimate[^<]*(EPS|revenue)/i.test(intro),
+    noNoteInIntro: intro != null && !/dayStateMessage|emptyLine/.test(intro),
     noteOnce: noteUses(page) === 1,
   };
 };
@@ -67,11 +71,11 @@ console.log("\n2-3. INTRO COPY AND THE GAP MESSAGE");
 {
   const r = pageHolds(PAGE);
   check("the intro paragraph was located", r.found);
-  check("the intro does not mention estimates", r.noEstimates);
+  check("the intro does not promise EPS or revenue estimates", r.noEstimates);
   check("the intro does not repeat the day-state note", r.noNoteInIntro);
-  check("the day-state note renders exactly once (the day panel)", r.noteOnce, `uses=${noteUses(PAGE)}`);
-  check("that one use is inside the day panel, after the date heading",
-    strip(PAGE, "app/earnings-calendar/page.tsx").search(/:\s*dayStateNote\s*\}/) > strip(PAGE, "app/earnings-calendar/page.tsx").indexOf("formatDateLabel(selectedDate)}</div>"));
+  check("the day-state note is built exactly once (each empty day's line)", r.noteOnce, `uses=${noteUses(PAGE)}`);
+  check("that one use is the empty-day line, set only for a day with no rows",
+    /const emptyLine = rows\.length[\s\S]{0,400}dayStateMessage\(state\)/.test(strip(PAGE, "app/earnings-calendar/page.tsx")));
 }
 
 const pageMutation = (name, from, to, key) => {
@@ -84,10 +88,10 @@ const pageMutation = (name, from, to, key) => {
     r[key] ? "the property still held with the fix removed — the assertion proves nothing" : "");
 };
 pageMutation("estimates back in the intro",
-  "date for tickers, price and market cap.", "date for tickers, EPS/revenue estimates, price and market cap.", "noEstimates");
+  "Who filed results in the last 7 days,", "Who filed results in the last 7 days, with EPS and revenue estimates,", "noEstimates");
 pageMutation("gap message back under the heading",
-  "                  See how many companies have filed on each day",
-  "                  {dayStateNote} See how many companies have filed on each day", "noteOnce");
+  '<p className="earnCalLede">',
+  '<p className="earnCalLede">{dayStateMessage(weekState)}', "noteOnce");
 
 // ── item 4: BackfillButton, rendered ────────────────────────────────────────
 const buildBtn = async (src) => {

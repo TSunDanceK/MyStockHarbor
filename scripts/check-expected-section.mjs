@@ -198,20 +198,11 @@ console.log("\n6. EVERY SYMBOL IS A ROW OR A NAMED SKIP");
 }
 
 // ── The render ────────────────────────────────────────────────────────────
-const SHIMS = `
-const Link = ({ href, children, ...rest }) => <a href={href} {...rest}>{children}</a>;
-const TickerLogo = ({ symbol }) => <span data-logo={symbol} />;
-`;
-const unit = [
-  SHIMS,
-  stripImports("lib/server/expectedToReport.ts"),
-  stripImports("lib/server/expectedCopy.ts"),
-  stripImports("app/earnings-calendar/EarningsExpectedSection.tsx").replace(/export default function/, "export function"),
-].join("\n");
-const tmp = `scripts/.check-expected-${process.pid}.mjs`;
-fs.writeFileSync(tmp, transpile(unit, "sec.tsx", true));
-let C;
-try { C = await import(`${ROOT}/${tmp}?t=${Date.now()}`); } finally { fs.rmSync(tmp, { force: true }); }
+// SINCE THE WEEK PAGE (#552 COWORK #170) the estimates render as compact chips
+// in "Coming up" (EarningsComingUp), grouped by calendar week, the evidence
+// behind a tap. The SHIPPED component is rendered through its real imports.
+(await import("node:module")).register("./lib/tsx-render-hooks.mjs", import.meta.url);
+const C = { ...(await import("../lib/server/expectedCopy.ts")), ...(await import("../app/earnings-calendar/EarningsComingUp.tsx")) };
 
 const visible = (markup) => markup
   .replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]*>/g, " ")
@@ -219,7 +210,7 @@ const visible = (markup) => markup
   .replace(/&quot;/g, '"').replace(/&mdash;/g, "—").replace(/&ldquo;|&rdquo;/g, '"')
   .replace(/\s+/g, " ").trim();
 const render = (state) => {
-  const markup = renderToStaticMarkup(React.createElement(C.EarningsExpectedSection, { state }));
+  const markup = renderToStaticMarkup(React.createElement(C.default, { expected: state, due: { kind: "none-outstanding", coverage: 1 }, today: TODAY }));
   return { markup, text: visible(markup) };
 };
 const ROW = {
@@ -228,52 +219,41 @@ const ROW = {
   lastReportedOn: "2026-09-23", lastReportedPeriodEnd: "2026-08-27",
 };
 
-console.log("\n7. NO SPECIFIC DAY IS EVER RENDERED FOR THE ESTIMATE");
+console.log("\n7. THE ESTIMATE IS A MARKED APPROXIMATION, NEVER A BARE DATE");
 {
+  // THE OWNER'S PICK (COWORK #170) replaced "Expected in about 4 days" with
+  // "~26 Sep" on a chip, under a line saying each one is a week, not a day.
+  // What this file keeps asserting is the honesty of that: the estimate's
+  // date never appears without its "~", never as an ISO date, and the line
+  // that qualifies it is always on the card.
   const r = render({ kind: "listed", rows: [ROW], considered: 50 });
-  check("the band heading renders", r.text.includes("Within the next 7 days"));
-  check("the estimate renders as WORDS", /Expected in about 4 days/.test(r.text));
-
-  // ── THE ASSERTION THIS WHOLE FILE IS FOR ──────────────────────────────
-  // Not "expectedOn is absent" -- there is no expectedOn here. EVERY
-  // date-shaped string in the markup is enumerated and each one has to be a
-  // DATED PUBLIC DOCUMENT (the period end, the last filing), never an
-  // estimate. A future refactor that formats daysAway into a date is caught
-  // whatever it names the variable.
-  const dates = [...new Set(r.markup.match(/\d{4}-\d{2}-\d{2}/g) ?? [])];
-  const allowed = new Set([ROW.periodEnd, ROW.lastReportedOn, ROW.lastReportedPeriodEnd]);
-  const rogue = dates.filter((d) => !allowed.has(d));
-  check("every date in the markup is a filed fact, not an estimate",
-    rogue.length === 0, rogue.length ? `unexplained: ${rogue.join(" ")}` : dates.join(" "));
-
-  // And the estimate's own date must not be derivable by accident.
   const estimated = iso(Date.parse(`${TODAY}T00:00:00Z`) + ROW.daysAway * DAY);
-  check("the estimated date itself appears nowhere", !r.markup.includes(estimated), estimated);
-
+  check("the week heading renders", r.text.includes("This week"));
+  check("the chip carries the approximate date", r.text.includes("MU ~26 Sep"));
+  const bare = (r.text.match(/26 Sep/g) ?? []).length, marked = (r.text.match(/~26 Sep/g) ?? []).length;
+  check("the estimated date appears ONLY with its '~'", bare === marked && marked === 1, `${marked} marked of ${bare}`);
+  check("the estimated date never appears as an ISO date", !r.markup.includes(estimated), estimated);
+  check("the line under the title says it is a week, not a day", r.text.includes(C.COMING_UP_LINE) && /a week, not a day/.test(C.COMING_UP_LINE));
   const FORECAST = [/\bwill report\b/i, /\bnext up\b/i, /\breports on\b/i, /\bconfirmed\b/i];
-  const scanned = r.text.split(C.EXPECTED_INTRO).join(" ");
-  check("no forecast vocabulary outside the intro's own disclaimer",
-    !FORECAST.some((re) => re.test(scanned)));
-  check("the intro says it is estimated and not company-announced",
-    /estimated from each company/i.test(r.text) && /not announced by the company/i.test(r.text));
+  check("no forecast vocabulary", !FORECAST.some((re) => re.test(r.text)));
+  check("the line says the dates are estimated and not announced",
+    /estimated from each company/i.test(r.text) && /aren't announced dates/i.test(r.text));
 }
 
 console.log("\n8. THE EVIDENCE, THE DENOMINATOR, AND THE TWO EMPTIES");
 {
   const r = render({ kind: "listed", rows: [ROW], considered: 50 });
-  check("the filer's own habit renders WITH its sample size",
+  check("the filer's own habit renders WITH its sample size (behind the tap)",
     r.text.includes(C.habitLabel(ROW.medianLagDays, ROW.fromPeriods)));
   check("...and that label carries the period count, not just the lag",
     /over its last 12 periods/.test(r.text));
-  check("the period the report would cover renders", r.text.includes(ROW.periodEnd));
+  check("the period the report would cover renders", r.text.includes("For the period ending 27 Nov 2026"));
   check("the last filing on record renders", r.text.includes(ROW.lastReportedOn));
-  check("the row links to the symbol's earnings page", r.markup.includes('href="/stock/MU/earnings"'));
-
-  // THE DENOMINATOR IS STATED, not implied by the list length.
+  check("the evidence is behind a native tap, in the server HTML",
+    /<details class="cuChip" data-chip="MU"><summary>[\s\S]*?<\/summary><div class="cuBody">[\s\S]*Usually reports/.test(r.markup));
+  check("the chip links to the symbol's earnings page", r.markup.includes('href="/stock/MU/earnings"'));
   check("the coverage line names BOTH shown and considered",
     r.text.includes("Showing 1 of the 50"), C.coverageLabel(1, 50));
-  check("and it is honest when many are hidden",
-    render({ kind: "listed", rows: [ROW], considered: 50 }).text.includes("of the 50"));
 
   const none = render({ kind: "none" });
   const un = render({ kind: "unavailable" });
@@ -282,30 +262,28 @@ console.log("\n8. THE EVIDENCE, THE DENOMINATOR, AND THE TWO EMPTIES");
   check("'unavailable' is a claim about US, and a different sentence",
     un.text.includes(C.EXPECTED_UNAVAILABLE) && !un.text.includes(C.EXPECTED_NONE));
   check("the two empties render differently", none.text !== un.text);
-  check("both keep the heading and intro",
-    none.text.includes(C.EXPECTED_HEADING) && un.text.includes(C.EXPECTED_INTRO));
+  check("both keep the title and the line",
+    none.text.includes(C.COMING_UP_TITLE) && un.text.includes(C.COMING_UP_LINE));
 }
 
 console.log("\n9. THE PAGE: LADDER ORDER, THE TICKER'S REMOVAL, AND THE PLACEHOLDER");
 {
   const page = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/page.tsx"), "utf8");
   const search = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/EarningsTickerSearch.tsx"), "utf8");
+  const cu = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/EarningsComingUp.tsx"), "utf8");
 
-  check("the page renders the expected section", /<EarningsExpectedSection\s/.test(page));
+  check("the page renders the estimates", /<EarningsComingUp\s[^>]*expected=\{forward\.expected\}/.test(page));
   check("fed from the combined forward read", page.includes("getCalendarForwardSections"));
-  check("on TODAY, never the browsed date",
-    /getForwardSections\(todayDate\)/.test(page) && !/getForwardSections\(selectedDate\)/.test(page));
+  check("on TODAY (Eastern), never a browsed date",
+    /getForwardSections\(today\)/.test(page) && !/getForwardSections\(selected/.test(page));
 
-  // THE LADDER IS AN ORDERING CLAIM, so it is asserted as one.
-  check("the due strip comes BEFORE the expected section in the markup",
-    page.indexOf("<EarningsDueStrip") < page.indexOf("<EarningsExpectedSection"));
-  check("and the grid separates them — the expected section is after the backfill button",
-    page.indexOf("<BackfillButton") < page.indexOf("<EarningsExpectedSection"));
+  // THE LADDER IS AN ORDERING CLAIM: filed (the week) → outstanding (the due
+  // group) → expected (the weeks), strongest first.
+  check("the week's filed results come BEFORE Coming up in the page",
+    page.indexOf("<EarningsWeek ") > 0 && page.indexOf("<EarningsWeek ") < page.indexOf("<EarningsComingUp "));
+  check("...and inside Coming up the due group comes BEFORE the estimate weeks",
+    cu.indexOf('data-group="due"') > 0 && cu.indexOf('data-group="due"') < cu.indexOf("data-group={w.key}"));
 
-  // THE TICKER IS GONE, and the file with it.
-  // NOT "the name appears nowhere" -- the note explaining WHY it was removed
-  // mentions it by name, and that note is the most valuable thing left of it.
-  // The property is that nothing RENDERS it and nothing IMPORTS it.
   check("EarningsUpcomingTicker is not rendered", !/<EarningsUpcomingTicker/.test(page));
   check("...and not imported", !/^import .*EarningsUpcomingTicker/m.test(page));
   check("...but the note explaining the removal survives",
@@ -314,13 +292,6 @@ console.log("\n9. THE PAGE: LADDER ORDER, THE TICKER'S REMOVAL, AND THE PLACEHOL
     !fs.existsSync(path.join(ROOT, "app/earnings-calendar/EarningsUpcomingTicker.tsx")));
   check("...and its loader is gone with it", !/getUpcomingTickerItems/.test(page));
 
-  // The placeholder promised a thing the page does not have.
-  // THE PLACEHOLDER PROMISED A CAPABILITY, so the placeholder is what changed.
-  // The widget's RESULT still renders an FMP-supplied next date
-  // (lib/latest-earnings-data.ts: "Structured earnings data from Financial
-  // Modeling Prep"), which is vendor data and part of the separate FMP finding
-  // this PR deliberately leaves alone -- so the fix is to stop the input
-  // promising anything rather than to restate the promise differently.
   const ph = (search.match(/placeholder="([^"]*)"/) ?? [])[1] ?? "";
   const aria = (search.match(/aria-label="([^"]*)"/) ?? [])[1] ?? "";
   check("the search input promises no next earnings date",

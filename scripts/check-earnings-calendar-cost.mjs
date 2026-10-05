@@ -28,6 +28,7 @@
 // starts filling it at once.
 //
 //   node scripts/check-earnings-calendar-cost.mjs
+import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
 
@@ -102,16 +103,25 @@ check(
     "page telling every visitor it cannot answer"
 );
 
-console.log("\n2. The completeness marker is read once, not twice");
+console.log("\n2. The completeness marker is not read at all, and the figures are one MGET");
 
+// SINCE THE WEEK PAGE (#552 COWORK #170) the rows are the day's candidates
+// from the month index, so the day blob and its completeness marker (once
+// read twice per render) are not read by the render at all; and the row
+// figures for all seven days come back in one MGET, not per day or per row.
 check(
-  "the page shares one read between the render and the flag",
-  /const loadDayComplete = cache\(/.test(page) &&
-    /loadDayComplete\(selectedDate\),/.test(page) &&
-    !/\n\s*isDateFullyPopulated\(selectedDate\),/.test(page),
-  "getFullDayEarnings already reads the marker internally and the page read it " +
-    "again through isDateFullyPopulated — two GETs for one fact"
+  "the render reads no completeness marker, and no day blob",
+  !/isDateFullyPopulated\(|loadDayComplete\(|getDayEarningsForRender\(|getCachedDayItems\(/.test(page),
+  "the grid's per-day reads went with the grid"
 );
+{
+  const store = fs.readFileSync("lib/server/earningsWeekStore.ts", "utf8");
+  const fn = store.slice(store.indexOf("export async function readWeekFigures"), store.indexOf("/** What one symbol needs filled"));
+  const oneMget = (src) => (src.match(/await redis\./g) ?? []).length === 1 && /await redis\.mget</.test(src);
+  check("the strip's 14 figure keys are one MGET", oneMget(fn) && /readWeekFigures\(days\)/.test(page));
+  check("MUTATION: a GET per day → caught",
+    !oneMget(fn.replace("const vals = await redis.mget<unknown[]>(...keys);", "const vals = await Promise.all(keys.map((k) => redis.get(k)));")));
+}
 
 console.log("\n3. The background scan runs once per window, not once per visitor");
 
@@ -175,7 +185,7 @@ check(
 // it rather than leaving it to review.
 const afterIdx = page.indexOf("after(async () => {");
 const claimIdx = page.indexOf("await claimCalendarScan()", afterIdx);
-const workIdx = page.indexOf("await getFullDayEarnings(selectedDate", afterIdx);
+const workIdx = page.indexOf("await fillWeekFigures(", afterIdx);
 check(
   "...and it is claimed before any of the work",
   afterIdx !== -1 && claimIdx !== -1 && workIdx !== -1 && claimIdx < workIdx,
@@ -185,7 +195,7 @@ check(
 
 console.log(
   failures === 0
-    ? "\nThe fifty forward reads are memoised, the marker is read once, and the scan is gated.\n"
+    ? "\nThe fifty forward reads are memoised, the render reads no marker, and the scan is gated.\n"
     : `\n${failures} assertion(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);

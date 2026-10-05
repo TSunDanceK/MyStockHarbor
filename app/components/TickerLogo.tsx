@@ -48,12 +48,15 @@ export default function TickerLogo({
   name,
   size = 24,
   radius = 8,
+  alt,
 }: {
   symbol?: string | null;
   domain?: string | null;
   name?: string | null;
   size?: number;
   radius?: number | string;
+  /** The image's alt text. Default "{SYM} logo"; "" where the ticker text beside it already names it. */
+  alt?: string;
 }) {
   const sym = (symbol || "").toUpperCase().trim();
 
@@ -138,7 +141,7 @@ export default function TickerLogo({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={sources[idx]}
-        alt={sym ? `${sym} logo` : ""}
+        alt={alt ?? (sym ? `${sym} logo` : "")}
         loading="lazy"
         onError={() => setFallback({ sym, idx: idx + 1 })}
         style={{
