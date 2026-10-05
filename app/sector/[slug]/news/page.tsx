@@ -81,6 +81,13 @@ type Props = {
 
 const SITE = "https://www.mystockharbor.com";
 
+// HIDDEN 2026-10-05 (owner, in chat): "who reports next" -- the Earnings This
+// Week card and the read's "N names reporting in the next week" sentence (it
+// keys off the empty list) -- is too hard to keep accurate. Hidden, not
+// deleted: flip this to bring it back. The descriptions' "who reports next" /
+// "upcoming earnings" wording was dropped with it.
+const SHOW_WHO_REPORTS_NEXT = false;
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const sector = getSectorBySlug(slug);
@@ -91,7 +98,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const url = `${SITE}${sectorNewsPath(sector.slug)}`;
   const title = `${sector.name} Sector News, Sentiment Score & What It Means | MyStockHarbor`;
-  const description = `Latest ${sector.name.toLowerCase()} sector news with beginner-friendly summaries. Sector news score, most-mentioned stocks, breadth, movers and who reports next.`;
+  const description = `Latest ${sector.name.toLowerCase()} sector news with beginner-friendly summaries. Sector news score, most-mentioned stocks, breadth and movers.`;
 
   return {
     title,
@@ -225,7 +232,7 @@ export default async function SectorNewsPage({ params }: Props) {
   const [performance, movers, earnings, breadth] = await Promise.all([
     getSectorPerformanceRow(sector.slug),
     getSectorMovers(sector.slug),
-    getSectorEarningsThisWeek(sector.slug),
+    SHOW_WHO_REPORTS_NEXT ? getSectorEarningsThisWeek(sector.slug) : Promise.resolve([] as SectorEarningsEntry[]),
     getSectorBreadth(sector.slug),
   ]);
 
@@ -325,7 +332,7 @@ export default async function SectorNewsPage({ params }: Props) {
                   "@id": `${url}#collection`,
                   url,
                   name: `${sector.name} Sector News`,
-                  description: `Latest ${sector.name.toLowerCase()} sector news with a sector news score, most-mentioned stocks, breadth and upcoming earnings.`,
+                  description: `Latest ${sector.name.toLowerCase()} sector news with a sector news score, most-mentioned stocks and breadth.`,
                   isPartOf: { "@id": `${SITE}/#website` },
                   hasPart: structuredNews([...detailedNews, ...compactNews]),
                 },
@@ -494,7 +501,9 @@ export default async function SectorNewsPage({ params }: Props) {
               </section>
 
               <MostMentionedCard mentions={mentions} sectorName={sector.name} />
-              <SectorEarningsCard entries={earnings} sectorName={sector.name} label={earningsScore.label} />
+              {SHOW_WHO_REPORTS_NEXT ? (
+                <SectorEarningsCard entries={earnings} sectorName={sector.name} label={earningsScore.label} />
+              ) : null}
               <SectorMoversCard movers={movers} sectorName={sector.name} credit={tiingoCredit} />
               <SectorBreadthCard breadth={breadth} sectorName={sector.name} />
             </aside>
