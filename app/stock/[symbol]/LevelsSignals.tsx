@@ -161,20 +161,27 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
                 })}
               </svg>
             ))}
+            {/* NO TRANSFORM ON A LABEL (#563 COWORK #103): A's ReasonedValue note is
+                position: fixed, and a transformed ancestor becomes its containing
+                block, squashing it into the label's width off the card. So each
+                label is centred on its height by a zero-height flex row instead
+                of translateY(-50%). measure-level-notes.mjs taps every label. */}
             {marks.map((m) => (
               <div key={`l-${m.key}`} className="lsLabel" data-key={m.key} data-side={m.side} data-label-side={m.labelSide}
                 style={{
-                  position: "absolute", top: m.labelY, transform: "translateY(-50%)", display: "flex", flexDirection: "column", lineHeight: 1.2, minWidth: 0,
+                  position: "absolute", top: m.labelY, height: 0, display: "flex", alignItems: "center", minWidth: 0,
                   ...(m.labelSide === "right"
-                    ? { left: `calc(50% + ${LABEL_OFFSET}px)`, right: 0, alignItems: "flex-start", textAlign: "left" as const }
-                    : { left: 0, right: `calc(50% + ${LABEL_OFFSET}px)`, alignItems: "flex-end", textAlign: "right" as const }),
+                    ? { left: `calc(50% + ${LABEL_OFFSET}px)`, right: 0, justifyContent: "flex-start" }
+                    : { left: 0, right: `calc(50% + ${LABEL_OFFSET}px)`, justifyContent: "flex-end" }),
                 }}>
+                <div className="lsLabelBody" style={{ display: "flex", flexDirection: "column", gap: 3, lineHeight: 1.2, minWidth: 0, alignItems: m.labelSide === "right" ? "flex-start" : "flex-end", textAlign: m.labelSide === "right" ? "left" : "right" }}>
                 {/* THE ANCHOR STAYS BOLDER on whichever side it falls (#73). */}
                 <span style={{ fontSize: m.key === "last" ? "0.875rem" : "0.8125rem", fontWeight: m.key === "last" ? 900 : 800, color: SIDE_COLOUR[m.side] }}>
                   <ReasonedValue text={m.name} reason={noteFor(m, p, when)} />
                 </span>
                 <span className="lsValue" style={{ fontSize: "0.75rem", color: m.key === "last" ? C.value : C.muted, fontWeight: m.key === "last" ? 800 : 600 }}>{m.valueText}</span>
                 {m.distText ? <span className="lsDist" style={{ fontSize: "var(--fs-label)", color: C.muted }}>{m.distText}</span> : null}
+                </div>
               </div>
             ))}
           </div>
@@ -234,7 +241,7 @@ export default function LevelsSignals(p: LevelsSignalsProps) {
         .lsPart { min-width: 0; }
         @media (max-width: 640px) { .lsGrid { grid-template-columns: minmax(0, 1fr); gap: 22px; } }
         /* Half a 320 px column per side: labels a size smaller so "$23,700–$24,300" stays on two lines at most. */
-        @media (max-width: 360px) { .lsLabel { line-height: 1.15 !important; } .lsLabel > span:first-child { font-size: 0.75rem !important; } .lsValue, .lsDist { font-size: var(--fs-label) !important; } }
+        @media (max-width: 360px) { .lsLabelBody { line-height: 1.15 !important; } .lsLabelBody > span:first-child { font-size: 0.75rem !important; } .lsValue, .lsDist { font-size: var(--fs-label) !important; } }
       `}</style>
     </div>
   );
