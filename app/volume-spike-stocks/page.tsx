@@ -57,6 +57,35 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["volumeSpike"],
   maxItems: 36,
+  // WRITE-UP (#553 COWORK #152, batch 1 of the indexing test, 2026-10-05):
+  // what the condition is and how this page computes it, from the builder's
+  // own thresholds; distinct per page; descriptive only.
+  bodySections: [
+    {
+      heading: "What counts as a volume spike here",
+      paragraphs: [
+        "Volume is the number of shares that changed hands in a session. On its own the figure says little, because a large company routinely trades tens of millions of shares a day while a smaller one may trade a few hundred thousand. What matters is volume compared with the stock's own normal level, and that comparison is what this page measures.",
+        "A stock is listed when its latest daily volume is at least 1.8 times its average daily volume over the previous 20 sessions. The 20-session window is roughly one trading month, long enough to smooth out an ordinary busy day and short enough to reflect how the stock has been trading recently. The test is relative, so a small company and a mega-cap can both appear when each trades well above its own usual level.",
+        "The threshold is deliberately moderate. A session at 1.8 times average is clearly unusual without being extreme, which means the list catches the early or milder cases as well as the dramatic ones. Some names here may be trading at three, five or ten times their normal volume; the Volume column on the General tab shows the session's figure, which is the place to compare them.",
+      ],
+    },
+    {
+      heading: "Why the volume may have jumped",
+      paragraphs: [
+        "The cause behind a spike often matters more than its size. Scheduled events are the most common: a quarterly report, a guidance update, an investor day or a regulatory decision with a known date. Volume around those events is expected, and a spike on the day of a report says more about the reaction than about anything hidden.",
+        "Other spikes have mechanical causes with little to do with the company itself. Index rebalancing days, the monthly and quarterly options expiry dates, and large block trades between institutions can all push volume far above normal for a single session. These often leave the price close to where it started, which is one way to recognise them.",
+        "Then there are the spikes with no obvious calendar reason: news that broke during the session, a move across the whole sector, or a change in how the market is valuing the business. Checking the stock's news page is usually the fastest way to tell an explained spike from an unexplained one, and the two may deserve very different levels of attention.",
+      ],
+    },
+    {
+      heading: "Putting the price move next to the volume",
+      paragraphs: [
+        "Volume describes participation, not direction. The same spike can sit under a large rise, a large fall or almost no change at all, and each of those combinations reads differently. The % Change column next to Volume is the first thing to look at: heavy volume with a big price move suggests a broad reassessment, while heavy volume with a flat price suggests large orders being matched without either side gaining ground.",
+        "Where the spike sits on the chart adds a second layer. Heavy trading as the price pushes through a level it has struggled with before tends to be read differently from heavy trading after a long, steady run. The Performance tab helps place the session in context, showing whether it comes after a quiet stretch or at the end of a strong week or month.",
+        "A single session of high volume is a snapshot, and its meaning often becomes clearer only over the following days, as volume either stays elevated or drops back to normal. A related page tracks sharp rises in daily price range (ATR) rather than shares traded, and the two lists overlap only sometimes. Nothing on this page is a forecast or a recommendation; it shows where trading interest was unusually high in the latest session.",
+      ],
+    },
+  ],
   relatedGuide: {
     href: "/learn/volume",
     label: "our lesson on volume",
