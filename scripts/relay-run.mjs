@@ -1381,6 +1381,8 @@ const TASKS = {
   // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #162 §2/§3): back-tests for the A2 dividend
   // estimate (companyfacts, ≤ 8/s) and the B1 EV cash fallback (stored sets + pool prices).
   "write-sec-estimate-accuracy": { script: "scripts/sec-estimate-accuracy.mjs", args: () => [], writes: true },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #162 §4, B2): why chain debt concepts resolve null.
+  "write-sec-ev-debt-diagnosis": { script: "scripts/sec-ev-debt-diagnosis.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
