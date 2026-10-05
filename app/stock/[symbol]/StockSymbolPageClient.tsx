@@ -1071,8 +1071,8 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 <div className="stock-stat-sub">{typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought" : lastRsi <= 30 ? "Oversold" : "Neutral") : "—"}</div>
               </div>
               {!valuationLoading && valuation ? (
-                <div className="stock-stat-cell" style={{ position: "relative" }}>
-                  {/* A's numeric sector median (#781); no quartiles exist, so no band. */}
+                <div className="stock-stat-cell" style={{ position: "relative", paddingBottom: 16 }}>
+                  {/* A's numeric sector median (#781); no quartiles exist, so no band. ~4 px clear of the words above it (#563 COWORK #116). */}
                   {valuation.peRatio != null && valuation.peSector ? <PeLine pe={valuation.peRatio} median={valuation.peSector.median} /> : null}
                   <div className="stock-stat-label">P/E ({valuation.peBasis ?? "TTM"})</div>
                   <div className="stock-stat-value">
@@ -1085,7 +1085,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                       not a verdict); the note names the peers and the date. */}
                   <div className="stock-stat-sub" data-pe-sector={valuation.peSector ? "" : undefined}>
                     {valuation.peSector
-                      ? <><span aria-hidden="true">{valuation.peSector.glyph} </span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></>
+                      ? <><span aria-hidden="true">{valuation.peSector.glyph}{"\u00a0"}</span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></>
                       : "See valuation ↓"}
                   </div>
                 </div>

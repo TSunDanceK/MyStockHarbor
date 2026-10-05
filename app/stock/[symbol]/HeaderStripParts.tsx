@@ -125,7 +125,7 @@ export function PeLine({ pe, median }: { pe: number | null | undefined; median: 
   const lo = Math.min(l.stock, l.median), hi = Math.max(l.stock, l.median);
   return (
     <svg className="hsPe" data-below={l.below ? "1" : "0"} aria-hidden="true" focusable="false" viewBox="0 0 100 12" preserveAspectRatio="none"
-      style={{ position: "absolute", left: 10, right: 10, bottom: 6, width: "calc(100% - 20px)", height: 12, pointerEvents: "none" }}>
+      style={{ position: "absolute", left: 10, right: 10, bottom: 3, width: "calc(100% - 20px)", height: 12, pointerEvents: "none" }}>
       <line x1={0} x2={100} y1={6} y2={6} stroke="rgba(255,255,255,0.14)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
       <rect className="hsPeGap" x={lo} y={4} width={hi - lo} height={4} fill={l.below ? UP : "#f59e0b"} fillOpacity={0.35} />
       <line className="hsPeMedian" x1={l.median} x2={l.median} y1={1} y2={11} stroke="rgba(241,245,249,0.7)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />

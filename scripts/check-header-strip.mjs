@@ -35,10 +35,12 @@ async function load(lib, parts, page) {
 const html = (M, C, p) => renderToStaticMarkup(React.createElement(M[C], p));
 /** The P/E tile as it stood on main before this PR (A's #741 line, at c2928b1d), which must not change. */
 const PE_BEFORE = "{!valuationLoading && valuation ? (\n                <div className=\"stock-stat-cell\">\n                  <div className=\"stock-stat-label\">P/E ({valuation.peBasis ?? \"TTM\"})</div>\n                  <div className=\"stock-stat-value\">\n                    {valuation.peRatio != null\n                      ? formatValuationMultiple(valuation.peRatio)\n                      : <ReasonedValue text={valuation.words?.peRatio ?? \"—\"} reason={valuation.reasons?.peRatio} />}\n                  </div>\n                  {/* P/E VS ITS SECTOR (#552 COWORK #147 §2): the glyph and the\n                      words carry it, in the page's ordinary ink (a comparison,\n                      not a verdict); the note names the peers and the date. */}\n                  <div className=\"stock-stat-sub\" data-pe-sector={valuation.peSector ? \"\" : undefined}>\n                    {valuation.peSector\n                      ? <><span aria-hidden=\"true\">{valuation.peSector.glyph} </span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></>\n                      : \"See valuation ↓\"}\n                  </div>\n                </div>\n              ) : null}";
-// #563 COWORK #112 adds a decorative P/E line inside the cell (and positions the cell); the tile otherwise stays as it was.
-const PE_DECOR = (s) => s.replace('<div className="stock-stat-cell" style={{ position: "relative" }}>', '<div className="stock-stat-cell">')
+// #563 COWORK #112 adds a decorative P/E line inside the cell (and positions the cell); COWORK #116 gives the line
+// room under the words and keeps the glyph with its first word (a no-break space). The tile otherwise stays as it was.
+const PE_DECOR = (s) => s.replace('<div className="stock-stat-cell" style={{ position: "relative", paddingBottom: 16 }}>', '<div className="stock-stat-cell">')
+  .replace('{valuation.peSector.glyph}{"\\u00a0"}</span>', "{valuation.peSector.glyph} </span>")
   .replace(/\n {18}\{\/\* A's numeric sector median[^\n]*\*\/\}\n {18}\{valuation\.peRatio != null && valuation\.peSector \? <PeLine pe=\{valuation\.peRatio\} median=\{valuation\.peSector\.median\} \/> : null\}/, "");
-const PE_BLOCK = /\{!valuationLoading && valuation \? \(\s*<div className="stock-stat-cell"(?: style=\{\{ position: "relative" \}\})?>(?:\s*\{\/\* A's numeric sector median[^\n]*\*\/\}\s*\{valuation\.peRatio != null[^\n]*)?\s*<div className="stock-stat-label">P\/E \(\{valuation\.peBasis \?\? "TTM"\}\)<\/div>[\s\S]*?: "See valuation ↓"\}\s*<\/div>\s*<\/div>\s*\) : null\}/;
+const PE_BLOCK = /\{!valuationLoading && valuation \? \(\s*<div className="stock-stat-cell"(?: style=\{\{ position: "relative"(?:, paddingBottom: 16)? \}\})?>(?:\s*\{\/\* A's numeric sector median[^\n]*\*\/\}\s*\{valuation\.peRatio != null[^\n]*)?\s*<div className="stock-stat-label">P\/E \(\{valuation\.peBasis \?\? "TTM"\}\)<\/div>[\s\S]*?: "See valuation ↓"\}\s*<\/div>\s*<\/div>\s*\) : null\}/;
 
 const RULES = {
   "the arrow and the sign agree (▲ with +, ▼ with −, none when unchanged), with spoken words": ({ M }) => {
@@ -127,7 +129,7 @@ const RULES = {
     const parts = M.partsSrc.slice(M.partsSrc.indexOf("const behind: CSSProperties"));
     const cells = ["<PriceSpark ", "<DayCandle ", "<VolumeBars ", "<RsiPane ", "<PeLine "];
     // Each graphic's own cell (the nearest stat cell before it) is positioned.
-    return cells.every((c) => { const i = M.page.indexOf(c); const cell = M.page.lastIndexOf('<div className="stock-stat-cell"', i); return i > 0 && cell > 0 && M.page.startsWith('<div className="stock-stat-cell" style={{ position: "relative" }}>', cell); }) &&
+    return cells.every((c) => { const i = M.page.indexOf(c); const cell = M.page.lastIndexOf('<div className="stock-stat-cell"', i); return i > 0 && cell > 0 && M.page.startsWith('<div className="stock-stat-cell" style={{ position: "relative"', cell); }) &&
       (parts.match(/aria-hidden="true" focusable="false"/g) ?? []).length === 5 && !/transform|translate\(|rotate\(|will-change/.test(parts) && /pointerEvents: "none"/.test(parts);
   },
   "the small text stays readable over the graphics: the cell's text paints above them, the small lines carry a halo (no z-index)": ({ M }) =>
