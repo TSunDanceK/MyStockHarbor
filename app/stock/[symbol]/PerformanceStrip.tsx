@@ -36,12 +36,15 @@ export default function PerformanceStrip({ strip, credit }: { strip: PerfStrip; 
       </div>
       {strip.asOfWords ? (
         <p data-fine-print style={{ margin: "8px 0 0", fontSize: "var(--fs-fine)", opacity: 0.6 }}>
-          {/* #563 COWORK #75: to the latest price in session, else to the last close. */}
+          {/* #563 COWORK #75: to the latest price in session, else to the last close.
+              "Price change only" is a method note, so it lives in each chip's tap
+              note (PRICE_ONLY), not here (#553 COWORK #145): the stamp keeps the
+              date and the credit. */}
           {strip.live
             ? strip.live.phase === "afterClose"
               ? <>To the close{strip.live.time ? `, ${strip.live.time} ET` : ""} (IEX)</>
               : <>To the last price{strip.live.time ? `, ${strip.live.time} ET` : ""} (IEX)</>
-            : <>To the close on {strip.asOfWords}</>} · price change only{credit ? <> · {credit}</> : null}
+            : <>To the close on {strip.asOfWords}</>}{credit ? <> · {credit}</> : null}
         </p>
       ) : null}
       <style>{`

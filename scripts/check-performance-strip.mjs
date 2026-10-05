@@ -95,11 +95,11 @@ const rules = {
     return S.inS.end === 777 && S.inS.live?.time === "14:32" && S.inS.asOf === "2026-10-02" &&
       c.note.includes("to $777.00 (last price, 14:32 ET)") && near(c.spyPct, ((555 - at(SPY, "2025-10-02")) / at(SPY, "2025-10-02")) * 100) &&
       chip(S.noSpyToday, "1Y").spyPct === null && /no price for the same day/.test(chip(S.noSpyToday, "1Y").spyReason) &&
-      /To the last price, 14:32 ET \(IEX\) · price change only/.test(visibleText(renderToStaticMarkup(React.createElement(M.PerformanceStrip, { strip: S.inS }))));
+      /To the last price, 14:32 ET \(IEX\)/.test(visibleText(renderToStaticMarkup(React.createElement(M.PerformanceStrip, { strip: S.inS }))));
   },
   "after the close: the day's final IEX price until the nightly job stores the day (#77)": ({ S, chip, M }) =>
     S.after.live?.phase === "afterClose" && S.after.end === 777 && chip(S.after, "1M").note.includes("to $777.00 (close, 16:00 ET (IEX))") &&
-    /To the close, 16:00 ET \(IEX\) · price change only/.test(visibleText(renderToStaticMarkup(React.createElement(M.PerformanceStrip, { strip: S.after })))),
+    /To the close, 16:00 ET \(IEX\)/.test(visibleText(renderToStaticMarkup(React.createElement(M.PerformanceStrip, { strip: S.after })))),
   "out of session: the last close; a stale partial, a Saturday and a holiday never count": ({ S, chip }) =>
     [S.sat, S.staleMon, S.pre].every((x) => x.live === null && x.end === at(STOCK, "2026-10-01") && x.asOf === "2026-10-01" && /\(close, Thu 1 Oct 2026\)/.test(chip(x, "1M").note)) &&
     S.hol.live === null && S.hol.asOf === "2026-09-04",
@@ -129,10 +129,12 @@ const rules = {
   "on a page that is the S&P 500 (#563 COWORK #90): no line or note against it, the same changes": ({ self, full, selfText }) =>
     self.benchmark === false && full.benchmark === true && !/S&P 500|SPY/.test(selfText) &&
     self.chips.every((c, i) => c.pct === full.chips[i].pct && c.spyPct === null && c.diffPts === null && !/S&P 500|SPY/.test(c.note)),
-  "the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once": ({ fullHtml, fullText }) =>
+  "the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once": ({ fullHtml, fullText, M }) =>
     (fullHtml.match(/class="perfChip"/g) ?? []).length === 6 && /▲ \+\d+\.\d%/.test(fullText) && !/▼/.test(fullText) &&
     /data-tone="up"/.test(fullHtml) && (fullHtml.match(/class="perfSpy"[^>]*>[\d.]+ pts (ahead of|behind) the S&amp;P 500</g) ?? []).length === 6 &&
-    /To the close on Fri 2 Oct 2026 · price change only/.test(fullText),
+    // The stamp keeps the date and credit; "price change only" is in each
+    // chip's tap note instead (#553 COWORK #145).
+    /To the close on Fri 2 Oct 2026/.test(fullText) && !/price change only/i.test(fullText.replace(M.PRICE_ONLY, "")),
   "a tap note per chip: the exact dates and closes, hedged": ({ full, fullHtml, M }) =>
     full.chips.every((c) => c.note.includes(M.PRICE_ONLY)) &&
     /^From \$[\d,.]+ \(close, Thu 2 Oct 2025\) to \$[\d,.]+ \(close, Fri 2 Oct 2026\): \+\d+\.\d%\. The S&P 500 \(SPY\) moved \+\d+\.\d% over the same dates: [\d.]+ pts (ahead of|behind) the S&P 500\./.test(full.chips[3].note) &&
@@ -177,6 +179,7 @@ const mutants = [
   ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("c.diffPts !== null ? spyWords(c.diffPts) :", "c.diffPts !== null ? \"\" :")],
   ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("<>To the close on {strip.asOfWords}</>", "<>{strip.asOfWords}</>")],
   ["a tap note per chip: the exact dates and closes, hedged", "c", (s) => s.replace("reason={c.note}", "reason={null}")],
+  ["the strip: six chips, an arrow and a sign beside the colour, the S&P line, closes stated once", "c", (s) => s.replace("{credit ? <> · {credit}</> : null}\n        </p>", " · price change only{credit ? <> · {credit}</> : null}\n        </p>")],
   ["a tap note per chip: the exact dates and closes, hedged", "l", (s) => s.replace("return { key: p.key, pct, reason: null, from, spyPct, spyReason, diffPts, note: `${head}${vs} ${PRICE_ONLY}` };", "return { key: p.key, pct, reason: null, from, spyPct, spyReason, diffPts, note: `${head}${vs}` };")],
   ["nothing reads as advice; the credit only when passed", "c", (s) => s.replace("{credit ? <> · {credit}</> : null}", "{\" · Tiingo credit\"}")],
 ];
