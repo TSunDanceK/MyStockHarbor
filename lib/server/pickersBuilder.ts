@@ -11,7 +11,7 @@
 // CACHING_REFRESH_ARCHITECTURE_PLAN.md (project doc) for the full context.
 
 import { Redis } from "@upstash/redis";
-import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { BULK_READ_CACHE, PAGE_READ_CACHE } from "./redisCacheMode";
 import { readMarketState } from "./marketState";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../ta/divergence";
@@ -463,6 +463,12 @@ const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
+// The payload's chunk MGET (~4 MB chunks by design) takes the 20 s deadline;
+// everything else here stays on the page's 6 s (#553 CODE-B #144).
+const bulkRedis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(BULK_READ_CACHE)
+    : null;
 
 /* ----------------------------- caching ------------------------------ */
 
@@ -805,7 +811,7 @@ async function readPickersV10(manifestKey = PICKERS_MANIFEST_KEY): Promise<Cache
   if (!Array.isArray(manifest.chunkKeys) || !manifest.head) return null;
 
   const chunks = manifest.chunkKeys.length
-    ? ((await redis.mget<PickerItem[][]>(...manifest.chunkKeys)) ?? [])
+    ? ((await (bulkRedis ?? redis).mget<PickerItem[][]>(...manifest.chunkKeys)) ?? [])
     : [];
 
   const records: PickerItem[] = [];
@@ -1016,7 +1022,7 @@ function logPayloadWriteSize(entry: CachedPickersPayload, label = "full") {
  *   AND SO DOES Promise.all, WHICH THE BRIEF DID NOT ANTICIPATE.
  *   @upstash/redis sets `enableAutoPipelining` to TRUE by default
  *   (chunk-K7RP6Y36.mjs:4488) and nothing in this project turns it off --
- *   PAGE_READ_CACHE only sets `cache`. Measured against the installed client
+ *   PAGE_READ_CACHE sets only `cache` and a request deadline. Measured against the installed client
  *   by stubbing fetch: three SEQUENTIALLY AWAITED sets produce three request
  *   bodies; three CONCURRENT sets produce ONE body containing all three.
  *   Concurrency here is a pipeline with a different name.

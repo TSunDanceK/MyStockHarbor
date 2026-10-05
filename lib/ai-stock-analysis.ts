@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_TIMEOUT_OPTS } from "./server/redisCacheMode";
 
 export type AiStockAnalysis = {
   symbol: string;
@@ -15,7 +16,7 @@ export type AiStockAnalysis = {
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_TIMEOUT_OPTS)
     : null;
 
 const REDIS_PREFIX = "msh:ai:stock-analysis:v2";

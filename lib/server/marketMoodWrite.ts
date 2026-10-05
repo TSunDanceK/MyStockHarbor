@@ -19,9 +19,10 @@ import { parseTiingoUniverse } from "./tiingoUniverse";
 import { toDashed } from "../symbolSpellings.mjs";
 import { uniqueEtfs } from "../curatedSymbols";
 import { POOL_BENCHMARK_ETFS } from "./pricePool";
+import { JOB_REDIS_OPTS } from "./redisCacheMode";
 
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv(JOB_REDIS_OPTS) : null;
 
 /** The ETFs kept out of the stock tallies (52-week highs/lows, up/down volume). */
 export const MOOD_EXCLUDE: readonly string[] = [...uniqueEtfs, ...POOL_BENCHMARK_ETFS];
