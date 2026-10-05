@@ -225,6 +225,31 @@ for (const pg of PAGES) {
       }).concat(document.querySelectorAll(".stock-stat-cell svg[class^='hs']").length ? [] : ["(no graphics rendered)"]));
       if (out.length) { console.log(`  ${width}px: header graphics outside their cell: ${out.join(", ")} — FAIL`); failures++; }
       else console.log(`  ${width}px: every header graphic inside its cell`);
+      // Small text over a graphic carries a halo (#563 COWORK #114); a mutant strips the halos and must be caught.
+      const bare = async (strip) => {
+        if (strip) await page.addStyleTag({ content: ".stock-stat-cell * { text-shadow: none !important; }" });
+        return page.evaluate(() => {
+          const out = [];
+          for (const cell of document.querySelectorAll(".stock-stat-cell")) {
+            const gs = [...cell.querySelectorAll("svg[class^='hs']")].map((g) => g.getBoundingClientRect());
+            for (const el of cell.querySelectorAll("*")) {
+              if (el.closest("svg") || ![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+              const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+              if (parseFloat(cs.fontSize) >= 16 || !r.width) continue;
+              const hit = gs.some((g) => r.left < g.right && r.right > g.left && r.top < g.bottom && r.bottom > g.top);
+              if (hit && cs.textShadow === "none") out.push(el.textContent.trim().slice(0, 30));
+            }
+          }
+          return out;
+        });
+      };
+      const unhaloed = await bare(false);
+      if (unhaloed.length) { console.log(`  ${width}px: small text over a graphic without a halo: ${unhaloed.join(" | ")} — FAIL`); failures++; }
+      else {
+        const caught = (await bare(true)).length > 0;
+        console.log(`  ${width}px: small text over the graphics carries a halo${caught ? " (mutant without halos: caught)" : " — the mutant found no text over a graphic, FAIL"}`);
+        if (!caught) failures++;
+      }
       await page.close();
     }
   }

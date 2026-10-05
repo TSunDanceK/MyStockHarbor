@@ -9,7 +9,6 @@ import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
 import { DayCandle, DayRange, PeLine, PriceChange, PriceSpark, RsiPane, TrendSpark, VolumeBars } from "./HeaderStripParts";
-import { sectorMedianOf } from "@/lib/headerStrip";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import ConfluenceCard from "./ConfluenceCard";
@@ -1073,8 +1072,8 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </div>
               {!valuationLoading && valuation ? (
                 <div className="stock-stat-cell" style={{ position: "relative" }}>
-                  {/* The median is read from A's line ("… sector median (21.5×)"); no quartiles exist, so no band. */}
-                  {valuation.peRatio != null && valuation.peSector ? <PeLine pe={valuation.peRatio} median={sectorMedianOf(valuation.peSector.text)} /> : null}
+                  {/* A's numeric sector median (#781); no quartiles exist, so no band. */}
+                  {valuation.peRatio != null && valuation.peSector ? <PeLine pe={valuation.peRatio} median={valuation.peSector.median} /> : null}
                   <div className="stock-stat-label">P/E ({valuation.peBasis ?? "TTM"})</div>
                   <div className="stock-stat-value">
                     {valuation.peRatio != null
@@ -1537,6 +1536,12 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         .stock-stat-label { font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; opacity: 0.55; }
         .stock-stat-value { font-size: 1.375rem; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; line-height: 1; }
         .stock-stat-sub { font-size: var(--fs-label); opacity: 0.48; margin-top: 3px; }
+        /* THE SMALL TEXT OVER THE MINI-GRAPHICS (#563 COWORK #114): the cell's text paints above its
+           graphic (positioned, after it in the DOM; no z-index, no transform: the P/E cell holds A's
+           ReasonedValue), and the small lines carry a halo in the card's colour, so a line passing
+           behind never cuts a letter. */
+        .stock-stat-cell > :not(svg) { position: relative; }
+        .stock-stat-label, .stock-stat-sub, .hsRange { text-shadow: 0 0 2px #080d18, 0 0 2px #080d18, 0 0 4px #080d18; }
         .stock-earnings-cell { flex: 2.2 1 0 !important; min-width: 180px; }
 
         @media (max-width: 640px) {

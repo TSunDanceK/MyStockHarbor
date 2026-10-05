@@ -65,7 +65,7 @@ const yOn = (v: number, lo: number, hi: number, h: number) => (hi > lo ? h - ((v
  */
 export const MIN_BODY_PCT = 2;
 export function dayCandle(q: { open?: number | null; high?: number | null; low?: number | null; last?: number | null; yearLow?: number | null; yearHigh?: number | null }):
-  { wickTop: number; wickBottom: number; bodyTop: number; bodyBottom: number; up: boolean; onYear: boolean } | null {
+  { wickTop: number; wickBottom: number; bodyTop: number; bodyBottom: number; lastY: number; up: boolean; onYear: boolean } | null {
   const { high, low, last } = q;
   if (!fin(high) || !fin(low) || !fin(last) || high < low) return null;
   const open = fin(q.open) ? q.open : last;
@@ -74,7 +74,7 @@ export function dayCandle(q: { open?: number | null; high?: number | null; low?:
   const y = (v: number) => (hi > lo ? ((hi - v) / (hi - lo)) * 100 : 50);
   let bodyTop = y(Math.max(open, last)), bodyBottom = y(Math.min(open, last));
   if (bodyBottom - bodyTop < MIN_BODY_PCT) { const mid = (bodyTop + bodyBottom) / 2; bodyTop = mid - MIN_BODY_PCT / 2; bodyBottom = mid + MIN_BODY_PCT / 2; }
-  return { wickTop: y(high), wickBottom: y(low), bodyTop, bodyBottom, up: last >= open, onYear };
+  return { wickTop: y(high), wickBottom: y(low), bodyTop, bodyBottom, lastY: y(last), up: last >= open, onYear };
 }
 
 /**
@@ -103,11 +103,6 @@ export function rsiPane(series: readonly (number | null)[], n = 60, h = 30): { p
   return { points: pts.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" "), y70: yOn(70, 0, 100, h), y30: yOn(30, 0, 100, h), last: { x: end.x, y: end.y, v: v[v.length - 1] } };
 }
 
-/** The sector median from A's line, "Above sector median (21.5×)" → 21.5; null when the text has none. */
-export function sectorMedianOf(text: string | null | undefined): number | null {
-  const m = /sector median \((\d+(?:\.\d+)?)×\)/.exec(text ?? "");
-  return m ? Number(m[1]) : null;
-}
 
 /**
  * The P/E against its sector median on a number line from 0 (both as % of the

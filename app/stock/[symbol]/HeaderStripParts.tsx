@@ -64,17 +64,23 @@ export function TrendSpark({ closes, colour }: { closes: readonly number[]; colo
 
 const behind: CSSProperties = { position: "absolute", left: 10, right: 10, bottom: 10, width: "calc(100% - 20px)", height: "55%", pointerEvents: "none" };
 
-/** Today's candle (wick low–high, body open–last) on a faint 52-week track, at the cell's right edge. */
+/**
+ * Today's candle on a faint 52-week track, in a 26 px column at the cell's right
+ * edge starting below the label (#563 COWORK #114: visible at a glance): a 6 px
+ * track, an 8 px body (a 1 px stroke keeps a flat day at least ~2 px), a
+ * 1.25 px wick and a small tick at the last price.
+ */
 export function DayCandle({ open, high, low, last, yearLow, yearHigh }: { open?: number | null; high?: number | null; low?: number | null; last?: number | null; yearLow?: number | null; yearHigh?: number | null }) {
   const c = dayCandle({ open, high, low, last, yearLow, yearHigh });
   if (!c) return null;
   const colour = c.up ? UP : DOWN;
   return (
-    <svg className="hsCandle" data-up={c.up ? "1" : "0"} aria-hidden="true" focusable="false" viewBox="0 0 10 100" preserveAspectRatio="none"
-      style={{ position: "absolute", right: 12, top: 12, bottom: 12, width: 10, height: "calc(100% - 24px)", pointerEvents: "none" }}>
-      {c.onYear ? <rect className="hsYear" x={3.5} y={0} width={3} height={100} rx={1.5} fill="rgba(255,255,255,0.10)" /> : null}
-      <line className="hsWick" x1={5} x2={5} y1={c.wickTop} y2={c.wickBottom} stroke={colour} strokeOpacity={0.75} strokeWidth={1} vectorEffect="non-scaling-stroke" />
-      <rect className="hsBody" x={1.5} y={c.bodyTop} width={7} height={c.bodyBottom - c.bodyTop} fill={colour} fillOpacity={0.8} />
+    <svg className="hsCandle" data-up={c.up ? "1" : "0"} aria-hidden="true" focusable="false" viewBox="0 0 26 100" preserveAspectRatio="none"
+      style={{ position: "absolute", right: 10, top: "calc(12px + 1.5rem)", bottom: 12, width: 26, height: "calc(100% - 24px - 1.5rem)", opacity: 0.7, pointerEvents: "none" }}>
+      {c.onYear ? <rect className="hsYear" x={10} y={0} width={6} height={100} rx={3} fill="rgba(255,255,255,0.14)" /> : null}
+      <line className="hsWick" x1={13} x2={13} y1={c.wickTop} y2={c.wickBottom} stroke={colour} strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
+      <rect className="hsBody" x={9} y={c.bodyTop} width={8} height={c.bodyBottom - c.bodyTop} fill={colour} stroke={colour} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      <line className="hsLast" x1={5} x2={21} y1={c.lastY} y2={c.lastY} stroke="rgba(241,245,249,0.85)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
@@ -128,13 +134,18 @@ export function PeLine({ pe, median }: { pe: number | null | undefined; median: 
   );
 }
 
-/** The last 5 sessions' closes behind the price, with a dashed line at the previous close. Daily closes only, no intraday line. */
+/**
+ * The last 5 sessions' closes with a dashed line at the previous close, in the
+ * cell's right part level with the big number, clear of the change line below
+ * it (#563 COWORK #114). Daily closes only, no intraday line.
+ */
 export function PriceSpark({ closes, prevClose }: { closes: readonly number[]; prevClose: number | null | undefined }) {
   const p = priceSpark(closes, prevClose);
   if (!p) return null;
   const colour = p.up === null ? "rgba(203,213,225,0.8)" : p.up ? UP : DOWN;
   return (
-    <svg className="hsPriceSpark" aria-hidden="true" focusable="false" viewBox="0 0 100 30" preserveAspectRatio="none" style={{ ...behind, opacity: 0.32 }}>
+    <svg className="hsPriceSpark" aria-hidden="true" focusable="false" viewBox="0 0 100 30" preserveAspectRatio="none"
+      style={{ position: "absolute", left: "52%", right: 10, top: "calc(12px + 1.35rem)", height: "1.5rem", width: "calc(48% - 10px)", opacity: 0.4, pointerEvents: "none" }}>
       {p.prevY !== null ? <line className="hsPrev" x1={0} x2={100} y1={p.prevY} y2={p.prevY} stroke="rgba(241,245,249,0.8)" strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" /> : null}
       <polyline points={p.points} fill="none" stroke={colour} strokeWidth={1.75} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
     </svg>

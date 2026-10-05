@@ -37,8 +37,8 @@ const html = (M, C, p) => renderToStaticMarkup(React.createElement(M[C], p));
 const PE_BEFORE = "{!valuationLoading && valuation ? (\n                <div className=\"stock-stat-cell\">\n                  <div className=\"stock-stat-label\">P/E ({valuation.peBasis ?? \"TTM\"})</div>\n                  <div className=\"stock-stat-value\">\n                    {valuation.peRatio != null\n                      ? formatValuationMultiple(valuation.peRatio)\n                      : <ReasonedValue text={valuation.words?.peRatio ?? \"—\"} reason={valuation.reasons?.peRatio} />}\n                  </div>\n                  {/* P/E VS ITS SECTOR (#552 COWORK #147 §2): the glyph and the\n                      words carry it, in the page's ordinary ink (a comparison,\n                      not a verdict); the note names the peers and the date. */}\n                  <div className=\"stock-stat-sub\" data-pe-sector={valuation.peSector ? \"\" : undefined}>\n                    {valuation.peSector\n                      ? <><span aria-hidden=\"true\">{valuation.peSector.glyph} </span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></>\n                      : \"See valuation ↓\"}\n                  </div>\n                </div>\n              ) : null}";
 // #563 COWORK #112 adds a decorative P/E line inside the cell (and positions the cell); the tile otherwise stays as it was.
 const PE_DECOR = (s) => s.replace('<div className="stock-stat-cell" style={{ position: "relative" }}>', '<div className="stock-stat-cell">')
-  .replace(/\n {18}\{\/\* The median is read from A's line[^\n]*\*\/\}\n {18}\{valuation\.peRatio != null && valuation\.peSector \? <PeLine pe=\{valuation\.peRatio\} median=\{sectorMedianOf\(valuation\.peSector\.text\)\} \/> : null\}/, "");
-const PE_BLOCK = /\{!valuationLoading && valuation \? \(\s*<div className="stock-stat-cell"(?: style=\{\{ position: "relative" \}\})?>(?:\s*\{\/\* The median is read[^\n]*\*\/\}\s*\{valuation\.peRatio != null[^\n]*)?\s*<div className="stock-stat-label">P\/E \(\{valuation\.peBasis \?\? "TTM"\}\)<\/div>[\s\S]*?: "See valuation ↓"\}\s*<\/div>\s*<\/div>\s*\) : null\}/;
+  .replace(/\n {18}\{\/\* A's numeric sector median[^\n]*\*\/\}\n {18}\{valuation\.peRatio != null && valuation\.peSector \? <PeLine pe=\{valuation\.peRatio\} median=\{valuation\.peSector\.median\} \/> : null\}/, "");
+const PE_BLOCK = /\{!valuationLoading && valuation \? \(\s*<div className="stock-stat-cell"(?: style=\{\{ position: "relative" \}\})?>(?:\s*\{\/\* A's numeric sector median[^\n]*\*\/\}\s*\{valuation\.peRatio != null[^\n]*)?\s*<div className="stock-stat-label">P\/E \(\{valuation\.peBasis \?\? "TTM"\}\)<\/div>[\s\S]*?: "See valuation ↓"\}\s*<\/div>\s*<\/div>\s*\) : null\}/;
 
 const RULES = {
   "the arrow and the sign agree (▲ with +, ▼ with −, none when unchanged), with spoken words": ({ M }) => {
@@ -65,6 +65,9 @@ const RULES = {
       flat.up && flat.bodyBottom - flat.bodyTop >= M.MIN_BODY_PCT - 1e-9 && flat.wickTop === flat.wickBottom && !pre.onYear && pre.wickTop === 0 && pre.wickBottom === 100 &&
       M.dayCandle({ high: null, low: 1, last: 1 }) === null &&
       /<svg class="hsCandle" data-up="0" aria-hidden="true"/.test(svg) && /class="hsBody"[^>]*fill="#ef4444"/.test(svg) && /class="hsYear"/.test(svg) &&
+      // A column wide enough to read (#114): 26 px, starting below the label; a 6 px track, an 8 px body, a last-price tick.
+      /viewBox="0 0 26 100"/.test(svg) && /width:26px/.test(svg) && /top:calc\(12px \+ 1\.5rem\)/.test(svg) && /class="hsYear" x="10" y="0" width="6"/.test(svg) &&
+      /class="hsBody" x="9" y="[\d.]+" width="8"/.test(svg) && /class="hsLast"/.test(svg) && Math.abs(down.lastY - 78) < 1e-9 &&
       /<DayCandle open=\{quote\?\.open\} high=\{quote\?\.dayHigh\} low=\{quote\?\.dayLow\} last=\{quote\?\.price\} yearLow=\{quote\?\.yearLow\} yearHigh=\{quote\?\.yearHigh\} \/>/.test(M.page) &&
       /<DayRange low=\{quote\?\.dayLow\} high=\{quote\?\.dayHigh\} last=\{quote\?\.price\} \/>\s*<div className="stock-stat-sub">52wk <span style=\{\{ whiteSpace: "nowrap" \}\}>\{formatRange\(quote\?\.yearLow, quote\?\.yearHigh\)\}<\/span><\/div>/.test(M.page);
   },
@@ -108,14 +111,16 @@ const RULES = {
     const svgB = html(M, "PeLine", { pe: 20, median: 30 }), svgA = html(M, "PeLine", { pe: 40, median: 30 });
     return below.below && !above.below && Math.abs(below.median - 80) < 1e-9 && Math.abs(below.stock - 53.333333333) < 1e-6 && Math.abs(above.stock - 80) < 1e-9 && Math.abs(near.stock - near.median) < 1 &&
       M.peLine(-5, 30) === null && M.peLine(null, 30) === null && M.peLine(20, null) === null &&
-      M.sectorMedianOf("Above sector median (21.5×)") === 21.5 && M.sectorMedianOf("Near sector median (8×)") === 8 && M.sectorMedianOf("See valuation") === null &&
+      !("sectorMedianOf" in M) &&
       /class="hsPeGap"[^>]*fill="#22c55e"/.test(svgB) && /class="hsPeGap"[^>]*fill="#f59e0b"/.test(svgA) && /class="hsPeMedian" x1="80" x2="80"/.test(svgB) && /aria-hidden="true"/.test(svgB) &&
-      /\{valuation\.peRatio != null && valuation\.peSector \? <PeLine pe=\{valuation\.peRatio\} median=\{sectorMedianOf\(valuation\.peSector\.text\)\} \/> : null\}/.test(M.page);
+      /\{valuation\.peRatio != null && valuation\.peSector \? <PeLine pe=\{valuation\.peRatio\} median=\{valuation\.peSector\.median\} \/> : null\}/.test(M.page);
   },
   "price: the last 5 sessions' closes behind the price, a dashed line at the previous close, daily closes only": ({ M }) => {
     const p = M.priceSpark([1, 2, 3, 4, 5, 6, 7], 6), svg = html(M, "PriceSpark", { closes: [1, 2, 3, 4, 5, 6, 7], prevClose: 6 });
     return p.points === "0.00,30.00 25.00,22.50 50.00,15.00 75.00,7.50 100.00,0.00" && p.prevY === 7.5 && p.up === true && M.priceSpark([5, 4], 6).up === false &&
       M.priceSpark([5], 4) === null && /class="hsPrev"[^>]*stroke-dasharray="3 3"/.test(svg) && /stroke="#22c55e"/.test(svg) && /aria-hidden="true"/.test(svg) &&
+      // In the cell's right part, level with the big number, clear of the change line (#114).
+      /left:52%/.test(svg) && /top:calc\(12px \+ 1\.35rem\)/.test(svg) && /height:1\.5rem/.test(svg) &&
       /<PriceSpark closes=\{closes\} prevClose=\{quote\?\.previousClose\} \/>/.test(M.page);
   },
   "every mini-graphic is decorative (aria-hidden, no pointer events), absolutely placed in a positioned cell, with no transform": ({ M }) => {
@@ -125,6 +130,10 @@ const RULES = {
     return cells.every((c) => { const i = M.page.indexOf(c); const cell = M.page.lastIndexOf('<div className="stock-stat-cell"', i); return i > 0 && cell > 0 && M.page.startsWith('<div className="stock-stat-cell" style={{ position: "relative" }}>', cell); }) &&
       (parts.match(/aria-hidden="true" focusable="false"/g) ?? []).length === 5 && !/transform|translate\(|rotate\(|will-change/.test(parts) && /pointerEvents: "none"/.test(parts);
   },
+  "the small text stays readable over the graphics: the cell's text paints above them, the small lines carry a halo (no z-index)": ({ M }) =>
+    /\.stock-stat-cell > :not\(svg\) \{ position: relative; \}/.test(M.raw) &&
+    /\.stock-stat-label, \.stock-stat-sub, \.hsRange \{ text-shadow: 0 0 2px #080d18, 0 0 2px #080d18, 0 0 4px #080d18; \}/.test(M.raw) &&
+    !/\.stock-stat-cell[^{]*\{[^}]*z-index/.test(M.raw),
 };
 
 const src = { lib: read(LIB), parts: read(PARTS), page: read(PAGE) };
@@ -158,7 +167,13 @@ const MUTANTS = [
   [R[7], "parts", (s) => s.replace('fill={l.below ? UP : "#f59e0b"}', 'fill={l.below ? "#f59e0b" : UP}')],
   [R[8], "lib", (s) => s.replace("prevY: fin(prevClose) ? yOn(prevClose, lo, hi, h) : null", "prevY: null")],
   [R[8], "lib", (s) => s.replace("const v = closes.filter(fin).slice(-n);\n  if (v.length < 2) return null;\n  const lo = Math.min(...v, fin(prevClose)", "const v = closes.filter(fin).slice(-20);\n  if (v.length < 2) return null;\n  const lo = Math.min(...v, fin(prevClose)")],
-  [R[9], "parts", (s) => s.replace('style={{ position: "absolute", right: 12, top: 12, bottom: 12, width: 10,', 'style={{ transform: "translateZ(0)", position: "absolute", right: 12, top: 12, bottom: 12, width: 10,')],
+  [R[10], "page", (s) => s.replace("        .stock-stat-cell > :not(svg) { position: relative; }\n", "")],
+  [R[10], "page", (s) => s.replace(".stock-stat-label, .stock-stat-sub, .hsRange { text-shadow:", ".stock-stat-label, .hsRange { text-shadow:")],
+  [R[1], "parts", (s) => s.replace('viewBox="0 0 26 100" preserveAspectRatio="none"', 'viewBox="0 0 10 100" preserveAspectRatio="none"').replace("bottom: 12, width: 26,", "bottom: 12, width: 10,")],
+  [R[1], "parts", (s) => s.replace('top: "calc(12px + 1.5rem)", bottom: 12', "top: 12, bottom: 12")],
+  [R[8], "parts", (s) => s.replace('style={{ position: "absolute", left: "52%", right: 10, top: "calc(12px + 1.35rem)", height: "1.5rem", width: "calc(48% - 10px)",', 'style={{ ...behind,')],
+  [R[7], "page", (s) => s.replace("median={valuation.peSector.median}", "median={valuation.peRatio}")],
+  [R[9], "parts", (s) => s.replace('style={{ position: "absolute", right: 10, top: "calc(12px + 1.5rem)",', 'style={{ transform: "translateZ(0)", position: "absolute", right: 10, top: "calc(12px + 1.5rem)",')],
   [R[9], "parts", (s) => s.replace('<svg className="hsVolume" aria-hidden="true" focusable="false"', '<svg className="hsVolume" focusable="false"')],
   [R[4], "page", (s) => s.replace(': "See valuation ↓"}', ': "See the valuation section"}')],
   [R[6], "page", (s) => s.replace("</div>{/* end hero box */}", "{performance ? <PerformanceStrip strip={performance} /> : null}</div>{/* end hero box */}")],
