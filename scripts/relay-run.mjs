@@ -1376,6 +1376,8 @@ const TASKS = {
   // for the dividend and picker-ratio columns, run through the shipped picker
   // functions. GET/MGET/SMEMBERS/HMGET only; SEC ≤ 8/s (a ~200 cold sample + spot checks).
   "write-sec-picker-inputs-census": { script: "scripts/sec-picker-inputs-census.mjs", args: () => [], writes: true },
+  // Its follow-up: which concepts close the dividend and EV gaps (one companyfacts per gap symbol, ≤ 8/s).
+  "write-sec-picker-inputs-followup": { script: "scripts/sec-picker-inputs-census.mjs", args: () => [], writes: true, env: { FOLLOWUP: "1" } },
 };
 
 const argv = process.argv.slice(2);

@@ -198,22 +198,6 @@ async function readSets(symbols) {
   return { sets: out, hashMiss };
 }
 
-// ── 1. The Pickers universe ───────────────────────────────────────────────
-const pickers = ((await get(PICKERS_SYMBOLS_KEY)) ?? []).map(String);
-const p = await readSets(pickers);
-const rows1 = [...p.sets.values()].map(measure);
-commands++;
-const hashRows = pickers.length ? await redis.hmget(PICKERS_SEC_KEY, ...pickers) : {};
-const withRow = pickers.filter((s) => hashRows?.[s] != null).length;
-console.log(`## Pickers universe (${PICKERS_SYMBOLS_KEY}): ${pickers.length} symbols · stored set ${p.sets.size} · field-hash miss ${p.hashMiss} · no set ${pickers.length - p.sets.size - p.hashMiss} · row in the pickers SEC hash ${withRow}`);
-table("Pickers universe, stored sets", rows1);
-
-// ── 2. Every stored set ───────────────────────────────────────────────────
-commands++;
-const indexed = (await redis.smembers(SEC_FACTS_INDEX_KEY)).map(String);
-const all = await readSets(indexed);
-table("every stored set (fact-set index)", [...all.sets.values()].map(measure));
-
 // ── SEC pacing, shared by 3 and 4 ─────────────────────────────────────────
 const GAP_MS = 125; // 8/s
 let last = 0, secRequests = 0;
@@ -243,6 +227,91 @@ const rawLatestFy = (facts, [ns, concept]) => {
   fy.sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : (a.filed < b.filed ? 1 : -1)));
   return fy[0] ? { val: fy[0].val, end: fy[0].end, unit: fy[0].unit, form: fy[0].form } : { val: null, end: null, any: all.length };
 };
+
+// ── FOLLOW-UP (FOLLOWUP=1): which concepts would close the two biggest gaps ─
+// Over the Pickers universe's stored sets: (a) payers by tag with no Div ($)
+// cell, does companyfacts carry a FRESH CommonStockDividendsPerShareCashPaid
+// (filed per share) or only cash paid; (b) the EV gaps, which debt and cash
+// concepts the filer tags at its stored balance-sheet date. One companyfacts
+// per symbol, paced at ≤ 8/s. Nothing written.
+if (process.env.FOLLOWUP === "1") {
+  const pk = ((await get(PICKERS_SYMBOLS_KEY)) ?? []).map(String);
+  const st = await readSets(pk);
+  const DEBT = ["DebtCurrent", "LongTermDebtCurrent", "ShortTermBorrowings", "CommercialPaper", "LinesOfCreditCurrent", "NotesPayableCurrent",
+    "LongTermDebt", "LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebtAndCapitalLeaseObligationsCurrent",
+    "LongTermNotesPayable", "ConvertibleNotesPayable", "ConvertibleDebtNoncurrent", "SeniorNotes", "UnsecuredDebt", "SecuredDebt",
+    "OtherLongTermDebtNoncurrent", "LongTermLineOfCredit", "DebtInstrumentCarryingAmount", "DebtLongtermAndShorttermCombinedAmount",
+    "FinanceLeaseLiability", "FinanceLeaseLiabilityCurrent", "FinanceLeaseLiabilityNoncurrent", "OperatingLeaseLiability"];
+  const CASH = ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", "Cash", "CashAndDueFromBanks", "CashEquivalentsAtCarryingValue"];
+  const at = (facts, concept, end) => {
+    const units = facts?.facts?.["us-gaap"]?.[concept]?.units;
+    if (!units) return { any: false, atEnd: null };
+    const arr = Object.values(units).flat();
+    const hit = arr.find((f) => f.end === end && !f.start);
+    return { any: true, atEnd: hit ? hit.val : null };
+  };
+  const divGap = [], evGap = [];
+  for (const [s, set] of st.sets) {
+    const r = measure(set);
+    if (r.tax !== "gaap" || !r.usd) continue;
+    if (r.payerByTag && !r.dpsTtm) divGap.push([s, set]);
+    if (r.evMissing.length && !r.evInputs) evGap.push([s, set, r.evMissing]);
+  }
+  const need = new Map([...divGap, ...evGap].map(([s, set]) => [s, set]));
+  const facts = new Map();
+  for (const [s, set] of need) {
+    const cik = String(set.cik ?? cikForSymbol(s)).padStart(10, "0");
+    const r = await secGet(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`);
+    if (r.body) facts.set(s, r.body);
+  }
+  // (a) dividends
+  let cashPaidFresh = 0, cashPaidStale = 0, declaredFreshRaw = 0, neither = 0;
+  const cpSyms = [];
+  for (const [s] of divGap) {
+    const f = facts.get(s);
+    const cp = rawLatestFy(f, RAW.cashPaid), dec = rawLatestFy(f, RAW.declared);
+    if (dec?.end && fresh(dec.end)) declaredFreshRaw++;
+    if (cp?.end && fresh(cp.end)) { cashPaidFresh++; cpSyms.push(s); }
+    else if (cp?.val != null || cp?.any) cashPaidStale++;
+    else if (!(dec?.end)) neither++;
+  }
+  console.log(`\n## Follow-up (a): US-GAAP payers by tag with no Div ($) cell: ${divGap.length}`);
+  console.log(`  a FRESH FY CommonStockDividendsPerShareCashPaid: ${cashPaidFresh} · CashPaid only stale/non-FY: ${cashPaidStale} · a fresh FY Declared in companyfacts the set lacks: ${declaredFreshRaw} · no per-share dividend concept at all: ${neither}`);
+  console.log(`  CashPaid symbols: ${cpSyms.join(" ")}`);
+  // (b) EV
+  const tally = {}, cashTally = {};
+  let noDebtConceptEver = 0;
+  for (const [s, set, missing] of evGap) {
+    const f = facts.get(s);
+    const end = multipleInputs(set).balanceSheet?.asOf;
+    if (!f || !end) continue;
+    const debtHits = DEBT.filter((c) => at(f, c, end).atEnd != null);
+    if (!DEBT.some((c) => at(f, c, end).any)) noDebtConceptEver++;
+    for (const c of debtHits) tally[c] = (tally[c] ?? 0) + 1;
+    if (missing.includes("cash")) for (const c of CASH) if (at(f, c, end).atEnd != null) cashTally[c] = (cashTally[c] ?? 0) + 1;
+  }
+  console.log(`\n## Follow-up (b): US-GAAP sets with an EV input missing: ${evGap.length} · no debt concept ever tagged (likely debt-free, not provable): ${noDebtConceptEver}`);
+  console.log(`  debt concepts filed AT the stored balance-sheet date: ${Object.entries(tally).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(" · ")}`);
+  console.log(`  where cash is missing, cash concepts filed at that date: ${Object.entries(cashTally).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(" · ") || "none"}`);
+  console.log(`\nRedis commands: ${commands} · SEC requests: ${secRequests} at ≤ 8/s · nothing written`);
+  process.exit(0);
+}
+
+// ── 1. The Pickers universe ───────────────────────────────────────────────
+const pickers = ((await get(PICKERS_SYMBOLS_KEY)) ?? []).map(String);
+const p = await readSets(pickers);
+const rows1 = [...p.sets.values()].map(measure);
+commands++;
+const hashRows = pickers.length ? await redis.hmget(PICKERS_SEC_KEY, ...pickers) : {};
+const withRow = pickers.filter((s) => hashRows?.[s] != null).length;
+console.log(`## Pickers universe (${PICKERS_SYMBOLS_KEY}): ${pickers.length} symbols · stored set ${p.sets.size} · field-hash miss ${p.hashMiss} · no set ${pickers.length - p.sets.size - p.hashMiss} · row in the pickers SEC hash ${withRow}`);
+table("Pickers universe, stored sets", rows1);
+
+// ── 2. Every stored set ───────────────────────────────────────────────────
+commands++;
+const indexed = (await redis.smembers(SEC_FACTS_INDEX_KEY)).map(String);
+const all = await readSets(indexed);
+table("every stored set (fact-set index)", [...all.sets.values()].map(measure));
 
 // ── 3. The backfill sample ────────────────────────────────────────────────
 let warm = null;
