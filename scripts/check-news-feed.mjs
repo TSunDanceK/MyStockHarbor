@@ -645,8 +645,10 @@ const outsideAfter = (() => {
   while (i < storeCode.length) {
     // `after(` ALONE WOULD ALSO MATCH A DECLARATION of that identifier, which
     // scripts/check-assertion-anchors.mjs flagged on the first version of this.
-    // Anchored on the two call shapes actually used instead.
-    const nextCall = /after\((?:async )?\(\) =>/g;
+    // Anchored on the call shapes actually used instead: a bare callback, or
+    // (since #553 COWORK #146) one wrapped in boundedDeferred() so a hung write
+    // cannot hold the function open.
+    const nextCall = /after\((?:(?:async )?\(\) =>|\s*boundedDeferred\()/g;
     nextCall.lastIndex = i;
     const hit = nextCall.exec(storeCode);
     const at = hit ? hit.index : -1;
@@ -681,8 +683,8 @@ for (const [write, why] of [
 }
 check(
   "...and all three are inside an after() callback",
-  /after\(async \(\) => \{[\s\S]*?writeStored\([\s\S]*?recordRefreshStats\([\s\S]*?\}\)/.test(storeCode) &&
-    /after\(\(\) => markViewed\(/.test(storeCode),
+  /after\((?:\s*boundedDeferred\([^,]+, [^,]+, )?async \(\) => \{[\s\S]*?writeStored\([\s\S]*?recordRefreshStats\([\s\S]*?\}/.test(storeCode) &&
+    /after\((?:boundedDeferred\([^,]+, [^,]+, )?\(\) => markViewed\(/.test(storeCode),
   "not awaited AND not deferred would mean simply dropped"
 );
 
