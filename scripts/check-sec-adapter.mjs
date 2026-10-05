@@ -63,6 +63,12 @@ let src = read("lib/server/news/secProvider.ts")
   // implementation; a stub here would be a second one, and this harness's
   // whole subject is cikFor's spelling behaviour -- it would be testing the
   // stub. `export` is stripped for the same reason as the modules above.
+  // A's ticker map behind the news map (#553 COWORK #146), stubbed: this
+  // harness is about cikFor's own spelling rules, and it returns null unless a
+  // case sets globalThis.__cikForSymbol. check-news-cik-fallback.mjs runs the
+  // real resolver against the committed files.
+  .replace(/^import \{ cikForSymbol \} from "\.\.\/secColdFetch";$/m,
+    () => "const cikForSymbol = (s) => (globalThis.__cikForSymbol ? globalThis.__cikForSymbol(s) : null);")
   .replace(/^import \{[^}]*\} from "@\/lib\/symbolSpellings\.mjs";$/m,
     () => read("lib/symbolSpellings.mjs").replace(/^export /gm, ""))
   .replace("const CIK_BY_SYMBOL = cikMap as Record<string, string>;", "const CIK_BY_SYMBOL = cikMap;")
@@ -523,7 +529,8 @@ check(
     const code = readCodeOnly("lib/server/news/secProvider.ts");
     const at = code.slice(code.indexOf("async function fetchForSymbol"));
     const body = at.slice(0, 400);
-    return /const cik = cikFor\(upper\)/.test(body) && !/CIK_BY_SYMBOL\[/.test(body);
+    // newsCikFor = cikFor first, then A's map (#553 COWORK #146).
+    return /const cik = newsCikFor\(upper\)/.test(body) && !/CIK_BY_SYMBOL\[/.test(body);
   })(),
   "a normalisation the one caller bypasses is a normalisation that does nothing"
 );
