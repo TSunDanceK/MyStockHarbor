@@ -84,7 +84,9 @@ console.log("\nd. the income statement on AVAV (fixture predates any chain chang
     !t.includes(NOT_FOUND) && !/Not tagged/.test(t), t);
   check("the site's existing words are the ones used", M.EMPTY_REASONS.notCaptured === NOT_CAPTURED);
   check("other absent lines keep 'Not reported' (the shared word is unchanged)",
-    /Other operating expense Not reported/.test(t) && /Less: noncontrolling interest Not reported/.test(t));
+    // Other operating expense is above operating income, so since #552 COWORK
+    // #168 its absence is the fine-print line under the bars, in COWORK's words.
+    /Other operating expense: not reported/.test(t) && /Less: noncontrolling interest Not reported/.test(t));
   await underMutation("tag-gap copy dropped from the income statement",
     "TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED", "NOT_REPORTED",
     (mod) => card(mod, "SecIncomeStatementCard", mod.buildSecEarningsView(AVAV_NO_PRETAX)).includes(`Interest expense ${NOT_CAPTURED}`));
