@@ -117,7 +117,7 @@ check("MUTATION: the CIK-only index rule back → caught", !page.replace(ROBOTS,
 console.log("\n5. the tidy-ups (#552 COWORK #152)");
 const NEXT_GUARD = '{nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <NextReportCard outlook={nextReport} /> : null}';
 const SNAP_RULE = 'if (cold.status === "not-shown") return { ...snap, sourceNote: null };';
-const TILE_GUARD = "{snapshot.sourceNote ? <div style={earningsSourceStyle} data-fine-print=\"\">{snapshot.sourceNote}</div> : null}";
+const TILE_GUARD = "{snapshot.sourceNote ? (\n        <details data-snapshot-source=\"\" style={earningsHowStyle}>";
 const nextRule = (p) => p.includes(NEXT_GUARD) && (p.match(/<NextReportCard /g) ?? []).length === 1;
 const snapRule = (src) => src.includes(SNAP_RULE);
 check("a fund's earnings page has no next-report box; a census-named note keeps it", nextRule(readCodeOnly("app/stock/[symbol]/earnings/page.tsx")));
@@ -136,7 +136,8 @@ check("the tile prints the footer only when there is one", tileRule(tileText));
   check("MUTATION: the not-shown footer back → caught", !snapRule(snapSrc.replace(SNAP_RULE, "")));
   const Sm = await loadSnapshot((src) => {
     if (src.split(TILE_GUARD).length !== 2) throw new Error("tile guard anchor");
-    return src.replace(TILE_GUARD, "<div style={earningsSourceStyle}>{snapshot.sourceNote ?? \"Reported figures from the company's own SEC filings.\"}</div>");
+    return src.replace(TILE_GUARD, "{true ? (\n        <details data-snapshot-source=\"\" style={earningsHowStyle}>")
+      .replace("<div style={earningsHowBodyStyle}>{snapshot.sourceNote}</div>", "<div style={earningsHowBodyStyle}>{snapshot.sourceNote ?? \"Reported figures from the company's own SEC filings.\"}</div>");
   });
   const mText = (sn) => visibleText(html(React.createElement(Sm.default, { snapshot: sn, symbol: "SPY" })));
   check("MUTATION: the tile prints a footer regardless → caught", !tileRule(mText));
