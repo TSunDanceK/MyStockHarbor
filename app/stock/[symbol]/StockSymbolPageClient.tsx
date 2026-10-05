@@ -4,7 +4,7 @@ import { EstimateKey } from "@/app/components/EstimateKey";
 import type { EstimateMark } from "@/app/components/estimateMark";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
@@ -30,6 +30,8 @@ import DilutionHistory, {
 import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
 import { dailyReturnBars, monthlyReturnBars, weeklyReturnBars } from "@/lib/closeReturns";
 import ShareButton from "@/app/components/ShareButton";
+import { STRENGTH_CSS, StrengthNote, StrengthPill, useStrengthNote } from "./StrengthBadge";
+import type { StrengthBadge } from "@/lib/strengthBadge";
 
 type Quote = {
   symbol: string;
@@ -180,6 +182,8 @@ type StockSymbolPageClientProps = {
   historyProvider?: string;
   /** The performance strip (#563 COWORK #69), computed server-side from the full series. */
   performance?: PerfStrip;
+  /** The strength badge (#563 COWORK #105), scored server-side from the same series; absent off Tiingo. */
+  strength?: StrengthBadge | null;
   /** The server's render time (#563 COWORK #75/#76), for "is today's partial bar in session". */
   renderedAt?: number;
 };
@@ -736,7 +740,13 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, performance, renderedAt }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, performance, strength, renderedAt }: StockSymbolPageClientProps) {
+  // THE STRENGTH BADGE (#563 COWORK #105): two copies, one shown (left of Share; under the ticker on a phone).
+  const strengthTop = useStrengthNote();
+  const strengthUnder = useStrengthNote();
+  const strengthTopRow = useRef<HTMLDivElement | null>(null);
+  const strengthUnderRow = useRef<HTMLDivElement | null>(null);
+  const strengthCredit = historyProvider === "tiingo" ? historyCredit : undefined;
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   // Whose bars the chart is showing: the seed's provider, or what the client
   // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
@@ -996,18 +1006,29 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         {/* -- Page header -------------------------------------------- */}
         <header style={{ paddingTop: 24, paddingBottom: 4 }}>
           <div style={stockHeroBoxStyle}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div ref={strengthTopRow} data-strength-row style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span style={stockDeskTagStyle}>Stock Analysis</span>
             <Link href="/pickers" style={{ fontSize: "var(--fs-label)", fontWeight: 600, color: "rgba(148,163,184,0.65)", textDecoration: "none" }}>← Pickers</Link>
-            <div style={{ marginLeft: "auto" }}>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              {strength ? <StrengthPill s={strengthTop} badge={strength} place="top" /> : null}
               <ShareButton url={shareUrl} title={shareTitle} text={shareText} />
             </div>
           </div>
+          {strength ? <StrengthNote s={strengthTop} row={strengthTopRow} badge={strength} credit={strengthCredit} place="top" /> : null}
           <div style={{ marginTop: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <TickerLogo symbol={symbol} name={companyName} size={34} radius={8} />
               <h1 style={{ margin: 0, fontSize: "2.125rem", lineHeight: 1.05, fontWeight: 800, letterSpacing: "-0.045em" }}>{symbol}</h1>
             </div>
+            {strength ? (
+              <>
+                <div ref={strengthUnderRow} data-strength-row className="strengthUnderRow">
+                  <StrengthPill s={strengthUnder} badge={strength} place="under" />
+                </div>
+                <StrengthNote s={strengthUnder} row={strengthUnderRow} badge={strength} credit={strengthCredit} place="under" />
+                <style>{STRENGTH_CSS}</style>
+              </>
+            ) : null}
             {companyName ? <p style={{ margin: "4px 0 0", fontSize: "1rem", opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
             {lastClose !== null ? <p style={{ margin: "12px 0 0", fontSize: "1rem", lineHeight: 1.7, opacity: 0.82, maxWidth: 760 }}>{heroLede}</p> : null}
           </div>

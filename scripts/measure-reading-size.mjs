@@ -60,9 +60,10 @@ async function stockPage() {
   const bars = fixtureBars(230, "2025-01-02").map(([date, open, high, low, close, volume]) => ({ date, open, high, low, close, volume }));
   const spy = fixtureBars(560, "2025-01-02").map(([date, open, high, low, close, volume]) => ({ date, open, high, low, close, volume }));
   const last = bars[bars.length - 1];
+  const earningsSnapshot = JSON.parse(fs.readFileSync(path.join(ROOT, "scripts/fixtures/measure-earnings-snapshot-AAPL.json"), "utf8"));
   return renderToStaticMarkup(React.createElement(Client, {
     symbol: "AAPL",
-    earningsSnapshot: JSON.parse(fs.readFileSync(path.join(ROOT, "scripts/fixtures/measure-earnings-snapshot-AAPL.json"), "utf8")),
+    earningsSnapshot,
     profile: { description: "Apple designs, makes and sells smartphones, personal computers, tablets, wearables and accessories, and sells a range of related services. ".repeat(3), sector: "Technology", industry: "Consumer Electronics", marketCap: 3.2e12, exchange: "NASDAQ", country: "US" },
     dividend: { state: "hidden", why: "none" },
     shareHistory: null,
@@ -71,8 +72,27 @@ async function stockPage() {
     initialQuote: { price: last.close, change: 1.2, changePercentage: 0.4, dayLow: last.low, dayHigh: last.high, volume: 5e7, avgVolume: 4.5e7, yearLow: 180, yearHigh: 260 },
     historyProvider: "tiingo",
     performance: performanceStrip(bars, spy),
+    strength: await strengthFixture(bars, spy, earningsSnapshot),
     renderedAt: Date.parse("2026-10-04T12:00:00Z"),
   }));
+}
+/** The strength badge (#563 COWORK #105), scored as the page scores it. */
+async function strengthFixture(bars, spy, snapshot) {
+  const { strengthBadge } = await import("../lib/strengthBadge.ts");
+  const { earningsBadgeInput } = await import("../lib/earningsBadge.ts");
+  return strengthBadge(bars, spy, earningsBadgeInput(snapshot));
+}
+/** The badge's tap note, open (static markup can't tap): its panel and body as the page draws them. */
+async function strengthNote() {
+  const { NotePanel } = await import("../app/stock/[symbol]/TapNote.tsx");
+  const { StrengthNoteBody } = await import("../app/stock/[symbol]/StrengthBadge.tsx");
+  const { fixtureBars } = await import("./lib/measure-stubs/fixture-bars.mjs");
+  const toBar = ([date, open, high, low, close, volume]) => ({ date, open, high, low, close, volume });
+  const badge = await strengthFixture(fixtureBars(300, "2025-01-02").map(toBar), fixtureBars(560, "2025-01-02").map(toBar), null);
+  const note = { id: "sn", open: true, owner: {}, toggle() {}, close() {} };
+  const credit = React.createElement("a", { href: "#" }, "Daily prices from Tiingo");
+  return renderToStaticMarkup(React.createElement("main", { style: { padding: 16 } },
+    React.createElement("section", null, React.createElement(NotePanel, { note, label: "Strength", mode: "inline" }, React.createElement(StrengthNoteBody, { badge, credit })))));
 }
 async function spxPage() {
   const { default: Page } = await import("../app/markets/spx/page.tsx");
@@ -87,6 +107,7 @@ const PAGES = [
   { name: "/stock/AAPL", render: stockPage, enforce: true },
   { name: "/markets/spx", render: spxPage, enforce: true },
   { name: "/stock/AAPL/earnings", render: earningsPage, enforce: true },
+  { name: "/stock/AAPL strength note (open)", render: strengthNote, enforce: true },
 ];
 
 // ── the browser pass ────────────────────────────────────────────────────────

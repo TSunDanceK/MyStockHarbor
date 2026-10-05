@@ -6,6 +6,8 @@ import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { historyForSurface, historyOnTiingo, readTiingoHistoryPoints } from "@/lib/server/tiingoHistory";
 import { performanceStrip } from "@/lib/ta/performance";
+import { strengthBadge } from "@/lib/strengthBadge";
+import { earningsBadgeInput } from "@/lib/earningsBadge";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { searchSymbols } from "@/lib/server/symbolSearch";
 import {
@@ -582,6 +584,10 @@ export default async function StockPage({ params }: Props) {
   // down to the client (no bars in any public JSON).
   // The render time decides whether today's partial bar is in session (#563 COWORK #75/#76).
   const performance = performanceStrip(historyResult.points, historyResult.provider === "tiingo" ? spyPoints : null, Date.now());
+  // THE STRENGTH BADGE (#563 COWORK #105): scored here from the same series, SPY
+  // and the earnings snapshot already read above (no read of its own), on
+  // completed sessions only. Tiingo's series only: nothing from FMP is used.
+  const strength = historyResult.provider === "tiingo" ? strengthBadge(historyResult.points, spyPoints, earningsBadgeInput(secFacts.snapshot)) : null;
 
   // ── THE PROFILE BLOCK, FROM FREE SOURCES (brief 2026-09-22 PR 2) ─────────
   // Composed rather than fetched, and no longer from FMP at all: the
@@ -882,6 +888,7 @@ export default async function StockPage({ params }: Props) {
       <StockSymbolPageClient
         symbol={upper}
         earningsSnapshot={secFacts.snapshot}
+        strength={strength}
         dividend={secFacts.dividend}
         // NULL WHEN NOTHING RESOLVED, not an empty object. The client renders
         // the standalone dilution chart and "Learn the indicators" section only
