@@ -94,6 +94,19 @@ async function strengthNote() {
   return renderToStaticMarkup(React.createElement("main", { style: { padding: 16 } },
     React.createElement("section", null, React.createElement(NotePanel, { note, label: "Strength", mode: "inline" }, React.createElement(StrengthNoteBody, { badge, credit })))));
 }
+/** The Performance card's tap note, open (static markup can't tap), with the card's own body (#563 COWORK #111). */
+async function performanceNote() {
+  const { NotePanel } = await import("../app/stock/[symbol]/TapNote.tsx");
+  const { performanceStrip } = await import("../lib/ta/performance.ts");
+  const { performanceCard } = await import("../lib/ta/performanceCard.ts");
+  const { fixtureBars } = await import("./lib/measure-stubs/fixture-bars.mjs");
+  const toBar = ([date, open, high, low, close, volume]) => ({ date, open, high, low, close, volume });
+  const c = performanceCard(performanceStrip(fixtureBars(230, "2025-01-02").map(toBar), fixtureBars(560, "2025-01-02").map(toBar)));
+  const note = { id: "pn", open: true, owner: {}, toggle() {}, close() {} };
+  return renderToStaticMarkup(React.createElement("main", { style: { padding: 16 } },
+    React.createElement("section", null, React.createElement(NotePanel, { note, label: "How these are measured", mode: "inline" },
+      React.createElement("div", { className: "pcNote", style: { fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)" } }, c.note.map((t) => React.createElement("p", { key: t, style: { margin: "0 0 6px" } }, t)))))));
+}
 /** The capex page's "Why follow the money?" card (#563 COWORK #110), in the page's card frame; `open` taps "How to use this page". */
 async function capexWhy(open) {
   const { default: Why } = await import("../app/bottlenecks/capex/WhyFollowMoney.tsx");
@@ -115,6 +128,7 @@ const PAGES = [
   { name: "/markets/spx", render: spxPage, enforce: true },
   { name: "/stock/AAPL/earnings", render: earningsPage, enforce: true },
   { name: "/stock/AAPL strength note (open)", render: strengthNote, enforce: true },
+  { name: "/stock/AAPL performance note (open)", render: performanceNote, enforce: true },
   { name: "/bottlenecks/capex why card", render: () => capexWhy(false), enforce: true },
   { name: "/bottlenecks/capex why card (How to use, open)", render: () => capexWhy(true), enforce: true },
 ];

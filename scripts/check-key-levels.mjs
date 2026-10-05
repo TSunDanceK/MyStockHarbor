@@ -406,9 +406,9 @@ const staticRules = {
       imports.every((i) => i === "react" || i === "./TapNote" || i === "@/lib/ta/keyLevels" || i === "@/lib/ta/keyLevelBars") &&
       /^import \{ useRef, type CSSProperties, type ReactNode \} from "react";$/m.test(c) && /^import \{[^}]*\} from "\.\/TapNote";$/m.test(c);
   },
-  "placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars": (_l, _c, p) => {
+  "placement: in the sidebar, directly above the earnings snapshot (the Performance card between them since #111), on the page's own bars, credited only on Tiingo bars": (_l, _c, p) => {
     const side = p.slice(p.indexOf('<aside className="stock-page-sidebar">'), p.indexOf("</aside>"));
-    return /<KeyLevelsCard bars=\{history\} lastPrice=\{quote\?\.price \?\? null\} nowMs=\{renderedAt\} credit=\{shownProvider === "tiingo" \? historyCredit : undefined\} \/>[\s{}]*(<\/div>[\s{}]*<div className="sp-slot sp-earnings"(?: data-reading-owner="a")?>[\s{}]*)?<LatestEarningsCard /.test(side) &&
+    return /<KeyLevelsCard bars=\{history\} lastPrice=\{quote\?\.price \?\? null\} nowMs=\{renderedAt\} credit=\{shownProvider === "tiingo" \? historyCredit : undefined\} \/>[\s{}]*(<\/div>[\s{}]*(\{performance \? \(\s*<div className="sp-slot sp-performance">\s*<PerformanceCard [^\n]*\/>\s*<\/div>\s*\) : null\}[\s{}]*)?<div className="sp-slot sp-earnings"(?: data-reading-owner="a")?>[\s{}]*)?<LatestEarningsCard /.test(side) &&
       (p.match(/<KeyLevelsCard /g) ?? []).length === 1 && /^import KeyLevelsCard from "\.\/KeyLevelsCard";$/m.test(p);
   },
   "a tap on the bar opens its row's note (the same note as the range label, its own outside-tap owner)": (_l, c) =>
@@ -533,9 +533,9 @@ const staticMutants = [
   ["the tick and the dot both stay visible where they meet: the tick is taller, the dot on top, the ◇ above the bar", (l, c, p, b) => [l, c.replace("zIndex: 2 }}", "zIndex: 0 }}"), p, b]],
   ["the modules import only each other; the card only React, C's TapNote and the modules", (l, c, p, b) => [`import { readTiingoHistoryPoints } from "@/lib/server/tiingoHistory";\n${l}`, c, p, b]],
   ["the modules import only each other; the card only React, C's TapNote and the modules", (l, c, p, b) => [l, `import { getDailyHistory } from "@/lib/server/historyCache";\n${c}`, p, b]],
-  ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace('nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />', "nowMs={renderedAt} credit={historyCredit} />")]],
-  ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace(/\s*<KeyLevelsCard [^\n]*\n/, "\n")]],
-  ["placement: in the sidebar, directly above the earnings snapshot, on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace("<KeyLevelsCard bars={history}", "<KeyLevelsCard bars={history.slice(-5)}")]],
+  ["placement: in the sidebar, directly above the earnings snapshot (the Performance card between them since #111), on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace('nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />', "nowMs={renderedAt} credit={historyCredit} />")]],
+  ["placement: in the sidebar, directly above the earnings snapshot (the Performance card between them since #111), on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace(/\s*<KeyLevelsCard [^\n]*\n/, "\n")]],
+  ["placement: in the sidebar, directly above the earnings snapshot (the Performance card between them since #111), on the page's own bars, credited only on Tiingo bars", (l, c, p) => [l, c, p.replace("<KeyLevelsCard bars={history}", "<KeyLevelsCard bars={history.slice(-5)}")]],
 ];
 for (const [name, mutate] of staticMutants) {
   const args = [code(L, LIB), code(Cd, CARD), code(P, PAGE), code(Bs, BARS)];
