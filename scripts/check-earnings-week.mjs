@@ -52,6 +52,14 @@ const visible = (markup) => markup
 // ── fixtures ───────────────────────────────────────────────────────────────
 const TODAY = "2026-10-05"; // a Monday
 const bars = [["2026-09-30", 0, 0, 0, 100], ["2026-10-01", 0, 0, 0, 104], ["2026-10-02", 0, 0, 0, 98]];
+// Share classes on one CIK, with pool volumes (MKC trades far more than MKC-V; BRK-B than BRK-A).
+const CIKS = { MKC: "63754", "MKC-V": "63754", "BRK-A": "1067983", "BRK-B": "1067983", AAPL: "320193" };
+const VOL = { MKC: 1.4e6, "MKC-V": 1.2e3, "BRK-A": 1.1e3, "BRK-B": 3.9e6, AAPL: 5e7 };
+const FILERS = {
+  cikOf: (s) => CIKS[s] ?? null,
+  siblingsOf: (s) => (s === "MKC-V" ? ["MKC"] : []),
+  volumeOf: (s) => VOL[s] ?? null,
+};
 
 const RULES = {
   "1. the strip is today and the six days before it, oldest first": (W) => {
@@ -85,6 +93,15 @@ const RULES = {
     return g.map((x) => x.heading).join(" | ") === "Next week · 26 Oct–1 Nov | In 2 weeks · 2–8 Nov";
   },
   "5c. the chip's date is marked approximate": (W) => W.approxDate("2026-10-15") === "~15 Oct",
+  "7a. one row per filer, under its most-traded class (MKC, not MKC-V)": (W) => {
+    const out = W.primaryPerFiler([{ symbol: "MKC-V" }, { symbol: "MKC" }, { symbol: "AAPL" }], FILERS);
+    return out.length === 2 && out.map((x) => x.symbol).join() === "MKC,AAPL";
+  },
+  "7b. a lone secondary class shows as its base ticker on the same CIK": (W) =>
+    W.primaryPerFiler([{ symbol: "MKC-V" }], FILERS).map((x) => `${x.row.symbol}>${x.symbol}`).join() === "MKC-V>MKC",
+  "7c. two listed classes: the more traded wins (BRK-B over BRK-A), whatever the order": (W) =>
+    W.primaryPerFiler([{ symbol: "BRK-A" }, { symbol: "BRK-B" }], FILERS)[0]?.symbol === "BRK-B" &&
+    W.primaryPerFiler([{ symbol: "BRK-B" }, { symbol: "BRK-A" }], FILERS)[0]?.symbol === "BRK-B",
 };
 
 const W0 = await loadWeek();
@@ -118,6 +135,14 @@ check("no comparable quarter: the YoY reads '—'", /\$11\.7M<span class="ewYoY"
 check("no close: 'Shares since' reads '—'", /data-row="NEWCO"[\s\S]*?data-since="">—</.test(html));
 check("each ticker links to its earnings page", html.includes('href="/stock/AAPL/earnings"'));
 check("logos carry alt=\"\" (the ticker names the company)", /<img[^>]*alt=""/.test(html) && !/alt="AAPL logo"/.test(html));
+check("no Backfill control unless the page turns it on (it is off on production)",
+  !/Backfill/.test(visible(html)) && /Backfill this date/.test(visible(renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-01", backfill: true })))));
+{
+  const PAGE_SRC = readCodeOnly("app/earnings-calendar/page.tsx");
+  const offProd = (src) => /backfill=\{!isProductionDeployment\(\)\}/.test(src);
+  check("the page turns it on only off production", offProd(PAGE_SRC));
+  check("MUTATION: Backfill on everywhere → caught", !offProd(PAGE_SRC.replace("backfill={!isProductionDeployment()}", "backfill={true}")));
+}
 check("EPS and Shares since hide below 640 px", /@media \(max-width: 640px\) \{[\s\S]*?\.ewWide \{ display: none; \}/.test(html));
 const CREDIT = React.createElement("a", { href: "https://www.tiingo.com", target: "_blank", rel: "noopener noreferrer" }, "Market data from Tiingo.com");
 const credited = renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-01", credit: CREDIT }));
@@ -141,6 +166,19 @@ check("an empty day says so, once, and shows no table", (visible(empty).match(/N
   let MLogo; try { MLogo = (await import(`../${tmp}`)).default; } finally { fs.rmSync(tmp, { force: true }); }
   const mb = renderToStaticMarkup(React.createElement(MLogo, { symbol: "", name: "Newco", size: 22, radius: 6, alt: "" }));
   check("MUTATION: the letter badge outside the shared box → caught", !sameBox(mb, img));
+
+  // THE ERROR HEARD AFTER HYDRATION (#552 COWORK #174): TMQ (no file) and JOBY
+  // (the stock page header) showed a blank white tile, because the request
+  // failed before React attached onError. TickerLogo reads the finished image
+  // after mount and falls back.
+  const L = await import("../app/components/TickerLogo.tsx");
+  const failedRule = (f) => f({ complete: true, naturalWidth: 0 }) === true && f({ complete: false, naturalWidth: 0 }) === false && f({ complete: true, naturalWidth: 72 }) === false && f(null) === false;
+  check("a finished image with no pixels is a failure; a loading or loaded one is not", failedRule(L.imageFailed));
+  const LOGO_CODE = readCodeOnly("app/components/TickerLogo.tsx");
+  const wired = (src) => /useEffect\(\(\) => \{[\s\S]*?imageFailed\(imgRef\.current\)\) setFallback\(\{ sym, idx: idx \+ 1 \}\)[\s\S]*?\}, \[sym, idx\]\);/.test(src) && /ref=\{imgRef\}/.test(src);
+  check("...read after mount, on the rendered <img>, advancing to the next source or the letter badge", wired(LOGO_CODE));
+  check("MUTATION: the after-mount read removed → caught", !wired(LOGO_CODE.replace("ref={imgRef}", "")));
+  check("MUTATION: a loading image treated as failed → caught", !failedRule((img) => Boolean(img && img.naturalWidth === 0)));
 }
 
 console.log("\n5. coming up (EarningsComingUp)");
@@ -189,6 +227,8 @@ const MUTANTS = [
   ["shares since from the filing day's close whatever the timing", (s) => once(s, 'const sameDayCounts = timing === "after-close";', "const sameDayCounts = true;")],
   ["any stored quarter shown against the announcement", (s) => once(s, "|| latest.end !== announcedPeriodEnd", "")],
   ["weeks start on Sunday", (s) => once(s, "const mondayOf = (d: string) => addDays(d, -((dow(d) + 6) % 7));", "const mondayOf = (d: string) => addDays(d, -dow(d));")],
+  ["one row per TICKER again (MKC and MKC-V both listed)", (s) => once(s, "const key = opts.cikOf(r.symbol) ?? `sym:${r.symbol}`;", "const key = `sym:${r.symbol}`;")],
+  ["the class picked by suffix alone, not by trading", (s) => once(s, "      (opts.volumeOf(b) ?? -1) - (opts.volumeOf(a) ?? -1)\n      || ", "      ")],
   ["the date shown without its '~'", (s) => once(s, "export const approxDate = (d: string) => `~${dayNum(d)} ${MONTH[mon(d)]}`;", "export const approxDate = (d: string) => `${dayNum(d)} ${MONTH[mon(d)]}`;")],
 ];
 for (const [label, m] of MUTANTS) {

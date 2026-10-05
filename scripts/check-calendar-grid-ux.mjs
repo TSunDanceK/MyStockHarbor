@@ -91,12 +91,23 @@ const cases = [
   ["Coca-Cola Consolidated, Inc. - Common Stock", "Coca-Cola Consolidated, Inc."],
   ["Some Holdings - Class B", "Some Holdings"],
   ["NVIDIA CORP", "NVIDIA CORP"],
+  // THE SAME SUFFIX WITHOUT A DASH (#552 COWORK #174), as the snapshot writes most names.
+  ["Nike, Inc. Common Stock", "Nike, Inc."],
+  ["Accenture plc Class A Ordinary Shares (Ireland)", "Accenture plc"],
+  ["Banco De Chile ADS", "Banco De Chile"],
+  ["Mizuho Financial Group, Inc. Sponosred ADR (Japan)", "Mizuho Financial Group, Inc."],
+  ["Brookfield Corporation Class A Limited Voting Shares", "Brookfield Corporation"],
+  ["Energy Transfer LP Common Units", "Energy Transfer LP"],
+  ["Brookfield Oaktree Holdings, LLC 6.625% Series A Preferred Units", "Brookfield Oaktree Holdings, LLC 6.625% Series A Preferred Units"],
+  ["Comcast Holdings ZONES", "Comcast Holdings ZONES"],
 ];
 for (const [inp, out] of cases) check(`"${inp}" → "${out}"`, N.cleanListingName(inp) === out, N.cleanListingName(inp));
 check("the grid's name goes through it", /return cleanListingName\(/.test(readCodeOnly("lib/server/secTickerNames.ts")));
 {
   const M = await build(once(NAME, "SECURITY_WORDS.test(suffix) || CLASS_ONLY.test(suffix)", "false"));
   check("MUTATION: without the rule the suffix shows again", M.cleanListingName(cases[0][0]) === cases[0][0]);
+  const M2 = await build(once(NAME, '  const bare = s.replace(NO_DASH_SECURITY, "").trim();', '  const bare = s;'));
+  check("MUTATION: without the no-dash rule \"Nike, Inc. Common Stock\" shows again", M2.cleanListingName("Nike, Inc. Common Stock") !== "Nike, Inc.");
 }
 
 console.log("\n4. each day tile shows its count");

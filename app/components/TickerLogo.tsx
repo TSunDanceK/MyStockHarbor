@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Small ticker/company logo with a graceful fallback chain, shared across
 // the site (search dropdowns, dashboard live feed + quote header, the
@@ -29,6 +29,20 @@ import { useState } from "react";
 // on GitHub Pages was the runner-up home) is a one-line change rather than a
 // hunt through call sites.
 const LOGO_BASE = "/logos";
+
+/**
+ * AN IMAGE THAT HAS ALREADY FAILED (#552 COWORK #174). On a server-rendered
+ * page the browser can finish (and fail) the request BEFORE React hydrates and
+ * attaches onError, so the error is never heard and a white tile with nothing
+ * in it stays: TMQ (no file) on the calendar, JOBY in the stock page header.
+ * A finished image with no pixels is the failure, read after mount. A lazy
+ * image not yet loaded is not complete, and is left to onError.
+ * Measured in Chromium: a broken <img alt=""> still paints its white
+ * background and a broken-image glyph, so no CSS-only fallback can cover it.
+ */
+export function imageFailed(img: Pick<HTMLImageElement, "complete" | "naturalWidth"> | null): boolean {
+  return Boolean(img && img.complete && img.naturalWidth === 0);
+}
 
 // ── NO MANIFEST AT RUNTIME, DELIBERATELY ──────────────────────────────────
 // data/logo-manifest.json is still emitted by the harvest, and is still the
@@ -96,6 +110,16 @@ export default function TickerLogo({
   // pre-emptively. See claude/serving-assets-from-public-2026-09-15.md.
   const [fallback, setFallback] = useState({ sym, idx: 0 });
   const idx = fallback.sym === sym ? fallback.idx : 0;
+  const imgRef = useRef<HTMLImageElement>(null);
+  // THE ERROR THAT FIRED BEFORE HYDRATION: checked once the element is ours.
+  useEffect(() => {
+    // Read on the next frame: the check is of the DOM, and the switch is a
+    // callback from it rather than a render-time cascade.
+    const frame = requestAnimationFrame(() => {
+      if (imageFailed(imgRef.current)) setFallback({ sym, idx: idx + 1 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sym, idx]);
   const initial = (name || sym || "?").trim().charAt(0).toUpperCase() || "?";
 
   const box: React.CSSProperties = {
@@ -140,6 +164,7 @@ export default function TickerLogo({
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        ref={imgRef}
         src={sources[idx]}
         alt={alt ?? (sym ? `${sym} logo` : "")}
         loading="lazy"

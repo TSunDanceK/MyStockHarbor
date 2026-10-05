@@ -222,7 +222,7 @@ const ROW = {
 console.log("\n7. THE ESTIMATE IS A MARKED APPROXIMATION, NEVER A BARE DATE");
 {
   // THE OWNER'S PICK (COWORK #170) replaced "Expected in about 4 days" with
-  // "~26 Sep" on a chip, under a line saying each one is a week, not a day.
+  // "~26 Sep" on a chip, under a line saying each may be off by a week or two.
   // What this file keeps asserting is the honesty of that: the estimate's
   // date never appears without its "~", never as an ISO date, and the line
   // that qualifies it is always on the card.
@@ -233,7 +233,7 @@ console.log("\n7. THE ESTIMATE IS A MARKED APPROXIMATION, NEVER A BARE DATE");
   const bare = (r.text.match(/26 Sep/g) ?? []).length, marked = (r.text.match(/~26 Sep/g) ?? []).length;
   check("the estimated date appears ONLY with its '~'", bare === marked && marked === 1, `${marked} marked of ${bare}`);
   check("the estimated date never appears as an ISO date", !r.markup.includes(estimated), estimated);
-  check("the line under the title says it is a week, not a day", r.text.includes(C.COMING_UP_LINE) && /a week, not a day/.test(C.COMING_UP_LINE));
+  check("the line under the title says each may be off by a week or two (COWORK #174)", r.text.includes(C.COMING_UP_LINE) && /may be off by a week or two/.test(C.COMING_UP_LINE));
   const FORECAST = [/\bwill report\b/i, /\bnext up\b/i, /\breports on\b/i, /\bconfirmed\b/i];
   check("no forecast vocabulary", !FORECAST.some((re) => re.test(r.text)));
   check("the line says the dates are estimated and not announced",

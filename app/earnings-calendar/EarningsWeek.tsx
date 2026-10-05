@@ -42,9 +42,11 @@ export type WeekDay = {
 const signedPct = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}%`;
 const toneOf = (v: number | null) => (v === null ? undefined : v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#cbd5e1");
 
-export default function EarningsWeek({ days, initial, credit = null }: {
+export default function EarningsWeek({ days, initial, credit = null, backfill = false }: {
   days: WeekDay[];
   initial: string;
+  /** The owner's "Backfill this date" control: off on production (#552 COWORK #174), on a preview only. */
+  backfill?: boolean;
   /** The "Shares since" closes' source, as the page's linked credit; null when they are not Tiingo's. */
   credit?: React.ReactNode;
 }) {
@@ -110,8 +112,8 @@ export default function EarningsWeek({ days, initial, credit = null }: {
           &ldquo;Shares since&rdquo;: last close before the filing to the latest close. Closes: {credit}
         </p>
       ) : null}
-      {/* The owner's re-fill, for the day shown. */}
-      <BackfillButton date={day.date} hasEarnings={day.count > 0} />
+      {/* The owner's re-fill, for the day shown: an internal control, never on production. */}
+      {backfill ? <BackfillButton date={day.date} hasEarnings={day.count > 0} /> : null}
 
       <style>{`
         .ewCard { margin: 0 0 24px; padding: 20px; border-radius: 16px; background: #0b1220; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 12px 30px rgba(0,0,0,0.28); }

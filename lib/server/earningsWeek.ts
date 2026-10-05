@@ -109,6 +109,36 @@ export function figuresForAnnouncement(
   return { periodEnd: announcedPeriodEnd, revenue: latest.revenue, revenueYoY: latest.revenueYoY, epsDiluted: latest.epsDiluted };
 }
 
+// ── ONE ROW PER FILER, UNDER ITS MOST-TRADED CLASS (#552 COWORK #174) ──────
+//
+// A filer with two common classes announces once: MKC and MKC-V are one
+// McCormick 8-K. The row shows the class readers know — the most traded, by
+// the pool's volume — and a class ticker whose base ticker is on the same CIK
+// (MKC-V → MKC) offers that base as well, so a lone secondary class still
+// shows as the primary. Ties: a ticker without a class suffix, then A–Z.
+export const hasClassSuffix = (s: string) => /[-.][A-Z]{1,2}$/.test(s);
+export const baseTicker = (s: string) => s.replace(/[-.][A-Z]{1,2}$/, "");
+export function primaryPerFiler<T extends { symbol: string }>(
+  rows: readonly T[],
+  opts: { cikOf: (s: string) => string | null; siblingsOf: (s: string) => string[]; volumeOf: (s: string) => number | null },
+): { row: T; symbol: string }[] {
+  const groups = new Map<string, { row: T; symbols: Set<string> }>();
+  for (const r of rows) {
+    const key = opts.cikOf(r.symbol) ?? `sym:${r.symbol}`;
+    const g = groups.get(key) ?? { row: r, symbols: new Set<string>() };
+    g.symbols.add(r.symbol);
+    for (const s of opts.siblingsOf(r.symbol)) g.symbols.add(s);
+    groups.set(key, g);
+  }
+  return [...groups.values()].map(({ row, symbols }) => {
+    const ranked = [...symbols].sort((a, b) =>
+      (opts.volumeOf(b) ?? -1) - (opts.volumeOf(a) ?? -1)
+      || Number(hasClassSuffix(a)) - Number(hasClassSuffix(b))
+      || (a < b ? -1 : a > b ? 1 : 0));
+    return { row, symbol: ranked[0] };
+  });
+}
+
 // ── COMING UP: grouped by calendar week from today ─────────────────────────
 
 /** Monday of the week holding `d`. */

@@ -17,8 +17,11 @@ import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { scaledAmount } from "@/lib/server/secPresentation";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import {
-  countPill, dayEyebrow, dayLong, defaultDay, sharesSince, tileDate, tileWeekday, weekDays,
+  baseTicker, countPill, dayEyebrow, dayLong, defaultDay, hasClassSuffix, primaryPerFiler, sharesSince, tileDate, tileWeekday, weekDays,
 } from "@/lib/server/earningsWeek";
+import { registrantFor } from "@/lib/server/stockProfile";
+import { isProductionDeployment } from "@/lib/server/deployTarget";
+import { gridAdmits, gridCompanyName } from "@/lib/server/secTickerNames";
 import { fillWeekFigures, readWeekFigures } from "@/lib/server/earningsWeekStore";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsWeek, { type WeekDay, type WeekRow } from "./EarningsWeek";
@@ -198,8 +201,16 @@ export default async function EarningsCalendarPage({
 
   // The day lists: the month index the calendar already reads (one HGETALL,
   // memoised 6h per instance; two months across a boundary).
-  const lists = await Promise.all(days.map((d) => getDayCandidates(d)));
-  const symbols = [...new Set(lists.flat().map((c) => c.symbol))];
+  const raw = await Promise.all(days.map((d) => getDayCandidates(d)));
+  // A CLASS TICKER'S BASE ON THE SAME CIK (MKC-V → MKC) is offered too, so the
+  // row can show the class readers know (#552 COWORK #174).
+  const siblingsOf = (s: string) => {
+    if (!hasClassSuffix(s)) return [];
+    const base = baseTicker(s);
+    const cik = registrantFor(s)?.cik;
+    return cik && registrantFor(base)?.cik === cik && gridAdmits(base) ? [base] : [];
+  };
+  const symbols = [...new Set(raw.flat().flatMap((c) => [c.symbol, ...siblingsOf(c.symbol)]))];
   const [pool, eodLast, week, forward] = await Promise.all([
     // Market cap, for the sort only (one HMGET).
     symbols.length ? readPricePoolBulk(symbols).catch(() => new Map()) : Promise.resolve(new Map()),
@@ -210,6 +221,14 @@ export default async function EarningsCalendarPage({
     getForwardSections(today),
   ]);
 
+  // ONE ROW PER FILER, under its most-traded class; the figures are filled
+  // from the record the announcement is under (`source`).
+  const lists = raw.map((cands) =>
+    primaryPerFiler(cands, {
+      cikOf: (s) => registrantFor(s)?.cik ?? null,
+      siblingsOf,
+      volumeOf: (s) => pool.get(s)?.volume ?? null,
+    }).map(({ row, symbol }) => ({ ...row, source: row.symbol, symbol, company: symbol === row.symbol ? row.company : gridCompanyName(symbol) || row.company })));
   const counts = new Map(days.map((d, i) => [d, lists[i].length] as const));
   const weekDaysView: WeekDay[] = days.map((date, i) => {
     const cands = lists[i];
@@ -269,7 +288,7 @@ export default async function EarningsCalendarPage({
   after(async () => {
     try {
       if (!(await claimCalendarScan())) return;
-      await fillWeekFigures(new Map(days.map((d, i) => [d, lists[i].map((c) => c.symbol)])), { maxSymbols: 30 });
+      await fillWeekFigures(new Map(days.map((d, i) => [d, lists[i].map((c) => ({ symbol: c.symbol, source: c.source }))])), { maxSymbols: 30 });
       await populateNextMissingDate({ maxDates: 2 });
     } catch {
       // best-effort background job; failures shouldn't affect any page load
@@ -344,6 +363,9 @@ export default async function EarningsCalendarPage({
           <EarningsWeek
             days={weekDaysView}
             initial={initial}
+            // AN INTERNAL CONTROL (#552 COWORK #174): off on production; a
+            // preview keeps it for the owner. The route behind it stays keyed.
+            backfill={!isProductionDeployment()}
             credit={priceProviderFor("POOL") === "tiingo" && weekDaysView.some((d) => d.rows.length > 0) ? (
               <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a>
             ) : null}

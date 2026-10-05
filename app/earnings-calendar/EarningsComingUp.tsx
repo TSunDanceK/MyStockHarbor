@@ -7,7 +7,7 @@
 // THE DATE ON A CHIP IS "~15 Oct", AN ESTIMATE MARKED AS ONE. The old section
 // printed words ("Expected in about 9 days"), never a date; the owner's pick
 // (COWORK #170) is the approximate date, and the line under the title says
-// every one of them is a week, not a day.
+// each may be off by a week or two (COWORK #174).
 //
 // "DUE TO REPORT", WHEN IT HAS NAMES, IS THE FIRST GROUP: "Period ended, not
 // filed yet". Empty, it is not shown at all (COWORK #170 "Remove"). An
@@ -21,8 +21,10 @@ import { EXPECTED_WINDOW_DAYS, MIN_USABLE_PERIODS, PRECISION_BAR_DOMESTIC, PRECI
 import { addDays, approxDate, groupByWeek, shortDate } from "@/lib/server/earningsWeek";
 
 export const COMING_UP_TITLE = "Coming up · Estimated: Expected to report";
+// THE MISS, STATED (#552 COWORK #174): a median of 3 days and a 90th
+// percentile of 15, so "a week, not a day" understated the tail.
 export const COMING_UP_LINE =
-  "Estimated from each company's own filing history. These aren't announced dates, so each one is a week, not a day.";
+  "Estimated from each company's own filing history. These aren't announced dates. Each is an estimate that may be off by a week or two.";
 export const DUE_GROUP_HEADING = "Period ended, not filed yet";
 
 

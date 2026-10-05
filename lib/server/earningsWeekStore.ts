@@ -86,7 +86,8 @@ export function needsFill(f: FiguresEntry | undefined, c: CloseEntry | undefined
  * after(), behind claimCalendarScan's once-per-five-minutes gate.
  */
 export async function fillWeekFigures(
-  daySymbols: ReadonlyMap<string, readonly string[]>,
+  /** Per day, each row's shown ticker and the ticker its announcement record is under (MKC and MKC-V, #552 COWORK #174). */
+  daySymbols: ReadonlyMap<string, readonly { symbol: string; source: string }[]>,
   opts: { maxSymbols?: number; nowMs?: number } = {},
 ): Promise<{ symbols: number; days: number }> {
   if (!redis) return { symbols: 0, days: 0 };
@@ -99,16 +100,16 @@ export async function fillWeekFigures(
     if (done >= max) break;
     const f = figures.get(date) ?? {}, c = closes.get(date) ?? {};
     let changed = false;
-    for (const symbol of daySymbols.get(date) ?? []) {
+    for (const { symbol, source } of daySymbols.get(date) ?? []) {
       if (done >= max) break;
       const need = needsFill(f[symbol], c[symbol], now);
       if (!need.figures && !need.close) continue;
       done++; changed = true;
-      const rec = await readReportDates(symbol).catch(() => null);
+      const rec = await readReportDates(source).catch(() => null);
       const event = rec?.events.find((e) => e.announcedOn === date) ?? null;
       if (need.figures) {
         let got: ReportedFigures | null = null;
-        const set = event?.periodEnd ? await readFactSet(symbol).catch(() => null) : null;
+        const set = event?.periodEnd ? await readFactSet(source).catch(() => null) : null;
         if (set && moneyIsUsd(unitOf(set))) {
           const v = buildSecEarningsView(set);
           const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : null);
