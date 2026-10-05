@@ -9,7 +9,7 @@ import DashboardClient, {
   type StockEarningsSummary,
 } from "../components/DashboardClient";
 import StockPagesBottomNav from "@/app/components/StockPagesBottomNav";
-import { getDailyHistory } from "@/lib/server/historyCache";
+import { getCachedDailyHistory, getDailyHistory } from "@/lib/server/historyCache";
 import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
@@ -19,6 +19,7 @@ import { secEarningsSummary } from "@/lib/server/secEarningsSummary";
 import { getInternalNewsPayload } from "@/lib/server/internalNews";
 import { cleanSymbol, SYMBOL_COOKIE } from "@/lib/symbol";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { DASHBOARD_SOURCE_BUDGET_MS, withBudget } from "@/lib/server/sourceBudget";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -160,19 +161,42 @@ export default async function DashboardPage({ searchParams }: Props) {
   // An explicit ?symbol= outranks the memory, which outranks the default.
   const symbol = requested || remembered || "SPY";
 
+  // A BUDGET PER SOURCE (#553 CODE-B #137, COWORK #145/#146). These five used
+  // to share one unbounded Promise.all, so a single read that never answered
+  // (our Upstash client has no request timeout) held the render to Vercel's
+  // 300 s limit -- ~3.5% of cold renders in the 24 h before this. Each source
+  // now resolves to its own "missing" value after DASHBOARD_SOURCE_BUDGET_MS,
+  // the page renders the other four, and one log line names the source and
+  // symbol. See lib/server/sourceBudget.ts.
+  const budget = <T,>(source: string, work: Promise<T>, fallback: T) =>
+    withBudget("dashboard", source, symbol, work, fallback, DASHBOARD_SOURCE_BUDGET_MS);
+
   const [rawHistory, quoteAndName, benchmarks, news, earningsSummary] =
     await Promise.all([
       // STEP 3 (#553 COWORK #71 row 3), behind PRICE_PROVIDER_HISTORY, the same
       // gate as /api/history, which this chart calls on every timeframe change:
       // one provider for the seed and the refetches (lib/server/tiingoHistory.ts).
-      historyForSurface("HISTORY", symbol, () => getDailyHistory(symbol, { caller: "dashboard" })).then(
-        (h) => ({ points: h.points as Point[], provider: h.provider as string }),
-        () => ({ points: [] as Point[], provider: "none" })
+      //
+      // NO KEY, CACHE ONLY (COWORK #146): with FMP_API_KEY unset the FMP path
+      // can only ever serve what is cached, so it reads the cache and stops.
+      // getDailyHistory would otherwise, on a miss, take or lose the history
+      // lock and poll up to 12 s for a fetch that cannot happen.
+      budget(
+        "history",
+        historyForSurface("HISTORY", symbol, () =>
+          process.env.FMP_API_KEY
+            ? getDailyHistory(symbol, { caller: "dashboard" })
+            : getCachedDailyHistory(symbol, "dashboard")
+        ).then(
+          (h) => ({ points: h.points as Point[], provider: h.provider as string }),
+          () => ({ points: [] as Point[], provider: "none" })
+        ),
+        { points: [] as Point[], provider: "none" }
       ),
-      getInitialQuoteAndName(symbol),
-      getInitialBenchmarks(),
-      getInitialNews(symbol),
-      getInitialEarningsSummary(symbol),
+      budget("quote", getInitialQuoteAndName(symbol), { quote: null, name: "" }),
+      budget("benchmarks", getInitialBenchmarks(), null),
+      budget("news", getInitialNews(symbol), null),
+      budget("earnings", getInitialEarningsSummary(symbol), null),
     ]);
 
   const initialHistory: Point[] = Array.isArray(rawHistory.points) ? rawHistory.points : [];

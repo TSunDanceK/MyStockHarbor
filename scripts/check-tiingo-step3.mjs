@@ -502,7 +502,9 @@ function rules(srcs) {
   // The dashboard seed: HISTORY, the same gate as the route it refetches from.
   const dp = code[FILES.dashPage];
   want("the dashboard's SSR seed switches on HISTORY",
-    /historyForSurface\("HISTORY", symbol, \(\) => getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\)/.test(dp) &&
+    // The seed may read the cache only when FMP_API_KEY is unset (#553 COWORK #146);
+    // the gate around it is the same.
+    /historyForSurface\("HISTORY", symbol, \(\) =>\s*(?:process\.env\.FMP_API_KEY\s*\?\s*)?getDailyHistory\(symbol, \{ caller: "dashboard" \}\)/.test(dp) &&
     (dp.match(/getDailyHistory\(symbol/g) ?? []).length === 1);
   want("the dashboard shows the credit under the chart", /historyCredit=\{\s*historyOnTiingo\("HISTORY"\) \?/.test(dp) && /\{historyCredit\}/.test(code[FILES.dashClient]));
 
@@ -608,7 +610,7 @@ const MUTANTS = [
   ["the interactive chart asks for more than the cap", FILES.interactive, /days=2000/, "days=4000"],
   ["the Tiingo cap raised past what the charts use", FILES.helper, /TIINGO_HISTORY_MAX_DAYS = 2600;/, "TIINGO_HISTORY_MAX_DAYS = 5000;"],
   ["the stock page's history fetch sends no page token", FILES.stockClient, /&days=900`, pageToken \? \{ headers: \{ "x-msh-page-token": pageToken \} \} : undefined\)/, "&days=900`)"],
-  ["the dashboard seed left on FMP", FILES.dashPage, /historyForSurface\("HISTORY", symbol, \(\) => getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\)/, 'getDailyHistory(symbol, { caller: "dashboard" })'],
+  ["the dashboard seed left on FMP", FILES.dashPage, /historyForSurface\("HISTORY", symbol, \(\) =>[\s\S]*?getCachedDailyHistory\(symbol, "dashboard"\)\s*\)/, 'getDailyHistory(symbol, { caller: "dashboard" })'],
   ["the weekly input window changed", FILES.stockClient, /weeklyReturnBars\(history, 12\)/, "weeklyReturnBars(history, 20)"],
   ["the monthly view not handed to the card", FILES.stockClient, / monthly=\{monthlyReturns\}/, ""],
   ["the old second returns card restored", FILES.stockClient, /<ReturnsToggleCard /, '<ReturnsBarChart symbol={symbol} periodLabel="Weekly" compareLabel="x" bars={weeklyReturns} /><ReturnsToggleCard '],

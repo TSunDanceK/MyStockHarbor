@@ -449,7 +449,10 @@ check(
 );
 check(
   "every throw site carries a reason",
-  (histSrc.match(/throw new FmpHistoryError\(/g) ?? []).length === 4 &&
+  // 5 since #553 COWORK #146: getDailyHistoryInner's no-key guard throws the
+  // fetch's own "no-api-key" before the lock. Each throw must name its reason.
+  (histSrc.match(/throw new FmpHistoryError\(/g) ?? []).length === 5 &&
+    (histSrc.match(/throw new FmpHistoryError\([^;]*?,\s*(?:"[a-z0-9-]+"|`[a-z0-9-]*\$\{[^}]+\}`)\s*\);/g) ?? []).length === 5 &&
     !/throw new Error\(/.test(histSrc.split("export async function reserveFmpCallSlot")[1] ?? ""),
   "an unclassified throw lands in 'other' and tells you nothing"
 );

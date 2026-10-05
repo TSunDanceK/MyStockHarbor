@@ -39,6 +39,7 @@ import { beginTiming, timingCache } from "./timing";
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { markRefreshed } from "./stalenessQueue";
+import { boundedDeferred, NEWS_DEFERRED_WRITE_BUDGET_MS } from "./sourceBudget";
 import {
   capNews,
   countAdded,
@@ -289,10 +290,16 @@ async function readOrRefresh<T extends NewsMergeItem>(
     }
   }
 
-  after(async () => {
-    await writeStored(key, kept, nowMs);
-    await recordRefreshStats(mode, added, nowMs, byProvider);
-  });
+  // BOUNDED (#553 COWORK #146): after() holds the function open until its
+  // callback settles, and our Upstash client has no request timeout, so a write
+  // that never answers would keep the invocation alive to the 300 s limit after
+  // the response had already gone.
+  after(
+    boundedDeferred("news-store", key, async () => {
+      await writeStored(key, kept, nowMs);
+      await recordRefreshStats(mode, added, nowMs, byProvider);
+    }, NEWS_DEFERRED_WRITE_BUDGET_MS)
+  );
 
   // ENDS BEFORE THE WRITES, deliberately: they are after() now, so counting
   // them would report a blocking cost the reader no longer pays.
@@ -332,7 +339,7 @@ export async function readOrRefreshSymbolNews<T extends NewsMergeItem>(
   // it is fresh, and marking on it would keep the staleness set green forever.
   // Deferred like the other two writes: health reporting is not something a
   // reader waits on.
-  if (result.mode !== "cached") after(() => markViewed("news", upper, nowMs));
+  if (result.mode !== "cached") after(boundedDeferred("news-store", upper, () => markViewed("news", upper, nowMs), NEWS_DEFERRED_WRITE_BUDGET_MS));
 
   return result;
 }
@@ -377,7 +384,7 @@ export async function readOrRefreshSectorNews<T extends NewsMergeItem>(
   const lower = slug.toLowerCase();
   const result = await readOrRefresh(sectorKey(lower), deps, nowMs);
 
-  if (result.mode !== "cached") after(() => markViewed("sectorNews", lower, nowMs));
+  if (result.mode !== "cached") after(boundedDeferred("news-store", lower, () => markViewed("sectorNews", lower, nowMs), NEWS_DEFERRED_WRITE_BUDGET_MS));
 
   return result;
 }
