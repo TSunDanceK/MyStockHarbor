@@ -8,9 +8,10 @@
 //      native <details>; no ISO date. (The window line itself is
 //      check-next-report-band's.)
 //   B. Balance sheet card: a readable date; refusals read "Not available" with
-//      the reason in the shared hover/tap note; every bar has its figure; no
-//      track for a row with no value; the "Not reported" sentence only when a
-//      row says it.
+//      the reason in the shared hover/tap note; with no debt on file there is
+//      no chart, the reason is in the tap note and the cash figure still
+//      shows (#552 COWORK #169); the "Not reported" sentence only when a
+//      figure says it.
 //   C. The CSS that keeps bar rows and the waterfall inside the card at phone
 //      width (scripts/measure-earnings-cards-360.mjs is the rendered
 //      measurement: no card overflows at 320/360/375/430 px).
@@ -79,12 +80,14 @@ const RULES = {
   "B1. the balance sheet's date reads '30 Jun 2026'":
     ({ balanceHtml }) => /Financial position at 30 Jun 2026/.test(balanceHtml) && !ISO.test(visibleText(balanceHtml)),
   "B2. refusals read 'Not available', the reason in the hover/tap note":
-    ({ balanceHtml }) => (balanceHtml.match(/data-estimate-note="Can&#x27;t calculate[^"]*"[^>]*>Not available</g) ?? []).length === 2
+    // ONE since #552 COWORK #169: total debt. Net cash is the lead line, and
+    // with no debt there is no lead to refuse.
+    ({ balanceHtml }) => (balanceHtml.match(/data-estimate-note="Can&#x27;t calculate[^"]*"[^>]*>Not available</g) ?? []).length === 1
       && !/Can.t calculate/.test(visibleText(balanceHtml)),
-  "B3. the cash bar carries its figure on the label line":
-    ({ balanceHtml }) => /<span class="hbarLabel">Cash &amp; equivalents[^<]*<\/span><span class="hbarValue">[^<]*\$\d/.test(balanceHtml),
-  "B4. no bar track for a row with no value (ONDS: cash only)":
-    ({ balanceHtml }) => (balanceHtml.match(/class="hbarTrack"/g) ?? []).length === 1,
+  "B3. with no chart, the cash figure is still on the card (ONDS)":
+    ({ balanceHtml }) => /Cash \$\d/.test(visibleText(balanceHtml)),
+  "B4. no chart where debt is not on file (ONDS), and the tap note says why":
+    ({ balanceHtml }) => !/data-balance-chart=/.test(balanceHtml) && /data-no-balance-chart="">There is no chart of cash against debt: total debt can/.test(balanceHtml),
   "B5. the 'Not reported' sentence only when a row says 'Not reported'":
     ({ balanceHtml }) => !/Not reported/.test(visibleText(balanceHtml)) && !/means the company.s SEC filing has no figure/.test(visibleText(balanceHtml)),
   "I1. no ISO date in the snapshot, tables, balance sheet or valuation, five fixtures":
@@ -105,8 +108,8 @@ const MUTANTS = [
   ["'though' restored in the margin copy", (s) => once(s, "${profit ? `, and ${profit}` : \"\"}.`;", "${profit ? `, though ${profit}` : \"\"}.`;")],
   ["the ISO date back on the balance sheet heading", (s) => once(s, "<h3>Financial position at {readableDate(b.asOf)}</h3>", "<h3>Financial position as at {b.asOf}</h3>")],
   ["the long refusal back in the cell", (s) => once(s, "? <ReasonedValue text={NOT_AVAILABLE} reason={cantCalculate(missing)} style={MUTED_VALUE} />", "? <span style={MUTED_VALUE}>{cantCalculate(missing)}</span>")],
-  ["the cash figure dropped from its bar", (s) => once(s, "          text: <CellValue cell={b.cash} compact />,", "          text: null,")],
-  ["an empty track drawn for a missing value", (s) => once(s, "  if (value === null || !Number.isFinite(value) || max <= 0) return null;", "  if (value === null || !Number.isFinite(value) || max <= 0) return <div className=\"hbarTrack\" aria-hidden=\"true\" />;")],
+  ["the cash figure dropped from the legend", (s) => once(s, `{b.cashIncludesRestricted ? "Cash (incl. restricted)" : "Cash"} <CellValue cell={b.cash} compact />`, `{b.cashIncludesRestricted ? "Cash (incl. restricted)" : "Cash"}`)],
+  ["the no-chart branch taken regardless of debt", (s) => once(s, "const chart = balanceBars(num(b.cash?.val), num(b.shortTermInvestments?.val), num(b.totalDebt)) !== null;", "const chart = true;")],
   ["the 'Not reported' sentence on every card", (s) => once(s, "{balanceShowsNotReported(b) ? <p>{NOT_REPORTED_NOTE}</p> : null}", "<p>{NOT_REPORTED_NOTE}</p>")],
   ["the recent-periods table back on ISO dates", (s) => once(s, `<td data-label="Period ending">{readableDate(r.end)}</td>`, `<td data-label="Period ending">{r.end}</td>`)],
 ];
@@ -123,9 +126,11 @@ for (const [label, mutate] of MUTANTS) {
 const cssRules = (css) => ({
   "S3c. CSS: the reachable range is an outline at full strength; the ends are dimmed":
     /\.scoreReach \{[^}]*background: transparent;[^}]*border: 2px solid/.test(css) && /\.scoreOut \{[^}]*background: rgba\(2,6,23,0\.\d+\)/.test(css),
-  "C1. CSS: bar rows can't outgrow the card (min-width: 0, minmax(0, 1fr), the head wraps, the track is 100%)":
-    /\.hbarList \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/.test(css) && /\.hbarRow \{[^}]*minmax\(0, 1fr\);[^}]*min-width: 0;/.test(css)
-      && /\.hbarHead \{[^}]*flex-wrap: wrap;[^}]*min-width: 0;/.test(css) && /\.hbarTrack \{[^}]*box-sizing: border-box; width: 100%;/.test(css),
+  // The per-row bars went with #552 COWORK #169; the balance chart's rows are
+  // what must stay inside the card now.
+  "C1. CSS: the balance chart can't outgrow the card (the label shrinks, the figure doesn't wrap, the track and its segments clip)":
+    /\.balanceRowHead span \{ min-width: 0; \}/.test(css) && /\.balanceRowHead strong \{ white-space: nowrap;/.test(css)
+      && /\.balanceTrack \{[^}]*overflow: hidden;/.test(css) && /\.balanceSeg \{[^}]*overflow: hidden;/.test(css),
   // Since #552 COWORK #168 the label column sizes to its text (the bars carry
   // the statement's own labels), so the guard against outgrowing the card is
   // two-part: on a wide card the TRACK is the flexible column, and on a narrow
@@ -140,7 +145,7 @@ const cssRules = (css) => ({
 for (const [name, ok] of Object.entries(cssRules(PAGE))) check(name, ok);
 const cssMutants = [
   ["the reachable range dimmed again", once(PAGE, ".scoreReach { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: transparent;", ".scoreReach { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: rgba(2,6,23,0.55);")],
-  ["the bar head no longer wraps", once(PAGE, ".hbarHead { display: flex; flex-wrap: wrap;", ".hbarHead { display: flex;")],
+  ["the balance row's label can no longer shrink", once(PAGE, ".balanceRowHead span { min-width: 0; }", ".balanceRowHead span { }")],
   ["the narrow-card rule dropped (a long label pushes the row wide)", once(PAGE, '.wfRow { grid-template-columns: minmax(0, 1fr) max-content; grid-template-areas: "label value" "track track";', '.wfRow { grid-template-columns: max-content max-content; grid-template-areas: "label value" "track track";')],
 ];
 for (const [label, css] of cssMutants) check(`MUTATION: ${label} → caught`, Object.values(cssRules(css)).some((ok) => !ok));

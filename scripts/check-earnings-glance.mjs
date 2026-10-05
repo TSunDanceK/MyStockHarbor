@@ -133,9 +133,12 @@ const MUTANTS = [
   ["the Trend refusal printed under the tile again", (s) => once(s,
     "                ) : l.latestWords ? l.latestWords : \"\\u00a0\"}",
     "                ) : l.latestWords ? l.latestWords : l.reason ? `Not measured: ${l.reason}` : \"\\u00a0\"}")],
-  ["a bar row's explanation printed under it again", (s) => once(s,
-    "          <HBar value={r.value} max={max} tone={r.tone} />\n",
-    "          <HBar value={r.value} max={max} tone={r.tone} />\n          {r.sub ? <span className=\"hbarSub\">{r.sub}</span> : null}\n")],
+  // The per-row bars went with #552 COWORK #169; the explanation that sat
+  // under a bar row is now the cash tile's n/m line, which must stay a word
+  // and its reason (rule 2's "Can't calculate" sentence must not print inline).
+  ["the balance legend's total-debt refusal printed as a sentence (ONDS)", (s) => once(s,
+    "Total debt <DerivedValue value={b.totalDebt} missing={b.totalDebtMissing} />",
+    "Total debt {b.totalDebtMissing ? `Can't calculate — ${b.totalDebtMissing} not reported` : null}<DerivedValue value={b.totalDebt} missing={b.totalDebtMissing} />")],
   ["the Q4 EPS footnote printed outside the details", (s) => once(s,
     "      <CardDetails>\n        <p>{view.recentPeriods.some(q4EpsNotReported) ? <>{Q4_EPS_NOTE} </> : null}Source: {SEC_ATTRIBUTION}.</p>\n      </CardDetails>",
     "      <p className=\"earningsDataNote\">{view.recentPeriods.some(q4EpsNotReported) ? <>{Q4_EPS_NOTE} </> : null}Source: {SEC_ATTRIBUTION}.</p>")],
@@ -144,9 +147,8 @@ const MUTANTS = [
     "      <h3>What does a typical {w.one} look like?</h3>\n      <p>Middle value across the {w.many} on file.</p>\n")],
   ["a tile losing its Latest row (alignment)", (s) => once(s, `<div className="trendLatest" style=`, `<div className="trendLatestGone" style=`)],
   ["'derived' after the figure again", (s) => once(s,
-    "              <DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />\n            </>",
-    "              <DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />\n              {c.freeCashFlowDerived ? <CardDerivedWord note=\"Derived after\" /> : null}\n            </>").replace(
-    "              {c.freeCashFlowDerived ? (\n                <CardDerivedWord note={`Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this ${w.one} is the difference between two cumulative figures.`} />\n              ) : null}\n", "")],
+    "dollars={<>{fcfDerived}<DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />",
+    "dollars={<><DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />{fcfDerived}")],
 ];
 for (const [label, mutate] of MUTANTS) {
   let caught, why = "";

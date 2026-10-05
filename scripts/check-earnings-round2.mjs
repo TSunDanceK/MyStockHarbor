@@ -56,14 +56,16 @@ const underMutation = async (name, from, to, probe) => {
 console.log("\nc. the balance sheet on AVAV");
 {
   const t = card(M, "SecBalanceSheetCard", vAvav);
+  // ONE TOTALS LINE since #552 COWORK #169: "Total assets · liabilities ·
+  // {equity}", the label following the figure as the row's did.
   check("total equity is shown under its own label, with the filed figure",
-    /Total equity \(incl\. noncontrolling interests\).*\$4\.40B/.test(t) && !/Shareholders' equity/.test(t), t.slice(-420));
+    /liabilities · total equity \(incl\. noncontrolling interests\)\s*\$5\.73B · .* · \$4\.40B/.test(t) && !/· equity \$/.test(t), t.slice(0, 600));
   // COWORK #54: untagged, but total assets and total equity are filed at the
   // same date, so it is derived (assets - equity) and marked, not "not found".
   check("total liabilities is derived from assets less equity, and marked (COWORK #54)",
-    /Total liabilities\s*derived\s*\$1\.3\dB/.test(t) && !new RegExp(`Total liabilities ${NOT_FOUND}`).test(t), (t.match(/Total liabilities[^A-Z]{0,40}/) ?? [""])[0]);
+    /Total assets · derived liabilities · .*\$5\.73B · \$1\.3\dB · \$4\.40B/.test(t) && !t.includes(NOT_FOUND), (t.match(/Total assets[^A-Z]{0,120}/) ?? [""])[0]);
   check("a filer with the parent-only figure keeps the plain label (AAPL)",
-    /Shareholders' equity/.test(card(M, "SecBalanceSheetCard", vAapl)) &&
+    /Total assets · liabilities · equity \$/.test(card(M, "SecBalanceSheetCard", vAapl)) &&
       !/incl\. noncontrolling/.test(card(M, "SecBalanceSheetCard", vAapl)));
   await underMutation("fallback to total equity removed",
     "const useTotal = parent.val === null && total.val !== null;", "const useTotal = false;",

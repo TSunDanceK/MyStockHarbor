@@ -801,14 +801,6 @@ export default async function StockEarningsPage({ params }: Props) {
         /* NOTHING WIDER THAN THE CARD (#552 COWORK #97): grid and flex
            children get min-width: 0, the track is the content box's width,
            and a long label wraps instead of pushing its figure off the edge. */
-        .hbarList { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
-        .hbarRow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
-        .hbarHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: 12px; row-gap: 2px; min-width: 0; }
-        .hbarLabel { font-size: var(--fs-label); font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; overflow-wrap: anywhere; }
-        .hbarValue { font-size: 0.875rem; font-weight: 950; color: #f1f5f9; letter-spacing: -0.02em; white-space: nowrap; }
-        .hbarSub { font-size: var(--fs-label); color: rgba(148,163,184,0.72); }
-        .hbarTrack { box-sizing: border-box; width: 100%; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.05); overflow: hidden; }
-        .hbarFill { display: block; height: 100%; border-radius: 999px; }
 
         .gmChart { margin-top: 10px; display: flex; align-items: stretch; gap: 2px; height: 148px; }
         .gmCol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
@@ -852,7 +844,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .trendTileLabel { min-height: 2.6em; }
         .trendTileValue { margin-top: 0; white-space: nowrap; overflow-wrap: normal; }
         .trendTile .trendChipRow { align-self: end; margin-top: 6px; }
-        .metricValue, .hbarValue, .wfValue { font-variant-numeric: tabular-nums; }
+        .metricValue, .wfValue { font-variant-numeric: tabular-nums; }
         .cardDetailsBody { margin-top: 8px; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(203,213,225,0.72); }
         .cardDetailsBody p { margin: 0 0 6px; }
         .trendCell { display: grid; gap: 4px; align-content: start; }
@@ -903,6 +895,48 @@ export default async function StockEarningsPage({ params }: Props) {
         .sideColumn .snapshotGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .snapshotGrid .metricValue { white-space: nowrap; word-break: normal; }
         @container (max-width: 330px) { .snapshotGrid { grid-template-columns: 1fr !important; } }
+        /* QUALITY OF EARNINGS AND BALANCE SHEET (#552 COWORK #169): tiles 2 × 2,
+           1 across where a figure would wrap; the charts share the card's width. */
+        .qualityCard, .balanceCard { container-type: inline-size; }
+        .qualityGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .qualityGrid .metricValue { white-space: nowrap; word-break: normal; }
+        @container (max-width: 300px) { .qualityGrid { grid-template-columns: 1fr !important; } }
+        .qualityLead { margin: 10px 0 0; }
+        .conversionSub, .conversionLegend { margin: 2px 0 10px; color: rgba(148,163,184,0.9) !important; }
+        .conversionLegend { margin-top: 8px; }
+        /* THE CONVERSION CHART IN HTML: its labels follow the root size. */
+        .convChart { --conv-plot: 7.5rem; --conv-axis: calc(var(--fs-fine) * 2.9); position: relative; display: grid; gap: 4px; max-width: 34rem; padding: 0 6px; }
+        .convSlot { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+        .convPlot { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; width: 100%; height: calc(var(--conv-plot) + 1.5em); font-size: var(--fs-label); }
+        .convBar { display: block; width: min(1.6rem, 70%); border-radius: 3px 3px 0 0; }
+        .convPct { font-weight: 800; color: #cbd5e1; white-space: nowrap; line-height: 1.5; }
+        .convLoss { font-weight: 700; color: #94a3b8; line-height: 1.5; }
+        .convLatest .convPct, .convLatest .convPeriod { color: #f8fafc; font-weight: 900; }
+        .convLatest .convBar { box-shadow: 0 0 0 1.5px #f8fafc; }
+        .convPeriod { display: flex; flex-direction: column; justify-content: center; height: var(--conv-axis); line-height: 1.35; font-size: var(--fs-fine); color: #94a3b8; white-space: nowrap; border-top: 1px solid rgba(148,163,184,0.35); width: 100%; text-align: center; }
+        @container (max-width: 22rem) { .convChart { gap: 2px; padding: 0 4px; } .convPct { font-size: var(--fs-fine); letter-spacing: -0.03em; } }
+        .convLine { position: absolute; left: 0; right: 0; border-top: 1.5px dashed rgba(226,232,240,0.7); pointer-events: none; }
+        .ratioMeter > .balanceRowHead { font-size: var(--fs-read); }
+        .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+        .balanceRows { position: relative; display: grid; gap: 10px; padding: 4px 0; }
+        .balanceRowHead { min-height: calc(var(--fs-label) * 1.5); line-height: 1.5; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: var(--fs-label); color: rgba(226,232,240,0.82); }
+        .balanceRowHead span { min-width: 0; }
+        .balanceRowHead strong { white-space: nowrap; color: #f8fafc; }
+        .balanceTrack { position: relative; display: flex; height: 22px; margin-top: 4px; border-radius: 6px; background: rgba(148,163,184,0.12); overflow: hidden; }
+        .balanceSeg { box-sizing: border-box; flex: 0 0 auto; display: flex; align-items: center; height: 100%; padding: 0 6px; overflow: hidden; white-space: nowrap; font-size: var(--fs-fine); font-weight: 800; color: #052e16; }
+        /* Over the two tracks only, never over the row figures: past the first
+           row's head (its line height) and the track's 4px margin. */
+        .balanceGap { position: absolute; top: calc(8px + var(--fs-label) * 1.5); bottom: 4px; border: 1.5px dashed; border-radius: 6px; pointer-events: none; }
+        .balanceGapLabel { margin-top: 4px; font-size: var(--fs-label); font-weight: 900; white-space: nowrap; }
+        .balanceLegend { margin: 8px 0 0; font-size: var(--fs-label) !important; line-height: 1.6; color: rgba(203,213,225,0.82) !important; }
+        .ratioMeter { margin-top: 18px; }
+        .meterTrack { position: relative; height: 8px; margin-top: 10px; border-radius: 999px; background: rgba(148,163,184,0.22); }
+        .meterMark { position: absolute; top: -5px; bottom: -5px; border-left: 1.5px dashed rgba(226,232,240,0.75); }
+        .meterDot { position: absolute; top: 50%; width: 14px; height: 14px; margin-left: -7px; transform: translateY(-50%); border-radius: 999px; background: #93c5fd; border: 2px solid #0f172a; }
+        .meterScale { position: relative; display: flex; justify-content: space-between; margin-top: 6px; font-size: var(--fs-label); color: rgba(148,163,184,0.9); }
+        .meterMarkLabel { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+        .balanceTotals { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); font-size: var(--fs-read); }
+        .balanceTotals .metricSub { margin-top: 0; margin-bottom: 4px; }
         /* THE PHONE ORDER (#552 COWORK #166), C's pattern from the stock page
            (check-stock-phone-order): the two columns step aside and their
            cards order by CSS, so the phone reads Next report, Growth &

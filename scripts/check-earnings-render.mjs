@@ -440,8 +440,13 @@ console.log("\n9. a percentage change across zero is not printed as a number");
   // THE ABBREVIATION IS GONE. The owner did not know what "n/m" meant, which is
   // the whole verdict on it — an abbreviation tells a reader something is being
   // withheld without saying what.
-  check("...and 'n/m' appears nowhere a reader can see it",
-    !/\bn\/m\b/.test(kgcText) && !/not meaningful/i.test(kgcText),
+  // THE EPS GROWTH CELLS, not the whole page: since #552 COWORK #169 the
+  // Quality of earnings tiles print "n/m: {the reason}" by the owner's own
+  // spec, the reason on the tile itself — a different rule, its own check
+  // (check-earnings-quality-balance).
+  const kgcGrowthText = visibleText(renderPage(M, vKgc).replace(/<section class="card qualityCard">[\s\S]*?<\/section>/, ""));
+  check("...and 'n/m' appears nowhere a reader can see it (outside the cash tiles' own n/m rule)",
+    !/\bn\/m\b/.test(kgcGrowthText) && !/not meaningful/i.test(kgcGrowthText) && kgcGrowthText !== kgcText,
     "replaced by what actually happened in the period");
 
   // A NUMBER THAT WAS MEANINGFUL MUST STILL PRINT. A guard that suppressed
