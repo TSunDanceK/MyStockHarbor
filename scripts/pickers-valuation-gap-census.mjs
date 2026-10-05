@@ -44,6 +44,10 @@ register("./lib/next-server-hooks.mjs", import.meta.url);
 register("./lib/ts-resolve-app.mjs", import.meta.url);
 
 delete process.env.FMP_API_KEY;
+// THE PRICE THE PAGE DIVIDES BY: production serves the pool from Tiingo
+// (PRICE_PROVIDER_POOL=tiingo); the relay job does not set it, and without it
+// the read returns the retired FMP rows — every cell then reads "no price".
+process.env.PRICE_PROVIDER_POOL = "tiingo";
 
 if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
   console.error("FATAL: needs the Upstash credentials (write- relay job).");
