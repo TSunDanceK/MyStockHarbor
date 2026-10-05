@@ -531,8 +531,13 @@ console.log("\n8. F4 — the manual override does not read the flag the bug corr
     "and no longer renders a 'fully populated' disabled state",
     !code.includes("Backfill (this date is fully populated)")
   );
-  check("page.tsx does not pass complete= to BackfillButton", !/<BackfillButton[^>]*complete=/s.test(page));
-  check("but still gates on there being candidates", /<BackfillButton[^>]*hasEarnings=/s.test(page));
+  // SINCE THE WEEK PAGE (#552 COWORK #170) the button renders inside the week
+  // list (EarningsWeek), for the day shown; the rule travels with it.
+  const week = fs.readFileSync("app/earnings-calendar/EarningsWeek.tsx", "utf8");
+  check("neither the page nor the week list passes complete= to BackfillButton",
+    !/<BackfillButton[^>]*complete=/s.test(page) && !/<BackfillButton[^>]*complete=/s.test(week));
+  check("but still gates on there being candidates",
+    /<BackfillButton[^>]*hasEarnings=/s.test(page) || /<BackfillButton[^>]*hasEarnings=\{day\.count > 0\}/s.test(week));
 }
 
 // ── 9. A lapsed FMP key still serves a month Redis holds ──────────────────

@@ -340,7 +340,14 @@ export default async function EarningsCalendarPage({
             <EarningsTickerSearch />
           </section>
 
-          <EarningsWeek days={weekDaysView} initial={initial} credit={priceProviderFor("POOL") === "tiingo" ? { label: TIINGO_CREDIT, href: TIINGO_URL } : null} />
+          {/* THE "SHARES SINCE" CLOSES ARE TIINGO'S: the shared linked credit, in the card's fine print. */}
+          <EarningsWeek
+            days={weekDaysView}
+            initial={initial}
+            credit={priceProviderFor("POOL") === "tiingo" && weekDaysView.some((d) => d.rows.length > 0) ? (
+              <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a>
+            ) : null}
+          />
 
           {/* THE "NEXT UP" TICKER IS STILL GONE. It walked forward through a
               window that ends today, so every row read "Today" under a "Next up"

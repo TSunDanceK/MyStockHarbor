@@ -280,7 +280,7 @@ console.log("\n9. THE PAGE: LADDER ORDER, THE TICKER'S REMOVAL, AND THE PLACEHOL
   // THE LADDER IS AN ORDERING CLAIM: filed (the week) → outstanding (the due
   // group) → expected (the weeks), strongest first.
   check("the week's filed results come BEFORE Coming up in the page",
-    page.indexOf("<EarningsWeek ") > 0 && page.indexOf("<EarningsWeek ") < page.indexOf("<EarningsComingUp "));
+    page.search(/<EarningsWeek\s/) > 0 && page.search(/<EarningsWeek\s/) < page.indexOf("<EarningsComingUp "));
   check("...and inside Coming up the due group comes BEFORE the estimate weeks",
     cu.indexOf('data-group="due"') > 0 && cu.indexOf('data-group="due"') < cu.indexOf("data-group={w.key}"));
 

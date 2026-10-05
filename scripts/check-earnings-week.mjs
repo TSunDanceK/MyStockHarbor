@@ -119,7 +119,7 @@ check("no close: 'Shares since' reads '—'", /data-row="NEWCO"[\s\S]*?data-sinc
 check("each ticker links to its earnings page", html.includes('href="/stock/AAPL/earnings"'));
 check("logos carry alt=\"\" (the ticker names the company)", /<img[^>]*alt=""/.test(html) && !/alt="AAPL logo"/.test(html));
 check("EPS and Shares since hide below 640 px", /@media \(max-width: 640px\) \{[\s\S]*?\.ewWide \{ display: none; \}/.test(html));
-const CREDIT = { label: "Market data from Tiingo.com", href: "https://www.tiingo.com" };
+const CREDIT = React.createElement("a", { href: "https://www.tiingo.com", target: "_blank", rel: "noopener noreferrer" }, "Market data from Tiingo.com");
 const credited = renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-01", credit: CREDIT }));
 const creditRule = (h, e) => /<p class="ewFine" data-fine-print="">[\s\S]*?Shares since[\s\S]*?<a href="https:\/\/www\.tiingo\.com"[^>]*>Market data from Tiingo\.com<\/a><\/p>/.test(h) && !/<p class="ewFine"/.test(e);
 const empty = renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-04" }));
@@ -161,7 +161,7 @@ check("'How these estimates work' is a closed tap note", /<details class="cuHow"
 
 console.log("\n6. the page");
 const PAGE = readCodeOnly("app/earnings-calendar/page.tsx");
-const gridGone = (src) => !/buildCalendarWeeks|WEEKDAY_LABELS|← Prev|Next →|\?year=\$\{/.test(src) && /<EarningsWeek /.test(src);
+const gridGone = (src) => !/buildCalendarWeeks|WEEKDAY_LABELS|← Prev|Next →|\?year=\$\{/.test(src) && /<EarningsWeek\s/.test(src);
 check("the month grid and Prev / Today / Next are gone", gridGone(PAGE));
 check("the title and description keep \"Earnings calendar\"",
   /const PAGE_TITLE = "Earnings Calendar[^"]*"/.test(PAGE) && /"Earnings calendar: /.test(PAGE));
@@ -204,7 +204,7 @@ for (const [label, m] of MUTANTS) {
   check("MUTATION: the credit printed under an empty day as well → caught",
     !creditRule(renderToStaticMarkup(React.createElement(MW, { days, initial: "2026-10-01", credit: CREDIT })), renderToStaticMarkup(React.createElement(MW, { days, initial: "2026-10-04", credit: CREDIT }))));
 }
-check("MUTATION: the month grid back → caught", !gridGone(PAGE.replace("<EarningsWeek ", "<div>{buildCalendarWeeks(2026, 10)}</div><EarningsWeek ")));
+check("MUTATION: the month grid back → caught", !gridGone(PAGE.replace(/<EarningsWeek\s/, "<div>{buildCalendarWeeks(2026, 10)}</div><EarningsWeek ")));
 {
   const PAGE_RAW = fs.readFileSync("app/earnings-calendar/page.tsx", "utf8");
   const Tm = await lift(grabFunction(once(PAGE_RAW, "if (date && days.includes(date)) return", "if (date) return"), "oldUrlTarget"), "", "oldUrlTarget-mut");
