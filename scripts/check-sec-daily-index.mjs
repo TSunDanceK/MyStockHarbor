@@ -1464,6 +1464,20 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
   check("the unioned manifest stays well inside Upstash's 10 MB ceiling",
     grown < 1048576,
     `${(grown / 1024).toFixed(0)} KB at 796 symbols (${((grown / 10485760) * 100).toFixed(1)}% of the ceiling)`);
+
+  // THE NEW BOUND (#552 COWORK #158, CODE-A #165 option 1). The seed now
+  // unions the Pickers/Tiingo universe: 999 entries + 1,675 eligible with no
+  // entry = 2,674 on 5 Oct, rounded up to 2,700. Every entry FULLY populated
+  // (the state once populate has read them all) must stay under 2 MiB, a fifth
+  // of the 10 MB request ceiling, since each SEC job still rewrites the
+  // manifest in one SET. Empty entries, the state on the first run, are ~60%
+  // of this. A universe that outgrows the bound fails here, visibly.
+  const widened = sizeAt(2700, true);
+  check("the manifest seeded with the Pickers/Tiingo universe (2,700 entries, worst case) stays under 2 MiB",
+    widened < 2 * 1048576,
+    `${(widened / 1024).toFixed(0)} KB at 2,700 symbols (${((widened / 10485760) * 100).toFixed(1)}% of the ceiling)`);
+  check("...and the bound bites: 3,600 fully populated entries would not fit under it",
+    sizeAt(3600, true) >= 2 * 1048576, "so the 2 MiB line is a real limit, not a formality");
 }
 
 // ── 17d. The run is observable without a key ───────────────────────────────
