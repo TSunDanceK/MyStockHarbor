@@ -36,11 +36,11 @@ const html = (M, C, p) => renderToStaticMarkup(React.createElement(M[C], p));
 /** The P/E tile as it stood on main before this PR (A's #741 line, at c2928b1d), which must not change. */
 const PE_BEFORE = "{!valuationLoading && valuation ? (\n                <div className=\"stock-stat-cell\">\n                  <div className=\"stock-stat-label\">P/E ({valuation.peBasis ?? \"TTM\"})</div>\n                  <div className=\"stock-stat-value\">\n                    {valuation.peRatio != null\n                      ? formatValuationMultiple(valuation.peRatio)\n                      : <ReasonedValue text={valuation.words?.peRatio ?? \"—\"} reason={valuation.reasons?.peRatio} />}\n                  </div>\n                  {/* P/E VS ITS SECTOR (#552 COWORK #147 §2): the glyph and the\n                      words carry it, in the page's ordinary ink (a comparison,\n                      not a verdict); the note names the peers and the date. */}\n                  <div className=\"stock-stat-sub\" data-pe-sector={valuation.peSector ? \"\" : undefined}>\n                    {valuation.peSector\n                      ? <><span aria-hidden=\"true\">{valuation.peSector.glyph} </span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></>\n                      : \"See valuation ↓\"}\n                  </div>\n                </div>\n              ) : null}";
 // #563 COWORK #112 adds a decorative P/E line inside the cell (and positions the cell); COWORK #116 gives the line
-// room under the words and keeps the glyph with its first word (a no-break space). The tile otherwise stays as it was.
+// room under the words and keeps the glyph with its first word (a baseline row; the glyph's span is A's, unchanged). The tile otherwise stays as it was.
 const PE_DECOR = (s) => s.replace('<div className="stock-stat-cell" style={{ position: "relative", paddingBottom: 17 }}>', '<div className="stock-stat-cell">')
   .replace(/\n {18}\{\/\* A baseline row, so the glyph keeps[^\n]*\*\/\}/, "")
-  .replace(' style={valuation.peSector ? { display: "flex", alignItems: "baseline" } : undefined}>', ">")
-  .replace('{valuation.peSector.glyph}{"\\u00a0"}</span>', "{valuation.peSector.glyph} </span>")
+  .replace('? <span style={{ display: "flex", alignItems: "baseline", columnGap: "0.3em" }}><span aria-hidden="true">', '? <><span aria-hidden="true">')
+  .replace('reason={valuation.peSector.note} /></span>', "reason={valuation.peSector.note} /></>")
   .replace(/\n {18}\{\/\* A's numeric sector median[^\n]*\*\/\}\n {18}\{valuation\.peRatio != null && valuation\.peSector \? <PeLine pe=\{valuation\.peRatio\} median=\{valuation\.peSector\.median\} \/> : null\}/, "");
 const PE_BLOCK = /\{!valuationLoading && valuation \? \(\s*<div className="stock-stat-cell"(?: style=\{\{ position: "relative"(?:, paddingBottom: 17)? \}\})?>(?:\s*\{\/\* A's numeric sector median[^\n]*\*\/\}\s*\{valuation\.peRatio != null[^\n]*)?\s*<div className="stock-stat-label">P\/E \(\{valuation\.peBasis \?\? "TTM"\}\)<\/div>[\s\S]*?: "See valuation ↓"\}\s*<\/div>\s*<\/div>\s*\) : null\}/;
 
@@ -139,9 +139,8 @@ const RULES = {
     /\.stock-stat-label, \.stock-stat-sub, \.hsRange \{ text-shadow: 0 0 2px #080d18, 0 0 2px #080d18, 0 0 4px #080d18; \}/.test(M.raw) &&
     !/\.stock-stat-cell[^{]*\{[^}]*z-index/.test(M.raw),
   // #563 COWORK #116: at 390 px the glyph sat alone above its words, and the line touched their underline.
-  "P/E: the glyph keeps to its first word (a baseline row, a no-break space); the line sits ~4 px clear of the words": ({ M }) =>
-    /data-pe-sector=\{valuation\.peSector \? "" : undefined\} style=\{valuation\.peSector \? \{ display: "flex", alignItems: "baseline" \} : undefined\}>/.test(M.page) &&
-    M.page.includes('{valuation.peSector.glyph}{"\\u00a0"}</span>') &&
+  "P/E: the glyph keeps to its first word (a baseline row); the line sits ~4 px clear of the words": ({ M }) =>
+    M.page.includes('? <span style={{ display: "flex", alignItems: "baseline", columnGap: "0.3em" }}><span aria-hidden="true">{valuation.peSector.glyph} </span><ReasonedValue') &&
     M.page.includes('<div className="stock-stat-cell" style={{ position: "relative", paddingBottom: 17 }}>') &&
     /className="hsPe"[\s\S]{0,200}bottom: 3, width: "calc\(100% - 20px\)", height: 12,/.test(M.partsSrc),
 };
@@ -179,7 +178,7 @@ const MUTANTS = [
   [R[8], "lib", (s) => s.replace("const v = closes.filter(fin).slice(-n);\n  if (v.length < 2) return null;\n  const lo = Math.min(...v, fin(prevClose)", "const v = closes.filter(fin).slice(-20);\n  if (v.length < 2) return null;\n  const lo = Math.min(...v, fin(prevClose)")],
   [R[10], "page", (s) => s.replace("        .stock-stat-cell > :not(svg) { position: relative; }\n", "")],
   [R[10], "page", (s) => s.replace(".stock-stat-label, .stock-stat-sub, .hsRange { text-shadow:", ".stock-stat-label, .hsRange { text-shadow:")],
-  [R[11], "page", (s) => s.replace(' style={valuation.peSector ? { display: "flex", alignItems: "baseline" } : undefined}>', ">")],
+  [R[11], "page", (s) => s.replace('<span style={{ display: "flex", alignItems: "baseline", columnGap: "0.3em" }}><span aria-hidden="true">', '<span><span aria-hidden="true">')],
   [R[11], "parts", (s) => s.replace('right: 10, bottom: 3, width: "calc(100% - 20px)", height: 12,', 'right: 10, bottom: 6, width: "calc(100% - 20px)", height: 12,')],
   [R[1], "parts", (s) => s.replace('viewBox="0 0 26 100" preserveAspectRatio="none"', 'viewBox="0 0 10 100" preserveAspectRatio="none"').replace("bottom: 12, width: 26,", "bottom: 12, width: 10,")],
   [R[1], "parts", (s) => s.replace('top: "calc(12px + 1.5rem)", bottom: 12', "top: 12, bottom: 12")],

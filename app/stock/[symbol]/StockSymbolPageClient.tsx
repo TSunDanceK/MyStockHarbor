@@ -1084,9 +1084,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                       words carry it, in the page's ordinary ink (a comparison,
                       not a verdict); the note names the peers and the date. */}
                   {/* A baseline row, so the glyph keeps to its first word when the words wrap (#563 COWORK #116). */}
-                  <div className="stock-stat-sub" data-pe-sector={valuation.peSector ? "" : undefined} style={valuation.peSector ? { display: "flex", alignItems: "baseline" } : undefined}>
+                  <div className="stock-stat-sub" data-pe-sector={valuation.peSector ? "" : undefined}>
                     {valuation.peSector
-                      ? <><span aria-hidden="true">{valuation.peSector.glyph}{"\u00a0"}</span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></>
+                      ? <span style={{ display: "flex", alignItems: "baseline", columnGap: "0.3em" }}><span aria-hidden="true">{valuation.peSector.glyph} </span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></span>
                       : "See valuation ↓"}
                   </div>
                 </div>
