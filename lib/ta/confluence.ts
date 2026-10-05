@@ -18,6 +18,14 @@
 //                  signal line. One-session projections, marked "≈" and kept
 //                  only within MAX_PROJECTION_PCT of the price.
 //
+//   price gaps     an unfilled fair value gap (B's lib/ta/fairValueGaps.ts at
+//                  its defaults: ≥ 0.5 × ATR(14), the last 250 bars, closed
+//                  bars only) joins a SHOWN zone as one structural member when
+//                  it OVERLAPS the zone (#563 COWORK #108: owner ruling (a)).
+//                  It never makes a zone, never moves one and never changes
+//                  which zones are shown: the zone's count rises by 1 and its
+//                  note gains a dated line
+//
 // THE ZONES:
 //   dedupe     one bar's one price counts once (on 2 Oct the week's low and the
 //              month's low are both Mon 28 Sep's low): every name is listed,
@@ -36,6 +44,7 @@
 // forecast. Nothing here says a level will hold, or what a reader should do.
 import { closedBars, dateWords, keyLevels, monthStart, isoWeekMonday, priceWords, type KeyBar, type PeriodKey } from "./keyLevels";
 import { ESTIMATE_SIGN } from "../../app/components/estimateMark";
+import { fairValueGaps, type FairValueGap } from "./fairValueGaps";
 import { emaSeries } from "./macdSeries";
 import { stackLabels } from "./priceLadder";
 import { liveBars } from "./sessionBar";
@@ -76,7 +85,11 @@ export type ConfLevel = {
 };
 
 /** One independent member of a zone: every name that shares its source. */
-export type Member = { labels: string[]; value: number; tier: Tier; date: string | null; rank: number; derived?: string };
+export type Member = {
+  labels: string[]; value: number; tier: Tier; date: string | null; rank: number; derived?: string;
+  /** An unfilled price gap's own range (its member's value is the gap's midpoint). */
+  gap?: { lower: number; upper: number };
+};
 
 export type Zone = {
   lo: number;
@@ -378,6 +391,30 @@ export function allZones(members: readonly Member[], band: number, price: number
   return bandMerge(near, band).map((ms) => withRound(ms, band, step)).filter(qualifies).map(toZone);
 }
 
+export const GAP_LABEL = "Unfilled price gap";
+/** How a gap counts, for the card's "What are these?" note. */
+export const GAP_WHAT = "An unfilled price gap (a jump of at least half the usual daily range that prices haven't gone back into, over the last 250 sessions) adds one level to a zone it overlaps; it never makes a zone on its own.";
+
+/** Does an unfilled gap overlap a zone? Edges count: a gap ending on the zone's low touches it. */
+export const gapOverlaps = (g: { lower: number; upper: number }, z: { lo: number; hi: number }) => g.lower <= z.hi && g.upper >= z.lo;
+
+/**
+ * A SHOWN zone with the unfilled gaps that overlap it, each one structural
+ * member (#563 COWORK #108). Its range, and so its place on the ladder, stays.
+ */
+export function withGaps(z: Zone, gaps: readonly FairValueGap[]): Zone {
+  const over = gaps.filter((g) => gapOverlaps(g, z));
+  if (!over.length) return z;
+  const added: Member[] = over.map((g) => ({ labels: [GAP_LABEL], value: (g.lower + g.upper) / 2, tier: "structural", date: g.date, rank: 2, gap: { lower: g.lower, upper: g.upper } }));
+  return { ...z, members: [...z.members, ...added].sort((a, b) => a.rank - b.rank || a.value - b.value), count: z.count + added.length };
+}
+
+/** The unfilled gaps on completed sessions, at B's defaults (today's partial bar never counts). */
+export function zoneGaps(bars: readonly KeyBar[] | null | undefined): FairValueGap[] {
+  const closed = closedBars(bars).filter((b) => isPrice(b.high) && isPrice(b.low) && isPrice(b.close));
+  return fairValueGaps(closed.map((b) => ({ date: b.date, high: b.high!, low: b.low!, close: b.close })));
+}
+
 /** The zones: nearest SHOWN above and below, and any holding the price. */
 export function confluence(inp: ConfluenceInput, opts: { k?: number } = {}): Confluence {
   const { price, levels, omitted, bars } = confluenceLevels(inp);
@@ -388,9 +425,12 @@ export function confluence(inp: ConfluenceInput, opts: { k?: number } = {}): Con
   if (a === null || a <= 0) return empty("Not enough daily highs and lows on file to measure the price's usual range.");
   const band = (opts.k ?? K_ATR) * a;
   const zones = allZones(dedupe(levels), band, price);
-  const inside = zones.find((z) => z.lo <= price && price <= z.hi) ?? null;
-  const above = zones.filter((z) => z.lo > price).sort((x, y) => x.lo - y.lo).slice(0, SHOWN);
-  const below = zones.filter((z) => z.hi < price).sort((x, y) => y.hi - x.hi).slice(0, SHOWN);
+  // Gaps join only the zones already picked to show: they never change which are shown.
+  const gaps = zoneGaps(inp.bars);
+  const insideZone = zones.find((z) => z.lo <= price && price <= z.hi);
+  const inside = insideZone ? withGaps(insideZone, gaps) : null;
+  const above = zones.filter((z) => z.lo > price).sort((x, y) => x.lo - y.lo).slice(0, SHOWN).map((z) => withGaps(z, gaps));
+  const below = zones.filter((z) => z.hi < price).sort((x, y) => y.hi - x.hi).slice(0, SHOWN).map((z) => withGaps(z, gaps));
   const shown = [...above, ...below, ...(inside ? [inside] : [])];
   if (!shown.length) return { ...empty("No areas where two or more levels sit close together near the price right now.", a), band };
   const lo = Math.min(price, ...shown.map((z) => z.lo)), hi = Math.max(price, ...shown.map((z) => z.hi));
@@ -437,6 +477,7 @@ export function zoneNote(z: Zone): string {
   const lines = z.members.map((m) => {
     const names = m.labels.join(" · ");
     if (m.tier === "projection") return `${ESTIMATE_SIGN} ${priceWords(m.value)}: ${m.derived} (a one-session projection).`;
+    if (m.gap && m.date) return `${GAP_LABEL} from ${dateWords(m.date)}.`;
     return `${names} ${priceWords(m.value)}${m.date ? ` (${dateWords(m.date).replace(/ \d{4}$/, "")})` : ""}.`;
   });
   const shared = z.members.filter((m) => m.labels.length > 1).length;
@@ -452,6 +493,7 @@ export const NOTE_KINDS = [
   { key: "ma", label: "Moving averages", colour: "#34d399" },
   { key: "swing", label: "Swing points", colour: "#c084fc" },
   { key: "pivot", label: "Pivots", colour: "#f472b6" },
+  { key: "gap", label: "Price gaps", colour: "#facc15" },
   { key: "round", label: "Round number", colour: "#cbd5e1" },
   { key: "proj", label: "Projections", colour: "#7dd3fc" },
 ] as const;
@@ -463,6 +505,7 @@ export function kindOfLabel(label: string, tier: Tier): NoteKind {
   if (tier === "round") return "round";
   if (/^MA(50|200)$/.test(label)) return "ma";
   if (/^Weekly pivot/.test(label)) return "pivot";
+  if (label === GAP_LABEL) return "gap";
   if (/^Swing |^Macro support/.test(label)) return "swing";
   if (/open$|close$/i.test(label)) return "oc";
   return "hl";
@@ -498,6 +541,8 @@ export function zoneNoteParts(z: Zone, price: number): ZoneNoteParts {
 /** "Day high · Week high — $237.88 (Fri 2 Oct)"; a projection "≈ $273.14 — the next close that would …". */
 export function bulletWords(b: NoteBullet): string {
   if (b.kind === "proj") return `${b.names.join(" · ")} — ${ESTIMATE_SIGN} ${priceWords(b.value)}, ${b.derived} (a one-session projection)`;
+  // "Unfilled price gap from Tue 4 Aug 2026" (#563 COWORK #108): dated, with its year.
+  if (b.kind === "gap" && b.date) return `${GAP_LABEL} from ${dateWords(b.date)}`;
   return `${b.names.join(" · ")} — ${priceWords(b.value)}${b.date ? ` (${dateWords(b.date).replace(/ \d{4}$/, "")})` : ""}`;
 }
 
