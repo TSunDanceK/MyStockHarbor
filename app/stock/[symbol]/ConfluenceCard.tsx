@@ -30,7 +30,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, typ
 import { ESTIMATE_SIGN } from "@/app/components/estimateMark";
 import { priceWords, type KeyBar } from "@/lib/ta/keyLevels";
 import {
-  CONFLUENCE_NOTE, GAP_WHAT, NOTE_KINDS, ZONE_LADDER_HEIGHT, ZONE_NOTE_FOOTER, bulletWords, confluence, countWords, ladderTop, rangeWords, zoneDistance, zoneLadder, zoneNoteParts,
+  CONFLUENCE_NOTE, GAP_WHAT, NOTE_KINDS, ZONE_LABEL_GAP, ZONE_NOTE_FOOTER, bulletWords, confluence, countWords, ladderHeight, ladderTop, rangeWords, zoneDistance, zoneLadder, zoneNoteParts,
   type Confluence, type ZoneMark,
 } from "@/lib/ta/confluence";
 import { FlowPanel, HowToRead, NOTE_GAP, NoteButton, NoteDot, NotePanel, anchoredPlacement, pushOffsets, useIsPhone, useTapNote } from "./TapNote";
@@ -38,8 +38,15 @@ import { FlowPanel, HowToRead, NOTE_GAP, NoteButton, NoteDot, NotePanel, anchore
 /** Above the price amber, below blue, holding it light: the same sides as the Price levels ladder. */
 export const ZONE_COLOUR: Record<ZoneMark["side"], string> = { above: "#f59e0b", below: "#38bdf8", inside: "#e2e8f0" };
 
-/** The pillar's centre, from the ladder's left edge, in px; the price's label sits left of it. */
-export const PILLAR_X = 70;
+/**
+ * The pillar's centre, from the ladder's left edge, IN REM (#563 COWORK #109):
+ * the price's label sits left of it and sizes to its text, so the column grows
+ * with the reader's text setting instead of cutting "$29,412". PILLAR_X is the
+ * same at the default 16px root, for the note's pointer.
+ */
+export const PILLAR = "5rem";
+export const PILLAR_X = 80;
+const atPillar = (px: number) => `calc(${PILLAR} + ${px}px)`;
 /** Zone labels start this far right of the pillar's centre; leaders stop ZONE_LEADER_GAP short. */
 export const ZONE_LABEL_OFFSET = 24;
 const ZONE_LEADER_GAP = 4;
@@ -100,13 +107,15 @@ function ZoneLabel({ mark, index, price, offset, phone, onPush }: {
   return (
     <>
       <div ref={label} {...note.owner} className="czLabel" data-side={mark.side}
-        style={{ position: "absolute", left: PILLAR_X + ZONE_LABEL_OFFSET, right: 0, top: mark.labelY + offset, transform: "translateY(-50%)", lineHeight: 1.25, minWidth: 0 }}>
-        <div className="czCount" style={{ fontSize: "0.78125rem", fontWeight: 850, color: ZONE_COLOUR[mark.side], whiteSpace: "nowrap" }}>
-          <NoteButton note={note}>{countWords(mark.zone)}</NoteButton>
-          {mark.side === "inside" ? null : <span style={{ fontSize: "var(--fs-label)", fontWeight: 600, color: C.muted }}> · {zoneDistance(mark.zone, price)}</span>}
+        style={{ position: "absolute", left: atPillar(ZONE_LABEL_OFFSET), right: 0, top: mark.labelY + offset, transform: "translateY(-50%)", lineHeight: 1.25, minWidth: 0 }}>
+        {/* On a narrow card or at a large text size these wrap (#563 COWORK #109): the count and the distance as
+            units, never mid-phrase; the range after its dash. The labels' measured height spaces them. */}
+        <div className="czCount" style={{ fontSize: "0.78125rem", fontWeight: 850, color: ZONE_COLOUR[mark.side] }}>
+          <NoteButton note={note} style={{ whiteSpace: "nowrap" }}>{countWords(mark.zone)}</NoteButton>
+          {mark.side === "inside" ? null : <span style={{ fontSize: "var(--fs-label)", fontWeight: 600, color: C.muted }}> · <span style={{ whiteSpace: "nowrap" }}>{zoneDistance(mark.zone, price)}</span></span>}
         </div>
-        <div className="czRange" style={{ fontSize: "var(--fs-label)", color: C.muted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{rangeWords(mark.zone)}</div>
-        {mark.side === "inside" ? <div className="czInside" style={{ fontSize: "var(--fs-label)", fontWeight: 700, color: C.value, whiteSpace: "nowrap" }}>{zoneDistance(mark.zone, price)}</div> : null}
+        <div className="czRange" style={{ fontSize: "var(--fs-label)", color: C.muted, fontVariantNumeric: "tabular-nums" }}>{rangeWords(mark.zone)}</div>
+        {mark.side === "inside" ? <div className="czInside" style={{ fontSize: "var(--fs-label)", fontWeight: 700, color: C.value }}>{zoneDistance(mark.zone, price)}</div> : null}
       </div>
       {note.open ? (
         phone
@@ -119,33 +128,54 @@ function ZoneLabel({ mark, index, price, offset, phone, onPush }: {
   );
 }
 
-function Ladder({ c, marks }: { c: Confluence; marks: ZoneMark[] }) {
+function Ladder({ c, count }: { c: Confluence; count: number }) {
   const phone = useIsPhone();
+  // THE LABELS' OWN HEIGHT SETS THEIR SPACING (#563 COWORK #109): at a large text
+  // setting, or when a label wraps on a narrow card, the stacking gap grows to the
+  // tallest label plus a little air, and the ladder grows only if they need it.
+  const box = useRef<HTMLDivElement | null>(null);
+  const [gap, setGap] = useState(ZONE_LABEL_GAP);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const fit = () => {
+      const tallest = Math.max(0, ...[...el.querySelectorAll<HTMLElement>(".czLabel")].map((x) => x.offsetHeight));
+      const need = Math.max(ZONE_LABEL_GAP, Math.ceil(tallest) + 6);
+      setGap((g) => (g === need ? g : need));
+    };
+    fit();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, []);
+  const height = ladderHeight(count, gap);
+  const marks = zoneLadder(c, height, gap);
   const [push, setPush] = useState<{ index: number; from: number; height: number } | null>(null);
   const onPush = useCallback((index: number, from: number, height: number | null) => {
     setPush((p) => (height === null ? (p && p.index === index ? null : p) : p && p.index === index && p.from === from && p.height === height ? p : { index, from, height }));
   }, []);
   const sc = c.scale!, price = c.price!;
-  const priceY = ladderTop(price, sc);
+  const priceY = ladderTop(price, sc, height);
   // Phone, a note open: everything whose top is below the open label moves down by the note.
   const ys = [priceY, ...marks.map((m) => m.top), ...marks.map((m) => m.labelY)];
   const off = push ? pushOffsets(ys, push.from, push.height) : ys.map(() => 0);
   const dotOff = off[0], bandOff = off.slice(1, 1 + marks.length), labelOff = off.slice(1 + marks.length);
   const extra = push ? push.height + NOTE_GAP * 2 : 0;
   return (
-    <div className="czLadder" style={{ position: "relative", height: ZONE_LADDER_HEIGHT + extra, marginTop: 16, marginBottom: 6 }}>
-      <div className="czAxis" style={{ position: "absolute", left: PILLAR_X - 1, top: 0, bottom: 0, width: 2, background: C.axis, borderRadius: 1 }} />
+    <div ref={box} className="czLadder" style={{ position: "relative", height: height + extra, marginTop: 16, marginBottom: 6 }}>
+      <div className="czAxis" style={{ position: "absolute", left: atPillar(-1), top: 0, bottom: 0, width: 2, background: C.axis, borderRadius: 1 }} />
       {marks.map((m, i) => (
         <div key={`b${i}`} className="czBand" data-side={m.side}
-          style={{ position: "absolute", left: PILLAR_X - BAND_HALF, width: BAND_HALF * 2, top: m.top + bandOff[i], height: Math.max(4, m.bottom - m.top), background: `${ZONE_COLOUR[m.side]}33`, border: `1px solid ${ZONE_COLOUR[m.side]}99`, borderRadius: 3, boxSizing: "border-box" }} />
+          style={{ position: "absolute", left: atPillar(-BAND_HALF), width: BAND_HALF * 2, top: m.top + bandOff[i], height: Math.max(4, m.bottom - m.top), background: `${ZONE_COLOUR[m.side]}33`, border: `1px solid ${ZONE_COLOUR[m.side]}99`, borderRadius: 3, boxSizing: "border-box" }} />
       ))}
       {/* THE PRICE: at its true height on the fixed scale, labelled on the pillar's left. */}
-      <div className="czDot" style={{ position: "absolute", left: PILLAR_X - 6, top: priceY + dotOff - 6, width: 12, height: 12, borderRadius: 999, background: "#f8fafc", border: "2px solid #0b1220", boxSizing: "border-box", zIndex: 2 }} />
-      <div className="czPrice" style={{ position: "absolute", left: 0, width: PILLAR_X - 12, top: priceY + dotOff, transform: "translateY(-50%)", textAlign: "right", lineHeight: 1.15 }}>
+      <div className="czDot" style={{ position: "absolute", left: atPillar(-6), top: priceY + dotOff - 6, width: 12, height: 12, borderRadius: 999, background: "#f8fafc", border: "2px solid #0b1220", boxSizing: "border-box", zIndex: 2 }} />
+      {/* Sized to its text, ending 12px left of the pillar: never cut, whatever the price or text size. */}
+      <div className="czPrice" style={{ position: "absolute", right: `calc(100% - ${PILLAR} + 12px)`, top: priceY + dotOff, transform: "translateY(-50%)", textAlign: "right", lineHeight: 1.15, whiteSpace: "nowrap" }}>
         <div style={{ fontSize: "var(--fs-label)", color: C.muted }}>price</div>
         <div style={{ fontSize: "var(--fs-label)", fontWeight: 850, color: C.value, fontVariantNumeric: "tabular-nums" }}>{priceWords(price)}</div>
       </div>
-      <svg className="czLeaders" width={ZONE_LABEL_OFFSET - BAND_HALF - ZONE_LEADER_GAP} height={ZONE_LADDER_HEIGHT + extra} aria-hidden="true" style={{ position: "absolute", top: 0, left: PILLAR_X + BAND_HALF }}>
+      <svg className="czLeaders" width={ZONE_LABEL_OFFSET - BAND_HALF - ZONE_LEADER_GAP} height={height + extra} aria-hidden="true" style={{ position: "absolute", top: 0, left: atPillar(BAND_HALF) }}>
         {marks.map((m, i) => (
           <line key={i} x1={0} y1={(m.top + m.bottom) / 2 + bandOff[i]} x2={ZONE_LABEL_OFFSET - BAND_HALF - ZONE_LEADER_GAP} y2={m.labelY + labelOff[i]} stroke={ZONE_COLOUR[m.side]} strokeOpacity={0.5} strokeWidth={1} />
         ))}
@@ -191,7 +221,7 @@ export default function ConfluenceCard({
         <div className="czWhat">{whatText}</div>
       </FlowPanel>
 
-      {marks.length && c.scale && c.price !== null ? <Ladder c={c} marks={marks} /> : <p className="czReason" style={readStyle}>{c.reason}</p>}
+      {marks.length && c.scale && c.price !== null ? <Ladder c={c} count={marks.length} /> : <p className="czReason" style={readStyle}>{c.reason}</p>}
 
       {/* THE SMALL PRINT, FOLDED (#88 §1): the key, the kinds' dots and the hedge. The Tiingo credit stays below, outside. */}
       <HowToRead>

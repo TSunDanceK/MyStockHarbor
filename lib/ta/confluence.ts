@@ -448,17 +448,17 @@ export function heightPct(v: number, scale: { lo: number; hi: number }): number 
 /** "3 levels" */
 export const countWords = (z: Zone) => `${z.count} level${z.count === 1 ? "" : "s"}`;
 
+/** A zone whose ends print the same at the usual precision: one price, not a range. */
+export const onePrice = (z: Zone) => z.lo === z.hi || priceWords(z.lo) === priceWords(z.hi);
+
 /**
- * "$325.81–$327.40" (one price when the zone is one price). When both ends
- * print the same at the usual precision ($1.08–$1.08), two more decimals.
+ * "$325.81–$327.40". A zone that collapses to one price (both ends print the
+ * same, e.g. a run of flat bars) reads "$11.24 (all at one price)", not
+ * "$11.2370–$11.2400" (#563 COWORK #109).
  */
 export function rangeWords(z: Zone): string {
-  if (z.lo === z.hi) return priceWords(z.lo);
-  const a = priceWords(z.lo), b = priceWords(z.hi);
-  if (a !== b) return `${a}–${b}`;
-  const dp = (Math.abs(z.hi) < 1 ? 4 : Math.abs(z.hi) >= 10_000 ? 0 : 2) + 2;
-  const fine = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp })}`;
-  return `${fine(z.lo)}–${fine(z.hi)}`;
+  if (onePrice(z)) return `${priceWords(z.hi)}${z.count > 1 ? " (all at one price)" : ""}`;
+  return `${priceWords(z.lo)}–${priceWords(z.hi)}`;
 }
 
 /**
@@ -477,7 +477,7 @@ export function zoneNote(z: Zone): string {
   const lines = z.members.map((m) => {
     const names = m.labels.join(" · ");
     if (m.tier === "projection") return `${ESTIMATE_SIGN} ${priceWords(m.value)}: ${m.derived} (a one-session projection).`;
-    if (m.gap && m.date) return `${GAP_LABEL} from ${dateWords(m.date)}.`;
+    if (m.gap && m.date) return `${GAP_LABEL} from ${dateWords(m.date)}, ${priceWords(m.gap.lower)}–${priceWords(m.gap.upper)}.`;
     return `${names} ${priceWords(m.value)}${m.date ? ` (${dateWords(m.date).replace(/ \d{4}$/, "")})` : ""}.`;
   });
   const shared = z.members.filter((m) => m.labels.length > 1).length;
@@ -517,7 +517,7 @@ export function kindOf(m: Member): NoteKind {
   return NOTE_KINDS.find((k) => ks.includes(k.key))?.key ?? "hl";
 }
 
-export type NoteBullet = { kind: NoteKind; names: string[]; value: number; date: string | null; derived?: string };
+export type NoteBullet = { kind: NoteKind; names: string[]; value: number; date: string | null; derived?: string; gap?: { lower: number; upper: number } };
 export type ZoneNoteParts = {
   /** "3 levels", "$236.06–$237.88", "0.9% above" (or "price inside zone"), and the zone's side for its colour. */
   count: string;
@@ -532,7 +532,7 @@ export const ZONE_NOTE_FOOTER = "One bar's price is counted once. A description,
 export function zoneNoteParts(z: Zone, price: number): ZoneNoteParts {
   const order = (k: NoteKind) => NOTE_KINDS.findIndex((x) => x.key === k);
   const bullets = z.members
-    .map((m) => ({ kind: kindOf(m), names: m.labels, value: m.value, date: m.date, ...(m.derived ? { derived: m.derived } : {}) }))
+    .map((m) => ({ kind: kindOf(m), names: m.labels, value: m.value, date: m.date, ...(m.derived ? { derived: m.derived } : {}), ...(m.gap ? { gap: m.gap } : {}) }))
     .sort((a, b) => order(a.kind) - order(b.kind) || b.value - a.value);
   const side = z.lo <= price && price <= z.hi ? "inside" : z.lo > price ? "above" : "below";
   return { count: countWords(z), range: rangeWords(z), distance: zoneDistance(z, price), side, bullets };
@@ -541,8 +541,9 @@ export function zoneNoteParts(z: Zone, price: number): ZoneNoteParts {
 /** "Day high · Week high — $237.88 (Fri 2 Oct)"; a projection "≈ $273.14 — the next close that would …". */
 export function bulletWords(b: NoteBullet): string {
   if (b.kind === "proj") return `${b.names.join(" · ")} — ${ESTIMATE_SIGN} ${priceWords(b.value)}, ${b.derived} (a one-session projection)`;
-  // "Unfilled price gap from Tue 4 Aug 2026" (#563 COWORK #108): dated, with its year.
-  if (b.kind === "gap" && b.date) return `${GAP_LABEL} from ${dateWords(b.date)}`;
+  // "Unfilled price gap from Tue 4 Aug 2026 — $298.40–$301.10" (#563 COWORK #108/#109): dated, with its
+  // year, and its range like the other lines' prices, so it can be checked against the chart's gap toggle.
+  if (b.kind === "gap" && b.date) return `${GAP_LABEL} from ${dateWords(b.date)}${b.gap ? ` — ${priceWords(b.gap.lower)}–${priceWords(b.gap.upper)}` : ""}`;
   return `${b.names.join(" · ")} — ${priceWords(b.value)}${b.date ? ` (${dateWords(b.date).replace(/ \d{4}$/, "")})` : ""}`;
 }
 
@@ -550,8 +551,15 @@ export function bulletWords(b: NoteBullet): string {
 
 /** The ladder's drawn height, in px (#88 §2: about 320 on desktop, at least 280 on phones; one height for both). */
 export const ZONE_LADDER_HEIGHT = 320;
-/** The least room between two zone labels (up to three lines and a little air), in px. */
+/**
+ * The least room between two zone labels at the default text size (up to three
+ * lines and a little air), in px. The card widens it to its labels' measured
+ * height when larger text or a narrow card makes them taller (#563 COWORK #109).
+ */
 export const ZONE_LABEL_GAP = 42;
+
+/** The ladder's height for `n` labels `gap` apart: ZONE_LADDER_HEIGHT, taller only when the labels need it. */
+export const ladderHeight = (n: number, gap = ZONE_LABEL_GAP) => Math.max(ZONE_LADDER_HEIGHT, Math.ceil(n * gap));
 
 export type ZoneMark = {
   zone: Zone;
@@ -572,7 +580,7 @@ export const ladderTop = (v: number, scale: { lo: number; hi: number }, height =
  * (the ladder's own stacking rule, lib/ta/priceLadder.ts stackLabels). The
  * price dot is placed by ladderTop(price): it moves, the scale doesn't.
  */
-export function zoneLadder(c: Confluence, height = ZONE_LADDER_HEIGHT): ZoneMark[] {
+export function zoneLadder(c: Confluence, height = ZONE_LADDER_HEIGHT, gap = ZONE_LABEL_GAP): ZoneMark[] {
   if (!c.scale || c.price === null) return [];
   const sc = c.scale;
   const all = [
@@ -584,6 +592,6 @@ export function zoneLadder(c: Confluence, height = ZONE_LADDER_HEIGHT): ZoneMark
     const top = ladderTop(m.zone.hi, sc, height), bottom = ladderTop(m.zone.lo, sc, height);
     return { ...m, top, bottom, labelY: (top + bottom) / 2 };
   });
-  const ys = stackLabels(marks.map((m) => m.labelY), ZONE_LABEL_GAP, height, ZONE_LABEL_GAP / 2);
+  const ys = stackLabels(marks.map((m) => m.labelY), gap, height, gap / 2);
   return marks.map((m, i) => ({ ...m, labelY: ys[i] }));
 }
