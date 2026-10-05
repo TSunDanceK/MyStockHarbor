@@ -85,7 +85,7 @@ type StockValuationData = {
   reasons?: Partial<Record<"peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda", string | null>>;
   sourceNote: string;
   /** "▲ Above sector median (21.5×)" and its note, or null for no line (lib/peSectorLine.ts). */
-  peSector?: { glyph: string; text: string; note: string } | null;
+  peSector?: { glyph: string; text: string; note: string; median?: number | null } | null;
   /** "TTM to 26 Jul 2026" or "FY2025": which twelve months the P/E is on. */
   peBasis?: string | null;
   /** The derived-Q4 caveat, when the TTM includes one. */
