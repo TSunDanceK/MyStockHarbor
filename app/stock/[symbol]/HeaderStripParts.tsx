@@ -85,7 +85,7 @@ export function VolumeBars({ vols, avg, colour }: { vols: readonly (number | nul
   if (!b) return null;
   const w = 100 / b.heights.length;
   return (
-    <svg className="hsVolume" aria-hidden="true" focusable="false" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ ...behind, height: "45%", opacity: 0.6 }}>
+    <svg className="hsVolume" aria-hidden="true" focusable="false" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ ...behind, height: "45%", opacity: 0.45 }}>
       {b.heights.map((h, i) => (
         <rect key={i} className={i === b.heights.length - 1 ? "hsVolLast" : undefined} x={i * w + w * 0.15} y={100 - h} width={w * 0.7} height={h}
           fill={colour} fillOpacity={i === b.heights.length - 1 ? 0.55 : 0.22} />
