@@ -38,7 +38,7 @@ export const RS_INPUTS = [
 ] as const;
 export const TREND_POINTS = [-2, -1, 1, 2] as const;
 export const EARNINGS_POINTS: Record<"Good" | "Mixed" | "Weak", number> = { Good: 1, Mixed: 0, Weak: -1 };
-export const CUTOFFS_WORDS = "Strong +4 or more · Firm +2 to +3 · Neutral −1 to +1 · Soft −2 to −3 · Weak −4 or less.";
+export const CUTOFFS_WORDS = "Strong +4 or more · Firm +2 to +3 · Neutral −1 to +1 · Soft −2 to −3 · Weak −4 or less. RSI(14) at 70 or more pulls a positive total one point toward Neutral, and at 30 or less a negative one.";
 export const NOT_ADVICE = "A description of recent price and results, not a recommendation.";
 
 export function wordFor(total: number): StrengthWord {
@@ -137,9 +137,11 @@ export function scoreSession(x: Ctx, i: number, earnings: EarningsBadgeInput): {
     rsiPts = rsi >= 70 && price > 0 ? -1 : rsi <= 30 && price < 0 ? 1 : 0;
     const v = Math.round(rsi);
     lines.push({ key: "rsi", label: "RSI(14)", counted: true, points: rsiPts,
-      reading: rsiPts < 0 ? `${v}, stretched above 70: pulls a positive total back 1`
-        : rsiPts > 0 ? `${v}, stretched below 30: pulls a negative total back 1`
-        : `${v}: no adjustment (counts only at 70 or more with a positive total, or 30 or less with a negative one)` });
+      // SHORT (#563 COWORK #106): the reading and why it counted; the rule itself
+      // is in CUTOFFS_WORDS, under the list.
+      reading: rsiPts < 0 ? `${v} (70 or more, with a positive total)`
+        : rsiPts > 0 ? `${v} (30 or less, with a negative total)`
+        : `${v}` });
   } else {
     lines.push({ key: "rsi", label: "RSI(14)", counted: false, points: 0, reading: `not counted (needs 15 sessions; ${i + 1} on file)` });
   }
