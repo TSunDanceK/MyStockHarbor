@@ -14,7 +14,12 @@
 //     zone of its own; the card's nearest SHOWN above and below are re-picked
 //     with those included, and how often that changes what is shown
 //   - crowding by market cap (price × SEC cover-page shares, as Pickers shows
-//     it): small < $2B, mid $2–10B, large > $10B, and no cap on file
+//     it): small < $2B, mid $2–10B, large > $10B, and no cap on file; and by
+//     liquidity (the 50-session average of close × volume): thin < $10M a day,
+//     mid $10–100M, deep > $100M, since SEC caps exist only for Pickers rows
+//
+// UNIVERSE=tiingo runs over the whole stored Tiingo universe instead of the
+// Pickers list (the Pickers universe is nearly all large caps).
 //
 // MA50 and MA200 are the page's (simple averages of the closes); the macro
 // support zone is the page's own computeMacroSupport, lifted from
@@ -25,6 +30,7 @@
 // only. No price, bar, cap or other Tiingo value is printed.
 //
 //   node scripts/fvg-zones-census.mjs      (relay: write-fvg-zones-census)
+//   UNIVERSE=tiingo node scripts/fvg-zones-census.mjs   (relay: write-fvg-zones-census-tiingo)
 //   FIXTURE=1 node scripts/fvg-zones-census.mjs   (synthetic bars, no Redis)
 import fs from "node:fs";
 import { register } from "node:module";
@@ -60,7 +66,9 @@ const redis = FIXTURE ? null : (await import("@upstash/redis")).Redis.fromEnv();
 const C = await import("../lib/ta/confluence.ts");
 const F = await import("../lib/ta/fairValueGaps.ts");
 const { closedBars } = await import("../lib/ta/keyLevels.ts");
-const { tiingoEodKey } = await import("../lib/server/marketData/keys.ts");
+const { tiingoEodKey, TIINGO_UNIVERSE_KEY } = await import("../lib/server/marketData/keys.ts");
+const { parseTiingoUniverse } = await import("../lib/server/tiingoUniverse.ts");
+const TIINGO = process.env.UNIVERSE === "tiingo";
 const { eodBarsToPoints } = await import("../lib/server/marketData/pickerHistory.ts");
 const { PICKERS_SYMBOLS_KEY } = await import("../lib/server/pickersBuilder.ts");
 const { toDashed } = await import("../lib/symbolSpellings.mjs");
@@ -88,7 +96,9 @@ function fixtureBars(seed) {
   }
   return { bars: out };
 }
-const listed = FIXTURE ? ["F1", "F2", "F3", "F4", "F5"] : parse(await redis.get(PICKERS_SYMBOLS_KEY));
+const listed = FIXTURE ? ["F1", "F2", "F3", "F4", "F5"]
+  : TIINGO ? (parseTiingoUniverse(await redis.get(TIINGO_UNIVERSE_KEY))?.symbols ?? []).filter((s) => s !== "SPY")
+  : parse(await redis.get(PICKERS_SYMBOLS_KEY));
 const universe = Array.isArray(listed) ? listed.map((s) => String(s).trim().toUpperCase()).filter(Boolean) : [];
 if (!universe.length) { console.error("FATAL: no Pickers symbol list."); process.exit(1); }
 const raw = [];
@@ -136,8 +146,9 @@ const vsAll = { overlap: 0, near: 0, none: 0 }, vsShown = { overlap: 0, near: 0,
 let shownZones = 0, strengthened = 0, strengthenedOverlap = 0, stocksStrengthened = 0;
 let changedB = 0, noneTodayGetsOne = 0, nearestChanged = 0, slots = 0, gapSlots = 0;
 const newZonesB = [], within10Before = [], within10After = [];
-const tiers = {};
-const tierOf2 = (t) => (tiers[t] ??= { n: 0, gapsWin: [], newB: [], changedB: 0, gapSlots: 0, slots: 0, strengthened: 0, shown: 0 });
+const tiers = {}, liq = {};
+const liqOf = (bars) => { const t = bars.slice(-50); const v = t.reduce((a, b) => a + b.close * (b.volume ?? 0), 0) / (t.length || 1); return v < 1e7 ? "thin" : v <= 1e8 ? "mid" : "deep"; };
+const tierOf2 = (t, into = tiers) => (into[t] ??= { n: 0, gapsWin: [], newB: [], changedB: 0, gapSlots: 0, slots: 0, strengthened: 0, shown: 0 });
 
 for (const { s, bars } of stocks) {
   const closes = bars.map((b) => b.close);
@@ -146,14 +157,16 @@ for (const { s, bars } of stocks) {
   if (c.atr === null || c.price === null) { T.noAtr++; continue; }
   T.measured++;
   const price = c.price, atr = c.atr;
-  const tier = tierOf2(tierOf(capOf(s, price)));
-  tier.n++;
+  const tierCap = tierOf2(tierOf(capOf(s, price))), tierLiq = tierOf2(liqOf(bars), liq);
+  tierCap.n++; tierLiq.n++;
+  // One tally, both groupings.
+  const each = (f) => { f(tierCap); f(tierLiq); };
 
   const closed = closedBars(bars).map((b) => ({ date: b.date, high: b.high, low: b.low, close: b.close }));
   const gaps = F.fairValueGaps(closed);
   const win = gaps.filter((g) => F.gapDistance(g, price) * 100 <= C.WINDOW_PCT);
   gapsAll.push(gaps.length); gapsWin.push(win.length); gapsChart.push(F.nearestGaps(gaps, price).length);
-  tier.gapsWin.push(win.length);
+  each((t) => t.gapsWin.push(win.length));
   if (gaps.length) T.withGap++;
   if (win.length) T.withGapWin++;
 
@@ -169,26 +182,26 @@ for (const { s, bars } of stocks) {
   // (a) STRENGTHEN ONLY: shown zones that a gap overlaps or sits within 1 ATR of.
   let st = 0;
   for (const z of shown) {
-    shownZones++; tier.shown++;
-    if (win.some((g) => apart(g, z) <= atr)) { strengthened++; st++; tier.strengthened++; }
+    shownZones++; each((t) => t.shown++);
+    if (win.some((g) => apart(g, z) <= atr)) { strengthened++; st++; each((t) => t.strengthened++); }
     if (win.some((g) => overlaps(g, z))) strengthenedOverlap++;
   }
   if (st) stocksStrengthened++;
 
   // (b) GAPS AS ZONES: a gap near no qualifying zone is a zone of its own; re-pick the shown ones.
   const lone = win.filter((g) => !zones.some((z) => apart(g, z) <= atr)).map((g) => ({ lo: g.lower, hi: g.upper, gap: true }));
-  newZonesB.push(lone.length); tier.newB.push(lone.length);
+  newZonesB.push(lone.length); each((t) => t.newB.push(lone.length));
   const both = [...zones.map((z) => ({ lo: z.lo, hi: z.hi, gap: false })), ...lone];
   const above = both.filter((z) => z.lo > price).sort((x, y) => x.lo - y.lo).slice(0, C.SHOWN);
   const below = both.filter((z) => z.hi < price).sort((x, y) => y.hi - x.hi).slice(0, C.SHOWN);
   const after = [...above, ...below];
   const key = (zs) => zs.map((z) => `${z.lo}:${z.hi}`).sort().join("|");
   const before = [...c.above, ...c.below];
-  if (key(before) !== key(after)) { changedB++; tier.changedB++; }
+  if (key(before) !== key(after)) { changedB++; each((t) => t.changedB++); }
   if (!shown.length && after.length) noneTodayGetsOne++;
   if ((above[0]?.gap) || (below[0]?.gap)) nearestChanged++;
   slots += after.length; gapSlots += after.filter((z) => z.gap).length;
-  tier.slots += after.length; tier.gapSlots += after.filter((z) => z.gap).length;
+  each((t) => { t.slots += after.length; t.gapSlots += after.filter((z) => z.gap).length; });
   const in10 = (z) => Math.min(Math.abs(z.lo - price), Math.abs(z.hi - price)) / price <= 0.10;
   within10Before.push(zones.filter(in10).length); within10After.push(both.filter(in10).length);
 }
@@ -209,10 +222,13 @@ console.log(`  new gap-zones per stock: median ${median(newZonesB)} (p75 ${q(new
 console.log(`  the shown zones change on ${pct(changedB, T.measured)} of stocks · the nearest zone above or below becomes a gap on ${pct(nearestChanged, T.measured)}`);
 console.log(`  shown slots taken by a gap-zone: ${pct(gapSlots, slots)} · stocks with no zone today that would get one: ${noneTodayGetsOne}`);
 console.log(`  zones within ±10% of the price: median ${median(within10Before)} → ${median(within10After)} (p90 ${q(within10Before, 0.9)} → ${q(within10After, 0.9)})`);
-console.log(`\nBY MARKET CAP (crowding)`);
-for (const t of ["small", "mid", "large", "no cap"]) {
-  const x = tiers[t];
+const groups = [["BY MARKET CAP (crowding)", tiers, ["small", "mid", "large", "no cap"]], ["BY LIQUIDITY, 50-session average close × volume (crowding)", liq, ["thin", "mid", "deep"]]];
+for (const [title, into, names] of groups) {
+console.log(`\n${title}`);
+for (const t of names) {
+  const x = into[t];
   if (!x) { console.log(`  ${t}: none`); continue; }
   console.log(`  ${t} (${x.n}): gaps in the window median ${median(x.gapsWin)} (p90 ${q(x.gapsWin, 0.9)}) · (a) shown zones strengthened ${pct(x.strengthened, x.shown)} · (b) new gap-zones median ${median(x.newB)} (p90 ${q(x.newB, 0.9)}), shown zones change ${pct(x.changedB, x.n)}, slots taken by gaps ${pct(x.gapSlots, x.slots)}`);
+}
 }
 console.log(`\nRedis commands ${commands} (read-only: ${[...READ_VERBS].join("/")})`);

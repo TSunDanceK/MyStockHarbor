@@ -1357,6 +1357,8 @@ const TASKS = {
   "write-confluence-census": { script: "scripts/confluence-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY: fair value gaps against the Price zones, before any proposal (#563 COWORK #107 §3). 1 GET + ~110 MGET + 1 HMGET.
   "write-fvg-zones-census": { script: "scripts/fvg-zones-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // The same over the whole stored Tiingo universe (small caps included). 1 GET + ~105 MGET + 1 HMGET.
+  "write-fvg-zones-census-tiingo": { script: "scripts/fvg-zones-census.mjs", args: () => [], needsTypescript: true, writes: true, env: { UNIVERSE: "tiingo" } },
   // READS ONLY: Market Mood's shipped maths on the stored bars (#563 COWORK #96). 1 GET + ~105 MGET; dates and 0–100 scores only.
   "write-market-mood-dryrun": { script: "scripts/market-mood-dryrun.mjs", args: () => [], needsTypescript: true, writes: true },
   // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #148): the stored SEC
