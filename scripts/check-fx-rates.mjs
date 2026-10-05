@@ -193,7 +193,8 @@ console.log("\nDIRECTION — normalised in the adapter, so no call site can inve
   // and its timeout blanked those filers' sets.
   // CNY (#552 COWORK #140): DEXCHUS for 2026-09-25 (relay fred-cny), likewise.
   // KRW and ZAR (#552 COWORK #151): DEXKOUS / DEXSFUS for 2026-09-25 (relay fred-krw-zar).
-  for (const [ccy, id, val] of [["INR", "DEXINUS", "95.81"], ["MXN", "DEXMXUS", "17.6932"], ["CNY", "DEXCHUS", "6.711"], ["KRW", "DEXKOUS", "1356.51"], ["ZAR", "DEXSFUS", "16.3021"]]) {
+  // SGD (#552 COWORK #157 §3): DEXSIUS for 2026-09-25 (relay fred-sgd).
+  for (const [ccy, id, val] of [["INR", "DEXINUS", "95.81"], ["MXN", "DEXMXUS", "17.6932"], ["CNY", "DEXCHUS", "6.711"], ["KRW", "DEXKOUS", "1356.51"], ["ZAR", "DEXSFUS", "16.3021"], ["SGD", "DEXSIUS", "1.2771"]]) {
     const r = await fx.fredSource(stub(csv(id, val))).fetchSeries(ccy, "2026-09-01", "2026-09-30");
     check(`${id} (${ccy} per USD) is INVERTED to USD per ${ccy}`, near(r[0]?.usdPerUnit, 1 / Number(val), 1e-12),
       `got ${r[0]?.usdPerUnit?.toFixed(6)} (expected ${(1 / Number(val)).toFixed(6)})`);
@@ -240,6 +241,21 @@ console.log("\nDIRECTION — normalised in the adapter, so no call site can inve
       const t = await m.fredSource(stub(csv("DEXSFUS", "16.3021"))).fetchSeries("ZAR", "2026-09-01", "2026-09-30");
       return near(t[0]?.usdPerUnit, 1 / 16.3021, 1e-12);
     }
+  );
+  await underMutation(
+    "SGD taken as USD per unit (a ~1.6x error on TLIH)",
+    'SGD: { id: "DEXSIUS", quote: "unit-per-usd" }',
+    'SGD: { id: "DEXSIUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXSIUS", "1.2771"))).fetchSeries("SGD", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 1.2771, 1e-12);
+    }
+  );
+  await underMutation(
+    "SGD dropped from the FRED map",
+    '  SGD: { id: "DEXSIUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("SGD")
   );
   await underMutation(
     "KRW dropped from the FRED map",
