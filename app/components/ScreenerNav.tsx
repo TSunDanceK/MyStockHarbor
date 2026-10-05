@@ -7,8 +7,8 @@ import ScreenerFilterSearch from "@/app/components/ScreenerFilterSearch";
 import type { AnyFilterKey } from "@/lib/pickerFilters";
 import { positiveLastEarningsHidden } from "@/lib/positiveLastEarnings";
 import { describePredicate } from "@/lib/screenerFields";
+import PickerGlyph, { OpensPageArrow, type GlyphId } from "@/app/components/PickerGlyph";
 
-type Tone = "green" | "yellow" | "orange" | "red" | "blue";
 
 // `filterKey` turns a category into a real checkbox in filter mode (see
 // NavList below) instead of a plain navigation link. Two kinds of key work
@@ -33,17 +33,16 @@ type Tone = "green" | "yellow" | "orange" | "red" | "blue";
 // Triangles) have no `filterKey`, since they're built from a separate, more
 // expensive dataset that was deliberately kept out of every other page's
 // payload -- those stay plain links even while filter mode is on.
-type NavItem = { href?: string; label: string; icon: string; tone: Tone; filterKey?: AnyFilterKey; comingSoon?: boolean };
-type NavGroup = { heading: string; headingColor: string; items: NavItem[] };
+type NavItem = { href?: string; label: string; glyph: GlyphId; filterKey?: AnyFilterKey; comingSoon?: boolean };
+type NavGroup = { heading: string; items: NavItem[] };
 
-// Grouped so the column reads like the Learn sidebar (coloured section
+// Grouped so the column reads like the Learn sidebar (section
 // headers) instead of one long flat list. Every existing screener page is
 // represented; order within a group roughly follows how related the setups
 // are.
 const GROUPS: NavGroup[] = [
   {
     heading: "Screener",
-    headingColor: "#e2e8f0",
     items: [
       // The no-filter starting point -- pinned at the top so it's clear there is
       // a page you can open that doesn't pre-apply any condition (unlike
@@ -54,11 +53,11 @@ const GROUPS: NavGroup[] = [
       // "All Stocks" over-promised. "Advanced Screener" also matches what this
       // page is called in the top-nav Pickers dropdown and in its own H1, so
       // the same destination isn't given three different names.
-      { href: "/stock-screener", label: "Advanced Screener", icon: "▦", tone: "blue" },
+      { href: "/stock-screener", label: "Advanced Screener", glyph: "advanced-screener" },
       // Greyed "coming soon" until launch -- the /popular-searches page itself
       // is IP/preview-gated (see middleware.ts), so the public sees a Coming
       // Soon placeholder if they click through; the owner sees the real page.
-      { href: "/popular-searches", label: "Popular Searches", icon: "☆", tone: "blue", comingSoon: true },
+      { href: "/popular-searches", label: "Popular Searches", glyph: "popular-searches", comingSoon: true },
     ],
   },
   {
@@ -73,70 +72,64 @@ const GROUPS: NavGroup[] = [
     // these indexed -- two independent GSC audits in this repo reached that
     // same conclusion.
     heading: "Popular Screens",
-    headingColor: "#38bdf8",
     items: [
-      { href: "/low-pe-stocks", label: "Low P/E Stocks", icon: "◈", tone: "blue" },
-      { href: "/high-dividend-yield-stocks", label: "High Dividend Yield", icon: "◈", tone: "green" },
-      { href: "/dividend-growth-stocks", label: "Dividend Growth", icon: "◈", tone: "green" },
-      { href: "/cash-rich-value-stocks", label: "Cash-Rich Value", icon: "◈", tone: "blue" },
-      { href: "/semiconductor-stocks", label: "Semiconductor Stocks", icon: "◈", tone: "blue" },
-      { href: "/cheap-tech-stocks", label: "Cheap Tech Stocks", icon: "◈", tone: "blue" },
+      { href: "/low-pe-stocks", label: "Low P/E Stocks", glyph: "low-pe" },
+      { href: "/high-dividend-yield-stocks", label: "High Dividend Yield", glyph: "high-dividend-yield" },
+      { href: "/dividend-growth-stocks", label: "Dividend Growth", glyph: "dividend-growth" },
+      { href: "/cash-rich-value-stocks", label: "Cash-Rich Value", glyph: "cash-rich-value" },
+      { href: "/semiconductor-stocks", label: "Semiconductor Stocks", glyph: "semiconductor" },
+      { href: "/cheap-tech-stocks", label: "Cheap Tech Stocks", glyph: "cheap-tech" },
     ],
   },
   {
     heading: "Signals",
-    headingColor: "#60a5fa",
     items: [
-      { href: "/top-stocks-with-buy-signals", label: "Buy Signals", icon: "▲", tone: "green", filterKey: "hasBuySignal" },
-      { href: "/top-stocks-with-sell-signals", label: "Sell Signals", icon: "▼", tone: "red", filterKey: "hasSellSignal" },
+      { href: "/top-stocks-with-buy-signals", label: "Buy Signals", glyph: "buy-signals", filterKey: "hasBuySignal" },
+      { href: "/top-stocks-with-sell-signals", label: "Sell Signals", glyph: "sell-signals", filterKey: "hasSellSignal" },
     ],
   },
   {
     heading: "Momentum",
-    headingColor: "#22c55e",
     items: [
-      { href: "/oversold-stocks-today", label: "Oversold", icon: "●", tone: "green", filterKey: "oversold" },
-      { href: "/overbought-stocks-today", label: "Overbought", icon: "●", tone: "red", filterKey: "overbought" },
-      { href: "/best-trend-score-stocks", label: "Best Trend", icon: "★", tone: "green", filterKey: "bestTrendPick" },
-      { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⚇", tone: "blue", filterKey: "divergencePick" },
+      { href: "/oversold-stocks-today", label: "Oversold", glyph: "oversold", filterKey: "oversold" },
+      { href: "/overbought-stocks-today", label: "Overbought", glyph: "overbought", filterKey: "overbought" },
+      { href: "/best-trend-score-stocks", label: "Best Trend", glyph: "best-trend", filterKey: "bestTrendPick" },
+      { href: "/bullish-bearish-divergence-stocks", label: "Divergence", glyph: "divergence", filterKey: "divergencePick" },
       // Finer-grained divergence conditions -- each now has its own dedicated
       // preset page (all stocks matching just that one flag).
-      { href: "/bullish-rsi-divergence-stocks", label: "Bullish RSI Divergence", icon: "↗", tone: "green", filterKey: "bullishRsiDivergence" },
-      { href: "/bearish-rsi-divergence-stocks", label: "Bearish RSI Divergence", icon: "↘", tone: "red", filterKey: "bearishRsiDivergence" },
-      { href: "/bullish-macd-divergence-stocks", label: "Bullish MACD Divergence", icon: "↗", tone: "green", filterKey: "bullishMacdDivergence" },
-      { href: "/bearish-macd-divergence-stocks", label: "Bearish MACD Divergence", icon: "↘", tone: "red", filterKey: "bearishMacdDivergence" },
+      { href: "/bullish-rsi-divergence-stocks", label: "Bullish RSI Divergence", glyph: "bullish-rsi-divergence", filterKey: "bullishRsiDivergence" },
+      { href: "/bearish-rsi-divergence-stocks", label: "Bearish RSI Divergence", glyph: "bearish-rsi-divergence", filterKey: "bearishRsiDivergence" },
+      { href: "/bullish-macd-divergence-stocks", label: "Bullish MACD Divergence", glyph: "bullish-macd-divergence", filterKey: "bullishMacdDivergence" },
+      { href: "/bearish-macd-divergence-stocks", label: "Bearish MACD Divergence", glyph: "bearish-macd-divergence", filterKey: "bearishMacdDivergence" },
     ],
   },
   {
     heading: "Highs & Breakouts",
-    headingColor: "#fb923c",
     items: [
-      { href: "/all-time-high-breakout-stocks", label: "ATH Breakouts", icon: "↗", tone: "orange", filterKey: "athBreakoutPick" },
-      { href: "/3-month-high-breakout-stocks", label: "3-Month Highs", icon: "↗", tone: "orange", filterKey: "threeMonthHighPick" },
-      { href: "/stocks-down-20-from-all-time-highs", label: "20% From ATH", icon: "◆", tone: "yellow", filterKey: "buyTheDip" },
+      { href: "/all-time-high-breakout-stocks", label: "ATH Breakouts", glyph: "ath-breakout", filterKey: "athBreakoutPick" },
+      { href: "/3-month-high-breakout-stocks", label: "3-Month Highs", glyph: "three-month-high", filterKey: "threeMonthHighPick" },
+      { href: "/stocks-down-20-from-all-time-highs", label: "20% From ATH", glyph: "down-20-from-ath", filterKey: "buyTheDip" },
     ],
   },
   {
     heading: "Volume & Volatility",
-    headingColor: "#fb923c",
     items: [
-      { href: "/breakout-signal-stocks", label: "Breakout", icon: "↗", tone: "orange", filterKey: "breakout" },
-      { href: "/volume-spike-stocks", label: "Volume Spike", icon: "▮", tone: "orange", filterKey: "volumeSpike" },
+      { href: "/breakout-signal-stocks", label: "Breakout", glyph: "breakout", filterKey: "breakout" },
+      { href: "/volume-spike-stocks", label: "Volume Spike", glyph: "volume-spike", filterKey: "volumeSpike" },
       // 2026-10-03 (#553 COWORK #107/#109): the icon was "≈", which now means
       // "estimate" site-wide (A's ESTIMATE_SIGN); "↕" reads as a widening range.
-      { href: "/atr-spike-stocks", label: "ATR Spike", icon: "↕", tone: "orange", filterKey: "atrSpike" },
+      { href: "/atr-spike-stocks", label: "ATR Spike", glyph: "atr-spike", filterKey: "atrSpike" },
     ],
   },
   {
     heading: "Moving Averages",
-    headingColor: "#facc15",
     items: [
-      { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day", icon: "◇", tone: "yellow", filterKey: "dailyMa200Proximity" },
-      { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", icon: "◆", tone: "yellow", filterKey: "weeklyMa200Proximity" },
-      { href: "/stocks-above-50-day-moving-average", label: "Above MA50", icon: "▲", tone: "yellow", filterKey: "aboveMA50" },
-      { href: "/stocks-below-50-day-moving-average", label: "Below MA50", icon: "▼", tone: "yellow", filterKey: "belowMA50" },
-      { href: "/stocks-trading-above-200-day-moving-average", label: "Above MA200", icon: "▲", tone: "yellow", filterKey: "aboveMA200" },
-      { href: "/stocks-below-200-day-moving-average", label: "Below MA200", icon: "▼", tone: "yellow", filterKey: "belowMA200" },
+      { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day", glyph: "near-200-day", filterKey: "dailyMa200Proximity" },
+      { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", glyph: "near-weekly-200", filterKey: "weeklyMa200Proximity" },
+      { href: "/stocks-above-50-day-moving-average", label: "Above MA50", glyph: "above-ma50", filterKey: "aboveMA50" },
+      { href: "/stocks-below-50-day-moving-average", label: "Below MA50", glyph: "below-ma50", filterKey: "belowMA50" },
+      { href: "/stocks-trading-above-200-day-moving-average", label: "Above MA200", glyph: "above-ma200", filterKey: "aboveMA200" },
+      { href: "/stocks-below-200-day-moving-average", label: "Below MA200", glyph: "below-ma200", filterKey: "belowMA200" },
     ],
   },
   {
@@ -145,47 +138,37 @@ const GROUPS: NavGroup[] = [
     // control -- the same split /stocks-near-200-day-moving-average and its
     // weekly twin already use.
     heading: "Trend Flips",
-    headingColor: "#38bdf8",
     items: [
-      { href: "/stocks-with-bullish-trend-flip", label: "Bullish Flip", icon: "▲", tone: "green", filterKey: "trendFlipBullish" },
-      { href: "/stocks-with-bearish-trend-flip", label: "Bearish Flip", icon: "▼", tone: "red", filterKey: "trendFlipBearish" },
-      { href: "/stocks-with-weekly-bullish-trend-flip", label: "Bullish Flip (W)", icon: "▲", tone: "green", filterKey: "trendFlipBullishWeekly" },
-      { href: "/stocks-with-weekly-bearish-trend-flip", label: "Bearish Flip (W)", icon: "▼", tone: "red", filterKey: "trendFlipBearishWeekly" },
+      { href: "/stocks-with-bullish-trend-flip", label: "Bullish Flip", glyph: "bullish-flip", filterKey: "trendFlipBullish" },
+      { href: "/stocks-with-bearish-trend-flip", label: "Bearish Flip", glyph: "bearish-flip", filterKey: "trendFlipBearish" },
+      { href: "/stocks-with-weekly-bullish-trend-flip", label: "Bullish Flip (W)", glyph: "bullish-flip-weekly", filterKey: "trendFlipBullishWeekly" },
+      { href: "/stocks-with-weekly-bearish-trend-flip", label: "Bearish Flip (W)", glyph: "bearish-flip-weekly", filterKey: "trendFlipBearishWeekly" },
     ],
   },
   {
     heading: "Earnings",
-    headingColor: "#34d399",
     items: ([
-      { href: "/stocks-with-positive-last-earnings", label: "Last Earnings", icon: "✓", tone: "green", filterKey: "positiveLastEarnings" },
-      { href: "/stocks-with-strong-earnings-growth", label: "Earnings Growth", icon: "↗", tone: "green", filterKey: "strongEarningsGrowth" },
+      { href: "/stocks-with-positive-last-earnings", label: "Last Earnings", glyph: "last-earnings", filterKey: "positiveLastEarnings" },
+      { href: "/stocks-with-strong-earnings-growth", label: "Earnings Growth", glyph: "earnings-growth", filterKey: "strongEarningsGrowth" },
       // Hidden 2026-09-27 (#553 COWORK #64): see lib/positiveLastEarnings.ts.
     ] satisfies NavItem[]).filter((item) => !positiveLastEarningsHidden(item.href)),
   },
   {
     heading: "Chart Plays",
-    headingColor: "#c084fc",
     items: [
-      { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "⇄", tone: "blue", filterKey: "macroSrPick" },
+      { href: "/macro-support-resistance-stocks", label: "Macro S/R", glyph: "macro-sr", filterKey: "macroSrPick" },
       // These three come from a separate chart-pattern dataset that was
       // deliberately kept out of every other page's payload (see the
       // ticker-search cost discussion earlier in this project) -- no cheap
       // per-symbol membership flag is available for them, so they stay
       // plain links (with the "opens page" hint below) even in filter mode.
-      { href: "/plays", label: "Ascending Triangles", icon: "△", tone: "green" },
-      { href: "/plays/bull-flags", label: "Bull Flags", icon: "⚑", tone: "green" },
-      { href: "/plays/descending-triangles", label: "Descending Triangles", icon: "▽", tone: "red" },
+      { href: "/plays", label: "Ascending Triangles", glyph: "ascending-triangle" },
+      { href: "/plays/bull-flags", label: "Bull Flags", glyph: "bull-flag" },
+      { href: "/plays/descending-triangles", label: "Descending Triangles", glyph: "descending-triangle" },
     ],
   },
 ];
 
-function toneColour(tone: Tone) {
-  if (tone === "green") return "#22c55e";
-  if (tone === "yellow") return "#facc15";
-  if (tone === "orange") return "#fb923c";
-  if (tone === "red") return "#ef4444";
-  return "#60a5fa";
-}
 
 // Renders the category list. Off, every item with an `href` is a plain
 // link (legacy behaviour: tap "Oversold", go to the Oversold page). On
@@ -232,12 +215,15 @@ function NavList({
 
         return (
           <div key={group.heading} className="screenerNavGroup">
-            <div className="screenerNavHeading" style={{ color: group.headingColor }}>
+            {/* Muted small caps with an accent tick and a hairline (#553 COWORK
+                #155): colour is kept for bullish / bearish meaning only, so a
+                section no longer gets a colour of its own. */}
+            <div className="screenerNavHeading">
+              <span className="screenerNavTick" aria-hidden="true" />
               {group.heading}
             </div>
             {visibleItems.map((item) => {
               const active = item.href === currentHref;
-              const colour = toneColour(item.tone);
 
               if (filterMode && item.filterKey) {
                 const key = item.filterKey;
@@ -286,9 +272,7 @@ function NavList({
                           }
                         />
                       </span>
-                      <span className="screenerNavIcon" style={{ color: colour }}>
-                        {item.icon}
-                      </span>
+                      <PickerGlyph id={item.glyph} dim={dead} />
                       <Link
                         href={item.href}
                         onClick={onNavigate}
@@ -296,7 +280,11 @@ function NavList({
                         aria-current={active ? "page" : undefined}
                       >
                         <span className="screenerNavLabel">{item.label}</span>
-                        {count != null ? (
+                        {/* "none today" in place of a 0 pill (#553 COWORK #155):
+                            the name dims, the box stays a live control. */}
+                        {dead ? (
+                          <span className="screenerNavNone" aria-hidden="true">none today</span>
+                        ) : count != null ? (
                           <span className="screenerNavCount" aria-hidden="true">{count}</span>
                         ) : null}
                         <span className="screenerNavGo" aria-hidden="true">›</span>
@@ -310,11 +298,13 @@ function NavList({
                 return (
                   <label key={item.filterKey} className={rowClass}>
                     <input type="checkbox" checked={checked} onChange={() => toggleFilter(key)} />
-                    <span className="screenerNavIcon" style={{ color: colour }}>
-                      {item.icon}
-                    </span>
+                    <PickerGlyph id={item.glyph} dim={dead} />
                     <span className="screenerNavLabel">{item.label}</span>
-                    {count != null ? <span className="screenerNavCount">{count}</span> : null}
+                    {dead ? (
+                      <span className="screenerNavNone">none today</span>
+                    ) : count != null ? (
+                      <span className="screenerNavCount">{count}</span>
+                    ) : null}
                   </label>
                 );
               }
@@ -334,9 +324,7 @@ function NavList({
                     style={{ opacity: 0.55 }}
                     title="Coming soon"
                   >
-                    <span className="screenerNavIcon" style={{ color: colour }}>
-                      {item.icon}
-                    </span>
+                    <PickerGlyph id={item.glyph} />
                     <span className="screenerNavLabel">{item.label}</span>
                     <span
                       style={{
@@ -366,20 +354,16 @@ function NavList({
                   onClick={onNavigate}
                   className={active ? "screenerNavItem active" : "screenerNavItem"}
                   aria-current={active ? "page" : undefined}
-                  style={
-                    active
-                      ? {
-                          borderColor: `${colour}88`,
-                          background: `linear-gradient(135deg, ${colour}22, rgba(15,23,42,0.35))`,
-                        }
-                      : undefined
-                  }
                 >
-                  <span className="screenerNavIcon" style={{ color: colour }}>
-                    {item.icon}
-                  </span>
+                  <PickerGlyph id={item.glyph} />
                   <span className="screenerNavLabel">{item.label}</span>
-                  {filterMode ? <span className="screenerNavHint">opens page</span> : null}
+                  {/* A small arrow, not the OPENS PAGE text (#553 COWORK #155). */}
+                  {filterMode ? (
+                    <span className="screenerNavHint" title="Opens page">
+                      <OpensPageArrow />
+                      <span className="screenerNavSr">opens page</span>
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}
@@ -777,10 +761,17 @@ export default function ScreenerNav({
         }
         .screenerNavList { display: grid; gap: 14px; }
         .screenerNavGroup { display: grid; gap: 4px; }
+        /* Option B (#553 COWORK #155): muted small caps, a 3px accent tick and a
+           hairline -- no colour per section. --picker-accent is the neutral
+           mark colour shared with PickerGlyph. */
+        .screenerNavList { --picker-accent: #38bdf8; }
         .screenerNavHeading {
-          font-size: 10.5px; font-weight: 950; letter-spacing: 0.1em; text-transform: uppercase;
-          padding: 4px 8px 2px; opacity: 0.92;
+          display: flex; align-items: center; gap: 8px;
+          font-size: var(--fs-fine); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+          color: #64748b; padding: 4px 8px 2px;
         }
+        .screenerNavHeading::after { content: ""; flex: 1 1 auto; height: 1px; background: rgba(148,163,184,0.14); }
+        .screenerNavTick { flex: 0 0 auto; width: 3px; height: 10px; border-radius: 2px; background: var(--picker-accent); }
         .screenerNavItem {
           /* UNBREAKS THE min-width CHAIN, and this is the actual cause of the
              sidebar's horizontal scrollbar -- not the column being too narrow.
@@ -797,22 +788,39 @@ export default function ScreenerNav({
           display: flex; align-items: center; gap: 10px;
           padding: 9px 8px; border-radius: 11px; border: 1px solid transparent;
           color: rgba(226,232,240,0.82); text-decoration: none;
-          font-size: 13.5px; font-weight: 800;
+          font-size: 0.875rem; font-weight: 650;
           transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
         }
         .screenerNavItem:hover { background: rgba(255,255,255,0.045); color: #f8fafc; }
         .screenerNavItem.active { color: #f8fafc; font-weight: 950; }
-        .screenerNavIcon { flex: 0 0 auto; width: 16px; text-align: center; font-size: 13px; }
+        .pickerGlyph { flex: 0 0 auto; display: block; width: 30px; height: 18px; }
         .screenerNavLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .screenerNavHint { margin-left: auto; flex: 0 0 auto; font-size: 9.5px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; color: rgba(148,163,184,0.4); white-space: nowrap; }
+        .screenerNavHint { margin-left: auto; flex: 0 0 auto; display: inline-flex; color: #64748b; }
+        .screenerNavSr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
         .screenerNavCheckable {
           cursor: pointer;
         }
+        /* Selected: a faint accent wash and an inset 2px bar on the left. */
         .screenerNavCheckable.checked {
-          background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.4); color: #f8fafc;
+          background: rgba(56,189,248,0.08); box-shadow: inset 2px 0 0 var(--picker-accent); color: #f8fafc;
         }
-        .screenerNavCheckable input[type="checkbox"] { flex: 0 0 auto; width: 16px; height: 16px; accent-color: #22c55e; cursor: pointer; }
+        /* The native input, restyled (#553 COWORK #155): 16px, 5px corners, a
+           1.5px slate border; filled accent with a dark tick when checked.
+           Still the real <input>, so keyboard and screen readers are unchanged,
+           and focus stays visible. */
+        .screenerNavCheckable input[type="checkbox"] {
+          appearance: none; -webkit-appearance: none; margin: 0;
+          flex: 0 0 auto; width: 16px; height: 16px; border-radius: 5px;
+          border: 1.5px solid #475569; background: transparent; cursor: pointer;
+          display: inline-grid; place-items: center;
+        }
+        .screenerNavCheckable input[type="checkbox"]:checked {
+          background: var(--picker-accent) center / 10px 10px no-repeat
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2 4.2 7.4 8 3' fill='none' stroke='%2306080d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+          border-color: var(--picker-accent);
+        }
+        .screenerNavCheckable input[type="checkbox"]:focus-visible { outline: 2px solid var(--picker-accent); outline-offset: 2px; }
         /* Padded hit area around the box. The word next to it is a link now, so
            this is the ONLY way to tick the row -- a bare 16px checkbox is well
            under any sane touch target. Negative margins absorb the extra height
@@ -836,10 +844,12 @@ export default function ScreenerNav({
           font-size: 10.5px; font-weight: 900; font-variant-numeric: tabular-nums;
           background: rgba(148,163,184,0.14); color: rgba(226,232,240,0.82);
         }
-        .screenerNavCheckable.checked .screenerNavCount { background: rgba(34,197,94,0.22); color: #dcfce7; }
-        /* Zero: readable but visibly spent, and the whole row dims with it. */
-        .screenerNavCheckable.dead { opacity: 0.45; }
-        .screenerNavCheckable.dead .screenerNavCount { background: rgba(148,163,184,0.10); }
+        .screenerNavCheckable.checked .screenerNavCount { background: rgba(56,189,248,0.2); color: #e0f2fe; }
+        /* Zero: "none today" instead of a 0 pill, and only the NAME dims -- the
+           box keeps its full contrast so it still reads as a working control. */
+        .screenerNavCheckable.dead .screenerNavLabel { color: #64748b; }
+        .screenerNavNone { flex: 0 0 auto; margin-left: auto; font-size: var(--fs-fine); font-weight: 600; color: #64748b; white-space: nowrap; }
+        .screenerNavNone + .screenerNavGo { margin-left: 6px; }
         /* The count has taken the auto margin, so the chevron just follows it. */
         .screenerNavCount + .screenerNavGo { margin-left: 6px; }
         .screenerNavGo { flex: 0 0 auto; margin-left: auto; font-size: 16px; line-height: 1; color: rgba(148,163,184,0.5); }
