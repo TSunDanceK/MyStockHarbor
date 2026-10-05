@@ -55,6 +55,9 @@ const RULES = {
     && P.peSectorLine(16.8, "Industrials", M(20), DATE)?.word === "Below" && P.peSectorLine(16.8, "Industrials", M(20), DATE)?.glyph === "▼",
   "the text names the comparison and the median to one decimal": (P) =>
     P.peSectorLine(30, "Technology", M(21.54), DATE)?.text === "Above sector median (21.5×)",
+  // #552 COWORK #164: the median as a number, the same value the text prints, unrounded.
+  "the median is on the line as a number, the one the text prints": (P) =>
+    P.peSectorLine(30, "Technology", M(21.54), DATE)?.median === 21.54,
 
   // ── 2. no line ─────────────────────────────────────────────────────────
   "fewer than 20 peers: no line (20 is enough)": (P) =>
@@ -109,6 +112,10 @@ const PAGE_RULES = {
   "drawn as a glyph plus words in the page's ink, the note on tap": (_p, _s, c) =>
     /<span aria-hidden="true">\{valuation\.peSector\.glyph\} <\/span><ReasonedValue text=\{valuation\.peSector\.text\} reason=\{valuation\.peSector\.note\} \/>/.test(c)
     && !/data-pe-sector[^>]*style=/.test(c),
+  // #552 COWORK #164: the numeric median reaches the client, typed there.
+  "the page passes the numeric median through to the client": (p, _s, c) =>
+    /\{ glyph: line\.glyph, text: line\.text, note: line\.note, median: line\.median \}/.test(p)
+    && /peSector\?: \{ glyph: string; text: string; note: string; median\?: number \| null \} \| null;/.test(c),
 };
 
 const P0 = await load();
@@ -129,6 +136,7 @@ const MUTANTS = [
   ["too few peers reported as Infinity again", once("if (pes.length < 6) return TOO_FEW_SPREAD;", "if (pes.length < 6) return Infinity;")],
   ["a loss-maker gets a line", once("|| pe <= 0 ", "")],
   ["a value word in the text", once("text: `${word} sector median", "text: `${word === \"Below\" ? \"Cheap vs\" : word} sector median")],
+  ["the numeric median dropped", once("    median: m.median,\n", "")],
   ["above and below swapped", once(': d > 0 ? (["Above", "▲"] as const) : (["Below", "▼"] as const);', ': d > 0 ? (["Below", "▼"] as const) : (["Above", "▲"] as const);')],
 ];
 for (const [label, mutate] of MUTANTS) {
@@ -143,6 +151,7 @@ const PAGE_MUTANTS = [
   ["the FY fallback gets a line", (p, s, c) => [p.replace("if (fyPe || !pe?.ok || ", "if (!pe?.ok || "), s, c]],
   ["a bank gets a line", (p, s, c) => [p.replace(" || isBankSic(registrantFor(upper)?.sic)) return null;", ") return null;"), s, c]],
   ["the peers include banks", (p, s, c) => [p, s.replace("if (isBankSic(registrantFor(sym)?.sic)) continue;", ""), c]],
+  ["the median not passed to the client", (p, s, c) => [p.replace(", median: line.median }", " }"), s, c]],
   ["the line coloured by direction", (p, s, c) => [p, s, c.replace('data-pe-sector={valuation.peSector ? "" : undefined}', 'data-pe-sector={valuation.peSector ? "" : undefined} style={{ color: "#22c55e" }}')]],
 ];
 for (const [label, mutate] of PAGE_MUTANTS) {

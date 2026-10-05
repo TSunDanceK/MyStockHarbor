@@ -680,7 +680,7 @@ export default async function StockPage({ params }: Props) {
       const sector = peSectorOf(upper);
       const medians = sector ? await readPeSectorMedians().catch(() => null) : null;
       const line = peSectorLine(figure(pe), sector, medians?.sectors[sector as string], medians?.asOf ? readableDate(medians.asOf) : "");
-      return line ? { glyph: line.glyph, text: line.text, note: line.note } : null;
+      return line ? { glyph: line.glyph, text: line.text, note: line.note, median: line.median } : null;
     })(),
   };
 
