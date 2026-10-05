@@ -301,7 +301,10 @@ export default function CompanyProfile({
     // per-share dividend tag" is a claim about one filer. The reason it is
     // hidden for is carried on the payload (ProfileDividend.why) so a probe
     // can read it even though nothing renders it.
-    { label: "Dividend", value: dividendValue },
+    // "AS FILED" (#552 COWORK #162): the figure is the declared per-share
+    // dividend, or the paid one where that is all the filer tags; the set does
+    // not record which, so the label claims neither.
+    { label: "Dividends per share (as filed)", value: dividendValue },
     { label: "Exchange", value: profile.exchange },
     { label: "Country", value: profile.country },
     { label: "IPO date", value: fmtDate(profile.ipoDate) },
