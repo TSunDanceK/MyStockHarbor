@@ -67,6 +67,21 @@ const RULES = {
     return /\{item\.value != null && item\.reason \? \(\s*<details className="valuationHow"[^>]*>\s*<summary[^>]*>How it&apos;s calculated<\/summary>\s*<div style=\{\{[^}]*fontSize: "var\(--fs-read\)"[^}]*\}\}>\{item\.reason\}<\/div>\s*<\/details>/.test(page) &&
       !/<div data-fine-print[^>]*>\{item\.reason\}<\/div>/.test(page);
   },
+  // OWNER RULING (#552 COWORK #157 §2): A's explanations go behind a tap and open at
+  // --fs-read: the snapshot's source sentence, the dilution card's basis sentence and the
+  // valuation panel's "How these are calculated". Credits and as-of stamps stay fine print.
+  "A's panel explanations sit behind a tap, at --fs-read when open, and are not fine print": ({ scope }) => {
+    const src = (f) => scope.find(([p]) => p.endsWith(f))[1];
+    // A <details> whose summary's named style is at --fs-label, opening on the named body style.
+    const tap = (src, summary, body) => new RegExp(`<details [^>]*>\\s*<summary style=\\{${summary}\\}>[^<]+</summary>\\s*<div style=\\{${body}\\}>`).test(src)
+      && new RegExp(`const ${summary}: CSSProperties = \\{[^}]*fontSize: "var\\(--fs-label\\)"`).test(src);
+    const card = src("LatestEarningsCard.tsx"), dil = src("DilutionHistory.tsx"), val = src("StockSymbolPageClient.tsx");
+    return tap(card, "earningsHowSummaryStyle", "earningsHowBodyStyle") && /<div style=\{earningsHowBodyStyle\}>\{snapshot\.sourceNote\}<\/div>/.test(card)
+      && /const earningsHowBodyStyle: CSSProperties = \{[^}]*fontSize: "var\(--fs-read\)"/.test(card) && !/data-fine-print[^>]*>\{snapshot\.sourceNote\}/.test(card)
+      && tap(dil, "howSummaryStyle", "howBodyStyle") && /const howBodyStyle: CSSProperties = \{[^}]*fontSize: "var\(--fs-read\)"/.test(dil)
+      && /<details data-share-how=""/.test(dil) && !/<div style=\{sourceStyle\} data-fine-print/.test(dil)
+      && /<details data-valuation-how=""[^>]*>\s*<summary[^>]*fontSize: "var\(--fs-label\)"[^>]*>How these are calculated<\/summary>\s*<div style=\{\{[^}]*fontSize: "var\(--fs-read\)"[^}]*\}\}>\{valuation\.sourceNote\}<\/div>/.test(val);
+  },
 };
 
 const load = (over = {}) => ({
@@ -93,6 +108,10 @@ const MUTANTS = [
   [R[2], "app/markets/spx/MarketMoodCard.tsx", (s) => s.replace('fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)"', 'fontSize: 14, lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)"')],
   [R[2], "app/stock/[symbol]/StockPriceChart.tsx", (s) => s.replace('fontSize="0.75rem"', 'fontSize="0.625rem"')],
   [R[3], "app/stock/[symbol]/StockSymbolPageClient.tsx", (s) => s.replace(/<details className="valuationHow"[\s\S]*?<\/details>/, '<div data-fine-print style={{ marginTop: 4, fontSize: "var(--fs-fine)" }}>{item.reason}</div>')],
+  // A's explanations behind a tap (#552 COWORK #157 §2): back to fine print in each panel.
+  [R[R.length - 1], "app/components/LatestEarningsCard.tsx", (s) => s.replace('fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" };\nconst', 'fontSize: "var(--fs-fine)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" };\nconst').replace("const earningsHowBodyStyle: CSSProperties = { marginTop: 6, fontSize: \"var(--fs-read)\"", "const earningsHowBodyStyle: CSSProperties = { marginTop: 6, fontSize: \"var(--fs-fine)\"")],
+  [R[R.length - 1], "app/components/DilutionHistory.tsx", (s) => s.replace(/<details data-share-how=""[\s\S]*?<div style=\{howBodyStyle\}>/, '<div style={howBodyStyle} data-fine-print=""><div>')],
+  [R[R.length - 1], "app/stock/[symbol]/StockSymbolPageClient.tsx", (s) => s.replace('<div style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" }}>{valuation.sourceNote}</div>', '<div style={{ marginTop: 6, fontSize: "var(--fs-fine)" }}>{valuation.sourceNote}</div>')],
   // A's (#552 COWORK #153): the earnings page's labels and the tile's chart.
   [R[2], "app/stock/[symbol]/earnings/page.tsx", (s) => s.replace(".metricLabel { font-size: var(--fs-label);", ".metricLabel { font-size: 9.5px;")],
   [R[2], "app/components/LatestEarningsCard.tsx", (s) => s.replace('const chartGapStyle: CSSProperties = { marginTop: 2, fontSize: "var(--fs-fine)"', "const chartGapStyle: CSSProperties = { marginTop: 2, fontSize: 9")],

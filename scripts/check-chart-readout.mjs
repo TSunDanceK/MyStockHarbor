@@ -157,7 +157,7 @@ async function chartRules(C, src) {
   want("a vertical swipe still scrolls the page (touch-action: pan-y)", /touch-action:\s*pan-y/.test(svg));
   want("the credit stays", html.includes('href="#credit"'));
   want("keys, pointer move, touch capture and leave are wired", /onKeyDown=\{onKeyDown\}/.test(src) && /onPointerMove=\{pick\}/.test(src) && /setPointerCapture/.test(src) && /onPointerLeave=/.test(src));
-  want("leaving or blurring returns to the latest", /onPointerLeave=\{\(e\) => \{ if \(e\.pointerType === "mouse"\) setPicked\(null\); \}\}/.test(src) && /onBlur=\{\(\) => setPicked\(null\)\}/.test(src));
+  want("leaving or blurring returns to the latest", /onPointerLeave=\{\(e\) => \{ if \(e\.pointerType === "mouse"\) \{ setPicked\(null\); setHoverValue\(null\); \} \}\}/.test(src) && /onBlur=\{\(\) => setPicked\(null\)\}/.test(src));
   want("the readout reads the bars it was given: no fetch, no action, no effect", !/\bfetch\(|useEffect|"use server"|Action"|XMLHttpRequest|navigator\.sendBeacon/.test(src));
   want("the readout comes from lib/chartReadout", /chartReadout\(series, picked\)/.test(src));
   return fails;
@@ -205,7 +205,7 @@ async function run() {
     ["the chart not focusable", /\s*tabIndex=\{0\}/, ""],
     ["keys not wired", /\s*onKeyDown=\{onKeyDown\}/, ""],
     ["hover not wired", /\s*onPointerMove=\{pick\}/, ""],
-    ["the mouse leaves and the readout sticks", /onPointerLeave=\{\(e\) => \{ if \(e\.pointerType === "mouse"\) setPicked\(null\); \}\}/, "onPointerLeave={() => {}}"],
+    ["the mouse leaves and the readout sticks", /onPointerLeave=\{\(e\) => \{ if \(e\.pointerType === "mouse"\) \{ setPicked\(null\); setHoverValue\(null\); \} \}\}/, "onPointerLeave={() => {}}"],
     ["the readout floats over the chart", /\.chart-readout \{ display: grid;/, ".chart-readout { position: absolute; display: grid;"],
     ["the phone strip's height follows its text (the chart jumps)", /grid-auto-rows: 20px; height: 60px;/, ""],
     ["the readout below the chart", /(\s*\{readout \? \([\s\S]*?\) : null\})(\s*<span aria-live="polite"[\s\S]*?<\/span>)(\s*<svg[\s\S]*?<\/svg>)/, "$2$3$1"],

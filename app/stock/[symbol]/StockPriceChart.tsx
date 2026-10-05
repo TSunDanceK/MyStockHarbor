@@ -3,6 +3,8 @@
 import React, { useMemo, useState } from "react";
 import { utcDay } from "@/lib/utcDate";
 import { chartReadout, indexAtFraction, shownIndex, stepIndex } from "@/lib/chartReadout";
+import { chartGapZones, inGapWords, zoneAt, type ChartGapZone, type GapInputBar } from "@/lib/chartGaps";
+import { STRETCH_NOTE, stretchHistory, stretchLine } from "@/lib/stretch";
 
 type Point = {
   date: string;
@@ -21,12 +23,19 @@ type Props = {
   // The linked "Market data from Tiingo.com", rendered by page.tsx when the
   // series is Tiingo's (step 3, COWORK #71/#92).
   credit?: React.ReactNode;
+  // The page's full daily history (highs and lows), for the fair value gap
+  // zones (#553 COWORK #140/#144). The same bars the page holds: no fetch.
+  gapBars?: readonly GapInputBar[];
 };
+
+/** The tap note's words (#553 COWORK #140): descriptive, past only. */
+export const GAP_NOTE = "A price gap left when the market moved too fast for candles to overlap. Some traders watch whether price returns to it. A description, not a forecast.";
 
 // SAY WHY, NOT A BARE "—" (#553 COWORK #88, applied to B's chart MAs): a young
 // listing (KRMN, ~410 stored bars) cannot have an MA200 over the shown window.
 export const SHORT_HISTORY_NOTE = "Not enough price history stored yet";
 
+const NO_ZONES: ChartGapZone[] = [];
 const UP = "#22c55e";
 const DOWN = "#ef4444";
 
@@ -71,6 +80,7 @@ export default function StockPriceChart({
   ma200,
   height = 360,
   credit,
+  gapBars,
 }: Props) {
   const width = 920;
   const padL = 38;
@@ -84,6 +94,12 @@ export default function StockPriceChart({
   const [picked, setPicked] = useState<number | null>(null);
   // Said to screen readers on keyboard steps only, never on every mouse move.
   const [spoken, setSpoken] = useState("");
+  // FAIR VALUE GAPS (#553 COWORK #140/#144): off until asked for; the note on a tap.
+  const [showGaps, setShowGaps] = useState(false);
+  const [gapNote, setGapNote] = useState(false);
+  const [stretchNote, setStretchNote] = useState(false);
+  // The pointer's height in the chart, as a price, to say when it is inside a zone.
+  const [hoverValue, setHoverValue] = useState<number | null>(null);
 
   const series = useMemo(() => {
     const n = data.length;
@@ -99,6 +115,16 @@ export default function StockPriceChart({
 
   const hasData = series.length >= 2;
 
+  const gaps = useMemo(() => chartGapZones(gapBars ?? [], series.map((p) => p.date)), [gapBars, series]);
+  const zones = showGaps ? gaps.zones : NO_ZONES;
+  // STRETCH (#553 COWORK #141/#144): this stock's own past, from the same bars;
+  // completed sessions only, like the gaps.
+  const stretch = useMemo(() => {
+    if (!gapBars) return null;
+    const done = gapBars.filter((b) => !b.label && Number.isFinite(b.close));
+    return stretchLine(symbol, stretchHistory(done));
+  }, [gapBars, symbol]);
+
   const x = useMemo(() => {
     return (i: number) =>
       padL + (i * (width - padL - padR)) / Math.max(1, series.length - 1);
@@ -113,13 +139,15 @@ export default function StockPriceChart({
       if (typeof p.ma50 === "number") vals.push(p.ma50);
       if (typeof p.ma200 === "number") vals.push(p.ma200);
     }
+    // A zone shown is a zone in full: the scale widens to hold it.
+    for (const z of zones) vals.push(z.lower, z.upper);
 
     const min = Math.min(...vals);
     const max = Math.max(...vals);
     const range = Math.max(1e-9, max - min);
 
     return { minV: min, maxV: max, rangeV: range };
-  }, [hasData, series]);
+  }, [hasData, series, zones]);
 
   const y = useMemo(() => {
     const innerH = height - padT - padB;
@@ -198,18 +226,23 @@ export default function StockPriceChart({
     const inner = el.clientWidth || r.width;
     if (!inner) return;
     setPicked(indexAtFraction((e.clientX - r.left - el.clientLeft) / inner, series.length, box));
+    // The same scale vertically (the viewBox keeps its aspect): the pointer's price.
+    const vy = ((e.clientY - r.top - el.clientTop) / inner) * width;
+    setHoverValue(maxV - ((vy - padT) * rangeV) / (height - padT - padB));
   };
+  const hoverZone = picked !== null && hoverValue !== null ? zoneAt(zones, at, hoverValue) : null;
   const onKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
     const next = stepIndex(picked, e.key, series.length);
     if (next === undefined) return;
     e.preventDefault();
     setPicked(next);
+    setHoverValue(null);
     const r = chartReadout(series, next);
     if (r) setSpoken(`${r.heading} ${r.date}: ${r.close}${r.change ? `, ${r.change.text}` : ""}`);
   };
 
   return (
-    <div style={{ width: "100%" }}>
+    <div style={{ width: "100%", containerType: "inline-size" }}>
       {/* Phone (the default): three fixed lines, so the chart never jumps
           while scrubbing; a column 640 px or wider: one line. */}
       <style>{`
@@ -219,7 +252,53 @@ export default function StockPriceChart({
         @container (min-width: 640px) {
           .chart-readout { display: flex; column-gap: 14px; height: 20px; }
         }
+        .chart-gap-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; row-gap: 4px; margin-bottom: 6px; font-size: var(--fs-label); }
+        .chart-gap-toggle, .chart-gap-why { min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+        .chart-gap-toggle[aria-pressed="true"] { border-color: rgba(34,197,94,0.55); background: rgba(34,197,94,0.12); }
+        .chart-gap-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+        .chart-gap-why { font-weight: 500; border-style: dashed; }
+        /* Its own line, always reserved, so the words coming and going never move the chart. */
+        .chart-gap-status { flex: 1 0 100%; height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.8; }
+        @container (min-width: 640px) { .chart-gap-status { flex: 1 1 auto; } }
+        .chart-stretch { margin: 0 0 8px; font-size: var(--fs-read); line-height: var(--lh-read); }
+        .chart-stretch .chart-gap-why { font-size: var(--fs-label); margin-left: 4px; }
+        .chart-gap-note { margin: 0 0 8px; font-size: var(--fs-read); line-height: var(--lh-read); opacity: 0.9; }
       `}</style>
+      {/* THE GAP TOGGLE (#553 COWORK #140/#144): off by default; with none, it
+          stays visible, disabled, with the reason beside it, never hidden. The
+          line beside it also says when the pointer is inside a zone. */}
+      {/* Only where the page passes its bars (the SPX page's chart has no toggle). */}
+      {gapBars ? (<>
+      {stretch ? (
+        <p className="chart-stretch" data-chart-stretch>
+          {stretch}{" "}
+          <button type="button" className="chart-gap-why" aria-expanded={stretchNote} aria-controls={`${symbol}-stretch-note`} onClick={() => setStretchNote((v) => !v)}>
+            How is this counted?
+          </button>
+        </p>
+      ) : null}
+      {stretchNote ? <p id={`${symbol}-stretch-note`} className="chart-gap-note">{STRETCH_NOTE}</p> : null}
+      <div className="chart-gap-row" data-chart-gaps={gaps.zones.length ? (showGaps ? "on" : "off") : "none"}>
+        <button
+          type="button"
+          className="chart-gap-toggle"
+          aria-pressed={showGaps}
+          disabled={!gaps.zones.length}
+          onClick={() => setShowGaps((v) => !v)}
+        >
+          {showGaps ? "Hide gaps" : "Show gaps"}
+        </button>
+        <button type="button" className="chart-gap-why" aria-expanded={gapNote} aria-controls={`${symbol}-gap-note`} onClick={() => setGapNote((v) => !v)}>
+          What is a gap?
+        </button>
+        <span className="chart-gap-status" data-chart-gap-status>
+          {gaps.reason ?? (hoverZone ? inGapWords(hoverZone) : "")}
+        </span>
+      </div>
+      {gapNote ? (
+        <p id={`${symbol}-gap-note`} className="chart-gap-note">{GAP_NOTE}</p>
+      ) : null}
+      </>) : null}
       {readout ? (
         <div className="chart-readout-wrap">
           <div className="chart-readout" data-chart-readout={readout.isLatest ? "latest" : "picked"}>
@@ -255,9 +334,9 @@ export default function StockPriceChart({
           pick(e);
         }}
         onPointerMove={pick}
-        onPointerUp={(e) => { if (e.pointerType !== "mouse") setPicked(null); }}
-        onPointerCancel={() => setPicked(null)}
-        onPointerLeave={(e) => { if (e.pointerType === "mouse") setPicked(null); }}
+        onPointerUp={(e) => { if (e.pointerType !== "mouse") { setPicked(null); setHoverValue(null); } }}
+        onPointerCancel={() => { setPicked(null); setHoverValue(null); }}
+        onPointerLeave={(e) => { if (e.pointerType === "mouse") { setPicked(null); setHoverValue(null); } }}
         onKeyDown={onKeyDown}
         onBlur={() => setPicked(null)}
         style={{
@@ -326,6 +405,21 @@ export default function StockPriceChart({
               {t.label}
             </text>
           </g>
+        ))}
+
+        {zones.map((z) => (
+          <rect
+            key={`${z.kind}-${z.startIndex}-${z.lower}`}
+            data-chart-gap={z.kind}
+            x={x(z.startIndex)}
+            y={y(z.upper)}
+            width={Math.max(1, width - padR - x(z.startIndex))}
+            height={Math.max(1, y(z.lower) - y(z.upper))}
+            fill={z.kind === "bullish" ? "rgba(34,197,94,0.16)" : "rgba(239,68,68,0.16)"}
+            stroke={z.kind === "bullish" ? "rgba(34,197,94,0.45)" : "rgba(239,68,68,0.45)"}
+            strokeWidth="1"
+            pointerEvents="none"
+          />
         ))}
 
         <path d={closePath} fill="none" stroke="currentColor" strokeWidth="2.4" opacity="0.95" />

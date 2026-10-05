@@ -1370,6 +1370,8 @@ const TASKS = {
   "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
   // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
+  // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
+  "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
 };
 
 const argv = process.argv.slice(2);

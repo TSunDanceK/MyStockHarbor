@@ -12,7 +12,12 @@
 //   - a touch drag scrubs the same way and lifting returns to the latest;
 //   - ←/→ step a bar once the chart is focused, Esc returns to the latest;
 //   - the readout strip sits above the chart, never over it, keeps one
-//     height while scrubbing (the chart doesn't jump) and cuts nothing off.
+//     height while scrubbing (the chart doesn't jump) and cuts nothing off;
+//   - FAIR VALUE GAPS (#553 COWORK #140/#144): the toggle starts off; on, each
+//     zone is drawn inside the plot, the pointer inside one reads "In a
+//     bullish gap (from …)", still no sideways scroll; the tap note opens at
+//     16 px; a stock with none shows the toggle disabled with the reason.
+// Also writes chart-gaps-390.png and chart-gaps-1280.png (gaps on).
 // Writes chart-readout-390.png (a touch drag in progress) and
 // chart-readout-1280.png (a hover) to SHOTS (default /tmp).
 //
@@ -43,6 +48,9 @@ const MODULES = {
   scheduler: read("node_modules/scheduler/cjs/scheduler.development.js"),
   "@/lib/utcDate": cjs(read("lib/utcDate.ts"), "utcDate.ts"),
   "@/lib/chartReadout": cjs(read("lib/chartReadout.ts"), "chartReadout.ts"),
+  "@/lib/ta/fairValueGaps": cjs(read("lib/ta/fairValueGaps.ts"), "fairValueGaps.ts"),
+  "@/lib/chartGaps": cjs(read("lib/chartGaps.ts"), "chartGaps.ts"),
+  "@/lib/stretch": cjs(read("lib/stretch.ts"), "stretch.ts"),
   chart: cjs(read("app/stock/[symbol]/StockPriceChart.tsx"), "StockPriceChart.tsx"),
 };
 
@@ -60,16 +68,19 @@ function bars() {
   }
   // SCALE=10 tries four-digit prices and three-digit moves on the narrowest phones.
   const scale = Number(process.env.SCALE || 1);
-  out.forEach((p, k) => { p.close = Number(((180 + 25 * Math.sin(k / 23) + 8 * Math.sin(k / 5) + k * 0.06) * scale).toFixed(2)); });
+  out.forEach((p, k) => { p.close = Number(((180 + 25 * Math.sin(k / 23) + 8 * Math.sin(k / 5) + k * 0.06) * scale * (k >= 400 ? 1.25 : 1)).toFixed(2)); });
+  // Highs and lows (1.5% either side, so ordinary days overlap), and one jump of 25% forty sessions from the end: a bullish gap.
+  out.forEach((p) => { p.high = Number((p.close * 1.015).toFixed(2)); p.low = Number((p.close * 0.985).toFixed(2)); });
+  const flat = out.map((p) => ({ date: p.date, close: 100, high: 101, low: 99 }));
   const ma = (k, w) => (k + 1 >= w ? out.slice(k + 1 - w, k + 1).reduce((s, p) => s + p.close, 0) / w : null);
   const ma50 = out.map((_, k) => ma(k, 50));
   const ma200 = out.map((_, k) => ma(k, 200));
-  return { data: out.slice(-240), ma50: ma50.slice(-240), ma200: ma200.slice(-240) };
+  return { data: out.slice(-240), ma50: ma50.slice(-240), ma200: ma200.slice(-240), gapBars: out, flat };
 }
 const SERIES = bars();
 
 const page = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>body{margin:0;padding:16px;background:#020617;color:#f8fafc;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}#col{max-width:1100px;margin:0 auto}</style></head>
+<style>:root{--fs-read:1rem;--lh-read:1.65;--fs-label:0.8125rem;--fs-fine:0.75rem}body{margin:0;padding:16px;background:#020617;color:#f8fafc;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}#col{max-width:1100px;margin:0 auto}</style></head>
 <body><div id="col"><section><h2 style="margin:0 0 16px">ABC with MA50 and MA200</h2><div id="root"></div></section></div>
 <script>
 window.process = { env: { NODE_ENV: "development" } };
@@ -91,7 +102,9 @@ const React = require("react");
 const Chart = require("chart").default;
 const credit = React.createElement("a", { href: "#credit" }, "Market data from Tiingo.com");
 require("react-dom/client").createRoot(document.getElementById("root")).render(
-  React.createElement(Chart, { symbol: "ABC", data: SERIES.data, ma50: SERIES.ma50, ma200: SERIES.ma200, height: 360, credit })
+  location.search.includes("flat")
+    ? React.createElement(Chart, { symbol: "FLT", data: SERIES.flat.slice(-240), ma50: SERIES.ma50, ma200: SERIES.ma200, height: 360, credit, gapBars: SERIES.flat })
+    : React.createElement(Chart, { symbol: "ABC", data: SERIES.data, ma50: SERIES.ma50, ma200: SERIES.ma200, height: 360, credit, gapBars: SERIES.gapBars })
 );
 </script></body></html>`;
 
@@ -210,6 +223,58 @@ for (const width of (process.env.WIDTHS || "320,360,375,390,414,430,1280").split
   await p.keyboard.press("Escape");
   const kEsc = await state();
   say(readMatches(k3, n - 4) && readMatches(k2, n - 3) && kEsc.kind === "latest" && kEsc.marker === null, "keys: ← ← ← steps back three bars, → one forward, Esc to the latest", `${k3.marker} ${k2.marker} ${kEsc.kind}`);
+
+  // ── Stretch line (#553 COWORK #144): present, reading size, nothing past the column ──
+  const st = await p.evaluate(() => {
+    const el = document.querySelector("[data-chart-stretch]");
+    if (!el) return null;
+    const r = el.getBoundingClientRect(), c = document.getElementById("root").getBoundingClientRect();
+    return { size: getComputedStyle(el).fontSize, inside: r.left >= c.left - 0.5 && r.right <= c.right + 0.5, text: el.textContent };
+  });
+  say(st && st.size === "16px" && st.inside && /standard deviations (above|below) its 20-day average/.test(st.text), "stretch: the line reads at 16 px inside the column", st ? st.text.slice(0, 70) : "missing");
+
+  // ── Fair value gaps ──
+  const g0 = await p.evaluate(() => ({ state: document.querySelector("[data-chart-gaps]")?.dataset.chartGaps, zones: document.querySelectorAll("[data-chart-gap]").length }));
+  say(g0.state === "off" && g0.zones === 0, "gaps: the toggle starts off, nothing drawn", JSON.stringify(g0));
+  await p.click(".chart-gap-toggle");
+  const g1 = await p.evaluate(() => {
+    const svg = document.querySelector("svg[tabindex]").getBoundingClientRect();
+    const rects = [...document.querySelectorAll("[data-chart-gap]")].map((r) => r.getBoundingClientRect());
+    return {
+      pressed: document.querySelector(".chart-gap-toggle").getAttribute("aria-pressed"),
+      n: rects.length,
+      inside: rects.every((r) => r.left >= svg.left - 0.5 && r.right <= svg.right + 0.5 && r.top >= svg.top - 0.5 && r.bottom <= svg.bottom + 0.5),
+      first: rects[0] ? { x: (rects[0].left + rects[0].right) / 2, y: (rects[0].top + rects[0].bottom) / 2 } : null,
+      scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth,
+      requests: window.requests, svgTop: svg.top,
+    };
+  });
+  say(g1.pressed === "true" && g1.n >= 1 && g1.inside, "gaps on: zones drawn, each inside the chart", `${g1.n} zone(s)`);
+  say(g1.scrollW <= g1.clientW, "gaps on: still no sideways scroll", `${g1.scrollW} vs ${g1.clientW}`);
+  if (g1.first) {
+    if (phone) {
+      await p.evaluate(([x, y]) => {
+        const svg = document.querySelector("svg[tabindex]");
+        for (const type of ["pointerdown", "pointermove"]) svg.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: "touch", pointerId: 9, isPrimary: true, clientX: x, clientY: y }));
+      }, [g1.first.x, g1.first.y]);
+    } else await p.mouse.move(g1.first.x, g1.first.y);
+    const words = await p.textContent("[data-chart-gap-status]");
+    const svgTopIn = await p.evaluate(() => document.querySelector("svg[tabindex]").getBoundingClientRect().top);
+    say(Math.abs(svgTopIn - g1.svgTop) < 0.5, "gaps: the words coming in don't move the chart", `${g1.svgTop} → ${svgTopIn}`);
+    say(/^In a bullish gap \(from \d{1,2} [A-Z][a-z]{2}\)$/.test(words ?? ""), "gaps: the pointer inside a zone reads \"In a bullish gap (from …)\"", words ?? "");
+    if (width === 390 || width === 1280) await p.screenshot({ path: path.join(SHOTS, `chart-gaps-${width}.png`), fullPage: true });
+    if (phone) await p.evaluate(([x, y]) => document.querySelector("svg[tabindex]").dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch", pointerId: 9, clientX: x, clientY: y })), [g1.first.x, g1.first.y]);
+    else await p.mouse.move(2, 2);
+  }
+  await p.click(`button[aria-controls="ABC-gap-note"]`);
+  const note = await p.evaluate(() => { const el = document.getElementById("ABC-gap-note"); return el ? { size: getComputedStyle(el).fontSize, text: el.textContent } : null; });
+  say(note && note.size === "16px" && /A description, not a forecast\.$/.test(note.text), "gaps: the tap note opens at 16 px with the ruled words", note ? note.size : "not shown");
+  const fp = await ctx.newPage();
+  await fp.goto(`file://${file}?flat`);
+  await fp.waitForSelector("[data-chart-gaps]");
+  const none = await fp.evaluate(() => ({ state: document.querySelector("[data-chart-gaps]").dataset.chartGaps, disabled: document.querySelector(".chart-gap-toggle").disabled, words: document.querySelector("[data-chart-gap-status]").textContent, scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth }));
+  say(none.state === "none" && none.disabled && none.words === "No unfilled gaps in the last 12 months" && none.scrollW <= none.clientW, "gaps: with none, the toggle is disabled with the reason", JSON.stringify(none));
+  await fp.close();
 
   const fin = await state();
   say(fin.requests === 0 && netAfterLoad === 0, "no network request on hover, drag or keys", `fetch ${fin.requests}, requests ${netAfterLoad}`);

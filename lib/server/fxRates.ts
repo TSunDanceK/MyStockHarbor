@@ -253,6 +253,13 @@ const FRED_SERIES: Record<string, { id: string; quote: "usd-per-unit" | "unit-pe
   // ECB stays the fallback for both.
   KRW: { id: "DEXKOUS", quote: "unit-per-usd" },
   ZAR: { id: "DEXSFUS", quote: "unit-per-usd" },
+  // DEXSIUS is SINGAPORE DOLLARS to one U.S. DOLLAR (#552 COWORK #157 §3). ECB,
+  // SGD's only route until now, timed out in the 5 Oct 04:20 UTC sec-facts run;
+  // the FX guard kept TLIH's stored set. MEASURED (relay fred-sgd, 2026-10-05):
+  // 1,933 daily rows from 2019-01-02 to 2026-09-25, zero "." placeholders, last
+  // 1.2771, so SGD per USD. Against the ECB cross over 1,907 shared days: median
+  // 0.082%, p95 0.306%, max 1.23%. ECB stays the fallback.
+  SGD: { id: "DEXSIUS", quote: "unit-per-usd" },
 };
 
 /**

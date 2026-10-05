@@ -374,7 +374,14 @@ export default function LatestEarningsCard({
           </Link>
         </>
       )}
-      {snapshot.sourceNote ? <div style={earningsSourceStyle} data-fine-print="">{snapshot.sourceNote}</div> : null}
+      {/* BEHIND A TAP, NOT FINE PRINT (#552 COWORK #157 §2, the owner's standing
+          rule): the sentence explains the figures, so it opens at reading size. */}
+      {snapshot.sourceNote ? (
+        <details data-snapshot-source="" style={earningsHowStyle}>
+          <summary style={earningsHowSummaryStyle}>About these figures</summary>
+          <div style={earningsHowBodyStyle}>{snapshot.sourceNote}</div>
+        </details>
+      ) : null}
     </section>
   );
 }
@@ -668,4 +675,6 @@ const chartGapStyle: CSSProperties = { marginTop: 2, fontSize: "var(--fs-fine)",
 const chartLegendStyle: CSSProperties = { marginTop: 8, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px", fontSize: "var(--fs-label)", color: "rgba(203,213,225,0.72)" };
 const legendSwatchStyle: CSSProperties = { display: "inline-block", width: 9, height: 9, borderRadius: 2, marginRight: 5, verticalAlign: "-1px" };
 
-const earningsSourceStyle: CSSProperties = { marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(203,213,225,0.58)" };
+const earningsHowStyle: CSSProperties = { marginTop: 12 };
+const earningsHowSummaryStyle: CSSProperties = { cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" };
+const earningsHowBodyStyle: CSSProperties = { marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" };

@@ -1166,7 +1166,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                     <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
                   </div>
                 </div>
-                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} />
+                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} gapBars={history} />
               </section>
 
               {/* -- Daily / weekly returns --------------------------- */}
@@ -1243,9 +1243,11 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                   {valuation?.sourceNote ? "From the company's SEC filings and this page's share price." : "Computed from the company's own filings on SEC EDGAR; none are on file for this symbol."}
                 </div>
                 {valuation?.sourceNote ? (
-                  <details data-fine-print style={{ marginTop: 6, fontSize: "var(--fs-fine)", lineHeight: 1.6, opacity: 0.65 }}>
-                    <summary style={{ cursor: "pointer" }}>How these are calculated</summary>
-                    <div style={{ marginTop: 6 }}>{valuation.sourceNote}</div>
+                  // OPENS AT READING SIZE (#552 COWORK #157 §2): an explanation behind a
+                  // tap, not 12px fine print; the summary at label size.
+                  <details data-valuation-how="" style={{ marginTop: 6 }}>
+                    <summary style={{ cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" }}>How these are calculated</summary>
+                    <div style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" }}>{valuation.sourceNote}</div>
                   </details>
                 ) : null}
               </section>
