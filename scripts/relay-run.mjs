@@ -1385,6 +1385,8 @@ const TASKS = {
   "write-sec-ev-debt-diagnosis": { script: "scripts/sec-ev-debt-diagnosis.mjs", args: () => [], writes: true },
   // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #163 B2.1): would one proposed debt concept understate a line?
   "write-sec-ev-debt-components": { script: "scripts/sec-ev-debt-components.mjs", args: () => [], writes: true },
+  // READ-ONLY (Relay A, #552 COWORK #163 §4): the 17 fresh-CashPaid filers still empty after #774.
+  "write-sec-dividend-17": { script: "scripts/sec-dividend-17.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
