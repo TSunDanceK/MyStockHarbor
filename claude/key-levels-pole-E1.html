@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Key Levels Pole</title>
+<style>
+  :root{--bg:#070b14;--card:#0f1623;--line:#1e293b;--ink:#e2e8f0;--mut:#94a3b8;--dim:#64748b;--acc:#7cb3f0;--up:#22c55e;--dn:#ef4444}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px 16px 60px}
+  h1{font-size:1.5rem;margin:0 0 6px}
+  .intro{color:var(--mut);max-width:860px;margin:0 0 24px}
+  .grid{display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+  .col h2{font-size:1.05rem;margin:0 0 4px}
+  .col p.why{color:var(--mut);font-size:.875rem;margin:0 0 12px;max-width:340px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px;width:340px;max-width:100%}
+  .eyebrow{color:var(--acc);font-weight:800;letter-spacing:.12em;font-size:.75rem}
+  .ttl{display:flex;justify-content:space-between;align-items:baseline;margin:4px 0 6px}
+  .ttl b{font-size:1.4rem;font-weight:600}
+  .ttl span{color:var(--mut);font-size:.8125rem;text-decoration:underline dotted}
+  .stamp{color:var(--mut);font-size:.8125rem;margin-bottom:6px}
+  .key{color:var(--mut);font-size:.8125rem;margin:6px 0 0}
+  .key i{font-style:normal;font-weight:700}
+  .fine{color:var(--dim);font-size:.75rem;margin-top:8px}
+  svg text{font-family:inherit}
+</style>
+</head>
+<body>
+<h1>Key levels: one vertical pole (E1, true scale), the owner's pick</h1>
+<p class="intro">Reference only, not for merge. AAPL figures from 5 Oct 2026, approximate. Desktop card (340 px) and phone card (332 px).</p>
+<div class="grid">
+  <div class="col">
+    <div class="card"><div class="eyebrow">DAY · WEEK · MONTH</div><div class="ttl"><b>Key levels</b><span>What are these?</span></div>
+      <div class="stamp">Last price <b style="color:var(--ink)">$332.94</b> · 15:59 ET (IEX)</div>
+      <div id="E1"></div>
+      <div class="key"><i style="color:var(--up)">Green</i>: above the last price · <i style="color:var(--dn)">red</i>: below · thick band: today's range · thin: this month's</div>
+      <div class="fine">Week = today so far (Monday) · Daily prices: Market data from Tiingo.com</div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card" style="width:332px"><div class="eyebrow">DAY · WEEK · MONTH</div><div class="ttl"><b>Key levels</b><span>What are these?</span></div>
+      <div class="stamp">Last price <b style="color:var(--ink)">$332.94</b> · 15:59 ET (IEX)</div>
+      <div id="E1p"></div>
+      <div class="fine">Daily prices: Market data from Tiingo.com</div>
+    </div>
+  </div>
+</div>
+<script>
+const last=332.94;
+const lv=[
+ {n:"Day & Month high",v:336.19},
+ {n:"Prev close",v:333.64},
+ {n:"Day open",v:332.65},
+ {n:"Sep close",v:332.20},
+ {n:"Day low",v:331.61},
+ {n:"Month open",v:329.95},
+ {n:"Month low",v:325.81},
+];
+const up="#22c55e",dn="#ef4444",mut="#94a3b8",dim="#64748b",ink="#e2e8f0",acc="#7cb3f0";
+const f2=v=>v.toFixed(2), dist=v=>{const d=(v-last)/last*100;return (d>=0?"+":"−")+Math.abs(d).toFixed(2)+"%"};
+const dayL=331.61,dayH=336.19,monL=325.81,monH=336.19;
+function E1(id,W){
+  const H=380,top=22,bot=H-20,lo=325.3,hi=336.7, y=v=>bot-(v-lo)/(hi-lo)*(bot-top);
+  const px=W*0.47;
+  const gap=22;
+  const rows=[...lv.map(l=>({...l})),{n:"LAST",v:last,isLast:true}].sort((a,b)=>b.v-a.v);
+  rows.forEach(r=>r.ly=y(r.v));
+  for(let i=1;i<rows.length;i++) if(rows[i].ly<rows[i-1].ly+gap) rows[i].ly=rows[i-1].ly+gap;
+  for(let i=rows.length-2;i>=0;i--) if(rows[i].ly>rows[i+1].ly-gap) rows[i].ly=rows[i+1].ly-gap;
+  let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" aria-hidden="true">`;
+  s+=`<rect x="${px-3}" y="${y(monH)}" width="6" height="${y(monL)-y(monH)}" rx="3" fill="#1e293b"/>`;
+  s+=`<rect x="${px-7}" y="${y(dayH)}" width="14" height="${y(dayL)-y(dayH)}" rx="4" fill="#4b5d78"/>`;
+  rows.forEach(r=>{
+    const ty=y(r.v), c=r.isLast?acc:(r.v>last?up:dn);
+    if(r.isLast){
+      s+=`<line x1="${px-16}" x2="${px+16}" y1="${ty}" y2="${ty}" stroke="${acc}" stroke-width="3" stroke-linecap="round"/>`;
+      s+=`<path d="M${px-24} ${ty-6} l8 6 l-8 6z" fill="${acc}"/>`;
+      s+=`<path d="M${px+18} ${ty} L${px+26} ${r.ly}" stroke="${acc}" fill="none"/>`;
+      s+=`<rect x="${px+26}" y="${r.ly-11}" width="${W-px-28}" height="22" rx="6" fill="rgba(124,179,240,.16)" stroke="${acc}"/>`;
+      s+=`<text x="${px+34}" y="${r.ly+4.5}" fill="${ink}" font-size="13" font-weight="800">Last price</text>`;
+      s+=`<text x="${W-8}" y="${r.ly+4.5}" fill="${ink}" font-size="13" font-weight="800" text-anchor="end">${f2(last)}</text>`;
+      return;
+    }
+    s+=`<line x1="${px-10}" x2="${px+10}" y1="${ty}" y2="${ty}" stroke="${c}" stroke-width="2"/>`;
+    s+=`<path d="M${px-10} ${ty} L${px-18} ${r.ly} L${px-22} ${r.ly}" stroke="${dim}" fill="none"/>`;
+    s+=`<text x="${px-26}" y="${r.ly+4}" fill="${ink}" font-size="12.5" text-anchor="end">${r.n}</text>`;
+    s+=`<path d="M${px+10} ${ty} L${px+18} ${r.ly} L${px+24} ${r.ly}" stroke="${dim}" fill="none"/>`;
+    s+=`<text x="${px+28}" y="${r.ly+4}" fill="${c}" font-size="12.5" font-weight="700">${f2(r.v)}</text>`;
+    s+=`<text x="${W-8}" y="${r.ly+4}" fill="${mut}" font-size="11.5" text-anchor="end">${dist(r.v)}</text>`;
+  });
+  s+=`</svg>`;
+  document.getElementById(id).innerHTML=s;
+}
+E1("E1",304);
+E1("E1p",296);
+</script>
+</body>
+</html>
