@@ -52,7 +52,8 @@ function offenders(over = {}) {
   }
   return bad;
 }
-const atrIcon = (src) => /label: "ATR Spike", icon: "([^"]*)"/.exec(stripComments(src, { file: NAV }))?.[1] ?? null;
+// The nav item names an SVG glyph id since the Option B menu (#553 COWORK #155).
+const atrIcon = (src) => /label: "ATR Spike", (?:icon|glyph): "([^"]*)"/.exec(stripComments(src, { file: NAV }))?.[1] ?? null;
 
 const navSrc = fs.readFileSync(path.join(ROOT, NAV), "utf8");
 const real = offenders();
@@ -62,7 +63,7 @@ check("the ATR Spike nav icon is set and is not \"≈\"", Boolean(icon) && icon 
 
 console.log("\n  mutants (each must be caught)");
 {
-  const mut = navSrc.replace(/label: "ATR Spike", icon: "[^"]*"/, `label: "ATR Spike", icon: "${SIGN}"`);
+  const mut = navSrc.replace(/label: "ATR Spike", (icon|glyph): "[^"]*"/, `label: "ATR Spike", $1: "${SIGN}"`);
   check(`mutant "the ATR Spike icon back to ≈" is caught`, mut !== navSrc && offenders({ [NAV]: mut }).length > 0 && atrIcon(mut) === SIGN);
   const LESSONS = "app/learn/lessons.ts";
   const ls = fs.readFileSync(path.join(ROOT, LESSONS), "utf8");
