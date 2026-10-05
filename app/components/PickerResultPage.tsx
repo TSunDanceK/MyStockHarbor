@@ -1686,7 +1686,8 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .screenerProse { margin-top: 40px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.08); max-width: 780px; }
         .screenerProseBlock + .screenerProseBlock { margin-top: 28px; }
         .screenerProse h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.3; font-weight: 800; color: #e2e8f0; letter-spacing: -0.01em; }
-        .screenerProse p { margin: 0 0 12px; font-size: 14.5px; line-height: 1.75; color: rgba(226,232,240,0.78); }
+        /* Read text: the reading floor (--fs-read / --lh-read, #553 COWORK #152). */
+        .screenerProse p { margin: 0 0 12px; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(226,232,240,0.78); }
         .screenerProse p:last-child { margin-bottom: 0; }
 
         .screenerGuideLink { margin-top: 28px; padding: 16px 18px; border: 1px solid rgba(96,165,250,0.28); border-radius: 16px; background: rgba(59,130,246,0.08); max-width: 780px; }
@@ -1696,7 +1697,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         @media (max-width: 640px) {
           .screenerProse { margin-top: 32px; padding-top: 22px; }
           .screenerProse h2 { font-size: 17.5px; }
-          .screenerProse p { font-size: 14px; line-height: 1.7; }
+          .screenerProse p { font-size: var(--fs-read); line-height: var(--lh-read); }
         }
 
         .seeMoreWrap { margin-top: 20px; display: flex; justify-content: center; }
