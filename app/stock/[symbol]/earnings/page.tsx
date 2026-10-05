@@ -617,6 +617,13 @@ export default async function StockEarningsPage({ params }: Props) {
   // HOW MUCH OF THE SCORE RAN. Shared with the sidebar card — see coverageOf.
   const coverage = coverageOf(score);
   const secView = data.secView;
+  // THE SNAPSHOT RENDERS EXACTLY WHEN THE SEC CARDS DO (#552 COWORK #166): the
+  // same conditions as the main column's chain below, which it left for the
+  // top of the right column.
+  const snapshotView =
+    !noRegistrant && data.cold.status !== "not-shown" && data.cold.status !== "not-issuer-equity" && data.cold.status !== "no-xbrl"
+      ? secView
+      : null;
 
   const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
   const driftQuarters: DriftQuarter[] = data.priceReactionQuarters.map((q) => ({
@@ -814,8 +821,22 @@ export default async function StockEarningsPage({ params }: Props) {
         .gmTick { margin-top: 7px; font-size: var(--fs-fine); font-weight: 800; color: rgba(148,163,184,0.72); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .waterfall { margin-top: 12px; display: grid; gap: 8px; }
-        .wfRow { display: grid; grid-template-columns: minmax(96px, 22%) minmax(0, 1fr) minmax(64px, auto); align-items: center; gap: 10px; min-width: 0; }
-        .wfLabel { font-size: var(--fs-label); font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; overflow-wrap: anywhere; }
+        /* THE LABEL COLUMN SIZES TO ITS TEXT (#552 COWORK #168): the bars carry
+           the statement's own labels ("Selling, general & admin"), which a 22%
+           column wrapped. Where the card is too narrow for label, track and
+           figure on one line, the label and figure share the first line and
+           the track runs full width under them, so nothing truncates. */
+        .incomeCard { container-type: inline-size; }
+        .wfRow { display: grid; grid-template-columns: max-content minmax(2.5rem, 1fr) max-content; align-items: center; gap: 10px; min-width: 0; }
+        .wfLabel { font-size: var(--fs-label); font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; white-space: nowrap; }
+        @container (max-width: 22rem) {
+          .wfRow { grid-template-columns: minmax(0, 1fr) max-content; grid-template-areas: "label value" "track track"; row-gap: 4px; }
+          .wfRow .wfLabel { grid-area: label; white-space: normal; }
+          .wfRow .wfValue { grid-area: value; }
+          .wfRow .wfTrack { grid-area: track; }
+        }
+        .wfSubtotal .wfLabel, .wfSubtotal .wfValue { color: #dbeafe; }
+        .incomeTableHeading { margin: 4px 0 2px; font-size: var(--fs-label); font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(203,213,225,0.72); }
         .wfTrack { position: relative; height: 12px; border-radius: 4px; background: rgba(255,255,255,0.04); overflow: hidden; }
         .wfZero { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 1px solid rgba(226,232,240,0.55); }
         .wfBar { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
@@ -837,7 +858,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .trendCell { display: grid; gap: 4px; align-content: start; }
         .trendChipRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
         .trendCount { font-size: var(--fs-label); color: rgba(148,163,184,0.75); }
-        @media (max-width: 520px) { .gmChart { height: 120px; } .wfRow { grid-template-columns: minmax(74px, 30%) minmax(0, 1fr) minmax(56px, auto); } }
+        @media (max-width: 520px) { .gmChart { height: 120px; } }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }
         .chartBlockSub { font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(148,163,184,0.85); margin-bottom: 8px; }
@@ -872,6 +893,28 @@ export default async function StockEarningsPage({ params }: Props) {
         .estimateGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
         .estimateGridStacked { grid-template-columns: 1fr; }
         @media (max-width: 980px) { .hero, .contentGrid { grid-template-columns: 1fr; } .sideColumn { position: static; } .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        /* THE SNAPSHOT IN THE RIGHT COLUMN (#552 COWORK #166): two tiles across,
+           one across where the card is too narrow for two whole figures; a
+           figure never wraps or cuts. */
+        /* In the stylesheet, not inline: an inline display would beat the phone
+           block's rule below that lets the columns step aside (#552 COWORK #166). */
+        .mainColumn { display: grid; gap: 18px; min-width: 0; }
+        .snapshotCard { container-type: inline-size; }
+        .sideColumn .snapshotGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .snapshotGrid .metricValue { white-space: nowrap; word-break: normal; }
+        @container (max-width: 330px) { .snapshotGrid { grid-template-columns: 1fr !important; } }
+        /* THE PHONE ORDER (#552 COWORK #166), C's pattern from the stock page
+           (check-stock-phone-order): the two columns step aside and their
+           cards order by CSS, so the phone reads Next report, Growth &
+           Margins, the snapshot, then the rest in DOM order. Desktop is
+           untouched: nothing outside this block orders or uses contents. */
+        @media (max-width: 980px) {
+          .contentGrid { gap: 18px; }
+          .mainColumn, .sideColumn { display: contents; }
+          .orderNext { order: -3; }
+          .orderGrowth { order: -2; }
+          .orderSnapshot { order: -1; }
+        }
         @media (max-width: 720px) {
           .earningsPage, .earningsPage * { box-sizing: border-box; }
           .earningsWrap { width: 100%; padding: 14px 10px 38px; overflow-x: hidden; }
@@ -972,14 +1015,14 @@ export default async function StockEarningsPage({ params }: Props) {
           </section>
 
           <section className="contentGrid">
-            <div style={{ display: "grid", gap: 18 }}>
+            <div className="mainColumn">
               {/* EVERY FINANCIAL CARD BELOW READS THE SEC FACT SET. When the
                   symbol has none yet, one honest card says so rather than six
                   cards of dashes. */}
               {/* NO NEXT-REPORT BOX FOR A FUND (#552 COWORK #152): a fund has no
                   earnings date to estimate. A census-named note keeps it: its
                   card points at the issuer, whose reports these are. */}
-              {nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <NextReportCard outlook={nextReport} /> : null}
+              {nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <div className="orderNext"><NextReportCard outlook={nextReport} /></div> : null}
 
               {/* THREE OUTCOMES, NOT TWO. "no readable XBRL" is a successful
                   fetch of nothing usable -- an IFRS filer, or a company with no
@@ -1032,7 +1075,10 @@ export default async function StockEarningsPage({ params }: Props) {
               ) :
                !secView ? <SecPendingCard symbol={clean} /> : (
                 <>
-                  <SecSnapshotCard view={secView} pending={data.pendingResults} />
+                  {/* THE SNAPSHOT MOVED TO THE TOP OF THE RIGHT COLUMN (#552
+                      COWORK #166, owner request): "AAPL earnings" visitors want
+                      the latest revenue and EPS at once, and there it stays in
+                      view on a desktop. Growth & Margins leads this column. */}
                   {/* HIDDEN, NOT REMOVED — the owner's standing rule. These two
                       were the FMP estimate cards: "EPS surprise" and "Revenue
                       surprise", both against FMP's epsEstimated /
@@ -1055,7 +1101,7 @@ export default async function StockEarningsPage({ params }: Props) {
                       (tableBasis "year"): quarterly results are not in SEC
                       structured data for 20-F/40-F filers; the five-year
                       card below is the main table. */}
-                  {secView.tableBasis === "year" ? null : <SecGrowthMarginsCard view={secView} />}
+                  {secView.tableBasis === "year" ? null : <div className="orderGrowth"><SecGrowthMarginsCard view={secView} /></div>}
                   {/* ON EVERY STOCK, not only annual filers: five fiscal years
                       is the longer view a quarterly table cannot give. Same
                       component, same rows, `sole` only changes the wording. */}
@@ -1112,6 +1158,8 @@ export default async function StockEarningsPage({ params }: Props) {
             </div>
 
             <aside className="sideColumn">
+              {/* FIRST IN THE RIGHT COLUMN, ABOVE "What it means" (#552 COWORK #166). */}
+              {snapshotView ? <div className="orderSnapshot"><SecSnapshotCard view={snapshotView} pending={data.pendingResults} /></div> : null}
               <section className="card">
                 <div className="eyebrow">What it means</div>
                 <h3>Investor read</h3>

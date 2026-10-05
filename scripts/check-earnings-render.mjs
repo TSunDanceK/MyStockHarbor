@@ -1061,7 +1061,7 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // agreed with. Both fields exist on the view, so a harness on the wrong one
   // renders a plausible page and asserts about the wrong reader.
   const pageSrc = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
-  const pageGate = (pageSrc.match(/\{secView\.(\w+) === "year" \? null : <SecGrowthMarginsCard/) ?? [])[1];
+  const pageGate = (pageSrc.match(/\{secView\.(\w+) === "year" \? null : (?:<div className="orderGrowth">)?<SecGrowthMarginsCard/) ?? [])[1];
   const soleGate = (pageSrc.match(/<SecAnnualCard view=\{secView\} sole=\{secView\.(\w+) === "year"\}/) ?? [])[1];
   check("the harness gates the growth card on the same field page.tsx does",
     pageGate === "tableBasis" && soleGate === "tableBasis",

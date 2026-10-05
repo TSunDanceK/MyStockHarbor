@@ -37,13 +37,18 @@ function bars(M, sym) {
   const out = html(React.createElement(M.SecIncomeStatementCard, { view: M.buildSecEarningsView(fixture(sym)) }));
   const i = out.indexOf('class="waterfall"');
   if (i < 0) return null;
-  const body = out.slice(i, out.indexOf("</div></div><p", i));
-  return [...body.matchAll(/<span class="wfLabel">([^<]+)<\/span><div class="wfTrack">(.*?)<\/div>/g)].map(([, label, track]) => {
+  // To the end of the waterfall: what follows it changed with #552 COWORK #168
+  // (fine-print lines, then the one "About these figures").
+  const body = out.slice(i, out.indexOf("</div></div><", i) + 12);
+  // Rows by key (data-wf-key): the bars carry the statement's own labels now,
+  // and Gross profit is a subtotal row between cost of revenue and R&D.
+  return [...body.matchAll(/<div class="wfRow[^"]*" data-wf-key="(\w+)"><span class="wfLabel">(.*?)<\/span><div class="wfTrack">(.*?)<\/div>/g)].map(([, key, label, track]) => {
     const st = /class="wfBar" style="([^"]*)"/.exec(track)?.[1] ?? "";
     const num = (k) => Number(new RegExp(`${k}:(-?[\\d.]+)%`).exec(st)?.[1] ?? 0);
     const zero = /class="wfZero" style="left:(-?[\d.]+)%"/.exec(track);
     return {
-      label: label.replace("&amp;", "&"),
+      key,
+      label: label.replace(/<[^>]+>/g, "").replace("&amp;", "&"),
       left: num("margin-left"), width: num("width"),
       colour: /background:([^;"]+)/.exec(st)?.[1] ?? "",
       zero: zero ? Number(zero[1]) : null,
@@ -57,9 +62,9 @@ const near = (a, b) => Math.abs(a - b) < 0.01;
 function wkhsHolds(M) {
   const r = bars(M, "WKHS");
   if (!r) return { drawn: false };
-  const costs = r.filter((b) => !["Revenue", "Operating income"].includes(b.label));
-  const cor = r.find((b) => b.label === "Cost of revenue");
-  const tot = r.find((b) => b.label === "Operating income");
+  const costs = r.filter((b) => !["revenue", "grossProfit", "operatingIncome"].includes(b.key));
+  const cor = r.find((b) => b.key === "costOfRevenue");
+  const tot = r.find((b) => b.key === "operatingIncome");
   const zero = r[0].zero;
   return {
     drawn: true, r, zero,
@@ -89,8 +94,8 @@ console.log("1. WKHS: costs > revenue");
   const m = wkhsHolds(Mm);
   check("MUTATION: the old 0..max scale leaves cost bars off the track", !(m.costsVisible && m.allInside));
   const Mc = await loadCards(once(
-    'background: g.totalBar.loss ? toneColor("weak") : "rgba(147,197,253,0.85)",',
-    'background: "rgba(147,197,253,0.85)",'));
+    'background: bar.loss ? toneColor("weak") : "rgba(147,197,253,0.85)"',
+    'background: "rgba(147,197,253,0.85)"'));
   check("MUTATION: the always-blue result bar fails the colour assertion", !wkhsHolds(Mc).lossColour);
 }
 
@@ -103,9 +108,15 @@ console.log("\n2. AAPL: a profit draws as before");
   const tot = r.at(-1);
   check("operating income from 0, in the blue", near(tot.left, 0) && tot.width > 0 && tot.colour === BLUE, JSON.stringify(tot));
   // THE ARITHMETIC OF A STEP: each cost's right end is the previous running total.
+  // The gross-profit subtotal (#552 COWORK #168) is a level, not a step: it runs
+  // from 0 to the running total after cost of revenue, in the subtotal blue.
   let run = r[0].left + r[0].width;
-  let ok = true;
-  for (const b of r.slice(1, -1)) { ok &&= near(b.left + b.width, run); run = b.left; }
+  let ok = true, gpOk = false;
+  for (const b of r.slice(1, -1)) {
+    if (b.key === "grossProfit") { gpOk = near(b.left, 0) && near(b.width, run) && b.colour === BLUE; continue; }
+    ok &&= near(b.left + b.width, run); run = b.left;
+  }
+  check("gross profit is a subtotal bar from 0 to the running total after cost of revenue, in the blue", gpOk);
   check("each cost bar ends where the previous running total was", ok);
   check("the result bar ends where the last cost began", near(tot.left + tot.width, run));
 }

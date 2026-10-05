@@ -40,6 +40,7 @@ import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
 import { CATEGORY_FIELDS, valueSatisfies, type Predicate } from "@/lib/screenerFields";
+import { PickerEmptyGuardError, emptyGuardLine, implausibleEmpty } from "@/lib/pickerEmptyGuard";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -1413,7 +1414,21 @@ async function getPickerData(config: PickerResultConfig) {
           )
         : entries;
 
+    // THE EMPTY-BUILD GUARD (#553 COWORK #155, lib/pickerEmptyGuard.ts): a
+    // fundamental screen that matches nothing because its field is missing
+    // is not published. At runtime the throw keeps the last good ISR render;
+    // at build there is none, so the empty box ships with noindex.
+    let emptyGuardNoindex = false;
+    const guard = implausibleEmpty(presetPredicates, entries, seoEntries.length, valueForPredicateField);
+    if (guard.tripped) {
+      const atBuild = process.env.NEXT_PHASE === "phase-production-build";
+      if (!atBuild) throw new PickerEmptyGuardError(emptyGuardLine(config.href, guard, false));
+      console.warn(emptyGuardLine(config.href, guard, true));
+      emptyGuardNoindex = true;
+    }
+
     return {
+      emptyGuardNoindex,
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
       priceOldestTs,
       priceNewestTs,
@@ -1525,7 +1540,7 @@ const ORDERED_PICKER_HREFS = new Set<string>([
 ]);
 
 export default async function PickerResultPage({ config }: { config: PickerResultConfig }) {
-  const { entries, seoEntries, updatedAt, priceOldestTs, priceNewestTs, volumeLabel, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
+  const { entries, seoEntries, updatedAt, priceOldestTs, priceNewestTs, volumeLabel, universeSize, dynamicUniverseCount, foundCount, emptyGuardNoindex } = await getPickerData(config);
   // The price column is Tiingo's when either switch is on: PICKERS (the
   // history and signals, step 2) or POOL (the price, % change and volume,
   // step 5). Either way the footer carries the linked credit (COWORK #92).
@@ -1631,6 +1646,9 @@ export default async function PickerResultPage({ config }: { config: PickerResul
   return (
     <WatermarkVisibilityProvider>
       <main className="pickerResultPage">
+        {/* Build-time trip of the empty-build guard: an empty fundamental
+            screen is never indexed (React hoists this into <head>). */}
+        {emptyGuardNoindex ? <meta name="robots" content="noindex, follow" /> : null}
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
         <style>{`

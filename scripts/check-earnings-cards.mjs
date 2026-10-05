@@ -126,8 +126,14 @@ const cssRules = (css) => ({
   "C1. CSS: bar rows can't outgrow the card (min-width: 0, minmax(0, 1fr), the head wraps, the track is 100%)":
     /\.hbarList \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/.test(css) && /\.hbarRow \{[^}]*minmax\(0, 1fr\);[^}]*min-width: 0;/.test(css)
       && /\.hbarHead \{[^}]*flex-wrap: wrap;[^}]*min-width: 0;/.test(css) && /\.hbarTrack \{[^}]*box-sizing: border-box; width: 100%;/.test(css),
-  "C2. CSS: the waterfall's track column is minmax(0, 1fr), at both widths":
-    (css.match(/\.wfRow \{ [^}]*grid-template-columns: minmax\(\d+px, \d+%\) minmax\(0, 1fr\) minmax\(\d+px, auto\);/g) ?? []).length === 2,
+  // Since #552 COWORK #168 the label column sizes to its text (the bars carry
+  // the statement's own labels), so the guard against outgrowing the card is
+  // two-part: on a wide card the TRACK is the flexible column, and on a narrow
+  // one (the container rule) the label column itself shrinks and wraps, with
+  // the track on its own full-width line.
+  "C2. CSS: a bar row can't outgrow the card: the track flexes, and a narrow card puts the label in a shrinkable column":
+    /\.wfRow \{ display: grid; grid-template-columns: max-content minmax\([\d.]+rem, 1fr\) max-content;/.test(css)
+    && /@container \(max-width: [\d.]+rem\) \{\s*\.wfRow \{ grid-template-columns: minmax\(0, 1fr\) max-content; grid-template-areas: "label value" "track track";/.test(css),
   "C3. CSS: the dropdowns' summary has a visible focus ring":
     /\.cardDetails > summary:focus-visible \{ outline: 2px solid/.test(css),
 });
@@ -135,7 +141,7 @@ for (const [name, ok] of Object.entries(cssRules(PAGE))) check(name, ok);
 const cssMutants = [
   ["the reachable range dimmed again", once(PAGE, ".scoreReach { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: transparent;", ".scoreReach { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: rgba(2,6,23,0.55);")],
   ["the bar head no longer wraps", once(PAGE, ".hbarHead { display: flex; flex-wrap: wrap;", ".hbarHead { display: flex;")],
-  ["the waterfall track back to 1fr", once(PAGE, ".wfRow { display: grid; grid-template-columns: minmax(96px, 22%) minmax(0, 1fr)", ".wfRow { display: grid; grid-template-columns: minmax(96px, 22%) 1fr")],
+  ["the narrow-card rule dropped (a long label pushes the row wide)", once(PAGE, '.wfRow { grid-template-columns: minmax(0, 1fr) max-content; grid-template-areas: "label value" "track track";', '.wfRow { grid-template-columns: max-content max-content; grid-template-areas: "label value" "track track";')],
 ];
 for (const [label, css] of cssMutants) check(`MUTATION: ${label} → caught`, Object.values(cssRules(css)).some((ok) => !ok));
 
