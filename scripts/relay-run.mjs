@@ -1373,6 +1373,9 @@ const TASKS = {
   // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #157 §1): how much of the
   // universe has no stored SEC set, why, and which queue would fill it. ~5 GET/SMEMBERS/ZCARD; counts only.
   "write-sec-coverage-census": { script: "scripts/sec-coverage-census.mjs", args: () => [], writes: true },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #157 §4): why the SEC news
+  // backfill fails, replaying its selection. 1 GET + ~970 EXISTS; ≤ 150 SEC requests at 5/s.
+  "write-sec-news-backfill-census": { script: "scripts/sec-news-backfill-census.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
