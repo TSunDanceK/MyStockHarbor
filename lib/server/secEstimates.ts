@@ -13,6 +13,10 @@
 //       not tag one. 93.2% within ±5% of the full EV (median 0.84%, p90 4.44%,
 //       n 295). ONLY this pattern: with cash or long-term debt missing it fails
 //       (75.9% and below), so those stay refusals.
+//   ev-cash-incl-restricted      (B1, #552 COWORK #162) EV with cash including
+//       restricted cash where cash is not tagged; both debt lines filed, never
+//       a bank, never stacked with M2. 96.6% within ±5% (median 0.00%, p90
+//       0.47%, n 268); misses are client-funds holders (PYPL 27%).
 //   pb-parent-equity-derived     (M6a) shareholders' equity = equity including
 //       noncontrolling interests − the filed noncontrolling interest, on the
 //       same balance-sheet date. 99.1% exact (n 16,172). It is arithmetic on
@@ -55,12 +59,16 @@ export const ESTIMATE_METHODS: Record<EstimateKey, { kind: Estimate["kind"]; met
     backtest: "93% of back-tested cases within ±5% of the full figure",
   },
   // B1 (#552 COWORK #162 §3): cash untagged, cash INCLUDING restricted cash
-  // filed at the same balance-sheet date, both debt lines filed. Back-test:
-  // BACKTEST_B1.
+  // filed at the same balance-sheet date, both debt lines filed. Back-test
+  // (relay write-sec-estimate-accuracy, 5 Oct): on the 268 stored non-bank
+  // sets filing all four lines at one date, EV with cash incl. restricted vs
+  // the full EV: 259 (96.6%) within ±5%, median 0.00%, p90 0.47%. The 9
+  // misses hold client funds as restricted cash (PYPL 27%, CPAY, ABNB, MRSH,
+  // WTW, BRO, ADM, ADP, INTU).
   "ev-cash-incl-restricted": {
     kind: "estimate",
     method: "cash is not tagged on this balance sheet, so it uses cash including restricted cash",
-    backtest: "BACKTEST_B1_LINE",
+    backtest: "97% of back-tested cases within ±5% of the full figure",
   },
   "pb-parent-equity-derived": {
     kind: "derived",
