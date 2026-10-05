@@ -168,8 +168,9 @@ console.log("\n4. no symbol ever renders \"No\"");
   const hits = [];
   for (const sym of ["AAPL", "AZN", "GEV", "KGC", "KTOS", "TSLA"]) {
     const t = renderWith(P, D.buildProfileDividend(fixture(sym)));
-    if (/Dividend\s+No\b/i.test(t)) hits.push(sym);
-    if (/Dividend\s+Yes/i.test(t)) hits.push(`${sym} (Yes)`);
+    // The row's label since #552 COWORK #162: "Dividends per share (as filed)".
+    if (/Dividends per share \(as filed\)\s+No\b/i.test(t)) hits.push(sym);
+    if (/Dividends per share \(as filed\)\s+Yes/i.test(t)) hits.push(`${sym} (Yes)`);
   }
   check("no fixture renders Yes/No in the Dividend row", hits.length === 0, hits.join(", "));
 
@@ -187,7 +188,7 @@ console.log("\n4. no symbol ever renders \"No\"");
   const yesNo = await loadProfile(once(
     "const dividendValue =", 'const dividendValue = dividendRow.state !== "declared" ? "No" :'));
   check("MUTATION: a \"No\" reintroduced is caught",
-    /Dividend\s+No\b/i.test(renderWith(yesNo, D.buildProfileDividend(fixture("TSLA")))));
+    /Dividends per share \(as filed\)\s+No\b/i.test(renderWith(yesNo, D.buildProfileDividend(fixture("TSLA")))));
 }
 
 console.log("\n5. every hide reason is registered, and the FMP field is kept");

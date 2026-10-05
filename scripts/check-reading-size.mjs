@@ -33,6 +33,8 @@ export const SCOPE = [
   "app/stock/[symbol]/StrengthBadge.tsx",
   // C's Performance card (#563 COWORK #111).
   "lib/ta/performanceCard.ts", "app/stock/[symbol]/PerformanceCard.tsx",
+  // C's capex explanation card (#563 COWORK #110).
+  "app/bottlenecks/capex/WhyFollowMoney.tsx",
 ];
 const read = (f) => fs.readFileSync(f, "utf8");
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.name === "node_modules" || e.name.startsWith(".") ? [] : e.isDirectory() ? walk(path.join(d, e.name)) : /\.(css|tsx?)$/.test(e.name) ? [path.join(d, e.name)] : []));
