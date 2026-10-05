@@ -1220,11 +1220,17 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                           ? <EstimatedValue text={formatValuationMultiple(item.value)} est={valuation?.estimates?.[item.key]} />
                           : <ReasonedValue text={valuation?.words?.[item.key] ?? "—"} reason={item.reason} />}
                       </div>
-                      {/* A FIGURE'S NOTE (its basis, NCI-inclusive equity) is
-                          printed; a REFUSAL'S reason is on hover/tap of the dash
-                          or word instead (#552 COWORK #98 §1). */}
+                      {/* A FIGURE'S NOTE (its basis, NCI-inclusive equity) sits behind a
+                          tap, "How it's calculated", at reading size when open: the card
+                          shows only the figure and its label (owner ruling, #563 COWORK
+                          #104: explanations go behind a tap, not as small text). A
+                          REFUSAL'S reason is on hover/tap of the dash or word instead
+                          (#552 COWORK #98 §1). */}
                       {item.value != null && item.reason ? (
-                        <div data-fine-print style={{ marginTop: 4, fontSize: "var(--fs-fine)", lineHeight: 1.45, opacity: 0.6 }}>{item.reason}</div>
+                        <details className="valuationHow" style={{ marginTop: 6 }}>
+                          <summary style={{ cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" }}>How it&apos;s calculated</summary>
+                          <div style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" }}>{item.reason}</div>
+                        </details>
                       ) : null}
                     </div>
                   ))}
