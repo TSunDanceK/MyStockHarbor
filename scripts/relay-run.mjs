@@ -1370,6 +1370,8 @@ const TASKS = {
   "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
   // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
+  // READS ONLY: time the /dashboard server reads with no FMP key (Relay B, #553 COWORK #145). SYMBOLS input.
+  "write-dashboard-timing": { script: "scripts/dashboard-timing.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
