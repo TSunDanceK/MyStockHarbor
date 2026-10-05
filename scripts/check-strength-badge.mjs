@@ -173,6 +173,13 @@ function rules(M, o) {
       Object.values(C).filter((b) => b.lines.length).every((b) => { const t = render(b); return ["Trend:", "3-month vs S&P 500:", "12-month vs S&P 500:", "RSI(14):", "Earnings:"].every((l) => t.includes(l)) && (t.match(/ · [+−]?\d+ points?\b/g) ?? []).length === 5; }),
     "the note carries the cut-offs, 'A description of recent price and results, not a recommendation.' and the credit": () =>
       credited.includes(M.NOT_ADVICE) && M.NOT_ADVICE === "A description of recent price and results, not a recommendation." && credited.includes("Strong +4 or more") && credited.includes("Tiingo credit"),
+    "the RSI row is short: 'RSI(14): 55 · 0 points'; its rule sits under the list": () =>
+      /RSI\(14\): \d+ · 0 points/.test(render(C.strong)) && /^\d+$/.test(line(C.strong, "rsi").reading) &&
+      M.CUTOFFS_WORDS.includes("RSI(14) at 70 or more pulls a positive total one point toward Neutral, and at 30 or less a negative one.") && render(C.strong).includes(M.CUTOFFS_WORDS),
+    "the pill's word is in the server HTML, read as 'Strength · Strong'": () => {
+      const pill = (badge) => visibleText(renderToStaticMarkup(React.createElement(function Pill() { return React.createElement(M.StrengthPill, { s: M.useStrengthNote(), badge, place: "top" }); })));
+      return pill(C.strong) === "Strength · Strong" && pill(C.tooShort) === "Strength · Not enough data";
+    },
     "no advice: nothing tells the reader what to do": () => {
       const words = `${allText}\n${M.CUTOFFS_WORDS}\n${[...lib.matchAll(/`[^`]*`|"[^"]*"/g)].map((m) => m[0]).join("\n")}\n${[...card.matchAll(/>[^<>{}]+</g)].map((m) => m[0]).join("\n")}`;
       return !ADVICE.test(words.split(M.NOT_ADVICE).join(" "));
@@ -230,7 +237,10 @@ const MUTANTS = [
   ["the note lists all five", "card", (s) => s.replace("<strong>{signed(l.points)}</strong>", "")],
   ["the note carries", "card", (s) => s.replace('<p className="strengthNotAdvice" style={{ margin: "6px 0 0" }}>{NOT_ADVICE}</p>', "")],
   ["the note carries", "card", (s) => s.replace("Prices: {credit}", "")],
-  ["no advice", "lib", (s) => s.replace('`${v}, stretched above 70: pulls a positive total back 1`', '`${v}, stretched above 70: you should consider waiting`')],
+  ["no advice", "lib", (s) => s.replace('`${v} (70 or more, with a positive total)`', '`${v}: you should consider waiting`')],
+  ["the RSI row is short", "lib", (s) => s.replace(": `${v}` });", ": `${v}: no adjustment (counts only at 70 or more with a positive total, or 30 or less with a negative one)` });")],
+  ["the RSI row is short", "lib", (s) => s.replace(" RSI(14) at 70 or more pulls a positive total one point toward Neutral, and at 30 or less a negative one.", "")],
+  ["the pill's word is in the server HTML", "card", (s) => s.replace('<span style={{ color: "rgba(203,213,225,0.5)" }}> · </span>', "")],
   ["no read of its own", "lib", (s) => s.replace("export function wordFor", "export async function peek() { return fetch(\"/x\"); }\nexport function wordFor")],
   ["the page scores Tiingo's", "page", (s) => s.replace('const strength = historyResult.provider === "tiingo" ? strengthBadge(', "const strength = true ? strengthBadge(")],
   ["the pill sits left of Share", "client", (s) => s.replace('{strength ? <StrengthPill s={strengthTop} badge={strength} place="top" /> : null}\n              <ShareButton url={shareUrl} title={shareTitle} text={shareText} />', '<ShareButton url={shareUrl} title={shareTitle} text={shareText} />\n              {strength ? <StrengthPill s={strengthTop} badge={strength} place="top" /> : null}')],
