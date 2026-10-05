@@ -119,7 +119,12 @@ check("no close: 'Shares since' reads '—'", /data-row="NEWCO"[\s\S]*?data-sinc
 check("each ticker links to its earnings page", html.includes('href="/stock/AAPL/earnings"'));
 check("logos carry alt=\"\" (the ticker names the company)", /<img[^>]*alt=""/.test(html) && !/alt="AAPL logo"/.test(html));
 check("EPS and Shares since hide below 640 px", /@media \(max-width: 640px\) \{[\s\S]*?\.ewWide \{ display: none; \}/.test(html));
+const CREDIT = { label: "Market data from Tiingo.com", href: "https://www.tiingo.com" };
+const credited = renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-01", credit: CREDIT }));
+const creditRule = (h, e) => /<p class="ewFine" data-fine-print="">[\s\S]*?Shares since[\s\S]*?<a href="https:\/\/www\.tiingo\.com"[^>]*>Market data from Tiingo\.com<\/a><\/p>/.test(h) && !/<p class="ewFine"/.test(e);
 const empty = renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-04" }));
+check("the Tiingo credit is in this card's fine print, under a day with rows only",
+  creditRule(credited, renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-04", credit: CREDIT }))));
 check("an empty day says so, once, and shows no table", (visible(empty).match(/No results filed on Sunday 4 October\./g) ?? []).length === 1 && !/class="ewTable"/.test(empty));
 {
   // THE LETTER BADGE SITS IN THE SAME BOX: TickerLogo's fallback branch, at the list's size.
@@ -190,6 +195,14 @@ for (const [label, m] of MUTANTS) {
   let caught = false;
   try { caught = await bites(m); } catch (e) { console.log(`    ${e.message}`); }
   check(`MUTATION: ${label} → caught`, caught);
+}
+{
+  const WK = fs.readFileSync("app/earnings-calendar/EarningsWeek.tsx", "utf8");
+  const tmp = `app/earnings-calendar/.check-week-${process.pid}.tsx`;
+  fs.writeFileSync(tmp, once(WK, "{credit && day.rows.length ? (", "{credit ? ("));
+  let MW; try { MW = (await import(`../${tmp}`)).default; } finally { fs.rmSync(tmp, { force: true }); }
+  check("MUTATION: the credit printed under an empty day as well → caught",
+    !creditRule(renderToStaticMarkup(React.createElement(MW, { days, initial: "2026-10-01", credit: CREDIT })), renderToStaticMarkup(React.createElement(MW, { days, initial: "2026-10-04", credit: CREDIT }))));
 }
 check("MUTATION: the month grid back → caught", !gridGone(PAGE.replace("<EarningsWeek ", "<div>{buildCalendarWeeks(2026, 10)}</div><EarningsWeek ")));
 {

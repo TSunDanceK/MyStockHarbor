@@ -83,7 +83,7 @@ console.log("\n4. a cap dash beside a price says why, once (#552 COWORK #117)");
   const WEEK = readCodeOnly("app/earnings-calendar/EarningsWeek.tsx");
   const pageRule = (s, w) => !/CAP_REFUSED_NOTE|PRICE_COVERAGE_NOTE/.test(s) && !/Market cap/i.test(w) && !/columnheader"[^>]*>Price</.test(w);
   check("the calendar has no cap or price column, and so prints no note about one", pageRule(PAGE, WEEK));
-  check("MUTATION: the cap note printed under the list → caught", !pageRule(once(PAGE, '<EarningsWeek days={weekDaysView} initial={initial} />', '<EarningsWeek days={weekDaysView} initial={initial} /><p>{CAP_REFUSED_NOTE}</p>'), WEEK));
+  check("MUTATION: the cap note printed under the list → caught", !pageRule(once(PAGE, '<EarningsComingUp ', '<p>{CAP_REFUSED_NOTE}</p><EarningsComingUp '), WEEK));
   // HEDGED (#552 COWORK #119): the row carries no reason for its dash, so the
   // note may not state the filings as THE cause, nor promise the stock page
   // explains it. Read from the source text, comments stripped.

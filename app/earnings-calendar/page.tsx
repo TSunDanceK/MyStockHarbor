@@ -321,7 +321,6 @@ export default async function EarningsCalendarPage({
       },
     ],
   };
-  const anyRows = weekDaysView.some((d) => d.rows.length > 0);
 
   return (
     <>
@@ -341,7 +340,7 @@ export default async function EarningsCalendarPage({
             <EarningsTickerSearch />
           </section>
 
-          <EarningsWeek days={weekDaysView} initial={initial} />
+          <EarningsWeek days={weekDaysView} initial={initial} credit={priceProviderFor("POOL") === "tiingo" ? { label: TIINGO_CREDIT, href: TIINGO_URL } : null} />
 
           {/* THE "NEXT UP" TICKER IS STILL GONE. It walked forward through a
               window that ends today, so every row read "Today" under a "Next up"
@@ -355,9 +354,6 @@ export default async function EarningsCalendarPage({
             (Form 8-K, Item 2.02). Companies filing results only as Form 6-K are not
             listed here. Revenue and EPS are the filed figures for the period announced;
             they appear once the quarterly report carrying them is filed. This is a starting point for further research, not investment advice.
-            {anyRows && priceProviderFor("POOL") === "tiingo" ? (
-              <> &ldquo;Shares since&rdquo; closes: <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a></>
-            ) : null}
           </p>
 
           <section className="earnCalExplore">

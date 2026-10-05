@@ -41,7 +41,10 @@ export type WeekDay = {
 const signedPct = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}%`;
 const toneOf = (v: number | null) => (v === null ? undefined : v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#cbd5e1");
 
-export default function EarningsWeek({ days, initial }: { days: WeekDay[]; initial: string }) {
+/** The "Shares since" closes' source, linked; null when the closes are not Tiingo's. */
+export type CloseCredit = { label: string; href: string } | null;
+
+export default function EarningsWeek({ days, initial, credit = null }: { days: WeekDay[]; initial: string; credit?: CloseCredit }) {
   const [selected, setSelected] = useState(initial);
   const day = days.find((d) => d.date === selected) ?? days[days.length - 1];
   return (
@@ -98,6 +101,12 @@ export default function EarningsWeek({ days, initial }: { days: WeekDay[]; initi
       ) : (
         <p className="ewEmpty" data-empty-day="">{day.emptyLine}</p>
       )}
+      {/* THIS CARD'S FINE PRINT (COWORK #170): where "Shares since" comes from. */}
+      {credit && day.rows.length ? (
+        <p className="ewFine" data-fine-print="">
+          &ldquo;Shares since&rdquo;: last close before the filing to the latest close. Closes: <a href={credit.href} target="_blank" rel="noopener noreferrer">{credit.label}</a>
+        </p>
+      ) : null}
       {/* The owner's re-fill, for the day shown. */}
       <BackfillButton date={day.date} hasEarnings={day.count > 0} />
 
@@ -126,6 +135,8 @@ export default function EarningsWeek({ days, initial }: { days: WeekDay[]; initi
         .ewName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cbd5e1; }
         .ewNum { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: #e2e8f0; }
         .ewYoY { margin-left: 6px; font-weight: 800; }
+        .ewFine { margin: 10px 0 0; font-size: var(--fs-fine); line-height: 1.5; color: rgba(203,213,225,0.7); }
+        .ewFine a { color: inherit; }
         .ewEmpty { margin: 6px 0 0; font-size: var(--fs-read); line-height: var(--lh-read); color: #cbd5e1; }
         @media (max-width: 640px) {
           .ewCard { padding: 14px; }
