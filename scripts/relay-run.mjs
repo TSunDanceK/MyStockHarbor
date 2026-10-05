@@ -1372,6 +1372,8 @@ const TASKS = {
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
   // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
   "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #162 §1): A1 measured on its own chain. Not to merge.
+  "write-sec-dividend-chain-measure": { script: "scripts/sec-dividend-chain-measure.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
