@@ -282,6 +282,53 @@ for (const pg of PAGES) {
     await page.close();
   }
 }
+// ── THE EARNINGS PAGE LAYOUT (#552 COWORK #166 / #168) ───────────────────────
+// The snapshot sits in the right column: its tile figures must not wrap at
+// 1280px or with a 20px root. On a phone the cards stack Growth & Margins →
+// snapshot → "What it means". The income statement's bars carry the
+// statement's own labels: no label or figure may be cut, at any width.
+{
+  const html = await earningsPage();
+  console.log("\n/stock/AAPL/earnings layout (#552 COWORK #166/#168)");
+  const tiles = () => [...document.querySelectorAll(".snapshotGrid .metricValue")].map((e) => {
+    const lh = parseFloat(getComputedStyle(e).lineHeight) || parseFloat(getComputedStyle(e).fontSize) * 1.25;
+    return { text: e.textContent.trim(), lines: Math.round(e.getBoundingClientRect().height / lh), cut: e.scrollWidth > e.clientWidth + 1 };
+  });
+  for (const [label, width, css] of [["1280px", 1280, ""], ["1280px, root 20px", 1280, "html { font-size: 20px; }"]]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.setContent(doc(html, css));
+    const t = await page.evaluate(tiles);
+    const cols = await page.evaluate(() => getComputedStyle(document.querySelector(".snapshotGrid")).gridTemplateColumns.split(" ").length);
+    const bad = t.filter((x) => x.lines > 1 || x.cut);
+    console.log(`  ${label}: snapshot tiles ${cols} across · ${bad.length ? `WRAPS OR CUTS: ${bad.map((x) => x.text).join(", ")} — FAIL` : `no figure wraps or cuts (${t.length} tiles)`}`);
+    if (bad.length || !t.length) failures++;
+    await page.close();
+  }
+  {
+    const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
+    await page.setContent(doc(html));
+    const seq = await page.evaluate(() => [...document.querySelectorAll(".contentGrid section.card")]
+      .filter((e) => e.getClientRects().length)
+      .map((e) => ({ y: e.getBoundingClientRect().top, name: (e.querySelector(".eyebrow")?.textContent ?? "").trim() }))
+      .sort((a, b) => a.y - b.y).map((x) => x.name));
+    const iGm = seq.indexOf("Growth & margins"), iSnap = seq.findIndex((n) => /^Latest/.test(n)), iMeans = seq.indexOf("What it means");
+    const ok = iGm >= 0 && iSnap === iGm + 1 && iMeans > iSnap;
+    console.log(`  390px stacked order: ${seq.slice(0, 6).join(" → ")} … · ${ok ? "Growth & Margins → snapshot → the rest" : "WRONG ORDER — FAIL"}`);
+    if (!ok) failures++;
+    await page.close();
+  }
+  for (const width of [320, 360, 390, 414, 430, 1280]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.setContent(doc(html));
+    const r = await page.evaluate(() => [...document.querySelectorAll(".waterfall .wfLabel, .waterfall .wfValue")]
+      .filter((e) => e.scrollWidth > e.clientWidth + 1 || e.getBoundingClientRect().right > e.closest(".card").getBoundingClientRect().right + 1)
+      .map((e) => e.textContent.trim().slice(0, 30)));
+    const n = await page.evaluate(() => document.querySelectorAll(".waterfall .wfRow").length);
+    if (r.length || !n) { console.log(`  ${width}px: income bars ${n ? `CUT: ${r.join(", ")}` : "NOT DRAWN"} — FAIL`); failures++; }
+    else console.log(`  ${width}px: ${n} income bars, no label or figure cut`);
+    await page.close();
+  }
+}
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

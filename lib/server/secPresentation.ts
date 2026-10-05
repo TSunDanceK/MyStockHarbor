@@ -586,7 +586,17 @@ export function stalePriceNote(price: number, asOf: string): string {
 export const WATERFALL_TOLERANCE_PCT = 0.5;
 
 export type WaterfallGate =
-  | { ok: true; steps: { key: string; label: string; delta: number }[]; total: number }
+  | {
+      ok: true; steps: { key: string; label: string; delta: number }[]; total: number;
+      /**
+       * SUBTOTAL BARS between the steps (#552 COWORK #168): gross profit after
+       * cost of revenue, drawn from zero to the running total there, like the
+       * closing operating-income bar. Only where the card's gross-profit figure
+       * agrees with that running total (WATERFALL_TOLERANCE_PCT), so the bar's
+       * length and its printed figure never disagree.
+       */
+      subtotals: { afterKey: string; key: string; label: string; value: number }[];
+    }
   | { ok: false; why: "incomplete-breakdown" | "missing-lines" };
 
 /**
@@ -675,7 +685,16 @@ export function waterfallGate(view: SecEarningsView): WaterfallGate {
   if (Math.abs(drawn - operating) > Math.max(Math.abs(operating), 1) * (WATERFALL_TOLERANCE_PCT / 100)) {
     return { ok: false, why: "incomplete-breakdown" };
   }
-  return { ok: true, steps, total: operating };
+  const cogs = val("costOfRevenue");
+  const gp = val("grossProfit");
+  const subtotals: { afterKey: string; key: string; label: string; value: number }[] = [];
+  if (steps.some((st) => st.key === "costOfRevenue") && cogs !== null && gp !== null) {
+    const running = revenue - cogs;
+    if (Math.abs(gp - running) <= Math.max(Math.abs(running), 1) * (WATERFALL_TOLERANCE_PCT / 100)) {
+      subtotals.push({ afterKey: "costOfRevenue", key: "grossProfit", label: "Gross profit", value: running });
+    }
+  }
+  return { ok: true, steps, total: operating, subtotals };
 }
 
 /**
@@ -699,11 +718,14 @@ export type WaterfallGeometry = {
   zeroPct: number | null;
   bars: { key: string; label: string; delta: number; leftPct: number; widthPct: number }[];
   totalBar: { leftPct: number; widthPct: number; loss: boolean };
+  /** Subtotal bars (#552 COWORK #168), each from zero to its value, like the total. */
+  subtotalBars: { afterKey: string; key: string; label: string; value: number; leftPct: number; widthPct: number; loss: boolean }[];
 };
 
 export function waterfallGeometry(
   steps: { key: string; label: string; delta: number }[],
   total: number,
+  subtotals: { afterKey: string; key: string; label: string; value: number }[] = [],
 ): WaterfallGeometry | null {
   const points: { key: string; label: string; delta: number; from: number; to: number }[] = [];
   for (const s of steps) {
@@ -724,6 +746,11 @@ export function waterfallGeometry(
       widthPct: (Math.abs(p.delta) / range) * 100,
     })),
     totalBar: { leftPct: at(Math.min(0, total)), widthPct: (Math.abs(total) / range) * 100, loss: total < 0 },
+    // A subtotal is a running total the axis already spans, so it needs no
+    // change to lo/hi: drawn from zero to its value, left of zero when negative.
+    subtotalBars: subtotals.map((s) => ({
+      ...s, leftPct: at(Math.min(0, s.value)), widthPct: (Math.abs(s.value) / range) * 100, loss: s.value < 0,
+    })),
   };
 }
 

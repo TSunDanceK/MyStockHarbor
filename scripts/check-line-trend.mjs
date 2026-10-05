@@ -34,9 +34,15 @@ const NONE = { now: false, then: false };
 
 /** The row of the income card whose label is `label`, up to the row's end. */
 const rowOf = (h, label) => {
-  // THE TABLE'S ROW, not the waterfall's bar of the same name above it.
+  // THE LINE WHEREVER IT SITS (#552 COWORK #168): a table row, or — for the
+  // lines down to operating income — the bar that now carries its figure,
+  // mark and note.
   const i = h.indexOf(`min-width:0">${label}<`);
-  return i < 0 ? null : h.slice(i, h.indexOf("</div></div>", i));
+  if (i >= 0) return h.slice(i, h.indexOf("</div></div>", i));
+  const b = h.indexOf(`<span class="wfLabel">${label}</span>`);
+  if (b < 0) return null;
+  const next = h.indexOf("data-wf-key=", b + 1);
+  return h.slice(b, next < 0 ? h.indexOf("</div></div>", b) : next);
 };
 
 const RULES = {

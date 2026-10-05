@@ -106,7 +106,7 @@ export default async function SectorIndexPage() {
           <p style={leadStyle}>
             The same news score we run on individual stocks, applied to whole sectors. Each page
             aggregates the latest coverage across that sector&apos;s largest names, scores the
-            headline tone, and shows who is driving it, how broad the move is, and who reports next.
+            headline tone, and shows who is driving it and how broad the move is.
           </p>
         </section>
 
