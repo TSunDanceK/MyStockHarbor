@@ -1378,6 +1378,9 @@ const TASKS = {
   "write-sec-picker-inputs-census": { script: "scripts/sec-picker-inputs-census.mjs", args: () => [], writes: true },
   // Its follow-up: which concepts close the dividend and EV gaps (one companyfacts per gap symbol, ≤ 8/s).
   "write-sec-picker-inputs-followup": { script: "scripts/sec-picker-inputs-census.mjs", args: () => [], writes: true, env: { FOLLOWUP: "1" } },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #162 §2/§3): back-tests for the A2 dividend
+  // estimate (companyfacts, ≤ 8/s) and the B1 EV cash fallback (stored sets + pool prices).
+  "write-sec-estimate-accuracy": { script: "scripts/sec-estimate-accuracy.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
