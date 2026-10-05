@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FILTER_DEFS, toneDotColor, type FilterKey } from "@/lib/pickerFilters";
 import PickerTickerSearch from "@/app/components/PickerTickerSearch";
 import TickerLogo from "@/app/components/TickerLogo";
+import { utcDay, utcStamp } from "@/lib/utcDate";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -1182,7 +1183,9 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
                   <Link key={post.slug} href={`/insights/${post.slug}`} className="insight-row">
                     {post.symbol ? <span className="insight-tag">{post.symbol}</span> : null}
                     <div className="insight-title">{post.title}</div>
-                    <div className="insight-meta">{new Date(post.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</div>
+                    {/* UTC fields, by hand (#553 COWORK #143): with no timeZone a viewer west
+                        of UTC saw the day before, and the hydration text differed. */}
+                    <div className="insight-meta">{utcDay(post.date)?.replace(/ \d{4}$/, "") ?? post.date}</div>
                   </Link>
                 )) : <div className="pickers-side-empty">No recent posts yet.</div>}
                 <Link href="/insights" className="pickers-side-footer-link">More reads →</Link>
@@ -1201,7 +1204,11 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
 
         {!loading && !err && (updatedAt || universeSize) ? (
           <div style={{ marginTop: 4, fontSize: 10, lineHeight: 1.5, opacity: 0.28, textAlign: "right", userSelect: "none" }}>
-            {updatedAt ? <div>{new Date(updatedAt).toLocaleString()}</div> : null}
+            {/* React #418 on every /pickers load (#553 COWORK #143): toLocaleString()
+                with no locale or zone rendered "10/4/2026, 2:05:00 PM" on the server
+                and "04/10/2026, 15:05:00" in a UK browser. utcStamp is the same text
+                on both: "4 Oct 2026, 14:05 UTC". */}
+            {updatedAt ? <div>{utcStamp(updatedAt) ?? updatedAt}</div> : null}
             {universeSize != null ? (
               <div>
                 Universe: {universeSize}
