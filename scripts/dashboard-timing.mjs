@@ -13,6 +13,7 @@
 //   SYMBOLS=COP,ODFL node scripts/dashboard-timing.mjs    (relay: write-dashboard-timing)
 import { register } from "node:module";
 
+register("./lib/after-timing-hooks.mjs", import.meta.url);
 register("./lib/next-cache-stub-hooks.mjs", import.meta.url);
 register("./lib/next-server-hooks.mjs", import.meta.url);
 register("./lib/ts-resolve-app.mjs", import.meta.url);
@@ -67,6 +68,15 @@ for (const s of symbols) {
   console.log("  " + await timed("benchmarks", () => getBenchmarksData("stock")));
   console.log("  " + await timed("news", () => getInternalNewsPayload(s)));
   console.log("  " + await timed("sec-earnings", () => secEarningsSummary(s)));
+  // The page's own shape: all five at once.
+  console.log("  " + await timed("all five (Promise.all)", () => Promise.all([
+    historyForSurface("HISTORY", s, () => getDailyHistory(s, { caller: "dashboard" })),
+    fetchQuoteSnapshot(s), getBenchmarksData("stock"), getInternalNewsPayload(s), secEarningsSummary(s),
+  ])));
+  // The deferred work these requests registered with after().
+  const tasks = globalThis.__afterTasks ?? [];
+  globalThis.__afterTasks = [];
+  for (const line of await Promise.all(tasks)) console.log("  " + line);
 }
 console.log(`\noutbound hosts (non-Redis) and request counts: ${[...hosts].map(([h, n]) => `${h} ${n}`).join("; ") || "none"}`);
 console.log(`Redis writes refused: ${refused}`);
