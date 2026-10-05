@@ -987,7 +987,7 @@ const entryUnguarded = (src) => {
 check("an off-manifest symbol reads its entry only through entry?. before `if (entry)` (TSM)",
   entryUnguarded(jobRaw).length === 0, entryUnguarded(jobRaw).join(" "));
 check("...and CATCHES the restatement line's `entry.needsReverify` restored",
-  entryUnguarded(jobRaw.replace("!entry?.needsReverify", "!entry.needsReverify")).includes("entry.needsReverify"));
+  entryUnguarded(jobRaw.replace("Boolean(entry?.needsReverify)", "Boolean(entry.needsReverify)")).includes("entry.needsReverify"));
 check("it is registered as a cron",
   JSON.parse(fs.readFileSync("vercel.json", "utf8")).crons.some((c) => c.path === "/api/jobs/sec-facts"));
 

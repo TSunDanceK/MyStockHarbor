@@ -316,6 +316,31 @@ export function restatedPeriods(
   return out;
 }
 
+/**
+ * WHETHER A MOVED OVERLAP IS A SILENT RESTATEMENT TO LOG (#552 COWORK #157 §3).
+ *
+ * The overlap (restatedPeriods) moving is necessary and no longer sufficient.
+ * contentHash is taken on the filer's REPORTING-CURRENCY figures (encodeFactSet's
+ * `fx.reported`), so for a non-USD filer an unchanged hash with moved stored
+ * values is the exchange rate moving, not the filer: on 5 Oct the FRED switch
+ * re-converted KEP, HMY, WF, SHG, VNET and XPEV by 0.01–0.05% and each was
+ * logged as a restatement with `from` equal to `to`. A real restatement moves
+ * the reported figures, so it moves the hash and stays loud (RMD: 245af012 ->
+ * b82793f5). For a USD filer the stored values ARE the hashed ones, so a moved
+ * overlap always moves the hash and nothing changes. Not the whole-hash test
+ * as the trigger (a wider window moves the hash too, see restatedPeriods): the
+ * overlap stays the trigger and the hash only rules out FX.
+ */
+export function isSilentRestatement(
+  prior: StoredFactSet | null,
+  next: StoredFactSet,
+  movedPeriods: string[],
+  needsReverify: boolean
+): prior is StoredFactSet {
+  if (!prior || !movedPeriods.length || needsReverify) return false;
+  return prior.contentHash !== next.contentHash;
+}
+
 export function populationQueues(
   manifest: SecManifest,
   limits = {
@@ -676,7 +701,7 @@ export async function GET(req: NextRequest) {
       // entry (TSM) has no entry here, and `entry.needsReverify` threw on the
       // one path that reaches it -- a prior set whose overlap moved, as a
       // currency flip does -- so the set was never rewritten.
-      if (prior && movedPeriods.length && !entry?.needsReverify) {
+      if (isSilentRestatement(prior, set, movedPeriods, Boolean(entry?.needsReverify))) {
         console.warn(
           "[sec-facts] SILENT RESTATEMENT",
           JSON.stringify({ symbol, from: prior.contentHash, to: set.contentHash, movedPeriods })
