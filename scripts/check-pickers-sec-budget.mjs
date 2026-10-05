@@ -7,6 +7,8 @@
 //   - SKIPS the prune on that early stop (pruneSkipped: "time-budget"), since
 //     the symbols it never reached are not stale,
 //   - reports stoppedEarly: "time-budget" and durationMs.
+// And every command, the prune included, goes to the key the run was handed
+// (#553 CODE-B #142: a --preview seed's prune used to hit the production hash).
 // The job prints durationMs and records it in its run summary.
 //
 // BEHAVIOURAL: the real module, with a fake clock (each fact-set read takes
@@ -86,6 +88,13 @@ function rules(mod, early, full) {
   want("CONTROL: ...and still prunes (HKEYS, then HDEL of the stale row)",
     full.log.some((c) => c[0] === "hkeys") && full.log.some((c) => c[0] === "hdel" && JSON.stringify(c[2]) === '["GONE"]') && full.result.pruneSkipped === null);
   want("CONTROL: ...and reports its duration", full.result.durationMs === 50_000, String(full.result.durationMs));
+  // THE RUN'S OWN KEY (#553 CODE-B #142): the prune used to read and delete the
+  // PRODUCTION hash whatever key the run was given, so a --preview seed deleted
+  // 94 production rows. Every command a run sends names the key it was handed.
+  want("KEY: the prune's HKEYS and HDEL go to the run's own key, never production's",
+    full.log.filter((c) => c[0] === "hkeys" || c[0] === "hdel").length === 2 &&
+      full.log.every((c) => c[1] === "test:key") && !full.log.some((c) => c[1] === mod.PICKERS_SEC_KEY),
+    JSON.stringify(full.log.filter((c) => c[1] !== "test:key")));
   return fails;
 }
 // #553 COWORK #124: the job guard's per-run command budget. 500 symbols at no
@@ -144,6 +153,8 @@ const MUTANTS = [
   ["the budget doubled", `export const WARM_PICKERS_SEC_BUDGET_MS = 240_000;`, `export const WARM_PICKERS_SEC_BUDGET_MS = 480_000;`],
   ["the command budget ignored (runs into the guard)", `    if (left != null && left <= WARM_PICKERS_SEC_COMMAND_RESERVE) {`, `    if (false) {`],
   ["no reserve kept", `export const WARM_PICKERS_SEC_COMMAND_RESERVE = 20;`, `export const WARM_PICKERS_SEC_COMMAND_RESERVE = 0;`],
+  ["the prune reads the production hash (CODE-B #142)", `    const stored = ((await redis.hkeys(key)) ?? []).map(String);`, `    const stored = ((await redis.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);`],
+  ["the prune deletes from the production hash (CODE-B #142)", `      result.pruned = await redis.hdel(key, ...drop);`, `      result.pruned = await redis.hdel(PICKERS_SEC_KEY, ...drop);`],
   ["the prune runs after a command-budget stop", `  if (result.stoppedEarly === "time-budget" || result.stoppedEarly === "command-budget") {`, `  if (result.stoppedEarly === "time-budget") {`],
 ];
 for (const [label, from, to] of MUTANTS) {
