@@ -406,7 +406,11 @@ export default function DilutionHistory({
         </div>
       </div>
 
-      <div style={sourceStyle} data-fine-print="">
+      {/* BEHIND A TAP, NOT FINE PRINT (#552 COWORK #157 §2, the owner's standing
+          rule): how the series is built, at reading size when open. */}
+      <details data-share-how="" style={howStyle}>
+        <summary style={howSummaryStyle}>How it&apos;s calculated</summary>
+        <div style={howBodyStyle}>
         {data?.basis === "annual+quarters" ? (
           // THE BASIS, SAID (#552 COWORK #136): quarterly averages plus
           // fiscal-year averages, which fill the year-ends no quarter covers.
@@ -430,7 +434,8 @@ export default function DilutionHistory({
           ? ` ${data.refusedYears.length === 1 ? "One fiscal-year figure is" : `${data.refusedYears.length} fiscal-year figures are`} left out: outside the range of that year's own quarterly figures, so likely on another basis.`
           : null}
         {notes.length ? <> {notes.join(" ")}</> : null}
-      </div>
+        </div>
+      </details>
 
       <style>{`
         .dh-stats-row {
@@ -464,4 +469,6 @@ const subStyle: CSSProperties = { marginTop: 10, marginBottom: 0, fontSize: "var
 const cellStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", minWidth: 0 };
 const cellLabelStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
 const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: "0.875rem", fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
-const sourceStyle: CSSProperties = { marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(203,213,225,0.55)" };
+const howStyle: CSSProperties = { marginTop: 12 };
+const howSummaryStyle: CSSProperties = { cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" };
+const howBodyStyle: CSSProperties = { marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" };
