@@ -13,10 +13,11 @@
 //   SYMBOLS=COP,ODFL node scripts/dashboard-timing.mjs    (relay: write-dashboard-timing)
 import { register } from "node:module";
 
-register("./lib/after-timing-hooks.mjs", import.meta.url);
 register("./lib/next-cache-stub-hooks.mjs", import.meta.url);
 register("./lib/next-server-hooks.mjs", import.meta.url);
 register("./lib/ts-resolve-app.mjs", import.meta.url);
+// LAST, so it runs first (Node chains hooks newest-first): next/server -> the after() timer.
+register("./lib/after-timing-hooks.mjs", import.meta.url);
 
 delete process.env.FMP_API_KEY;
 const LIMIT_MS = Number(process.env.LIMIT_MS || 60_000);
