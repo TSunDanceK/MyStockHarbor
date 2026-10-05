@@ -130,6 +130,16 @@ export type SectorPerformanceRow = {
   dayBasis: DayBasis;
   /** Eastern date (yyyy-mm-dd) of the session `day` describes when not live. */
   sessionDate: string | null;
+  /**
+   * TRACKED MARKET CAP, for the /sector heat map's tile sizes (#553 COWORK
+   * #157): the SEC x Tiingo cap summed over EVERY constituent that has one
+   * (not only the sampled 25), how many had one, and how many there are.
+   * Optional: a table cached before this field reads as no coverage, and the
+   * map sizes by companies tracked until it is rebuilt (15 minutes).
+   */
+  capSum?: number | null;
+  capCovered?: number;
+  constituents?: number;
 };
 
 export type { DayBasis } from "./lastSession";
@@ -280,7 +290,23 @@ async function buildSectorPerformanceFromEod(eod: Record<string, EodLast>): Prom
   }
   const { date, rows: fresh } = lastCloseRows(allSymbols, eod);
   if (!date) return null;
-  const caps = await readSecTiingoCaps(allSymbols, Date.now()).catch(() => new Map<string, number | null>());
+  // Every constituent, for the tracked-cap sums: the same three Data Cache
+  // blobs either way, so the wider list costs no read (tiingoPool.ts).
+  const everySymbol = [...new Set(SECTORS.flatMap((sector) => index.bySlug[sector.slug] ?? []))];
+  const caps = await readSecTiingoCaps(everySymbol, Date.now()).catch(() => new Map<string, number | null>());
+  const capTotals = (slug: string) => {
+    const members = index.bySlug[slug] ?? [];
+    let capSum = 0;
+    let capCovered = 0;
+    for (const symbol of members) {
+      const cap = caps.get(symbol);
+      if (typeof cap === "number" && Number.isFinite(cap) && cap > 0) {
+        capSum += cap;
+        capCovered += 1;
+      }
+    }
+    return { capSum: capCovered ? capSum : null, capCovered, constituents: members.length };
+  };
 
   const rows: SectorPerformanceRow[] = SECTORS.map((sector) => {
     const entries = (pick: (r: EodLast) => number | null) =>
@@ -300,6 +326,7 @@ async function buildSectorPerformanceFromEod(eod: Record<string, EodLast>): Prom
       rank: null,
       dayBasis: "last-close",
       sessionDate: date,
+      ...capTotals(sector.slug),
     };
   });
 

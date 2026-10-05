@@ -12,6 +12,8 @@ import { getSectorConstituentCounts } from "@/lib/server/sectorUniverse";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { lastCloseLabel } from "@/lib/server/marketData/eodLast";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { heatSizing, heatTiles, squarify } from "@/lib/sectorHeatmap";
+import SectorHeatMap from "./SectorHeatMap";
 
 export const runtime = "nodejs";
 // ISR, same interval as /headlines and the per-sector news pages. See the note
@@ -59,6 +61,38 @@ export default async function SectorIndexPage() {
   const byslug = new Map<string, SectorPerformanceRow>(
     table.rows.map((row) => [row.slug, row])
   );
+
+  // THE HEAT MAP (#553 COWORK #157): the cards' own figures, one tile each.
+  // Sized by tracked cap only when every sector's caps cover >= 80% of its
+  // constituents; otherwise by companies tracked. The fine print says which.
+  const heatRows = SECTORS.map((sector) => {
+    const row = byslug.get(sector.slug);
+    return {
+      slug: sector.slug,
+      name: sector.name,
+      href: sectorNewsPath(sector.slug),
+      companies: counts[sector.slug] ?? 0,
+      day: row?.day ?? null,
+      month: row?.month ?? null,
+      ytd: row?.ytd ?? null,
+      capSum: row?.capSum ?? null,
+      capCovered: row?.capCovered ?? 0,
+      constituents: row?.constituents ?? counts[sector.slug] ?? 0,
+    };
+  });
+  const sizing = heatSizing(heatRows);
+  const tiles = heatTiles(heatRows, sizing);
+  // Laid out in the desktop box's own 2:1 shape, then turned into percents,
+  // so squarifying holds on screen (a square layout stretched to 2:1 makes
+  // the smallest tiles into thin strips).
+  const rects = squarify(tiles.map((t) => t.weight), 200, 100).map((r) => ({ x: r.x / 2, y: r.y, w: r.w / 2, h: r.h }));
+  const firstRow = table.rows.find((row) => row.sessionDate) ?? null;
+  const heatDayLabel =
+    firstRow?.dayBasis === "last-close" ? lastCloseLabel(firstRow.sessionDate) ?? "Last close" : "Last close";
+  const sizedBy =
+    sizing.basis === "cap"
+      ? `tracked market cap (shares from SEC filings times the latest price; at least ${Math.round((sizing.minCoverage ?? 0) * 100)}% of every sector's companies covered)`
+      : "companies tracked";
 
   // Best performer first when we have a ranking; otherwise keep the canonical
   // order so the page is stable and predictable outside market hours.
@@ -109,6 +143,10 @@ export default async function SectorIndexPage() {
             headline tone, and shows who is driving it and how broad the move is.
           </p>
         </section>
+
+        {table.rows.length ? (
+          <SectorHeatMap tiles={tiles} rects={rects} dayLabel={heatDayLabel} sizedBy={sizedBy} credit={{ text: TIINGO_CREDIT, href: TIINGO_URL }} />
+        ) : null}
 
         <section style={{ display: "grid", gap: 12, marginTop: 22 }} className="sectorGrid">
           {ordered.map((sector) => {
