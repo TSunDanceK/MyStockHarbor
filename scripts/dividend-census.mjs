@@ -126,6 +126,34 @@ for (let i = 0; i < universe.length; i += 50) {
 }
 console.log(`\n── FMP stock-data rows (msh:stockdata:v1:*) still present: ${sd}/${universe.length} · with a dividend yield ${sdYield} · with growth ${sdGrowth}`);
 
+// THE OTHER FUNDAMENTAL SCREENS (#553 COWORK #151 item 2), on the production
+// hash: P/E through applySecEarnings, FCF through applySecPickerRow, sector and
+// industry through A's committed resolver -- the page's own reads.
+{
+  const { resolveProfileBulk } = await import("../lib/server/staticProfile.ts");
+  const tax = resolveProfileBulk(universe.map((s) => ({ symbol: s, cached: null })), "census");
+  let lowPe = 0, cashRich = 0, cheapTech = 0, semis = 0, pe = 0, fcf = 0, sector = 0, industry = 0;
+  for (const s of universe) {
+    const t = tax.get(s.toUpperCase());
+    if (t?.sector) sector++;
+    if (t?.industry) industry++;
+    if (t?.industry === "Semiconductors") semis++;
+    const row = prod.rows.get(s);
+    if (!row || row.at < staleBefore) continue;
+    const px = close.get(s) ?? null;
+    const f = S.applySecPickerRow(row, px);
+    const e = S.applySecEarnings(row, px);
+    const peRatio = e?.peRatio ?? null;
+    if (peRatio !== null) pe++;
+    if (f.freeCashFlow !== null) fcf++;
+    if (peRatio !== null && peRatio <= 15) lowPe++;
+    if (f.freeCashFlow !== null && f.freeCashFlow >= 10_000_000_000 && peRatio !== null && peRatio <= 20) cashRich++;
+    if (t?.sector === "Technology" && peRatio !== null && peRatio <= 25) cheapTech++;
+  }
+  console.log(`\n── other fundamental screens (production hash; P/E ${pe}, FCF ${fcf}, sector ${sector}, industry ${industry} of ${universe.length})`);
+  console.log(`  would list: /low-pe-stocks (P/E ≤ 15) ${lowPe} · /cash-rich-value-stocks (FCF ≥ $10B, P/E ≤ 20) ${cashRich} · /cheap-tech-stocks (Technology, P/E ≤ 25) ${cheapTech} · /semiconductor-stocks ${semis}`);
+}
+
 // Symbols with no fresh production row keep only what stock data gives them, which is now nothing.
 const noProdRow = universe.filter((s) => { const r = prod.rows.get(s); return !r || r.at < staleBefore; }).length;
 console.log(`\nno fresh PRODUCTION row: ${noProdRow} symbols (their dividend cells now come from nowhere)`);
