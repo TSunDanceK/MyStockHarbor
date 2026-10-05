@@ -325,7 +325,7 @@ const mutants = [
   ["dates and prices in words", "l", (s) => s.replace("const dp = Math.abs(v) < 1 ? 4 : Math.abs(v) >= WHOLE_DOLLARS_FROM ? 0 : 2;", "const dp = Math.abs(v) < 1 ? 4 : 2;")],
   ["dates and prices in words", "l", (s) => s.replace("const dp = Math.abs(v) < 1 ? 4 : Math.abs(v) >= WHOLE_DOLLARS_FROM ? 0 : 2;", "const dp = Math.abs(v) >= WHOLE_DOLLARS_FROM ? 0 : 2;")],
   ["the card is never blank: no bars still gives the reason", "c", (s) => s.replace(") : k.reasons.map((r) => <p key={r} className=\"klReason\"", ") : false && k.reasons.map((r) => <p key={r} className=\"klReason\"")],
-  ["the Tiingo credit only when it is passed", "c", (s) => s.replace("{pole?.skipped || credit ? (", "{true ? (").replace("{credit ? <>Daily prices: {credit}</> : null}", "<>Daily prices: {credit}</>")],
+  ["the Tiingo credit only when it is passed", "c", (s) => s.replace("{pole?.merged || pole?.skipped || credit ? (", "{true ? (").replace("{credit ? <>Daily prices: {credit}</> : null}", "<>Daily prices: {credit}</>")],
 ];
 for (const [name, which, mutate] of mutants) {
   const l2 = which === "l" ? mutate(L) : L;
