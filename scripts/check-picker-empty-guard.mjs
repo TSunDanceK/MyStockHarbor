@@ -72,7 +72,7 @@ function wiringRules(pageRaw) {
   const page = stripComments(pageRaw, { file: PAGE });
   const run = page.indexOf("const guard = implausibleEmpty(presetPredicates, entries, seoEntries.length, valueForPredicateField);");
   want("the guard runs on the page's predicates, entries, matches and value reader", run >= 0);
-  want("...after the filings layer and after the matched set is built", run > page.indexOf("applySecPickerRow(row") && run > page.indexOf("const seoEntries ="));
+  want("...after the filings layer and after the matched set is built", run > page.indexOf("const figures = applySecPickerRow(row") && run > page.indexOf("const seoEntries ="));
   want("outside next build, a trip throws (Next keeps the last good render)",
     /if \(!atBuild\) throw new PickerEmptyGuardError\(emptyGuardLine\(config\.href, guard, false\)\);/.test(page) &&
       /const atBuild = process\.env\.NEXT_PHASE === "phase-production-build";/.test(page));
