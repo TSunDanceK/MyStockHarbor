@@ -7,7 +7,8 @@
 //   - nothing sets html's font-size to a fixed px value (that would break a
 //     reader's browser text-size setting);
 //   - the stock and SPX pages' own files size text in rem or the tokens only:
-//     no numeric (px) fontSize, no "Npx" font size, and nothing under 0.75rem.
+//     no numeric (px) fontSize, no "Npx" font size, and nothing under 0.75rem;
+//   - the valuation figures' method notes are behind a tap (owner ruling, #104).
 // A mutant each.
 //
 //   node scripts/check-reading-size.mjs
@@ -53,6 +54,12 @@ const RULES = {
     all.every(([, src]) => !/(^|[\s,}])html\s*\{[^}]*font-size:\s*\d+(\.\d+)?px/m.test(src) && !/documentElement\.style\.fontSize\s*=\s*["'`]\d+px/.test(src)),
   "the stock and SPX pages' files size text in rem or the tokens only, nothing under 0.75rem": ({ scope }) =>
     scope.every(([, src]) => sizesIn(src).every((v) => badSize(v) === null)),
+  // OWNER RULING (#563 COWORK #104): explanations go behind a tap, not as small text on the page.
+  "the valuation figures' method notes sit behind a 'How it's calculated' tap, at --fs-read when open": ({ scope }) => {
+    const page = scope.find(([f]) => f.endsWith("StockSymbolPageClient.tsx"))[1];
+    return /\{item\.value != null && item\.reason \? \(\s*<details className="valuationHow"[^>]*>\s*<summary[^>]*>How it&apos;s calculated<\/summary>\s*<div style=\{\{[^}]*fontSize: "var\(--fs-read\)"[^}]*\}\}>\{item\.reason\}<\/div>\s*<\/details>/.test(page) &&
+      !/<div data-fine-print[^>]*>\{item\.reason\}<\/div>/.test(page);
+  },
 };
 
 const load = (over = {}) => ({
@@ -78,6 +85,7 @@ const MUTANTS = [
   [R[1], GLOBALS, (s) => `${s}\nhtml { font-size: 15px; }\n`],
   [R[2], "app/markets/spx/MarketMoodCard.tsx", (s) => s.replace('fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)"', 'fontSize: 14, lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)"')],
   [R[2], "app/stock/[symbol]/StockPriceChart.tsx", (s) => s.replace('fontSize="0.75rem"', 'fontSize="0.625rem"')],
+  [R[3], "app/stock/[symbol]/StockSymbolPageClient.tsx", (s) => s.replace(/<details className="valuationHow"[\s\S]*?<\/details>/, '<div data-fine-print style={{ marginTop: 4, fontSize: "var(--fs-fine)" }}>{item.reason}</div>')],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");
 for (const [label, file, mutate] of MUTANTS) {
