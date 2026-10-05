@@ -1372,6 +1372,10 @@ const TASKS = {
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
   // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
   "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #160 §1): the SEC inputs
+  // for the dividend and picker-ratio columns, run through the shipped picker
+  // functions. GET/MGET/SMEMBERS/HMGET only; SEC ≤ 8/s (a ~200 cold sample + spot checks).
+  "write-sec-picker-inputs-census": { script: "scripts/sec-picker-inputs-census.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
