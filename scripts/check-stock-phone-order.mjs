@@ -4,10 +4,11 @@
 // of dropping below the whole main column (Key levels and the Earnings
 // snapshot used to sit at the very bottom), the sidebar and main column step
 // aside (display: contents) and their sections are ordered by CSS:
-//   chart · Price zones (#84) · Key levels · Price levels & signals · Earnings snapshot ·
+//   Performance (#111) · chart · Price zones (#84) · Key levels · Price levels & signals · Earnings snapshot ·
 //   valuation · price action · chart summary · company profile ·
 //   change stock · explore · FAQ
-// (The header and its performance strip sit above the layout, so first.)
+// (The header sits above the layout, so first; since #111 its 1M–5Y periods are the
+// Performance card, which leads the stacked sections, before the chart.)
 //
 // The rules read app/stock/[symbol]/StockSymbolPageClient.tsx (comments
 // stripped):
@@ -26,10 +27,10 @@ import fs from "node:fs";
 import { stripComments } from "./lib/source-code.mjs";
 
 const FILE = "app/stock/[symbol]/StockSymbolPageClient.tsx";
-const PHONE = ["chart", "confluence", "keylevels", "signals", "earnings", "valuation", "returns", "summary", "profile", "changestock", "explore", "faq"];
+const PHONE = ["performance", "chart", "confluence", "keylevels", "signals", "earnings", "valuation", "returns", "summary", "profile", "changestock", "explore", "faq"];
 // The DOM order: the sidebar first (Key levels, Earnings), then the main column as on desktop,
 // with the phone-only Change stock copy (hidden above 900px) just before Explore.
-const DOM = ["confluence", "keylevels", "earnings", "chart", "returns", "signals", "valuation", "summary", "profile", "changestock", "explore", "faq"];
+const DOM = ["confluence", "keylevels", "performance", "earnings", "chart", "returns", "signals", "valuation", "summary", "profile", "changestock", "explore", "faq"];
 // What desktop shows in the main column, top to bottom (unchanged by #82).
 const DESKTOP_MAIN = ["chart", "returns", "signals", "valuation", "summary", "profile", "explore", "faq"];
 
@@ -65,7 +66,7 @@ function read(src) {
 }
 
 const RULES = {
-  "phones: chart, Price zones, Key levels, signals, Earnings, valuation, price action, summary, profile, change stock, explore, FAQ": (r) =>
+  "phones: Performance, chart, Price zones, Key levels, signals, Earnings, valuation, price action, summary, profile, change stock, explore, FAQ": (r) =>
     JSON.stringify(r.phoneOrder) === JSON.stringify(PHONE) && new Set(Object.values(r.order)).size === PHONE.length &&
     /\.stock-page-sidebar, \.stock-page-main \{ display: contents; \}/.test(r.phone) &&
     /\.stock-page-layout \{ grid-template-columns: minmax\(0, 1fr\) !important; gap: 0; \}/.test(r.phone),
@@ -96,9 +97,9 @@ for (const [label, rule] of Object.entries(RULES)) check(label, rule(base), labe
 
 const swap = (s, a, b) => s.replace(a, "\u0000").replace(b, a).replace("\u0000", b);
 const MUTANTS = [
-  ["phones: chart, Price zones, Key levels, signals, Earnings, valuation, price action, summary, profile, change stock, explore, FAQ", (s) => swap(s, ".sp-chart { order: 10; }", ".sp-keylevels { order: 20; }").replace(".sp-keylevels { order: 20; }", ".sp-keylevels { order: 10; }").replace(".sp-chart { order: 10; }", ".sp-chart { order: 20; }")],
-  ["phones: chart, Price zones, Key levels, signals, Earnings, valuation, price action, summary, profile, change stock, explore, FAQ", (s) => s.replace(".sp-signals { order: 30; }", ".sp-signals { order: 45; }")],
-  ["phones: chart, Price zones, Key levels, signals, Earnings, valuation, price action, summary, profile, change stock, explore, FAQ", (s) => s.replace(".stock-page-sidebar, .stock-page-main { display: contents; }", "")],
+  ["phones: Performance, chart, Price zones, Key levels, signals, Earnings, valuation, price action, summary, profile, change stock, explore, FAQ", (s) => swap(s, ".sp-chart { order: 10; }", ".sp-keylevels { order: 20; }").replace(".sp-keylevels { order: 20; }", ".sp-keylevels { order: 10; }").replace(".sp-chart { order: 10; }", ".sp-chart { order: 20; }")],
+  ["phones: Performance, chart, Price zones, Key levels, signals, Earnings, valuation, price action, summary, profile, change stock, explore, FAQ", (s) => s.replace(".sp-signals { order: 30; }", ".sp-signals { order: 45; }")],
+  ["phones: Performance, chart, Price zones, Key levels, signals, Earnings, valuation, price action, summary, profile, change stock, explore, FAQ", (s) => s.replace(".stock-page-sidebar, .stock-page-main { display: contents; }", "")],
   ["anything unlisted (a new section, the hidden analyst block) falls after the profile, before change stock", (s) => s.replace("{ order: 85; min-width: 0; }", "{ order: 0; min-width: 0; }")],
   ["each section in the DOM once, each ordered; no card rendered twice", (s) => s.replace(".sp-earnings { order: 40; }", "")],
   ["each section in the DOM once, each ordered; no card rendered twice", (s) => s.replace('<div className="sp-slot sp-earnings" data-reading-owner="a">', '<div className="sp-slot sp-earnings" data-reading-owner="a">\n<KeyLevelsCard bars={history} />')],
