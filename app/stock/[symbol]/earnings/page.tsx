@@ -651,19 +651,19 @@ export default async function StockEarningsPage({ params }: Props) {
         .earningsPage { min-height: 100vh; background: radial-gradient(circle at top left, rgba(59,130,246,0.12), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,0.09), transparent 26%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
         .earningsWrap { max-width: 1240px; margin: 0 auto; padding: 24px 18px 52px; }
         .topLinks { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-        .topLinks a, .earningsSearchRow button, .actionLink { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(59,130,246,0.32); background: rgba(59,130,246,0.10); color: #dbeafe; text-decoration: none; font-weight: 900; font-size: 13px; cursor: pointer; }
+        .topLinks a, .earningsSearchRow button, .actionLink { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(59,130,246,0.32); background: rgba(59,130,246,0.10); color: #dbeafe; text-decoration: none; font-weight: 900; font-size: var(--fs-label); cursor: pointer; }
         .topLinks a.green, .actionLink.green { border-color: rgba(34,197,94,0.32); background: rgba(34,197,94,0.10); color: #dcfce7; }
         .hero { border: 1px solid rgba(255,255,255,0.08); border-radius: 28px; padding: 24px; background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(6,10,18,0.98)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 38px rgba(0,0,0,0.24); display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 24px; align-items: stretch; }
         .heroTopBar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-        .eyebrow, .smallLabel { font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.08em; color: #93c5fd; }
-        .hero h1 { margin: 12px 0 0; font-size: 46px; line-height: 1.04; letter-spacing: -0.055em; }
-        .hero p { margin: 12px 0 0; color: rgba(226,232,240,0.80); line-height: 1.7; font-size: 16px; max-width: 760px; }
+        .eyebrow, .smallLabel { font-size: var(--fs-label); font-weight: 950; text-transform: uppercase; letter-spacing: 0.08em; color: #93c5fd; }
+        .hero h1 { margin: 12px 0 0; font-size: 2.875rem; line-height: 1.04; letter-spacing: -0.055em; }
+        .hero p { margin: 12px 0 0; color: rgba(226,232,240,0.80); line-height: var(--lh-read); font-size: var(--fs-read); max-width: 760px; }
         .scoreCard { border: 1px solid ${toneColor(score.tone)}55; border-radius: 22px; padding: 18px; background: linear-gradient(135deg, ${toneBg(score.tone)}, rgba(255,255,255,0.026)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.045); }
         .scoreTop { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-        .scorePill { display: inline-flex; align-items: center; justify-content: center; border: 1px solid ${toneColor(score.tone)}66; background: ${toneBg(score.tone)}; color: ${toneColor(score.tone)}; border-radius: 999px; padding: 8px 11px; font-weight: 950; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .scorePill { display: inline-flex; align-items: center; justify-content: center; border: 1px solid ${toneColor(score.tone)}66; background: ${toneBg(score.tone)}; color: ${toneColor(score.tone)}; border-radius: 999px; padding: 8px 11px; font-weight: 950; font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.06em; }
         .scoreNumberRow { margin-top: 14px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-        .scoreNumber { font-size: 48px; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
-        .scoreWatermark { font-size: 15px; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }
+        .scoreNumber { font-size: 3rem; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
+        .scoreWatermark { font-size: 0.9375rem; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }
         .scoreBar { position: relative; margin-top: 18px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, #ef4444, #facc15, #22c55e); overflow: hidden; }
         /* A PARTIAL SCORE READS AS INK, NOT AS A VERDICT — see the card. */
         .scorePillPartial { background: rgba(148,163,184,0.14); border-color: rgba(148,163,184,0.38); color: #cbd5e1; letter-spacing: 0.01em; }
@@ -673,27 +673,27 @@ export default async function StockEarningsPage({ params }: Props) {
         .scoreReach { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: transparent; border: 2px solid #f8fafc; border-radius: 999px; }
         .scoreOut { position: absolute; top: 0; bottom: 0; background: rgba(2,6,23,0.62); }
         .scoreReachLabelRow { position: relative; height: 16px; margin-top: 4px; }
-        .scoreReachLabel { position: absolute; top: 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(226,232,240,0.80); white-space: nowrap; }
-        .scoreSummary { margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: rgba(226,232,240,0.86); }
+        .scoreReachLabel { position: absolute; top: 0; text-align: center; font-size: var(--fs-label); font-weight: 800; color: rgba(226,232,240,0.80); white-space: nowrap; }
+        .scoreSummary { margin: 10px 0 0; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(226,232,240,0.86); }
         .scoreReachNote { color: rgba(226,232,240,0.78); }
         /* A NATIVE DROPDOWN FOR THE DETAIL (#552 COWORK #95/#96/#97): in the
            server HTML, keyboard-operable, with a visible focus ring. */
         .cardDetails { margin-top: 12px; }
-        .cardDetails > summary { cursor: pointer; font-size: 13px; font-weight: 800; color: #93c5fd; list-style-position: inside; border-radius: 6px; }
+        .cardDetails > summary { cursor: pointer; font-size: var(--fs-label); font-weight: 800; color: #93c5fd; list-style-position: inside; border-radius: 6px; }
         .cardDetails > summary:focus-visible { outline: 2px solid #93c5fd; outline-offset: 3px; }
-        .nextEstimateWord { font-size: 14px; font-weight: 700; color: rgba(226,232,240,0.72); letter-spacing: 0; }
+        .nextEstimateWord { font-size: 0.875rem; font-weight: 700; color: rgba(226,232,240,0.72); letter-spacing: 0; }
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
-        .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
+        .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: var(--fs-label); font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
         .metricCard { padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.02); }
-        .trendTag { font-size: 0.55em; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.75; margin-right: 2px; }
-        .trendLatest { display: block; margin-top: 4px; font-size: 15px; font-weight: 900; letter-spacing: -0.02em; }
-        .trendLatest .trendTag { font-size: 10px; }
+        .trendTag { font-size: var(--fs-label); font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.75; margin-right: 2px; }
+        .trendLatest { display: block; margin-top: 4px; font-size: 0.9375rem; font-weight: 900; letter-spacing: -0.02em; }
+        .trendLatest .trendTag { font-size: var(--fs-label); }
         .cellShort { text-decoration: none; cursor: help; border-bottom: 1px dotted rgba(148,163,184,0.55); white-space: nowrap; }
         .crossTip { text-decoration: none; cursor: help; border-bottom: 1px dotted rgba(148,163,184,0.6); }
-        .hero p.heroNote { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(148,163,184,0.85); }
-        .infoTip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 6px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.45); color: rgba(226,232,240,0.85); font-size: 10px; font-weight: 900; font-style: normal; text-transform: none; letter-spacing: 0; cursor: help; vertical-align: 1px; }
+        .hero p.heroNote { margin-top: 10px; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(148,163,184,0.85); }
+        .infoTip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 6px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.45); color: rgba(226,232,240,0.85); font-size: var(--fs-label); font-weight: 900; font-style: normal; text-transform: none; letter-spacing: 0; cursor: help; vertical-align: 1px; }
         .infoTip:focus { outline: 2px solid #93c5fd; outline-offset: 2px; }
-        .infoTipText { display: none; position: absolute; right: -6px; bottom: calc(100% + 8px); z-index: 5; width: min(260px, 72vw); padding: 9px 11px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.35); background: #0f172a; color: #e2e8f0; font-size: 12px; font-weight: 600; line-height: 1.5; text-align: left; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+        .infoTipText { display: none; position: absolute; right: -6px; bottom: calc(100% + 8px); z-index: 5; width: min(260px, 72vw); padding: 9px 11px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.35); background: #0f172a; color: #e2e8f0; font-size: var(--fs-read); font-weight: 600; line-height: var(--lh-read); text-align: left; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
         .infoTip:hover .infoTipText, .infoTip:focus .infoTipText { display: block; }
         .contentGrid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr); gap: 22px; align-items: start; }
         /* ── THE COLUMNS MUST BE ALLOWED TO BE NARROWER THAN THEIR CONTENT ───
@@ -745,43 +745,45 @@ export default async function StockEarningsPage({ params }: Props) {
         .card, .scoreCard { min-width: 0; }
         .card { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); overflow: visible; }
         .card h2, .card h3 { margin: 8px 0 0; letter-spacing: -0.035em; line-height: 1.15; }
-        .card h2 { font-size: 26px; } .card h3 { font-size: 22px; }
-        .card p { color: rgba(226,232,240,0.82); line-height: 1.7; }
+        .card h2 { font-size: 1.625rem; } .card h3 { font-size: 1.375rem; }
+        .card p { color: rgba(226,232,240,0.82); font-size: var(--fs-read); line-height: var(--lh-read); }
+        /* FINE PRINT ONLY (#552 COWORK #153): source and as-of lines, marked data-fine-print. */
+        .earningsPage [data-fine-print], .earningsPage .card p[data-fine-print] { font-size: var(--fs-fine); line-height: 1.5; }
         .metricGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; overflow: visible; }
         .metricLabelWrap { position: relative; display: inline-flex; align-items: center; gap: 7px; max-width: 100%; overflow: visible; }
-        .metricLabel { font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(203,213,225,0.72); }
-        .metricHelp { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 999px; border: 1px solid rgba(147,197,253,0.30); background: #1e293b; color: #dbeafe; font-size: 11px; font-weight: 950; line-height: 1; cursor: help; z-index: 20; flex: 0 0 auto; }
-        .metricHelpBubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 260px; max-width: min(260px, 72vw); padding: 11px 12px; border-radius: 13px; border: 1px solid rgba(147,197,253,0.22); background: #020617; color: #e5e7eb; box-shadow: 0 18px 44px rgba(0,0,0,0.55); font-size: 12px; font-weight: 750; letter-spacing: 0; line-height: 1.55; text-transform: none; text-align: left; opacity: 0; visibility: hidden; pointer-events: none; white-space: normal; z-index: 9999; }
+        .metricLabel { font-size: var(--fs-label); font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(203,213,225,0.72); }
+        .metricHelp { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 999px; border: 1px solid rgba(147,197,253,0.30); background: #1e293b; color: #dbeafe; font-size: var(--fs-label); font-weight: 950; line-height: 1; cursor: help; z-index: 20; flex: 0 0 auto; }
+        .metricHelpBubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 260px; max-width: min(260px, 72vw); padding: 11px 12px; border-radius: 13px; border: 1px solid rgba(147,197,253,0.22); background: #020617; color: #e5e7eb; box-shadow: 0 18px 44px rgba(0,0,0,0.55); font-size: var(--fs-read); font-weight: 750; letter-spacing: 0; line-height: var(--lh-read); text-transform: none; text-align: left; opacity: 0; visibility: hidden; pointer-events: none; white-space: normal; z-index: 9999; }
         .metricHelpBubble::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border-width: 7px; border-style: solid; border-color: #020617 transparent transparent transparent; }
         .metricHelp:hover .metricHelpBubble, .metricHelp:focus .metricHelpBubble, .metricHelp:focus-visible .metricHelpBubble { opacity: 1; visibility: visible; }
-        .metricValue { margin-top: 8px; font-size: 24px; font-weight: 950; letter-spacing: -0.035em; }
-        .earningsDataNote { margin: 10px 0 0; color: rgba(148,163,184,0.78); font-size: 12px; line-height: 1.45; }
-        .metricSub { margin-top: 8px; font-size: 12px; line-height: 1.5; color: rgba(226,232,240,0.66); }
+        .metricValue { margin-top: 8px; font-size: 1.5rem; font-weight: 950; letter-spacing: -0.035em; }
+        .earningsDataNote { margin: 10px 0 0; color: rgba(148,163,184,0.78); font-size: var(--fs-read); line-height: var(--lh-read); }
+        .metricSub { margin-top: 8px; font-size: var(--fs-label); line-height: 1.5; color: rgba(226,232,240,0.66); }
         .metricSubNote { margin-top: 4px; font-style: italic; color: rgba(251,191,36,0.85); }
         .trendDots { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
         .trendDot { text-align: center; min-width: 52px; }
         .trendDot span { display: inline-flex; width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 0 6px rgba(255,255,255,0.04); }
-        .trendDot strong { display: block; margin-top: 9px; font-size: 11px; color: rgba(241,245,249,0.86); }
-        .chartLegend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 11px; font-weight: 800; color: rgba(226,232,240,0.72); }
+        .trendDot strong { display: block; margin-top: 9px; font-size: var(--fs-label); color: rgba(241,245,249,0.86); }
+        .chartLegend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: var(--fs-label); font-weight: 800; color: rgba(226,232,240,0.72); }
         .chartLegend span { display: inline-flex; align-items: center; gap: 6px; }
         .chartLegend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
         .chartRow { display: flex; align-items: stretch; gap: 8px; }
         .chartPlot { flex: 1 1 auto; min-width: 0; }
         .chartScale { position: relative; width: 66px; flex: 0 0 auto; border-left: 1px solid rgba(255,255,255,0.08); }
-        .chartScale span { position: absolute; right: 4px; left: 4px; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.62); white-space: nowrap; text-align: right; overflow: visible; }
+        .chartScale span { position: absolute; right: 4px; left: 4px; font-size: var(--fs-fine); font-weight: 800; color: rgba(203,213,225,0.62); white-space: nowrap; text-align: right; overflow: visible; }
         .chartScale .scaleTop { top: 0; }
         .chartScale .scaleMid { top: 50%; transform: translateY(-50%); }
         .chartScale .scaleBottom { bottom: 0; }
         .chartScaleSpacer { width: 66px; flex: 0 0 auto; }
         .chartCategories { display: flex; flex: 1 1 auto; min-width: 0; margin-top: 6px; }
         .chartCategories .catShort { display: none; }
-        .chartCategories > span { flex: 1 1 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
+        .chartCategories > span { flex: 1 1 0; text-align: center; font-size: var(--fs-fine); font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
         /* ── THE NEW MARKS ──────────────────────────────────────────────────
            Thin bars, 4px rounded data-ends anchored to the baseline, a 2px
            surface gap between adjacent fills, and recessive tracks. Text stays
            in the page's ink tokens — never the series colour — so a value is
            readable whether or not its mark's hue reaches the reader. */
-        .toneChip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid; font-size: 11px; font-weight: 900; letter-spacing: 0.02em; white-space: nowrap; }
+        .toneChip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid; font-size: var(--fs-label); font-weight: 900; letter-spacing: 0.02em; white-space: nowrap; }
         .toneChip i { display: inline-block; width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto; }
 
         /* NOTHING WIDER THAN THE CARD (#552 COWORK #97): grid and flex
@@ -790,9 +792,9 @@ export default async function StockEarningsPage({ params }: Props) {
         .hbarList { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
         .hbarRow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
         .hbarHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: 12px; row-gap: 2px; min-width: 0; }
-        .hbarLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; overflow-wrap: anywhere; }
-        .hbarValue { font-size: 14px; font-weight: 950; color: #f1f5f9; letter-spacing: -0.02em; white-space: nowrap; }
-        .hbarSub { font-size: 11px; color: rgba(148,163,184,0.72); }
+        .hbarLabel { font-size: var(--fs-label); font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; overflow-wrap: anywhere; }
+        .hbarValue { font-size: 0.875rem; font-weight: 950; color: #f1f5f9; letter-spacing: -0.02em; white-space: nowrap; }
+        .hbarSub { font-size: var(--fs-label); color: rgba(148,163,184,0.72); }
         .hbarTrack { box-sizing: border-box; width: 100%; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.05); overflow: hidden; }
         .hbarFill { display: block; height: 100%; border-radius: 999px; }
 
@@ -804,15 +806,15 @@ export default async function StockEarningsPage({ params }: Props) {
         .gmUp { bottom: 50%; }
         .gmDown { top: 50%; }
         .gmNone { position: absolute; left: 30%; right: 30%; top: calc(50% - 1px); height: 2px; border-radius: 999px; background: rgba(148,163,184,0.35); }
-        .gmTick { margin-top: 7px; font-size: 10px; font-weight: 800; color: rgba(148,163,184,0.72); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .gmTick { margin-top: 7px; font-size: var(--fs-fine); font-weight: 800; color: rgba(148,163,184,0.72); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .waterfall { margin-top: 12px; display: grid; gap: 8px; }
         .wfRow { display: grid; grid-template-columns: minmax(96px, 22%) minmax(0, 1fr) minmax(64px, auto); align-items: center; gap: 10px; min-width: 0; }
-        .wfLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; overflow-wrap: anywhere; }
+        .wfLabel { font-size: var(--fs-label); font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; overflow-wrap: anywhere; }
         .wfTrack { position: relative; height: 12px; border-radius: 4px; background: rgba(255,255,255,0.04); overflow: hidden; }
         .wfZero { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 1px solid rgba(226,232,240,0.55); }
         .wfBar { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
-        .wfValue { font-size: 12px; font-weight: 900; color: #e2e8f0; text-align: right; white-space: nowrap; }
+        .wfValue { font-size: var(--fs-label); font-weight: 900; color: #e2e8f0; text-align: right; white-space: nowrap; }
         .wfTotal .wfLabel, .wfTotal .wfValue { color: #dbeafe; }
         .wfTotal { border-top: 1px solid rgba(255,255,255,0.10); padding-top: 8px; }
 
@@ -825,28 +827,28 @@ export default async function StockEarningsPage({ params }: Props) {
         .trendTileValue { margin-top: 0; white-space: nowrap; overflow-wrap: normal; }
         .trendTile .trendChipRow { align-self: end; margin-top: 6px; }
         .metricValue, .hbarValue, .wfValue { font-variant-numeric: tabular-nums; }
-        .cardDetailsBody { margin-top: 8px; font-size: 12px; line-height: 1.55; color: rgba(203,213,225,0.72); }
+        .cardDetailsBody { margin-top: 8px; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(203,213,225,0.72); }
         .cardDetailsBody p { margin: 0 0 6px; }
         .trendCell { display: grid; gap: 4px; align-content: start; }
         .trendChipRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-        .trendCount { font-size: 11px; color: rgba(148,163,184,0.75); }
+        .trendCount { font-size: var(--fs-label); color: rgba(148,163,184,0.75); }
         @media (max-width: 520px) { .gmChart { height: 120px; } .wfRow { grid-template-columns: minmax(74px, 30%) minmax(0, 1fr) minmax(56px, auto); } }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }
-        .chartBlockSub { font-size: 12px; color: rgba(148,163,184,0.85); margin-bottom: 8px; }
-        .chartBlockTitle { font-size: 13px; font-weight: 900; color: rgba(226,232,240,0.85); margin-bottom: 4px; }
+        .chartBlockSub { font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(148,163,184,0.85); margin-bottom: 8px; }
+        .chartBlockTitle { font-size: var(--fs-read); font-weight: 900; color: rgba(226,232,240,0.85); margin-bottom: 4px; }
         .yearGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-        .yearBadge { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 13px; padding: 10px 12px; font-size: 13px; font-weight: 950; border: 1px solid rgba(255,255,255,0.10); }
+        .yearBadge { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 13px; padding: 10px 12px; font-size: var(--fs-label); font-weight: 950; border: 1px solid rgba(255,255,255,0.10); }
         .historyTable { width: 100%; border-collapse: separate; border-spacing: 0 10px; margin-top: 14px; }
-        .historyTable th { text-align: left; color: rgba(203,213,225,0.68); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 10px; }
-        .historyTable td { background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 10px; font-size: 13px; }
+        .historyTable th { text-align: left; color: rgba(203,213,225,0.68); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 10px; }
+        .historyTable td { background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 10px; font-size: var(--fs-label); }
         .historyTable td:first-child { border-left: 1px solid rgba(255,255,255,0.07); border-radius: 12px 0 0 12px; font-weight: 900; }
         .historyTable td:last-child { border-right: 1px solid rgba(255,255,255,0.07); border-radius: 0 12px 12px 0; }
         /* THE FIVE-YEAR TABLE, TIGHTER. Eight columns in a 571px main column
            (1024px, beside the side column) overflowed at the shared padding;
            these fit it without forcing nowrap on anything. */
-        .annualTable th { padding: 0 6px; letter-spacing: 0.04em; font-size: 10.5px; }
-        .annualTable td { padding: 11px 6px; font-size: 12.5px; }
+        .annualTable th { padding: 0 6px; letter-spacing: 0.04em; font-size: var(--fs-label); }
+        .annualTable td { padding: 11px 6px; font-size: var(--fs-label); }
         /* THE COLUMN A CROSSING LANDS IN gets room for its longest phrase
            ("Loss both periods"), so the headers wrap before it does. */
         .annualTable .colCross { min-width: 112px; }
@@ -854,13 +856,13 @@ export default async function StockEarningsPage({ params }: Props) {
            tighter still, so all eight columns and the crossing phrase fit. */
         .annualBox { container-type: inline-size; }
         @container (max-width: 640px) {
-          .annualTable th { padding: 0 3px; font-size: 10px; letter-spacing: 0.02em; }
-          .annualTable td { padding: 10px 3px; font-size: 12px; }
+          .annualTable th { padding: 0 3px; font-size: var(--fs-fine); letter-spacing: 0.02em; }
+          .annualTable td { padding: 10px 3px; font-size: var(--fs-fine); }
           .annualTable .colCross { min-width: 108px; }
         }
         .sideColumn { position: sticky; top: 18px; display: grid; gap: 16px; min-width: 0; }
         .bulletList { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
-        .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); line-height: 1.65; }
+        .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); font-size: var(--fs-read); line-height: var(--lh-read); }
         .bulletList li::before { content: ""; width: 9px; height: 9px; border-radius: 999px; margin-top: 8px; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.10); }
         .estimateGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
         .estimateGridStacked { grid-template-columns: 1fr; }
@@ -871,41 +873,41 @@ export default async function StockEarningsPage({ params }: Props) {
           .topLinks { display: grid; grid-template-columns: 1fr; justify-content: stretch; gap: 8px; margin-bottom: 12px; }
           .topLinks a, .actionLink { width: 100%; min-height: 44px; padding: 10px 12px; text-align: center; }
           .hero { padding: 16px; border-radius: 20px; gap: 18px; }
-          .hero h1 { margin-top: 10px; font-size: clamp(29px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }
-          .hero p { font-size: 14px; line-height: 1.65; }
+          .hero h1 { margin-top: 10px; font-size: clamp(1.8125rem, 9vw, 2.25rem); line-height: 1.08; letter-spacing: -0.045em; }
+          .hero p { font-size: var(--fs-read); line-height: var(--lh-read); }
           .scoreCard, .card { width: 100%; min-width: 0; border-radius: 18px; padding: 15px; }
           .scoreTop { align-items: flex-start; }
           .scoreNumberRow { margin-top: 18px; }
-          .scoreNumber { font-size: 42px; }
+          .scoreNumber { font-size: 2.625rem; }
           .scoreNeedle { left: calc(${score.score}% - 8px); width: 16px; height: 22px; }
           .contentGrid { gap: 16px; }
-          .card h2 { font-size: 23px; } .card h3 { font-size: 20px; }
-          .card p, .bulletList li { font-size: 14px; line-height: 1.6; }
+          .card h2 { font-size: 1.4375rem; } .card h3 { font-size: 1.25rem; }
+          .card p, .bulletList li { font-size: var(--fs-read); line-height: var(--lh-read); }
           .yearGrid, .earningsSearchRow, .estimateGrid { grid-template-columns: 1fr; }
           .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
           .metricCard { padding: 10px !important; border-radius: 14px !important; }
-          .metricValue { font-size: 18px; word-break: break-word; }
-          .metricLabel { font-size: 9.5px; }
-          .metricSub { font-size: 10.5px; margin-top: 5px; }
-          .metricHelp { width: 14px; height: 14px; font-size: 9px; }
+          .metricValue { font-size: 1.125rem; word-break: break-word; }
+          .metricLabel { font-size: var(--fs-label); }
+          .metricSub { font-size: var(--fs-label); margin-top: 5px; }
+          .metricHelp { width: 18px; height: 18px; font-size: var(--fs-label); }
           .metricHelpBubble { position: fixed; left: 12px; right: 12px; bottom: auto; top: 92px; transform: none; width: auto; max-width: none; }
           .metricHelpBubble::after { display: none; }
           .trendDots { gap: 12px; justify-content: flex-start; }
           .trendDot { min-width: 48px; }
           .chartScale { width: 58px; }
           .chartScaleSpacer { width: 58px; }
-          .chartScale span { font-size: 10px; left: 2px; right: 2px; }
-          .chartCategories span { font-size: 9.5px; }
+          .chartScale span { font-size: var(--fs-fine); left: 2px; right: 2px; }
+          .chartCategories span { font-size: var(--fs-fine); }
           .chartCategories .catLong { display: none; }
           .chartCategories .catShort { display: inline; white-space: nowrap; line-height: 1.25; }
           .historyTable { display: block; width: 100%; border-spacing: 0; margin-top: 12px; }
           .historyTable thead { display: none; }
           .historyTable tbody, .historyTable tr, .historyTable td { display: block; width: 100%; }
           .historyTable tr { margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; background: rgba(255,255,255,0.035); overflow: hidden; }
-          .historyTable td { display: flex; align-items: center; justify-content: space-between; gap: 14px; border: none; border-bottom: 1px solid rgba(255,255,255,0.07); border-radius: 0; background: transparent; padding: 11px 12px; font-size: 13px; text-align: right; }
+          .historyTable td { display: flex; align-items: center; justify-content: space-between; gap: 14px; border: none; border-bottom: 1px solid rgba(255,255,255,0.07); border-radius: 0; background: transparent; padding: 11px 12px; font-size: var(--fs-label); text-align: right; }
           .historyTable td:first-child, .historyTable td:last-child { border-radius: 0; border-left: none; border-right: none; }
           .historyTable td:last-child { border-bottom: none; }
-          .historyTable td::before { content: ""; flex: 0 0 auto; color: rgba(203,213,225,0.70); font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }
+          .historyTable td::before { content: ""; flex: 0 0 auto; color: rgba(203,213,225,0.70); font-size: var(--fs-label); font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }
           /* READ FROM THE CELL, NOT FROM ITS POSITION. These used to be seven
              nth-child rules naming the estimate columns that were retired on
              2026-09-15. There are now two tables on this page with different
@@ -915,12 +917,12 @@ export default async function StockEarningsPage({ params }: Props) {
           .historyTable td::before { content: attr(data-label); }
           /* THE FY LABEL IS THE CARD'S HEADER on the five-year table, not a
              "Fiscal year" row (owner review of #523). */
-          .annualTable td.rowHead { justify-content: flex-start; font-size: 15px; font-weight: 950; background: rgba(255,255,255,0.03); }
+          .annualTable td.rowHead { justify-content: flex-start; font-size: 0.9375rem; font-weight: 950; background: rgba(255,255,255,0.03); }
           .annualTable td.rowHead::before { content: none; }
           .annualTable .colCross { min-width: 0; }
         }
         @media (max-width: 374px) { .snapshotGrid { grid-template-columns: 1fr !important; } }
-        @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 38px; } }
+        @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 2.375rem; } }
       `}</style>
 
         <div className="earningsWrap">

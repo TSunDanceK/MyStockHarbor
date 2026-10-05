@@ -106,7 +106,7 @@ check("the earnings page draws the card for not-shown, ahead of the derivative c
 console.log("\n5. the tidy-ups (#552 COWORK #152)");
 const NEXT_GUARD = '{nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <NextReportCard outlook={nextReport} /> : null}';
 const SNAP_RULE = 'if (cold.status === "not-shown") return { ...snap, sourceNote: null };';
-const TILE_GUARD = "{snapshot.sourceNote ? <div style={earningsSourceStyle}>{snapshot.sourceNote}</div> : null}";
+const TILE_GUARD = "{snapshot.sourceNote ? <div style={earningsSourceStyle} data-fine-print=\"\">{snapshot.sourceNote}</div> : null}";
 const nextRule = (p) => p.includes(NEXT_GUARD) && (p.match(/<NextReportCard /g) ?? []).length === 1;
 const snapRule = (src) => src.includes(SNAP_RULE);
 check("a fund's earnings page has no next-report box; a census-named note keeps it", nextRule(readCodeOnly("app/stock/[symbol]/earnings/page.tsx")));

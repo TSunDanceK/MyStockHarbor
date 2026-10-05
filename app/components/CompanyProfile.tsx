@@ -351,12 +351,12 @@ export default function CompanyProfile({
         <p key={i} style={i === 0 ? descStyle : { ...descStyle, marginTop: 12 }}>{para}</p>
       ))}
       {profile.descriptionAttribution ? (
-        <p style={descAttributionStyle}>{profile.descriptionAttribution}</p>
+        <p style={descAttributionStyle} data-fine-print="">{profile.descriptionAttribution}</p>
       ) : null}
     </div>
   ) : (
     <div className="cp-desc">
-      <p style={descAttributionStyle}>{NO_DESCRIPTION_LINE}</p>
+      <p style={descAttributionStyle} data-fine-print="">{NO_DESCRIPTION_LINE}</p>
     </div>
   );
 
@@ -440,7 +440,7 @@ export default function CompanyProfile({
           the rows, PR 3 the description, which carries its own line under
           the paragraph). The sources are the ones the composer actually used
           for THIS symbol, so a row that hid does not get credited. */}
-      <div style={sourceStyle}>
+      <div style={sourceStyle} data-fine-print="">
         {profile.sources?.length
           ? `${profile.sources.map((s) => `${s.field}: ${s.source}`).join(" · ")}.`
           : null}
@@ -497,14 +497,14 @@ export default function CompanyProfile({
   );
 }
 
-const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
-const headingStyle: CSSProperties = { margin: 0, fontSize: 26, lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
+const eyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
+const headingStyle: CSSProperties = { margin: 0, fontSize: "1.625rem", lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
 /** Shown where the filing gives no usable description (#552 COWORK #57). */
 export const NO_DESCRIPTION_LINE = "Description not available from the filing.";
-const descStyle: CSSProperties = { margin: 0, fontSize: 16, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
-const descAttributionStyle: CSSProperties = { margin: "10px 0 0", fontSize: 12, lineHeight: 1.5, fontStyle: "italic", color: "rgba(148,163,184,0.72)" };
+const descStyle: CSSProperties = { margin: 0, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.82)" };
+const descAttributionStyle: CSSProperties = { margin: "10px 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, fontStyle: "italic", color: "rgba(148,163,184,0.72)" };
 const gridStyle: CSSProperties = { marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 };
 const cellStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", minWidth: 0 };
-const cellLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
-const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: 15, fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
-const sourceStyle: CSSProperties = { marginTop: 12, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.55)" };
+const cellLabelStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
+const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: "0.9375rem", fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
+const sourceStyle: CSSProperties = { marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(203,213,225,0.55)" };

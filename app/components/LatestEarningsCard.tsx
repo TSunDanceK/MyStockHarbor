@@ -210,7 +210,7 @@ export default function LatestEarningsCard({
           WHICH EVENT THE DATE IS stays said: an 8-K Item 2.02 announcement and
           a 10-Q acceptance are different days, often several apart. */}
       {snapshot.available && snapshot.reportedOn ? (
-        <div style={earningsMiniSubStyle} data-snapshot-reported="">
+        <div style={earningsMiniSubStyle} data-fine-print="" data-snapshot-reported="">
           Latest report {formatPlainDate(snapshot.reportedOn)}
           {snapshot.reportedVia === "announcement"
             ? ` · ${snapshot.reportedTimingNote ?? "Announced by the company"}`
@@ -254,7 +254,7 @@ export default function LatestEarningsCard({
                   10-Q acceptance are different days, often several apart, and
                   printing either as a bare "latest report" invites a reader to
                   compare one symbol's announcement against another's filing. */}
-              <div style={earningsMiniSubStyle}>
+              <div style={earningsMiniSubStyle} data-fine-print="">
                 {snapshot.reportedVia === "announcement"
                   ? snapshot.reportedTimingNote ?? "Announced by the company"
                   : snapshot.reportedVia === "filing"
@@ -271,7 +271,7 @@ export default function LatestEarningsCard({
                   only for the filed-fact "due" answer and the outage one,
                   which are not estimates. */}
               {snapshot.nextReport.hedge ? (
-                <div style={earningsMiniSubStyle}>{snapshot.nextReport.hedge}</div>
+                <div style={earningsMiniSubStyle} data-fine-print="">{snapshot.nextReport.hedge}</div>
               ) : null}
             </div>
           </div>
@@ -284,7 +284,7 @@ export default function LatestEarningsCard({
               at all: every figure was captioned "Actual EPS" with nothing
               saying which quarter, so a stale fact set rendered identically to
               a current one. */}
-          <div style={periodLineStyle}>
+          <div style={periodLineStyle} data-fine-print="">
             {snapshot.periodLabel}
             {snapshot.periodEnd ? ` · period ending ${formatPlainDate(snapshot.periodEnd)}` : ""}
           </div>
@@ -293,10 +293,10 @@ export default function LatestEarningsCard({
               words are built once in secEarningsView so this tile and the
               earnings card cannot say different things. */}
           {snapshot.filingCredit ? (
-            <div style={earningsMiniSubStyle}>{snapshot.filingCredit}</div>
+            <div style={earningsMiniSubStyle} data-fine-print="">{snapshot.filingCredit}</div>
           ) : null}
           {snapshot.filingNotice ? (
-            <div style={earningsMiniSubStyle}>{snapshot.filingNotice}</div>
+            <div style={earningsMiniSubStyle} data-fine-print="">{snapshot.filingNotice}</div>
           ) : null}
 
           {/* THREE TILES ON ONE ROW, OR EPS ON ITS OWN ROW WHEN THE TILE IS
@@ -374,7 +374,7 @@ export default function LatestEarningsCard({
           </Link>
         </>
       )}
-      {snapshot.sourceNote ? <div style={earningsSourceStyle}>{snapshot.sourceNote}</div> : null}
+      {snapshot.sourceNote ? <div style={earningsSourceStyle} data-fine-print="">{snapshot.sourceNote}</div> : null}
     </section>
   );
 }
@@ -395,8 +395,8 @@ export default function LatestEarningsCard({
 
 const CHART_W = 320;
 const CHART_H = 132;
-const CHART_PAD_L = 44;
-const CHART_PAD_R = 38;
+const CHART_PAD_L = 58;
+const CHART_PAD_R = 44;
 const CHART_PAD_T = 12;
 const CHART_PAD_B = 8;
 
@@ -470,7 +470,7 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
       x={side === "l" ? CHART_PAD_L - 6 : CHART_W - CHART_PAD_R + 6}
       y={y + 3}
       textAnchor={side === "l" ? "end" : "start"}
-      fontSize={9}
+      fontSize="0.75rem"
       fill={C.muted}
     >
       {text}
@@ -509,7 +509,7 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
         ))}
         {dots.map((d) => <circle key={d.i} data-margin-dot="" cx={d.x} cy={d.y} r={3} fill={C.margin} />)}
         {last ? (
-          <text data-margin-latest="" x={last.x} y={last.y - 6} textAnchor="middle" fontSize={9} fontWeight={800} fill={isLoss(last.v) ? LOSS_TEXT : C.margin}>
+          <text data-margin-latest="" x={last.x} y={last.y - 6} textAnchor="middle" fontSize="0.75rem" fontWeight={800} fill={isLoss(last.v) ? LOSS_TEXT : C.margin}>
             {formatLevel(last.v)}
           </text>
         ) : null}
@@ -569,9 +569,9 @@ function EarningsMetric({
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
-const sectionEyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)" };
-const sectionTitleSmallStyle: CSSProperties = { margin: "8px 0 0 0", fontSize: 22, lineHeight: 1.12, letterSpacing: "-0.03em" };
-const bodyCopyStyle: CSSProperties = { margin: "14px 0 0 0", fontSize: 15, lineHeight: 1.72, color: "rgba(241,245,249,0.82)" };
+const sectionEyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)" };
+const sectionTitleSmallStyle: CSSProperties = { margin: "8px 0 0 0", fontSize: "1.375rem", lineHeight: 1.12, letterSpacing: "-0.03em" };
+const bodyCopyStyle: CSSProperties = { margin: "14px 0 0 0", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.82)" };
 
 /**
  * The card's own frame.
@@ -610,7 +610,7 @@ function earningsCardStyle(tone: ToneKey, verdict: boolean): CSSProperties {
 function earningsTonePillStyle(tone: ToneKey, verdict: boolean): CSSProperties {
   const rgb = verdict ? TONE_RGB[tone] : "148,163,184";
   const color = verdict ? TONE_TEXT[tone] : "rgba(226,232,240,0.78)";
-  return { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "7px 10px", borderRadius: 999, border: `1px solid rgba(${rgb},0.34)`, background: `rgba(${rgb},0.12)`, color, fontSize: 12, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.06em" };
+  return { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "7px 10px", borderRadius: 999, border: `1px solid rgba(${rgb},0.34)`, background: `rgba(${rgb},0.12)`, color, fontSize: "var(--fs-label)", fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.06em" };
 }
 
 const earningsDateRowStyle: CSSProperties = { marginTop: 14, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 };
@@ -631,18 +631,18 @@ function earningsMetricStyle(tone?: ToneKey): CSSProperties {
   return { border: `1px solid ${border}`, borderRadius: 14, padding: 10, background: "rgba(2,6,23,0.30)", minWidth: 0 };
 }
 
-const earningsMiniLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 950, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(203,213,225,0.72)" };
-const earningsMiniValueStyle: CSSProperties = { marginTop: 5, fontSize: 14, fontWeight: 900, color: "#f8fafc" };
+const earningsMiniLabelStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 950, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(203,213,225,0.72)" };
+const earningsMiniValueStyle: CSSProperties = { marginTop: 5, fontSize: "0.875rem", fontWeight: 900, color: "#f8fafc" };
 /** A sentence, not a date, so it wraps and sits a notch lighter than a value. */
-const earningsMiniSentenceStyle: CSSProperties = { marginTop: 5, fontSize: 13, lineHeight: 1.35, fontWeight: 800, color: "#f8fafc" };
-const earningsMiniSubStyle: CSSProperties = { marginTop: 3, fontSize: 11, lineHeight: 1.4, color: "rgba(203,213,225,0.58)" };
-const earningsMetricValueStyle: CSSProperties = { marginTop: 6, fontSize: 18, lineHeight: 1.08, fontWeight: 950, letterSpacing: "-0.035em", color: "#f8fafc" };
-const earningsMetricNoteStyle: CSSProperties = { marginTop: 4, fontSize: 10, lineHeight: 1.4, color: "rgba(203,213,225,0.55)" };
-const periodLineStyle: CSSProperties = { marginTop: 14, fontSize: 12, fontWeight: 800, letterSpacing: "0.01em", color: "rgba(226,232,240,0.72)" };
-const earningsFootnoteStyle: CSSProperties = { marginTop: 10, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.62)" };
+const earningsMiniSentenceStyle: CSSProperties = { marginTop: 5, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", fontWeight: 800, color: "#f8fafc" };
+const earningsMiniSubStyle: CSSProperties = { marginTop: 3, fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(203,213,225,0.58)" };
+const earningsMetricValueStyle: CSSProperties = { marginTop: 6, fontSize: "1.125rem", lineHeight: 1.08, fontWeight: 950, letterSpacing: "-0.035em", color: "#f8fafc" };
+const earningsMetricNoteStyle: CSSProperties = { marginTop: 4, fontSize: "var(--fs-label)", lineHeight: 1.4, color: "rgba(203,213,225,0.55)" };
+const periodLineStyle: CSSProperties = { marginTop: 14, fontSize: "var(--fs-fine)", fontWeight: 800, letterSpacing: "0.01em", color: "rgba(226,232,240,0.72)" };
+const earningsFootnoteStyle: CSSProperties = { marginTop: 10, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(203,213,225,0.62)" };
 
 function earningsMetricMetaStyle(tone?: ToneKey): CSSProperties {
-  return { marginTop: 5, fontSize: 12, fontWeight: 850, color: tone ? TONE_TEXT[tone] : "rgba(226,232,240,0.70)" };
+  return { marginTop: 5, fontSize: "var(--fs-label)", fontWeight: 850, color: tone ? TONE_TEXT[tone] : "rgba(226,232,240,0.70)" };
 }
 
 const fullReportLinkStyle: CSSProperties = {
@@ -656,16 +656,16 @@ const fullReportLinkStyle: CSSProperties = {
   background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(15,23,42,0.30))",
   color: "#dbeafe",
   textDecoration: "none",
-  fontSize: 13,
+  fontSize: "var(--fs-label)",
   fontWeight: 950,
   letterSpacing: "0.02em",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
 };
 
-const chartReasonStyle: CSSProperties = { marginTop: 14, fontSize: 12, lineHeight: 1.5, color: "rgba(203,213,225,0.70)" };
-const chartYearStyle: CSSProperties = { textAlign: "center", fontSize: 11, fontWeight: 800, color: "rgba(226,232,240,0.80)", minWidth: 0 };
-const chartGapStyle: CSSProperties = { marginTop: 2, fontSize: 9, lineHeight: 1.25, color: "rgba(203,213,225,0.58)" };
-const chartLegendStyle: CSSProperties = { marginTop: 8, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px", fontSize: 11, color: "rgba(203,213,225,0.72)" };
+const chartReasonStyle: CSSProperties = { marginTop: 14, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(203,213,225,0.70)" };
+const chartYearStyle: CSSProperties = { textAlign: "center", fontSize: "var(--fs-fine)", fontWeight: 800, color: "rgba(226,232,240,0.80)", minWidth: 0 };
+const chartGapStyle: CSSProperties = { marginTop: 2, fontSize: "var(--fs-fine)", lineHeight: 1.25, color: "rgba(203,213,225,0.58)" };
+const chartLegendStyle: CSSProperties = { marginTop: 8, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px", fontSize: "var(--fs-label)", color: "rgba(203,213,225,0.72)" };
 const legendSwatchStyle: CSSProperties = { display: "inline-block", width: 9, height: 9, borderRadius: 2, marginRight: 5, verticalAlign: "-1px" };
 
-const earningsSourceStyle: CSSProperties = { marginTop: 12, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.58)" };
+const earningsSourceStyle: CSSProperties = { marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(203,213,225,0.58)" };
