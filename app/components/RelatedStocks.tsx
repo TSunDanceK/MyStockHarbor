@@ -143,9 +143,9 @@ const wrapStyle: CSSProperties = {
   padding: "24px 20px 40px",
   boxSizing: "border-box",
 };
-const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
-const headingStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
-const descStyle: CSSProperties = { margin: "8px 0 0", fontSize: 14, lineHeight: 1.6, color: "rgba(241,245,249,0.72)" };
+const eyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
+const headingStyle: CSSProperties = { margin: 0, fontSize: "1.375rem", lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
+const descStyle: CSSProperties = { margin: "8px 0 0", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)" };
 
 // Was a wrapping flex row of single pills. Now a responsive grid of small
 // cards, because each entry carries three links rather than one — pills
@@ -166,7 +166,7 @@ const symbolLinkStyle: CSSProperties = {
   display: "inline-block",
   color: "#e2e8f0",
   textDecoration: "none",
-  fontSize: 13,
+  fontSize: "0.8125rem",
   fontWeight: 800,
   letterSpacing: "-0.01em",
 };
@@ -179,10 +179,10 @@ const subRowStyle: CSSProperties = {
 const subLinkStyle: CSSProperties = {
   color: "rgba(148,163,184,0.92)",
   textDecoration: "none",
-  fontSize: 11.5,
+  fontSize: "var(--fs-label)",
   fontWeight: 600,
 };
 const dotStyle: CSSProperties = {
   color: "rgba(148,163,184,0.45)",
-  fontSize: 11.5,
+  fontSize: "var(--fs-label)",
 };

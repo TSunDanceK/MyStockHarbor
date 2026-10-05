@@ -22,7 +22,7 @@ export const SCOPE = [
   "app/stock/[symbol]/TapNote.tsx", "app/stock/[symbol]/LevelsSignals.tsx", "app/stock/[symbol]/PerformanceStrip.tsx",
   "app/stock/[symbol]/StockPriceChart.tsx", "app/stock/[symbol]/StockTickerJump.tsx", "app/stock/[symbol]/HeaderStripParts.tsx",
   "app/markets/spx/page.tsx", "app/markets/spx/SPXChartClient.tsx", "app/markets/spx/LevelsGlanceCard.tsx", "app/markets/spx/MarketMoodCard.tsx",
-  "app/components/ReturnsToggleCard.tsx", "app/components/ReturnsBarChart.tsx", "app/components/ShareButton.tsx",
+  "app/components/ReturnsToggleCard.tsx", "app/components/ReturnsBarChart.tsx", "app/components/ShareButton.tsx", "app/components/RelatedStocks.tsx",
 ];
 const read = (f) => fs.readFileSync(f, "utf8");
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.name === "node_modules" || e.name.startsWith(".") ? [] : e.isDirectory() ? walk(path.join(d, e.name)) : /\.(css|tsx?)$/.test(e.name) ? [path.join(d, e.name)] : []));
