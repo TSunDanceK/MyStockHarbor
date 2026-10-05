@@ -256,12 +256,15 @@ export default function StockPriceChart({
         .chart-gap-toggle, .chart-gap-why { min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
         .chart-gap-toggle[aria-pressed="true"] { border-color: rgba(34,197,94,0.55); background: rgba(34,197,94,0.12); }
         .chart-gap-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
-        .chart-gap-why { font-weight: 500; border-style: dashed; }
+        /* The two tap questions and the status line are read, so they sit at
+           --fs-read, not the row's --fs-label (#553 COWORK #148: C's
+           measure-reading-size found them at 13px). */
+        .chart-gap-why { font-weight: 500; border-style: dashed; font-size: var(--fs-read); }
         /* Its own line, always reserved, so the words coming and going never move the chart. */
-        .chart-gap-status { flex: 1 0 100%; height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.8; }
+        .chart-gap-status { flex: 1 0 100%; height: calc(var(--fs-read) * var(--lh-read)); font-size: var(--fs-read); line-height: var(--lh-read); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.8; }
         @container (min-width: 640px) { .chart-gap-status { flex: 1 1 auto; } }
         .chart-stretch { margin: 0 0 8px; font-size: var(--fs-read); line-height: var(--lh-read); }
-        .chart-stretch .chart-gap-why { font-size: var(--fs-label); margin-left: 4px; }
+        .chart-stretch .chart-gap-why { font-size: var(--fs-read); margin-left: 4px; }
         .chart-gap-note { margin: 0 0 8px; font-size: var(--fs-read); line-height: var(--lh-read); opacity: 0.9; }
       `}</style>
       {/* THE GAP TOGGLE (#553 COWORK #140/#144): off by default; with none, it

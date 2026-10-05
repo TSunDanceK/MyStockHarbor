@@ -1673,7 +1673,11 @@ export default function PickerResultsGrid({
 
         .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
 
-        .mRows { margin-top: 12px; display: grid; gap: 8px; }
+        /* minmax(0, 1fr), NOT the implicit auto column (#553 COWORK #147). An
+           auto track sizes to the widest row's max-content, so one long company
+           name made every row 427-564 px wide inside a 359 px box at 390 px,
+           and .resultWrap's overflow clip hid the figures and the chevron. */
+        .mRows { margin-top: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
         /* 2026-10-03 (#553 COWORK #107/#109): was overflow: hidden, which clipped
            a why-popover (or A's estimate note) opened on an expanded row's
            bottom fields. The row's own background and border follow
@@ -1681,15 +1685,18 @@ export default function PickerResultsGrid({
            edge is the toggle's tap highlight, so IT carries the corners
            (13px = the row's 14px less its 1px border). */
         .mRow {
+          min-width: 0;
           border: 1px solid rgba(255,255,255,0.09); border-radius: 14px;
           background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
           overflow: visible;
         }
         .mRow.open { border-color: rgba(96,165,250,0.4); }
         .mRowTop { display: flex; }
-        /* The entire collapsed row is the button. */
+        /* The entire collapsed row is the button. min-width: 0 because a
+           flex item's default (auto) is its content width, so the name could
+           not shrink and ellipsis never applied (#553 COWORK #147). */
         .mRowToggle {
-          flex: 1 1 auto; display: flex; width: 100%; align-items: center; gap: 10px;
+          flex: 1 1 auto; min-width: 0; display: flex; width: 100%; align-items: center; gap: 10px;
           padding: 11px 12px; border: none; background: none;
           font-family: inherit; color: inherit; cursor: pointer; text-align: left;
           border-radius: 13px;
@@ -1700,7 +1707,7 @@ export default function PickerResultsGrid({
         .mRowId .dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
         .mRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #eaf2ff; }
         .mRowName {
-          min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-size: 12px; font-weight: 700; color: rgba(148,163,184,0.9);
         }
         .mRowSpark { flex: 0 0 auto; display: block; width: 54px; height: 22px; opacity: 0.9; }
@@ -1716,7 +1723,7 @@ export default function PickerResultsGrid({
           padding: 4px 12px 12px;
           display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px;
         }
-        .mRowChart { grid-column: 1 / -1; margin: 8px 0 2px; }
+        .mRowChart { grid-column: 1 / -1; min-width: 0; margin: 8px 0 2px; }
         .mRowField {
           display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
           padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.055); min-width: 0;
