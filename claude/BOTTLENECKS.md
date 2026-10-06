@@ -20,6 +20,42 @@ Key facts as of 2026-07-09:
   this file — read that for the authoritative, up-to-date version.
 ---
 
+## How the leaderboard keys and counts companies (2026-10-06, COWORK #125)
+
+The `/bottlenecks` hub (leaderboard, dependency web, theme cards, stat tiles)
+is computed at build time from `content/bottlenecks/*.md` by
+`lib/bottleneckHub.ts`, called from `lib/bottlenecks.ts`. No runtime fetch, so
+a daily content PR shows up on the next deploy with nothing else to change.
+
+- **Key:** the **ticker when present** (`GOOG` folds into `GOOGL`), otherwise
+  the **normalised name**: lower case, accents dropped, anything in brackets
+  dropped, `&` read as "and", punctuation and corporate suffixes (Inc, Corp,
+  Ltd, plc, N.V., S.A., AG, Group, Holdings...) removed. A ticker-less name that
+  normalises to exactly the name of a ticker'd entry joins that ticker.
+- **Alias map:** `NAME_ALIASES` in `lib/bottleneckHub.ts` joins the unlisted
+  companies written in genuinely different words (Samsung Foundry → Samsung
+  Electronics, AB Volvo → Volvo, SK Siltron CSS → SK Siltron...). Each entry is
+  one company checked by hand; Samsung SDI is deliberately **not** joined to
+  Samsung Electronics. Add an alias when a new page spells an unlisted company
+  a new way.
+- **Count:** **distinct stock pages** naming the company, not raw entries. A
+  page naming it twice (e.g. "Amazon (AWS)" as a supplier and
+  "Amazon.com, Inc." as a customer) counts once. The supplier / key-customer
+  split counts pages per chart (`supplyChain` vs `customers`).
+- **Generic buckets** ("Other cloud customers", "Largest distributor",
+  "Diversified retail base") are not companies: they are keyed per page, never
+  merge across pages and never rank.
+- **Themes** ("Choke points by theme") come from `THEME_MAP` in the same file:
+  an editorial company key → theme map.
+- `buildMergeCensus()` lists every key that joined more than one spelling, so
+  a wrong merge is visible; `scripts/check-bottlenecks-hub.mjs` holds the rules.
+
+So the exact spelling no longer splits a ticker'd company. For a company with
+**no ticker** the spelling still decides the key unless it normalises the same
+or an alias joins it, so consistent spelling still matters there.
+
+---
+
 ## Correction: SK hynix is Nasdaq-listed — use `ticker: SKHY`, not `ticker: null`
 
 **Added 2026-08-20; corrected the same day — see the note at the end, which is
@@ -33,9 +69,12 @@ the more useful half.**
   NYSE/Nasdaq ADR that trades with real volume" and must be written as
   `ticker: SKHY`, never `ticker: null`.
 
-**Spelling matters as much as the ticker.** `getBottleneckCompanyCounts()` keys
-by company **name**, so `SK Hynix` and `SK hynix` count as two separate
-companies and silently undercount both on the Bottleneck Leaderboard. The
+**Spelling matters as much as the ticker.** *(Superseded 2026-10-06: the
+leaderboard now keys by ticker, then by normalised name -- see "How the
+leaderboard keys and counts companies" above. Kept as history.)*
+`getBottleneckCompanyCounts()` keyed by company **name**, so `SK Hynix` and
+`SK hynix` counted as two separate companies and silently undercounted both on
+the Bottleneck Leaderboard. The
 company's own styling is lowercase-h: always write **`SK hynix`**.
 
 The content backfill landed in **PR #246** (merged `136523bf`, 2026-08-20):

@@ -6,8 +6,9 @@ import { readContractsRecord } from "@/lib/server/capexContracts";
 import { readSpendingRecord } from "@/lib/server/capexSpending";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import WhyFollowMoney from "./WhyFollowMoney";
+import WhoIsReceivingMost from "./WhoIsReceivingMost";
 import { normaliseCompanyName } from "@/lib/server/news/companyName";
-import { buildContractRows, buildInsights, buildReceiverGroups, buildSpendingRows, formatAmount, type Insights, type ReceiverView, type SpendingView } from "@/lib/capexPresent";
+import { buildContractRows, buildInsights, buildReceiverGroups, buildSpendingRows, buildTopReceivers, formatAmount, type Insights, type ReceiverView, type SpendingView, type TopReceiverView } from "@/lib/capexPresent";
 
 // Capex -- "Follow the money" (Relay C, #563). Phase 1 panels, each from a
 // filed or published source, side by side and deliberately NOT connected:
@@ -51,6 +52,8 @@ export default async function CapexPage() {
     contracts,
     companyName,
   });
+  // "Who is receiving most" (#563 COWORK #124): panel 2's same lines, no new read.
+  const topReceivers = buildTopReceivers(RECEIVER_ENTRIES, receivers?.rows ?? {}, companyName);
 
   return (
     <main style={mainStyle}>
@@ -203,7 +206,7 @@ export default async function CapexPage() {
         </section>
 
         </div>
-        <InsightColumn insights={insights} contractsWindow={contracts?.window ?? null} />
+        <InsightColumn insights={insights} topReceivers={topReceivers} contractsWindow={contracts?.window ?? null} />
         </div>
 
         <p style={footnoteStyle}>
@@ -320,7 +323,7 @@ function SpendingRow({ row, firstYear, lastYear }: { row: SpendingView; firstYea
 
 // The right column (#563 COWORK #12): each card reads one of the page's three
 // records, names its source and year, and never links one panel to another.
-function InsightColumn({ insights: x, contractsWindow }: { insights: Insights; contractsWindow: { start: string; end: string } | null }) {
+function InsightColumn({ insights: x, topReceivers, contractsWindow }: { insights: Insights; topReceivers: TopReceiverView[]; contractsWindow: { start: string; end: string } | null }) {
   const shareColors = ["#a78bfa", "#60a5fa", "#34d399"];
   return (
     <aside className="capexSide">
@@ -372,6 +375,9 @@ function InsightColumn({ insights: x, contractsWindow }: { insights: Insights; c
           <p className="cardSource">Source: each company&apos;s cash-flow statement filed with the SEC, calendar {x.year}.</p>
         </section>
       ) : null}
+
+      {/* Who is receiving most (#563 COWORK #124): directly under "Who is spending most". */}
+      <WhoIsReceivingMost rows={topReceivers} />
 
       {x.fastest ? (
         <section className="capexCard">

@@ -1,13 +1,12 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import {
-  getAllBottleneckPosts,
-  getBottleneckCompanyCounts,
-} from "@/lib/bottlenecks";
+import { getAllBottleneckPosts, getBottleneckHub } from "@/lib/bottlenecks";
 import BottleneckList from "@/app/components/BottleneckList";
 import BottleneckArchive from "@/app/components/BottleneckArchive";
 import BottleneckLeaderboard from "@/app/components/BottleneckLeaderboard";
 import BottlenecksMobileTabs from "@/app/components/BottlenecksMobileTabs";
+import BottleneckHero from "@/app/components/BottleneckHero";
+import BottleneckThemes from "@/app/components/BottleneckThemes";
 
 const PAGE_TITLE =
   "Stock Bottlenecks | Supply Chain & Customer Dependency | MyStockHarbor";
@@ -52,8 +51,8 @@ export const metadata: Metadata = {
 
 // Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store`.
 // Nothing on this page is request-dependent: getAllBottleneckPosts() and
-// getBottleneckCompanyCounts() are both local content-file reads, and the
-// three child components are client components fed entirely by props. The
+// getBottleneckHub() are both local content-file reads, and the child
+// components are fed entirely by props. The
 // underlying markdown can only change on a deploy, so `no-store` bought
 // nothing and cost a full serverless render on every crawl of a page that
 // carries the crawl path to every /bottlenecks/{ticker} child.
@@ -72,7 +71,16 @@ export default function BottlenecksIndexPage() {
     const dateB = new Date(b.date).getTime();
     return dateB - dateA;
   });
-  const counts = getBottleneckCompanyCounts();
+  // The hub (#125 COWORK): leaderboard, dependency web, themes and stat tiles,
+  // computed from the same content files -- see lib/bottleneckHub.ts.
+  const hub = getBottleneckHub();
+  const searchItems = posts.map(({ slug, symbol, companyName }) => ({ slug, symbol, companyName }));
+  // The leaderboard's rows: every company named on two or more pages (its top
+  // ten first); the single-page tail is a count, not a list.
+  const boardRows = hub.companies
+    .filter((c) => c.count >= 2)
+    .map(({ key, name, ticker, count, supplierPages, customerPages, pages }) => ({ key, name, ticker, count, supplierPages, customerPages, pages }));
+  const boardSingles = hub.companies.length - boardRows.length;
 
   const bottlenecksJsonLd = {
     "@context": "https://schema.org",
@@ -163,97 +171,69 @@ export default function BottlenecksIndexPage() {
                 color: "#93c5fd",
                 textDecoration: "none",
                 fontWeight: 700,
-                fontSize: 14,
+                fontSize: "0.875rem",
               }}
             >
               ← Back to Dashboard
             </Link>
           </div>
 
-          {/* Under 960px the three blocks below become two tabs on a docked
+          {/* Under 960px the blocks below become two tabs on a docked
               bottom bar: the list (with the archive under it) and the
-              leaderboard. Each block declares which tab it belongs to via
-              data-bntab; BottlenecksMobileTabs only puts a class on a
-              wrapper and lets CSS hide the inactive one, so everything here
-              still renders on the server and every archive link stays in the
-              served HTML. Above 960px the bar is off and nothing changes.
+              leaderboard (with the theme cards under it). Each block declares
+              which tab it belongs to via data-bntab; BottlenecksMobileTabs
+              only puts a class on a wrapper and lets CSS hide the inactive
+              one, so everything here still renders on the server and every
+              archive link stays in the served HTML. Above 960px the bar is
+              off and nothing changes.
 
-              The intro card carries no data-bntab on purpose -- it holds the
-              h1, so it stays on screen whichever tab is showing. */}
+              The hero carries no data-bntab on purpose -- it holds the h1, so
+              it stays on screen whichever tab is showing. */}
           <BottlenecksMobileTabs>
+            <BottleneckHero hub={hub} items={searchItems} />
+
             {/* Named grid areas rather than nesting, so the single-column
-                mobile layout can order the three blocks independently of the
+                mobile layout can order the blocks independently of the
                 desktop one. The archive used to sit inside the main column,
                 which put it above the leaderboard once the grid collapsed --
                 on a phone that meant scrolling past 100+ A-Z links to reach
                 the leaderboard. Row gap is 0 and vertical spacing comes from
-                each block's own margin, so the desktop layout is unchanged. */}
+                each block's own margin. The theme cards (#125 COWORK) run
+                full width above the list on desktop, and sit under the
+                leaderboard in its tab on a phone. */}
             <div
               className="bottlenecksIndexLayout"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr 340px",
-                gridTemplateAreas: `"main rail" "archive rail"`,
+                gridTemplateAreas: `"themes themes" "main rail" "archive rail"`,
                 columnGap: 24,
                 rowGap: 0,
                 alignItems: "start",
               }}
             >
+              <div className="bottlenecksThemesArea" data-bntab="board" style={{ gridArea: "themes", minWidth: 0 }}>
+                <BottleneckThemes themes={hub.themes} />
+              </div>
+
               <div style={{ gridArea: "main", minWidth: 0 }}>
-                <section
-                  className="bottlenecksIntroCard"
-                  style={{
-                    background: "#0b1220",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: 16,
-                    padding: 24,
-                    boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
-                  }}
-                >
-                  <h1
-                    className="bottlenecksTitle"
-                    style={{
-                      marginTop: 0,
-                      marginBottom: 16,
-                      fontSize: 34,
-                      lineHeight: 1.1,
-                      fontWeight: 900,
-                    }}
-                  >
-                    Stock Bottlenecks
-                  </h1>
-
-                  <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
-                    Every public company depends on other companies to
-                    function - suppliers it can&apos;t easily replace, and
-                    customers that make up an outsized share of its revenue.
-                    This section breaks that down for one stock at a time,
-                    with two pie charts per stock:{" "}
-                    <strong>supply-chain dependency</strong> and{" "}
-                    <strong>customer concentration</strong>.
-                  </p>
-
-                  <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
-                    New stock pages are added roughly one per day.
-                  </p>
-                </section>
-
-                <section data-bntab="list" style={{ marginTop: 24 }}>
+                <section data-bntab="list">
                   <BottleneckList posts={posts} />
                 </section>
               </div>
 
+              {/* No longer sticky: with rows that open, the leaderboard can
+                  be taller than the window, and a sticky block taller than
+                  the window hides its own foot until the page ends. */}
               <div
                 className="bottlenecksLeaderboardRail"
                 data-bntab="board"
                 style={{
                   gridArea: "rail",
-                  position: "sticky",
-                  top: 24,
                   minWidth: 0,
                 }}
               >
-                <BottleneckLeaderboard counts={counts} />
+                <BottleneckLeaderboard rows={boardRows} singles={boardSingles} />
               </div>
 
               {/* Crawlable index of the full set. BottleneckList only mounts
@@ -272,23 +252,17 @@ export default function BottlenecksIndexPage() {
           @media (max-width: 960px) {
             .bottlenecksIndexLayout {
               grid-template-columns: 1fr !important;
-              grid-template-areas: "main" "rail" "archive" !important;
+              grid-template-areas: "main" "rail" "themes" "archive" !important;
             }
-            .bottlenecksLeaderboardRail {
-              position: static !important;
-              margin-top: 24px !important;
+            /* The hero's own bottom margin spaces the first block. */
+            .bottlenecksThemesArea {
+              margin-top: 24px;
             }
           }
 
           @media (max-width: 640px) {
             .bottlenecksMain {
               padding: 24px 14px !important;
-            }
-            .bottlenecksIntroCard {
-              padding: 18px !important;
-            }
-            .bottlenecksTitle {
-              font-size: 26px !important;
             }
           }
         `}</style>

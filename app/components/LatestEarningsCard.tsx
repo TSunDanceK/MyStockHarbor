@@ -2,6 +2,7 @@ import Link from "next/link";
 import ColdFill from "@/app/stock/[symbol]/ColdFill";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
 import { GROWTH_COLORS, GROWTH_MARGIN_LINE } from "@/lib/growthPalette";
+import { VS_TINT, epsVsYearAgo, marginVsYearAgo, partialLine, type VsTone } from "@/lib/snapshotVsYearAgo";
 import type { CSSProperties } from "react";
 
 import type {
@@ -109,6 +110,9 @@ function growthText(p: SnapshotPct): string | null {
   return null;
 }
 
+/** A year-ago direction as the tile's tone: none for "no claim". */
+const toneOf = (t: VsTone): ToneKey | undefined => (t === null ? undefined : t);
+
 /** Sign tone for a growth figure. A crossing gets none — it is not a magnitude. */
 function growthTone(p: SnapshotPct): ToneKey | undefined {
   if (p.kind !== "pct") return undefined;
@@ -189,6 +193,12 @@ export default function LatestEarningsCard({
   // do when the score did not run at all, because in both cases the hue would
   // be a claim the filings did not support.
   const verdict = snapshot.available && !snapshot.partial;
+  // The tiles against the year-ago quarter (#563 COWORK #123). `yearAgo` may be absent on an older payload.
+  const ya = snapshot.yearAgo ?? null;
+  const perShare = (v: number) => formatFigure({ value: v, perShare: true, derivedNote: null, emptyReason: null });
+  const epsVs = epsVsYearAgo(snapshot.eps.value, ya ? ya.eps : null, perShare);
+  const grossVs = marginVsYearAgo(snapshot.margins.gross, ya ? ya.gross : null, ya?.label);
+  const opVs = marginVsYearAgo(snapshot.margins.operating, ya ? ya.operating : null, ya?.label);
   return (
     <section className="snapshotMetricsWrap" style={earningsCardStyle(tone, verdict)}>
       <div style={sectionEyebrowStyle}>Latest earnings</div>
@@ -219,7 +229,15 @@ export default function LatestEarningsCard({
               : ""}
         </div>
       ) : null}
-      {snapshot.partialNote ? <div style={earningsFootnoteStyle}>{snapshot.partialNote}</div> : null}
+      {/* THE PARTIAL-SCORE PARAGRAPH BEHIND A TAP (#563 COWORK #123): the chart comes
+          first; one muted line ("1 input not measured: tap for why") opens the
+          same sentence at reading size. The badge above still says "Partial". */}
+      {snapshot.partialNote ? (
+        <details data-snapshot-partial="" style={earningsHowStyle}>
+          <summary style={partialSummaryStyle}>{partialLine(snapshot.toneLabel)}</summary>
+          <div style={earningsHowBodyStyle}>{snapshot.partialNote}</div>
+        </details>
+      ) : null}
       {/* THE ANNUAL-ONLY LAYOUT (#535 COWORK #15): one short, true note, and the
           score says what it is based on. */}
       {snapshot.annualNote ? (
@@ -307,11 +325,15 @@ export default function LatestEarningsCard({
             {/* A BLANK TILE SAYS WHY, in the meta slot where growth would sit.
                 The reason is the payload's (emptyReason / marginReasons) —
                 the card never guesses one. */}
+            {/* COLOURED AGAINST THE SAME PERIOD A YEAR EARLIER (#563 COWORK #123):
+                higher green, lower red; two losses, narrowed green and widened
+                red, and the line says so. The figures are the snapshot's own
+                (yearAgo); lib/snapshotVsYearAgo.ts holds the rules. */}
             <EarningsMetric
               label={snapshot.basis === "year" ? "EPS (diluted, FY)" : "EPS (diluted)"}
               value={formatFigure(snapshot.eps)}
-              meta={snapshot.eps.emptyReason ?? growthText(snapshot.epsYoY)}
-              tone={snapshot.eps.emptyReason ? undefined : growthTone(snapshot.epsYoY)}
+              meta={snapshot.eps.emptyReason ?? epsVs.words ?? growthText(snapshot.epsYoY)}
+              tone={snapshot.eps.emptyReason ? undefined : toneOf(epsVs.tone)}
               note={
                 // THE FULL YEAR, LABELLED AS THE FULL YEAR. Only ever set under
                 // a blank derived-Q4 tile; never presented as the quarter's.
@@ -340,8 +362,9 @@ export default function LatestEarningsCard({
                 />
               </>
             ) : null}
-            <EarningsMetric label="Gross margin" value={formatLevel(snapshot.margins.gross)} loss={isLoss(snapshot.margins.gross)} meta={snapshot.marginReasons.gross} />
-            <EarningsMetric label="Operating margin" value={formatLevel(snapshot.margins.operating)} loss={isLoss(snapshot.margins.operating)} meta={snapshot.marginReasons.operating} />
+            {/* Up or down by at least 0.5 pt against the year-ago quarter: green or red; between, uncoloured. */}
+            <EarningsMetric label="Gross margin" value={formatLevel(snapshot.margins.gross)} loss={isLoss(snapshot.margins.gross)} meta={snapshot.marginReasons.gross ?? grossVs.words} tone={snapshot.marginReasons.gross ? undefined : toneOf(grossVs.tone)} />
+            <EarningsMetric label="Operating margin" value={formatLevel(snapshot.margins.operating)} loss={isLoss(snapshot.margins.operating)} meta={snapshot.marginReasons.operating ?? opVs.words} tone={snapshot.marginReasons.operating ? undefined : toneOf(opVs.tone)} />
             {SHOW_CHARTED_METRIC_TILES ? (
               <EarningsMetric label="Net margin" value={formatLevel(snapshot.margins.net)} loss={isLoss(snapshot.margins.net)} meta={snapshot.marginReasons.net} />
             ) : null}
@@ -399,13 +422,28 @@ export default function LatestEarningsCard({
 //
 // THE TWO SCALES SHARE ONE ZERO LINE. Each is stretched below zero by the same
 // fraction, so a loss bar and a negative margin both sit under the same line.
+//
+// THE FULL WIDTH FOR THE BARS (#563 COWORK #123): the plot runs to the card's
+// inner edges and the scale labels sit inside it, small and muted: the $ scale
+// on the left, the margin % on the right, in LANES NO MARK REACHES: the top of
+// each scale above the plot, a negative scale's bottom under it (the $ floor is
+// the worst year's own figure, #126), and "$0" / "0%" on the zero line at the
+// very edges, where the years' slots stop short (CHART_EDGE). The newest margin
+// is in the legend, not floating on the plot.
+// scripts/snapshot-chart-measure.mjs holds it to no label on a label, bar or dot.
 
 const CHART_W = 320;
-const CHART_H = 132;
-const CHART_PAD_L = 58;
-const CHART_PAD_R = 44;
-const CHART_PAD_T = 12;
-const CHART_PAD_B = 8;
+const CHART_H = 150;
+const CHART_PAD_L = 2;
+const CHART_PAD_R = 2;
+const CHART_PAD_T = 22;
+/** Room under the plot for a negative scale's bottom label; a little otherwise. */
+const CHART_PAD_B_NEG = 22;
+const CHART_PAD_B = 4;
+/** The years' slots stop this short of each edge, so the $0 / 0% labels there never meet a bar (#126). */
+const CHART_EDGE = 6;
+/** The least gap between a raised margin top's label and the "0%" label on the zero line (#127). */
+const CHART_LABEL_GAP = 22;
 
 function moneyTick(v: number): string {
   if (v === 0) return "$0";
@@ -431,7 +469,6 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
   const years = chart.years;
   const n = years.length;
   const plotW = CHART_W - CHART_PAD_L - CHART_PAD_R;
-  const plotH = CHART_H - CHART_PAD_T - CHART_PAD_B;
 
   // The $ scale: revenue and net income together. The % scale: net margin.
   const money = years.flatMap((y) => [y.revenue, y.netIncome]).filter((v): v is number => v !== null);
@@ -440,24 +477,29 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
   const moneyMin = Math.min(0, ...money);
   const pctMax = Math.max(0, ...margins);
   const pctMin = Math.min(0, ...margins);
-  // How far below zero each scale must reach, as a fraction of its top; the
-  // larger wins for both so the zero lines coincide.
-  const below = Math.max(
-    moneyMax > 0 ? -moneyMin / moneyMax : 0,
-    pctMax > 0 ? -pctMin / pctMax : 0,
-    moneyMax <= 0 || pctMax <= 0 ? 1 : 0,
-  );
+  // How far below zero the plot reaches, as a fraction of its top, shared so the
+  // zero lines coincide. THE $ FLOOR IS THE DATA'S (#563 COWORK #126): with a
+  // loss on the $ scale the plot ends exactly at the worst year's figure, and the
+  // margin scale makes room for its own low point by reaching higher (pTop),
+  // never by stretching the $ floor past the data (INTC read −$175B for a worst
+  // year of −$18.8B). Without a $ loss, the margin's low point sets the floor.
+  const moneyBelow = moneyMax > 0 ? -moneyMin / moneyMax : moneyMin < 0 ? 1 : 0;
+  const pctBelow = pctMax > 0 ? -pctMin / pctMax : pctMin < 0 ? 1 : 0;
+  const below = moneyMin < 0 ? moneyBelow : pctBelow;
   const mTop = moneyMax > 0 ? moneyMax : Math.max(1, -moneyMin);
-  const pTop = pctMax > 0 ? pctMax : Math.max(1, -pctMin);
+  const pTop0 = pctMax > 0 ? pctMax : Math.max(1, -pctMin);
+  const pTop = below > 0 && pctMin < 0 ? Math.max(pTop0, -pctMin / below) : pTop0;
   const mBottom = -below * mTop;
   const pBottom = -below * pTop;
+  const padB = below > 0 ? CHART_PAD_B_NEG : CHART_PAD_B;
+  const plotH = CHART_H - CHART_PAD_T - padB;
   const yMoney = (v: number) => CHART_PAD_T + ((mTop - v) / (mTop - mBottom)) * plotH;
   const yPct = (v: number) => CHART_PAD_T + ((pTop - v) / (pTop - pBottom)) * plotH;
   const zeroY = yMoney(0);
 
-  const slot = plotW / n;
-  const barW = slot * 0.26;
-  const xOf = (i: number) => CHART_PAD_L + slot * i + slot / 2;
+  const slot = (plotW - 2 * CHART_EDGE) / n;
+  const barW = slot * 0.24;
+  const xOf = (i: number) => CHART_PAD_L + CHART_EDGE + slot * i + slot / 2;
 
   const dots = years
     .map((y, i) => (y.netMargin === null ? null : { x: xOf(i), y: yPct(y.netMargin), v: y.netMargin, i }))
@@ -472,31 +514,43 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
   if (run.length > 1) segments.push(run.join(" "));
   const last = dots.at(-1);
 
-  const tick = (y: number, text: string, side: "l" | "r") => (
+  // A scale label INSIDE the plot: at the left (the $ scale) or right (the margin %) edge, `dy` from its line.
+  const tick = (y: number, text: string, side: "l" | "r", dy: number) => (
     <text
-      x={side === "l" ? CHART_PAD_L - 6 : CHART_W - CHART_PAD_R + 6}
-      y={y + 3}
-      textAnchor={side === "l" ? "end" : "start"}
+      data-scale={side}
+      x={side === "l" ? CHART_PAD_L : CHART_W - CHART_PAD_R}
+      y={y + dy}
+      textAnchor={side === "l" ? "start" : "end"}
       fontSize="0.75rem"
       fill={C.muted}
     >
       {text}
     </text>
   );
-  const leftPct = (CHART_PAD_L / CHART_W) * 100;
-  const rightPct = (CHART_PAD_R / CHART_W) * 100;
+  const plotBottom = CHART_PAD_T + plotH;
+  // A raised margin top's label sits above its own line, lifted only as far as
+  // it takes to clear the "0%" label when the two lines are close.
+  const pctTopY = pTop > pctMax ? Math.min(yPct(pctMax), zeroY - CHART_LABEL_GAP) : CHART_PAD_T;
+  const leftPct = ((CHART_PAD_L + CHART_EDGE) / CHART_W) * 100;
+  const rightPct = ((CHART_PAD_R + CHART_EDGE) / CHART_W) * 100;
 
   return (
     <div style={{ marginTop: 14 }} data-snapshot-chart="">
       <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} width="100%" role="img" aria-label="Revenue, net income and net margin for the last fiscal years" style={{ display: "block", overflow: "visible" }}>
         <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={zeroY} y2={zeroY} stroke={C.rule} strokeWidth={1} />
         <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={CHART_PAD_T} y2={CHART_PAD_T} stroke={C.rule} strokeWidth={0.5} strokeDasharray="2 3" />
-        {tick(CHART_PAD_T, moneyTick(mTop), "l")}
-        {tick(zeroY, "$0", "l")}
-        {mBottom < 0 && moneyMin < 0 ? tick(yMoney(moneyMin), moneyTick(moneyMin), "l") : null}
-        {tick(CHART_PAD_T, `${Math.round(pTop)}%`, "r")}
-        {tick(zeroY, "0%", "r")}
-        {pBottom < 0 && pctMin < 0 ? tick(yPct(pctMin), `${Math.round(pctMin)}%`, "r") : null}
+        {mBottom < 0 ? <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={plotBottom} y2={plotBottom} stroke={C.rule} strokeWidth={0.5} strokeDasharray="2 3" /> : null}
+        {moneyMax > 0 ? tick(yMoney(moneyMax), moneyTick(moneyMax), "l", -9) : null}
+        {/* The $0 / 0% line, labelled at the edges, where no bar stands (#126). */}
+        {tick(zeroY, "$0", "l", -3)}
+        {tick(zeroY, "0%", "r", -3)}
+        {/* A scale's bottom only where that scale has a negative: the other may reach down for it. */}
+        {mBottom < 0 && moneyMin < 0 ? tick(plotBottom, moneyTick(mBottom), "l", 18) : null}
+        {/* THE MARGIN TOP IS THE DATA'S (#563 COWORK #127): the highest margin
+            plotted, at its own height, never the raised plot top (INTC read 119%). */}
+        {pctMax > 0 && pTop > pctMax ? <line data-margin-top="" x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={yPct(pctMax)} y2={yPct(pctMax)} stroke={C.rule} strokeWidth={0.5} strokeDasharray="2 3" /> : null}
+        {pctMax > 0 ? tick(pctTopY, `${Math.round(pctMax)}%`, "r", pTop > pctMax ? -3 : -9) : null}
+        {pBottom < 0 && pctMin < 0 ? tick(plotBottom, `${Math.round(pBottom)}%`, "r", 18) : null}
         {years.map((y, i) => {
           const x = xOf(i);
           const bar = (v: number, dx: number, fill: string, kind: string) => {
@@ -515,11 +569,6 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
           <path key={d} d={d} fill="none" stroke={C.margin} strokeWidth={GROWTH_MARGIN_LINE.width} strokeOpacity={GROWTH_MARGIN_LINE.opacity} />
         ))}
         {dots.map((d) => <circle key={d.i} data-margin-dot="" cx={d.x} cy={d.y} r={3} fill={C.margin} />)}
-        {last ? (
-          <text data-margin-latest="" x={last.x} y={last.y - 6} textAnchor="middle" fontSize="0.75rem" fontWeight={800} fill={isLoss(last.v) ? LOSS_TEXT : C.margin}>
-            {formatLevel(last.v)}
-          </text>
-        ) : null}
       </svg>
       {/* THE YEAR LABELS, IN HTML SO EACH OPENS ITS FIGURES ON A TAP. Laid
           over the plot's own columns: the same side padding, as a % of width. */}
@@ -538,7 +587,8 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
       <div style={chartLegendStyle} data-snapshot-legend="">
         <span><i style={{ ...legendSwatchStyle, background: C.sales }} />Revenue</span>
         <span><i style={{ ...legendSwatchStyle, background: C.profit }} />Net income</span>
-        <span><i style={{ ...legendSwatchStyle, background: C.margin, borderRadius: 999 }} />Net margin %</span>
+        {/* THE NEWEST MARGIN, HERE AND NOT ON THE PLOT (#563 COWORK #123): it collided with the scale labels. */}
+        <span><i style={{ ...legendSwatchStyle, background: C.margin, borderRadius: 999 }} />Net margin %{last ? <> · {years[last.i].short} <b data-margin-latest="" style={{ color: isLoss(last.v) ? LOSS_TEXT : C.margin }}>{formatLevel(last.v)}</b></> : null}</span>
       </div>
     </div>
   );
@@ -633,9 +683,14 @@ const SNAPSHOT_GRID_CSS =
   `.snapshotMetrics>:first-child{grid-column:1/-1}` +
   `@container (min-width:${SNAPSHOT_GRID_ONE_ROW_MIN_PX}px){.snapshotMetrics{grid-template-columns:repeat(3,minmax(0,1fr))}.snapshotMetrics>:first-child{grid-column:auto}}`;
 
+/**
+ * A tile. Green or red carries the earnings page snapshot's faint tint (#563 COWORK #123, VS_TINT) over the
+ * tile's own dark ground, so the two snapshots read alike; the figure keeps its ink.
+ */
 function earningsMetricStyle(tone?: ToneKey): CSSProperties {
   const border = tone ? `rgba(${TONE_RGB[tone]},0.23)` : "rgba(255,255,255,0.08)";
-  return { border: `1px solid ${border}`, borderRadius: 14, padding: 10, background: "rgba(2,6,23,0.30)", minWidth: 0 };
+  const tint = tone === "good" || tone === "weak" ? VS_TINT[tone] : null;
+  return { border: `1px solid ${border}`, borderRadius: 14, padding: 10, background: tint ? `linear-gradient(${tint}, ${tint}), rgba(2,6,23,0.30)` : "rgba(2,6,23,0.30)", minWidth: 0 };
 }
 
 const earningsMiniLabelStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 950, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(203,213,225,0.72)" };
@@ -676,5 +731,7 @@ const chartLegendStyle: CSSProperties = { marginTop: 8, display: "flex", flexWra
 const legendSwatchStyle: CSSProperties = { display: "inline-block", width: 9, height: 9, borderRadius: 2, marginRight: 5, verticalAlign: "-1px" };
 
 const earningsHowStyle: CSSProperties = { marginTop: 12 };
+/** The one muted line standing in for the partial-score paragraph; a tap opens it. */
+const partialSummaryStyle: CSSProperties = { cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(203,213,225,0.72)" };
 const earningsHowSummaryStyle: CSSProperties = { cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" };
 const earningsHowBodyStyle: CSSProperties = { marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" };

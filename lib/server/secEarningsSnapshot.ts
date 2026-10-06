@@ -328,6 +328,15 @@ export type SecEarningsSnapshot = {
   margins: { gross: number | null; operating: number | null; net: number | null };
   /** Per margin, why it is blank. Null where the margin has a value. */
   marginReasons: { gross: string | null; operating: string | null; net: string | null };
+  /**
+   * THE SAME PERIOD A YEAR EARLIER, for the tiles' colour (#563 COWORK #123):
+   * its label (= comparedWith), diluted EPS and gross / operating margins, as
+   * the view already holds them — EPS from incomeTrendBase (the reporting
+   * currency, as epsYoY), the margins from the view's own margin rows by
+   * label. Nothing recomputed; a figure the view does not hold is null and
+   * its tile stays uncoloured. Null with no comparison period.
+   */
+  yearAgo: { label: string; eps: number | null; gross: number | null; operating: number | null } | null;
 
   /** Set only for a filer that reports in another currency. */
   currencyNote: string | null;
@@ -355,6 +364,20 @@ export type SecEarningsSnapshot = {
    */
   annualChart: SnapshotAnnualChart | null;
 };
+
+/**
+ * The year-ago figures the tiles are coloured against (#563 COWORK #123), from
+ * what the view already holds: EPS from incomeTrendBase.then, the margins from
+ * the margin row carrying the comparison period's label (refused margins stay
+ * null). Pure; no read, no arithmetic on the figures.
+ */
+export function yearAgoOf(view: SecEarningsView): SecEarningsSnapshot["yearAgo"] {
+  const label = view.snapshot.comparedWith;
+  if (!label) return null;
+  const base = view.incomeTrendBase && view.incomeTrendBase.label === label ? view.incomeTrendBase : null;
+  const m = view.margins.find((r) => r.label === label && !r.marginsRefused) ?? null;
+  return { label, eps: finiteOrNull(base?.then.epsDiluted), gross: finiteOrNull(m?.gross), operating: finiteOrNull(m?.operating) };
+}
 
 /** The tile's chart shows this many fiscal years (#552 COWORK #134: four, not five). */
 export const SNAPSHOT_CHART_YEARS = 4;
@@ -483,6 +506,7 @@ export function buildSecEarningsSnapshot(args: {
       netIncome: EMPTY_FIGURE,
       margins: { gross: null, operating: null, net: null },
       marginReasons: { gross: null, operating: null, net: null },
+      yearAgo: null,
       currencyNote: null,
       filingCredit: null,
       filingNotice: null,
@@ -540,6 +564,7 @@ export function buildSecEarningsSnapshot(args: {
       operating: marginReason(margins.operating),
       net: marginReason(margins.net),
     },
+    yearAgo: yearAgoOf(view),
     currencyNote: view.currency ? conversionNote(view.currency) : null,
     filingCredit: view.latestFromFiling ? filingCreditText(view.latestFromFiling) : null,
     filingNotice: view.filedNotInFeed ? filingNoticeText(view.filedNotInFeed) : null,

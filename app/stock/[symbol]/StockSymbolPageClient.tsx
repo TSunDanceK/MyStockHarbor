@@ -1046,7 +1046,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 </div>
               </div>
               <div className="stock-stat-cell" style={{ position: "relative" }}>
-                <DayCandle open={quote?.open} high={quote?.dayHigh} low={quote?.dayLow} last={quote?.price} yearLow={quote?.yearLow} yearHigh={quote?.yearHigh} />
+                <DayCandle open={quote?.open} high={quote?.dayHigh} low={quote?.dayLow} last={quote?.price} />
                 <div className="stock-stat-label">Day range</div>
                 <DayRange low={quote?.dayLow} high={quote?.dayHigh} last={quote?.price} />
                 <div className="stock-stat-sub">52wk <span style={{ whiteSpace: "nowrap" }}>{formatRange(quote?.yearLow, quote?.yearHigh)}</span></div>

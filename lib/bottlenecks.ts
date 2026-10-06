@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
+import { buildBottleneckHub, buildHubCompanies, type BottleneckHub } from "./bottleneckHub";
 
 const bottlenecksDirectory = path.join(process.cwd(), "content/bottlenecks");
 
@@ -31,9 +32,8 @@ export type BottleneckPost = {
   customers: BottleneckCompany[];
 };
 
-// A company's total appearance count across every stock page's supply-chain
-// and customer-concentration lists combined - used to power the "Bottleneck
-// Leaderboard" panel on the /bottlenecks index page.
+// How many distinct stock pages name a company, across both charts (see
+// getBottleneckCompanyCounts below).
 export type BottleneckCompanyCount = {
   name: string;
   ticker: string | null;
@@ -125,39 +125,20 @@ export function getBottleneckBySlug(slug: string): BottleneckPost {
   return readPost(`${slug}.md`);
 }
 
-// Counts how many times each company shows up as a bottleneck - as a
-// supplier or as a customer - across every stock page, keyed by company
-// name (tickers can legitimately be null on some entries, name is always
-// present and consistent). Sorted highest count first, alphabetical on ties.
+// The /bottlenecks hub (#125 COWORK): leaderboard, dependency web, themes and
+// stat tiles, all computed here at build time from the content files. The
+// keying and counting rules live in lib/bottleneckHub.ts (pure, so
+// scripts/check-bottlenecks-hub.mjs can drive them): a company is keyed by
+// its ticker when present, otherwise by its normalised name plus a small alias
+// map, and counted once per stock page that names it.
+export function getBottleneckHub(): BottleneckHub {
+  return buildBottleneckHub(getAllBottleneckPosts());
+}
+
+// How many distinct stock pages name each company - as a supplier or as a
+// customer - keyed as above. Sorted highest count first, alphabetical on ties.
+// (It used to key by the raw name string and count raw entries, which split
+// "Amazon (AWS)" from "Amazon.com, Inc. (AWS)".)
 export function getBottleneckCompanyCounts(): BottleneckCompanyCount[] {
-  const posts = getAllBottleneckPosts();
-  const counts = new Map<string, BottleneckCompanyCount>();
-
-  for (const post of posts) {
-    const appearances = [...post.supplyChain, ...post.customers];
-
-    for (const company of appearances) {
-      const key = company.name.trim().toLowerCase();
-      if (!key) continue;
-
-      const existing = counts.get(key);
-      if (existing) {
-        existing.count += 1;
-        if (!existing.ticker && company.ticker) {
-          existing.ticker = company.ticker;
-        }
-      } else {
-        counts.set(key, {
-          name: company.name,
-          ticker: company.ticker,
-          count: 1,
-        });
-      }
-    }
-  }
-
-  return Array.from(counts.values()).sort((a, b) => {
-    if (b.count !== a.count) return b.count - a.count;
-    return a.name.localeCompare(b.name);
-  });
+  return buildHubCompanies(getAllBottleneckPosts()).map(({ name, ticker, count }) => ({ name, ticker, count }));
 }

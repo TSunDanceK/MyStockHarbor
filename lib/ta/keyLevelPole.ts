@@ -12,10 +12,18 @@
 //              The Week is skipped when it is only the latest session (its
 //              first), and so is the Month; the fine print says so ("Week =
 //              today so far" while live, "Week = the latest session" otherwise)
-//   merge      prices equal at 2 dp are one label: "Day & Month high"; more
-//              than MERGE_NAMES_MAX names on one price read "All levels" (or
-//              "7 levels"), and the fine print names them (a thin stock's flat
+//   names      short, with period tags (#563 COWORK #123), never wrapping:
+//              "High" D W, "Low" D W M, "Close" last wk, "Open" M, "Prev
+//              close", "Sep close"; the tap note says D = today, W = this
+//              week, M = this month
+//   merge      prices equal at 2 dp are one label ("High D M"); a label of
+//              more than MERGE_PARTS_MAX names reads "All levels" (or "7
+//              levels"), and the fine print names them (a thin stock's flat
 //              run put eleven names on one price)
+//   crowding   past CROWD_LABELS labels, levels within CROWD_PCT % of each
+//              other (on one side of the last price) share a label ("Open D"
+//              over "Prev close", each name on its own line), its price "~"
+//              their mean; every level keeps its own tick
 //   side       green above the last price, red below, muted level with it
 //   labels     at least `gap` apart (two passes, down then up, inside the
 //              pole); a label off its tick's height gets a leader line, so
@@ -35,8 +43,35 @@ export const PAD_FRACTION = 0.06;
 /** The labels stay this far inside the pole's ends, in rem. */
 export const EDGE_REM = 0.7;
 
-/** More names than this on one price get a short label, and the fine print names them. */
-export const MERGE_NAMES_MAX = 3;
+/** A label of more short names than this reads "All levels" / "n levels", and the fine print names them. */
+export const MERGE_PARTS_MAX = 2;
+/** Past this many level labels, levels within CROWD_PCT % of each other share one (#563 COWORK #123). */
+export const CROWD_LABELS = 8;
+export const CROWD_PCT = 0.15;
+
+/** The period tags, in order, and what they stand for (the tap note's words). */
+export const TAG_ORDER = ["D", "W", "M", "last wk"] as const;
+export const TAG_NOTE = "On the pole, D = today (the latest session), W = this week, M = this month; \"last wk\" is last week's close.";
+const SHORT: Record<string, [string, string]> = {
+  "Day open": ["Open", "D"], "Day high": ["High", "D"], "Day low": ["Low", "D"],
+  "Week open": ["Open", "W"], "Week high": ["High", "W"], "Week low": ["Low", "W"],
+  "Month open": ["Open", "M"], "Month high": ["High", "M"], "Month low": ["Low", "M"],
+  "Last week's close": ["Close", "last wk"],
+};
+export type LabelPart = { name: string; tags: string[] };
+/** ["Day high", "Week high", "Prev close"] → [{ High, [D, W] }, { Prev close, [] }]. */
+export function shortParts(names: readonly string[]): LabelPart[] {
+  const out: LabelPart[] = [];
+  for (const n of names) {
+    const [name, tag] = SHORT[n] ?? [n, ""];
+    const p = out.find((x) => x.name === name);
+    if (p) { if (tag && !p.tags.includes(tag)) p.tags.push(tag); } else out.push({ name, tags: tag ? [tag] : [] });
+  }
+  const rank = (t: string) => TAG_ORDER.indexOf(t as (typeof TAG_ORDER)[number]);
+  return out.map((p) => ({ name: p.name, tags: [...p.tags].sort((a, b) => rank(a) - rank(b)) }));
+}
+/** "High D W · Prev close". */
+export const partsWords = (parts: readonly LabelPart[]) => parts.map((p) => (p.tags.length ? `${p.name} ${p.tags.join(" ")}` : p.name)).join(" · ");
 
 export const POLE_KEY = "Green: above the last price · red: below · thick band: today's range · thin: this month's";
 
@@ -49,13 +84,19 @@ export type PoleSide = "up" | "down" | "at";
 export type PoleLevel = {
   /** Every name the price carries, in order: ["Day high", "Month high"]. */
   names: string[];
-  /** "Day & Month high"; "All levels" / "7 levels" past MERGE_NAMES_MAX names. */
+  /** "High D M"; "All levels" / "7 levels" past MERGE_PARTS_MAX names. */
   label: string;
+  /** The label's short names and tags, to draw ([] for a short "All levels" label and the last price). */
+  parts: LabelPart[];
   /** Every name in words, whatever the label: "Day & Month high". */
   full: string;
+  /** The level's price, or "~" their mean when crowded levels share the label: "~117.18". */
+  valueText: string;
+  /** Each level behind the label, with its own tick height (rem) — more than one only for a crowded label. */
+  members: { names: string[]; value: number; y: number }[];
   value: number;
   side: PoleSide;
-  /** "+0.98%" / "−0.37%" from the last price. */
+  /** "+0.98%" / "−0.37%" from the last price (a crowded label's from their mean). */
   dist: string;
   /** The tick's true height and the label's placed height, in rem from the pole's top. */
   y: number;
@@ -159,6 +200,19 @@ export function keyLevelPole(k: KeyLevels, last: number | null | undefined, gap 
     const m = merged.find((x) => samePrice(x.value, l.value));
     if (m) { if (!m.names.includes(l.name)) m.names.push(l.name); } else merged.push({ names: [l.name], value: l.value });
   }
+  // CROWDING (#563 COWORK #123): past CROWD_LABELS labels, levels within CROWD_PCT % share one, never across the last price.
+  let groups = merged.map((m) => ({ names: [...m.names], members: [{ names: m.names, value: m.value }] }));
+  if (groups.length > CROWD_LABELS) {
+    const out: typeof groups = [];
+    for (const g of [...groups].sort((a, b) => b.members[0].value - a.members[0].value)) {
+      const prev = out[out.length - 1], v = g.members[0].value;
+      const top = prev ? prev.members[0].value : 0;
+      if (prev && ((top - v) / last) * 100 < CROWD_PCT && (top > last) === (v > last) && !samePrice(v, last) && !samePrice(top, last)) {
+        prev.names.push(...g.names); prev.members.push(...g.members);
+      } else out.push(g);
+    }
+    groups = out;
+  }
   const day = k.periods.find((p) => p.key === "day"), month = k.periods.find((p) => p.key === "month");
   const dayLo = day?.levels.low.value, dayHi = day?.levels.high.value;
   const monthOk = month && !month.reason;
@@ -167,11 +221,17 @@ export function keyLevelPole(k: KeyLevels, last: number | null | undefined, gap 
   let lo = Math.min(...all), hi = Math.max(...all);
   const span = hi - lo || last * 0.01;
   lo -= span * PAD_FRACTION; hi += span * PAD_FRACTION;
-  const rows0 = [...merged.map((m) => ({ names: m.names, value: m.value, last: false })), { names: ["Last price"], value: last, last: true }]
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  type Row0 = { names: string[]; value: number; last: boolean; members: { names: string[]; value: number }[] };
+  const rows0: Row0[] = [...groups.map((g) => ({ names: g.names, value: mean(g.members.map((m) => m.value)), last: false, members: g.members })), { names: ["Last price"], value: last, last: true, members: [] }]
     .sort((a, b) => b.value - a.value || (a.last ? -1 : 1));
   const all1 = merged.length === 1;
-  const labelOf = (r: { names: string[]; last: boolean }) =>
-    r.last ? "Last price" : r.names.length > MERGE_NAMES_MAX ? (all1 ? "All levels" : `${r.names.length} levels`) : mergeNames(r.names);
+  const partsOf = (r: Row0) => (r.last ? [] : shortParts(r.names));
+  const labelOf = (r: Row0) => {
+    if (r.last) return "Last price";
+    const parts = partsOf(r);
+    return parts.length > MERGE_PARTS_MAX ? (all1 ? "All levels" : `${r.names.length} levels`) : partsWords(parts);
+  };
   const gaps = rows0.map((_, i) => (i === 0 ? 0 : Math.max(gap, (heights?.[labelOf(rows0[i - 1])] ?? 0) + LABEL_AIR_REM)));
   // The last label hangs below its line by its measured height: the pole makes room for it, so it never runs out.
   const bottom = Math.max(EDGE_REM, (heights?.[labelOf(rows0[rows0.length - 1])] ?? 0) - LABEL_LINE_REM / 2 + LABEL_AIR_REM);
@@ -179,13 +239,18 @@ export function keyLevelPole(k: KeyLevels, last: number | null | undefined, gap 
   const height = Math.max(POLE_REM, Math.round(Math.max(sum + gap + 2 * EDGE_REM, sum + EDGE_REM + bottom) * 1000) / 1000);
   const y = (v: number) => ((hi - v) / (hi - lo)) * height;
   const ys = stackLabels(rows0.map((r) => y(r.value)), gaps, height, EDGE_REM, bottom);
-  const rows: PoleLevel[] = rows0.map((r, i) => ({
-    names: r.names, label: labelOf(r), full: r.last ? "Last price" : mergeNames(r.names), value: r.value,
-    side: r.last ? "at" : samePrice(r.value, last) ? "at" : r.value > last ? "up" : "down",
-    dist: distWords(r.value, last), y: y(r.value), ly: ys[i], ...(r.last ? { last: true } : {}),
-  }));
+  const rows: PoleLevel[] = rows0.map((r, i) => {
+    const label = labelOf(r), vals = r.members.map((m) => m.value), crowded = r.members.length > 1;
+    return {
+      names: r.names, label, parts: r.last || /levels$/.test(label) ? [] : partsOf(r), full: r.last ? "Last price" : mergeNames(r.names), value: r.value,
+      valueText: crowded && !samePrice(Math.min(...vals), Math.max(...vals)) ? `~${poleNumber(r.value)}` : poleNumber(r.value),
+      members: r.members.map((m) => ({ names: m.names, value: m.value, y: y(m.value) })),
+      side: r.last ? "at" : samePrice(r.value, last) ? "at" : r.value > last ? "up" : "down",
+      dist: distWords(r.value, last), y: y(r.value), ly: ys[i], ...(r.last ? { last: true } : {}),
+    };
+  });
   const band = (a: number | null | undefined, b: number | null | undefined) => (fin(a) && fin(b) ? { top: y(Math.max(a, b)), bottom: y(Math.min(a, b)) } : null);
-  const short = rows.filter((r) => !r.last && r.label !== r.full);
+  const short = rows.filter((r) => !r.last && /levels$/.test(r.label));
   const mergedWords = short.length ? short.map((r) => `${r.label} = ${poleNumber(r.value)}: ${r.names.join(", ")}`).join(" · ") : null;
   return { height, lo, hi, rows, month: band(monLo, monHi), day: band(dayLo, dayHi), skipped, merged: mergedWords, last };
 }
@@ -199,5 +264,10 @@ export function poleFromBars(bars: readonly KeyBar[], last: number | null | unde
 
 /** The visually hidden list, in price order: "Day high $336.19, 0.98% above the last price". */
 export function poleListWords(p: Pole): string[] {
-  return p.rows.map((r) => r.last ? `Last price ${priceWords(r.value)}` : `${r.full} ${priceWords(r.value)}, ${r.side === "at" ? "at the last price" : `${r.dist.replace(/^[+−]/, "")} ${r.side === "up" ? "above" : "below"} the last price`}`);
+  const at = (v: number) => {
+    const d = distWords(v, p.last);
+    return samePrice(v, p.last) ? "at the last price" : `${d.replace(/^[+−]/, "")} ${v > p.last ? "above" : "below"} the last price`;
+  };
+  // A crowded label lists each of its levels on its own line.
+  return p.rows.flatMap((r) => (r.last ? [`Last price ${priceWords(r.value)}`] : r.members.map((m) => `${mergeNames(m.names)} ${priceWords(m.value)}, ${at(m.value)}`)));
 }

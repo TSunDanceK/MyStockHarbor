@@ -57,13 +57,15 @@ const FLAT = set(NORMAL, "2026-10-08", { open: 210, high: 210, low: 210, close: 
 const GAP = (() => { const p = NORMAL.find((x) => x.date === "2026-10-07").close; return set(NORMAL, "2026-10-08", { open: p * 1.06, high: p * 1.08, low: p * 1.05, close: p * 1.07 }); })();
 // Six levels within 0.3%: the week's and the day's bars all near 250.
 const CROWD = NORMAL.map((x) => (x.date >= "2026-10-05" ? { ...x, open: 250 + (x.date.slice(-1) * 0.05), high: 250.6, low: 249.4, close: 250 + (x.date.slice(-1) * 0.07) } : x));
+// INTC on 6 Oct (#563 COWORK #123): 10+ levels, some within 0.15% of each other.
+const INTC = set(set(bars("2026-10-08").map((x) => ({ ...x, open: x.open * 0.5, high: x.high * 0.5, low: x.low * 0.5, close: x.close * 0.5 })), "2026-10-07", { close: 116.4 }), "2026-10-08", { open: 117.26, high: 118.19, low: 112.91, close: 114.47 });
 const THIN = NORMAL.map((x) => (x.date >= "2026-09-18" ? { ...x, open: 11.24, high: 11.24, low: 11.24, close: 11.24 } : x));
 const near = (a, b, t = 1e-9) => Math.abs(a - b) <= t;
 const ADVICE = /\b(buy|sell|bullish|bearish|support|resistance|target|should|recommend|will)\b/i;
 
 async function measure(M, src) {
   const at = (b, last) => M.keyLevelPole(M.keyLevels(b), last ?? b[b.length - 1].close);
-  const P = { normal: at(NORMAL), monday: at(MONDAY), first: at(FIRST), flat: at(FLAT), gap: at(GAP), crowd: at(CROWD), thin: at(THIN) };
+  const P = { normal: at(NORMAL), monday: at(MONDAY), first: at(FIRST), flat: at(FLAT), gap: at(GAP), crowd: at(CROWD), thin: at(THIN), intc: at(INTC) };
   const render = (b, credit) => renderToStaticMarkup(React.createElement(M.KeyLevelsCard, { bars: b, lastPrice: b[b.length - 1].close, credit }));
   const svg = (p) => renderToStaticMarkup(React.createElement(M.PoleSvg, { pole: p }));
   return { M, P, html: { normal: render(NORMAL, React.createElement("a", { href: "#" }, "Market data from Tiingo.com")), monday: render(MONDAY), bare: render(NORMAL), thin: render(THIN) }, svg, ...src };
@@ -80,10 +82,11 @@ const RULES = {
       p.rows.every((r) => r.ly >= M.EDGE_REM - 1e-9 && r.ly <= p.height - M.EDGE_REM + 1e-9));
     const crowded = P.crowd.rows.filter((r) => Math.abs(r.ly - r.y) > 0.05).length >= 2;
     const s = svg(P.crowd);
-    const tick = P.crowd.rows.find((r) => !r.last && Math.abs(r.ly - r.y) > 0.05);
+    const tick = P.crowd.rows.find((r) => !r.last && r.members.length === 1 && Math.abs(r.ly - r.y) > 0.05);
+    // Every level keeps its own tick and leaders, a crowded label's too.
     return ok && crowded && M.LABEL_GAP_REM === Math.round(M.LABEL_LINE_REM * 1.4 * 1000) / 1000 &&
       new RegExp(`class="klLeader" d="M[\\d.]+ ${(tick.y * 10).toFixed(4).replace(/0+$/, "").replace(/\\.$/, "")}[\\d]* L[\\d.]+ ${(tick.ly * 10).toFixed(4).replace(/0+$/, "").replace(/\\.$/, "")}`).test(s) &&
-      (s.match(/class="klLeader"/g) ?? []).length === 2 * P.crowd.rows.filter((r) => !r.last).length;
+      (s.match(/class="klLeader"/g) ?? []).length === 2 * P.crowd.rows.reduce((n, r) => n + r.members.length, 0);
   },
   "equal prices (2 dp) are one label: 'Day & Month high'": ({ M, P }) =>
     M.mergeNames(["Day high", "Month high"]) === "Day & Month high" && M.mergeNames(["Day open", "Prev close"]) === "Day open & Prev close" &&
@@ -91,11 +94,30 @@ const RULES = {
     P.thin.rows.filter((r) => !r.last).length === 1 && P.thin.rows.find((r) => !r.last).names.length >= 6 &&
     new Set(P.normal.rows.map((r) => Math.round(r.value * 100))).size === P.normal.rows.length - P.normal.rows.filter((r) => !r.last && P.normal.rows.some((q) => q.last && Math.round(q.value * 100) === Math.round(r.value * 100))).length,
   // A thin stock's flat run put eleven names on one price: a short label, the names in the fine print and the hidden list.
-  "more than 3 names on one price: 'All levels' (or 'n levels'), named in the fine print and the hidden list": ({ M, P, html }) => {
-    const t = P.thin.rows.find((r) => !r.last), two = P.normal.rows.find((r) => r.names.length === 2);
-    return M.MERGE_NAMES_MAX === 3 && t.label === "All levels" && t.full === M.mergeNames(t.names) && /^All levels = 11\.24: Day open, Day high, /.test(P.thin.merged) &&
-      (!two || (two.label === two.full && P.normal.merged === null)) && M.poleListWords(P.thin).some((w) => w.startsWith(`${t.full} $11.24`)) &&
+  "more than 2 short names on one label: 'All levels' (or 'n levels'), named in the fine print and the hidden list": ({ M, P, html }) => {
+    const t = P.thin.rows.find((r) => !r.last), two = P.normal.rows.find((r) => !r.last && r.names.length === 2);
+    return M.MERGE_PARTS_MAX === 2 && t.label === "All levels" && t.full === M.mergeNames(t.names) && /^All levels = 11\.24: Day open, Day high, /.test(P.thin.merged) &&
+      (!two || (two.label === M.partsWords(M.shortParts(two.names)) && P.normal.merged === null)) && M.poleListWords(P.thin).some((w) => w.startsWith(`${t.full} $11.24`)) &&
       /class="klCredit" data-fine-print="true"[^>]*>All levels = 11\.24: Day open/.test(html.thin);
+  },
+  // #563 COWORK #123: short names with period tags, one line each, the tags explained in the tap note.
+  "short names with period tags (High D W, Low D W M, Close last wk), one line each; the tap note explains D / W / M": ({ M, html, card }) =>
+    M.partsWords(M.shortParts(["Day high", "Week high"])) === "High D W" && M.partsWords(M.shortParts(["Month low", "Day low", "Week low"])) === "Low D W M" &&
+    M.partsWords(M.shortParts(["Last week's close"])) === "Close last wk" && M.partsWords(M.shortParts(["Prev close"])) === "Prev close" &&
+    M.partsWords(M.shortParts(["Sep close"])) === "Sep close" && M.partsWords(M.shortParts(["Day open", "Prev close"])) === "Open D · Prev close" &&
+    /class="klPart" style="white-space:nowrap">[A-Z][a-z]+<span class="klTag"/.test(html.normal) && /className="klValue"[^\n]*whiteSpace: "nowrap"/.test(card) &&
+    M.TAG_NOTE.includes("D = today") && M.TAG_NOTE.includes("W = this week") && M.TAG_NOTE.includes("M = this month") && /<div className="klTags"[^>]*>\{TAG_NOTE\}<\/div>/.test(card),
+  "crowding: past 8 labels, levels within 0.15% share one ('~' their mean), never across the last price; each keeps its tick": ({ M, P, svg }) => {
+    const levels = (p) => p.rows.filter((r) => !r.last);
+    const shared = levels(P.intc).filter((r) => r.members.length > 1);
+    return M.CROWD_LABELS === 8 && M.CROWD_PCT === 0.15 && levels(P.intc).length <= 8 && shared.length >= 1 &&
+      shared.every((r) => r.valueText.startsWith("~") && r.members.every((m) => (m.value > P.intc.last) === (r.value > P.intc.last)) &&
+        (Math.max(...r.members.map((m) => m.value)) - Math.min(...r.members.map((m) => m.value))) / P.intc.last * 100 < M.CROWD_PCT) &&
+      levels(P.monday).every((r) => r.members.length === 1) &&
+      // The last price between two close levels: they stay apart, one on each side.
+      ((vs) => { const mid = (Math.max(...vs) + Math.min(...vs)) / 2, p2 = M.keyLevelPole(M.keyLevels(INTC), mid);
+        return levels(p2).every((r) => r.members.every((m) => (m.value > mid) === (r.members[0].value > mid))); })(shared[0].members.map((m) => m.value)) &&
+      (svg(P.intc).match(/class="klLeader"/g) ?? []).length === 2 * levels(P.intc).reduce((n, r) => n + r.members.length, 0);
   },
   "the last label's measured height counts: the pole grows for it and it stays inside": ({ M }) => {
     const p0 = M.keyLevelPole(M.keyLevels(NORMAL), NORMAL[NORMAL.length - 1].close);
@@ -123,8 +145,8 @@ const RULES = {
     /class="klPill"[^>]*><span>Last price<\/span><span[^>]*>[\d,.]+<\/span>/.test(html.normal) && /class="klLastMark"/.test(svg(P.normal)) &&
     P.normal.rows.filter((r) => r.last).length === 1,
   "screen readers: a visually hidden list of the levels in price order, with their distances; the pole aria-hidden": ({ M, P, html }) => {
-    const words = M.poleListWords(P.normal);
-    return words.length === P.normal.rows.length && /^[A-Z][^$]* \$[\d,.]+, [\d.]+% (above|below) the last price$|^Last price \$[\d,.]+$/.test(words[0]) &&
+    const words = M.poleListWords(P.intc);
+    return words.length === P.intc.rows.reduce((n, r) => n + (r.last ? 1 : r.members.length), 0) && /^[A-Z][^$]* \$[\d,.]+, [\d.]+% (above|below) the last price$|^Last price \$[\d,.]+$/.test(words[0]) &&
       /<ul class="klList" style="[^"]*clip:rect\(0 0 0 0\)/.test(html.normal) && /<div class="klPole" aria-hidden="true"/.test(html.normal) && /<svg class="klPoleSvg" aria-hidden="true"/.test(html.normal);
   },
   "the key line under the pole; 'How to read this' gone; 'What are these?' kept": ({ M, html }) => {
@@ -156,12 +178,12 @@ const MUTANTS = [
   ["true scale", "pole", (s) => s.replace("const y = (v: number) => ((hi - v) / (hi - lo)) * height;", "const y = (v: number) => ((hi - v) / (hi - lo)) * height * 0.9;")],
   ["true scale", "pole", (s) => s.replace("lo -= span * PAD_FRACTION; hi += span * PAD_FRACTION;", "")],
   ["labels:", "pole", (s) => s.replace("for (let i = 1; i < out.length; i++) if (out[i] < out[i - 1] + g(i)) out[i] = out[i - 1] + g(i);", "return out;")],
-  ["labels:", "card", (s) => s.replace("d={`M${mid - 9} ${ty} L${mid - 12} ${ly} L0 ${ly}`}", "d={`M${mid - 9} ${ty} L0 ${ty}`}").replace("d={`M${mid + 9} ${ty} L${mid + 12} ${ly} L${W} ${ly}`}", "d={`M${mid + 9} ${ty} L${W} ${ty}`}")],
+  ["labels:", "card", (s) => s.replace("d={`M${mid - 9} ${my} L${mid - 12} ${ly} L0 ${ly}`}", "d={`M${mid - 9} ${my} L0 ${my}`}").replace("d={`M${mid + 9} ${my} L${mid + 12} ${ly} L${W} ${ly}`}", "d={`M${mid + 9} ${my} L${W} ${my}`}")],
   ["labels:", "pole", (s) => s.replace("export const LABEL_GAP_REM = Math.round(LABEL_LINE_REM * 1.4 * 1000) / 1000;", "export const LABEL_GAP_REM = 0.6;")],
   ["equal prices", "pole", (s) => s.replace("export const samePrice = (a: number, b: number) => Math.round(a * 100) === Math.round(b * 100);", "export const samePrice = (a: number, b: number) => a === b;")],
   ["equal prices", "pole", (s) => s.replace('if (tail && split.every(([, t]) => t === tail)) return `${split.map(([h]) => h).join(" & ")} ${tail}`;', "")],
-  ["more than 3 names", "pole", (s) => s.replace("export const MERGE_NAMES_MAX = 3;", "export const MERGE_NAMES_MAX = 30;")],
-  ["more than 3 names", "card", (s) => s.replace("{pole?.merged ? <>{pole.merged}{pole.skipped || credit ? \" · \" : \"\"}</> : null}", "")],
+  ["more than 2 short names", "pole", (s) => s.replace("export const MERGE_PARTS_MAX = 2;", "export const MERGE_PARTS_MAX = 30;")],
+  ["more than 2 short names", "card", (s) => s.replace("{pole?.merged ? <>{pole.merged}{pole.skipped || credit ? \" · \" : \"\"}</> : null}", "")],
   ["the last label's measured", "pole", (s) => s.replace("const ys = stackLabels(rows0.map((r) => y(r.value)), gaps, height, EDGE_REM, bottom);", "const ys = stackLabels(rows0.map((r) => y(r.value)), gaps, height);")],
   ["the last label's measured", "pole", (s) => s.replace("Math.max(sum + gap + 2 * EDGE_REM, sum + EDGE_REM + bottom)", "(sum + gap + 2 * EDGE_REM)")],
   ["green above", "pole", (s) => s.replace(': r.value > last ? "up" : "down",', ': r.value > last ? "down" : "up",')],
@@ -170,7 +192,11 @@ const MUTANTS = [
   ["the Week skipped", "pole", (s) => s.replace("const monthIsDay = !!month && !!day && !month.reason && month.from === day.from;", "const monthIsDay = false;")],
   ["the levels:", "pole", (s) => s.replace('    add("Last week\'s close", week.prevClose?.value);\n', "")],
   ["the levels:", "pole", (s) => s.replace("add(`${MONTH_NAMES[Number(month.prevClose.date.slice(5, 7)) - 1]} close`", 'add("Month close"')],
-  ["a flat day", "pole", (s) => s.replace("const merged: { names: string[]; value: number }[] = [];", "const merged: { names: string[]; value: number }[] = [];\n  const samePrice = (a: number, b: number) => a === b && false;")],
+  ["a flat day", "pole", (s) => s.replace("const merged: { names: string[]; value: number }[] = [];", "const merged: { names: string[]; value: number }[] = [];\n  const samePrice = (a: number, b: number) => a === b && false;").replace("export const CROWD_LABELS = 8;", "export const CROWD_LABELS = 99;")],
+  ["short names", "pole", (s) => s.replace('"Week high": ["High", "W"]', '"Week high": ["High", "D"]')],
+  ["short names", "card", (s) => s.replace('className="klPart" style={{ whiteSpace: "nowrap" }}', 'className="klPart" style={{}}')],
+  ["crowding", "pole", (s) => s.replace("export const CROWD_PCT = 0.15;", "export const CROWD_PCT = 0;")],
+  ["crowding", "pole", (s) => s.replace("(top > last) === (v > last) && ", "")],
   ["the last price:", "card", (s) => s.replace("<span>Last price</span>", "<span>Now</span>")],
   ["screen readers", "card", (s) => s.replace('<ul className="klList" style={srOnly}>', '<ul className="klList">')],
   ["screen readers", "card", (s) => s.replace('<div ref={box} className="klPole" aria-hidden="true"', '<div ref={box} className="klPole"')],

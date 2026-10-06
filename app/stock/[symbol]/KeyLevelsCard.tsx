@@ -5,9 +5,10 @@
 //
 // One pole on TRUE price scale: a thin track over this month's low–high, a
 // thicker band over today's, the last price as an accent bar and pill. Each
-// level is a short tick at its true height; its name sits on the left in words,
-// its price on the right (green above the last price, red below) with its %
-// distance. Labels keep a minimum gap and fan out with leader lines. The layout
+// level is a short tick at its true height; its short name and period tags
+// ("High D W", #563 COWORK #123) sit on the left on one line, its price on the
+// right (green above the last price, red below) with its % distance. Labels
+// keep a minimum gap and fan out with leader lines. The layout
 // is lib/ta/keyLevelPole.ts over lib/ta/keyLevels.ts (the bars the page already
 // holds). No fetch, no Redis; the card renders in the server HTML.
 //
@@ -21,7 +22,7 @@
 "use client";
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { keyLevels, priceWords, type KeyBar } from "@/lib/ta/keyLevels";
-import { LABEL_LINE_REM, POLE_KEY, keyLevelPole, poleListWords, poleNumber, type Pole, type PoleSide } from "@/lib/ta/keyLevelPole";
+import { LABEL_LINE_REM, POLE_KEY, TAG_NOTE, keyLevelPole, poleListWords, poleNumber, type Pole, type PoleSide } from "@/lib/ta/keyLevelPole";
 import { FlowPanel, NoteButton, useIsPhone, useTapNote } from "./TapNote";
 
 export const KEY_LEVELS_NOTE =
@@ -43,6 +44,16 @@ const C = {
 
 /** The pole column's width, in rem; the SVG draws in tenths of a rem (1 unit = 0.1rem). */
 export const POLE_COL_REM = 2.25;
+/**
+ * The name column's share of the width beside the pole (#123: the names are short now, the price and its %
+ * distance need the room). Below DIST_MIN_REM of pole width (the 300 px sidebar at a large text size) the %
+ * distance steps aside so nothing wraps, and the names take NAME_SHARE_NARROW; the hidden list keeps every
+ * distance. One CSS variable sets both the labels' columns and the pole's place, so they always line up.
+ */
+export const NAME_SHARE = 0.46;
+export const NAME_SHARE_NARROW = 0.55;
+export const DIST_MIN_REM = 16.25;
+const NAME_COL = `calc((100% - ${POLE_COL_REM}rem) * var(--kl-name, ${NAME_SHARE}))`;
 const U = 10;
 
 /** The pole, its ticks and leaders: decorative (the labels and the hidden list are the content). */
@@ -50,7 +61,7 @@ export function PoleSvg({ pole }: { pole: Pole }) {
   const W = POLE_COL_REM * U, H = pole.height * U, mid = W / 2;
   return (
     <svg className="klPoleSvg" aria-hidden="true" focusable="false" viewBox={`0 0 ${W} ${H}`}
-      style={{ position: "absolute", left: `calc((100% - ${POLE_COL_REM}rem) / 2.3)`, top: 0, width: `${POLE_COL_REM}rem`, height: `${pole.height}rem`, overflow: "visible", pointerEvents: "none" }}>
+      style={{ position: "absolute", left: NAME_COL, top: 0, width: `${POLE_COL_REM}rem`, height: `${pole.height}rem`, overflow: "visible", pointerEvents: "none" }}>
       {pole.month ? <rect className="klMonth" x={mid - 3} y={pole.month.top * U} width={6} height={Math.max(1, (pole.month.bottom - pole.month.top) * U)} rx={3} fill={C.month} /> : null}
       {pole.day ? <rect className="klDay" x={mid - 7} y={pole.day.top * U} width={14} height={Math.max(2, (pole.day.bottom - pole.day.top) * U)} rx={4} fill={C.day} /> : null}
       {pole.rows.map((r, i) => {
@@ -65,11 +76,19 @@ export function PoleSvg({ pole }: { pole: Pole }) {
           );
         }
         const c = SIDE_COLOUR[r.side];
+        // Every level keeps its own tick at its true height; a crowded label's ticks all lead to it.
         return (
           <g key={i} className="klTick" data-side={r.side}>
-            <line x1={mid - 9} x2={mid + 9} y1={ty} y2={ty} stroke={c} strokeWidth={2} />
-            <path className="klLeader" d={`M${mid - 9} ${ty} L${mid - 12} ${ly} L0 ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} />
-            <path className="klLeader" d={`M${mid + 9} ${ty} L${mid + 12} ${ly} L${W} ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} />
+            {r.members.map((m, j) => {
+              const my = m.y * U;
+              return (
+                <g key={j}>
+                  <line x1={mid - 9} x2={mid + 9} y1={my} y2={my} stroke={c} strokeWidth={2} />
+                  <path className="klLeader" d={`M${mid - 9} ${my} L${mid - 12} ${ly} L0 ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} />
+                  <path className="klLeader" d={`M${mid + 9} ${my} L${mid + 12} ${ly} L${W} ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} />
+                </g>
+              );
+            })}
           </g>
         );
       })}
@@ -81,17 +100,22 @@ export function PoleSvg({ pole }: { pole: Pole }) {
 function PoleLabel({ r }: { r: Pole["rows"][number] }) {
   return (
     <div className="klLabel" data-label={r.label} data-last={r.last ? "1" : undefined} data-side={r.side}
-      style={{ position: "absolute", left: 0, right: 0, top: `calc(${r.ly}rem - ${LABEL_LINE_REM / 2}rem)`, display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${POLE_COL_REM}rem minmax(0, 1.3fr)`, alignItems: "start", fontSize: "var(--fs-label)", lineHeight: 1.25 }}>
-      <span className="klName" style={{ textAlign: "right", color: C.value, paddingRight: 2 }}>{r.last ? "" : r.label}</span>
+      style={{ position: "absolute", left: 0, right: 0, top: `calc(${r.ly}rem - ${LABEL_LINE_REM / 2}rem)`, display: "grid", gridTemplateColumns: `${NAME_COL} ${POLE_COL_REM}rem minmax(0, 1fr)`, alignItems: "start", fontSize: "var(--fs-label)", lineHeight: 1.25 }}>
+      {/* NEVER WRAPPING (#123): each short name on one line, its period tags small and muted; a label of two names stacks them. */}
+      <span className="klName" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", color: C.value, paddingRight: 2, minWidth: 0 }}>
+        {r.last ? null : (r.parts.length ? r.parts : [{ name: r.label, tags: [] }]).map((p) => (
+          <span key={p.name} className="klPart" style={{ whiteSpace: "nowrap" }}>{p.name}{p.tags.length ? <span className="klTag" style={{ marginLeft: "0.3em", color: C.muted, fontSize: "var(--fs-fine)", fontWeight: 700, letterSpacing: "0.04em" }}>{p.tags.join(" ")}</span> : null}</span>
+        ))}
+      </span>
       <span />
       {r.last ? (
         <span className="klPill" style={{ justifySelf: "start", display: "inline-flex", flexWrap: "wrap", columnGap: "0.45em", whiteSpace: "nowrap", padding: "0 0.45em", marginTop: "-0.15rem", borderRadius: 6, border: `1px solid ${C.accent}`, background: "rgba(124,179,240,0.16)", color: C.value, fontSize: "var(--fs-label)", fontWeight: 800, lineHeight: 1.4 }}>
           <span>Last price</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{poleNumber(r.value)}</span>
         </span>
       ) : (
-        <span className="klValue" style={{ display: "flex", flexWrap: "wrap", columnGap: "0.5em", paddingLeft: 2, fontVariantNumeric: "tabular-nums" }}>
-          <span style={{ color: SIDE_COLOUR[r.side], fontWeight: 700 }}>{poleNumber(r.value)}</span>
-          <span className="klDist" style={{ color: C.muted, fontSize: "var(--fs-fine)" }}>{r.dist}</span>
+        <span className="klValue" style={{ display: "flex", columnGap: "0.5em", paddingLeft: 2, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+          <span style={{ color: SIDE_COLOUR[r.side], fontWeight: 700, whiteSpace: "nowrap" }}>{r.valueText}</span>
+          {r.dist ? <span className="klDist" style={{ color: C.muted, fontSize: "var(--fs-fine)", whiteSpace: "nowrap" }}>{r.dist}</span> : null}
         </span>
       )}
     </div>
@@ -152,6 +176,7 @@ export default function KeyLevelsCard({
       </div>
       <FlowPanel note={what} anchor={head} phone={phone} label="What are these?" pointerX={200}>
         <div className="klWhat">{KEY_LEVELS_NOTE}</div>
+        <div className="klTags" style={{ marginTop: 6 }}>{TAG_NOTE}</div>
       </FlowPanel>
       {k.asOf && last != null ? (
         <p className="klAsOf" data-fine-print style={noteStyle}>
@@ -166,7 +191,8 @@ export default function KeyLevelsCard({
 
       {pole ? (
         <>
-          <div ref={box} className="klPole" aria-hidden="true" style={{ position: "relative", height: `${pole.height}rem`, marginTop: 12 }}>
+          <div ref={box} className="klPole" aria-hidden="true" style={{ position: "relative", height: `${pole.height}rem`, marginTop: 12, containerType: "inline-size" }}>
+            <style>{`@container (max-width: ${DIST_MIN_REM}rem) { .klPole > * { --kl-name: ${NAME_SHARE_NARROW}; } .klDist { display: none; } }`}</style>
             <PoleSvg pole={pole} />
             {pole.rows.map((r) => <PoleLabel key={`${r.label}${r.value}`} r={r} />)}
           </div>

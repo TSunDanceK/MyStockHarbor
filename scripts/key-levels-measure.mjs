@@ -9,7 +9,7 @@
 // (from Mon 28 Sep) differs from the Day, so the full set shows. At 320, 360, 390, 414, 430 and 1280 px, at a
 // 16 px and a 20 px root, it fails when the page scrolls sideways, when a label
 // overlaps another, when any label leaves the card, or when a name or price is
-// cut, or when a label runs out of the pole or over the key and fine print under it. With an output directory it saves 1280 and 390 px screenshots.
+// cut, when a name or price wraps (#123), or when a label runs out of the pole or over the key and fine print under it. With an output directory it saves 1280 and 390 px screenshots.
 //
 // NOT IN check-all: it needs a browser, and the suite must run without one.
 //
@@ -78,6 +78,8 @@ const lastOf = (b) => b[b.length - 1].close;
 const flatEnd = (b) => { const l = b[b.length - 1]; b[b.length - 1] = { ...l, open: l.close, high: l.close, low: l.close }; return b; };
 const gapEnd = (b) => { const p = b[b.length - 2].close, l = b[b.length - 1]; b[b.length - 1] = { ...l, open: p * 1.06, high: p * 1.075, low: p * 1.05, close: p * 1.07 }; return b; };
 const crowd = (b) => { const n = b.length; for (let i = n - 4; i < n; i++) { const c = 250; b[i] = { ...b[i], open: c * (1 + (i - n) * 0.0004), high: c * 1.0012, low: c * 0.9985, close: c * (1 + (i - n + 2) * 0.0003) }; } return b; };
+// INTC on 6 Oct (#563 COWORK #123): open 117.26, range 112.91–118.19, last 114.47, the week and month apart: 10+ levels.
+const intcDay = (b) => { const n = b.length; b[n - 2] = { ...b[n - 2], close: 116.4 }; b[n - 1] = { ...b[n - 1], open: 117.26, high: 118.19, low: 112.91, close: 114.47 }; return b; };
 const flatRun = (b) => b.map((x, i) => (i >= b.length - 12 ? { ...x, open: 11.24, high: 11.24, low: 11.24, close: 11.24 } : x));
 const FIX = [
   ["normal day", bars("2026-10-08")],
@@ -87,6 +89,7 @@ const FIX = [
   ["gap from the previous close", bars("2026-10-08", gapEnd)],
   ["crowded (6 levels within 0.3%)", bars("2026-10-08", crowd)],
   ["thin stock, one-price levels", bars("2026-10-08", flatRun, 13)],
+  ["INTC-like, 10+ levels", bars("2026-10-08", intcDay, 112)],
   ["/markets/spx (Week from 28 Sep, the close on Fri 2 Oct)", bars("2026-10-02", (b) => b, 740)],
 ].map(([name, b]) => [name, { bars: b, lastPrice: lastOf(b), credit: "Market data from Tiingo.com" }]);
 const SPX = FIX.length - 1;
@@ -124,6 +127,8 @@ for (const root of [16, 20]) {
         const labels = [...p.querySelectorAll(".klLabel")].map((l) => ({ l, parts: [...l.querySelectorAll(".klName, .klValue, .klPill")].filter((e) => e.textContent.trim()).map((e) => { const range = document.createRange(); range.selectNodeContents(e); return range.getBoundingClientRect(); }) }));
         labels.forEach(({ l, parts }) => parts.forEach((b) => { if (b.left < card.left + 4 || b.right > card.right - 4) bad.push(`outside the card: ${l.textContent.trim().slice(0, 30)}`); }));
         for (const e of p.querySelectorAll(".klName, .klValue, .klPill")) if (e.scrollWidth > e.clientWidth + 0.5) bad.push(`cut: ${e.textContent.trim().slice(0, 30)}`);
+        // ONE LINE EACH (#123): a level's name and its price never wrap.
+        for (const e of p.querySelectorAll(".klPart, .klValue")) { const lh = parseFloat(getComputedStyle(e).lineHeight) || 16; if (e.textContent.trim() && e.getBoundingClientRect().height > lh * 1.5) bad.push(`wraps: ${e.textContent.trim().slice(0, 30)}`); }
         // Every label inside the pole's own box, and clear of the key and the fine print under it.
         const poleBox = p.querySelector(".klPole").getBoundingClientRect();
         const below = [...p.querySelectorAll(".klKey, .klCredit")].map((e) => e.getBoundingClientRect());
@@ -141,6 +146,8 @@ for (const root of [16, 20]) {
     console.log(`${width}px @ ${root}px root: ${ok ? "OK" : "FAIL"}${r.scrolls ? " · SCROLLS SIDEWAYS" : ""}${errors.length ? ` · errors ${errors.join(" ")}` : ""}`);
     for (const p of r.probes) if (p.bad.length || p.labels < 2) console.log(`    ${p.name} (${p.labels} labels): ${p.bad.join("; ") || "too few labels"}`);
     if (shots && (width === 1280 || width === 390)) await page.screenshot({ path: path.join(shots, `key-levels-${width}-${root}.png`), fullPage: true });
+    // And each fixture's card on its own, to look at one case.
+    if (shots && (width === 1280 || width === 390)) for (let i = 0; i < FIX.length; i++) await page.locator(`#p${i} .klCard`).screenshot({ path: path.join(shots, `key-levels-${width}-${root}-${i}.png`) });
     await page.close();
   }
 }
