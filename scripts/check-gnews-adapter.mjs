@@ -23,6 +23,11 @@ import { readCodeOnly, eventTypeSource } from "./lib/source-code.mjs";
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
+// lib/server/outsideFetch.ts, inlined with a pass-through unstable_cache (#553 COWORK #171).
+const outsideFetchInline = () => read("lib/server/outsideFetch.ts")
+  .replace('import { unstable_cache } from "next/cache";', "const unstable_cache = (fn) => fn;")
+  .replace(/^export /gm, "");
+
 let failures = 0;
 const check = (label, ok, detail = "") => {
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
@@ -56,7 +61,8 @@ let adapterSrc = read("lib/server/news/gnewsProvider.ts")
       .replace(/^export /gm, ""))
   .replace(/^import \{ stripHtmlTags, containsHtmlMarkup, decodeHtml \} from ".\/text";$/m,
     () => read("lib/server/news/text.ts").replace(/^export /gm, ""))
-  .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "");
+  .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "")
+  .replace(/^import \{ cachedOutsideText \} from "\.\.\/outsideFetch";$/m, () => outsideFetchInline());
 
 if (/^import /m.test(adapterSrc)) {
   console.error("FAIL: an import survived inlining:");
@@ -276,7 +282,8 @@ check(
 
 console.log("\n=== 5. The constraints this step must not break ===\n");
 const src = readCodeOnly("lib/server/news/gnewsProvider.ts");
-check("the fetch keeps revalidate: 3600", /next: \{ revalidate: 3600 \}/.test(src));
+// The hourly cache moved from Next's fetch cache to our own, bounded (#553 COWORK #171).
+check("the fetch keeps its hourly cache", /cachedOutsideText\(3600\)\(feedUrlFor\(cleanName\)\)/.test(src));
 check(
   "no AI call per item",
   !/openai|anthropic|getAiNews|fetchAi/i.test(src),

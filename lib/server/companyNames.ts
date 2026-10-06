@@ -100,9 +100,12 @@ function parseInto(text: string, map: Map<string, string>) {
 
 async function fetchDirectory(url: string) {
   try {
-    const res = await fetch(url, { next: { revalidate: 86400 } });
-    if (!res.ok) return "";
-    return await res.text();
+    // Bounded and cached daily by lib/server/outsideFetch.ts (#553 COWORK #171):
+    // Next refreshed the old `next: { revalidate }` entry with no deadline.
+    // Imported here, not at the top: this module imports nothing, so harnesses
+    // can inline it (check-company-name, check-gnews-adapter).
+    const { cachedOutsideText } = await import("./outsideFetch");
+    return await cachedOutsideText(86400)(url);
   } catch {
     return "";
   }
