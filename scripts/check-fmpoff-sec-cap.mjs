@@ -270,7 +270,7 @@ function wiringRules(srcs) {
   want("a cached index from the other gate is rebuilt", /isUsableIndex\(cached\) && \(cached\.gate \?\? "fmp"\) === gate/.test(uni));
   const eodFn = fnBody(panels, "buildSectorPerformanceFromEod");
   want("Tiingo sector weights are SEC x Tiingo, with no pool HMGET",
-    /const caps = await readSecTiingoCaps\(allSymbols, Date\.now\(\)\)/.test(eodFn) && /weight: caps\.get\(symbol\) \?\? null/.test(eodFn) && !/readPricePoolBulk\(/.test(eodFn));
+    /const caps = await readSecTiingoCaps\((?:allSymbols|everySymbol), Date\.now\(\)\)/.test(eodFn) /* everySymbol: the /sector heat map's cap sums, same blobs (#553 COWORK #157) */ && /weight: caps\.get\(symbol\) \?\? null/.test(eodFn) && !/readPricePoolBulk\(/.test(eodFn));
   want("the FMP-path weights go through poolCapWeight", /const weight = poolCapWeight\(quote, onTiingo\);/.test(fnBody(panels, "buildSectorPerformance")));
   return fails;
 }
