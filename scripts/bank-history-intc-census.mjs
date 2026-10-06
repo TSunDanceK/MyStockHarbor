@@ -51,7 +51,7 @@ const FROM = "2022-10-01";
 for (const sym of ["JPM", "BAC", "GS", "WFC", "MS", "AAPL"]) {
   const cik = REG[sym]?.cik;
   if (!cik) { console.log(`   ${sym}: no CIK`); continue; }
-  const rec = await redis.get(`msh:sec:report-dates:v1:${sym}`).catch(() => null);
+  const rec = await redis.get(`msh:sec:reportdates:v1:${sym}`).catch(() => null);
   const subs = await sec(`https://data.sec.gov/submissions/CIK${cik}.json`);
   const r = tally(subs.filings.recent, FROM);
   const pages = subs.filings.files ?? [];
