@@ -1376,6 +1376,14 @@ const TASKS = {
   // The shipped due strip and expected section over the live report-date
   // records, the named reason per symbol, and what a top-100 / top-150 cut
   // would add at the same bar. GETs and one HMGET; writes nothing.
+  // READ-ONLY DESPITE THE PREFIX (#552 COWORK #181): the banks' short
+  // report-date history, INTC's diluted EPS facts, and the top-150 cut.
+  // Reads the store and SEC submissions / companyconcept; writes nothing.
+  "write-bank-history-intc-census": {
+    script: "scripts/bank-history-intc-census.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-coming-up-coverage-census": {
     script: "scripts/coming-up-coverage-census.mjs",
     args: () => [],
