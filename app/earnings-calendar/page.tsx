@@ -17,7 +17,7 @@ import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { scaledAmount } from "@/lib/server/secPresentation";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import {
-  baseTicker, countPill, dayEyebrow, dayLong, defaultDay, hasClassSuffix, primaryPerFiler, sharesSince, tileDate, tileWeekday, weekDays,
+  baseTicker, byCapThenSymbol, countPill, dayEyebrow, dayLong, defaultDay, hasClassSuffix, primaryPerFiler, sharesSince, tileDate, tileWeekday, weekDays,
 } from "@/lib/server/earningsWeek";
 import { registrantFor } from "@/lib/server/stockProfile";
 import { isProductionDeployment } from "@/lib/server/deployTarget";
@@ -89,14 +89,14 @@ const signed$ = (v: number) => `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`
 //
 //   day lists         1   the month index, memoised 6h per instance (2 across
 //                         a month boundary, on a cold instance)
-//   market cap        1   one HMGET of the price pool, for the sorts (strip and Coming up)
+//   market cap        1   one HMGET of the price pool (SEC shares × Tiingo close), for the sorts
 //   row figures       1   one MGET of the strip's 14 keys
 //   latest closes     1   the Tiingo last-bar blob (Data Cache, 24h)
 //   forward sections  1   the analysis-universe symbol key
-//                  + 50   the committed cut's report-date records (memoised 5 min)
+//                  + 1    the committed cut's 150 report-date records, ONE MGET (memoised 5 min)
 //   after(): gate     1   SET NX; the fill and the populate run on a win only
 //                    --
-//                    ~6   warm, plus the memoised fifty
+//                    ~6   warm, plus the memoised two
 //
 // The month grid's per-day reads (the day blob, its completeness marker read
 // twice) are gone with the grid: the strip reads the candidates directly.
@@ -201,7 +201,7 @@ export default async function EarningsCalendarPage({
 
   // The day lists: the month index the calendar already reads (one HGETALL,
   // memoised 6h per instance; two months across a boundary).
-  // AND THE FORWARD SECTIONS FIRST (memoised 6h), so "Coming up"'s names join
+  // AND THE FORWARD SECTIONS FIRST (memoised 5 min, FORWARD_MEMO_MS), so "Coming up"'s names join
   // the strip's in the ONE market-cap read below (#552 COWORK #179).
   const [raw, forward] = await Promise.all([
     Promise.all(days.map((d) => getDayCandidates(d))),
@@ -256,10 +256,14 @@ export default async function EarningsCalendarPage({
     });
     const figures = week.figures.get(date) ?? {};
     const closes = week.closes.get(date) ?? {};
+    // THE CAP IS COVER-PAGE SHARES × TIINGO CLOSE: readPricePoolBulk overlays
+    // B's SEC cap on the Tiingo pool row (PRICE_PROVIDER_POOL=tiingo).
     const capOf = (s: string) => pool.get(s)?.marketCap ?? null;
     const rows: WeekRow[] = [...cands]
-      // SORT: market cap, largest first; an unknown cap last.
-      .sort((a, b) => (capOf(b.symbol) ?? -1) - (capOf(a.symbol) ?? -1))
+      // SORT: market cap, largest first; a company without one after the
+      // ranked ones, A–Z (#552 COWORK #181), the rule Coming up sorts by.
+      .map((c) => ({ ...c, cap: capOf(c.symbol) }))
+      .sort(byCapThenSymbol)
       .map((c) => {
         const f = figures[c.symbol]?.f ?? null;
         const before = closes[c.symbol];

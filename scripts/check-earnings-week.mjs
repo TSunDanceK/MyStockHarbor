@@ -313,6 +313,11 @@ console.log("\n6. the page");
 const PAGE = readCodeOnly("app/earnings-calendar/page.tsx");
 const gridGone = (src) => !/buildCalendarWeeks|WEEKDAY_LABELS|← Prev|Next →|\?year=\$\{/.test(src) && /<EarningsWeek\s/.test(src);
 check("the month grid and Prev / Today / Next are gone", gridGone(PAGE));
+// ONE SORT FOR BOTH SECTIONS (#552 COWORK #181): cap, largest first; no cap after, A–Z.
+const stripSort = (src) => /\.map\(\(c\) => \(\{ \.\.\.c, cap: capOf\(c\.symbol\) \}\)\)\s*\.sort\(byCapThenSymbol\)/.test(src);
+check("'Last 7 days' rows sort by the same cap-then-A–Z rule as Coming up", stripSort(PAGE));
+check("MUTATION: the strip back to a cap-only sort → caught",
+  !stripSort(PAGE.replace(".sort(byCapThenSymbol)", ".sort((a, b) => (b.cap ?? -1) - (a.cap ?? -1))")));
 check("the title and description keep \"Earnings calendar\"",
   /const PAGE_TITLE = "Earnings Calendar[^"]*"/.test(PAGE) && /"Earnings calendar: /.test(PAGE));
 const T = await lift(grabFunction(fs.readFileSync("app/earnings-calendar/page.tsx", "utf8"), "oldUrlTarget"), "", "oldUrlTarget");
