@@ -148,6 +148,30 @@ async function earningsWeekFixture() {
     React.createElement(ComingUp, { expected, due, today })));
 }
 
+/**
+ * INTC'S SHAPE ON THE EARNINGS PAGE (#552 COWORK #176): the snapshot with the
+ * word "Loss both periods" in the right column, and the cash card with n/m
+ * tiles (a loss quarter, positive OCF and FCF, OCF derived) in the main one,
+ * under the page's own stylesheet and layout.
+ */
+async function intcCardsFixture() {
+  const { buildSecEarningsView } = await import("../lib/server/secEarningsView.ts");
+  const Cards = await import("../app/stock/[symbol]/earnings/SecEarningsCards.tsx");
+  const v = buildSecEarningsView(JSON.parse(fs.readFileSync(path.join(ROOT, "data/sec/factset-fixture-AAPL.json"), "utf8")));
+  v.snapshot.epsYoY = "loss-both";
+  v.cashQuality.netIncome.val = -11.03e9;
+  v.cashQuality.operatingCashFlow.val = 7.01e9;
+  v.cashQuality.operatingCashFlow.derivedNote = "Derived: the quarter is the year-to-date figure less the previous one.";
+  v.cashQuality.freeCashFlow = 4.45e9;
+  const styles = ((await earningsPage()).match(/<style[\s\S]*?<\/style>/g) ?? []).join("");
+  const body = renderToStaticMarkup(React.createElement("main", { className: "earningsPage" },
+    React.createElement("div", { className: "earningsWrap" },
+      React.createElement("section", { className: "contentGrid" },
+        React.createElement("div", { className: "mainColumn" }, React.createElement(Cards.SecCashQualityCard, { view: v })),
+        React.createElement("aside", { className: "sideColumn" }, React.createElement(Cards.SecSnapshotCard, { view: v, pending: null }))))));
+  return styles + body;
+}
+
 const PAGES = [
   { name: "/stock/AAPL", render: stockPage, enforce: true },
   { name: "/markets/spx", render: spxPage, enforce: true },
@@ -427,6 +451,39 @@ for (const pg of PAGES) {
     console.log(`  ${label}: ${r.n} tiles in ${r.rows} row · ${fail ? `${r.scrolls ? "SCROLLS SIDEWAYS " : ""}${r.bad.slice(0, 4).join("; ")} — FAIL` : "no tile line wraps or cuts"}`);
     if (fail) failures++;
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `earnings-week-${width}${css ? "-root20" : ""}.png`), fullPage: true });
+    await page.close();
+  }
+}
+// ── NO TILE TEXT LEAVES ITS TILE, INTC'S SHAPE (#552 COWORK #176) ───────────
+{
+  const html = await intcCardsFixture();
+  console.log("\n/stock/INTC/earnings shape: word values and n/m tiles (#552 COWORK #176)");
+  for (const [label, width, css] of [["320px", 320, ""], ["360px", 360, ""], ["390px", 390, ""], ["430px", 430, ""], ["1280px", 1280, ""], ["390px, root 20px", 390, "html { font-size: 20px; }"], ["1280px, root 20px", 1280, "html { font-size: 20px; }"]]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.setContent(doc(html, css));
+    const r = await page.evaluate(() => {
+      const bad = [];
+      const tiles = [...document.querySelectorAll(".metricCard")];
+      for (const t of tiles) {
+        const R = t.getBoundingClientRect();
+        // THE TEXT ITSELF, not its box: a nowrap line overflows a box that
+        // stays the tile's width, so each text node's own extent is measured.
+        const walk = document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          if (!n.textContent.trim()) continue;
+          const range = document.createRange(); range.selectNodeContents(n);
+          for (const q of range.getClientRects()) {
+            if (q.width && (q.right > R.right + 1 || q.left < R.left - 1))
+              bad.push(`"${(t.querySelector(".metricLabel")?.textContent ?? "").trim()}": "${n.textContent.trim().slice(0, 40)}"`);
+          }
+        }
+      }
+      return { tiles: tiles.length, words: document.querySelectorAll(".metricWord").length, bad: [...new Set(bad)] };
+    });
+    const fail = r.bad.length || r.tiles < 10 || r.words < 1;
+    console.log(`  ${label}: ${r.tiles} tiles, ${r.words} word value(s) · ${fail ? `${r.bad.slice(0, 4).join("; ")}${r.tiles < 10 ? " CARDS NOT DRAWN" : ""} — FAIL` : "no text leaves its tile"}`);
+    if (fail) failures++;
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `intc-tiles-${width}${css ? "-root20" : ""}.png`), fullPage: true });
     await page.close();
   }
 }

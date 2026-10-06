@@ -900,6 +900,10 @@ export default async function StockEarningsPage({ params }: Props) {
         .qualityCard, .balanceCard { container-type: inline-size; }
         .qualityGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .qualityGrid .metricValue { white-space: nowrap; word-break: normal; }
+        /* A WORD IN A TILE (#552 COWORK #176, INTC): "Loss both periods", "Not
+           reported" at the reading size, allowed to wrap, never out of the
+           tile. Numbers keep the big size and nowrap above. */
+        .metricGrid .metricValue.metricWord { font-size: var(--fs-read); font-weight: 800; line-height: 1.35; letter-spacing: 0; white-space: normal; word-break: normal; overflow-wrap: anywhere; }
         @container (max-width: 300px) { .qualityGrid { grid-template-columns: 1fr !important; } }
         .qualityLead { margin: 10px 0 0; }
         .conversionSub, .conversionLegend { margin: 2px 0 10px; color: rgba(148,163,184,0.9) !important; }

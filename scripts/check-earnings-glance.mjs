@@ -113,7 +113,9 @@ const RULES = {
     ({ pages }) => pages.every((p) => Object.values(p.cards).every((m) =>
       // never a figure directly followed by a "derived" word
       !/>[^<>"]*[\d%×][^<>"]*(<\/[a-z]+>)*<span style="position:relative;display:inline-block"><span role="button"[^>]*data-estimate-note="[^"]*"[^>]*>derived</.test(m)))
-      && /data-estimate-note="Derived[^"]*"[^>]*>derived<\/span><\/span>-?\$/.test(pages[0].cards.cash),
+      // ONDS's tiles are n/m, so the big line is the figure alone and "derived"
+      // leads the small line's words (#552 COWORK #176): before "vs net income".
+      && /data-estimate-note="Derived[^"]*"[^>]*>derived<\/span><\/span>(-?\$|vs net income )/.test(pages[0].cards.cash),
 };
 
 const real = measure(await loadCards());

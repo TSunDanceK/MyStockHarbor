@@ -304,6 +304,9 @@ const Q4_EPS_NOTE =
  * on the element, so a reader who meets the word far from the footnote is
  * one hover or one tap away from why there is no percentage.
  */
+/** A growth value that prints as a number; a crossing word or a missing value prints as words. */
+const isNumberPct = (v: Pct | undefined): boolean => typeof v === "number" && Number.isFinite(v);
+
 function PctCell({ v, missing, note }: { v: Pct | undefined; missing?: string | null; note?: string | null }) {
   // EVERY DOTTED WORD OPENS ITS NOTE (#552 COWORK #124 item 3): this was an
   // <abbr title> with a dotted underline, which a tap or click never opened.
@@ -485,13 +488,21 @@ export function HiddenCard({ id }: { id: string; stacked?: boolean }) {
  * null is the grey of a state that is not a number — missing, or a crossing.
  */
 function Metric(
-  { label, children, sub, tone }:
-  { label: string; children: React.ReactNode; sub?: React.ReactNode; tone?: EarningsTone | null }
+  { label, children, sub, tone, word = false }:
+  {
+    label: string; children: React.ReactNode; sub?: React.ReactNode; tone?: EarningsTone | null;
+    /**
+     * THE VALUE IS A WORD ("Loss both periods", "Not reported"), not a figure
+     * (#552 COWORK #176, INTC): drawn at the reading size and allowed to
+     * wrap. A number keeps the big size and never wraps.
+     */
+    word?: boolean;
+  }
 ) {
   return (
     <div className="metricCard" style={tone === undefined ? undefined : { background: toneTint(tone) }}>
       <div className="metricLabel">{label}</div>
-      <div className="metricValue">{children}</div>
+      <div className={word ? "metricValue metricWord" : "metricValue"}>{children}</div>
       {sub ? <div className="metricSub">{sub}</div> : null}
     </div>
   );
@@ -577,7 +588,7 @@ export function SecSnapshotCard({
           the three profit lines by sign, revenue untinted because a level has
           no direction, and grey wherever there is no number to judge. */}
       <div className="metricGrid snapshotGrid">
-        <Metric label="Revenue" tone={s.revenue.val == null ? null : undefined}>
+        <Metric label="Revenue" tone={s.revenue.val == null ? null : undefined} word={s.revenue.val == null}>
           <CellValue cell={s.revenue} compact empty={revenueEmpty(view)} />
         </Metric>
         {/* NO COMPARATOR MEANS NO FIGURE, AND THE CARD SAYS WHY. It used to
@@ -586,11 +597,12 @@ export function SecSnapshotCard({
         <Metric
           label="YoY revenue growth"
           tone={toneForGrowth(s.revenueYoY)}
+          word={!isNumberPct(s.revenueYoY)}
           sub={s.comparedWith ? `Compared with ${s.comparedWith}` : undefined}
         >
           <PctCell v={s.revenueYoY} missing={s.comparedWith ? null : `Prior-year ${w.one} not on file.`} />
         </Metric>
-        <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)}>
+        <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)} word={s.epsDiluted.val == null}>
           <CellValue cell={s.epsDiluted} empty={epsEmpty(view, view.latestLabel)} />
         </Metric>
         {/* A GROWTH FIGURE THE SCORE WILL NOT USE SAYS WHY, beside the figure
@@ -599,6 +611,7 @@ export function SecSnapshotCard({
         <Metric
           label="YoY EPS growth"
           tone={toneForGrowth(s.epsYoY)}
+          word={!isNumberPct(s.epsYoY)}
           sub={s.comparedWith ? `Compared with ${s.comparedWith}` : undefined}
         >
           <PctCell
@@ -607,10 +620,10 @@ export function SecSnapshotCard({
             note={view.largeNonOperatingNote && s.epsYoY != null ? view.largeNonOperatingNote : null}
           />
         </Metric>
-        <Metric label="Operating income" tone={signTone(s.operatingIncome.val)}>
+        <Metric label="Operating income" tone={signTone(s.operatingIncome.val)} word={s.operatingIncome.val == null}>
           <CellValue cell={s.operatingIncome} compact />
         </Metric>
-        <Metric label="Net income" tone={signTone(s.netIncome.val)}>
+        <Metric label="Net income" tone={signTone(s.netIncome.val)} word={s.netIncome.val == null}>
           <CellValue cell={s.netIncome} compact />
         </Metric>
       </div>
@@ -932,8 +945,20 @@ const shortMoney = (n: number) => scaledAmount(n);
 const lcFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 
 /** A tile: a large share (or, n/m, the dollar figure), its sub-lines, its ink. */
-function RatioTile({ label, share, tone, of, dollars, nm, missing = null }: {
-  label: string; share: ShareOf; tone: EarningsTone | null; of: string; dollars: React.ReactNode;
+function RatioTile({ label, share, tone, of, dollars, figure, rest, figureIsWord = false, nm, missing = null }: {
+  label: string; share: ShareOf; tone: EarningsTone | null; of: string;
+  /** The sub-line when the share is shown: every dollar figure, "derived" first. */
+  dollars: React.ReactNode;
+  /**
+   * WITH NO SHARE, THE BIG LINE IS THE FIGURE ALONE (#552 COWORK #176, INTC):
+   * the whole dollar line at the big size ran out of the tile. `figure` is
+   * the tile's own amount, no mark; `rest` the words that went with it,
+   * "derived" first, on the small line with the n/m reason.
+   */
+  figure: React.ReactNode;
+  rest: React.ReactNode;
+  /** The figure is a word ("Not reported"): drawn at the word size, and may wrap. */
+  figureIsWord?: boolean;
   /** The words after "n/m:" when the share is not meaningful. */
   nm: string;
   /** Which input is not on file, when the tile's own figure can't be calculated. */
@@ -951,11 +976,14 @@ function RatioTile({ label, share, tone, of, dollars, nm, missing = null }: {
         </>
       ) : (
         <>
-          <div className="metricValue">{dollars}</div>
-          <div className="metricSub" data-not-meaningful="">{share.why === "not-meaningful" ? `n/m: ${nm}` : (
-            // THE WORD, ITS REASON ON TAP (#552 COWORK #124): never the sentence inline.
-            <ReasonedValue text={NOT_AVAILABLE} reason={missing ? cantCalculate(missing) : "A figure this share needs is not on file."} style={MUTED_VALUE} />
-          )}</div>
+          <div className={figureIsWord ? "metricValue metricWord" : "metricValue"} data-tile-figure="">{figure}</div>
+          <div className="metricSub" data-not-meaningful="">
+            {rest ? <>{rest} · </> : null}
+            {share.why === "not-meaningful" ? `n/m: ${nm}` : (
+              // THE WORD, ITS REASON ON TAP (#552 COWORK #124): never the sentence inline.
+              <ReasonedValue text={NOT_AVAILABLE} reason={missing ? cantCalculate(missing) : "A figure this share needs is not on file."} style={MUTED_VALUE} />
+            )}
+          </div>
         </>
       )}
     </div>
@@ -1091,19 +1119,28 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           nm={ni !== null && ni <= 0 ? "net income was a loss" : "a figure is not on file"}
           // "vs net income", not a bare "vs": a "derived" word on the second
           // figure must never sit straight after the first (check-earnings-glance 4).
-          dollars={<><CellValue cell={c.operatingCashFlow} compact /> vs net income <CellValue cell={c.netIncome} compact /></>} />
+          dollars={<><CellValue cell={c.operatingCashFlow} compact /> vs net income <CellValue cell={c.netIncome} compact /></>}
+          figure={<CellValue cell={{ ...c.operatingCashFlow, derivedNote: null }} compact />} figureIsWord={ocf === null}
+          rest={<><DerivedMark cell={c.operatingCashFlow} />vs net income <CellValue cell={c.netIncome} compact /></>} />
         <RatioTile label="Free cash flow" share={sFcf} tone={cashTileTone("fcf", sFcf)} of="of net income"
           nm="net income was a loss" missing={c.freeCashFlowMissing}
-          dollars={<>{fcfDerived}<DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />{fcf !== null ? " after equipment" : null}</>} />
+          dollars={<>{fcfDerived}<DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />{fcf !== null ? " after equipment" : null}</>}
+          figure={<DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />} figureIsWord={fcf === null}
+          rest={fcf !== null ? <>{fcfDerived}after equipment</> : null} />
         <RatioTile label="Spent on equipment" share={sCapex} tone={cashTileTone("capex", sCapex)} of="of operating cash flow"
           nm="operating cash flow was negative"
           dollars={capex === null ? <>{c.capex.label} <CellValue cell={c.capex} compact /></> : c.capex.label !== "Capital expenditure"
             // THE LABEL FOLLOWS THE FIGURE: a filer on the broader concept is named as such.
             ? <>{c.capex.label}: <DerivedMark cell={c.capex} />{shortMoney(Math.abs(capex))}</>
-            : <><DerivedMark cell={c.capex} />{shortMoney(Math.abs(capex))} capex</>} />
+            : <><DerivedMark cell={c.capex} />{shortMoney(Math.abs(capex))} capex</>}
+          // NOT ON FILE, the phrase stays whole ("Capital expenditure Not reported") at the word size.
+          figure={capex === null ? <>{c.capex.label} <CellValue cell={c.capex} compact /></> : shortMoney(Math.abs(capex))} figureIsWord={capex === null}
+          rest={capex === null ? null : <><DerivedMark cell={c.capex} />{c.capex.label !== "Capital expenditure" ? c.capex.label : "capex"}</>} />
         <RatioTile label="Paid in shares" share={sSbc} tone={cashTileTone("sbc", sSbc)} of="of free cash flow"
           nm="free cash flow was negative"
-          dollars={sbc === null ? <CellValue cell={c.shareBasedCompensation} compact /> : <><DerivedMark cell={c.shareBasedCompensation} />{shortMoney(sbc)} share-based pay</>} />
+          dollars={sbc === null ? <CellValue cell={c.shareBasedCompensation} compact /> : <><DerivedMark cell={c.shareBasedCompensation} />{shortMoney(sbc)} share-based pay</>}
+          figure={sbc === null ? <CellValue cell={c.shareBasedCompensation} compact /> : shortMoney(sbc)} figureIsWord={sbc === null}
+          rest={sbc === null ? null : <><DerivedMark cell={c.shareBasedCompensation} />share-based pay</>} />
       </div>
       <ConversionChart view={view} />
       {/* ONE "About these figures" (#552 COWORK #166/#169): the ratios, the
