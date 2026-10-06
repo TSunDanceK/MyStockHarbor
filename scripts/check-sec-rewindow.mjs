@@ -310,6 +310,20 @@ check("the allowances and the slack ceiling are read from the route, not retyped
   LIM.reverify > 0 && LIM.populate > 0 && LIM.rewindow > 0 && CEILING > 0,
   `reverify ${LIM.reverify}, populate ${LIM.populate}, rewindow ${LIM.rewindow}, ceiling ${CEILING}`);
 
+// POPULATE IS 150 A RUN (#552 COWORK #175, owner GO). At 300, populate and
+// reverify used the whole facts phase and rewindow did 0 (CODE-A #182); the
+// halving is what leaves it time. A revert to 300 fails here.
+check("populate's per-run allowance is 150 (COWORK #175)", LIM.populate === 150,
+  `SEC_POPULATE_PER_RUN is ${LIM.populate}`);
+{
+  // TONIGHT'S SHAPE (CODE-A #182): a populate backlog of 884, above the slack
+  // ceiling, so rewindow keeps its floor and populate takes exactly 150.
+  const busy = M.populationQueues(bulkManifest({ reverify: 0, populate: 884, rewindow: 500 }));
+  check("...and with an 884 backlog populate takes 150, not 300",
+    busy.populate.length === 150 && busy.rewindow.length >= LIM.rewindow,
+    `populate ${busy.populate.length}, rewindow ${busy.rewindow.length}`);
+}
+
 // THE LIVE SHAPE, from the census on 01ea371a: reverify 1, populate 323,
 // rewindow 431.
 {
