@@ -2124,6 +2124,10 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
                   <span className="trendCount">{`${l.matched} of ${l.compared} ${l.compared === 1 ? w.one : w.many}`}</span>
                 ) : null}
               </div>
+              {/* THE LATEST, WHEN IT DISAGREES WITH THE MAJORITY (#552 COWORK #190). */}
+              {l.latestChip ? (
+                <div className="trendLatestWord" data-latest-word="" style={{ color: toneColor(l.latestChip.tone) }}>{l.latestChip.word}</div>
+              ) : null}
             </div>
           );
         })}

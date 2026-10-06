@@ -141,6 +141,20 @@ console.log("\n5. the chip counts the periods that match it (#552 COWORK #187 §
   const cards = readCodeOnly("app/stock/[symbol]/earnings/SecEarningsCards.tsx");
   check("the card prints matched of compared, and the chip from chipTone",
     /\$\{l\.matched\} of \$\{l\.compared\}/.test(cards) && /<ToneChip tone=\{l\.chipTone\} word=\{word\} \/>/.test(cards) && !/\$\{l\.counted\} of \$\{total\}/.test(cards));
+  // "LATEST:" WHEN THE NEWEST PERIOD DISAGREES WITH THE MAJORITY (#552 COWORK #190).
+  // TXN's margin: down on the year in five of eight quarters, the latest up 7.1pp.
+  const TXN_M = [mr(38, -1), mr(36, -2), mr(34, -3), mr(33, -2), mr(33, -1), mr(35, 1), mr(37, 2), mr(42.3, 7.1)];
+  const txnM = line(M.trendSummary(viewOf([], TXN_M)), "Operating margin");
+  check("TXN margin: 'Narrowing 5 of 8' with 'Latest: widening'", txnM.move?.word === "Narrowing" && txnM.matched === 5 && txnM.latestChip?.word === "Latest: widening" && txnM.latestChip?.tone === "good", JSON.stringify([txnM.move, txnM.matched, txnM.latestChip]));
+  const ENPHup = [5, 4, 1, -8, -12, -19.6, -6, 9].map((r) => g(r, null));
+  const enphUp = line(M.trendSummary(viewOf(ENPHup, [])), "Revenue growth");
+  check("a rate line: 'Declining' majority with a latest +9% adds 'Latest: growing'", enphUp.chipTone === "weak" && enphUp.latestChip?.word === "Latest: growing", JSON.stringify([enphUp.chipTone, enphUp.latestChip]));
+  check("no second line when the latest agrees (TXN revenue, HSY margin)", txn.latestChip === null && hsy.latestChip === null);
+  check("the card prints it under the count", /\{l\.latestChip \? \(\s*<div className="trendLatestWord" data-latest-word=""/.test(cards));
+  const M5 = await build(VIEW, once(PRES, "latestChip: chip && latestTone && latestTone !== chip.tone ?", "latestChip: false && chip && latestTone && latestTone !== chip.tone ?"));
+  check("MUTATION: no 'Latest:' line on a rate card → the +9% latest is unsaid (caught)", line(M5.trendSummary(viewOf(ENPHup, [])), "Revenue growth").latestChip === null);
+  const M6 = await build(VIEW, once(PRES, "if (!moveTone || !t || t === moveTone || newest === null || newestDelta === null) return null;", "return null;"));
+  check("MUTATION: no 'Latest:' line on the margin card → TXN reads only 'Narrowing' (caught)", line(M6.trendSummary(viewOf([], TXN_M)), "Operating margin").latestChip === null);
   // THE VIEW SUPPLIES THE MOVES, AND THE ANNUAL TABLE'S YoY IS IN THE
   // REPORTING CURRENCY (SONY: -2.6% converted vs -3.7% in yen).
   const V = readCodeOnly("lib/server/secEarningsView.ts");
@@ -150,7 +164,7 @@ console.log("\n5. the chip counts the periods that match it (#552 COWORK #187 §
     /revenueYoY: yoy\(valueOf\(home\(p\), "revenue"\), valueOf\(home\(prior\), "revenue"\)\),\s*epsDiluted: view\(p, "epsDiluted"/.test(V) &&
       /epsYoY: yoy\(valueOf\(home\(p\), "epsDiluted"\), valueOf\(home\(prior\), "epsDiluted"\)\),\s*\.\.\.marginsOf\(p\),\s*netIncome/.test(V));
   // MUTATIONS
-  const M1 = await build(VIEW, once(PRES, "chipTone: chip?.tone ?? null, matched: chip?.matched ?? null, compared: nums.length };", "chipTone: tone, matched: nums.length, compared: nums.length };"));
+  const M1 = await build(VIEW, once(PRES, "chipTone: chip?.tone ?? null, matched: chip?.matched ?? null, compared: nums.length,", "chipTone: tone, matched: nums.length, compared: nums.length,"));
   const t1 = line(M1.trendSummary(viewOf(TXN, [])), "Revenue growth"), e1 = line(M1.trendSummary(viewOf(ENPH, [])), "Revenue growth");
   check("MUTATION: the old rule (median tone, every period counted) → TXN 8 of 8, ENPH Flat (caught)", t1.matched === 8 && e1.chipTone === "neutral");
   const M2 = await build(VIEW, once(PRES, "const tone = (latest && tied.includes(latest) ? latest : median && tied.includes(median) ? median : null)", "const tone = (median && tied.includes(median) ? median : null)"));

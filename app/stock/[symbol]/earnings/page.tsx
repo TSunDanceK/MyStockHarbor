@@ -850,6 +850,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .trendCell { display: grid; gap: 4px; align-content: start; }
         .trendChipRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
         .trendCount { font-size: var(--fs-label); color: rgba(148,163,184,0.75); }
+        .trendLatestWord { margin-top: 4px; font-size: var(--fs-label); font-weight: 700; }
         @media (max-width: 520px) { .gmChart { height: 120px; } }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }

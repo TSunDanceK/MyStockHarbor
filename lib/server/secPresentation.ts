@@ -214,6 +214,13 @@ export type TrendLine = {
   chipTone: EarningsTone | null;
   matched: number | null;
   compared: number;
+  /**
+   * THE LATEST PERIOD, WHEN IT DISAGREES WITH THE CHIP (#552 COWORK #190): TXN's
+   * margin read "Narrowing 5 of 8" beside a latest quarter up 7.1pp on the year.
+   * The majority is right, but the chip reads as the current state, so the tile
+   * adds "Latest: widening". Null when the latest agrees or has no tone.
+   */
+  latestChip: { tone: EarningsTone; word: string } | null;
 };
 
 export type TrendSummary = {
@@ -318,13 +325,14 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
           : `Not measured: ${subject} crossed between profit and loss in these ${w.many}, so a % change isn't meaningful.`
         : `Not measured: needs ${TREND_MIN_PERIODS} comparable ${w.many}, has ${nums.length}.`;
       return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped, reason, latestWords, move: null,
-        chipTone: null, matched: null, compared: nums.length };
+        chipTone: null, matched: null, compared: nums.length, latestChip: null };
     }
     const m = median(nums);
     const tone = toneForGrowth(m as Pct);
     const chip = modalTone(nums.map((n) => toneForGrowth(n)), latestTone, tone);
     return { label, kind: "rate", value: m, tone, latest, latestTone, counted: nums.length, skipped, reason: null, latestWords, move: null,
-      chipTone: chip?.tone ?? null, matched: chip?.matched ?? null, compared: nums.length };
+      chipTone: chip?.tone ?? null, matched: chip?.matched ?? null, compared: nums.length,
+      latestChip: chip && latestTone && latestTone !== chip.tone ? { tone: latestTone, word: `Latest: ${growthToneWord(latestTone).toLowerCase()}` } : null };
   };
 
   const growth = view.growth ?? [];
@@ -369,6 +377,12 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
       chipTone: moveTone,
       matched: moveTone ? chip!.matched : null,
       compared: deltas.length,
+      latestChip: (() => {
+        const t = toneForMarginDelta(newestDelta);
+        if (!moveTone || !t || t === moveTone || newest === null || newestDelta === null) return null;
+        // The latest period's own move, so the verb follows its own ends (a negative margin improves, not widens).
+        return { tone: t, word: `Latest: ${marginToneWord(t, { older: newest - newestDelta, newer: newest }).toLowerCase()}` };
+      })(),
     });
   }
 
