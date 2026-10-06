@@ -115,6 +115,8 @@ export async function loadSnapshot(mutate = (src) => src) {
     // opens each year's figures.
     profitUncheckedConst(),
     stripImports("lib/growthPalette.ts"),
+    // The tiles against the year-ago quarter (#563 COWORK #123): pure, import-free.
+    stripImports("lib/snapshotVsYearAgo.ts"),
     reasonedValueUnit(),
     // getSecEarningsSnapshot's Redis and cold-path calls are stripped with the
     // imports and are never invoked: every assertion drives
