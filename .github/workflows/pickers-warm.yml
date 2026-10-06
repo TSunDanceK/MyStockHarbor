@@ -82,7 +82,10 @@ jobs:
               "${url}?t=$(date +%s)" || printf '\n000')
             code=$(printf '%s' "${body}" | tail -n 1)
             echo "${label}: HTTP ${code}"
-            printf '%s' "${body}" | head -n -1 | head -c 500
+            # `|| true`: the second head closes the pipe early on a long body,
+            # and under pipefail that SIGPIPE failed the step AFTER a 200, so
+            # the earnings passes never ran (#553 CODE-B #152, 2026-10-06).
+            printf '%s' "${body}" | head -n -1 | head -c 500 || true
             echo
             if [ "${code}" != "200" ]; then
               echo "::error::${label} returned ${code} (000 = curl could not complete the request). A warm job that silently does nothing is worse than one that is visibly broken."

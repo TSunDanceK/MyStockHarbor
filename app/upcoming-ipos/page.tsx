@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { getIpoTables, ipoProvider } from "@/lib/server/ipoCalendar";
 import IpoList from "./IpoList";
+import IpoProfileList, { type IpoProfileRow } from "./IpoProfileList";
+import { readIpoProfiles } from "@/lib/server/ipoProfiles";
 import { refuseToCacheDegradedRender } from "@/lib/server/degradedRender";
 
 const PAGE_TITLE = "Upcoming IPOs This Month | Confirmed IPO Calendar | MyStockHarbor";
@@ -108,6 +110,12 @@ export default async function UpcomingIposPage() {
 
   const ipos = feed.upcoming;
   const recentIpos = feed.recent;
+
+  // THE SEC PROFILES (#553 COWORK #159 PR 1): ONE GET per regeneration (daily),
+  // written by the ipo-refresh job, never fetched here. A filer without one
+  // still renders its row; only the blocks that need the profile are omitted.
+  const profiles = ipoProvider() === "sec" ? await readIpoProfiles() : {};
+  const withProfiles = (rows: typeof ipos): IpoProfileRow[] => rows.map((ipo) => ({ ipo, profile: profiles[ipo.cik] ?? null }));
 
   // ── WHICH SOURCE IS ANSWERING, DECIDED SERVER-SIDE ───────────────────────
   // IpoList is a client component, so it cannot read IPO_PROVIDER: a
@@ -284,6 +292,18 @@ export default async function UpcomingIposPage() {
               marginBottom: 32,
             }}
           >
+            {isSec ? (
+              <IpoProfileList
+                rows={withProfiles(ipos)}
+                table="upcoming"
+                dateLabel="Terms set"
+                emptyMessage={
+                  feed.ok
+                    ? "No companies with terms set are on file right now. Check back soon — this list updates as new filings arrive."
+                    : "We couldn't load the IPO calendar just now. This is a temporary problem on our side, not an empty calendar — please refresh in a moment."
+                }
+              />
+            ) : (
             <IpoList
               ipos={ipos}
               // "Terms set", NOT "IPO Date", and this is the honest half of the
@@ -301,6 +321,7 @@ export default async function UpcomingIposPage() {
                   : "We couldn't load the IPO calendar just now. This is a temporary problem on our side, not an empty calendar — please refresh in a moment."
               }
             />
+            )}
           </section>
 
           <section
@@ -341,6 +362,18 @@ export default async function UpcomingIposPage() {
               boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
             }}
           >
+            {isSec ? (
+              <IpoProfileList
+                rows={withProfiles(recentIpos)}
+                table="recent"
+                dateLabel="Listed"
+                emptyMessage={
+                  feed.ok
+                    ? "No confirmed IPOs listed in the last 30 days."
+                    : "We couldn't load recent IPO listings just now. This is a temporary problem on our side — please refresh in a moment."
+                }
+              />
+            ) : (
             <IpoList
               ipos={recentIpos}
               // "Listed" on the SEC path: this date IS the final prospectus's,
@@ -354,6 +387,7 @@ export default async function UpcomingIposPage() {
                   : "We couldn't load recent IPO listings just now. This is a temporary problem on our side — please refresh in a moment."
               }
             />
+            )}
           </section>
 
           {/* THE SOURCE LINE IS FALSE THE MOMENT THE FLAG FLIPS, which is why
@@ -362,7 +396,7 @@ export default async function UpcomingIposPage() {
               right now. */}
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
             {isSec
-              ? "Data source: SEC EDGAR filings (public domain) — compiled from S-1/A, F-1/A, 424B and 8-A12B filings. "
+              ? "Data source: SEC EDGAR filings (public domain) — compiled from S-1, S-1/A, F-1, F-1/A, 424B and 8-A12B filings, each filer's EDGAR company record, and the filing-fee exhibit. "
               : "Data source: financialmodelingprep.com. "}
             IPO terms can change before listing day — treat this as a starting
             point for further research, not investment advice.

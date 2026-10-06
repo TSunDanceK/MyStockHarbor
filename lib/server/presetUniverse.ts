@@ -50,6 +50,11 @@
 // The general point: a symbol does NOT need to be in this list to have a
 // working page any more. Add names here because they belong in the guaranteed
 // mega-cap slots, not to make a page work.
+// MS ADDED 2026-10-06 (#553 COWORK #177, CODE-B #152). Morgan Stanley had
+// aged out of the dynamic universe -- the frozen FMP market state no longer
+// carried it -- so it had no pickers row and no SEC row, and A's bank work
+// needs it. A large-cap US bank belongs in the guaranteed slots; one more name
+// here displaces one dynamic name under the 700 cap, at no Redis cost.
 export const PRESET_UNIVERSE: string[] = [
   "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","BRK.B","AVGO","LLY",
   "JPM","V","UNH","XOM","PG","MA","COST","HD","MRK","ABBV",
@@ -61,4 +66,5 @@ export const PRESET_UNIVERSE: string[] = [
   "BKNG","AMGN","HON","ISRG","TJX","SYK","UNP","GILD","MDT","ADI",
   "CB","C","MO","GS","ETN","MRSH","TMUS","CI","SO","DUK",
   "ELV","SCHW","BLK","REGN","FISV","TT","PH","PYPL","CDNS","MAR",
+  "MS",
 ];
