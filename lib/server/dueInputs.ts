@@ -262,8 +262,9 @@ export async function getCalendarForwardSections(today: string): Promise<Calenda
     };
   }
 
-  // ONLY THE CUT IS READ, IN ONE MGET (#552 COWORK #181): 150 records, one
-  // command, where one GET each was 50. A failed read is not an empty market.
+  // ONLY THE CUT IS READ, IN ONE MGET (#552 COWORK #181): 200 records since
+  // #552 COWORK #186, one command, where one GET each was 50. A failed read is
+  // not an empty market.
   const read = await readReportDatesBulk(DUE_STRIP_CUT);
   if (!read.ok) {
     return {

@@ -93,7 +93,7 @@ const signed$ = (v: number) => `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`
 //   row figures       1   one MGET of the strip's 14 keys
 //   latest closes     1   the Tiingo last-bar blob (Data Cache, 24h)
 //   forward sections  1   the analysis-universe symbol key
-//                  + 1    the committed cut's 150 report-date records, ONE MGET (memoised 5 min)
+//                  + 1    the committed cut's 200 report-date records, ONE MGET (memoised 5 min)
 //   after(): gate     1   SET NX; the fill and the populate run on a win only
 //                    --
 //                    ~6   warm, plus the memoised two
