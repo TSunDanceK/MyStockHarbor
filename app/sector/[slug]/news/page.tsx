@@ -37,6 +37,7 @@ import { bucketFor, planCardArt, type CardArt } from "@/lib/server/news/art";
 import { withGenericFallback } from "@/lib/server/news/artTags";
 import { newsAttribution, hasPublisherExcerpt } from "@/lib/news-attribution";
 import NewsCardArt from "@/app/components/NewsCardArt";
+import SectorSpark from "@/app/sector/SectorSpark";
 
 export const runtime = "nodejs";
 
@@ -432,6 +433,9 @@ export default async function SectorNewsPage({ params }: Props) {
                   </div>
                 </div>
               </div>
+
+              {/* The 3-month line (#553 COWORK #167/#180): server-drawn path only, absent when not on file. */}
+              <SectorSpark v={performance?.spark} variant="strip" />
 
               <div style={coverageNoteStyle}>
                 Constituent-weighted across the {constituents.length} largest {sector.name.toLowerCase()}{" "}

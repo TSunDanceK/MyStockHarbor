@@ -14,6 +14,7 @@ import { lastCloseLabel } from "@/lib/server/marketData/eodLast";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { heatSizing, heatTiles, squarify } from "@/lib/sectorHeatmap";
 import SectorHeatMap from "./SectorHeatMap";
+import SectorSpark from "./SectorSpark";
 import SectorCompareTable, { type CompareRow } from "./SectorCompareTable";
 import { getSectorByLabel } from "@/lib/sectors";
 import { readSectorTones } from "@/lib/server/sectorTone";
@@ -58,15 +59,32 @@ function moveColour(value: number | null | undefined) {
   return "#f8fafc";
 }
 
-type CardFacts = { tone: StoredTone | null; breadth: ReturnType<typeof breadthLine>; movers: Mover[]; medianPe: number | null };
+type CardFacts = {
+  tone: StoredTone | null;
+  breadth: ReturnType<typeof breadthLine>;
+  movers: Mover[];
+  medianPe: number | null;
+  /** Why the median shows a dash, for the card's tap note (#553 COWORK #180); null when it shows. */
+  peWhy: string | null;
+};
+
+/** The reason behind a dashed median, in the rule's own terms (lib/peSectorLine.ts). */
+function medianPeWhy(m: { median: number; n: number; spreadPct: number } | undefined): string | null {
+  if (!m || !Number.isFinite(m.median) || m.median <= 0) return "Median P/E shows a dash here: no comparable trailing P/E is on file for this sector yet.";
+  if (m.n < PE_PEER_FLOOR) return `Median P/E shows a dash here: only ${m.n} companies have a comparable trailing P/E, under the ${PE_PEER_FLOOR} the median needs.`;
+  if (m.spreadPct > PE_MAX_SPREAD_PCT) return `Median P/E shows a dash here: across ${m.n} companies with a comparable trailing P/E, the median moved by more than ${PE_MAX_SPREAD_PCT}% between samples of them, so no single figure would be a fair summary.`;
+  return null;
+}
 
 /** The cards' tone and median P/E sources, read once; returns the per-card reader. */
 async function loadCardFacts(): Promise<(slug: string, row: SectorPerformanceRow | null) => CardFacts> {
   const [tones, peMedians] = await Promise.all([readSectorTones(), readPeSectorMedians().catch(() => null)]);
   const nowMs = Date.now();
   const medianBySlug = new Map<string, number>();
+  const rawBySlug = new Map<string, { median: number; n: number; spreadPct: number }>();
   for (const [label, m] of Object.entries(peMedians?.sectors ?? {})) {
     const slug = getSectorByLabel(label)?.slug;
+    if (slug) rawBySlug.set(slug, m);
     const median = usableMedian(m, PE_PEER_FLOOR, PE_MAX_SPREAD_PCT);
     if (slug && median != null) medianBySlug.set(slug, median);
   }
@@ -75,6 +93,7 @@ async function loadCardFacts(): Promise<(slug: string, row: SectorPerformanceRow
     breadth: breadthLine(row?.above200, row?.breadthN),
     movers: [...(row?.gainers ?? []), ...(row?.decliners ?? [])],
     medianPe: medianBySlug.get(slug) ?? null,
+    peWhy: medianBySlug.has(slug) || !peMedians ? null : medianPeWhy(rawBySlug.get(slug)),
   });
 }
 
@@ -112,10 +131,10 @@ export default async function SectorIndexPage() {
   });
   const sizing = heatSizing(heatRows);
   const tiles = heatTiles(heatRows, sizing);
-  // Laid out in the desktop box's own 2:1 shape, then turned into percents,
-  // so squarifying holds on screen (a square layout stretched to 2:1 makes
-  // the smallest tiles into thin strips).
-  const rects = squarify(tiles.map((t) => t.weight), 200, 100).map((r) => ({ x: r.x / 2, y: r.y, w: r.w / 2, h: r.h }));
+  // Laid out in the desktop box's own 4:1 shape (#553 COWORK #180: about half
+  // the old 2:1 height), then turned into percents, so squarifying holds on
+  // screen (a square layout stretched to 4:1 makes the smallest tiles strips).
+  const rects = squarify(tiles.map((t) => t.weight), 400, 100).map((r) => ({ x: r.x / 4, y: r.y, w: r.w / 4, h: r.h }));
   const firstRow = table.rows.find((row) => row.sessionDate) ?? null;
   const heatDayLabel =
     firstRow?.dayBasis === "last-close" ? lastCloseLabel(firstRow.sessionDate) ?? "Last close" : "Last close";
@@ -185,7 +204,9 @@ export default async function SectorIndexPage() {
 
             return (
               <article key={sector.slug} style={cardStyle} className="sectorCard" data-slug={sector.slug}>
-                <div style={{ minWidth: 0, flex: "1 1 240px" }}>
+                {/* The 3-month line, faint behind the card (#553 COWORK #167/#180): server-drawn path only. */}
+                <SectorSpark v={row?.spark} />
+                <div style={{ minWidth: 0, flex: "1 1 240px", position: "relative", zIndex: 1 }}>
                   <Link href={sectorNewsPath(sector.slug)} className="sectorCardTitle" style={cardTitleStyle}>{sector.name}</Link>
                   <div style={cardBlurbStyle}>{sector.blurb}</div>
                   <div style={cardMetaStyle}>
@@ -221,11 +242,13 @@ export default async function SectorIndexPage() {
                       News tone is the score on this sector&apos;s news page, shown only while it is under three hours old.
                       The 200-day line counts only companies with at least 200 stored daily bars. {MOVERS_RULE} Median
                       P/E is the median trailing P/E of the sector&apos;s companies, banks left out; it shows a dash where
-                      there are too few comparable companies or the median is not stable.
+                      there are too few comparable companies or the median is not stable. The faint line behind the card is
+                      the same weighted read over the last three months (63 sessions), from the nightly closes.
                     </p>
+                    {facts.peWhy ? <p className="sectorPeWhy">{facts.peWhy}</p> : null}
                   </details>
                 </div>
-                <div style={cardStatsStyle}>
+                <div style={{ ...cardStatsStyle, position: "relative", zIndex: 1 }}>
                   <div>
                     <div style={statLabelStyle}>
                       {row?.dayBasis === "last-close"
@@ -319,7 +342,7 @@ const heroStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.09)", b
 const tagStyle: CSSProperties = { display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))", color: "#dbeafe", fontSize: "var(--fs-label)", fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase" };
 const titleStyle: CSSProperties = { margin: "14px 0 0 0", fontSize: 40, lineHeight: 1.04, letterSpacing: "-0.05em", maxWidth: 760 };
 const leadStyle: CSSProperties = { margin: "14px 0 0 0", maxWidth: 820, fontSize: "var(--fs-read)", lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
-const cardStyle: CSSProperties = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, flexWrap: "wrap", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))", color: "#f1f5f9", textDecoration: "none" };
+const cardStyle: CSSProperties = { position: "relative", overflow: "hidden", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, flexWrap: "wrap", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))", color: "#f1f5f9", textDecoration: "none" };
 const cardTitleStyle: CSSProperties = { fontSize: 22, fontWeight: 900, letterSpacing: "-0.03em" };
 const cardBlurbStyle: CSSProperties = { marginTop: 8, maxWidth: 620, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)" };
 const cardMetaStyle: CSSProperties = { marginTop: 8, fontSize: "var(--fs-label)", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(147,197,253,0.7)" };

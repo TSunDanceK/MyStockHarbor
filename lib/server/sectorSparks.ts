@@ -9,7 +9,8 @@
 //
 // Commands: +1 SET a night (a complete night only), +1 GET per sector-table
 // build (cached 15 minutes, so at most ~96 a day).
-import type { Redis } from "@upstash/redis";
+import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { SECTORS } from "@/lib/sectors";
 import { getSectorIndex } from "./sectorUniverse";
 import { readSecTiingoCaps } from "./tiingoPool";
@@ -39,6 +40,22 @@ export async function buildSectorSparks(bars: Map<string, EodBar[]>, nowMs: numb
     if (line.to > asOf) asOf = line.to;
   }
   return Object.keys(sectors).length ? { asOf, at: nowMs, sectors } : null;
+}
+
+const readClient =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(PAGE_READ_CACHE)
+    : null;
+
+/** The stored lines, read with the sector table's own build (1 GET). Null on a miss or an error; never throws. */
+export async function readSectorSparks(): Promise<StoredSectorSparks | null> {
+  if (!readClient) return null;
+  try {
+    const got = await readClient.get<StoredSectorSparks>(SECTOR_SPARK_KEY);
+    return got && typeof got === "object" && got.sectors && typeof got.sectors === "object" ? got : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The job's step: build and store, never failing the job. Returns what it did, for the run summary. */

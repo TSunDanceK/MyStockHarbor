@@ -16,6 +16,7 @@ import type { PricePoolRow } from "./pricePool";
 import { eodBreadth, eodDayMove, lastCloseRows, type EodLast } from "./marketData/eodLast";
 import { sectorMovers, type Mover } from "../sectorCards";
 import { toDashed } from "../symbolSpellings.mjs";
+import { readSectorSparks } from "./sectorSparks";
 
 // ---------------------------------------------------------------------------
 // The four sector panels, all built from caches the site already fills.
@@ -156,6 +157,13 @@ export type SectorPerformanceRow = {
   breadthN?: number;
   gainers?: Mover[];
   decliners?: Mover[];
+  /**
+   * THE CARD'S 3-MONTH LINE (#553 COWORK #157/#167): % from the window's first
+   * session, one point per session (lib/sectorSeries.ts), written nightly by
+   * the EOD job (sectorSparks.ts) and read here with the table's build. Null
+   * when the night's lines are not on file; optional like the fields above.
+   */
+  spark?: number[] | null;
 };
 
 export type { DayBasis } from "./lastSession";
@@ -310,6 +318,8 @@ async function buildSectorPerformanceFromEod(eod: Record<string, EodLast>): Prom
   // blobs either way, so the wider list costs no read (tiingoPool.ts).
   const everySymbol = [...new Set(SECTORS.flatMap((sector) => index.bySlug[sector.slug] ?? []))];
   const caps = await readSecTiingoCaps(everySymbol, Date.now()).catch(() => new Map<string, number | null>());
+  // The cards' 3-month lines: ONE GET with the build (cached 15 minutes with the table).
+  const sparks = await readSectorSparks();
   const capTotals = (slug: string) => {
     const members = index.bySlug[slug] ?? [];
     let capSum = 0;
@@ -356,6 +366,7 @@ async function buildSectorPerformanceFromEod(eod: Record<string, EodLast>): Prom
       sessionDate: date,
       ...capTotals(sector.slug),
       ...cardFacts(sector.slug),
+      spark: sparks?.sectors[sector.slug]?.v ?? null,
     };
   });
 
