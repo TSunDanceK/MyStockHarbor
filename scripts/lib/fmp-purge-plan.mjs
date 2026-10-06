@@ -5,9 +5,15 @@
 // holds the rules and mutants.
 //
 // DEFAULT GROUPS hold FMP-derived data that nothing needs after the cancel:
-// either no live reader, or a reader that rebuilds from SEC / Tiingo when the
-// key is gone. Most would lapse on their own within 7 days; the ones with no
-// TTL would not.
+// either no live reader, or a reader that takes its figures from SEC / Tiingo
+// once the key is gone. Most would lapse on their own within 7 days; the ones
+// with no TTL would not.
+//
+// "Takes its figures from", not "rebuilds" (#553 CODE-B #149 note 2, 2026-10-06):
+// the fundamentals reader (fundamentalsCache.readCachedFundamentalsBulk) does
+// not rebuild these rows -- its Tiingo overlay only patches rows that exist,
+// so it returns nothing once they are gone. Nothing shown changes, because the
+// grid takes the same figures from the Tiingo/SEC pool rows and the SEC overlay.
 //
 // OPT-IN GROUPS are reported in the dry run but deleted only with their own
 // flag, because deleting them changes something a reader sees:
@@ -38,7 +44,9 @@ export const DEFAULT_GROUPS = [
   { id: "history-v7", owner: "B", prefix: "msh:history:v7:" },
   { id: "history-newest-bar", owner: "B", exact: "msh:history:newest-bar:v1", noTtl: true },
   { id: "quote", owner: "B", prefix: "msh:quote:v1:" },
-  { id: "benchmarks", owner: "B", prefix: "msh:benchmarks:", refills: true },
+  // NOT `refills` (#553 CODE-B #149 note 1): its only writer runs after a
+  // successful FMP fetch, and the Tiingo tiles are never written to Redis.
+  { id: "benchmarks", owner: "B", prefix: "msh:benchmarks:" },
   { id: "feed-ipo-fmp", owner: "B", exact: "msh:feed:ipo:all:fmp" },
   { id: "feed-index-additions", owner: "B", exact: "msh:feed:index:additions" },
   // A (CODE-A #147, #552)
