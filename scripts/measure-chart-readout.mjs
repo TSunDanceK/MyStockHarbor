@@ -51,6 +51,8 @@ const MODULES = {
   "@/lib/ta/fairValueGaps": cjs(read("lib/ta/fairValueGaps.ts"), "fairValueGaps.ts"),
   "@/lib/chartGaps": cjs(read("lib/chartGaps.ts"), "chartGaps.ts"),
   "@/lib/stretch": cjs(read("lib/stretch.ts"), "stretch.ts"),
+  "@/lib/chartCandles": cjs(read("lib/chartCandles.ts"), "chartCandles.ts"),
+  "@/lib/useChartMode": cjs(read("lib/useChartMode.ts"), "useChartMode.ts"),
   chart: cjs(read("app/stock/[symbol]/StockPriceChart.tsx"), "StockPriceChart.tsx"),
 };
 
@@ -71,7 +73,9 @@ function bars() {
   out.forEach((p, k) => { p.close = Number(((180 + 25 * Math.sin(k / 23) + 8 * Math.sin(k / 5) + k * 0.06) * scale * (k >= 400 ? 1.25 : 1)).toFixed(2)); });
   // Highs and lows (1.5% either side, so ordinary days overlap), and one jump of 25% forty sessions from the end: a bullish gap.
   out.forEach((p) => { p.high = Number((p.close * 1.015).toFixed(2)); p.low = Number((p.close * 0.985).toFixed(2)); });
-  const flat = out.map((p) => ({ date: p.date, close: 100, high: 101, low: 99 }));
+  // Opens for the candle view (#553 COWORK #165): the previous close, nudged, so days go both ways.
+  out.forEach((p, k) => { p.open = Number(((k ? out[k - 1].close : p.close) * (k % 3 ? 1.004 : 0.996)).toFixed(2)); p.high = Math.max(p.high, p.open); p.low = Math.min(p.low, p.open); });
+  const flat = out.map((p) => ({ date: p.date, open: 100, close: 100, high: 100, low: 100 }));
   const ma = (k, w) => (k + 1 >= w ? out.slice(k + 1 - w, k + 1).reduce((s, p) => s + p.close, 0) / w : null);
   const ma50 = out.map((_, k) => ma(k, 50));
   const ma200 = out.map((_, k) => ma(k, 200));
@@ -102,7 +106,9 @@ const React = require("react");
 const Chart = require("chart").default;
 const credit = React.createElement("a", { href: "#credit" }, "Market data from Tiingo.com");
 require("react-dom/client").createRoot(document.getElementById("root")).render(
-  location.search.includes("flat")
+  location.search.includes("partial")
+    ? React.createElement(Chart, { symbol: "PRT", data: SERIES.data.map((p, k, a) => (k === a.length - 1 ? { ...p, label: "today so far (IEX), 14:05 ET" } : p)), ma50: SERIES.ma50, ma200: SERIES.ma200, height: 360, credit, gapBars: SERIES.gapBars })
+    : location.search.includes("flat")
     ? React.createElement(Chart, { symbol: "FLT", data: SERIES.flat.slice(-240), ma50: SERIES.ma50, ma200: SERIES.ma200, height: 360, credit, gapBars: SERIES.flat })
     : React.createElement(Chart, { symbol: "ABC", data: SERIES.data, ma50: SERIES.ma50, ma200: SERIES.ma200, height: 360, credit, gapBars: SERIES.gapBars })
 );
@@ -275,6 +281,81 @@ for (const width of (process.env.WIDTHS || "320,360,375,390,414,430,1280").split
   const none = await fp.evaluate(() => ({ state: document.querySelector("[data-chart-gaps]").dataset.chartGaps, disabled: document.querySelector(".chart-gap-toggle").disabled, words: document.querySelector("[data-chart-gap-status]").textContent, scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth }));
   say(none.state === "none" && none.disabled && none.words === "No unfilled gaps in the last 12 months" && none.scrollW <= none.clientW, "gaps: with none, the toggle is disabled with the reason", JSON.stringify(none));
   await fp.close();
+
+  // ── LINE | CANDLES (#553 COWORK #165) ──
+  const c0 = await p.evaluate(() => ({ line: !!document.querySelector("[data-chart-line]"), pressed: [...document.querySelectorAll(".chart-mode-btn")].map((b) => b.getAttribute("aria-pressed")).join() }));
+  say(c0.line && c0.pressed === "true,false", "Line is the default, and the switch says so", JSON.stringify(c0));
+  await p.click(".chart-mode-btn:nth-child(2)");
+  await p.waitForSelector("[data-chart-candles]");
+  const cs = await p.evaluate(() => {
+    const svg = document.querySelector("svg[tabindex]");
+    const k = svg.clientWidth / 920;
+    const bodies = [...document.querySelectorAll("[data-candle] rect")];
+    const widths = bodies.map((r) => r.getBoundingClientRect().width);
+    const ups = document.querySelectorAll('[data-candle="up"]').length, downs = document.querySelectorAll('[data-candle="down"]').length;
+    const upFill = document.querySelector('[data-candle="up"] rect')?.getAttribute("fill"), downFill = document.querySelector('[data-candle="down"] rect')?.getAttribute("fill");
+    return { n: bodies.length, minW: Math.min(...widths), ups, downs, upFill, downFill, fit: document.querySelector("[data-chart-fit]")?.textContent ?? null,
+      overlays: document.querySelectorAll('svg path[stroke-dasharray]').length, dot: !!svg.querySelector("circle"), line: !!document.querySelector("[data-chart-line]"),
+      pressed: [...document.querySelectorAll(".chart-mode-btn")].map((b) => b.getAttribute("aria-pressed")).join(), stored: localStorage.getItem("msh:stock-chart-mode"),
+      scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth, k };
+  });
+  say(cs.pressed === "false,true" && !cs.line && cs.n >= 2, "candles: one candle per shown session, the line gone", `${cs.n} candles`);
+  say(cs.ups > 0 && cs.downs > 0 && cs.upFill === "#22c55e" && cs.downFill === "#ef4444", "candles: green up days, red down days", `${cs.ups} up, ${cs.downs} down`);
+  say(cs.minW >= 3 * 0.7 - 0.01 || cs.n === 240, "candles: each body at least ~3 px of slot (70% body)", `min ${cs.minW.toFixed(2)} px`);
+  say(phone ? cs.n < 240 && cs.fit === `Last ${cs.n} sessions shown in candle view` : cs.n === 240 && cs.fit === null, phone ? "candles on a phone: only the latest that fit, said in the footer" : "candles on desktop: all 240 sessions", cs.fit ?? "no fit line");
+  say(cs.overlays === 2 && cs.dot, "candles: MA50, MA200 and the last-price dot stay");
+  say(cs.scrollW <= cs.clientW, "candles: no sideways scroll", `${cs.scrollW} vs ${cs.clientW}`);
+  say(cs.stored === "candles", "candles: the choice is remembered in this browser");
+  // The readout's OHLC line on a picked day, and the strip's height holding while scrubbing.
+  const box = await p.evaluate(() => { const r = document.querySelector("svg[tabindex]").getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height, strip: document.querySelector("[data-chart-readout]").getBoundingClientRect().height }; });
+  if (phone) await p.evaluate(([x, y]) => { const svg = document.querySelector("svg[tabindex]"); for (const type of ["pointerdown", "pointermove"]) svg.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: "touch", pointerId: 7, isPrimary: true, clientX: x, clientY: y })); }, [box.l + box.w * 0.5, box.t + box.h * 0.5]);
+  else await p.mouse.move(box.l + box.w * 0.5, box.t + box.h * 0.5);
+  const ohlc = await p.evaluate(() => ({ text: document.querySelector("[data-chart-ohlc]")?.textContent ?? null, strip: document.querySelector("[data-chart-readout]").getBoundingClientRect().height, cut: [...document.querySelectorAll("[data-chart-readout] > span")].some((s) => s.scrollWidth > s.clientWidth + 1) }));
+  say(/^O (\d+\.\d{2}|—) · H \d+\.\d{2} · L \d+\.\d{2} · C \d+\.\d{2}$/.test(ohlc.text ?? "") && Math.abs(ohlc.strip - box.strip) < 0.5 && !ohlc.cut, "candles: the readout shows O/H/L/C, one height while scrubbing, nothing cut", `${ohlc.text} · ${box.strip}→${ohlc.strip}`);
+  if (width === 390 || width === 1280) await p.screenshot({ path: path.join(SHOTS, `chart-candles-${width}.png`), fullPage: true });
+  if (phone) await p.evaluate(() => document.querySelector("svg[tabindex]").dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch", pointerId: 7 })));
+  else await p.mouse.move(2, 2);
+  // Gaps still work in candle mode (they were left on above).
+  const gc = await p.evaluate(() => ({ zones: document.querySelectorAll("[data-chart-gap]").length, pressed: document.querySelector(".chart-gap-toggle").getAttribute("aria-pressed") }));
+  say(gc.pressed === "true" && gc.zones >= 1, "candles: Show gaps works the same", `${gc.zones} zone(s)`);
+  await p.click(".chart-gap-toggle");
+  say((await p.evaluate(() => document.querySelectorAll("[data-chart-gap]").length)) === 0, "candles: Hide gaps hides them");
+  // The stored choice restored on the next visit; then back to Line for the rest.
+  // (A second page in the same browser, so this page's no-request count stays clean.)
+  const rp = await ctx.newPage();
+  await rp.goto(`file://${file}`);
+  await rp.waitForSelector("[data-chart-candles]", { timeout: 3000 }).catch(() => {});
+  say(await rp.evaluate(() => !!document.querySelector("[data-chart-candles]")), "candles: restored from this browser's choice on the next visit");
+  await rp.close();
+  await p.click(".chart-mode-btn:nth-child(1)");
+  // A flat day still draws a body; today's partial bar is hollow.
+  for (const [q, label] of [["flat", "a flat day (O = H = L = C) still draws a visible body"], ["partial", "today's partial bar is hollow and the readout says today so far"]]) {
+    const cp = await ctx.newPage();
+    await cp.goto(`file://${file}?${q}`);
+    await cp.waitForSelector(".chart-mode-btn");
+    await cp.click(".chart-mode-btn:nth-child(2)");
+    await cp.waitForSelector("[data-chart-candles]");
+    const r = await cp.evaluate(() => {
+      const last = [...document.querySelectorAll("[data-candle]")].pop();
+      const body = last.querySelector("rect");
+      return { h: body.getBoundingClientRect().height, fill: body.getAttribute("fill"), partial: last.getAttribute("data-candle-partial"), readout: document.querySelector("[data-chart-readout]").textContent };
+    });
+    say(q === "flat" ? r.h >= 1 : r.partial === "1" && r.fill === "none" && /today so far/.test(r.readout), label, JSON.stringify({ h: r.h.toFixed(2), fill: r.fill }));
+    await cp.evaluate(() => localStorage.setItem("msh:stock-chart-mode", "line"));
+    await cp.close();
+  }
+  // Storage that throws: the chart opens on Line and the switch still works.
+  const tp = await ctx.newPage();
+  await tp.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } }); });
+  const tErrors = [];
+  tp.on("pageerror", (e) => tErrors.push(String(e)));
+  await tp.goto(`file://${file}`);
+  await tp.waitForSelector(".chart-mode-btn");
+  const t0 = await tp.evaluate(() => !!document.querySelector("[data-chart-line]"));
+  await tp.click(".chart-mode-btn:nth-child(2)");
+  const t1 = await tp.evaluate(() => !!document.querySelector("[data-chart-candles]"));
+  say(t0 && t1 && tErrors.length === 0, "storage that throws: opens on Line, the switch still works, no error", tErrors[0] ?? "");
+  await tp.close();
 
   const fin = await state();
   say(fin.requests === 0 && netAfterLoad === 0, "no network request on hover, drag or keys", `fetch ${fin.requests}, requests ${netAfterLoad}`);

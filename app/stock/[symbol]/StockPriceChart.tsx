@@ -1,14 +1,21 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { utcDay } from "@/lib/utcDate";
 import { chartReadout, indexAtFraction, shownIndex, stepIndex } from "@/lib/chartReadout";
 import { chartGapZones, inGapWords, zoneAt, type ChartGapZone, type GapInputBar } from "@/lib/chartGaps";
 import { STRETCH_NOTE, stretchHistory, stretchLine } from "@/lib/stretch";
+import { candleFit, candleFitWords, candleOf, candleWords } from "@/lib/chartCandles";
+import { useChartMode, usePlotWidth } from "@/lib/useChartMode";
 
 type Point = {
   date: string;
   close: number;
+  // The stored daily bar's open, high and low, for the candle view (#553
+  // COWORK #165). Already on the bars the page holds: no fetch.
+  open?: number;
+  high?: number;
+  low?: number;
   // Tiingo's newest point when it is today's partial bar (step 3, #553 COWORK
   // #57 §2): "today so far (IEX), hh:mm ET".
   label?: string;
@@ -36,6 +43,8 @@ export const GAP_NOTE = "A price gap left when the market moved too fast for can
 export const SHORT_HISTORY_NOTE = "Not enough price history stored yet";
 
 const NO_ZONES: ChartGapZone[] = [];
+// The plot's share of the viewBox width (920 less the 38 + 60 px gutters).
+const PLOT_FRACTION = (920 - 38 - 60) / 920;
 const UP = "#22c55e";
 const DOWN = "#ef4444";
 
@@ -100,8 +109,16 @@ export default function StockPriceChart({
   const [stretchNote, setStretchNote] = useState(false);
   // The pointer's height in the chart, as a price, to say when it is inside a zone.
   const [hoverValue, setHoverValue] = useState<number | null>(null);
+  // LINE | CANDLES (#553 COWORK #165): Line by default and on the server; the
+  // browser's remembered choice after mount (useChartMode). Only the stock
+  // page's chart (the one handed its bars) offers it.
+  const { mode, chooseMode } = useChartMode(Boolean(gapBars));
+  const candles = mode === "candles" && Boolean(gapBars);
+  // The plot's on-screen width, for the >= 3 px candle rule (phones show fewer days).
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const plotPx = usePlotWidth(svgRef, PLOT_FRACTION);
 
-  const series = useMemo(() => {
+  const fullSeries = useMemo(() => {
     const n = data.length;
     const safe50 = ma50.length === n ? ma50 : Array(n).fill(null);
     const safe200 = ma200.length === n ? ma200 : Array(n).fill(null);
@@ -112,6 +129,11 @@ export default function StockPriceChart({
       ma200: safe200[i] as number | null,
     }));
   }, [data, ma50, ma200]);
+
+  // In candle view, only the latest sessions that fit at >= 3 px each.
+  const shownCount = candles ? candleFit(plotPx, fullSeries.length) : fullSeries.length;
+  const series = useMemo(() => (shownCount < fullSeries.length ? fullSeries.slice(-shownCount) : fullSeries), [fullSeries, shownCount]);
+  const fitWords = candles ? candleFitWords(series.length, fullSeries.length) : null;
 
   const hasData = series.length >= 2;
 
@@ -134,8 +156,14 @@ export default function StockPriceChart({
     if (!hasData) return { minV: 0, maxV: 1, rangeV: 1 };
 
     const vals: number[] = [];
-    for (const p of series) {
+    for (let i = 0; i < series.length; i++) {
+      const p = series[i];
       vals.push(p.close);
+      // A candle shown is a candle in full: its wick widens the scale.
+      if (candles) {
+        const c = candleOf(series, i);
+        vals.push(c.high, c.low);
+      }
       if (typeof p.ma50 === "number") vals.push(p.ma50);
       if (typeof p.ma200 === "number") vals.push(p.ma200);
     }
@@ -147,7 +175,7 @@ export default function StockPriceChart({
     const range = Math.max(1e-9, max - min);
 
     return { minV: min, maxV: max, rangeV: range };
-  }, [hasData, series, zones]);
+  }, [hasData, series, zones, candles]);
 
   const y = useMemo(() => {
     const innerH = height - padT - padB;
@@ -256,6 +284,12 @@ export default function StockPriceChart({
         .chart-gap-toggle, .chart-gap-why { min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
         .chart-gap-toggle[aria-pressed="true"] { border-color: rgba(34,197,94,0.55); background: rgba(34,197,94,0.12); }
         .chart-gap-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+        .chart-mode { display: inline-flex; border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 2px; background: rgba(255,255,255,0.04); }
+        .chart-mode-btn { min-height: 28px; padding: 2px 12px; border: 0; border-radius: 999px; background: none; color: inherit; font: inherit; font-weight: 700; cursor: pointer; opacity: 0.75; }
+        .chart-mode-btn[aria-pressed="true"] { background: rgba(56,189,248,0.16); box-shadow: inset 0 0 0 1px rgba(56,189,248,0.5); opacity: 1; }
+        .chart-mode-btn:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+        .chart-readout.candles { grid-auto-rows: 20px; height: 80px; }
+        @container (min-width: 640px) { .chart-readout.candles { flex-wrap: wrap; height: 40px; } }
         /* The two tap questions and the status line are read, so they sit at
            --fs-read, not the row's --fs-label (#553 COWORK #148: C's
            measure-reading-size found them at 13px). */
@@ -282,6 +316,14 @@ export default function StockPriceChart({
       ) : null}
       {stretchNote ? <p id={`${symbol}-stretch-note`} className="chart-gap-note">{STRETCH_NOTE}</p> : null}
       <div className="chart-gap-row" data-chart-gaps={gaps.zones.length ? (showGaps ? "on" : "off") : "none"}>
+        {/* LINE | CANDLES (#553 COWORK #165): a real button group, Line by default. */}
+        <span className="chart-mode" role="group" aria-label="Chart style">
+          {(["line", "candles"] as const).map((m) => (
+            <button key={m} type="button" className="chart-mode-btn" aria-pressed={mode === m} onClick={() => chooseMode(m)}>
+              {m === "line" ? "Line" : "Candles"}
+            </button>
+          ))}
+        </span>
         <button
           type="button"
           className="chart-gap-toggle"
@@ -304,11 +346,12 @@ export default function StockPriceChart({
       </>) : null}
       {readout ? (
         <div className="chart-readout-wrap">
-          <div className="chart-readout" data-chart-readout={readout.isLatest ? "latest" : "picked"}>
+          <div className={candles ? "chart-readout candles" : "chart-readout"} data-chart-readout={readout.isLatest ? "latest" : "picked"}>
             <span>
               <span style={{ opacity: 0.74 }}>{readout.heading} · {readout.date}</span>
               <span style={{ marginLeft: 10, fontWeight: 800 }}>{readout.close}</span>
             </span>
+            {candles && at >= 0 ? <span data-chart-ohlc>{candleWords(candleOf(series, at))}</span> : null}
             <span
               data-chart-change={readout.change?.dir ?? "none"}
               style={{ fontWeight: 700, color: readout.change?.dir === "up" ? UP : readout.change?.dir === "down" ? DOWN : undefined, opacity: readout.change ? 1 : 0.6 }}
@@ -325,6 +368,7 @@ export default function StockPriceChart({
         {spoken}
       </span>
       <svg
+        ref={svgRef}
         width="100%"
         viewBox={`0 0 ${width} ${height}`}
         tabIndex={0}
@@ -425,7 +469,40 @@ export default function StockPriceChart({
           />
         ))}
 
-        <path d={closePath} fill="none" stroke="currentColor" strokeWidth="2.4" opacity="0.95" />
+        {candles ? (
+          // ONE CANDLE PER STORED DAILY BAR (#553 COWORK #165): green when the
+          // close is at or above the open, red otherwise; a 1 px wick; the body
+          // width from the spacing; a flat day still a visible body; today's
+          // partial session hollow, so it never reads as a finished day.
+          <g data-chart-candles={series.length}>
+            {series.map((p, i) => {
+              const c = candleOf(series, i);
+              const step = (width - padL - padR) / Math.max(1, series.length - 1);
+              const bodyW = Math.max(1, Math.min(14, step * 0.7));
+              const pxPerUnit = plotPx > 0 ? (width - padL - padR) / plotPx : 1;
+              const top = y(Math.max(c.open, c.close));
+              const bodyH = Math.max(1.5 * pxPerUnit, Math.abs(y(c.open) - y(c.close)));
+              const colour = c.up ? UP : DOWN;
+              return (
+                <g key={p.date} data-candle={c.up ? "up" : "down"} data-candle-partial={c.partial ? "1" : undefined}>
+                  <line x1={x(i)} x2={x(i)} y1={y(c.high)} y2={y(c.low)} stroke={colour} strokeWidth={pxPerUnit} vectorEffect="non-scaling-stroke" opacity={c.partial ? 0.7 : 1} />
+                  <rect
+                    x={x(i) - bodyW / 2}
+                    y={top - (bodyH - Math.abs(y(c.open) - y(c.close))) / 2}
+                    width={bodyW}
+                    height={bodyH}
+                    fill={c.partial ? "none" : colour}
+                    stroke={colour}
+                    strokeWidth={c.partial ? 1.2 : 0}
+                    opacity={c.partial ? 0.85 : 1}
+                  />
+                </g>
+              );
+            })}
+          </g>
+        ) : (
+          <path d={closePath} fill="none" stroke="currentColor" strokeWidth="2.4" opacity="0.95" data-chart-line />
+        )}
 
         {ma50Path ? (
           <path
@@ -483,6 +560,7 @@ export default function StockPriceChart({
               server and browser render the same text). */}
           {symbol} • {utcDay(series[0].date) ?? series[0].date} → {utcDay(series[series.length - 1].date) ?? series[series.length - 1].date}
           {series[series.length - 1].label ? ` (${series[series.length - 1].label})` : null}
+          {fitWords ? <> · <span data-chart-fit>{fitWords}</span></> : null}
           {credit ? <> · {credit}</> : null}
         </div>
 
