@@ -8,13 +8,17 @@ import {
   coldStartFrom,
   ingestIpoWindow,
 } from "@/lib/server/ipoIngest";
+import { Redis } from "@upstash/redis";
 import { invalidateFeed } from "@/lib/server/feedCache";
-import { ipoFeedKey } from "@/lib/server/ipoCalendar";
+import { getIpoTables, ipoFeedKey, ipoProvider } from "@/lib/server/ipoCalendar";
 import {
   IPO_REFRESH_COMMANDS_PER_RUN,
+  readStoredIpoFilings,
   readStoredIpoFilingsMeta,
   writeStoredIpoFilings,
 } from "@/lib/server/ipoSecStore";
+import { refreshIpoProfiles, type IpoProfilesStepResult } from "@/lib/server/ipoProfiles";
+import { JOB_REDIS_OPTS } from "@/lib/server/redisCacheMode";
 import { IPO_WINDOW_DAYS, windowStartFor } from "@/lib/server/ipoRecordMerge";
 import { addDays, latestProcessableDate } from "@/lib/server/secDailyIndex";
 
@@ -74,6 +78,52 @@ async function authorize(req: NextRequest): Promise<Response | null> {
   const auth = req.headers.get("authorization") || "";
   if (!secret || auth === `Bearer ${secret}`) return null;
   return guardDebugRequest(req);
+}
+
+/** The profile step's own deadline: inside maxDuration, after the walk's 240 s budget. */
+const PROFILE_DEADLINE_MS = 280_000;
+
+/**
+ * THE /upcoming-ipos PROFILES (#553 COWORK #159 PR 1): for every filer the page
+ * shows, refresh its SEC profile when its record has a newer filing than the
+ * stored profile (lib/server/ipoProfiles.ts). SEC provider only, never on a dry
+ * run, never failing the job. Commands: the page feed's read (1 GET, plus its
+ * SET on a miss), the stored filings (1 GET), the profiles (1 GET, +1 SET when
+ * anything changed).
+ */
+async function profileStep(started: number, dryRun: boolean): Promise<IpoProfilesStepResult | { skipped: string } | { error: string }> {
+  if (dryRun) return { skipped: "dry run" };
+  if (ipoProvider() !== "sec") return { skipped: "IPO_PROVIDER is not sec" };
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return { skipped: "no Redis" };
+  try {
+    const [tables, records] = await Promise.all([getIpoTables(), readStoredIpoFilings()]);
+    const latestBy = new Map((records ?? []).map((rec) => [rec.cik, rec.filings.reduce((m, f) => (f.date > m ? f.date : m), "")]));
+    const ciks = [...new Set([...tables.upcoming, ...tables.recent].map((row) => row.cik))];
+    const r = Redis.fromEnv(JOB_REDIS_OPTS);
+    return await refreshIpoProfiles(
+      r,
+      ciks.map((cik) => ({ cik, latestFilingDate: latestBy.get(cik) ?? "" })),
+      { ua: SEC_UA, deadlineMs: started + PROFILE_DEADLINE_MS }
+    );
+  } catch (err) {
+    return { error: err instanceof Error ? err.message.slice(0, 160) : "unknown" };
+  }
+}
+
+/** The step's result as flat summary fields (recordJobRun takes scalars only). */
+function profileFields(res: Awaited<ReturnType<typeof profileStep>>): Record<string, string | number | boolean | null> {
+  if ("skipped" in res) return { profilesSkipped: res.skipped };
+  if ("error" in res) return { profilesError: res.error };
+  return {
+    profileTargets: res.targets,
+    profilesRefreshed: res.refreshed,
+    profilesFailed: res.failed,
+    profilesDeferred: res.deferred,
+    profileFeeExhibits: res.feeFound,
+    profilesThrottled: res.throttled,
+    profileSecRequests: res.secRequests,
+    profileRedisCommands: res.redisCommands,
+  };
 }
 
 async function handleGET(req: NextRequest) {
@@ -141,6 +191,7 @@ async function handleGET(req: NextRequest) {
       latestProcessable: latest,
       storedRecords: meta?.count ?? 0,
       redisCommands: 1,
+      ...profileFields(await profileStep(started, dryRun)),
       ms: Date.now() - started,
     };
     await recordJobRun("ipo-refresh", true, summary);
@@ -293,6 +344,7 @@ async function handleGET(req: NextRequest) {
     // about not adding a second STORE key for the watermark, not about never
     // spending a command on correctness.
     redisCommands: dryRun ? 1 : 1 + IPO_REFRESH_COMMANDS_PER_RUN + (feedInvalidated ? 1 : 0),
+    ...profileFields(!dryRun && write.ok ? await profileStep(started, dryRun) : { skipped: dryRun ? "dry run" : "the write did not complete" }),
     dryRun,
     ms: Date.now() - started,
   };

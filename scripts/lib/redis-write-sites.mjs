@@ -59,6 +59,10 @@ export const WRITE_SITES = [
   // and off hours only when the key is absent or older than 6 h (#553 COWORK #120).
   // Market Mood (#563 COWORK #96): one ~33 KB series of 0–100 scores, 1 SET a complete night.
   { file: "lib/server/marketMoodWrite.ts", key: "TIINGO_MOOD_KEY", cls: "row" },
+  // The /sector cards' 3-month lines: 11 x 64 percentages (~6 KB), once a complete night (#553 COWORK #167).
+  { file: "lib/server/sectorSparks.ts", key: "SECTOR_SPARK_KEY", cls: "row" },
+  // The /upcoming-ipos SEC profiles, one SET of the whole map only when something changed (#553 COWORK #159).
+  { file: "lib/server/ipoProfiles.ts", key: "IPO_PROFILES_KEY", cls: "listed", candidate: "IPO_PROFILES_KEY" },
   { file: "lib/server/tiingoUniverse.ts", key: "TIINGO_UNIVERSE_KEY", cls: "small" },
   // The stock-page cold fill (#553 COWORK #121): one symbol's history per SET (the nightly job's row shape), and its per-symbol lock.
   { file: "lib/server/marketData/coldFill.ts", key: "tiingoEodKey(sym", cls: "row" },
