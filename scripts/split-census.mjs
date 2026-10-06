@@ -37,7 +37,7 @@ globalThis.fetch = async (input, init = {}) => {
 };
 
 const { cell } = await import("../lib/server/secFactCodec.ts");
-const { splitRatioOf, SHARE_SCALE_MAX_STEP, SHARE_PROVEN_SPLIT_YEARS } = await import("../lib/server/secShareHistory.ts");
+const { splitRatioOf, SHARE_SCALE_MAX_STEP, SHARE_PROVEN_SPLIT_YEARS, SHARE_PROVEN_SPLIT_TOLERANCE } = await import("../lib/server/secShareHistory.ts");
 const plusYears = (iso, n) => `${Number(iso.slice(0, 4)) + n}${iso.slice(4)}`;
 const nearStep = (e, at) => e >= plusYears(at, -SHARE_PROVEN_SPLIT_YEARS) && e <= plusYears(at, SHARE_PROVEN_SPLIT_YEARS);
 const cls = { proven: new Set(), unproven: new Set(), unit: new Set(), other: new Set() };
@@ -91,9 +91,13 @@ for (let i = 0; i < keys.length; i += 20) {
         const shareJump = sa > 0 && sb > 0 && ratio(sa, sb) >= JUMP;
         if (shareJump) {
           hits.share.push(`${basis} ${a.e}→${b.e} ×${(sb / sa).toFixed(2)}`);
-          const r = sb / sa, k = splitRatioOf(r);
-          const kind = ratio(sa, sb) >= SHARE_SCALE_MAX_STEP ? "unit" : k === null ? "other"
-            : proven.some((x) => Math.abs(x.k / k - 1) < 0.1 && nearStep(x.e, b.e)) ? "proven" : "unproven";
+          // AS correctShareSeries MATCHES IT: a restated ratio proves a step
+          // within SHARE_PROVEN_SPLIT_TOLERANCE, either direction (BKNG's newest
+          // unrestated quarter steps DOWN by the ratio its restatements record).
+          const r = sb / sa;
+          const isProven = proven.some((x) => nearStep(x.e, b.e) &&
+            (Math.abs(r / x.k - 1) < SHARE_PROVEN_SPLIT_TOLERANCE || Math.abs(r * x.k - 1) < SHARE_PROVEN_SPLIT_TOLERANCE));
+          const kind = ratio(sa, sb) >= SHARE_SCALE_MAX_STEP ? "unit" : isProven ? "proven" : splitRatioOf(r) !== null ? "unproven" : "other";
           cls[kind].add(sym);
         }
         for (const [kind, f] of [["eps", eps], ["dps", (p) => val(p, "dividendsDeclaredPerShare")]]) {
@@ -115,7 +119,7 @@ for (let i = 0; i < keys.length; i += 20) {
     if (hits.epsBasis.length) out.epsBasis.push([sym, hits.epsBasis]);
     if (NAMED.includes(sym)) {
       const row = (p) => `${p.e} ${p.fp ?? ""} eps ${eps(p) ?? "—"} sh ${shares(p) ? (shares(p) / 1e6).toFixed(1) + "M" : "—"} ni ${val(p, "netIncome") === null ? "—" : "yes"}`;
-      detail.set(sym, { q: [...set.quarters].sort((a, b) => (a.e < b.e ? -1 : 1)).map(row), y: [...(set.years ?? [])].sort((a, b) => (a.e < b.e ? -1 : 1)).map(row) });
+      detail.set(sym, { asr: JSON.stringify(set.asr ?? null), sv: set.sv ?? 1, q: [...set.quarters].sort((a, b) => (a.e < b.e ? -1 : 1)).map(row), y: [...(set.years ?? [])].sort((a, b) => (a.e < b.e ? -1 : 1)).map(row) });
     }
   });
 }
@@ -143,6 +147,7 @@ console.log("\n5. NAMED FILERS (stored series, oldest first)");
 for (const s of NAMED) {
   const d = detail.get(s);
   if (!d) { console.log(`   ${s}: no stored set`); continue; }
+  console.log(`   ${s} asr ${d.asr} · share-series version ${d.sv}`);
   console.log(`   ${s} quarters:`); for (const r of d.q) console.log(`      ${r}`);
   console.log(`   ${s} years:`); for (const r of d.y) console.log(`      ${r}`);
 }
