@@ -167,7 +167,12 @@ for (const sym of list) {
     continue;
   }
   const set = await redis.get(`${FACTS_PREFIX}:${sym}`);
-  if (!set?.quarters) { console.log(`   ${sym}: no fact set, skipped`); continue; }
+  if (!set?.quarters) {
+    // WHY THERE IS NO RECORD: report dates are built beside a fact set, so no
+    // set means nothing was ever paired. Say whether the manifest lists it.
+    console.log(`   ${sym}: no fact set (manifest entry: ${manifest?.symbols?.[sym] ? "yes" : "no"}), skipped; a record needs a fact set beside it`);
+    continue;
+  }
   let merged = subs, read = 0, found = resultsSince(subs.filings.recent);
   for (const p of inRange) {
     if (found >= TARGET_EVENTS) break;
