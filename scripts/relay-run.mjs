@@ -1391,6 +1391,12 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  "write-due-strip-rank-200": {
+    script: "scripts/due-strip-rank.mjs",
+    args: () => [],
+    writes: true,
+    env: { CUT: "200" },
+  },
   "write-due-strip-rank-pickers": {
     script: "scripts/due-strip-rank.mjs",
     args: () => [],
