@@ -1383,6 +1383,8 @@ const TASKS = {
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
   // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
   "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
+  // READS ONLY (Relay B, #553 COWORK #173/#177): the live Oversold/Overbought counts after #796, and MS in the universe.
+  "write-pickers-live-counts": { script: "scripts/pickers-live-counts.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
