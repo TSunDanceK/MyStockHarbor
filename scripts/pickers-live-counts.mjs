@@ -42,6 +42,21 @@ console.log(`build ${new Date(manifest.cachedAt).toISOString()}: ${records.lengt
 console.log(`  oversold:   ${records.filter((r) => r?.oversold === true).length}`);
 console.log(`  overbought: ${records.filter((r) => r?.overbought === true).length}`);
 
+// The Trend Helper line (#553 COWORK #179): how many items of each trend-flip
+// section carry a trendSeries, and how many of those series have points.
+// Counts only; never a value.
+for (const sec of manifest.head?.sections ?? []) {
+  if (!/trend flip/i.test(String(sec.title))) continue;
+  const items = Array.isArray(sec.items) ? sec.items : [];
+  const withSeries = items.filter((i) => i && i.trendSeries && Array.isArray(i.trendSeries.dates));
+  const nonEmpty = withSeries.filter((i) => i.trendSeries.dates.length > 0 && Array.isArray(i.trendSeries.line) && i.trendSeries.line.length === i.trendSeries.dates.length);
+  const recBySym = new Map(records.map((r) => [r.symbol, r]));
+  // The page joins series to the RECORD's chartPoints by date (attachTrendHelper): count rows whose join finds a date.
+  const joinable = nonEmpty.filter((i) => { const pts = recBySym.get(i.symbol)?.chartPoints; if (!Array.isArray(pts)) return false; const ds = new Set(pts.map((p) => String(p?.date ?? "").slice(0, 10))); return i.trendSeries.dates.some((d) => ds.has(d)); });
+  const noRecPts = nonEmpty.filter((i) => !Array.isArray(recBySym.get(i.symbol)?.chartPoints) || !recBySym.get(i.symbol).chartPoints.length).length;
+  console.log(`  ${sec.title}: items ${items.length}, with trendSeries ${withSeries.length}, non-empty ${nonEmpty.length}, joinable to the record's chartPoints ${joinable.length}, record has no chartPoints ${noRecPts}`);
+}
+
 const universe = parse(await redis.get("msh:pickers:v10:symbols"));
 const list = Array.isArray(universe) ? universe : Array.isArray(universe?.symbols) ? universe.symbols : [];
 console.log(`\nuniverse ${list.length}: ${["MS", "MRSH", "MMC"].map((s) => `${s} ${list.includes(s) ? "in" : "not in"}`).join(", ")}`);
