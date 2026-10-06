@@ -20,7 +20,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
-import LatestEarningsCard from "@/app/components/LatestEarningsCard";
+import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
+import { epsVsYearAgo, marginVsYearAgo, VS_TINT, type Vs } from "@/lib/snapshotVsYearAgo";
 import InsightChart from "./InsightChart";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import type { InsightPageData, MoreCard } from "@/lib/server/insightPage";
@@ -29,7 +30,8 @@ import { dayWords, outcomeWords, pctWords, ptsWords } from "@/lib/insightView";
 export type InsightHtml = { whatHappened: string | null; why: string | null; originalRest: string | null };
 
 const money = (v: number) => `$${v >= 1000 ? v.toFixed(0) : v.toFixed(2)}`;
-const range = (z: { lo: number; hi: number }) => (z.hi - z.lo < 0.005 ? money(z.lo) : `${money(z.lo)}–${money(z.hi).slice(1)}`);
+const bnWords = (v: number) => `$${(v / 1e9).toFixed(1)}bn`;
+const newsDay = (d: string) => { const t = Date.parse(d); return Number.isFinite(t) ? dayWords(new Date(t).toISOString().slice(0, 10)) : d; };
 const tone = (v: number | null | undefined) => (v === null || v === undefined || Math.abs(v) < 0.05 ? "flat" : v > 0 ? "up" : "down");
 
 export const INSIGHT_FINE_PRINT =
@@ -48,7 +50,7 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
         <header className="inHero" data-insight-hero="">
           {d.art.kind === "library" ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img className="inHeroImg" src={d.art.art.src} srcSet={d.art.art.srcSet} sizes="(max-width: 1100px) 100vw, 1100px" width={d.art.art.width} height={d.art.art.height} alt="" loading="eager" decoding="async" />
+            <img className="inHeroImg" src={d.art.art.src} srcSet={d.art.art.srcSet} sizes="(max-width: 1100px) 100vw, 1100px" width={d.art.art.width} height={d.art.art.height} alt={`Illustration for ${d.company} (${sym}): ${n.title}`} loading="eager" decoding="async" />
           ) : (
             <div className="inHeroBrand" aria-hidden="true"><span>{sym}</span></div>
           )}
@@ -76,7 +78,7 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
         {/* 2. SINCE THIS WAS PUBLISHED */}
         {d.since ? (
           <section className="inSince" data-insight-since="" aria-label="Since this was published">
-            <h2 className="inEyebrow">Since this was published</h2>
+            <h2 className="inCardTitle inSinceTitle">{d.company} stock since this was published</h2>
             <div className="inStats">
               <Stat label="Move since" value={pctWords(d.since.movePct)} tone={tone(d.since.movePct)} sub={`${money(d.since.thenClose)} → ${money(d.since.nowClose)}`} />
               {d.since.level ? (() => {
@@ -102,7 +104,7 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
             </Card>
 
             {d.chart ? (
-              <Card eyebrow="Did the level hold" title="Drag from the publish date to today">
+              <Card eyebrow="Did the level hold" title={d.chart.level ? `Did ${sym} hold its ${d.chart.level.name}?` : `${sym} since publication`}>
                 <InsightChart symbol={sym} {...d.chart} />
                 {thumb && thumb.length > 1 ? (
                   <figure className="inThumb">
@@ -113,16 +115,23 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
               </Card>
             ) : null}
 
-            {d.snapshot?.available ? (
-              <section className="inBlock" aria-label="From the filings">
-                <h2 className="inH2">From the filings</h2>
-                <LatestEarningsCard snapshot={d.snapshot} symbol={sym} />
-                {d.pe ? <p className="inRead" data-insight-pe="">P/E {d.pe.value.toFixed(1)}: {d.pe.text}. <span className="inFineInline" data-fine-print="">{d.pe.note}</span></p> : null}
-                <p className="inLinks">
-                  <Link href={`/stock/${sym}/earnings`}>{sym} earnings, in full →</Link>
-                </p>
-              </section>
-            ) : null}
+            {/* WHAT'S DRIVING IT NOW (#563 COWORK #138 §1): the news page's own items and score; no new AI call. */}
+            <Card eyebrow={`What's driving ${sym} now`} title={`${sym} news and catalysts`} attr="data-insight-news">
+              {d.news?.score ? (
+                <p className="inRead"><span className="inTone" data-tone={d.news.score.tone}>{d.news.score.label}</span> {d.news.score.reason}</p>
+              ) : null}
+              {d.news?.items.length ? (
+                <ul className="inNews">
+                  {d.news.items.map((i) => (
+                    <li key={i.link}>
+                      <a href={i.link} target="_blank" rel="noopener noreferrer">{i.title}</a>
+                      <span className="inNewsMeta">{[i.source, i.date ? newsDay(i.date) : null].filter(Boolean).join(" · ")}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="inRead">No recent headlines.</p>}
+              <p className="inLinks"><Link href={`/stock/${sym}/news`}>All {sym} news →</Link></p>
+            </Card>
 
             {html.whatHappened ? (
               <Card eyebrow="What happened">
@@ -146,23 +155,26 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
           </div>
 
           <aside className="inRail">
-            {d.levelsToday ? (
-              <Card eyebrow="Levels today" title={`As of ${dayWords(d.levelsToday.asOf)}`}>
-                <ul className="inList inDots" data-insight-levels="">
-                  {[...d.levelsToday.above].reverse().map((z, i) => <li key={`a${i}`} data-dot="up"><span>Zone above ({z.count} levels)</span><strong>{range(z)}</strong></li>)}
-                  {d.levelsToday.inside ? <li data-dot="last"><span>Price inside a zone ({d.levelsToday.inside.count} levels)</span><strong>{range(d.levelsToday.inside)}</strong></li> : null}
-                  <li data-dot="last"><span>Last close</span><strong>{money(d.levelsToday.price)}</strong></li>
-                  {d.levelsToday.below.map((z, i) => <li key={`b${i}`} data-dot="down"><span>Zone below ({z.count} levels)</span><strong>{range(z)}</strong></li>)}
-                  {d.levelsToday.monthLow !== null ? <li data-dot="down"><span>This month&apos;s low</span><strong>{money(d.levelsToday.monthLow)}</strong></li> : null}
-                  {d.levelsToday.discussed ? <li data-dot="level" data-discussed=""><span>Level discussed: {d.levelsToday.discussed.name}</span><strong>{money(d.levelsToday.discussed.value)}</strong></li> : null}
-                </ul>
+            {/* LEVELS TODAY (#563 COWORK #139): the Key levels pole, with the post's level as its own gold tick. */}
+            {d.railBars.length ? (
+              <div className="inRailPole" data-insight-levels="">
+                <KeyLevelsCard bars={d.railBars} discussed={d.discussed} credit={d.onTiingo ? <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a> : undefined} />
                 <p className="inFine" data-fine-print="">Zones are where several levels sit close together. <Link href={`/stock/${sym}`}>All levels on the {sym} page →</Link></p>
-              </Card>
+              </div>
             ) : null}
+            {/* LATEST EARNINGS, COMPACT (#563 COWORK #138 §3): the three tiles vs a year ago, the P/E line, the link. */}
+            <Card eyebrow="From the filings" title={`${sym} latest earnings`} attr="data-insight-earnings">
+              {d.snapshot?.available ? <EarningsTiles d={d} /> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet.</p>}
+              <p className="inLinks"><Link href={`/stock/${sym}/earnings`}>Full earnings →</Link></p>
+            </Card>
             {d.screens && d.screens.length ? (
-              <Card eyebrow="Showing up in screens" title={`${d.screens.length} screen${d.screens.length === 1 ? "" : "s"} today`}>
+              <section className="inCard inScreens">
+                {/* THE FAINT CHART BEHIND IT (#563 COWORK #138 §6): decorative, low contrast. */}
+                {d.screenChart ? <FaintChart closes={d.screenChart.closes} ref200={d.screenChart.ref} /> : null}
+                <div className="inEyebrow">Showing up in screens</div>
+                <h2 className="inCardTitle">{`${d.screens.length} screen${d.screens.length === 1 ? "" : "s"} today`}</h2>
                 <div className="inPills" data-insight-screens="">{d.screens.map((s) => <Link key={s.href} href={s.href} className="inPill">{s.label}</Link>)}</div>
-              </Card>
+              </section>
             ) : null}
             {d.sectorMove ? (
               <Card eyebrow="Sector" title={d.sectorMove.ytd !== null ? `${d.sectorMove.name} · ${pctWords(d.sectorMove.ytd, 2)} YTD` : d.sectorMove.name}>
@@ -252,22 +264,58 @@ function Spark({ closes }: { closes: number[] }) {
 
 function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
   if (m.kind === "bottlenecks") {
+    // BOTH DIRECTIONS (#563 COWORK #138 §4).
     return (
-      <Link href={m.href} className="inMoreCard" data-more="bottlenecks">
+      <div className="inMoreCard" data-more="bottlenecks">
         <span className="inEyebrow">Bottlenecks</span>
-        {m.count > 0 ? <span className="inMoreBig">×{m.count}</span> : null}
-        {m.pages.length ? <MiniWeb center={sym} around={m.pages} /> : null}
-        <span className="inRead">{m.count > 0 ? `Named on ${m.count} stock page${m.count === 1 ? "" : "s"} as a supplier or customer.` : `${sym}'s own suppliers and customers.`}</span>
-        <span className="inMoreGo">{m.count > 0 ? `See who depends on ${m.company} →` : `See ${sym}'s bottlenecks →`}</span>
-      </Link>
+        <MiniWeb center={sym} left={m.suppliers.map((s) => s.ticker ?? s.name)} right={m.dependants.names} />
+        {m.suppliers.length ? (
+          <>
+            <h3 className="inH3">Who {m.company} depends on</h3>
+            <ul className="inList inTight">{m.suppliers.map((s) => <li key={s.name}><span>{s.name}</span><strong>~{s.pct}%</strong></li>)}</ul>
+          </>
+        ) : null}
+        {m.dependants.count > 0 ? (
+          <>
+            <h3 className="inH3">Who depends on {m.company} <span className="inMoreBig inInline">×{m.dependants.count}</span></h3>
+            <p className="inRead">{m.dependants.names.join(", ")}{m.dependants.count > m.dependants.names.length ? ` and ${m.dependants.count - m.dependants.names.length} more` : ""}.</p>
+          </>
+        ) : null}
+        <Link href={m.href} className="inMoreGo">{m.ownPage ? "See the full map →" : `See who depends on ${m.company} →`}</Link>
+      </div>
     );
   }
   if (m.kind === "capex") {
+    // FOLLOW THE MONEY (#563 COWORK #138 §5): the figure, its change, and a small flow.
+    const flow = m.mention.list === "spending" ? m.flow.to : m.flow.from;
+    const max = Math.max(1, ...flow.map((f) => f.value || 0));
     return (
       <Link href={m.href} className="inMoreCard" data-more="capex">
-        <span className="inEyebrow">Capex: follow the money</span>
-        <span className="inMoreBig">#{m.mention.rank}</span>
-        <span className="inRead">{m.mention.list === "spending" ? `Among the largest capex spenders: ${m.mention.amount} in its latest year.` : `On the receiving side: ${m.mention.line ?? "its build-out line"}, ${m.mention.amount}.`}</span>
+        <span className="inEyebrow">Follow the money</span>
+        {m.mention.list === "spending" ? (
+          <>
+            <span className="inMoreBig">#{m.mention.rank} · {m.own ? bnWords(m.own.value) : m.mention.amount}</span>
+            <span className="inRead">{m.own ? `Capex in FY${m.own.year}${m.own.changePct !== null ? `, ${pctWords(m.own.changePct)} on the year before` : ""}, from its cash-flow statement.` : "Among the largest reported capex spenders."}</span>
+          </>
+        ) : (
+          <>
+            <span className="inMoreBig">#{m.mention.rank} · {m.mention.amount}</span>
+            <span className="inRead">{m.mention.line}, {m.mention.fyTo}{m.mention.changePct !== null ? `, ${pctWords(m.mention.changePct)} on the year before` : ""}.</span>
+          </>
+        )}
+        {flow.length ? (
+          <div className="inFlow" aria-label={m.mention.list === "spending" ? `${sym} to the largest build-out sellers` : `The largest spenders to ${sym}`}>
+            <span className="inFlowEnd">{m.mention.list === "spending" ? sym : "Spenders"}</span>
+            <span className="inFlowArrow" aria-hidden="true">→</span>
+            <ul className="inFlowList">
+              {flow.map((f) => (
+                <li key={f.ticker}><span className="inFlowSym">{f.ticker}</span><span className="inFlowBar" aria-hidden="true"><i style={{ width: `${Math.max(6, (100 * (f.value || 0)) / max)}%` }} /></span><span className="inFlowAmt">{f.amount}</span></li>
+              ))}
+            </ul>
+            {m.mention.list === "receiving" ? <><span className="inFlowArrow" aria-hidden="true">→</span><span className="inFlowEnd">{sym}</span></> : null}
+          </div>
+        ) : null}
+        <span className="inFineInline" data-fine-print="">What suppliers sold, not a record of who paid them.</span>
         <span className="inMoreGo">AI and data-centre capex →</span>
       </Link>
     );
@@ -295,22 +343,58 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
   );
 }
 
-/** The stock in the middle and up to eight pages that name it around it. */
-function MiniWeb({ center, around }: { center: string; around: string[] }) {
-  const R = 38, C = 50;
+/** Suppliers on the left feeding the stock in the middle; the pages that depend on it on the right. */
+function MiniWeb({ center, left, right }: { center: string; left: string[]; right: string[] }) {
+  const W = 220, H = 96, C = { x: W / 2, y: H / 2 };
+  const at = (i: number, n: number, x: number) => ({ x, y: n === 1 ? H / 2 : 14 + (i * (H - 28)) / (n - 1) });
   return (
-    <svg viewBox="0 0 100 100" width="96" height="96" aria-hidden="true" className="inMiniWeb">
-      {around.map((s, i) => {
-        const a = -Math.PI / 2 + (i / around.length) * Math.PI * 2;
-        return <line key={s} x1={C} y1={C} x2={C + R * Math.cos(a)} y2={C + R * Math.sin(a)} stroke="rgba(95,212,199,0.45)" strokeWidth={1} />;
-      })}
-      {around.map((s, i) => {
-        const a = -Math.PI / 2 + (i / around.length) * Math.PI * 2;
-        return <circle key={s} cx={C + R * Math.cos(a)} cy={C + R * Math.sin(a)} r={4} fill="#cbd5e1" />;
-      })}
-      <circle cx={C} cy={C} r={12} fill="#0b1220" stroke="#5FD4C7" strokeWidth={2} />
-      <text x={C} y={C + 3} textAnchor="middle" fill="#f1f5f9" style={{ fontSize: "0.75rem", fontWeight: 800 }}>{center.slice(0, 4)}</text>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} aria-hidden="true" className="inMiniWeb" style={{ maxWidth: 260 }}>
+      {left.map((s, i) => { const p = at(i, left.length, 40); return <line key={`l${s}`} x1={p.x} y1={p.y} x2={C.x - 14} y2={C.y} stroke="rgba(147,197,253,0.5)" strokeWidth={1} />; })}
+      {right.map((s, i) => { const p = at(i, right.length, W - 40); return <line key={`r${s}`} x1={C.x + 14} y1={C.y} x2={p.x} y2={p.y} stroke="rgba(95,212,199,0.5)" strokeWidth={1} />; })}
+      {left.map((s, i) => { const p = at(i, left.length, 40); return <g key={`lc${s}`}><circle cx={p.x} cy={p.y} r={3.5} fill="#93c5fd" /><text x={p.x - 7} y={p.y + 4} textAnchor="end" fill="#cbd5e1" style={{ fontSize: "0.75rem" }}>{s.slice(0, 5)}</text></g>; })}
+      {right.map((s, i) => { const p = at(i, right.length, W - 40); return <circle key={`rc${s}`} cx={p.x} cy={p.y} r={3.5} fill="#5FD4C7" />; })}
+      <circle cx={C.x} cy={C.y} r={14} fill="#0b1220" stroke="#5FD4C7" strokeWidth={2} />
+      <text x={C.x} y={C.y + 4} textAnchor="middle" fill="#f1f5f9" style={{ fontSize: "0.75rem", fontWeight: 800 }}>{center.slice(0, 4)}</text>
     </svg>
+  );
+}
+
+/** The screens card's background (#138 §6): the last closes and the screen's own line, faint, aria-hidden. */
+function FaintChart({ closes, ref200 }: { closes: number[]; ref200: (number | null)[] | null }) {
+  const vals = [...closes, ...(ref200 ?? []).filter((v): v is number => v !== null)];
+  const lo = Math.min(...vals), hi = Math.max(...vals), W = 300, H = 120;
+  const y = (v: number) => (H - ((v - lo) / (hi - lo || 1)) * (H - 10) - 5).toFixed(1);
+  const line = (vs: (number | null)[]) => vs.map((v, i) => (v === null ? null : `${((i / (vs.length - 1)) * W).toFixed(1)},${y(v)}`)).filter(Boolean).join(" ");
+  return (
+    <svg className="inFaint" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      {ref200 ? <polyline points={line(ref200)} fill="none" stroke="rgba(234,179,8,0.22)" strokeWidth={1.2} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" /> : null}
+      <polyline points={line(closes)} fill="none" stroke="rgba(148,163,184,0.22)" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+/** The snapshot's three tiles against the same quarter a year earlier, the P/E line under them. */
+function EarningsTiles({ d }: { d: InsightPageData }) {
+  const s = d.snapshot!, ya = s.yearAgo ?? null;
+  const tiles: { label: string; value: string; vs: Vs }[] = [
+    { label: "EPS (diluted)", value: s.eps.value !== null ? `$${s.eps.value.toFixed(2)}` : "n/a", vs: epsVsYearAgo(s.eps.value, ya?.eps, (v) => `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`) },
+    { label: "Gross margin", value: s.margins.gross !== null ? `${s.margins.gross.toFixed(1)}%` : "n/a", vs: marginVsYearAgo(s.margins.gross, ya?.gross, ya?.label) },
+    { label: "Operating margin", value: s.margins.operating !== null ? `${s.margins.operating.toFixed(1)}%` : "n/a", vs: marginVsYearAgo(s.margins.operating, ya?.operating, ya?.label) },
+  ];
+  return (
+    <>
+      {s.periodLabel ? <p className="inFine" data-fine-print="">{s.periodLabel}{s.comparedWith ? `, against ${s.comparedWith}` : ""}. Filed with the SEC.</p> : null}
+      <div className="inTiles">
+        {tiles.map((t) => (
+          <div key={t.label} className="inTile" data-tone={t.vs.tone ?? "none"} style={t.vs.tone ? { background: VS_TINT[t.vs.tone] } : undefined}>
+            <div className="inStatLabel">{t.label}</div>
+            <div className="inTileValue">{t.value}</div>
+            {t.vs.words ? <div className="inTileSub">{t.vs.words}</div> : null}
+          </div>
+        ))}
+      </div>
+      {d.pe ? <p className="inRead" data-insight-pe="">P/E {d.pe.value.toFixed(1)}: {d.pe.text}.</p> : null}
+    </>
   );
 }
 
@@ -334,6 +418,7 @@ const CSS = `
 .inChip[data-tone="down"] { border-color: rgba(239,68,68,0.5); color: #fca5a5; }
 .inTitle { margin: 14px 0 0; font-size: 2rem; line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .inMeta { margin: 10px 0 0; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(226,232,240,0.85); }
+.inSinceTitle { margin: 0; font-size: 1.125rem; }
 .inSince { margin-top: 16px; border: 1px solid rgba(148,163,184,0.22); border-radius: 18px; padding: 16px; background: rgba(15,23,42,0.55); }
 .inEyebrow { margin: 0; font-size: var(--fs-label); font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(147,197,253,0.85); display: block; }
 .inStats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
@@ -406,6 +491,33 @@ const CSS = `
 .inEndRow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .inEndRow a { font-size: var(--fs-read); font-weight: 800; color: #e2e8f0; text-decoration: none; padding: 8px 14px; border-radius: 12px; border: 1px solid rgba(59,130,246,0.35); background: rgba(30,58,138,0.25); }
 .inEndRow .inTrade { color: #dcfce7; border-color: rgba(34,197,94,0.4); background: rgba(21,128,61,0.15); }
+.inTone { display: inline-block; font-size: var(--fs-label); font-weight: 800; padding: 2px 9px; border-radius: 999px; border: 1px solid rgba(234,179,8,0.45); color: #fde68a; margin-right: 6px; }
+.inTone[data-tone="green"] { border-color: rgba(34,197,94,0.45); color: #86efac; }
+.inTone[data-tone="red"] { border-color: rgba(239,68,68,0.45); color: #fca5a5; }
+.inNews { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.inNews a { font-size: var(--fs-read); line-height: 1.45; color: #e2e8f0; font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
+.inNews a:hover { text-decoration: underline; }
+.inNewsMeta { display: block; margin-top: 2px; font-size: var(--fs-label); color: rgba(203,213,225,0.7); }
+.inRailPole { min-width: 0; }
+.inTiles { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 10px; }
+.inTile { border: 1px solid rgba(148,163,184,0.2); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.inTileValue { margin-top: 2px; font-size: 1.25rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.inTileSub { font-size: var(--fs-label); color: rgba(203,213,225,0.8); }
+.inScreens { position: relative; overflow: hidden; }
+.inScreens > *:not(.inFaint) { position: relative; }
+.inFaint { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.inH3 { margin: 10px 0 0; font-size: var(--fs-read); font-weight: 800; }
+.inInline { font-size: 1.125rem; margin-left: 6px; }
+.inTight { margin-top: 6px; gap: 4px; }
+.inFlow { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-width: 0; }
+.inFlowEnd { font-size: var(--fs-label); font-weight: 900; color: #5fd4c7; white-space: nowrap; }
+.inFlowArrow { color: rgba(203,213,225,0.7); }
+.inFlowList { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; flex: 1; min-width: 0; }
+.inFlowList li { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto; gap: 6px; align-items: center; font-size: var(--fs-label); }
+.inFlowSym { font-weight: 800; }
+.inFlowBar { height: 6px; border-radius: 3px; background: rgba(148,163,184,0.15); overflow: hidden; }
+.inFlowBar i { display: block; height: 100%; background: rgba(95,212,199,0.7); }
+.inFlowAmt { font-variant-numeric: tabular-nums; color: rgba(226,232,240,0.9); }
 @media (max-width: 900px) {
   .inCols { grid-template-columns: minmax(0, 1fr); }
   .inStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }

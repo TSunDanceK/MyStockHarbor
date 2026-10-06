@@ -14,7 +14,11 @@
 //   - the new format reads no price fields; sources must be https;
 //   - the screens link only to picker routes;
 //   - no advice words in anything the template writes;
-//   - the fixture is served off production only and never listed.
+//   - the fixture is served off production only and never listed;
+//   - SEO (#138): an Article with the hero picture and dateModified from the
+//     post's own "updated", Insights › TICKER › post, one h1, the hero's alt;
+//   - the rail (#138/#139): the Key levels pole with the level discussed, the
+//     filed tiles or "not available yet", and the news card's empty state.
 // A mutant each.
 //
 //   node scripts/check-insight-page.mjs
@@ -108,6 +112,15 @@ const RULES = {
     const all = [...page, ...strings(read(CHART), CHART), ...words, ...Object.values(S.SCREEN_ROUTES).map((r) => r.label)];
     return all.length > 30 && all.every((s) => !ADVICE.test(s ?? "")) && !/\p{Extended_Pictographic}/u.test(all.join(" ")) && V.stripEmoji("📈 What happened") === "What happened";
   },
+  // #563 COWORK #138/#139, read as source (the Chromium measure renders them).
+  "SEO: an Article with the hero picture, dateModified from the post's own 'updated', a 3-step breadcrumb; one h1": ({ route, page }) =>
+    /"@type": "Article"/.test(route) && /image: \[heroImage\]/.test(route) && /const modifiedTime = data\.n\.updated \? new Date\(data\.n\.updated\)\.toISOString\(\) : publishedTime;/.test(route) &&
+    /dateModified: modifiedTime,/.test(route) && /name: "Insights",[\s\S]*?name: sym,[\s\S]*?name: post\.title,/.test(route) && !/"@type": "BlogPosting"/.test(route) &&
+    (page.match(/<h1 /g) ?? []).length === 1 && /alt=\{`Illustration for \$\{d\.company\} \(\$\{sym\}\): \$\{n\.title\}`\}/.test(page),
+  "the rail: the Key levels pole with the level discussed; filed tiles, or 'not available yet' without facts; news with its empty state": ({ page, loader }) =>
+    /<KeyLevelsCard bars=\{d\.railBars\} discussed=\{d\.discussed\}/.test(page) && /discussed: level && lvNow !== null \? \{ label: SHORT\[level\], value: lvNow \} : null,/.test(loader) &&
+    /\{d\.snapshot\?\.available \? <EarningsTiles d=\{d\} \/> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet\.<\/p>\}/.test(page) &&
+    /: <p className="inRead">No recent headlines\.<\/p>\}/.test(page) && /getStockNewsBaseData\(sym, \{ maxDetailedItems: 5 \}\)/.test(loader) && !/LatestEarningsCard/.test(page),
   "the fixture is served off production only, noindex, and never listed": () => {
     const loader = stripComments(read(LOADER), { file: LOADER }), route = stripComments(read(ROUTE), { file: ROUTE });
     return /export const fixturesServed = \(\) => process\.env\.VERCEL_ENV !== "production";/.test(loader) && /fixturesServed\(\) && /.test(loader) &&
@@ -132,11 +145,19 @@ const MUTANTS = [
   ["no advice words", "v", (s) => s.replace('case "held": return { word: "Held", detail: "No daily close below it since", tone: "up" };', 'case "held": return { word: "Held", detail: "A level to buy while it holds", tone: "up" };')],
 ];
 
+// Source mutants: [rule start, file, mutation].
+const SRC_MUTANTS = [
+  ["SEO:", ROUTE, (s) => s.replace("dateModified: modifiedTime,", "dateModified: new Date().toISOString(),")],
+  ["SEO:", ROUTE, (s) => s.replace('"@type": "Article",', '"@type": "BlogPosting",')],
+  ["the rail:", PAGE, (s) => s.replace("<KeyLevelsCard bars={d.railBars} discussed={d.discussed}", "<KeyLevelsCard bars={d.railBars}")],
+  ["the rail:", PAGE, (s) => s.replace('{d.snapshot?.available ? <EarningsTiles d={d} /> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet.</p>}', "<EarningsTiles d={d} />")],
+];
 const R = Object.keys(RULES);
 let failures = 0;
 const check = (label, ok) => { console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}`); if (!ok) failures++; };
 const run = (rule, m) => { try { return !!rule(m); } catch (e) { if (process.env.DEBUG) console.log(e); return false; } };
-const measure = async (v = read(VIEW), s = read(SCREENS)) => ({ V: await load(v, "view"), S: await load(s, "screens") });
+const srcOf = (over = {}) => ({ route: stripComments(over[ROUTE] ?? read(ROUTE), { file: ROUTE }), page: stripComments(over[PAGE] ?? read(PAGE), { file: PAGE }), loader: stripComments(over[LOADER] ?? read(LOADER), { file: LOADER }) });
+const measure = async (v = read(VIEW), s = read(SCREENS), over = {}) => ({ V: await load(v, "view"), S: await load(s, "screens"), ...srcOf(over) });
 
 console.log("=== Rules ===");
 const base = await measure();
@@ -150,6 +171,11 @@ for (const [start, where, mutate] of MUTANTS) {
   let m;
   try { m = await measure(where === "v" ? mut : undefined, where === "s" ? mut : undefined); } catch { m = null; }
   check(`mutant bites: ${label}`, !m || !run(RULES[label], m));
+}
+for (const [start, file, mutate] of SRC_MUTANTS) {
+  const label = R.find((x) => x.startsWith(start)), src = read(file), mut = mutate(src);
+  if (mut === src) { check(`mutant bites: ${label} — the mutation did not apply`, false); continue; }
+  check(`mutant bites: ${label}`, !run(RULES[label], { ...base, ...srcOf({ [file]: mut }) }));
 }
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

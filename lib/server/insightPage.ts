@@ -44,8 +44,11 @@ import { normaliseCompanyName } from "@/lib/server/news/companyName";
 import { getAllBottleneckPosts } from "@/lib/bottlenecks";
 import { buildHubCompanies } from "@/lib/bottleneckHub";
 import { getAllPosts } from "@/lib/blog";
+import { getStockNewsBaseData } from "@/lib/stock-news-data";
+import { resolveFactSetForRender } from "@/lib/server/secColdFetch";
+import { toSpendingInput } from "@/lib/server/capexSpendingJob";
 import { confluence } from "@/lib/ta/confluence";
-import { keyLevels, type KeyBar } from "@/lib/ta/keyLevels";
+import type { KeyBar } from "@/lib/ta/keyLevels";
 import {
   differenceNote, levelSeries, normaliseInsight, setupLabel, sinceView, LEVEL_NAME,
   type EodBar, type NormalisedInsight, type SetupLabel, type SinceView,
@@ -95,22 +98,36 @@ const readScreenFlags = unstable_cache(
 );
 
 // ── CAPEX (shared, 1 h) ─────────────────────────────────────────────────────
-export type CapexMention = { list: "spending" | "receiving"; rank: number; of: number; amount: string; line: string | null };
-const readCapexRanks = unstable_cache(
-  async (): Promise<Record<string, CapexMention> | null> => {
+// "Follow the money" (#563 COWORK #138 §5): where a ticker sits on the
+// spending and receiving lists, and each list's top three for the flow.
+export type CapexMention =
+  | { list: "spending"; rank: number; of: number; value: number; amount: string }
+  | { list: "receiving"; rank: number; of: number; amount: string; line: string; changePct: number | null; fyTo: string };
+export type CapexFlowItem = { ticker: string; value: number; amount: string };
+export type CapexShared = { mentions: Record<string, CapexMention>; topSpenders: CapexFlowItem[]; topReceivers: CapexFlowItem[] };
+const bn = (v: number) => `$${(v / 1e9).toFixed(1)}bn`;
+const readCapexShared = unstable_cache(
+  async (): Promise<CapexShared | null> => {
     const [sp, rc] = await Promise.all([readSpendingRecord().catch(() => null), readReceiversRecord().catch(() => null)]);
     if (!sp && !rc) return null;
-    const out: Record<string, CapexMention> = {};
+    const mentions: Record<string, CapexMention> = {};
     const leaders = sp?.leaders ?? [];
-    leaders.forEach((l, i) => { out[l.symbol.toUpperCase()] = { list: "spending", rank: i + 1, of: leaders.length, amount: `$${(l.capex / 1e9).toFixed(1)}bn`, line: null }; });
-    const recv = rc ? buildTopReceivers(RECEIVER_ENTRIES, rc.rows ?? {}, () => "", Infinity) : [];
+    leaders.forEach((l, i) => { mentions[l.symbol.toUpperCase()] = { list: "spending", rank: i + 1, of: leaders.length, value: l.capex, amount: bn(l.capex) }; });
+    const rows = rc?.rows ?? {};
+    const recv = rc ? buildTopReceivers(RECEIVER_ENTRIES, rows, () => "", Infinity) : [];
+    const valueOf = (id: string) => Number((rows as Record<string, { current?: number }>)[id]?.current ?? NaN);
     recv.forEach((r, i) => {
       const t = r.ticker.toUpperCase();
-      if (!out[t]) out[t] = { list: "receiving", rank: i + 1, of: recv.length, amount: r.amount, line: r.line };
+      const f = (rows as Record<string, { changePct?: number | null }>)[r.id];
+      if (!mentions[t]) mentions[t] = { list: "receiving", rank: i + 1, of: recv.length, amount: r.amount, line: r.line, changePct: f?.changePct ?? null, fyTo: r.fyTo };
     });
-    return out;
+    return {
+      mentions,
+      topSpenders: leaders.slice(0, 3).map((l) => ({ ticker: l.symbol.toUpperCase(), value: l.capex, amount: bn(l.capex) })),
+      topReceivers: recv.slice(0, 3).map((r) => ({ ticker: r.ticker.toUpperCase(), value: valueOf(r.id), amount: r.amount })),
+    };
   },
-  ["insight-capex-ranks-v1"],
+  ["insight-capex-shared-v2"],
   { revalidate: 3600, tags: ["insight-capex-ranks"] },
 );
 
@@ -132,27 +149,34 @@ export type ChartData = {
   todayLevels: { price: number; label: string }[];
 };
 
-export type ZoneRow = { lo: number; hi: number; count: number };
-export type LevelsToday = {
-  price: number;
-  above: ZoneRow[];
-  below: ZoneRow[];
-  inside: ZoneRow | null;
-  monthLow: number | null;
-  discussed: { name: string; value: number; pct: number } | null;
-  asOf: string;
-};
-
 export type MoreCard =
-  | { kind: "bottlenecks"; href: string; count: number; company: string; pages: string[]; ownPage: boolean }
-  | { kind: "capex"; href: string; mention: CapexMention }
+  // BOTH DIRECTIONS (#563 COWORK #138 §4): who it depends on (its own page's
+  // suppliers, by the page's editorial %) and who depends on it (×N, three names).
+  | { kind: "bottlenecks"; href: string; company: string; ownPage: boolean;
+      suppliers: { name: string; ticker: string | null; pct: number }[];
+      dependants: { count: number; names: string[] } }
+  | { kind: "capex"; href: string; mention: CapexMention; flow: { from: CapexFlowItem[]; to: CapexFlowItem[] };
+      /** A spender's own capex, latest and prior fiscal year, from its filings. */
+      own: { year: string; value: number; prior: number | null; changePct: number | null } | null }
   | { kind: "pickers"; href: string; label: string }
   | { kind: "sector"; href: string; name: string }
   | { kind: "calendar"; href: string }
   | { kind: "spx"; href: string };
 
+/** "What's driving {TICKER} now" (#563 COWORK #138 §1): the news page's own items and score. */
+export type InsightNews = {
+  items: { title: string; link: string; source: string | null; date: string | null }[];
+  score: { label: string; tone: "green" | "yellow" | "red"; reason: string } | null;
+};
+
 export type InsightPageData = {
   n: NormalisedInsight;
+  news: InsightNews | null;
+  /** The bars the rail's Key levels pole reads (#139): the last ~70 sessions. */
+  railBars: KeyBar[];
+  discussed: { label: string; value: number } | null;
+  /** The screens card's faint background (#138 §6): the last 60 closes and the screen's own line. */
+  screenChart: { closes: number[]; ref: (number | null)[] | null } | null;
   company: string;
   label: SetupLabel | null;
   since: SinceView | null;
@@ -166,7 +190,6 @@ export type InsightPageData = {
   nextReport: string | null;
   snapshot: SecEarningsSnapshot | null;
   pe: { value: number; text: string; note: string; median: number } | null;
-  levelsToday: LevelsToday | null;
   screens: { label: string; href: string }[] | null;
   sectorMove: { name: string; slug: string; day: number | null; week: number | null; month: number | null; ytd: number | null; rank: number | null } | null;
   more: MoreCard[];
@@ -200,12 +223,17 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
   const sym = n.symbol;
   const today = new Date(nowMs).toISOString().slice(0, 10);
   const level = n.levels[0];
-  const [eod, spyEod, outlook, facts, medians] = await Promise.all([
+  // The news page's cached read, by its own key (same symbol, same options), so
+  // a warm news page costs nothing here; the fact set is read once (secColdFetch
+  // dedupes the in-flight read getStockPageSecFacts makes).
+  const [eod, spyEod, outlook, facts, medians, newsBase, cold] = await Promise.all([
     readTiingoHistory(sym).catch(() => null),
     readTiingoHistory("SPY").catch(() => null),
     getSymbolOutlook(sym, today).catch(() => null),
     getStockPageSecFacts(sym).catch(() => null),
     readPeSectorMedians().catch(() => null),
+    getStockNewsBaseData(sym, { maxDetailedItems: 5 }).catch(() => null),
+    resolveFactSetForRender(sym).catch(() => null),
   ]);
   const bars = ((eod?.bars ?? []) as EodBar[]).filter((b) => Number.isFinite(b[4]) && b[4] > 0);
   const spy = ((spyEod?.bars ?? []) as EodBar[]).filter((b) => Number.isFinite(b[4]) && b[4] > 0);
@@ -213,7 +241,7 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
   const [sectorRow, screenFlags, capex] = await Promise.all([
     sector?.slug ? getSectorPerformanceRow(sector.slug).catch(() => null) : null,
     readScreenFlags().catch(() => null),
-    readCapexRanks().catch(() => null),
+    readCapexShared().catch(() => null),
   ]);
 
   const company = normaliseCompanyName(snapshotCompanyName(sym)) || facts?.profileFacts.entityName || sym;
@@ -222,7 +250,7 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
   const price = bars.at(-1)?.[4] ?? null;
 
   // THE CHART: the post's window, its level and today's zones.
-  let chart: ChartData | null = null, thumb: number[] | null = null, levelsToday: LevelsToday | null = null;
+  let chart: ChartData | null = null, thumb: number[] | null = null;
   if (bars.length >= 2) {
     const pub = Math.max(0, bars.findLastIndex((b) => b[0] <= n.date));
     const start = Math.max(0, Math.min(pub - LEAD_IN, bars.length - MIN_BARS));
@@ -231,7 +259,6 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
     const keyBars: KeyBar[] = bars.map(([date, open, high, low, close]) => ({ date, open, high, low, close }));
     const ma50 = levelSeries(bars, "MA50"), ma200 = levelSeries(bars, "MA200");
     const conf = confluence({ bars: keyBars, lastPrice: price, nowMs, ma50: ma50.at(-1) ?? null, ma200: ma200.at(-1) ?? null, macro: null });
-    const mid = (z: { lo: number; hi: number; count: number }): ZoneRow => ({ lo: z.lo, hi: z.hi, count: z.count });
     const lvlSeries = level ? levelSeries(bars, level) : null;
     chart = {
       points: cut(bars.map((b) => ({ date: b[0], close: b[4] }))),
@@ -245,16 +272,6 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
       todayLevels: [...conf.above, ...(conf.inside ? [conf.inside] : []), ...conf.below].map((z) => ({ price: (z.lo + z.hi) / 2, label: `${z.count} levels` })),
     };
     thumb = closes.slice(Math.max(0, pub - 119), pub + 1);
-    const kl = keyLevels(keyBars, { nowMs });
-    const month = kl.periods.find((p) => p.key === "month");
-    const lv = lvlSeries?.at(-1) ?? null;
-    levelsToday = {
-      price: price ?? bars.at(-1)![4],
-      above: conf.above.map(mid), below: conf.below.map(mid), inside: conf.inside ? mid(conf.inside) : null,
-      monthLow: month && !month.reason ? (month.levels.low?.value ?? null) : null,
-      discussed: level && lv !== null && price !== null ? { name: LEVEL_NAME[level], value: lv, pct: ((price - lv) / lv) * 100 } : null,
-      asOf: bars.at(-1)![0],
-    };
   }
 
   // FROM THE FILINGS: the snapshot tiles, the P/E against its sector's median, the cap.
@@ -270,17 +287,33 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
 
   // SCREENS: the flags with a page, ordered as SCREEN_ROUTES lists them.
   const flags = screenFlags?.[sym] ?? null;
+  const capexMention = capex?.mentions[sym] ?? null;
   const screens = flags ? flags.map((f) => ({ label: SCREEN_ROUTES[f].label, href: SCREEN_ROUTES[f].href })) : screenFlags ? [] : null;
 
   // MORE ON {TICKER}: three cards, each only when the stock has that data.
   const more: MoreCard[] = [];
   const bnPosts = getAllBottleneckPosts();
   const named = buildHubCompanies(bnPosts).find((c) => c.key === sym);
-  const ownPage = bnPosts.some((p) => p.slug === sym.toLowerCase());
-  if (named || ownPage) {
-    more.push({ kind: "bottlenecks", href: ownPage ? `/bottlenecks/${sym.toLowerCase()}` : "/bottlenecks", count: named?.count ?? 0, company, pages: (named?.pages ?? []).slice(0, 8).map((p) => p.symbol), ownPage });
+  const own = bnPosts.find((p) => p.slug === sym.toLowerCase()) ?? null;
+  if (named || own) {
+    more.push({
+      kind: "bottlenecks", href: own ? `/bottlenecks/${sym.toLowerCase()}` : "/bottlenecks", company, ownPage: !!own,
+      suppliers: own ? [...own.supplyChain].sort((x, y) => y.pct - x.pct).slice(0, 4).map((c) => ({ name: c.name, ticker: c.ticker, pct: c.pct })) : [],
+      dependants: { count: named?.count ?? 0, names: (named?.pages ?? []).slice(0, 3).map((p) => p.companyName || p.symbol) },
+    });
   }
-  if (capex?.[sym]) more.push({ kind: "capex", href: "/bottlenecks/capex", mention: capex[sym] });
+  if (capexMention && capex) {
+    // A spender's own capex, latest and prior year, from the fact set already read.
+    let ownCapex: Extract<MoreCard, { kind: "capex" }>["own"] = null;
+    if (capexMention.list === "spending" && cold?.status === "ready") {
+      const ys = toSpendingInput(cold.set, null, null).years.filter((y) => typeof y.capex === "number" && y.capex !== 0).sort((x, y) => x.e.localeCompare(y.e));
+      const latest = ys.at(-1), prior = ys.at(-2);
+      if (latest?.capex) ownCapex = { year: latest.e.slice(0, 4), value: Math.abs(latest.capex), prior: prior?.capex ? Math.abs(prior.capex) : null,
+        changePct: prior?.capex ? ((Math.abs(latest.capex) - Math.abs(prior.capex)) / Math.abs(prior.capex)) * 100 : null };
+    }
+    more.push({ kind: "capex", href: "/bottlenecks/capex", mention: capexMention, own: ownCapex,
+      flow: capexMention.list === "spending" ? { from: [], to: capex.topReceivers } : { from: capex.topSpenders, to: [] } });
+  }
   const pick = screenFor(label, flags);
   if (pick) more.push({ kind: "pickers", href: pick.href, label: pick.label });
   if (more.length < 3 && sector?.slug) more.push({ kind: "sector", href: `/sector/${sector.slug}`, name: sector.name });
@@ -296,14 +329,26 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
   const ranked = [...all.filter(same), ...all.filter((p) => !same(p) && sameSector(p)), ...all.filter((p) => !same(p) && !sameSector(p))].slice(0, 3);
   const related = ranked.map((p) => ({ slug: p.slug, title: p.title, date: p.date, symbol: String(p.symbol).toUpperCase(), art: artFor(String(p.symbol), p.title, `insight:${p.slug}`, taken) }));
 
+  // WHAT'S DRIVING IT NOW: the news page's lead items (newest, deduped, on topic) and its score.
+  const news: InsightNews | null = newsBase ? {
+    items: (newsBase.detailedNews ?? []).slice(0, 5).filter((i) => i.title && /^https?:\/\//.test(i.link ?? "")).map((i) => ({ title: i.title, link: i.link, source: i.source ?? null, date: i.pubDate ?? null })),
+    score: newsBase.newsScore?.available ? { label: newsBase.newsScore.label, tone: newsBase.newsScore.tone, reason: newsBase.newsScore.reason } : null,
+  } : null;
+  const SHORT: Record<string, string> = { MA50: "50-day", MA200: "200-day", WMA200: "200-week", BBMID: "20-day" };
+  const lvNow = level && bars.length ? levelSeries(bars, level).at(-1) ?? null : null;
+  const screenRef = pick && /200-day/.test(pick.label) ? levelSeries(bars, "MA200") : pick && /50-day/.test(pick.label) ? levelSeries(bars, "MA50") : null;
+
   return {
-    n, company, label, since,
+    n, company, label, since, news,
+    railBars: bars.slice(-70).map(([date, open, high, low, close]) => ({ date, open, high, low, close })),
+    discussed: level && lvNow !== null ? { label: SHORT[level], value: lvNow } : null,
+    screenChart: bars.length >= 20 ? { closes: bars.slice(-60).map((b) => b[4]), ref: screenRef ? screenRef.slice(-60) : null } : null,
     difference: bars.length ? differenceNote(n, bars) : null,
     chart, thumb, art, sector,
     capWords: cap?.ok ? capText(cap.val) : null,
     nextReport: outlook?.window ? (outlook.window.estimate ? `~${outlook.window.line} (estimated)` : outlook.window.line) : null,
     snapshot: facts?.snapshot ?? null,
-    pe, levelsToday, screens,
+    pe, screens,
     sectorMove: sectorRow ? { name: sectorRow.name, slug: sectorRow.slug, day: sectorRow.day, week: sectorRow.week, month: sectorRow.month, ytd: sectorRow.ytd, rank: sectorRow.rank } : null,
     more: more.slice(0, 3), related,
     onTiingo: bars.length > 0,

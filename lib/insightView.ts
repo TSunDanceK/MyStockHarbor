@@ -46,6 +46,8 @@ export type NormalisedInsight = {
   title: string;
   /** Publication date, yyyy-mm-dd. */
   date: string;
+  /** When the post's TEXT last changed (frontmatter `updated`), else null: the JSON-LD's dateModified, never the daily data refresh (#138). */
+  updated: string | null;
   symbol: string;
   timeframe: "d" | "w";
   eventType: string | null;
@@ -129,7 +131,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
       .map((s) => (s && typeof s === "object" ? { title: str((s as Record<string, unknown>).title), url: str((s as Record<string, unknown>).url), publisher: str((s as Record<string, unknown>).publisher) || null } : null))
       .filter((s): s is InsightSource => !!s && !!s.title && /^https:\/\//.test(s.url));
     return {
-      format: "v2", slug, title: str(data.title), date, symbol, timeframe, eventType: str(data.eventType) || null, levels,
+      format: "v2", slug, title: str(data.title), date, updated: str(data.updated) || null, symbol, timeframe, eventType: str(data.eventType) || null, levels,
       summary: str(data.summary), why: str(data.why) || find(/^why it matter/i)?.body || null, whatHappened, sources,
       bull: str(data.bull) || null, bear: str(data.bear) || null, originalRest: null, claimedSide: null,
     };
@@ -144,7 +146,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
   const rest = secs.filter((s) => !shown.has(s.heading.toLowerCase())).map((s) => (s.heading ? `## ${stripEmoji(s.heading)}\n\n${s.body}` : s.body)).join("\n\n").trim();
   const summary = str(data.excerpt) || str(data.overallBreakdown);
   return {
-    format: "v1", slug, title: str(data.title), date, symbol, timeframe, eventType: null, levels,
+    format: "v1", slug, title: str(data.title), date, updated: str(data.updated) || null, symbol, timeframe, eventType: null, levels,
     summary, why: find(/^why it matters$/i)?.body || null, whatHappened, sources: [],
     bull: SCENARIO("Bullish", scen), bear: SCENARIO("Bearish", scen), originalRest: rest || null,
     claimedSide: claimedSideOf(`${str(data.excerpt)} ${str(data.overallBreakdown)}`, levels[0]),

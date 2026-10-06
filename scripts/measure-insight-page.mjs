@@ -10,7 +10,11 @@
 //     fine print, or anything is under 12 px;
 //   - a section the page always draws is missing (hero, the one setup label,
 //     the "Since" strip, the short version once, the chart, the end links);
-//   - the summary appears more than once.
+//   - the summary appears more than once;
+//   - (#138/#139) the news card is missing; the JSON-LD has no Article with its
+//     image, dates and author, or its breadcrumb is not Insights › TICKER ›
+//     post; there is more than one h1; the level discussed is not on the rail's
+//     pole (or its marker); the filed tiles show without facts, or hide with them.
 // With --shots DIR it saves 1280 and 390 px screenshots. A mutant (a 700 px
 // wide block) must be caught as sideways scroll.
 //
@@ -25,12 +29,13 @@ const SHOTS = (() => { const i = process.argv.indexOf("--shots"); return i > 0 ?
 process.env.MEASURE_STUBS = JSON.stringify({
   "@/lib/server/historyCache": "scripts/lib/measure-stubs/history-cache.mjs",
   "@/lib/server/marketData/read": "scripts/lib/measure-stubs/tiingo-read-variant.mjs",
-  "@/lib/server/secColdFetch": "scripts/lib/measure-stubs/sec-cold-fetch.mjs",
+  "@/lib/server/secColdFetch": "scripts/lib/measure-stubs/insight-sec-cold.mjs",
   // secEarningsSnapshot.ts reads it by a relative specifier.
-  "./secColdFetch": "scripts/lib/measure-stubs/sec-cold-fetch.mjs",
+  "./secColdFetch": "scripts/lib/measure-stubs/insight-sec-cold.mjs",
   "@/lib/server/sectorPanels": "scripts/lib/measure-stubs/sector-panels.mjs",
   "@/lib/server/peSectorMedians": "scripts/lib/measure-stubs/pe-sector-medians.mjs",
   "@/lib/server/pickersBuilder": "scripts/lib/measure-stubs/insight-pickers.mjs",
+  "@/lib/stock-news-data": "scripts/lib/measure-stubs/insight-news.mjs",
 });
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -49,7 +54,10 @@ const pages = [];
 for (const slug of SLUGS) pages.push([slug, renderToStaticMarkup(await Page({ params: Promise.resolve({ slug }) }))]);
 
 const CSS = fs.readFileSync("app/globals.css", "utf8").replace(/@import[^;]*;|@tailwind[^;]*;|@theme inline \{[^}]*\}/g, "");
-const doc = (body, root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>html{font-size:${root}px}body{margin:0}</style></head><body>${body}</body></html>`;
+// Which posts have a level discussed, and which symbols have a fact set in the stub (AAPL only).
+const FLAGS = { amzn: { level: 1, facts: 0 }, riot: { level: 1, facts: 0 }, bbai: { level: 1, facts: 0 }, fixture: { level: 1, facts: 1 } };
+let flags = { level: 0, facts: 0 };
+const doc = (body, root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>html{font-size:${root}px}body{margin:0}</style></head><body data-level="${flags.level}" data-facts="${flags.facts}">${body}</body></html>`;
 
 function probe() {
   const vis = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
@@ -65,7 +73,20 @@ function probe() {
     const wide = [...texts, ...document.querySelectorAll("body *")].filter((e) => typeof e === "string" || e.getBoundingClientRect().right > innerWidth + 1).slice(0, 3).map((e) => typeof e === "string" ? e : `${e.tagName.toLowerCase()}.${typeof e.className === "string" ? e.className.split(" ")[0] : ""}[${Math.round(e.getBoundingClientRect().left)}-${Math.round(e.getBoundingClientRect().right)}] ${e.textContent.trim().slice(0, 25)}`);
     bad.push(`scrolls sideways (${document.documentElement.scrollWidth} > ${innerWidth}: ${wide.join(", ")})`);
   }
-  for (const card of document.querySelectorAll(".inCard, .inStat, .inMoreCard, .inSince")) {
+  // #138/#139: the news card; the Article JSON-LD (image, dateModified, a 3-step breadcrumb); the rail's
+  // pole with the level discussed drawn (or its marker); filed tiles, or "not available yet" without facts.
+  if (!q("[data-insight-news]")) bad.push("missing: news card");
+  try {
+    const ld = JSON.parse(q('script[type="application/ld+json"]')?.textContent ?? "{}")["@graph"] ?? [];
+    const art = ld.find((x) => x["@type"] === "Article"), crumbs = ld.find((x) => x["@type"] === "BreadcrumbList");
+    if (!art || !art.image?.length || !art.dateModified || !art.datePublished || art.author?.name !== "MyStockHarbor") bad.push("JSON-LD: no Article with image, dates and author");
+    if (crumbs?.itemListElement?.map((i) => i.name)[0] !== "Insights" || crumbs.itemListElement.length !== 3) bad.push("JSON-LD: breadcrumb is not Insights › TICKER › post");
+  } catch { bad.push("JSON-LD does not parse"); }
+  if (document.querySelectorAll("h1").length !== 1) bad.push(`${document.querySelectorAll("h1").length} h1s`);
+  if (q("[data-insight-levels]") && !q('.klTick[data-discussed], [data-discussed-off]') && document.body.dataset.level === "1") bad.push("the level discussed is not on the pole");
+  const tiles = q("[data-insight-earnings] .inTile"), none = q("[data-insight-no-facts]");
+  if (document.body.dataset.facts === "1" ? !tiles || none : tiles || !none) bad.push("filed tiles shown / hidden wrongly for this symbol's facts");
+  for (const card of document.querySelectorAll(".inCard, .inStat, .inMoreCard, .inSince, .klCard")) {
     const c = card.getBoundingClientRect();
     for (const el of card.querySelectorAll("*")) {
       if (!vis(el) || el.closest("svg") || el.closest("details:not([open])")) continue;
@@ -87,6 +108,7 @@ function probe() {
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || "/opt/pw-browsers/chromium" });
 let failures = 0;
 for (const [slug, body] of pages) {
+  flags = FLAGS[slug.split("-")[0]];
   for (const root of [16, 20]) {
     for (const width of [320, 390, 768, 1024, 1280]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });

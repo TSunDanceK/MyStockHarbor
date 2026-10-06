@@ -119,6 +119,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const publishedTime = post.date
       ? new Date(post.date).toISOString()
       : new Date().toISOString();
+    // CHANGES ONLY WHEN THE TEXT DOES (#563 COWORK #138): the post's own `updated`, else its date.
+    const updated = (() => { try { return readInsightSource(slug).n.updated; } catch { return null; } })();
+    const modifiedTime = updated ? new Date(updated).toISOString() : publishedTime;
 
     return {
       title,
@@ -149,7 +152,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         locale: "en_GB",
         type: "article",
         publishedTime,
-        modifiedTime: publishedTime,
+        modifiedTime,
         authors: ["https://www.mystockharbor.com"],
         section: "Stock Market Insights",
         tags: post.symbol
@@ -237,16 +240,23 @@ export default async function InsightPostPage({ params }: Props) {
     ? new Date(post.date).toISOString()
     : new Date().toISOString();
 
+  // ARTICLE + BREADCRUMB (#563 COWORK #138): dateModified moves only when the
+  // post's text does (its frontmatter `updated`), never on the daily data
+  // refresh; the image is the hero's picture.
+  const modifiedTime = data.n.updated ? new Date(data.n.updated).toISOString() : publishedTime;
+  const heroImage = data.art.kind === "library" ? `https://www.mystockharbor.com${data.art.art.src}` : `${insightUrl}/opengraph-image`;
+  const sym = data.n.symbol;
   const insightJsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "BlogPosting",
+        "@type": "Article",
         "@id": `${insightUrl}#article`,
         headline: post.title,
         description: post.excerpt,
+        image: [heroImage],
         datePublished: publishedTime,
-        dateModified: publishedTime,
+        dateModified: modifiedTime,
         mainEntityOfPage: {
           "@type": "WebPage",
           "@id": `${insightUrl}#webpage`,
@@ -286,17 +296,18 @@ export default async function InsightPostPage({ params }: Props) {
         "@type": "BreadcrumbList",
         "@id": `${insightUrl}#breadcrumb`,
         itemListElement: [
+          // Insights › TICKER › the post.
           {
             "@type": "ListItem",
             position: 1,
-            name: "Home",
-            item: "https://www.mystockharbor.com/",
+            name: "Insights",
+            item: "https://www.mystockharbor.com/insights",
           },
           {
             "@type": "ListItem",
             position: 2,
-            name: "Insights",
-            item: "https://www.mystockharbor.com/insights",
+            name: sym,
+            item: `https://www.mystockharbor.com/stock/${sym}`,
           },
           {
             "@type": "ListItem",

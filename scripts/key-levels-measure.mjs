@@ -6,7 +6,9 @@
 // close, a crowded cluster of levels within 0.3%, and a thin stock whose levels
 // are one price (BRBI's flat run); and /markets/spx (#563 COWORK #118), the same
 // card in that page's own two-column levels row, on S&P 500 ETF bars whose Week
-// (from Mon 28 Sep) differs from the Day, so the full set shows. At 320, 360, 390, 414, 430 and 1280 px, at a
+// (from Mon 28 Sep) differs from the Day, so the full set shows; and the
+// insight page's rail (#563 COWORK #139): the level discussed drawn gold on the
+// pole, or as a marker past it. At 320, 360, 390, 414, 430 and 1280 px, at a
 // 16 px and a 20 px root, it fails when the page scrolls sideways, when a label
 // overlaps another, when any label leaves the card, or when a name or price is
 // cut, when a name or price wraps (#123), or when a label runs out of the pole or over the key and fine print under it. With an output directory it saves 1280 and 390 px screenshots.
@@ -90,8 +92,11 @@ const FIX = [
   ["crowded (6 levels within 0.3%)", bars("2026-10-08", crowd)],
   ["thin stock, one-price levels", bars("2026-10-08", flatRun, 13)],
   ["INTC-like, 10+ levels", bars("2026-10-08", intcDay, 112)],
+  // THE INSIGHT PAGE'S RAIL (#563 COWORK #139): the post's level discussed as its own gold tick, and past the pole's reach as a marker.
+  ["insight rail: level discussed on the pole", bars("2026-10-08"), (b) => ({ label: "200-day", value: Math.min(...b.slice(-6).map((x) => x.low)) * 0.997 })],
+  ["insight rail: level discussed off the pole", bars("2026-10-08"), (b) => ({ label: "200-day", value: lastOf(b) * 0.8 })],
   ["/markets/spx (Week from 28 Sep, the close on Fri 2 Oct)", bars("2026-10-02", (b) => b, 740)],
-].map(([name, b]) => [name, { bars: b, lastPrice: lastOf(b), credit: "Market data from Tiingo.com" }]);
+].map(([name, b, disc]) => [name, { bars: b, lastPrice: lastOf(b), credit: "Market data from Tiingo.com", ...(disc ? { discussed: disc(b) } : {}) }]);
 const SPX = FIX.length - 1;
 
 const CSS = fs.readFileSync("app/globals.css", "utf8").replace(/@import[^;]*;|@tailwind[^;]*;|@theme inline \{[^}]*\}/g, "");
@@ -138,6 +143,8 @@ for (const root of [16, 20]) {
         }));
         const boxes = labels.flatMap(({ l, parts }) => parts.map((b) => ({ t: l.textContent.trim().slice(0, 24), b })));
         boxes.forEach((a, i) => boxes.slice(i + 1).forEach((c) => { if (a.t !== c.t && a.b.right > c.b.left + 1 && c.b.right > a.b.left + 1 && a.b.bottom > c.b.top + 1 && c.b.bottom > a.b.top + 1) bad.push(`overlap: ${a.t} / ${c.t}`); }));
+        if (/level discussed on the pole/.test(p.dataset.name) && !(p.querySelector('.klTick[data-discussed]') && p.querySelector('.klLabel[data-discussed]'))) bad.push("the level discussed is not drawn on the pole");
+        if (/level discussed off the pole/.test(p.dataset.name) && !p.querySelector("[data-discussed-off]")) bad.push("the off-pole marker is missing");
         return { name: p.dataset.name, labels: labels.length, h: Math.round(card.height), bad: [...new Set(bad)] };
       }),
     }));

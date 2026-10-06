@@ -317,7 +317,8 @@ const PAGE_MUTANTS = [
 for (const [where, name, from, to] of PAGE_MUTANTS) {
   const src = where === "view" ? VIEW_SRC : PAGE_SRC;
   if (!src.includes(from)) { check(`mutant "${name}" applies`, false, "anchor not found"); continue; }
-  const fails = where === "view" ? statics(PAGE_SRC, MOD_SRC, src.replace(from, to)) : statics(src.replace(from, to), MOD_SRC);
+  // Every occurrence: the rebuilt page credits Tiingo in more than one place (the strip and the rail).
+  const fails = where === "view" ? statics(PAGE_SRC, MOD_SRC, src.split(from).join(to)) : statics(src.split(from).join(to), MOD_SRC);
   check(`mutant caught: ${name}`, fails.length > 0, fails.join("; "));
 }
 const STATIC_MOD_MUTANTS = [

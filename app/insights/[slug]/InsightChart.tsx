@@ -26,26 +26,37 @@ const day = (d: string) => { const [y, m, dd] = d.split("-").map(Number); return
 const money = (v: number) => `$${v.toFixed(v >= 1000 ? 0 : 2)}`;
 const pct = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}%`;
 
-type Toggle = "ma200" | "ma50" | "trend" | "today";
-const TOGGLES: { key: Toggle; label: string }[] = [
+type Toggle = "level" | "ma200" | "ma50" | "trend" | "today";
+const BASE: { key: Toggle; label: string }[] = [
   { key: "ma200", label: "200-day" },
   { key: "ma50", label: "50-day" },
   { key: "trend", label: "Trend Helper" },
   { key: "today", label: "Today's levels" },
 ];
+/**
+ * THE TOGGLES MATCH THE LEVEL DISCUSSED (#563 COWORK #137): a post about the
+ * 20-day (its Bollinger midline) or the 200-week gets THAT line as the first
+ * toggle, on by default; the 200-day and 50-day posts already have theirs.
+ */
+export function togglesFor(level: string | undefined): { key: Toggle; label: string }[] {
+  if (level === "BBMID") return [{ key: "level", label: "20-day (Bollinger)" }, ...BASE];
+  if (level === "WMA200") return [{ key: "level", label: "200-week" }, ...BASE];
+  return BASE;
+}
 
 export default function InsightChart(p: InsightChartProps) {
   const last = p.points.length - 1;
   const [at, setAt] = useState(last);
   // The level discussed is always drawn; the toggles add the rest.
-  const [on, setOn] = useState<Record<Toggle, boolean>>({ ma200: p.level?.kind === "MA200", ma50: p.level?.kind === "MA50", trend: false, today: false });
+  const toggles = togglesFor(p.level?.kind);
+  const [on, setOn] = useState<Record<Toggle, boolean>>({ level: true, ma200: p.level?.kind === "MA200", ma50: p.level?.kind === "MA50", trend: false, today: false });
   const indicators = useMemo<Overlay[]>(() => {
     const out: Overlay[] = [];
     if (on.ma200) out.push("MA200");
     if (on.ma50) out.push("MA50");
     if (on.trend) out.push("Trend Helper (Smooth)");
-    if (p.level?.kind === "WMA200") out.push("Weekly MA200");
-    if (p.level?.kind === "BBMID") out.push("Bollinger(20,2)");
+    if (on.level && p.level?.kind === "WMA200") out.push("Weekly MA200");
+    if (on.level && p.level?.kind === "BBMID") out.push("Bollinger(20,2)");
     return out;
   }, [on, p.level?.kind]);
 
@@ -57,7 +68,7 @@ export default function InsightChart(p: InsightChartProps) {
   return (
     <div className="inChart" data-insight-chart="">
       <div className="inToggles" role="group" aria-label="Lines on the chart">
-        {TOGGLES.map((t) => (
+        {toggles.map((t) => (
           <button key={t.key} type="button" aria-pressed={on[t.key]} className="inToggle" data-on={on[t.key] ? "1" : "0"}
             onClick={() => setOn((s) => ({ ...s, [t.key]: !s[t.key] }))}>
             {t.label}

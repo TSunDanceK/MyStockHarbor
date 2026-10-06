@@ -37,6 +37,7 @@ levels today, the filed earnings figures, the screens, the sector and the
 ---
 title: "Amazon tests its 200-day average ahead of Q2 earnings"   # under 60 characters, no "buy zone"
 date: "YYYY-MM-DD"                                                  # the publish date
+# updated: "YYYY-MM-DD"                                             # only when the TEXT is edited later (the page's dateModified)
 symbol: "AMZN"                                                      # the ticker
 eventType: "level-test"                                             # one of the list below
 timeframe: "d"                                                      # "d" (daily) or "w" (weekly)
