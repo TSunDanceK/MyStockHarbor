@@ -99,6 +99,12 @@ const FIX = [
   P("ddd", [E("Apple Inc."), E("Alphabet (Google Cloud)", "GOOGL"), E("Mastercard Incorporated", "MA")], [E("Alphabet Inc.", "GOOG")]),
 ];
 const co = (cs, key) => cs.find((c) => c.key === key);
+// THE RIM (#563 COWORK #131): with two hubs (AMZN, AAPL), "zzz" names neither and stays off the rim.
+const RIM_FIX = [...FIX, P("zzz", [E("Samsung SDI"), E("Valve Corporation")])];
+// THE SAFETY VALVE: 250 connected pages over a few sectors, uneven, each naming one or two hubs.
+const SECTOR_NAMES = ["Technology", "Industrials", "Healthcare", "Financials", "Consumer Cyclical", "Energy", "Communication", "Utilities"];
+const BIG_FIX = Array.from({ length: 250 }, (_, i) => P(`s${String(i).padStart(3, "0")}`, [E("Amazon (AWS)", "AMZN"), ...(i % 3 ? [] : [E("Apple", "AAPL")]), ...(i % 5 ? [] : [E("Nvidia", "NVDA")])]));
+const bigSector = (sym) => SECTOR_NAMES[Number(sym.slice(1)) % 13 % SECTOR_NAMES.length];
 
 const RULES = {
   "Amazon is one key: today every AMZN spelling (incl. 'Amazon.com, Inc. (AWS)' and 'Amazon (AWS)') merges, at the summed distinct-page count": ({ M, posts, companies }) => {
@@ -171,6 +177,30 @@ const RULES = {
     return hubs.length === 8 && hub.web.hubs.every((x, i) => x.key === hub.companies[i].key && lines[i] === hub.companies[i].count && (i === 0 || x.r <= hub.web.hubs[i - 1].r)) &&
       /<svg class="bnWeb"/.test(heroHtml) && heroHtml.includes(`>${hub.companies[0].count} stocks depend on ${hub.companies[0].name}</p>`) && !/^"use client"/.test(webSrc.trim()) && !/from "(recharts|d3|chart\.js)/.test(webSrc);
   },
+  "the rim: only stocks naming a hub, each with a line; the caption counts the dots; the tiles still count every page": ({ M, hub, heroHtml }) => {
+    const fx = M.hub.buildDependencyWeb(RIM_FIX, M.hub.buildHubCompanies(RIM_FIX), 2);
+    const dots = (heroHtml.match(/<circle class="bnStock /g) ?? []).length;
+    const linesTo = (slug) => hub.web.hubs.filter((x) => (heroHtml.split(`class="bnLinks bnLinks-${hub.web.hubs.indexOf(x)}"`)[1] ?? "").split("</g>")[0].includes(`<line x1="${hub.web.stocks.find((t) => t.slug === slug).x}" y1="${hub.web.stocks.find((t) => t.slug === slug).y}"`)).length;
+    return fx.hubs.map((x) => x.key).join() === "AMZN,AAPL" && !fx.stocks.some((t) => t.slug === "zzz") && fx.stocks.length === 4 && fx.connected === 4 && fx.arcs === null &&
+      hub.web.stocks.length === hub.web.connected && hub.web.stocks.every((t) => t.hubs.length > 0 && linesTo(t.slug) === t.hubs.length) &&
+      dots === hub.web.connected && heroHtml.includes(`>${hub.web.connected} stocks that name one of these 8. Hover or tap a hub to see who names it.</p>`) &&
+      hub.stats.stocksMapped === M.content.getAllBottleneckPosts().length;
+  },
+  "the safety valve: past 200 connected pages the rim is sector arcs, one bundled line per hub and sector, as wide as its pages": ({ M }) => {
+    const companies = M.hub.buildHubCompanies(BIG_FIX), web = M.hub.buildDependencyWeb(BIG_FIX, companies, 8, bigSector);
+    const small = M.hub.buildDependencyWeb(BIG_FIX.slice(0, 200), M.hub.buildHubCompanies(BIG_FIX.slice(0, 200)), 8, bigSector);
+    const html = renderToStaticMarkup(h(M.web.default, { web }));
+    const sum = (f) => web.arcs.reduce((a, x) => a + f(x), 0);
+    const amznIn = (x) => x.bundles.find((b) => b.hub === "AMZN")?.pages ?? 0;
+    const widths = web.arcs.flatMap((x) => x.bundles), byPages = [...widths].sort((a, b) => a.pages - b.pages);
+    return M.hub.WEB.maxDots === 200 && small.arcs === null && small.stocks.length === 200 &&
+      web.stocks.length === 0 && web.connected === 250 && web.arcs.length === SECTOR_NAMES.length && sum((x) => x.count) === 250 && sum(amznIn) === 250 &&
+      web.hubs.every((hb) => sum((x) => x.bundles.find((b) => b.hub === hb.key)?.pages ?? 0) === co(companies, hb.key).count) &&
+      byPages.every((b, i) => i === 0 || b.width >= byPages[i - 1].width) && byPages[0].width < byPages.at(-1).width &&
+      !/class="bnStock /.test(html) && (html.match(/<g class="bnArc /g) ?? []).length === web.arcs.length &&
+      (html.match(/<line class="bnBundle"/g) ?? []).length === widths.length && html.includes(">250 stocks that name one of these 3. Hover or tap a hub to see who names it.</p>") &&
+      web.arcs.every((x) => html.includes(`<title>${x.sector}: ${x.count} stocks</title>`));
+  },
   "phones (≤560px): the web hidden by CSS, the top ten as a list instead": ({ heroHtml, heroSrc, hub }) =>
     /@media \(max-width: 560px\) \{\s*\.bnWebBlock \{ display: none; \}\s*\.bnTopList \{ display: block; \}\s*\}/.test(heroSrc) && /\.bnTopList \{ display: none; \}/.test(heroSrc) &&
     /<div class="bnWebBlock"[^>]*><div class="bnWebWrap"><svg class="bnWeb"/.test(heroHtml) &&
@@ -240,8 +270,14 @@ const MUTANTS = [
   ["the hub link card", "page", (s) => s.replace("<BottleneckThemes themes={hub.themes} />", "")],
   ["the hero:", "hero", (s) => s.replace('"Which companies the market can\'t easily do without"', '"Stock bottlenecks"')],
   ["the hero:", "search", (s) => s.replace("Search a stock: what does it depend on?", "Search by company name or ticker...")],
-  ["the web:", "hub", (s) => s.replace("ring: 116, edge: 236, hubs: 8 }", "ring: 116, edge: 236, hubs: 6 }")],
+  ["the web:", "hub", (s) => s.replace("ring: 116, edge: 236, hubs: 8,", "ring: 116, edge: 236, hubs: 6,")],
   ["the web:", "hub", (s) => s.replace("r: round(24 + 13 * Math.sqrt(c.count / max)),", "r: 30,").replace("const top = companies.slice(0, hubCount);", "const top = companies.slice(0, hubCount).reverse();")],
+  // An unconnected page back on the rim; the caption counting every page.
+  ["the rim:", "hub", (s) => s.replace("    .filter((x) => x.linked.length > 0);\n", "\n")],
+  ["the rim:", "web", (s) => s.replace("{connected} stocks that name one of these {hubs.length}.", "{stocks.length + 1} stocks that name one of these {hubs.length}.")],
+  // The valve never opening; bundles all one width.
+  ["the safety valve", "hub", (s) => s.replace("if (linked.length > maxDots) return", "if (linked.length > maxDots * 10) return")],
+  ["the safety valve", "hub", (s) => s.replace(".map((b) => ({ ...b, width: round(1 + 7 * (b.pages / bundleMax)) })),", ".map((b) => ({ ...b, width: 2 })),")],
   ["phones", "hero", (s) => s.replace("          .bnWebBlock { display: none; }\n", "")],
   ["phones", "hero", (s) => s.replace("{companies.slice(0, 10).map(", "{companies.slice(0, 5).map(")],
   ["the archive", "page", (s) => s.replace("<BottleneckArchive posts={posts} />", "")],

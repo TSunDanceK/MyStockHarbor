@@ -55,13 +55,22 @@ export const NAME_SHARE_NARROW = 0.55;
 export const DIST_MIN_REM = 16.25;
 const NAME_COL = `calc((100% - ${POLE_COL_REM}rem) * var(--kl-name, ${NAME_SHARE}))`;
 const U = 10;
+/**
+ * FILLING ITS CARD (#563 COWORK #129, the SPX page's levels row): the pole may
+ * grow to this multiple of its own height to take the row's spare room; past
+ * it the levels sit too far apart to read as one scale, and the card centres
+ * the pole instead. Every height is then a share of the pole's own height.
+ */
+export const KL_FILL_MAX = 1.75;
 
 /** The pole, its ticks and leaders: decorative (the labels and the hidden list are the content). */
-export function PoleSvg({ pole }: { pole: Pole }) {
+export function PoleSvg({ pole, fill = false }: { pole: Pole; fill?: boolean }) {
   const W = POLE_COL_REM * U, H = pole.height * U, mid = W / 2;
+  // Filling, the drawing stretches with the pole and its lines keep their width.
+  const v = fill ? "non-scaling-stroke" : undefined;
   return (
-    <svg className="klPoleSvg" aria-hidden="true" focusable="false" viewBox={`0 0 ${W} ${H}`}
-      style={{ position: "absolute", left: NAME_COL, top: 0, width: `${POLE_COL_REM}rem`, height: `${pole.height}rem`, overflow: "visible", pointerEvents: "none" }}>
+    <svg className="klPoleSvg" aria-hidden="true" focusable="false" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio={fill ? "none" : undefined}
+      style={{ position: "absolute", left: NAME_COL, top: 0, width: `${POLE_COL_REM}rem`, height: fill ? "100%" : `${pole.height}rem`, overflow: "visible", pointerEvents: "none" }}>
       {pole.month ? <rect className="klMonth" x={mid - 3} y={pole.month.top * U} width={6} height={Math.max(1, (pole.month.bottom - pole.month.top) * U)} rx={3} fill={C.month} /> : null}
       {pole.day ? <rect className="klDay" x={mid - 7} y={pole.day.top * U} width={14} height={Math.max(2, (pole.day.bottom - pole.day.top) * U)} rx={4} fill={C.day} /> : null}
       {pole.rows.map((r, i) => {
@@ -69,9 +78,9 @@ export function PoleSvg({ pole }: { pole: Pole }) {
         if (r.last) {
           return (
             <g key={i} className="klLastMark">
-              <line x1={mid - 9.5} x2={mid + 9.5} y1={ty} y2={ty} stroke={C.accent} strokeWidth={3} strokeLinecap="round" />
+              <line x1={mid - 9.5} x2={mid + 9.5} y1={ty} y2={ty} stroke={C.accent} strokeWidth={3} strokeLinecap="round" vectorEffect={v} />
               <path d={`M${mid - 10.5} ${ty} l-3 -3 v6 z`} fill={C.accent} />
-              <path d={`M${mid + 9.5} ${ty} L${W} ${ly}`} stroke={C.accent} fill="none" strokeWidth={1} />
+              <path d={`M${mid + 9.5} ${ty} L${W} ${ly}`} stroke={C.accent} fill="none" strokeWidth={1} vectorEffect={v} />
             </g>
           );
         }
@@ -83,9 +92,9 @@ export function PoleSvg({ pole }: { pole: Pole }) {
               const my = m.y * U;
               return (
                 <g key={j}>
-                  <line x1={mid - 9} x2={mid + 9} y1={my} y2={my} stroke={c} strokeWidth={2} />
-                  <path className="klLeader" d={`M${mid - 9} ${my} L${mid - 12} ${ly} L0 ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} />
-                  <path className="klLeader" d={`M${mid + 9} ${my} L${mid + 12} ${ly} L${W} ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} />
+                  <line x1={mid - 9} x2={mid + 9} y1={my} y2={my} stroke={c} strokeWidth={2} vectorEffect={v} />
+                  <path className="klLeader" d={`M${mid - 9} ${my} L${mid - 12} ${ly} L0 ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} vectorEffect={v} />
+                  <path className="klLeader" d={`M${mid + 9} ${my} L${mid + 12} ${ly} L${W} ${ly}`} stroke={C.leader} fill="none" strokeWidth={1} vectorEffect={v} />
                 </g>
               );
             })}
@@ -97,10 +106,11 @@ export function PoleSvg({ pole }: { pole: Pole }) {
 }
 
 /** One label row at its placed height: name on the left, price and distance (or the last-price pill) on the right. */
-function PoleLabel({ r }: { r: Pole["rows"][number] }) {
+function PoleLabel({ r, fillOf }: { r: Pole["rows"][number]; /** Filling: the pole's own height, in rem. */ fillOf?: number }) {
+  const at = fillOf ? `calc(100% * ${(r.ly / fillOf).toFixed(5)} - ${LABEL_LINE_REM / 2}rem)` : `calc(${r.ly}rem - ${LABEL_LINE_REM / 2}rem)`;
   return (
     <div className="klLabel" data-label={r.label} data-last={r.last ? "1" : undefined} data-side={r.side}
-      style={{ position: "absolute", left: 0, right: 0, top: `calc(${r.ly}rem - ${LABEL_LINE_REM / 2}rem)`, display: "grid", gridTemplateColumns: `${NAME_COL} ${POLE_COL_REM}rem minmax(0, 1fr)`, alignItems: "start", fontSize: "var(--fs-label)", lineHeight: 1.25 }}>
+      style={{ position: "absolute", left: 0, right: 0, top: at, display: "grid", gridTemplateColumns: `${NAME_COL} ${POLE_COL_REM}rem minmax(0, 1fr)`, alignItems: "start", fontSize: "var(--fs-label)", lineHeight: 1.25 }}>
       {/* NEVER WRAPPING (#123): each short name on one line, its period tags small and muted; a label of two names stacks them. */}
       <span className="klName" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", color: C.value, paddingRight: 2, minWidth: 0 }}>
         {r.last ? null : (r.parts.length ? r.parts : [{ name: r.label, tags: [] }]).map((p) => (
@@ -127,6 +137,7 @@ export default function KeyLevelsCard({
   lastPrice,
   nowMs,
   credit,
+  fill = false,
 }: {
   bars: readonly KeyBar[];
   /** The page's last price; the latest close stands in when there is none. */
@@ -139,6 +150,8 @@ export default function KeyLevelsCard({
   nowMs?: number;
   /** The linked Tiingo credit, passed only when the bars are Tiingo's. */
   credit?: ReactNode;
+  /** The SPX page (#563 COWORK #129): the pole takes the card's spare height, which that page's CSS gives it. */
+  fill?: boolean;
 }) {
   const k = keyLevels(bars, { nowMs });
   const hasPrice = typeof lastPrice === "number" && Number.isFinite(lastPrice) && lastPrice > 0;
@@ -191,11 +204,20 @@ export default function KeyLevelsCard({
 
       {pole ? (
         <>
-          <div ref={box} className="klPole" aria-hidden="true" style={{ position: "relative", height: `${pole.height}rem`, marginTop: 12, containerType: "inline-size" }}>
-            <style>{`@container (max-width: ${DIST_MIN_REM}rem) { .klPole > * { --kl-name: ${NAME_SHARE_NARROW}; } .klDist { display: none; } }`}</style>
-            <PoleSvg pole={pole} />
-            {pole.rows.map((r) => <PoleLabel key={`${r.label}${r.value}`} r={r} />)}
-          </div>
+          {(() => {
+            const poleEl = (
+              <div ref={box} className="klPole" aria-hidden="true" data-fill={fill ? "" : undefined}
+                style={fill
+                  ? { position: "relative", flex: "1 1 auto", minHeight: `${pole.height}rem`, maxHeight: `${pole.height * KL_FILL_MAX}rem`, containerType: "inline-size" }
+                  : { position: "relative", height: `${pole.height}rem`, marginTop: 12, containerType: "inline-size" }}>
+                <style>{`@container (max-width: ${DIST_MIN_REM}rem) { .klPole > * { --kl-name: ${NAME_SHARE_NARROW}; } .klDist { display: none; } }`}</style>
+                <PoleSvg pole={pole} fill={fill} />
+                {pole.rows.map((r) => <PoleLabel key={`${r.label}${r.value}`} r={r} fillOf={fill ? pole.height : undefined} />)}
+              </div>
+            );
+            // The wrapper carries the pole's margin and centres it once it reaches its cap.
+            return fill ? <div className="klFill" style={{ flex: "1 1 auto", display: "flex", flexDirection: "column", justifyContent: "center", marginTop: 12 }}>{poleEl}</div> : poleEl;
+          })()}
           {/* The same levels in words, in price order, for screen readers (the pole above is aria-hidden). */}
           <ul className="klList" style={srOnly}>{poleListWords(pole).map((t) => <li key={t}>{t}</li>)}</ul>
           {/* The key: a legend at --fs-label as #115 rules, tagged as fine print (not reading text). */}
