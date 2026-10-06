@@ -40,11 +40,13 @@ const check = (label, ok, detail = "") => {
 // MAY SHRINK, NEVER GROW.
 const EXEMPT = new Map([
   ["lib/server/fmpUsage.ts", "fmpFetch: FMP is cancelled and every caller returns before it without FMP_API_KEY"],
-  ["lib/server/secColdFetch.ts", "A's cold SEC path (#552), not called by the news base build; its `next: { revalidate }` is reported to A, not changed here"],
   ["lib/ai-news-briefs.ts", "getStockNewsAiData's OpenAI calls, a separate build from the cached news base; reported, not changed here"],
   ["lib/server/news/secProvider.ts", "fetchSubmissionsItems runs only in the SEC filings job, no-store; fetchForSymbol reads the store and makes no fetch (both pinned by check-sec-adapter)"],
 ]);
-const EXEMPT_MAX = 4;
+// 4 -> 3 (2026-10-06, the owner's OK in #553 COWORK #186): A's #801 gave
+// secColdFetch.ts a per-request deadline and dropped its revalidate hint, so its
+// exemption went stale and is removed. The list may only shrink.
+const EXEMPT_MAX = 3;
 
 // ── 1. the scan ─────────────────────────────────────────────────────────────
 function graphFrom(entry, readFile) {
