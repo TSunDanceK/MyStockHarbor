@@ -100,5 +100,6 @@
       "path": "/api/jobs/tiingo-cold-queue",
       "schedule": "3-59/10 * * * *"
     }
-  ]
+  ],
+  "ignoreCommand": "bash scripts/vercel-ignore-build.sh"
 }
