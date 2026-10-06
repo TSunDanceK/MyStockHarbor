@@ -43,6 +43,11 @@ import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } 
 import { CATEGORY_FIELDS, valueSatisfies, type Predicate } from "@/lib/screenerFields";
 import { PickerEmptyGuardError, emptyGuardLine, implausibleEmpty } from "@/lib/pickerEmptyGuard";
 
+// The six valuation cells of a listing that is not a common share (#553 COWORK #168).
+const NOT_COMMON_WHY: Partial<Record<CellWhyColumn, CellWhyCode>> = {
+  marketCap: "notCommon", ev: "notCommon", pe: "notCommon", ps: "notCommon", pb: "notCommon", pfcf: "notCommon",
+};
+
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
 export type PickerResultKind = "section" | "buySignals" | "sellSignals" | "allSymbols" | "preset";
@@ -302,7 +307,7 @@ export type ResultEntry = ResultEntryFlags & {
   chartPoints: MiniCandlePoint[];
   badge?: string;
   // Which of the composite's six checks actually fired for this stock,
-  // strongest first. The screener's membership rule is "2 or more of six", so a
+  // strongest first. The screener's membership rule is "RSI plus one more of six", so a
   // count alone ("3 oversold") leaves a reader unable to tell WHICH three -- and
   // in particular unable to tell whether RSI was among them, which is what
   // /stock/[symbol] means when it says the same word.
@@ -1336,7 +1341,15 @@ async function getPickerData(config: PickerResultConfig) {
         const secRows = await readSecPickerRows(entries.map((e) => e.symbol));
         for (const entry of entries) {
           const row = secRows.get(entry.symbol);
-          if (!row) continue;
+          if (!row) {
+            // NOT A COMMON SHARE (#553 COWORK #168 item 2): a preferred or a
+            // note has no stock ratios to show, so its valuation cells read
+            // "n/a" with the reason, not the missing-data dash.
+            if (excludedFromFundamentals(entry.symbol) === "debt-or-preferred") {
+              entry.cellWhy = { ...entry.cellWhy, ...NOT_COMMON_WHY };
+            }
+            continue;
+          }
           const shown = valueForPredicateField(entry, "price");
           const figures = applySecPickerRow(row, typeof shown === "number" ? shown : null);
           const rec = entry as unknown as Record<string, unknown>;

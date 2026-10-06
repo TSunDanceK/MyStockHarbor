@@ -960,7 +960,7 @@ export default function PickerResultsGrid({
     const volume: Col = { key: "volume", label: "Volume", sortType: "num", get: (_e, d) => d.volume, cell: (_e, d) => volCell(d.volume) };
     // Which of the six composite checks fired, strongest first.
     //
-    // The oversold/overbought screeners select on "2 or more of six", so the
+    // The oversold/overbought screeners select on "RSI plus at least one more of six", so the
     // existing note ("3 oversold") tells a reader how many fired and never
     // which. That matters most for RSI: /stock/[symbol] says "Overbought" when
     // RSI >= 70 and nothing else, so the same word on the two pages can rest on

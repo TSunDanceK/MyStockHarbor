@@ -535,11 +535,11 @@ for (const [label, from, to] of WORD_MUTANTS) {
   const mk = stripComments(marksSrc.replace(from, `role="tooltip">`), { file: MARKS });
   check(`mutant "#103: the open popover is not clamped" is caught`, marksSrc.includes(from) && !/<span className="whyPop" role="tooltip" ref=\{clampPop\}>/.test(mk));
   // FCF of 0 given the "Neg." word.
-  const wFrom = `  pfcf: { fcfNeg: "Neg.", naFcf: "n/a" },\n`;
+  const wFrom = `  pfcf: { fcfNeg: "Neg.", naFcf: "n/a", notCommon: "n/a" },\n`;
   if (!wordsSrc.includes(wFrom)) check(`mutant "#103: an FCF of 0 shows Neg." applies`, false, "the replacement matched nothing");
   else {
     let fails;
-    try { fails = await suite(await import(pathToFileURL(path.join(ROOT, MODULE)).href), await loadSibling(WORDS, wordsSrc.replace(wFrom, `  pfcf: { fcfNeg: "Neg.", fcf0: "Neg.", naFcf: "n/a" },\n`))); } catch (err) { fails = [String(err)]; }
+    try { fails = await suite(await import(pathToFileURL(path.join(ROOT, MODULE)).href), await loadSibling(WORDS, wordsSrc.replace(wFrom, `  pfcf: { fcfNeg: "Neg.", fcf0: "Neg.", naFcf: "n/a", notCommon: "n/a" },\n`))); } catch (err) { fails = [String(err)]; }
     check(`mutant "#103: an FCF of 0 shows Neg." is caught`, fails.length > 0, fails[0] ?? "no assertion failed");
   }
 }

@@ -343,24 +343,47 @@ for (const api of DYNAMIC_APIS) {
     "a dynamic API inside this ISR route is a 500, not a slower page");
 }
 check('no import from "next/headers"', !/from "next\/headers"/.test(code));
-check("the fetch does not carry an explicit no-store hint",
-  !/cache: "no-store"/.test(code),
-  "one such hint opts the whole route out of static rendering");
+// NO-STORE IS NOW REQUIRED, AND ONLY IN secFetch (#552 COWORK #181). The 500
+// was a no-store fetch IN THE RENDER; the render no longer fetches (asserted
+// below), and every fetch is the server action's, through secFetch.
+const secFetchFn = grabFunction(code, "secFetch") ?? "";
+const fetchRule = (fn, mod) =>
+  /cache: "no-store"/.test(fn) && /signal: AbortSignal\.timeout\(SEC_COLD_FETCH_DEADLINE_MS\)/.test(fn) &&
+  !/next: \{ revalidate/.test(mod) && (mod.match(/\bfetch\(/g) ?? []).length === 1;
+check("every cold SEC request is one fetch, in secFetch: no-store, a fresh per-request deadline, no revalidate hint",
+  fetchRule(secFetchFn, code), "Next refetches a revalidate entry with the caller's signal stripped (#553 CODE-B #150)");
+check("MUTATION: the revalidate hint back → caught",
+  !fetchRule(secFetchFn, code.replace('headers: { "User-Agent": SEC_UA } });', 'headers: { "User-Agent": SEC_UA }, next: { revalidate: 3600 } });')));
+check("MUTATION: the deadline dropped → caught",
+  !fetchRule(secFetchFn.replace(", signal: AbortSignal.timeout(SEC_COLD_FETCH_DEADLINE_MS)", ""), code));
+check("the render never fetches and carries no no-store",
+  !/\bfetch\(|secFetch\(|no-store/.test(render), "a no-store fetch in this ISR render was the measured 500");
 check("the Redis client is PAGE_READ_CACHE-guarded",
   /Redis\.fromEnv\(\{ \.\.\.PAGE_READ_CACHE/.test(code),
   "@upstash/redis sends no-store by default, which is the same defect wearing " +
     "a different hat");
-// A FETCH REVALIDATE BELOW THE SEGMENT'S SHORTENS THE SEGMENT'S. Next takes the
-// minimum, so a 60 here would quietly re-render every stock page every minute.
-check("the fetch's revalidate is a named constant, not a literal",
-  /next: \{ revalidate: SEC_COLD_FETCH_REVALIDATE \}/.test(code));
-const layout = fs.readFileSync("app/stock/[symbol]/layout.tsx", "utf8");
-const segRevalidate = Number((layout.match(/^export const revalidate = (\d+)/m) ?? [])[1]);
-const fetchRevalidate = Number((code.match(/SEC_COLD_FETCH_REVALIDATE = (\d+)/) ?? [])[1]);
-check("...and it is not shorter than the segment's own revalidate",
-  Number.isFinite(segRevalidate) && fetchRevalidate >= segRevalidate,
-  `fetch ${fetchRevalidate}s vs segment ${segRevalidate}s — Next takes the minimum, ` +
-    "so a shorter one here would shorten every /stock/* page's window");
+// THE DEADLINE BITES, AGAINST A SERVER THAT NEVER FINISHES. secFetch lifted
+// with its pacing (no Redis: unpaced) and a short deadline, pointed at a local
+// server that sends headers and then stalls the body.
+{
+  const http = await import("node:http");
+  const server = http.createServer((_req, res) => { res.writeHead(200, { "content-type": "application/json" }); res.write("{"); });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${server.address().port}/stall`;
+  const unit = (fn) => lift(`const redis = null; const SEC_COLD_FETCH_DEADLINE_MS = 300; const SEC_COLD_PACE_TRIES = 1; const SEC_COLD_REQUESTS_PER_SECOND = 1; const coldPaceKey = () => "k";\n${grabFunction(code, "paceSecRequest")}\n${fn}\nexport { secFetch };`);
+  const timed = async (fn) => {
+    const t0 = Date.now();
+    try { const res = await (await unit(fn)).secFetch(url, {}); await res.text(); return { threw: false, ms: Date.now() - t0 }; }
+    catch (e) { return { threw: true, ms: Date.now() - t0, name: `${e?.name}: ${e?.message}`.slice(0, 160) }; }
+  };
+  const got = await timed(secFetchFn);
+  check("a stalled body aborts at the deadline and throws a timeout", got.threw && /TimeoutError|AbortError|aborted/i.test(got.name) && got.ms >= 250 && got.ms < 2_000, `${got.name} after ${got.ms} ms`);
+  const unbounded = secFetchFn.replace(", signal: AbortSignal.timeout(SEC_COLD_FETCH_DEADLINE_MS)", "");
+  const race = await Promise.race([timed(unbounded), new Promise((r) => setTimeout(() => r({ hung: true }), 1_500))]);
+  check("MUTATION: without the signal the same request hangs → caught", race.hung === true);
+  server.closeAllConnections?.(); server.close();
+}
+
 // THE SWALLOW IS WHAT MADE THE 500 INVISIBLE. Both catches read as handled
 // timeouts while Next failed the route underneath. FIRST STATEMENT IN THE
 // CATCH, not merely present: a rethrow after `await enqueue(clean)` would have
