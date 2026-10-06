@@ -13,10 +13,11 @@ import {
 import { refreshScreenerFundamentals } from "../../../lib/server/screenerFundamentals";
 import { seedColdPricePoolRows } from "../../../lib/server/pricePool";
 import { priceProviderFor } from "../../../lib/server/marketData/provider";
+import { PAGE_TIMEOUT_OPTS } from "../../../lib/server/redisCacheMode";
 
 export const runtime = "nodejs";
 
-const redis = Redis.fromEnv();
+const redis = Redis.fromEnv(PAGE_TIMEOUT_OPTS);
 const REDIS_KEY = "msh:market:state";
 
 type Quote = {

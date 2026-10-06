@@ -953,3 +953,116 @@ export function compareAmounts(
   if (!ok(a) || !ok(b)) return ok(a) === ok(b) ? 0 : ok(a) ? -1 : 1;
   return dir === "asc" ? a - b : b - a;
 }
+
+// ── THE QUALITY-OF-EARNINGS AND BALANCE-SHEET CARDS (#552 COWORK #169) ──────
+//
+// The owner's redesign: each card answers its own title. Every rule the cards
+// draw by lives here, pure, so a check drives it on fixtures and a mutant per
+// rule. Figures only from what the cards already hold, or one ratio of two of
+// them: no estimate, no request. Words describe; they never rate.
+
+/** Which lead line the cash card opens with, or null when a leg is missing. */
+export type CashLead = { kind: "ahead" | "behind" | "loss"; ocf: number; netIncome: number } | null;
+export function cashLead(ocf: number | null, netIncome: number | null): CashLead {
+  if (ocf === null || netIncome === null) return null;
+  if (netIncome <= 0) return { kind: "loss", ocf, netIncome };
+  return { kind: ocf >= netIncome ? "ahead" : "behind", ocf, netIncome };
+}
+
+/**
+ * A SHARE OF ANOTHER FIGURE, OR WHY THERE IS NONE. Never a percentage of a
+ * figure at or below zero ("n/m"), and never one of a missing figure.
+ */
+export type ShareOf = { ok: true; pct: number } | { ok: false; why: "missing" | "not-meaningful" };
+export function shareOf(part: number | null, of: number | null): ShareOf {
+  if (part === null || of === null || !Number.isFinite(part) || !Number.isFinite(of)) return { ok: false, why: "missing" };
+  if (of <= 0) return { ok: false, why: "not-meaningful" };
+  return { ok: true, pct: (part / of) * 100 };
+}
+
+/**
+ * THE TILE'S INK. Cash against profit (the first two tiles) reads green at
+ * 100% or more and amber below; the other two (capex, share-based pay) are
+ * neither good nor bad, so they are never green or red.
+ */
+export function cashTileTone(tile: "ocf" | "fcf" | "capex" | "sbc", s: ShareOf): EarningsTone | null {
+  if (!s.ok || tile === "capex" || tile === "sbc") return null;
+  return s.pct >= 100 ? "good" : "neutral";
+}
+
+/** The chart's fixed scale: one outlier quarter must not flatten the rest. */
+export const CONVERSION_MAX_PCT = 200;
+/** Fewer usable periods than this and the chart is hidden, with the reason. */
+export const CONVERSION_MIN_PERIODS = 4;
+
+export type ConversionBar = {
+  label: string;
+  /** OCF ÷ net income, %, or null for a loss period or a missing leg. */
+  pct: number | null;
+  loss: boolean;
+  /** Bar height as % of the 0–200% scale, clamped; 0 below zero. */
+  heightPct: number;
+  clamped: boolean;
+};
+/** Oldest first, as drawn. A loss period has no bar, only its marker. */
+export function conversionBars(history: { label: string; ocf: number | null; netIncome: number | null }[]): { bars: ConversionBar[]; usable: number } {
+  const bars = history.map((h) => {
+    const loss = h.netIncome !== null && h.netIncome <= 0;
+    const s = loss ? null : shareOf(h.ocf, h.netIncome);
+    const pct = s && s.ok ? s.pct : null;
+    return {
+      label: h.label, pct, loss,
+      heightPct: pct === null ? 0 : (Math.min(Math.max(pct, 0), CONVERSION_MAX_PCT) / CONVERSION_MAX_PCT) * 100,
+      clamped: pct !== null && pct > CONVERSION_MAX_PCT,
+    };
+  });
+  return { bars, usable: bars.filter((b) => b.pct !== null).length };
+}
+
+/**
+ * NET CASH OR NET DEBT, on the card's own definition (cash + short-term
+ * investments − total debt). The dashed gap box sits on the longer bar's side:
+ * the cash row for net cash, the debt row for net debt.
+ */
+export function netPosition(net: number | null): { kind: "cash" | "debt"; amount: number } | null {
+  if (net === null || !Number.isFinite(net)) return null;
+  return net >= 0 ? { kind: "cash", amount: net } : { kind: "debt", amount: -net };
+}
+
+/** The current-ratio meter: 0–3, a mark at 1.0, the dot clamped at 3 (the true value is printed). */
+export const RATIO_METER_MAX = 3;
+export function ratioMeter(ratio: number | null): { pos: number; clamped: boolean } | null {
+  if (ratio === null || !Number.isFinite(ratio)) return null;
+  const v = Math.min(Math.max(ratio, 0), RATIO_METER_MAX);
+  return { pos: (v / RATIO_METER_MAX) * 100, clamped: ratio > RATIO_METER_MAX };
+}
+
+/**
+ * THE BALANCE SHEET'S ONE SHARED SCALE (#552 COWORK #169): cash and short-term
+ * investments on one row, total debt on the other, both against the larger of
+ * the two, so the lengths can be compared. The gap between the two ends is the
+ * net position, drawn as a box spanning both rows on the longer bar's side.
+ * Null when either side cannot be drawn (no debt on file, or neither cash nor
+ * short-term investments) — the card then shows the totals alone.
+ */
+export type BalanceBars = {
+  /** Each a % of the shared scale. */
+  cashPct: number;
+  stiPct: number;
+  debtPct: number;
+  liquid: number;
+  gap: { fromPct: number; toPct: number; kind: "cash" | "debt"; amount: number };
+};
+export function balanceBars(cash: number | null, sti: number | null, debt: number | null): BalanceBars | null {
+  if (debt === null || !Number.isFinite(debt) || (cash === null && sti === null)) return null;
+  const c = Math.max(cash ?? 0, 0), s = Math.max(sti ?? 0, 0), d = Math.max(debt, 0);
+  const liquid = c + s;
+  const scale = Math.max(liquid, d);
+  if (!(scale > 0)) return null;
+  const pct = (v: number) => (v / scale) * 100;
+  const net = liquid - d;
+  return {
+    cashPct: pct(c), stiPct: pct(s), debtPct: pct(d), liquid,
+    gap: { fromPct: pct(Math.min(liquid, d)), toPct: pct(Math.max(liquid, d)), kind: net >= 0 ? "cash" : "debt", amount: Math.abs(net) },
+  };
+}

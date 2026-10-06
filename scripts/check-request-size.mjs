@@ -182,7 +182,7 @@ const loopBodies = (() => {
 })();
 check(
   "each chunk is awaited inside the loop",
-  loopBodies.some((body) => /await redis\.set\(\s*chunkKeys\[i\]/.test(body)),
+  loopBodies.some((body) => /await writeRedis\.set\(\s*chunkKeys\[i\]/.test(body)),
   `${loopBodies.length} loop(s) in the function — the sequential await IS the fix, ` +
     `and the comment on that line says so, in prose rather than an eslint-disable ` +
     `because this project does not enable no-await-in-loop and an unused directive ` +
@@ -203,9 +203,9 @@ const at = (pattern) => {
   const i = writeFn.search(pattern);
   return i;
 };
-const lastChunkIdx = at(/await redis\.set\(\s*chunkKeys\[i\]/);
-const manifestIdx = at(/await redis\.set\(\s*PICKERS_MANIFEST_KEY/);
-const symbolsIdx = at(/await redis\.set\(\s*PICKERS_SYMBOLS_KEY/);
+const lastChunkIdx = at(/await writeRedis\.set\(\s*chunkKeys\[i\]/);
+const manifestIdx = at(/await writeRedis\.set\(\s*PICKERS_MANIFEST_KEY/);
+const symbolsIdx = at(/await writeRedis\.set\(\s*PICKERS_SYMBOLS_KEY/);
 check(
   "the manifest is written after the chunks it names",
   lastChunkIdx !== -1 && manifestIdx !== -1 && lastChunkIdx < manifestIdx,

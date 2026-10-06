@@ -899,6 +899,13 @@ export type SecEarningsView = {
      */
     months: number | null;
   };
+  /**
+   * OPERATING CASH FLOW AND NET INCOME, the newest 8 table periods, OLDEST
+   * FIRST (#552 COWORK #169): the quality card's "OCF as % of net income"
+   * chart. The stored periods the tables already walk; no new read. A ratio of
+   * two figures from one period, so a conversion rate cancels.
+   */
+  cashHistory: { label: string; end: string; ocf: number | null; netIncome: number | null }[];
   balance: {
     asOf: string;
     cash: ViewCell;
@@ -1691,6 +1698,10 @@ export function buildSecEarningsView(
     annual: annualRows,
     margins,
     growth,
+    // The NEWEST 8 by date, whatever order the store keeps, then oldest first.
+    cashHistory: [...q].sort((a, b) => (a.e < b.e ? 1 : a.e > b.e ? -1 : 0)).slice(0, 8)
+      .map((p) => ({ label: periodLabel(p), end: p.e, ocf: valueOf(p, "operatingCashFlow"), netIncome: valueOf(p, "netIncome") }))
+      .reverse(),
     cashQuality: {
       operatingCashFlow: ocf,
       capex,

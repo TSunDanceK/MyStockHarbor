@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { canWriteDemandState, noteDemandWriteBlocked } from "./demandWriteGate";
 import { withRedisTimeout } from "./redisGuardTimeout";
+import { PAGE_TIMEOUT_OPTS } from "./redisCacheMode";
 
 // Cumulative per-IP, per-category, 24h *real page view* counter, plus a
 // same-day BotID verification gate layered on top of it.
@@ -50,7 +51,7 @@ import { withRedisTimeout } from "./redisGuardTimeout";
 // they only spend Upstash quota answering a question already abandoned.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv({ retry: { retries: 1, backoff: () => 50 } })
+    ? Redis.fromEnv({ ...PAGE_TIMEOUT_OPTS, retry: { retries: 1, backoff: () => 50 } })
     : null;
 
 const VIEWS_PREFIX = "msh:daily-views:v2";

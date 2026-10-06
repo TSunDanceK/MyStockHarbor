@@ -1,7 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { markRefreshed } from "./stalenessQueue";
 import { fmpFetch } from "./fmpUsage";
-import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { BULK_READ_CACHE, PAGE_READ_CACHE } from "./redisCacheMode";
 import { timingCache, beginTiming } from "./timing";
 import { recordRedisRead, UNATTRIBUTED_CALLER } from "./redisBandwidth";
 import { toDashed } from "../symbolSpellings.mjs";
@@ -40,6 +40,15 @@ export type HistoryCacheEntry = {
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv(PAGE_READ_CACHE)
+    : null;
+// The chunked bulk MGETs (~40 histories, ~4 MB a response) and the history
+// write take the 20 s deadline; every single-symbol read stays on the page's
+// 6 s (#553 CODE-B #144, COWORK #156). The write is ~120 KB, but the client
+// auto-pipelines: the forced pass runs ten at once, so ~1.2 MB can leave as one
+// request body.
+const bulkRedis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(BULK_READ_CACHE)
     : null;
 
 const REDIS_HISTORY_PREFIX = "msh:history:v7";
@@ -1255,7 +1264,8 @@ export async function writeHistoryEntry(
     if (outcome === "success") {
       await markRefreshed("dailyHistory", [normalized]);
     }
-    await redis.set(getHistoryRedisKey(normalized), entry, {
+    const writeRedis = bulkRedis ?? redis;
+    await writeRedis.set(getHistoryRedisKey(normalized), entry, {
       // STILL CALLED WITH THE WRITE INSTANT, not a hoisted or passed-in time --
       // the weekend behaviour measured in #354 depends on this reading the
       // moment of the write. The outcome is the only new argument.
@@ -1696,7 +1706,7 @@ export async function getDailyHistoryBulk(
     // silently wrong for the rest.
     const fetched: (HistoryCacheEntry | null)[] = [];
     for (const group of chunkHistoryKeys(keys, HISTORY_MGET_CHUNK)) {
-      fetched.push(...(await redis.mget<(HistoryCacheEntry | null)[]>(...group)));
+      fetched.push(...(await (bulkRedis ?? redis).mget<(HistoryCacheEntry | null)[]>(...group)));
     }
     entries = fetched;
   } catch {
@@ -1852,7 +1862,7 @@ export async function getCachedDailyHistoryBulk(
     const entries: (HistoryCacheEntry | null)[] = [];
     for (const group of chunkHistoryKeys(normalized, HISTORY_MGET_CHUNK)) {
       const keys = group.map((symbol) => getHistoryRedisKey(symbol));
-      entries.push(...(await redis.mget<(HistoryCacheEntry | null)[]>(...keys)));
+      entries.push(...(await (bulkRedis ?? redis).mget<(HistoryCacheEntry | null)[]>(...keys)));
     }
 
     normalized.forEach((symbol, i) => {
