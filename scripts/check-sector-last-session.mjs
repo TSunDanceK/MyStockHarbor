@@ -93,7 +93,7 @@ async function suite(L, T, code) {
   ok("rows and movers carry the basis and date", (code.panels.match(/dayBasis: dayRule\.basis/g) ?? []).length >= 2);
   // v3 since step 5 (#553 COWORK #98): the basis can be "last-close" (Tiingo
   // EOD), so neither a v1 row (no basis) nor a v2 table may be served.
-  ok("the cached table's key moved past v2 (old rows have no or another basis)", /"msh:sector-performance:v3"/.test(code.panels));
+  ok("the cached table's key moved past v2 (old rows have no or another basis)", (Number((/"msh:sector-performance:v(\d+)"/.exec(code.panels) ?? [])[1]) >= 3));
   ok("the card's title and rank line follow the basis",
     /const dayTitle = lastClose \? "Last Close" : lastSession \? "Last Session" : "Sector Today";/.test(code.news) && /\{dayTitle\}/.test(code.news) && /\{rankLine\}/.test(code.news));
   ok("the lead is told when the move is the last session's",

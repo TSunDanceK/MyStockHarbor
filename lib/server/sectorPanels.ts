@@ -69,7 +69,10 @@ const redis =
 // v3 (step 5, #553 COWORK #98): the basis can be "last-close" (Tiingo EOD), so
 // a v2 table must not be served under the new labels. Computed figures only
 // (weighted averages), so no raw Tiingo value sits in it.
-export const PERFORMANCE_KEY = "msh:sector-performance:v3";
+// v4 (#553 COWORK #166): rows carry the cards' breadth and movers. A preview
+// reading v3 got production's older rows (no such fields) and drew no card
+// parts; a new key keeps the two shapes apart.
+export const PERFORMANCE_KEY = "msh:sector-performance:v4";
 const PERFORMANCE_TTL_SECONDS = 15 * 60;
 
 // v2 (step 5): on Tiingo the flags come from the stored Tiingo bars; a cached

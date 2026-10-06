@@ -538,7 +538,7 @@ function staticRules(srcs) {
   want("week/month/YTD from the stored bars' summary, not FMP's price-change", /week: weightedAverage\(entries\(\(r\) => r\.w\)\)\.value,/.test(fnBody(panels, "buildSectorPerformanceFromEod")) && !/readCachedStockDataBulk/.test(fnBody(panels, "buildSectorPerformanceFromEod")));
   want("breadth from the stored flags on Tiingo", /const fromEod = eodBreadth\(constituents, eod\);/.test(panels));
   want("the Tiingo paths are gated on POOL", /return priceProviderFor\("POOL"\) === "tiingo";/.test(panels) && /if \(!poolOnTiingo\(\)\) return null;/.test(panels));
-  want("the cache key moved to v3", /"msh:sector-performance:v3"/.test(panels));
+  want("the cache key moved to v3 or later", Number((/"msh:sector-performance:v(\d+)"/.exec(panels) ?? [])[1]) >= 3);
   want("/sector labels a last-close column \"Last close · <date>\"", /row\?\.dayBasis === "last-close"\s*\? lastCloseLabel\(row\.sessionDate\)/.test(code[FILES.sectorIndex]));
   want("the sector page's card and movers say \"Last close\"",
     /const dayTitle = lastClose \? "Last Close"/.test(code[FILES.sectorNews]) && /movers\.dayBasis === "last-close"\s*\? `Inside the sector · \$\{lastCloseLabel\(movers\.sessionDate\)/.test(code[FILES.sectorNews]));
@@ -568,7 +568,7 @@ const S_MUTANTS = [
   ["the not-a-recommendation answer dropped", FILES.stockClient, /\{ q: "Is this page a buy or sell recommendation\?", a: "[^"]+" \},/, ""],
   ["the profile row keeps its own range on Tiingo", FILES.stockPage, /\{ range: quote\.yearLow != null && quote\.yearHigh != null \? \{ low: quote\.yearLow, high: quote\.yearHigh \} : null, priceLabel: quote\.priceLabel \}/, "{ priceLabel: quote.priceLabel }"],
   ["the sector column says Last session on Tiingo", FILES.sectorIndex, /\? lastCloseLabel\(row\.sessionDate\) \?\? "Last close"/, '? "Last session"'],
-  ["the sector cache key left at v2", FILES.panels, /"msh:sector-performance:v3"/, '"msh:sector-performance:v2"'],
+  ["the sector cache key left at v2", FILES.panels, /"msh:sector-performance:v\d+"/, '"msh:sector-performance:v2"'],
   ["week/month/YTD from FMP on Tiingo", FILES.panels, /week: weightedAverage\(entries\(\(r\) => r\.w\)\)\.value,/, "week: weightedAverage(entries(() => null)).value, /* readCachedStockDataBulk */"],
   ["/api/market keeps spending on Tiingo", FILES.market, /if \(priceProviderFor\("POOL"\) === "tiingo"\) \{/, "if (false) {"],
   ["the ticker says \"today\" for a last close", FILES.ticker, /% \$\{row\.label \?\? "today"\}`/, "% today`"],

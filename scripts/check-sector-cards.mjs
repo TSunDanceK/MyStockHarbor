@@ -12,8 +12,8 @@
 //     every column sorts, a missing figure sinks last both ways.
 // Source: the cards read the tone hash and A's medians (imported, never
 // edited), link each mover to its stock page, carry the tap note; no earnings
-// calendar is imported; the tone is written only from a real news build and
-// never from a preview. Every rule has a planted mutant.
+// calendar is imported; the tone is written only from a real news build, and
+// a preview keeps to its own hash. Every rule has a planted mutant.
 //
 //   node scripts/check-sector-cards.mjs
 import { register } from "node:module";
@@ -114,7 +114,7 @@ function sourceRules({ page, panels, tone, news }) {
   want('no "Reporting next" and no earnings calendar import', !/[Rr]eporting next|earningsCalendar|earnings-calendar|getSectorEarningsThisWeek/.test(p));
   want("the builder computes breadth and movers from the EOD blob, larger half by cap", /const breadth = eodBreadth\(members, eod\);/.test(b) && /sectorMovers\(\s*members\.map/.test(b) && /\.\.\.cardFacts\(sector\.slug\),/.test(b));
   want("the tone is written only from a real news build", /if \(news\.length\) await recordSectorTone\(sector\.slug, newsScore\.label, newsScore\.score\);/.test(n));
-  want("...and never from a preview", /if \(!redis \|\| process\.env\.VERCEL_ENV === "preview"\) return;/.test(t));
+  want("...and a preview writes and reads only its own hash", /return env === "preview" \? `\$\{SECTOR_TONE_BASE_KEY\}:preview` : SECTOR_TONE_BASE_KEY;/.test(t) && /redis\.hset\(sectorToneKey\(\),/.test(t) && /redis\.hgetall<Record<string, StoredTone>>\(sectorToneKey\(\)\)/.test(t));
   return fails;
 }
 
@@ -161,7 +161,7 @@ try {
     ["a stale tone shown on the card", "page", "tone: toneIsFresh(tones[slug], nowMs) ? tones[slug] : null,", "tone: tones[slug] ?? null,"],
     ["the median shown without A's rule", "page", "usableMedian(m, PE_PEER_FLOOR, PE_MAX_SPREAD_PCT)", "(m?.median ?? null)"],
     ['"Reporting next" back on the card', "page", '<span className="sectorPe">', '<span>Reporting next: ORCL</span>\n                    <span className="sectorPe">'],
-    ["a preview writes the tone", "tone", 'if (!redis || process.env.VERCEL_ENV === "preview") return;', "if (!redis) return;"],
+    ["a preview writes production's tones", "tone", 'return env === "preview" ? `${SECTOR_TONE_BASE_KEY}:preview` : SECTOR_TONE_BASE_KEY;', "return SECTOR_TONE_BASE_KEY;"],
     ["a headline-less sector writes Neutral", "news", "if (news.length) await recordSectorTone(", "await recordSectorTone("],
   ];
   for (const [label, which, from, to] of SM) {
