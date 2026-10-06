@@ -56,6 +56,15 @@ if (!Array.isArray(universe) || !universe.length) { console.error("FATAL: no uni
 const fields = [...new Set(universe.map(dashed))];
 const rawPool = await redis.hmget(POOL_KEY, ...fields); commands++;
 const capOf = new Map();
+{
+  // THE RAW SHAPE, printed: a zero count must be told apart from a parse miss.
+  const peek = (raw, f) => Array.isArray(raw) ? raw[fields.indexOf(f)] : raw?.[f];
+  const sample = ["AAPL", "MSFT", "JPM"].find((f) => fields.includes(f)) ?? fields[0];
+  const v = peek(rawPool, sample);
+  console.log(`pool HMGET: ${rawPool === null ? "null" : Array.isArray(rawPool) ? `array(${rawPool.length}), ${rawPool.filter(Boolean).length} non-null` : `object(${Object.keys(rawPool ?? {}).length} keys)`} · ${sample}: ${typeof v} ${JSON.stringify(v)?.slice(0, 300)}`);
+  const one = await redis.hget(POOL_KEY, sample); commands++;
+  console.log(`pool HGET ${sample}: ${typeof one} ${JSON.stringify(one)?.slice(0, 300)} · HLEN ${await redis.hlen(POOL_KEY)}`); commands++;
+}
 fields.forEach((f, i) => {
   const row = Array.isArray(rawPool) ? rawPool[i] : rawPool?.[f];
   const c = row && typeof row === "object" ? Number(row.marketCap) : NaN;
@@ -75,6 +84,10 @@ if (!poolCaps) {
     if (Number.isFinite(p) && p > 0) { priceOf.set(f, p); poolPrices++; }
   });
   const secRaw = await redis.hmget(PICKERS_SEC_KEY, ...fields); commands++;
+  {
+    const one = await redis.hget(PICKERS_SEC_KEY, "AAPL"); commands++;
+    console.log(`SEC hash HGET AAPL: ${typeof one} ${JSON.stringify(one)?.slice(0, 400)}`);
+  }
   fields.forEach((f, i) => {
     let row = Array.isArray(secRaw) ? secRaw[i] : secRaw?.[f];
     if (typeof row === "string") { try { row = JSON.parse(row); } catch { row = null; } }
