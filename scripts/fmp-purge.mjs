@@ -9,6 +9,11 @@
 //
 // DRY RUN unless --apply. Each opt-in group also needs its own flag:
 //   --pool-figures --market-state --insight-snapshots --meters
+// --opt-ins-only leaves the default groups alone: only the opted-in groups are
+// deleted (#553 CODE-B #152). Without it, a later opt-in run also re-deletes
+// whatever the "refills" defaults have rebuilt since the first purge -- on
+// 2026-10-06 that was 8 of A's live, SEC-built earnings keys, outside the
+// owner's OK for the 63 insight snapshots.
 // After --apply it scans again and exits 1 if a deleted group that nothing
 // refills still has keys (groups marked "refills" are rebuilt from SEC/Tiingo
 // by a live writer, so a few keys back there is expected and reported).
@@ -30,8 +35,9 @@ import { DEFAULT_GROUPS, OPT_IN_GROUPS, classify, strippedPoolRow, isFmpEraSnaps
 export async function purge(redis, argv, log = console.log) {
   const args = new Set(argv);
   const apply = args.has("--apply");
+  const optInsOnly = args.has("--opt-ins-only");
   const optedIn = new Set(OPT_IN_GROUPS.filter((g) => args.has(g.flag)).map((g) => g.id));
-  const known = new Set(["--apply", ...OPT_IN_GROUPS.map((g) => g.flag)]);
+  const known = new Set(["--apply", "--opt-ins-only", ...OPT_IN_GROUPS.map((g) => g.flag)]);
   const unknown = [...args].filter((a) => !known.has(a));
   if (unknown.length) {
     log(`FATAL: unknown argument(s) ${unknown.join(" ")}. Nothing read or deleted.`);
@@ -95,12 +101,12 @@ export async function purge(redis, argv, log = console.log) {
     const where = g.exact ?? `${g.prefix}*`;
     const extra = g.id === "insight-snapshots-fmp" ? ` (of ${snapKeys.length} snapshots; Tiingo-path ones are kept)` :
       g.id === "pool-figures" ? (poolRows ? ` (${poolRows.length} rows with FMP figures to null; the hash and its fields stay)` : " (the hash stays; rows counted only with --pool-figures)") : "";
-    const mode = g.flag ? (optedIn.has(g.id) ? "opted in" : `report only, needs ${g.flag}`) : "default";
+    const mode = g.flag ? (optedIn.has(g.id) ? "opted in" : `report only, needs ${g.flag}`) : optInsOnly ? "default, kept (--opt-ins-only)" : "default";
     log(`  ${String(n).padStart(6)}  ${g.owner}  ${where}${g.noTtl ? "  [no TTL]" : ""}${g.refills ? "  [refills]" : ""}  — ${mode}${extra}`);
   }
 
   const toDelete = [];
-  for (const g of DEFAULT_GROUPS) toDelete.push(...(found.get(g.id) ?? []));
+  if (!optInsOnly) for (const g of DEFAULT_GROUPS) toDelete.push(...(found.get(g.id) ?? []));
   if (optedIn.has("market-state")) toDelete.push(...(found.get("market-state") ?? []));
   if (optedIn.has("fmp-meters")) toDelete.push(...(found.get("fmp-meters") ?? []));
   if (optedIn.has("insight-snapshots-fmp")) toDelete.push(...fmpSnaps);
@@ -126,7 +132,7 @@ export async function purge(redis, argv, log = console.log) {
   }
 
   const after = await scanGroups();
-  const deletedIds = [...DEFAULT_GROUPS.map((g) => g.id), ...["market-state", "fmp-meters"].filter((id) => optedIn.has(id))];
+  const deletedIds = [...(optInsOnly ? [] : DEFAULT_GROUPS.map((g) => g.id)), ...["market-state", "fmp-meters"].filter((id) => optedIn.has(id))];
   const left = deletedIds.map((id) => [ALL.find((g) => g.id === id), count(after, id)]).filter(([, n]) => n > 0);
   const bad = left.filter(([g]) => !g.refills);
   log(`\napplied at ${new Date().toISOString()}: DEL removed ${removed}${strips ? `; pool rows stripped ${stripped}` : ""}. Redis commands: ${commands}`);
