@@ -68,4 +68,19 @@ console.log(`\nBUDGET: of the ${gap.length}, ${gap.length - noBars} already get 
 // How the analysis universe's members break down by source, for the "why".
 const inDyn = [...uni].filter((s) => score.has(s)).length;
 console.log(`analysis universe members with a dynamic-universe entry: ${inDyn} of ${uni.size}`);
+// BEFORE AND AFTER #808 (#553 COWORK #189/#190): the universe as it stood on
+// 2026-10-06 before the size slice, against today's. Symbols only.
+{
+  const fs = await import("node:fs");
+  const before = new Set(fs.readFileSync(new URL("./universe-before-2026-10-06.txt", import.meta.url), "utf8").split(",").map((s) => s.trim()).filter(Boolean).map(dashed));
+  const added = [...uni].filter((s) => !before.has(s)).sort();
+  const dropped = [...before].filter((s) => !uni.has(s)).sort();
+  const topSet = new Set(top.map((r) => r.f));
+  const rankOf = (s) => { const r = ranked.findIndex((x) => x.f === s); return r >= 0 ? `#${r + 1}` : "unranked"; };
+  console.log(`\nBEFORE #808: ${before.size} · NOW: ${uni.size}`);
+  console.log(`NOW IN, NOT BEFORE: ${added.length} (of them in the top ${TOP}: ${added.filter((s) => topSet.has(s)).length})`);
+  console.log(`  ${added.map((s) => `${s} ${rankOf(s)}`).join(" · ")}`);
+  console.log(`DROPPED OUT: ${dropped.length}`);
+  for (const s of dropped) console.log(`  ${s.padEnd(7)} cap rank ${rankOf(s)} · dynamic ${score.has(s) ? `yes (score ${score.get(s)})` : "no"}`);
+}
 console.log(`\nRedis commands ${commands} (read-only)`);
