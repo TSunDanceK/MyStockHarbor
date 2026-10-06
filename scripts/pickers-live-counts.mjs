@@ -67,6 +67,7 @@ for (const sec of manifest.head?.sections ?? []) {
   const raw = await redis.hmget("msh:picker-charts:v1", ...syms);
   const got = Array.isArray(raw) ? raw : syms.map((s) => raw?.[s] ?? null);
   let rows = 0, rowsWithLine = 0, drawn = 0, withLine = 0;
+  const states = { up: 0, down: 0, zero: 0 };
   const shapes = new Map();
   nonEmpty.forEach((it, k) => {
     const pts = parse(got[k]);
@@ -79,9 +80,10 @@ for (const sec of manifest.head?.sections ?? []) {
     drawn += tail.length;
     const n = tail.filter((p) => typeof p.trendLine === "number").length;
     withLine += n;
+    for (const p of tail) if (typeof p.trendLine === "number") { if (p.trendState === 1) states.up++; else if (p.trendState === -1) states.down++; else states.zero++; }
     if (n) rowsWithLine++;
   });
-  console.log(`    page join over stored charts: rows with a stored chart ${rows}, rows that get a line ${rowsWithLine}, drawn points ${drawn}, points with a line ${withLine}; date shapes (type:length chart vs series) ${[...shapes].map(([k, v]) => `${k} ×${v}`).join("; ")}`);
+  console.log(`    page join over stored charts: rows with a stored chart ${rows}, rows that get a line ${rowsWithLine}, drawn points ${drawn}, points with a line ${withLine}; date shapes (type:length chart vs series) ${[...shapes].map(([k, v]) => `${k} ×${v}`).join("; ")}; line states drawn: up ${states.up}, down ${states.down}, unconfirmed ${states.zero}`);
 }
 
 const universe = parse(await redis.get("msh:pickers:v10:symbols"));
