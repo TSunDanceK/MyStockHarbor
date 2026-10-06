@@ -15,7 +15,7 @@
 //   4. the command cost per forward-section build for each cut, as GETs (as
 //      shipped) and as one MGET.
 //
-// Commands: 1 GET (universe) + 1 HMGET (pool) + up to 3 (Pickers caps) + up to ~200 GETs (records).
+// Commands: 1 GET (universe) + 1 HMGET (pool) + 1 HMGET (SEC shares) + up to ~200 GETs (records).
 import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 import { readCodeOnly, grabConst } from "./lib/source-code.mjs";
@@ -63,22 +63,28 @@ fields.forEach((f, i) => {
 });
 const poolCaps = capOf.size;
 // THE POOL HOLDS NO CAP SINCE THE FMP PULL (#738 "no frozen FMP figures"), so
-// the ranking falls back to the Pickers rows' SEC market cap (price × cover-
-// page shares, pickersSecFundamentals): the manifest, then one MGET of chunks.
-const PICKERS_MANIFEST_KEY = keyOf("lib/server/pickersBuilder.ts", "PICKERS_MANIFEST_KEY");
-const PICKERS_LAST_GOOD_KEY = keyOf("lib/server/pickersBuilder.ts", "PICKERS_LAST_GOOD_MANIFEST_KEY");
-let pickersCaps = 0;
+// the ranking falls back to A's own definition, cover-page shares × price: the
+// shares from the Pickers SEC hash (one HMGET), the price from the pool row.
+const PICKERS_SEC_KEY = keyOf("lib/server/pickersSecFundamentals.ts", "PICKERS_SEC_KEY");
+let secCaps = 0, poolPrices = 0;
 if (!poolCaps) {
-  let man = await redis.get(PICKERS_MANIFEST_KEY); commands++;
-  if (!man?.chunkKeys) { man = await redis.get(PICKERS_LAST_GOOD_KEY); commands++; }
-  const chunks = man?.chunkKeys?.length ? await redis.mget(...man.chunkKeys) : []; commands++;
-  for (const item of (chunks ?? []).flat()) {
-    const c = Number(item?.marketCap);
-    if (item?.symbol && Number.isFinite(c) && c > 0) { capOf.set(dashed(item.symbol), c); pickersCaps++; }
-  }
+  const priceOf = new Map();
+  fields.forEach((f, i) => {
+    const row = Array.isArray(rawPool) ? rawPool[i] : rawPool?.[f];
+    const p = row && typeof row === "object" ? Number(row.price) : NaN;
+    if (Number.isFinite(p) && p > 0) { priceOf.set(f, p); poolPrices++; }
+  });
+  const secRaw = await redis.hmget(PICKERS_SEC_KEY, ...fields); commands++;
+  fields.forEach((f, i) => {
+    let row = Array.isArray(secRaw) ? secRaw[i] : secRaw?.[f];
+    if (typeof row === "string") { try { row = JSON.parse(row); } catch { row = null; } }
+    const shares = Number(row?.inputs?.shares?.val);
+    const p = priceOf.get(f);
+    if (Number.isFinite(shares) && shares > 0 && p) { capOf.set(f, shares * p); secCaps++; }
+  });
 }
 const ranked = [...capOf.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s);
-console.log(`today ${TODAY} · universe ${universe.length} · market cap from the price pool: ${poolCaps} · from the Pickers rows (SEC × price): ${pickersCaps}`);
+console.log(`today ${TODAY} · universe ${universe.length} · market cap from the price pool: ${poolCaps} · pool prices ${poolPrices} · shares × price from the SEC hash: ${secCaps}`);
 if (!poolCaps) console.log("   NOTE: the price pool carries NO market cap, so the page's HMGET sort (strip and Coming up) has none to sort by.");
 
 const want = [...new Set([...CUT50, ...ranked.slice(0, 150).map((s) => s), ...NAMED])];
@@ -143,7 +149,7 @@ for (const s of NAMED) {
 }
 
 // ── 3. WIDENING ─────────────────────────────────────────────────────────────
-console.log(`\n3. WIDENING, SAME RULE AND SAME BAR (fresh ranking: ${poolCaps ? "the price pool" : "the Pickers rows' SEC"} market cap)`);
+console.log(`\n3. WIDENING, SAME RULE AND SAME BAR (fresh ranking: ${poolCaps ? "the price pool's market cap" : "cover-page shares × pool price"})`);
 const fresh50 = ranked.slice(0, 50);
 const drift = CUT50.filter((s) => !fresh50.includes(dashed(s)));
 console.log(`   the committed 50 vs today's top 50: ${drift.length} differ (${drift.join(" ") || "none"})`);
