@@ -1402,6 +1402,13 @@ const TASKS = {
   // --opt-ins-only keeps every default key; use these two in its place.
   "write-fmp-purge-snapshots-only-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--opt-ins-only", "--insight-snapshots"], writes: true },
   "write-fmp-purge-snapshots-only": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--opt-ins-only", "--insight-snapshots"], writes: true },
+  // THE EARNINGS-PAGE GAPS (#552 COWORK #187 §3/§4/§5). Read-only.
+  "write-page-gaps-census": {
+    script: "scripts/sec-page-gaps-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
