@@ -1372,6 +1372,16 @@ const TASKS = {
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
   // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
   "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
+  // READ-ONLY DESPITE THE PREFIX: why "Coming up" is thin (#552 COWORK #180).
+  // The shipped due strip and expected section over the live report-date
+  // records, the named reason per symbol, and what a top-100 / top-150 cut
+  // would add at the same bar. GETs and one HMGET; writes nothing.
+  "write-coming-up-coverage-census": {
+    script: "scripts/coming-up-coverage-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
