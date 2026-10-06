@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insight page concept · AMZN</title>
+<style>
+:root{
+  --bg:#070b14; --panel:#0e1524; --panel2:#111a2c; --line:#1e2a40; --text:#e6edf7; --muted:#94a3b8; --fine:#64748b;
+  --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --blue:#38bdf8; --accent:#60a5fa; --gold:#eab308;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+.note{background:#1a1405;border:1px dashed #6b5310;color:#facc15;font-size:13px;padding:8px 12px;border-radius:10px;margin-bottom:14px}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.mock{font-size:10px;color:#facc15;border:1px dashed #6b5310;border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+.eyebrow{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--accent);text-transform:uppercase;margin:0 0 4px}
+h1{font-size:34px;line-height:1.15;margin:8px 0 10px}
+h2{font-size:20px;margin:0 0 10px}
+.fine{font-size:12px;color:var(--fine)}
+.muted{color:var(--muted)}
+.grid{display:grid;gap:16px}
+/* hero */
+.hero{position:relative;border-radius:20px;overflow:hidden;border:1px solid var(--line);min-height:300px;display:flex;align-items:flex-end;
+  background:linear-gradient(180deg,rgba(7,11,20,.05),rgba(7,11,20,.92) 75%),
+  radial-gradient(1200px 400px at 70% 0%,#1f3b63 0,#0b1424 60%),#0b1424}
+.hero .art{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#2b4569;font-size:13px;letter-spacing:.1em;text-transform:uppercase;pointer-events:none}
+.hero .art span{border:1px dashed #2b4569;padding:6px 10px;border-radius:8px;margin-top:-90px}
+.hero-in{position:relative;padding:22px;width:100%}
+.idrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.logo{width:44px;height:44px;border-radius:12px;background:#ff9900;color:#111;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:20px}
+.tick{font-weight:900;font-size:20px}
+.label{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.5);color:#fbbf24}
+.meta{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:6px}
+.credit{position:absolute;right:12px;top:10px;font-size:11px;color:#7c8aa3;background:rgba(0,0,0,.35);padding:2px 8px;border-radius:6px}
+/* since */
+.since{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:12px;margin-top:16px}
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px}
+.stat .k{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.stat .v{font-size:26px;font-weight:800;margin-top:2px}
+.up{color:var(--green)} .down{color:var(--red)}
+.held{display:inline-flex;align-items:center;gap:6px;font-weight:800;color:var(--green)}
+.since-lead{background:linear-gradient(135deg,#0f2a1c,#0e1524);border-color:#1f5134}
+/* layout */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;margin-top:16px}
+.result{font-size:18px;line-height:1.6}
+details{border-top:1px solid var(--line);padding-top:10px;margin-top:12px}
+summary{cursor:pointer;color:var(--accent);font-weight:700;font-size:14px}
+/* chart */
+.chartbox{position:relative}
+svg text{font-family:inherit}
+.toggles{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}
+.tg{font-size:13px;border:1px solid var(--line);background:#0b1220;color:var(--muted);border-radius:999px;padding:5px 11px;cursor:pointer}
+.tg.on{color:var(--text);border-color:#34507a;background:#12233d}
+.slider{width:100%;accent-color:var(--accent);margin-top:8px}
+.readout{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:14px;margin-top:6px}
+.pill{border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:#0b1220}
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile{border:1px solid var(--line);border-radius:12px;padding:12px;background:rgba(34,197,94,.06)}
+.tile .k{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.tile .v{font-size:22px;font-weight:800}
+.src{font-size:12px}
+/* levels */
+.lv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+.lv:last-child{border:0}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px}
+/* bull bear */
+.bb{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bb div{border-radius:12px;padding:12px;border:1px solid var(--line)}
+.bull{background:rgba(34,197,94,.07)} .bear{background:rgba(239,68,68,.07)}
+.bb b{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+/* vote */
+.vote{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.vbtn{border:1px solid var(--line);background:#0b1220;color:var(--text);border-radius:12px;padding:10px;font-weight:700;cursor:pointer}
+.vbtn:hover{border-color:#34507a}
+.bar{height:10px;border-radius:999px;background:#0b1220;overflow:hidden;display:flex;margin-top:10px}
+.bar i{display:block;height:100%}
+/* explore cards */
+.explore{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
+.xcard{color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s}
+.xcard:hover{border-color:#34507a}
+.xcard .big{font-size:28px;font-weight:900;color:var(--accent)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:12px;font-weight:700;border-radius:999px;padding:4px 9px;border:1px solid #1f5134;background:rgba(34,197,94,.08);color:#86efac}
+.chip.n{border-color:var(--line);background:#0b1220;color:var(--muted)}
+.go{margin-top:auto;font-weight:700;font-size:14px}
+.related{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
+.rel{color:var(--text);border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+.rel .img{height:90px;background:linear-gradient(135deg,#1b2d4a,#0b1424)}
+.rel .t{padding:12px;font-weight:700}
+.rel .s{padding:0 12px 12px;font-size:13px;color:var(--muted)}
+.trade{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.btn{border:1px solid #34507a;background:#12233d;color:var(--text);padding:9px 14px;border-radius:10px;font-weight:700}
+@media (max-width:900px){
+  .main{grid-template-columns:1fr}
+  .since{grid-template-columns:1fr 1fr}
+  .explore,.related{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  h1{font-size:26px}
+  .tiles{grid-template-columns:1fr 1fr}
+  .bb{grid-template-columns:1fr}
+  .since{grid-template-columns:1fr 1fr}
+  .stat .v{font-size:22px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="note"><b>Concept mock-up, not live.</b> AMZN figures are from the live site on 6 Oct 2026 (price $256.62, earnings tiles, capex $132bn, Bottlenecks ×44, sector YTD). Anything marked <span class="mock" style="margin:0">illustrative</span> is made-up shape data for the mock-up only. On the real page, every number is computed by page code.</div>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="art"><span>Latest AMZN news image · from our news feed</span></div>
+  <div class="credit">Image: publisher credit</div>
+  <div class="hero-in">
+    <div class="idrow">
+      <div class="logo">a</div>
+      <div><span class="tick">AMZN</span> <span class="muted">Amazon.com, Inc.</span></div>
+      <span class="tag label">200-day test</span>
+      <span class="tag">Daily chart</span>
+    </div>
+    <h1>Amazon tests its 200-day average ahead of Q2 earnings</h1>
+    <div class="meta">
+      <span>Published 28 Jul 2026</span>
+      <span>Next report: ~26 Oct – 1 Nov <span class="tag" style="padding:1px 6px">estimated</span></span>
+      <span>Consumer Cyclical · $2.77T</span>
+    </div>
+  </div>
+</section>
+
+<!-- SINCE PUBLISHED -->
+<section class="since">
+  <div class="stat since-lead">
+    <div class="k">Since this was published</div>
+    <div class="v up">+11.7%</div>
+    <div class="fine">$229.82 on 28 Jul → $256.62 on 6 Oct</div>
+  </div>
+  <div class="stat">
+    <div class="k">Level discussed</div>
+    <div class="v" style="font-size:20px">200-day average</div>
+    <div class="held">✓ Back above it</div>
+  </div>
+  <div class="stat">
+    <div class="k">Now vs 200-day</div>
+    <div class="v up">+6.2%</div>
+    <div class="fine">200-day $241.68 today</div>
+  </div>
+  <div class="stat">
+    <div class="k">vs S&amp;P 500 since</div>
+    <div class="v up">+? pts <span class="mock">illustrative</span></div>
+    <div class="fine">From the performance engine</div>
+  </div>
+</section>
+
+<div class="main">
+  <!-- LEFT -->
+  <div class="grid">
+
+    <div class="card">
+      <p class="eyebrow">The short version</p>
+      <p class="result">Amazon slipped about 2% under its 200-day average two days before its Q2 report, after Alphabet's bigger capex plan raised worries about AI spending. The report on 30 Jul showed EPS up sharply on a year earlier, and the stock has since moved back above the line.</p>
+      <details><summary>Why the 200-day mattered here</summary>
+        <p class="muted">The 200-day average is a long-term trend line many chart readers watch. A close back above it may suggest the longer uptrend held; a run of closes below it might suggest a deeper pullback. It's one signal, not a forecast.</p>
+      </details>
+    </div>
+
+    <!-- INTERACTIVE CHART -->
+    <div class="card">
+      <p class="eyebrow">Did the level hold?</p>
+      <h2>Drag from the publish date to today</h2>
+      <div class="toggles">
+        <button class="tg on" data-k="ma200">200-day</button>
+        <button class="tg" data-k="ma50">50-day</button>
+        <button class="tg on" data-k="trend">Trend Helper</button>
+        <button class="tg on" data-k="levels">Today's levels</button>
+      </div>
+      <div class="chartbox"><svg id="chart" viewBox="0 0 720 280" width="100%" role="img" aria-label="AMZN price chart since publication"></svg></div>
+      <input id="scrub" class="slider" type="range" min="0" max="49" value="49" aria-label="Move through time">
+      <div class="readout">
+        <span class="pill" id="rDate">6 Oct 2026</span>
+        <span class="pill">Price <b id="rPx">$256.62</b></span>
+        <span class="pill">vs publish <b id="rChg" class="up">+11.7%</b></span>
+        <span class="pill" id="rState">Above 200-day</span>
+      </div>
+      <p class="fine" style="margin-top:8px">Mock-up path is <span class="mock" style="margin:0">illustrative</span>. The real chart uses daily prices (Market data from Tiingo.com), drawn by page code. The small "Chart when published" image sits under it.</p>
+    </div>
+
+    <!-- FILED FIGURES -->
+    <div class="card">
+      <p class="eyebrow">From the filings</p>
+      <h2>What the 30 Jul report showed</h2>
+      <div class="tiles">
+        <div class="tile"><div class="k">EPS (diluted)</div><div class="v">$5.75</div><div class="fine up">+242.3% vs Q2 FY2025</div></div>
+        <div class="tile"><div class="k">Gross margin</div><div class="v">52.3%</div><div class="fine up">▲ 0.4 pt</div></div>
+        <div class="tile"><div class="k">Operating margin</div><div class="v">13.7%</div><div class="fine up">▲ 2.3 pt</div></div>
+      </div>
+      <p class="src muted" style="margin-top:10px">P/E 20.6× (TTM to 30 Jun 2026), near the sector median of 19.5×. <a href="#">10-Q filed with the SEC ↗</a> · <a href="#">Full earnings page →</a></p>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">What happened</p>
+      <p>Alphabet lifted its 2026 capital spending plan, and investors priced in the chance that Amazon would follow. <a href="#">[source]</a> Amazon's own capex in calendar 2025 was the largest of any US company we track, at $132bn. <a href="#">[cash-flow statement]</a></p>
+      <div class="bb">
+        <div class="bull"><b class="up">If it goes well</b>Holding above the 200-day may keep the longer uptrend intact into the next report.</div>
+        <div class="bear"><b class="down">If it doesn't</b>A run of closes back under $241.68 might point to the capex worry returning.</div>
+      </div>
+    </div>
+
+    <!-- VOTE -->
+    <div class="card">
+      <p class="eyebrow">Your read</p>
+      <h2>Where do you think AMZN goes into its next report?</h2>
+      <div class="vote">
+        <button class="vbtn" data-v="0">▲ Higher</button>
+        <button class="vbtn" data-v="1">● Sideways</button>
+        <button class="vbtn" data-v="2">▼ Lower</button>
+      </div>
+      <div id="vres" style="display:none">
+        <div class="bar"><i id="b0" style="background:var(--green)"></i><i id="b1" style="background:#64748b"></i><i id="b2" style="background:var(--red)"></i></div>
+        <p class="fine" id="vtxt"></p>
+      </div>
+      <p class="fine">Votes reset at each report. After it, the page shows how readers called it. <span class="mock">illustrative counts</span></p>
+    </div>
+  </div>
+
+  <!-- RIGHT RAIL -->
+  <aside class="grid" style="align-content:start">
+    <div class="card">
+      <p class="eyebrow">Levels today</p>
+      <div class="lv"><span><span class="dot" style="background:var(--green)"></span>Zone above (2 levels)</span><span>$259.49–261.12</span></div>
+      <div class="lv"><span><span class="dot" style="background:var(--blue)"></span>Last price</span><b>$256.62</b></div>
+      <div class="lv"><span><span class="dot" style="background:var(--red)"></span>Zone below (4 levels)</span><span>$253.56–255.19</span></div>
+      <div class="lv"><span><span class="dot" style="background:var(--red)"></span>Month low</span><span>$246.12</span></div>
+      <div class="lv"><span><span class="dot" style="background:var(--gold)"></span>Level discussed: 200-day</span><span>$241.68</span></div>
+      <p class="fine" style="margin-top:8px">Live Price zones + Key levels engine · <a href="#">open the stock page →</a></p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">Showing up in screens</p>
+      <div class="chips">
+        <a class="chip" href="#">Above MA200</a>
+        <a class="chip" href="#">MACD above signal</a>
+        <a class="chip n" href="#">Earnings Growth</a>
+      </div>
+      <p class="fine" style="margin-top:8px">From today's picker build. <span class="mock">illustrative list</span></p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">Sector</p>
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><b>Consumer Cyclical</b><span class="down" style="font-weight:800">−2.57% YTD</span></div>
+      <svg viewBox="0 0 300 50" width="100%" style="margin-top:6px"><polyline fill="none" stroke="#ef4444" stroke-opacity=".6" stroke-width="2" points="0,20 30,24 60,18 90,28 120,26 150,33 180,30 210,36 240,31 270,34 300,32"/></svg>
+      <p class="fine">70 companies · <a href="#">all 11 sectors →</a> <span class="mock">illustrative line</span></p>
+    </div>
+  </aside>
+</div>
+
+<!-- EXPLORE THE SITE: STRONG POINTS -->
+<h2 style="margin:26px 0 0">More on AMZN across MyStockHarbor</h2>
+<section class="explore">
+  <a class="xcard" href="#">
+    <p class="eyebrow">Bottlenecks</p>
+    <div class="big">×44</div>
+    <div>stock pages name Amazon as a supplier or key customer, more than any other company.</div>
+    <svg viewBox="0 0 200 70" width="100%" style="max-height:90px"><g stroke="#2dd4bf" stroke-opacity=".35"><line x1="100" y1="35" x2="20" y2="10"/><line x1="100" y1="35" x2="40" y2="62"/><line x1="100" y1="35" x2="180" y2="12"/><line x1="100" y1="35" x2="165" y2="60"/><line x1="100" y1="35" x2="10" y2="38"/><line x1="100" y1="35" x2="192" y2="36"/></g><g fill="#94a3b8"><circle cx="20" cy="10" r="3"/><circle cx="40" cy="62" r="3"/><circle cx="180" cy="12" r="3"/><circle cx="165" cy="60" r="3"/><circle cx="10" cy="38" r="3"/><circle cx="192" cy="36" r="3"/></g><circle cx="100" cy="35" r="15" fill="#0b1424" stroke="#2dd4bf" stroke-width="2"/><text x="100" y="39" fill="#e6edf7" font-size="10" font-weight="800" text-anchor="middle">AMZN</text></svg>
+    <span class="go">See who depends on Amazon →</span>
+  </a>
+  <a class="xcard" href="#">
+    <p class="eyebrow">AI &amp; data-centre capex</p>
+    <div class="big">#1 · $132bn</div>
+    <div>Largest reported capex of any company we track, calendar 2025. See who's receiving that spend.</div>
+    <div class="chips"><span class="chip n">NVDA $194bn</span><span class="chip n">HPE $17.6bn</span><span class="chip n">INTC $16.9bn</span></div>
+    <span class="go">Follow the money →</span>
+  </a>
+  <a class="xcard" href="#">
+    <p class="eyebrow">Pickers</p>
+    <div class="big">Near 200-Day</div>
+    <div>Find other stocks testing their 200-day average today, or build your own screen from 28 conditions.</div>
+    <div class="chips"><span class="chip n">Oversold</span><span class="chip n">Breakout</span><span class="chip n">Bullish Flip</span></div>
+    <span class="go">Open the screener →</span>
+  </a>
+</section>
+
+<h2 style="margin:26px 0 0">Related insights</h2>
+<section class="related">
+  <a class="rel" href="#"><div class="img"></div><div class="t">Walmart near its 50-day after a record run</div><div class="s">Consumer Defensive · peer <span class="mock">illustrative</span></div></a>
+  <a class="rel" href="#"><div class="img"></div><div class="t">Alphabet's capex jump and the AI spending race</div><div class="s">Communication Services <span class="mock">illustrative</span></div></a>
+  <a class="rel" href="#"><div class="img"></div><div class="t">NVDA: the biggest receiver of cloud capex</div><div class="s">Technology <span class="mock">illustrative</span></div></a>
+</section>
+
+<div class="card trade" style="margin-top:16px">
+  <span class="muted">Want the full picture? Compare this with the live stock page, news and earnings.</span>
+  <span style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="#">AMZN stock page</a><a class="btn" href="#">News</a><a class="btn" href="#">Earnings</a><a class="btn" href="#">Trade AMZN ↗</a></span>
+</div>
+<p class="fine" style="margin-top:14px">Descriptive analysis of public information, not investment advice. Daily prices: Market data from Tiingo.com. Filed figures: SEC EDGAR.</p>
+</div>
+
+<script>
+// Illustrative path only: 50 sessions from publish (229.82) to today (256.62)
+const N=50, P0=229.82, P1=256.62;
+const px=[], ma200=[], ma50=[];
+for(let i=0;i<N;i++){
+  const t=i/(N-1);
+  const dip = i<4 ? -1.8*i : 0;
+  const base = P0 + (P1-P0)*Math.pow(t,0.9) + Math.sin(i*0.7)*3.2 + dip + (i>2&&i<6?8:0);
+  px.push(i===0?P0:(i===N-1?P1:base));
+  ma200.push(234.64 + (241.68-234.64)*t);
+  ma50.push(248.45 + (257.43-248.45)*t + Math.sin(i*0.25)*1.5);
+}
+const dates=[];{let d=new Date(Date.UTC(2026,6,28));while(dates.length<N){const w=d.getUTCDay();if(w>0&&w<6)dates.push(new Date(d));d.setUTCDate(d.getUTCDate()+1);} dates[N-1]=new Date(Date.UTC(2026,9,6));}
+const fmt=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+const W=720,H=280,L=46,R=10,T=14,B=26, lo=220, hi=266;
+const x=i=>L+(W-L-R)*i/(N-1), y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
+const show={ma200:true,ma50:false,trend:true,levels:true};
+const svg=document.getElementById('chart');
+function path(arr,n){return arr.slice(0,n).map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1)).join('');}
+function draw(k){
+  let s='';
+  for(let v=225;v<=265;v+=10){s+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#1e2a40"/><text x="${L-6}" y="${y(v)+4}" fill="#64748b" font-size="11" text-anchor="end">${v}</text>`;}
+  if(show.levels){
+    s+=`<rect x="${L}" width="${W-L-R}" y="${y(261.12)}" height="${y(259.49)-y(261.12)}" fill="#22c55e" opacity=".12"/>`;
+    s+=`<rect x="${L}" width="${W-L-R}" y="${y(255.19)}" height="${y(253.56)-y(255.19)}" fill="#ef4444" opacity=".12"/>`;
+  }
+  if(show.ma200) s+=`<path d="${path(ma200,N)}" fill="none" stroke="#eab308" stroke-width="2" stroke-dasharray="5 4"/><text x="${W-R-4}" y="${y(ma200[N-1])+14}" fill="#eab308" font-size="11" text-anchor="end">200-day</text>`;
+  if(show.ma50) s+=`<path d="${path(ma50,N)}" fill="none" stroke="#a78bfa" stroke-width="1.6"/>`;
+  if(show.trend){
+    for(let i=1;i<N;i++){const c=px[i]>=ma200[i]?'#3b82f6':'#eab308'; s+=`<line x1="${x(i-1)}" y1="${y(px[i-1]-4)}" x2="${x(i)}" y2="${y(px[i]-4)}" stroke="${c}" stroke-width="3" stroke-opacity=".55" stroke-linecap="round"/>`;}
+  }
+  s+=`<path d="${path(px,N)}" fill="none" stroke="#475569" stroke-width="1.5"/>`;
+  s+=`<path d="${path(px,k+1)}" fill="none" stroke="#e6edf7" stroke-width="2.2"/>`;
+  s+=`<line x1="${x(0)}" x2="${x(0)}" y1="${T}" y2="${H-B}" stroke="#60a5fa" stroke-dasharray="3 3"/><text x="${x(0)+4}" y="${T+10}" fill="#60a5fa" font-size="11">Published</text>`;
+  s+=`<circle cx="${x(k)}" cy="${y(px[k])}" r="5" fill="${px[k]>=ma200[k]?'#22c55e':'#ef4444'}" stroke="#070b14" stroke-width="2"/>`;
+  s+=`<text x="${L}" y="${H-6}" fill="#64748b" font-size="11">28 Jul</text><text x="${W-R}" y="${H-6}" fill="#64748b" font-size="11" text-anchor="end">6 Oct</text>`;
+  svg.innerHTML=s;
+  const chg=(px[k]/P0-1)*100;
+  document.getElementById('rDate').textContent=fmt(dates[k]);
+  document.getElementById('rPx').textContent='$'+px[k].toFixed(2);
+  const c=document.getElementById('rChg'); c.textContent=(chg>=0?'+':'')+chg.toFixed(1)+'%'; c.className=chg>=0?'up':'down';
+  document.getElementById('rState').textContent=px[k]>=ma200[k]?'Above 200-day':'Below 200-day';
+  document.getElementById('rState').style.color=px[k]>=ma200[k]?'#22c55e':'#ef4444';
+}
+const sc=document.getElementById('scrub'); sc.addEventListener('input',()=>draw(+sc.value)); draw(N-1);
+document.querySelectorAll('.tg').forEach(b=>b.addEventListener('click',()=>{show[b.dataset.k]=!show[b.dataset.k];b.classList.toggle('on');draw(+sc.value);}));
+const votes=[118,64,41];
+document.querySelectorAll('.vbtn').forEach(b=>b.addEventListener('click',()=>{
+  votes[+b.dataset.v]++; const t=votes.reduce((a,c)=>a+c,0);
+  ['b0','b1','b2'].forEach((id,i)=>document.getElementById(id).style.width=(votes[i]/t*100)+'%');
+  document.getElementById('vtxt').textContent=`Higher ${Math.round(votes[0]/t*100)}% · Sideways ${Math.round(votes[1]/t*100)}% · Lower ${Math.round(votes[2]/t*100)}% · ${t} votes`;
+  document.getElementById('vres').style.display='block';
+  document.querySelectorAll('.vbtn').forEach(x=>x.disabled=true); b.style.borderColor='#60a5fa';
+}));
+</script>
+</body>
+</html>
