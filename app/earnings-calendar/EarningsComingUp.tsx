@@ -14,10 +14,10 @@
 // quiet market (dueStripState's whole point).
 import Link from "next/link";
 import TickerLogo from "@/app/components/TickerLogo";
-import { EXPECTED_NONE, EXPECTED_UNAVAILABLE } from "@/lib/server/expectedCopy";
+import { EXPECTED_NONE, EXPECTED_UNAVAILABLE, coverageLabel } from "@/lib/server/expectedCopy";
 import { DUE_STRIP_UNAVAILABLE, type DueStripState } from "@/lib/server/dueStripState";
 import type { ExpectedSectionState } from "@/lib/server/expectedToReport";
-import { addDays, byCapThenSymbol, comingUpColumns } from "@/lib/server/earningsWeek";
+import { addDays, byCapThenSymbol, comingUpColumns, onePerCompany } from "@/lib/server/earningsWeek";
 
 export const COMING_UP_TITLE = "Coming up";
 export const ESTIMATED_TAG = "Estimated";
@@ -25,12 +25,14 @@ export const HOW_WE_ESTIMATE =
   "These dates are estimated from each company's usual SEC reporting pattern, so the exact day may differ.";
 export const DUE_GROUP_HEADING = "Period ended, not filed yet";
 export const EMPTY_COLUMN = "None estimated.";
+/** In place of an empty "This week" column (#552 COWORK #180). */
+export const THIS_WEEK_EMPTY = "Nothing estimated for the rest of this week.";
 /** Rows a column shows before "+ N more". */
 export const VISIBLE_PER_COLUMN = 8;
 
-/** Per symbol: the name and the market cap (for the sort only), as the page read them. */
-export type ComingUpFacts = Record<string, { company: string; cap: number | null }>;
-type Row = { symbol: string; company: string; cap: number | null; due: boolean };
+/** Per symbol: the name, the market cap (for the sort only) and the filer's CIK (one row per company), as the page read them. */
+export type ComingUpFacts = Record<string, { company: string; cap: number | null; cik?: string | null }>;
+type Row = { symbol: string; company: string; cap: number | null; due: boolean; also: string[] };
 
 function RowItem({ r }: { r: Row }) {
   return (
@@ -39,6 +41,7 @@ function RowItem({ r }: { r: Row }) {
         <TickerLogo symbol={r.symbol} name={r.company} size={20} radius={6} alt="" />
         <span className="cuSym">{r.symbol}</span>
         <span className="cuName">{r.company}</span>
+        {r.also.length ? <span className="cuAlso" data-also="">also {r.also.join(", ")}</span> : null}
       </Link>
     </li>
   );
@@ -73,15 +76,21 @@ function ColumnRows({ due, rows }: { due: Row[]; rows: Row[] }) {
 export default function EarningsComingUp({ expected, due, today, facts = {} }: {
   expected: ExpectedSectionState; due: DueStripState; today: string; facts?: ComingUpFacts;
 }) {
-  const fact = (s: string) => facts[s] ?? { company: "", cap: null };
-  const rows = expected.kind === "listed"
-    ? expected.rows.map((r) => ({ symbol: r.symbol, estimatedOn: addDays(today, r.daysAway), ...fact(r.symbol), due: false }))
-    : [];
-  const dueRows: Row[] = (due.kind === "listed" ? due.entries : [])
-    .map((e) => ({ symbol: e.symbol, ...fact(e.symbol), due: true }))
-    .filter((r) => !rows.some((x) => x.symbol === r.symbol))
+  const fact = (s: string) => ({ company: facts[s]?.company ?? "", cap: facts[s]?.cap ?? null });
+  const cikOf = (s: string) => facts[s]?.cik ?? null;
+  // ONE ROW PER COMPANY, across both lists: a due class and an estimated class
+  // of one filer are one row (the due one, which is the stronger fact).
+  const dueRows: Row[] = onePerCompany((due.kind === "listed" ? due.entries : [])
+    .map((e) => ({ symbol: e.symbol, ...fact(e.symbol), due: true })), cikOf)
     .sort(byCapThenSymbol);
-  const columns = comingUpColumns(rows, today);
+  const dueCompanies = new Set(dueRows.flatMap((r) => [r.symbol, ...r.also]).map((s) => cikOf(s) ?? `sym:${s}`));
+  const rows = expected.kind === "listed"
+    ? onePerCompany(expected.rows.map((r) => ({ symbol: r.symbol, estimatedOn: addDays(today, r.daysAway), ...fact(r.symbol), due: false })), cikOf)
+        .filter((r) => !dueCompanies.has(cikOf(r.symbol) ?? `sym:${r.symbol}`))
+    : [];
+  const columns = comingUpColumns(rows, today, { thisWeekHasDue: dueRows.length > 0 });
+  const thisWeekShown = columns[0].isThisWeek;
+  const shown = columns.reduce((n, c) => n + c.items.length, 0);
   const showGrid = rows.length > 0 || dueRows.length > 0;
   return (
     <section className="cuCard" aria-labelledby="cuHeading">
@@ -91,6 +100,8 @@ export default function EarningsComingUp({ expected, due, today, facts = {} }: {
         <details className="cuHow">
           <summary><span aria-hidden="true">ⓘ</span> How we estimate</summary>
           <p>{HOW_WE_ESTIMATE}</p>
+          {/* THE COVERAGE, BACK (#552 COWORK #180): the live counts, companies shown of the cut considered. */}
+          {expected.kind === "listed" ? <p data-coverage="">{coverageLabel(shown, expected.considered, DUE_GROUP_HEADING)}</p> : null}
         </details>
       </div>
 
@@ -102,6 +113,7 @@ export default function EarningsComingUp({ expected, due, today, facts = {} }: {
         <p className="cuLine">{expected.kind === "none" ? EXPECTED_NONE : EXPECTED_UNAVAILABLE}</p>
       ) : null}
 
+      {showGrid && !thisWeekShown ? <p className="cuThisWeekEmpty" data-this-week-empty="">{THIS_WEEK_EMPTY}</p> : null}
       {showGrid ? (
         <div className="cuGrid">
           {columns.map((c) => {
@@ -113,7 +125,7 @@ export default function EarningsComingUp({ expected, due, today, facts = {} }: {
                   <h3 id={`cu-${c.key}`} className="cuColLabel">{c.label}</h3>
                   <div className="cuColMeta"><span className="cuRange">{c.range}</span> · <span data-count={n}>{n} {n === 1 ? "company" : "companies"}</span></div>
                 </div>
-                {n ? <ColumnRows due={colDue} rows={c.items.map((r) => ({ symbol: r.symbol, company: r.company, cap: r.cap, due: false }))} />
+                {n ? <ColumnRows due={colDue} rows={c.items.map((r) => ({ symbol: r.symbol, company: r.company, cap: r.cap, due: false, also: r.also }))} />
                   : <p className="cuEmpty">{EMPTY_COLUMN}</p>}
               </div>
             );
@@ -148,6 +160,8 @@ export default function EarningsComingUp({ expected, due, today, facts = {} }: {
         .cuRowLink:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; border-radius: 6px; }
         .cuSym { flex: none; font-weight: 900; color: #f8fafc; }
         .cuName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cbd5e1; }
+        .cuAlso { flex: none; font-size: var(--fs-fine); color: #94a3b8; white-space: nowrap; }
+        .cuThisWeekEmpty { margin: 0 0 10px; font-size: var(--fs-fine); line-height: 1.5; color: #94a3b8; }
         .cuMore > summary { cursor: pointer; list-style: none; margin-top: 4px; font-size: var(--fs-label); font-weight: 800; color: #93c5fd; }
         .cuMore > summary::-webkit-details-marker { display: none; }
         .cuMore > summary:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; border-radius: 6px; }

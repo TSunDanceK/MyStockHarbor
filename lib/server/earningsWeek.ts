@@ -145,6 +145,10 @@ export function primaryPerFiler<T extends { symbol: string }>(
 // says "this week" or "the week of 19 Oct", never a day. Column one is the
 // rest of this week (today to Sunday); then the next three Mon–Sun weeks.
 // They roll forward on Monday because they are computed from today.
+//
+// AN EMPTY "THIS WEEK" IS NOT A COLUMN (#552 COWORK #180): with nothing
+// estimated and no due name for the rest of the week, the page says so in one
+// line and the grid shows the next FOUR Mon–Sun weeks instead.
 
 /** Monday of the week holding `d`. */
 const mondayOf = (d: string) => addDays(d, -((dow(d) + 6) % 7));
@@ -170,16 +174,30 @@ export type ComingUpColumn<T> = {
 };
 
 /**
- * The four columns, always four (an empty week is said, not dropped), each
- * sorted by market cap, largest first; an unknown cap last, then A–Z. A row
- * estimated before today or after the fourth window is not placed.
+ * The four columns, each sorted by market cap, largest first; an unknown cap
+ * last, then A–Z. A row estimated before today or after the last window is not
+ * placed. Column one is the rest of this week, UNLESS it would be empty and
+ * `thisWeekHasDue` is false: then the four are the next four Mon–Sun weeks
+ * (the caller tells by `columns[0].isThisWeek`). A later week that is empty
+ * stays, and says so.
  */
 export function comingUpColumns<T extends { symbol: string; estimatedOn: string; cap: number | null }>(
   rows: readonly T[],
   today: string,
+  opts: { thisWeekHasDue?: boolean } = {},
+): ComingUpColumn<T>[] {
+  const all = weekColumns(rows, today, COMING_UP_COLUMNS + 1);
+  const skip = all[0].items.length === 0 && !opts.thisWeekHasDue;
+  return skip ? all.slice(1) : all.slice(0, COMING_UP_COLUMNS);
+}
+
+function weekColumns<T extends { symbol: string; estimatedOn: string; cap: number | null }>(
+  rows: readonly T[],
+  today: string,
+  count: number,
 ): ComingUpColumn<T>[] {
   const monday = mondayOf(today);
-  const cols = Array.from({ length: COMING_UP_COLUMNS }, (_, w): ComingUpColumn<T> => {
+  const cols = Array.from({ length: count }, (_, w): ComingUpColumn<T> => {
     const weekStart = addDays(monday, 7 * w);
     const start = w === 0 ? today : weekStart;
     const end = addDays(weekStart, 6);
@@ -192,6 +210,30 @@ export function comingUpColumns<T extends { symbol: string; estimatedOn: string;
   }
   for (const c of cols) c.items.sort(byCapThenSymbol);
   return cols;
+}
+
+/**
+ * ONE ROW PER COMPANY (#552 COWORK #180): GOOGL and GOOG are one Alphabet
+ * row. Rows on the same CIK collapse to the class with the larger market cap
+ * (ties: a ticker without a class suffix, then A–Z); the others ride along as
+ * `also`, for a small "also GOOG". A row with no CIK on record stands alone.
+ */
+export function onePerCompany<T extends { symbol: string; cap: number | null }>(
+  rows: readonly T[],
+  cikOf: (symbol: string) => string | null,
+): (T & { also: string[] })[] {
+  const groups = new Map<string, T[]>();
+  for (const r of rows) {
+    const key = cikOf(r.symbol) ?? `sym:${r.symbol}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  return [...groups.values()].map((g) => {
+    const [lead, ...rest] = [...g].sort((a, b) =>
+      (b.cap ?? -1) - (a.cap ?? -1)
+      || Number(hasClassSuffix(a.symbol)) - Number(hasClassSuffix(b.symbol))
+      || (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0));
+    return { ...lead, also: [...new Set(rest.map((r) => r.symbol))].filter((s) => s !== lead.symbol) };
+  });
 }
 
 /** Market cap, largest first; an unknown cap last; then A–Z. */

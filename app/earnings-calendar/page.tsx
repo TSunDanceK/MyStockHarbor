@@ -230,7 +230,7 @@ export default async function EarningsCalendarPage({
     readWeekFigures(days),
   ]);
   const comingUpFacts: ComingUpFacts = Object.fromEntries(comingUpSymbols.map((s) =>
-    [s, { company: gridCompanyName(s), cap: pool.get(s)?.marketCap ?? null }]));
+    [s, { company: gridCompanyName(s), cap: pool.get(s)?.marketCap ?? null, cik: registrantFor(s)?.cik ?? null }]));
 
   // ONE ROW PER FILER, under its most-traded class; the figures are filled
   // from the record the announcement is under (`source`).

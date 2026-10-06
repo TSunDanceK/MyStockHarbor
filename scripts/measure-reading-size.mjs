@@ -158,6 +158,9 @@ async function earningsWeekFixture() {
   const names = { UNH: "UnitedHealth Group Incorporated", JPM: "JPMorgan Chase & Co.", NFLX: "Netflix, Inc.", "BRK-B": "Berkshire Hathaway Inc.",
     TSM: "Taiwan Semiconductor Manufacturing Company Limited", MU: "Micron Technology, Inc.", SCHW: "The Charles Schwab Corporation" };
   const facts = Object.fromEntries([...expected.rows.map((r) => r.symbol), "MU"].map((s, i) => [s, { company: names[s] ?? `${s} Financial Holdings Corporation`, cap: 1e12 - i * 1e9 }]));
+  // ONE ROW PER COMPANY (#552 COWORK #180): "also GOOG" must fit beside a long name.
+  expected.rows.push(exp("GOOGL", 3), exp("GOOG", 3));
+  Object.assign(facts, { GOOGL: { company: "Alphabet Inc. Class A Common Stock Holdings", cap: 2.1e12, cik: "1652044" }, GOOG: { company: "Alphabet Inc.", cap: 2.0e12, cik: "1652044" } });
   return renderToStaticMarkup(React.createElement("main", { style: { background: "#06080d", color: "#f1f5f9", padding: "20px 10px" } }, // the page's own padding at ≤400 px
     React.createElement(Week, { days, initial: "2026-10-01" }),
     React.createElement(ComingUp, { expected, due, today, facts })));
