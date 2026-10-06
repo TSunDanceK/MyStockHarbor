@@ -121,15 +121,16 @@ for (let i = 0; i < keys.length; i += 20) {
 }
 
 console.log(`sets read ${out.sets} of ${keys.length} keys`);
-console.log(`\n1. SHARE JUMPS (>= ${JUMP}x between adjacent periods): ${out.shareJump.length} symbols`);
-for (const [s, h] of out.shareJump) console.log(`   ${s.padEnd(7)} ${h.join(" · ")}`);
-console.log(`\n1b. THE SHARE STEPS, CLASSIFIED (a symbol can sit in more than one):`);
+console.log(`\n0. SUMMARY · THE SHARE STEPS, CLASSIFIED (a symbol can sit in more than one):`);
 console.log(`   split ratio, PROVEN by the filer's restated comparatives (asr): ${cls.proven.size} · ${[...cls.proven].join(" ")}`);
 console.log(`   split ratio, no restatement on file: ${cls.unproven.size} · ${[...cls.unproven].join(" ")}`);
 console.log(`   unit slip (>= ${SHARE_SCALE_MAX_STEP}x, thousands/millions): ${cls.unit.size} · ${[...cls.unit].join(" ")}`);
 console.log(`   other step (issuance, IPO/SPAC, reverse merger): ${cls.other.size} · ${[...cls.other].join(" ")}`);
 const provenMix = out.splitMixEps.filter(([s]) => cls.proven.has(s)).map(([s]) => s);
 console.log(`   of the ${out.splitMixEps.length} with EPS on two bases, ${provenMix.length} sit on a PROVEN split: ${provenMix.join(" ")}`);
+
+console.log(`\n1. SHARE JUMPS (>= ${JUMP}x between adjacent periods): ${out.shareJump.length} symbols`);
+for (const [s, h] of out.shareJump) console.log(`   ${s.padEnd(7)} ${h.join(" · ")}`);
 console.log(`\n2. EPS ON TWO BASES (an EPS jump on the same pair as a share jump): ${out.splitMixEps.length} symbols`);
 for (const [s, h] of out.splitMixEps) console.log(`   ${s.padEnd(7)} ${h.join(" · ")}`);
 console.log(`\n3. DPS ON TWO BASES: ${out.splitMixDps.length} symbols`);
