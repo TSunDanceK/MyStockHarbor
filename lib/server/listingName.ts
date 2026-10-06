@@ -15,10 +15,25 @@ const SECURITY_WORDS =
   /\b(?:stock|shares?|units?|warrants?|rights|adss?|notes|preferred|depositary|depository|registry|closed end fund|interests?)\b/i;
 const CLASS_ONLY = /^(?:class|series)\s+[a-z0-9]+$/i;
 
+/**
+ * THE SAME SUFFIX WITH NO DASH (#552 COWORK #174): the committed directory
+ * snapshot writes most names as "Nike, Inc. Common Stock", "Accenture plc
+ * Class A Ordinary Shares (Ireland)", "Banco De Chile ADS" — 1,403 of its
+ * 2,610 rows. Anchored on a phrase that can only describe a security (a class
+ * of common equity, a depositary share, a unit), from that phrase to the end.
+ * Preferred stock, notes and debentures are left alone: they are not a
+ * company's common listing, and their name says so.
+ */
+const NO_DASH_SECURITY =
+  /(?<!Preferred)\s+(?:New\s+)?(?:(?:Sponsored|Sponosred|Global|NY|Corporate)\s+)?(?:(?:Class|Series)\s+[A-Z0-9]+\s+)?(?:New York Registry Shares|Registry Shares|(?:Exchangeable\s+)?Limited Voting Shares|Subordinate Voting Shares|Shares of Beneficial Interest|Common Stock|Common Shares|Common [Uu]nits?|Ordinary Shares?|Ordinary share|American Depositary (?:Shares?|Receipts?)|Depositary Shares|ADRs?|ADSs?|Limited Partnership Units|Units|Class [A-Z] [Ss]hares)\b.*$/;
+
 export function cleanListingName(name: string): string {
   const s = String(name ?? "").trim();
   const at = s.lastIndexOf(" - ");
-  if (at <= 0) return s;
-  const suffix = s.slice(at + 3).trim();
-  return SECURITY_WORDS.test(suffix) || CLASS_ONLY.test(suffix) ? s.slice(0, at).trim() : s;
+  if (at > 0) {
+    const suffix = s.slice(at + 3).trim();
+    return SECURITY_WORDS.test(suffix) || CLASS_ONLY.test(suffix) ? s.slice(0, at).trim() : s;
+  }
+  const bare = s.replace(NO_DASH_SECURITY, "").trim();
+  return bare || s;
 }

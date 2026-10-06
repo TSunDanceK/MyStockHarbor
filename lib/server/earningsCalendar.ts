@@ -965,7 +965,8 @@ export async function getMonthDaysWithEarnings(year: number, month: number): Pro
   return days;
 }
 
-async function getDayCandidates(date: string): Promise<EarningsCandidate[]> {
+/** A date's candidates (SEC-admitted, named), from the month's one cached read. The week strip reads these directly (#552 COWORK #170). */
+export async function getDayCandidates(date: string): Promise<EarningsCandidate[]> {
   const [yearStr, monthStr] = date.split("-");
   const year = Number(yearStr);
   const month = Number(monthStr);

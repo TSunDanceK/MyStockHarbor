@@ -58,10 +58,10 @@ export function awayLabel(daysAway: number): string {
 }
 
 /** What the section can actually see, stated rather than implied. */
-export function coverageLabel(shown: number, considered: number): string {
+export function coverageLabel(shown: number, considered: number, dueHeading = "Due to report"): string {
   return `Showing ${shown} of the ${considered} largest companies we track. ` +
     `The rest either have no estimate that clears our accuracy bar, report outside ` +
-    `this window, or already appear under “Due to report” above.`;
+    `this window, or already appear under “${dueHeading}” above.`;
 }
 
 /** The last filing on record — a dated public document, so a date is honest here. */

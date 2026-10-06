@@ -123,10 +123,60 @@ async function earningsPage() {
   return renderToStaticMarkup(await Page({ params: Promise.resolve({ symbol: "AAPL" }) }));
 }
 
+/** "Earnings this week" (#552 COWORK #170) on fixture data: the page itself reads Redis for its lists. */
+async function earningsWeekFixture() {
+  const W = await import("../lib/server/earningsWeek.ts");
+  const { default: Week } = await import("../app/earnings-calendar/EarningsWeek.tsx");
+  const { default: ComingUp } = await import("../app/earnings-calendar/EarningsComingUp.tsx");
+  const today = "2026-10-05";
+  const rows = [
+    { symbol: "AAPL", company: "Apple Inc.", revenue: "$94.04B", revenueYoY: 9.6, eps: "$1.57", since: 2.3 },
+    { symbol: "GOOGL", company: "Alphabet Inc.", revenue: "$96.43B", revenueYoY: 13.8, eps: "$2.31", since: -1.4 },
+    { symbol: "NEWCO", company: "Newco International Holdings Corporation", revenue: "$11.7M", revenueYoY: null, eps: "−$0.12", since: null },
+  ];
+  const days = W.weekDays(today).map((date) => {
+    const r = date === "2026-10-01" ? rows : [];
+    return { date, weekday: W.tileWeekday(date), dateLabel: W.tileDate(date), count: date === "2026-09-30" ? 128 : r.length,
+      pill: W.countPill(date === "2026-09-30" ? 128 : r.length, date === today), isToday: date === today,
+      eyebrow: W.dayEyebrow(date, r.length), emptyLine: r.length ? null : `No results filed on ${W.dayLong(date)}.`, rows: r };
+  });
+  const exp = (symbol, daysAway) => ({ symbol, band: "d8_21", daysAway, periodEnd: "2026-09-30", medianLagDays: 15, fromPeriods: 12, precision: 0.9, isFpi: false, lastReportedOn: "2026-07-15", lastReportedPeriodEnd: "2026-06-30" });
+  const expected = { kind: "listed", considered: 50, rows: [exp("UNH", 10), exp("JPM", 2), exp("NFLX", 26), exp("BRK-B", 12), exp("TSM", 11)] };
+  const due = { kind: "listed", coverage: 1, entries: [{ symbol: "MU", periodEnd: "2026-08-27", dueFrom: "2026-09-15", expectedOn: "2026-09-19", daysOutstanding: 39 }] };
+  return renderToStaticMarkup(React.createElement("main", { style: { background: "#06080d", color: "#f1f5f9", padding: "20px 10px" } }, // the page's own padding at ≤400 px
+    React.createElement(Week, { days, initial: "2026-10-01" }),
+    React.createElement(ComingUp, { expected, due, today })));
+}
+
+/**
+ * INTC'S SHAPE ON THE EARNINGS PAGE (#552 COWORK #176): the snapshot with the
+ * word "Loss both periods" in the right column, and the cash card with n/m
+ * tiles (a loss quarter, positive OCF and FCF, OCF derived) in the main one,
+ * under the page's own stylesheet and layout.
+ */
+async function intcCardsFixture() {
+  const { buildSecEarningsView } = await import("../lib/server/secEarningsView.ts");
+  const Cards = await import("../app/stock/[symbol]/earnings/SecEarningsCards.tsx");
+  const v = buildSecEarningsView(JSON.parse(fs.readFileSync(path.join(ROOT, "data/sec/factset-fixture-AAPL.json"), "utf8")));
+  v.snapshot.epsYoY = "loss-both";
+  v.cashQuality.netIncome.val = -11.03e9;
+  v.cashQuality.operatingCashFlow.val = 7.01e9;
+  v.cashQuality.operatingCashFlow.derivedNote = "Derived: the quarter is the year-to-date figure less the previous one.";
+  v.cashQuality.freeCashFlow = 4.45e9;
+  const styles = ((await earningsPage()).match(/<style[\s\S]*?<\/style>/g) ?? []).join("");
+  const body = renderToStaticMarkup(React.createElement("main", { className: "earningsPage" },
+    React.createElement("div", { className: "earningsWrap" },
+      React.createElement("section", { className: "contentGrid" },
+        React.createElement("div", { className: "mainColumn" }, React.createElement(Cards.SecCashQualityCard, { view: v })),
+        React.createElement("aside", { className: "sideColumn" }, React.createElement(Cards.SecSnapshotCard, { view: v, pending: null }))))));
+  return styles + body;
+}
+
 const PAGES = [
   { name: "/stock/AAPL", render: stockPage, enforce: true },
   { name: "/markets/spx", render: spxPage, enforce: true },
   { name: "/stock/AAPL/earnings", render: earningsPage, enforce: true },
+  { name: "/earnings-calendar (week fixture)", render: earningsWeekFixture, enforce: true },
   { name: "/stock/AAPL strength note (open)", render: strengthNote, enforce: true },
   { name: "/stock/AAPL performance note (open)", render: performanceNote, enforce: true },
   { name: "/bottlenecks/capex why card", render: () => capexWhy(false), enforce: true },
@@ -372,6 +422,68 @@ for (const pg of PAGES) {
     console.log(`  ${label}: ${r.tiles} tiles, ${r.cols} across · ${r.balance} balance elements · ${fail ? `${scrolls ? "SCROLLS SIDEWAYS " : ""}${r.bad.slice(0, 4).join("; ")}${!r.tiles || !r.balance ? "CARDS NOT DRAWN" : ""} — FAIL` : "nothing wraps, cuts or leaves its card"}`);
     if (fail) failures++;
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `quality-balance-${width}${css ? "-root20" : ""}.png`), fullPage: true });
+    await page.close();
+  }
+}
+// ── THE WEEK STRIP (#552 COWORK #170): seven tiles in one row at 320 px, no
+// tile's lines wrapping ("Mon" over "5 Oct" over the pill), and nothing cut.
+{
+  const html = await earningsWeekFixture();
+  console.log("\n/earnings-calendar week strip (#552 COWORK #170)");
+  for (const [label, width, css] of [["320px", 320, ""], ["390px", 390, ""], ["1280px", 1280, ""], ["390px, root 20px", 390, "html { font-size: 20px; }"]]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.setContent(doc(html, css));
+    const r = await page.evaluate((big) => {
+      const tiles = [...document.querySelectorAll(".ewTile")];
+      const tops = new Set(tiles.map((t) => Math.round(t.getBoundingClientRect().top)));
+      const bad = [];
+      for (const t of tiles) for (const e of t.children) {
+        const lh = parseFloat(getComputedStyle(e).lineHeight) || parseFloat(getComputedStyle(e).fontSize) * 1.3;
+        // At the default size a line may not wrap; at a 20 px root the date may
+        // break between its two words ("5" / "Oct"), but nothing may be cut.
+        const wraps = Math.round(e.getBoundingClientRect().height / lh) > 1;
+        const cut = e.scrollWidth > e.clientWidth + 1 || e.getBoundingClientRect().right > t.getBoundingClientRect().right + 1 || e.getBoundingClientRect().left < t.getBoundingClientRect().left - 1;
+        if (cut || (wraps && !big)) bad.push(`${t.dataset.weekDay} "${e.textContent}"${cut ? " cut" : " wraps"}`);
+      }
+      return { n: tiles.length, rows: tops.size, bad, scrolls: document.documentElement.scrollWidth > innerWidth };
+    }, Boolean(css));
+    const fail = r.n !== 7 || r.rows !== 1 || r.bad.length || r.scrolls;
+    console.log(`  ${label}: ${r.n} tiles in ${r.rows} row · ${fail ? `${r.scrolls ? "SCROLLS SIDEWAYS " : ""}${r.bad.slice(0, 4).join("; ")} — FAIL` : "no tile line wraps or cuts"}`);
+    if (fail) failures++;
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `earnings-week-${width}${css ? "-root20" : ""}.png`), fullPage: true });
+    await page.close();
+  }
+}
+// ── NO TILE TEXT LEAVES ITS TILE, INTC'S SHAPE (#552 COWORK #176) ───────────
+{
+  const html = await intcCardsFixture();
+  console.log("\n/stock/INTC/earnings shape: word values and n/m tiles (#552 COWORK #176)");
+  for (const [label, width, css] of [["320px", 320, ""], ["360px", 360, ""], ["390px", 390, ""], ["430px", 430, ""], ["1280px", 1280, ""], ["390px, root 20px", 390, "html { font-size: 20px; }"], ["1280px, root 20px", 1280, "html { font-size: 20px; }"]]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.setContent(doc(html, css));
+    const r = await page.evaluate(() => {
+      const bad = [];
+      const tiles = [...document.querySelectorAll(".metricCard")];
+      for (const t of tiles) {
+        const R = t.getBoundingClientRect();
+        // THE TEXT ITSELF, not its box: a nowrap line overflows a box that
+        // stays the tile's width, so each text node's own extent is measured.
+        const walk = document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          if (!n.textContent.trim()) continue;
+          const range = document.createRange(); range.selectNodeContents(n);
+          for (const q of range.getClientRects()) {
+            if (q.width && (q.right > R.right + 1 || q.left < R.left - 1))
+              bad.push(`"${(t.querySelector(".metricLabel")?.textContent ?? "").trim()}": "${n.textContent.trim().slice(0, 40)}"`);
+          }
+        }
+      }
+      return { tiles: tiles.length, words: document.querySelectorAll(".metricWord").length, bad: [...new Set(bad)] };
+    });
+    const fail = r.bad.length || r.tiles < 10 || r.words < 1;
+    console.log(`  ${label}: ${r.tiles} tiles, ${r.words} word value(s) · ${fail ? `${r.bad.slice(0, 4).join("; ")}${r.tiles < 10 ? " CARDS NOT DRAWN" : ""} — FAIL` : "no text leaves its tile"}`);
+    if (fail) failures++;
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `intc-tiles-${width}${css ? "-root20" : ""}.png`), fullPage: true });
     await page.close();
   }
 }

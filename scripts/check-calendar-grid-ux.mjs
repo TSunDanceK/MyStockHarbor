@@ -40,9 +40,11 @@ console.log("1. future cells are neutral");
 const cells = (M) => ["2026-06-01", "2026-09-10", "2026-09-28"].map((d) => M.outOfWindowCell(d, "2026-06-25", "2026-09-24"));
 check("before the window → archived; inside → drawn normally; after → future", JSON.stringify(cells(D)) === '["archived",null,"future"]', JSON.stringify(cells(D)));
 {
+  // SINCE THE WEEK PAGE (#552 COWORK #170) there is no month grid: the strip
+  // is today and the six days before it, so no future day is drawn at all.
   const PAGE = readCodeOnly("app/earnings-calendar/page.tsx");
-  const fut = PAGE.indexOf('outside === "future"'), arch = PAGE.indexOf('outside === "archived"');
-  check("the future branch draws no ✕", fut > 0 && arch > fut && !PAGE.slice(fut, arch).includes("✕"));
+  check("no future day is drawn: the strip is weekDays(today), which ends today",
+    /const days = weekDays\(today\);/.test(PAGE) && !/outside === "future"/.test(PAGE));
   const M = await build(once(DAY, 'if (cellDate > windowEnd) return "future";', 'if (cellDate > windowEnd) return "archived";'));
   check("MUTATION: future days drawn as archived again is caught", cells(M)[2] !== "future");
 }
@@ -71,7 +73,8 @@ const base = { items: [], totalCandidates: 0, complete: false, monthVisibility: 
   check("the SEC month read records known/unknown (fresh and cached)", records(fn));
   check("MUTATION: the visibility write removed is caught", !records(fn.replace('monthVisibility.set(key, index ? "known" : "unknown");', "")));
   const PAGE = readCodeOnly("app/earnings-calendar/page.tsx");
-  check("the page passes dayOpen from the Eastern date", /dayOpen: selectedDate >= easternDate\(new Date\(\)\)/.test(PAGE));
+  check("the page passes dayOpen from the Eastern date",
+    /const today = easternDate\(new Date\(\)\);/.test(PAGE) && /dayOpen: date >= today/.test(PAGE));
 }
 
 console.log("\n3. company names without the security-class suffix");
@@ -88,44 +91,42 @@ const cases = [
   ["Coca-Cola Consolidated, Inc. - Common Stock", "Coca-Cola Consolidated, Inc."],
   ["Some Holdings - Class B", "Some Holdings"],
   ["NVIDIA CORP", "NVIDIA CORP"],
+  // THE SAME SUFFIX WITHOUT A DASH (#552 COWORK #174), as the snapshot writes most names.
+  ["Nike, Inc. Common Stock", "Nike, Inc."],
+  ["Accenture plc Class A Ordinary Shares (Ireland)", "Accenture plc"],
+  ["Banco De Chile ADS", "Banco De Chile"],
+  ["Mizuho Financial Group, Inc. Sponosred ADR (Japan)", "Mizuho Financial Group, Inc."],
+  ["Brookfield Corporation Class A Limited Voting Shares", "Brookfield Corporation"],
+  ["Energy Transfer LP Common Units", "Energy Transfer LP"],
+  ["Brookfield Oaktree Holdings, LLC 6.625% Series A Preferred Units", "Brookfield Oaktree Holdings, LLC 6.625% Series A Preferred Units"],
+  ["Comcast Holdings ZONES", "Comcast Holdings ZONES"],
 ];
 for (const [inp, out] of cases) check(`"${inp}" → "${out}"`, N.cleanListingName(inp) === out, N.cleanListingName(inp));
 check("the grid's name goes through it", /return cleanListingName\(/.test(readCodeOnly("lib/server/secTickerNames.ts")));
 {
   const M = await build(once(NAME, "SECURITY_WORDS.test(suffix) || CLASS_ONLY.test(suffix)", "false"));
   check("MUTATION: without the rule the suffix shows again", M.cleanListingName(cases[0][0]) === cases[0][0]);
+  const M2 = await build(once(NAME, '  const bare = s.replace(NO_DASH_SECURITY, "").trim();', '  const bare = s;'));
+  check("MUTATION: without the no-dash rule \"Nike, Inc. Common Stock\" shows again", M2.cleanListingName("Nike, Inc. Common Stock") !== "Nike, Inc.");
 }
 
-console.log("\n4. each cell shows its count");
-check("the cell renders the per-day count from getMonthDayCounts",
-  /const count = dayCounts\.get\(cellDate\) \?\? 0;/.test(readCodeOnly("app/earnings-calendar/page.tsx")) &&
-    /\{count\}/.test(readCodeOnly("app/earnings-calendar/page.tsx")));
+console.log("\n4. each day tile shows its count");
+check("the tile renders the day's candidate count (#552 COWORK #170)",
+  /pill: countPill\(cands\.length, date === today\)/.test(readCodeOnly("app/earnings-calendar/page.tsx")) &&
+    /\{d\.pill\}/.test(readCodeOnly("app/earnings-calendar/EarningsWeek.tsx")));
 
 console.log("\n5. one message, not two (#552 COWORK #26)");
 {
-  // RENDERED: the day list with no rows, with and without the page's note above it.
-  const { createRequire } = await import("node:module");
-  const require = createRequire(`${process.cwd()}/package.json`);
-  const React = require("react");
-  const { renderToStaticMarkup } = require("react-dom/server");
-  const LIST = fs.readFileSync("app/earnings-calendar/EarningsDayList.tsx", "utf8");
-  const buildList = (src) => {
-    const js = ts.transpileModule(src.replace(/^"use client";\s*/, ""), {
-      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
-    }).outputText;
-    const mod = { exports: {} };
-    const req = (m) => (m === "next/link" ? { __esModule: true, default: (p) => React.createElement("a", p) } : require(m));
-    new Function("require", "module", "exports", "React", js)(req, mod, mod.exports, React);
-    return mod.exports.default;
-  };
-  const render = (Comp, explained) => renderToStaticMarkup(React.createElement(Comp, { date: "2026-09-24", initialItems: [], initialHasMore: false, complete: false, emptyExplainedAbove: explained }));
-  const L = buildList(LIST);
-  check("with the day panel's note above, the empty list renders nothing", render(L, true) === "");
-  check("without it, the list still explains itself", /still populating/.test(render(L, false)));
-  check("the page passes the flag whenever the panel shows a note",
-    /emptyExplainedAbove=\{dayState\.kind !== "listed"\}/.test(readCodeOnly("app/earnings-calendar/page.tsx")));
-  const M = buildList(once(LIST, "    if (emptyExplainedAbove) return null;\n", ""));
-  check("MUTATION: without the guard both messages show again", /still populating/.test(render(M, true)));
+  // SINCE THE WEEK PAGE (#552 COWORK #170): one sentence per empty day, the
+  // day state's, and only when the day has no rows; the list shows it once.
+  const PAGE = readCodeOnly("app/earnings-calendar/page.tsx");
+  const WEEK = readCodeOnly("app/earnings-calendar/EarningsWeek.tsx");
+  const pageRule = (src) => /const emptyLine = rows\.length\s*\? null/.test(src);
+  const weekRule = (src) => /day\.rows\.length \? \(/.test(src) && (src.match(/day\.emptyLine/g) ?? []).length === 1;
+  check("the page sets the empty line only for a day with no rows", pageRule(PAGE));
+  check("the list prints it once, in place of the rows", weekRule(WEEK));
+  check("MUTATION: the empty line on every day is caught", !pageRule(PAGE.replace(/const emptyLine = rows\.length\s*\? null/, "const emptyLine = false ? null")));
+  check("MUTATION: the line printed beside the rows as well is caught", !weekRule(WEEK.replace("day.rows.length ? (", "true ? (").concat("{day.emptyLine}")));
 }
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);

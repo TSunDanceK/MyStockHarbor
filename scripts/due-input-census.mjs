@@ -324,7 +324,7 @@ console.log("\n6. THE SHIPPED PRODUCER (lib/server/dueInputs.ts), AGAINST THE LI
 // ── 7. THE SHIPPED COMPONENT, RENDERED, AGAINST THAT SAME LIVE STATE ─────
 //
 // Section 6 proved the producer returns a real DueStripState. This renders the
-// SHIPPED EarningsDueStrip with it and prints the visible text, so "the MU row
+// SHIPPED EarningsComingUp with it and prints the visible text, so "the MU row
 // appears on the page" is a sentence read out of real markup rather than
 // inferred from a state object.
 //
@@ -333,38 +333,16 @@ console.log("\n6. THE SHIPPED PRODUCER (lib/server/dueInputs.ts), AGAINST THE LI
 // 2026-08-20), so nobody here can open the preview. What CAN be checked is the
 // markup the server produces -- which is also what a crawler and a screen
 // reader consume -- and that is what this prints.
-console.log("\n7. THE SHIPPED COMPONENT (EarningsDueStrip.tsx), RENDERED WITH THAT STATE");
+console.log("\n7. THE SHIPPED COMPONENT (EarningsComingUp.tsx, its due group), RENDERED WITH THAT STATE");
 {
   const React = (await import("react")).default;
   const { renderToStaticMarkup } = await import("react-dom/server");
-  const tsMod = (await import("typescript")).default;
 
-  const SHIMS = `
-const Link = ({ href, children, ...rest }) => <a href={href} {...rest}>{children}</a>;
-const TickerLogo = ({ symbol }) => <span data-logo={symbol} />;
-`;
-  const noImports = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
-  const unit = [
-    SHIMS,
-    noImports("lib/server/dueStripState.ts"),
-    noImports("app/earnings-calendar/EarningsDueStrip.tsx")
-      .replace(/export default function/, "export function"),
-  ].join("\n");
-  const out = tsMod.transpileModule(unit, {
-    fileName: "strip.tsx",
-    compilerOptions: {
-      target: tsMod.ScriptTarget.ES2022, module: tsMod.ModuleKind.ESNext,
-      jsx: tsMod.JsxEmit.ReactJSX, jsxImportSource: "react",
-    },
-  }).outputText;
-  const tmp = `scripts/.census-strip-${process.pid}.mjs`;
-  fs.writeFileSync(tmp, out);
-  let comp;
-  try { comp = await import(`${process.cwd()}/${tmp}?t=${Date.now()}`); }
-  finally { fs.rmSync(tmp, { force: true }); }
-
+  // THE DUE NAMES ARE THE FIRST GROUP OF "Coming up" SINCE #552 COWORK #170.
+  (await import("node:module")).register("./lib/tsx-render-hooks.mjs", import.meta.url);
+  const ComingUp = (await import("../app/earnings-calendar/EarningsComingUp.tsx")).default;
   const markup = renderToStaticMarkup(
-    React.createElement(comp.EarningsDueStrip, { state: shipped })
+    React.createElement(ComingUp, { due: shipped, expected: { kind: "none" }, today: TODAY })
   );
   const text = markup
     .replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]*>/g, " ")
@@ -392,11 +370,10 @@ const TickerLogo = ({ symbol }) => <span data-logo={symbol} />;
 //   no estimated DAY appears anywhere in the markup
 //   the FPI bar is APPLIED -- foreign filers refused by it are named
 //   nothing appears in both this section and the due strip
-console.log("\n8. THE EXPECTED SECTION (expectedToReport + EarningsExpectedSection), LIVE");
+console.log("\n8. THE EXPECTED SECTION (expectedToReport + EarningsComingUp), LIVE");
 {
   const React = (await import("react")).default;
   const { renderToStaticMarkup } = await import("react-dom/server");
-  const tsMod = (await import("typescript")).default;
   const noImports = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 
   const exp = await lift(
@@ -444,34 +421,13 @@ console.log("\n8. THE EXPECTED SECTION (expectedToReport + EarningsExpectedSecti
   const both = built.rows.filter((r) => alreadyDue.has(r.symbol)).map((r) => r.symbol);
   console.log(`   overlap with the due strip: ${both.length}${both.length ? ` *** ${both.join(" ")} APPEARS TWICE ***` : " (none — the due strip wins, as designed)"}`);
 
-  // ── RENDER IT ──────────────────────────────────────────────────────────
-  const SHIMS = `
-const Link = ({ href, children, ...rest }) => <a href={href} {...rest}>{children}</a>;
-const TickerLogo = ({ symbol }) => <span data-logo={symbol} />;
-`;
-  const unit = [
-    SHIMS,
-    noImports("lib/server/expectedToReport.ts"),
-    noImports("lib/server/expectedCopy.ts"),
-    noImports("app/earnings-calendar/EarningsExpectedSection.tsx").replace(/export default function/, "export function"),
-  ].join("\n");
-  const out = tsMod.transpileModule(unit, {
-    fileName: "exp.tsx",
-    compilerOptions: {
-      target: tsMod.ScriptTarget.ES2022, module: tsMod.ModuleKind.ESNext,
-      jsx: tsMod.JsxEmit.ReactJSX, jsxImportSource: "react",
-    },
-  }).outputText;
-  const tmp2 = `scripts/.census-exp-${process.pid}.mjs`;
-  fs.writeFileSync(tmp2, out);
-  let comp2;
-  try { comp2 = await import(`${process.cwd()}/${tmp2}?t=${Date.now()}`); }
-  finally { fs.rmSync(tmp2, { force: true }); }
-
+  // ── RENDER IT (the chips in "Coming up" since #552 COWORK #170) ─────────
+  (await import("node:module")).register("./lib/tsx-render-hooks.mjs", import.meta.url);
+  const ComingUp = (await import("../app/earnings-calendar/EarningsComingUp.tsx")).default;
   const state = built.rows.length
     ? { kind: "listed", rows: built.rows, considered: built.considered }
     : { kind: "none" };
-  const markup = renderToStaticMarkup(React.createElement(comp2.EarningsExpectedSection, { state }));
+  const markup = renderToStaticMarkup(React.createElement(ComingUp, { expected: state, due: shipped, today: TODAY }));
   const text = markup
     .replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]*>/g, " ")
     .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#x27;|&apos;/g, "'")

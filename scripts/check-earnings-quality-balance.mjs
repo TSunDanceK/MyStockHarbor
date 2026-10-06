@@ -52,11 +52,21 @@ function measure(M) {
   const behind = structuredClone(A); behind.cashQuality.operatingCashFlow.val = A.cashQuality.netIncome.val * 0.8;
   const negFcf = structuredClone(A); negFcf.cashQuality.freeCashFlow = -5e9;
   const few = structuredClone(A); few.cashHistory = A.cashHistory.slice(-3);
+  // INTC'S SHAPE (#552 COWORK #176): a loss quarter with positive operating and
+  // free cash flow, OCF derived from year-to-date filings; and a snapshot whose
+  // EPS growth is the word "Loss both periods".
+  const intc = structuredClone(A);
+  intc.cashQuality.netIncome.val = -11.03e9;
+  intc.cashQuality.operatingCashFlow.val = 7.01e9;
+  intc.cashQuality.operatingCashFlow.derivedNote = "Derived: the quarter is the year-to-date figure less the previous one.";
+  intc.cashQuality.freeCashFlow = 4.45e9;
+  const lossBoth = structuredClone(A); lossBoth.snapshot.epsYoY = "loss-both";
   return {
     views,
     cash: Object.fromEntries(SYMS.map((s) => [s, cash(views[s])])),
     bal: Object.fromEntries(SYMS.map((s) => [s, bal(views[s])])),
-    behind: cash(behind), negFcf: cash(negFcf), few: cash(few),
+    behind: cash(behind), negFcf: cash(negFcf), few: cash(few), intc: cash(intc),
+    snap: html(el(M.SecSnapshotCard, { view: lossBoth, pending: null })),
     toneColor: M.toneColor,
   };
 }
@@ -133,6 +143,20 @@ const RULES = {
   "B3. the current-ratio meter: the dot clamps at 3, the true value is printed (AVAV 4.26)": (m) =>
     /data-meter-dot="100\.00" data-clamped="1"/.test(m.bal.AVAV) && /data-ratio-value="">4\.26</.test(m.bal.AVAV)
       && /data-meter-dot="33\.\d+" data-clamped="0"/.test(m.bal.AAPL) && /1\.0 · just covered/.test(m.bal.AAPL),
+  "Q5a. n/m tile (INTC): the big line is the figure ALONE; the rest is the small line, 'derived' first": (m) => {
+    const t = tile(m.intc, "Operating cash flow");
+    const big = (t.match(/class="metricValue" data-tile-figure="">([\s\S]*?)<\/div>/) ?? [])[1] ?? "";
+    const small = visibleText((t.match(/data-not-meaningful="">([\s\S]*?)<\/div>/) ?? [])[1] ?? "");
+    return visibleText(big) === "$7.01B" && /^derived vs net income [−-]\$11\.03B · n\/m: net income was a loss$/.test(small);
+  },
+  "Q5b. ...the same for free cash flow: '$4.45B' big, 'after equipment · n/m: …' small": (m) => {
+    const t = tile(m.intc, "Free cash flow");
+    return visibleText((t.match(/data-tile-figure="">([\s\S]*?)<\/div>/) ?? [])[1] ?? "") === "$4.45B"
+      && /^(derived )?after equipment · n\/m: net income was a loss$/.test(visibleText((t.match(/data-not-meaningful="">([\s\S]*?)<\/div>/) ?? [])[1] ?? ""));
+  },
+  "S1. a snapshot word value ('Loss both periods') is drawn as a word; a number is not": (m) =>
+    /<div class="metricValue metricWord">[\s\S]{0,400}?Loss both periods/.test(m.snap)
+      && /<div class="metricLabel">Revenue<\/div><div class="metricValue">/.test(m.snap),
   "X1. one 'About these figures' per card, every fixture": (m) =>
     SYMS.every((s) => [m.cash[s], m.bal[s]].every((h) => (h.match(/<summary>About these figures<\/summary>/g) ?? []).length === 1)),
   "X2a. no rating or advice words on either card, every fixture": (m) =>
@@ -148,6 +172,8 @@ for (const [name, rule] of Object.entries(RULES)) {
 }
 
 const MUTANTS = [
+  ["the n/m tile's big line is the whole dollar line again (INTC overflow)", (s) => once(s, 'data-tile-figure="">{figure}</div>', 'data-tile-figure="">{dollars}</div>')],
+  ["the snapshot's word value drawn at the figure size again", (s) => once(s, "word={!isNumberPct(s.epsYoY)}", "word={false}")],
   ["the lead's comparison reversed", (s) => once(s, `kind: ocf >= netIncome ? "ahead" : "behind"`, `kind: ocf <= netIncome ? "ahead" : "behind"`)],
   ["a loss no longer gets its own lead line", (s) => once(s, `  if (netIncome <= 0) return { kind: "loss", ocf, netIncome };\n`, "")],
   ["the n/m guard dropped (a % of a negative figure)", (s) => once(s, `  if (of <= 0) return { ok: false, why: "not-meaningful" };\n`, "")],

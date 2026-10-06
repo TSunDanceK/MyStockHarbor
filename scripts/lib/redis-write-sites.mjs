@@ -34,6 +34,9 @@ export const WRITE_SITES = [
   { file: "lib/server/earningsCalendar.ts", key: "CALENDAR_SCAN_GATE_KEY", cls: "small" },
   { file: "lib/server/earningsSchedule.ts", key: "SCHEDULE_KEY", cls: "listed", candidate: "SCHEDULE_KEY" },
   { file: "lib/server/earningsStore.ts", key: "`${EARNINGS_REDIS_KEY_PREFIX}${clean}`", cls: "row" },
+  // The week page's row figures and closes, one value per strip day, 10-day TTL (#552 COWORK #170).
+  { file: "lib/server/earningsWeekStore.ts", key: "weekFiguresKey(date", cls: "row" },
+  { file: "lib/server/earningsWeekStore.ts", key: "weekCloseKey(date", cls: "row" },
   { file: "lib/server/feedCache.ts", key: "`${REDIS_PREFIX}:${key}`", cls: "row" },
   { file: "lib/server/fundamentalsCache.ts", key: "`${SCREENER_FUND_KEY_PREFIX}${symbol}`", cls: "chunked", bound: "500 rows x <=207 B = 0.09 MB" },
   { file: "lib/server/fundamentalsCache.ts", key: "QUOTE_OFFSET_KEY", cls: "small" },
