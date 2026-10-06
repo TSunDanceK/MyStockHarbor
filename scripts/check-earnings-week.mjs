@@ -84,15 +84,22 @@ const RULES = {
     W.figuresForAnnouncement("2026-09-27", { end: "2026-06-28", revenue: 1, revenueYoY: 1, epsDiluted: 1 }) === null &&
     W.figuresForAnnouncement("2026-09-27", { end: "2026-09-27", revenue: 11.7e9, revenueYoY: 4.1, epsDiluted: 1.42 })?.revenue === 11.7e9 &&
     W.figuresForAnnouncement(null, { end: "2026-09-27", revenue: 1, revenueYoY: 1, epsDiluted: 1 }) === null,
-  "5a. coming up groups by calendar week (Mon–Sun) from today": (W) => {
-    const g = W.groupByWeek([{ estimatedOn: "2026-10-09" }, { estimatedOn: "2026-10-15" }, { estimatedOn: "2026-10-21" }], TODAY);
-    return g.map((x) => x.heading).join(" | ") === "This week | Next week · 12–18 Oct | In 2 weeks · 19–25 Oct";
+  // COMING UP AS FOUR WEEK WINDOWS (#552 COWORK #179): the rest of this week,
+  // then the next three Mon–Sun weeks; date windows, never a day.
+  "5a. four columns: the rest of this week, then three Mon–Sun weeks": (W) => {
+    const c = W.comingUpColumns([], "2026-10-07"); // a Wednesday
+    return c.map((x) => `${x.label} ${x.range}`).join(" | ") ===
+      "This week 7–11 Oct | Next week 12–18 Oct | Week of 19 Oct 19–25 Oct | Week of 26 Oct 26 Oct–1 Nov";
   },
-  "5b. ...across a month boundary": (W) => {
-    const g = W.groupByWeek([{ estimatedOn: "2026-10-30" }, { estimatedOn: "2026-11-03" }], "2026-10-21");
-    return g.map((x) => x.heading).join(" | ") === "Next week · 26 Oct–1 Nov | In 2 weeks · 2–8 Nov";
+  "5b. ...across a month boundary, and on a Sunday the first window is one day": (W) =>
+    W.comingUpColumns([], "2026-10-21").map((x) => x.range).join(" | ") === "21–25 Oct | 26 Oct–1 Nov | 2–8 Nov | 9–15 Nov" &&
+    W.comingUpColumns([], "2026-10-11")[0].range === "11 Oct",
+  "5c. each row in its window, by market cap (unknown last); past the fourth window, not placed": (W) => {
+    const r = (symbol, estimatedOn, cap) => ({ symbol, estimatedOn, cap });
+    const c = W.comingUpColumns([r("A", "2026-10-09", 5), r("B", "2026-10-08", 50), r("C", "2026-10-10", null), r("D", "2026-10-14", 1), r("E", "2026-11-02", 9)], "2026-10-07");
+    return c[0].items.map((x) => x.symbol).join() === "B,A,C" && c[1].items.map((x) => x.symbol).join() === "D" &&
+      c.flatMap((x) => x.items).length === 4;
   },
-  "5c. the chip's date is marked approximate": (W) => W.approxDate("2026-10-15") === "~15 Oct",
   "7a. one row per filer, under its most-traded class (MKC, not MKC-V)": (W) => {
     const out = W.primaryPerFiler([{ symbol: "MKC-V" }, { symbol: "MKC" }, { symbol: "AAPL" }], FILERS);
     return out.length === 2 && out.map((x) => x.symbol).join() === "MKC,AAPL";
@@ -184,18 +191,83 @@ check("an empty day says so, once, and shows no table", (visible(empty).match(/N
 console.log("\n5. coming up (EarningsComingUp)");
 const ComingUp = (await import("../app/earnings-calendar/EarningsComingUp.tsx")).default;
 const exp = (symbol, daysAway) => ({ symbol, band: "d8_21", daysAway, periodEnd: "2026-09-30", medianLagDays: 15, fromPeriods: 12, precision: 0.9, isFpi: false, lastReportedOn: "2026-07-15", lastReportedPeriodEnd: "2026-06-30" });
-const cu = renderToStaticMarkup(React.createElement(ComingUp, {
+const capOf = { UNH: 500e9, JPM: 700e9, NFLX: 400e9, MU: 100e9 };
+const facts = (syms) => Object.fromEntries(syms.map((sy) => [sy, { company: `${sy} Inc.`, cap: capOf[sy] ?? null }]));
+const many = Array.from({ length: 11 }, (_, i) => `T${String(i).padStart(2, "0")}`);
+const cuProps = {
   today: TODAY,
-  expected: { kind: "listed", considered: 50, rows: [exp("UNH", 10), exp("JPM", 2), exp("NFLX", 26)] },
+  expected: { kind: "listed", considered: 50, rows: [exp("UNH", 10), exp("JPM", 2), exp("NFLX", 26), ...many.map((sy) => exp(sy, 9))] },
   due: { kind: "listed", coverage: 1, entries: [{ symbol: "MU", periodEnd: "2026-08-27", dueFrom: "2026-09-15", expectedOn: "2026-09-19", daysOutstanding: 39 }] },
-}));
-const groups = [...cu.matchAll(/data-group="([^"]+)"><h3 class="cuGroupHeading">([^<]+)</g)].map((g) => `${g[1]}:${g[2]}`);
-check("a non-empty due list is the FIRST group, under its own heading",
-  groups[0] === "due:Period ended, not filed yet", groups.join(" | "));
-check("then the weeks, in order", groups.slice(1).join(" | ") === "w0:This week | w1:Next week · 12–18 Oct | w3:In 3 weeks · 26 Oct–1 Nov", groups.join(" | "));
-check("each chip: ticker and ~date; its detail behind a native tap",
-  /data-chip="UNH"><summary>[\s\S]*?UNH<\/span><span class="cuWhen">~15 Oct<\/span><\/summary><div class="cuBody">/.test(cu));
-check("'How these estimates work' is a closed tap note", /<details class="cuHow"><summary>How these estimates work<\/summary>/.test(cu));
+  facts: facts(["UNH", "JPM", "NFLX", "MU", ...many]),
+};
+const cu = renderToStaticMarkup(React.createElement(ComingUp, cuProps));
+/** One column's markup, from its opening tag to the next column's. */
+const colOf = (key) => (cu.match(new RegExp(`<div class="cuCol[^"]*" data-col="${key}"[\\s\\S]*?(?=<div class="cuCol[ "]|<style)`)) ?? [""])[0];
+const heads = [...cu.matchAll(/class="cuColLabel">([^<]+)<\/h3><div class="cuColMeta"><span class="cuRange">([^<]+)<\/span> · <span data-count="(\d+)"/g)].map((g) => `${g[1]} ${g[2]} (${g[3]})`);
+check("four columns, each with its label, window and company count",
+  heads.join(" | ") === "This week 5–11 Oct (2) | Next week 12–18 Oct (12) | Week of 19 Oct 19–25 Oct (0) | Week of 26 Oct 26 Oct–1 Nov (1)", heads.join(" | "));
+check("the header: the title, ONE amber ESTIMATED tag, and a closed 'How we estimate' tap with the one sentence",
+  /<h2 id="cuHeading" class="cuHeading">Coming up<\/h2><span class="cuTag" data-estimated-tag="">Estimated<\/span><details class="cuHow"><summary><span aria-hidden="true">ⓘ<\/span> How we estimate<\/summary><p>[^<]*usual SEC reporting pattern[^<]*may differ\.<\/p><\/details>/.test(cu) &&
+  (cu.match(/data-estimated-tag/g) ?? []).length === 1);
+check("NO day on a row: no '~date' and no date inside any row",
+  !/~\d/.test(cu) && !/cuWhen/.test(cu) && ![...cu.matchAll(/<li class="cuRow"[\s\S]*?<\/li>/g)].some((m) => /\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/.test(m[0].replace(/<[^>]*>/g, " "))));
+check("'This week' is marked, and carries the due name first under its heading, then the estimates",
+  /^<div class="cuCol cuThisWeek" data-col="w0"/.test(colOf("w0")) &&
+  /<p class="cuSub" data-group="due">Period ended, not filed yet<\/p><ul class="cuList"><li class="cuRow" data-row="MU" data-due="">[\s\S]*?<ul class="cuList cuAfterDue"><li class="cuRow" data-row="JPM"/.test(colOf("w0")) &&
+  !/cuThisWeek/.test(colOf("w1")));
+const w1rows = [...colOf("w1").matchAll(/data-row="([^"]+)"/g)].map((g) => g[1]);
+check("rows sort by market cap, largest first (unknown last, then A–Z)", w1rows.slice(0, 3).join() === "UNH,T00,T01", w1rows.join());
+check("8 shown, the rest behind '+ N more' within the column (native details)",
+  /<ul class="cuList">(?:<li class="cuRow"[\s\S]*?<\/li>){8}<\/ul><details class="cuMore"><summary><span class="cuMoreOpen">\+ 4 more<\/span>/.test(colOf("w1")) && w1rows.length === 12);
+check("each row: logo, ticker, name, linked to its earnings page",
+  /<li class="cuRow" data-row="UNH"><a href="\/stock\/UNH\/earnings" class="cuRowLink">[\s\S]*?<span class="cuSym">UNH<\/span><span class="cuName">UNH Inc\.<\/span><\/a><\/li>/.test(cu));
+check("an empty week says so", /<p class="cuEmpty">None estimated\.<\/p>/.test(colOf("w2")));
+check("4 / 2 / 1 columns at desktop / ≤900px / ≤560px",
+  /\.cuGrid \{ display: grid; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/.test(cu) &&
+  /@media \(max-width: 900px\) \{ \.cuGrid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/.test(cu) &&
+  /@media \(max-width: 560px\) \{ \.cuGrid \{ grid-template-columns: minmax\(0, 1fr\)/.test(cu));
+
+// THE COMPONENT'S MUTANTS. Each is written NEXT TO the shipped file (so its
+// "@/…" and "./…" imports resolve as the real one's do), rendered with the
+// same props, and deleted. Each must break one of these properties.
+{
+  const CU = "app/earnings-calendar/EarningsComingUp.tsx";
+  const CU_SRC = fs.readFileSync(CU, "utf8");
+  const props = (m) => {
+    const col = (key) => (m.match(new RegExp(`<div class="cuCol[^"]*" data-col="${key}"[\\s\\S]*?(?=<div class="cuCol[ "]|<style)`)) ?? [""])[0];
+    return {
+      "8 rows, then '+ 4 more'": /<ul class="cuList">(?:<li class="cuRow"[\s\S]*?<\/li>){8}<\/ul><details class="cuMore"><summary><span class="cuMoreOpen">\+ 4 more</.test(col("w1")),
+      "due first in This week": /^<div class="cuCol cuThisWeek" data-col="w0"[\s\S]*?<p class="cuSub" data-group="due">[\s\S]*?data-row="MU"[\s\S]*?data-row="JPM"/.test(col("w0")),
+      "one ESTIMATED tag": (m.match(/data-estimated-tag=""/g) ?? []).length === 1,
+      "four columns": (m.match(/<div class="cuCol[ "]/g) ?? []).length === 4,
+      "no day on a row": ![...m.matchAll(/<li class="cuRow"[\s\S]*?<\/li>/g)].some((x) => /\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)|~\d/.test(x[0].replace(/<[^>]*>/g, " "))),
+    };
+  };
+  const shipped = props(cu);
+  check("the component's mutant properties all hold on the shipped render", Object.values(shipped).every(Boolean), JSON.stringify(shipped));
+  let n = 0;
+  const bitesCu = async (mutate) => {
+    const src = mutate(CU_SRC);
+    const file = `app/earnings-calendar/EarningsComingUp.mutant${++n}.tsx`;
+    fs.writeFileSync(file, src);
+    try {
+      const M = (await import(`../${file}`)).default;
+      return !Object.values(props(renderToStaticMarkup(React.createElement(M, cuProps)))).every(Boolean);
+    } catch { return true; } finally { fs.rmSync(file, { force: true }); }
+  };
+  const CU_MUTANTS = [
+    ["nine rows before '+ N more'", (s) => once(s, "export const VISIBLE_PER_COLUMN = 8;", "export const VISIBLE_PER_COLUMN = 9;")],
+    ["the due heading over the estimates, the due names after them", (s) => once(s, "const d = items.filter((r) => r.due), e = items.filter((r) => !r.due);", "const d = items.filter((r) => !r.due), e = items.filter((r) => r.due);")],
+    ["the due names left out of This week", (s) => once(s, "const colDue = c.isThisWeek ? dueRows : [];", "const colDue: Row[] = [];")],
+    ["the ESTIMATED tag dropped", (s) => once(s, '<span className="cuTag" data-estimated-tag="">{ESTIMATED_TAG}</span>', "")],
+    ["the estimated day back on each row", (s) => once(s, '<span className="cuName">{r.company}</span>', '<span className="cuName">{r.company}</span><span>~15 Oct</span>')],
+  ];
+  for (const [label, m] of CU_MUTANTS) {
+    let caught = false;
+    try { caught = await bitesCu(m); } catch (e) { console.log(`    ${e.message}`); }
+    check(`MUTATION (component): ${label} → caught`, caught);
+  }
+}
 
 console.log("\n6. the page");
 const PAGE = readCodeOnly("app/earnings-calendar/page.tsx");
@@ -229,7 +301,9 @@ const MUTANTS = [
   ["weeks start on Sunday", (s) => once(s, "const mondayOf = (d: string) => addDays(d, -((dow(d) + 6) % 7));", "const mondayOf = (d: string) => addDays(d, -dow(d));")],
   ["one row per TICKER again (MKC and MKC-V both listed)", (s) => once(s, "const key = opts.cikOf(r.symbol) ?? `sym:${r.symbol}`;", "const key = `sym:${r.symbol}`;")],
   ["the class picked by suffix alone, not by trading", (s) => once(s, "      (opts.volumeOf(b) ?? -1) - (opts.volumeOf(a) ?? -1)\n      || ", "      ")],
-  ["the date shown without its '~'", (s) => once(s, "export const approxDate = (d: string) => `~${dayNum(d)} ${MONTH[mon(d)]}`;", "export const approxDate = (d: string) => `${dayNum(d)} ${MONTH[mon(d)]}`;")],
+  ["a fifth week column", (s) => once(s, "export const COMING_UP_COLUMNS = 4;", "export const COMING_UP_COLUMNS = 5;")],
+  ["column one starts on Monday, not today", (s) => once(s, "const start = w === 0 ? today : weekStart;", "const start = weekStart;")],
+  ["Coming up sorted smallest cap first", (s) => once(s, "(b.cap ?? -1) - (a.cap ?? -1)", "(a.cap ?? -1) - (b.cap ?? -1)")],
 ];
 for (const [label, m] of MUTANTS) {
   let caught = false;

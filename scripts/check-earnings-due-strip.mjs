@@ -8,11 +8,12 @@
 // copy, and both files would stay green. So this renders the SHIPPED component
 // to markup and asserts on the visible text.
 //
-// ── SINCE THE WEEK PAGE (#552 COWORK #170) ─────────────────────────────────
-// The separate "Due to report" box is gone. Its names are the FIRST group of
-// "Coming up" (EarningsComingUp), headed "Period ended, not filed yet", and
-// the group is not shown when it has none (the owner's "Remove … when it's
-// empty"). An UNREADABLE record is not empty, and still says so in its own
+// ── SINCE THE WEEK GRID (#552 COWORK #179) ────────────────────────────────
+// The separate "Due to report" box is gone. Its names lead the "This week"
+// column of "Coming up" (EarningsComingUp), under "Period ended, not filed
+// yet", as plain rows (logo, ticker, name); the per-row label went with the
+// chips on 2026-10-06. The heading is not shown when there are none (the
+// owner's "Remove … when it's empty"). An UNREADABLE record is not empty, and still says so in its own
 // sentence: the two empties must never render the same.
 //
 // ── THE PROPERTY THAT MATTERS IS A NEGATIVE ONE ───────────────────────────
@@ -59,7 +60,8 @@ const visibleText = (markup) =>
 /** The card with this due state (and no estimates), and its due group alone. */
 const render = (state) => {
   const markup = renderToStaticMarkup(React.createElement(C.default, { due: state, expected: { kind: "none" }, today: "2026-09-22" }));
-  const group = (markup.match(/<div class="cuGroup" data-group="due">[\s\S]*?<\/div><\/div>/) ?? [""])[0];
+  // THE DUE PART OF "THIS WEEK": its heading and its rows, up to the estimates.
+  const group = (markup.match(/<p class="cuSub" data-group="due">[\s\S]*?<\/ul>/) ?? [""])[0];
   const unavailable = (markup.match(/<p class="cuLine" data-due-unavailable="">[\s\S]*?<\/p>/) ?? [""])[0];
   return { markup, text: visibleText(markup), group, groupText: visibleText(group), unavailable: visibleText(unavailable) };
 };
@@ -74,13 +76,13 @@ console.log("\n1. THE LISTED BRANCH SHOWS THE ROW, IN THE MODULE'S OWN WORDS");
 const listed = render({ kind: "listed", entries: [MU], coverage: 0.84 });
 {
   check("the group heading renders", listed.groupText.includes(m.DUE_GROUP_HEADING), m.DUE_GROUP_HEADING);
-  check("the group comes FIRST in the card, before any week", listed.markup.indexOf('data-group="due"') < listed.markup.search(/data-group="w\d/) || !/data-group="w\d/.test(listed.markup));
-  check("the symbol renders", listed.groupText.includes("MU"));
-  check("the row label is dueRowLabel's, character for character (behind the tap)",
-    listed.groupText.includes(m.dueRowLabel(MU)), m.dueRowLabel(MU));
-  check("the period end appears on the chip", listed.groupText.includes("period ended 27 Aug 2026"));
-  check("the days outstanding appear", /26 days outstanding/.test(listed.groupText));
-  check("the chip links to the symbol's earnings page", listed.group.includes('href="/stock/MU/earnings"'));
+  check("it leads the 'This week' column", /data-col="w0"[\s\S]*?<\/div><\/div><p class="cuSub" data-group="due">/.test(listed.markup));
+  check("the symbol renders", /data-row="MU" data-due=""/.test(listed.group) && listed.groupText.includes("MU"));
+  check("the row links to the symbol's earnings page", listed.group.includes('href="/stock/MU/earnings"'));
+  // THE ROW LABEL WENT WITH THE CHIPS (COWORK #179, 2026-10-06): dueRowLabel
+  // stays in dueStripState.ts; the heading says what the rows are.
+  check("no day is printed on a due row (period end, due-from, outstanding)",
+    !/27 Aug|2026-08-27|days outstanding/.test(listed.groupText));
   check("the unavailable sentence does not appear", !listed.text.includes(m.DUE_STRIP_UNAVAILABLE));
 }
 
@@ -119,7 +121,7 @@ console.log("\n3. IT NEVER READS AS A FORECAST");
 console.log("\n4. THE COPY IS THE MODULE'S, NOT THIS COMPONENT'S");
 {
   const src = fs.readFileSync(SRC, "utf8");
-  for (const name of ["DUE_STRIP_UNAVAILABLE", "dueRowLabel"]) {
+  for (const name of ["DUE_STRIP_UNAVAILABLE"]) {
     check(`it imports ${name} rather than restating it`, new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from "@/lib/server/dueStripState"`).test(src));
   }
   const code = readCodeOnly(SRC).replace(/<style>[\s\S]*?<\/style>/g, "");

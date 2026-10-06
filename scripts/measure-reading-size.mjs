@@ -150,11 +150,17 @@ async function earningsWeekFixture() {
       eyebrow: W.dayEyebrow(date, r.length), emptyLine: r.length ? null : `No results filed on ${W.dayLong(date)}.`, rows: r };
   });
   const exp = (symbol, daysAway) => ({ symbol, band: "d8_21", daysAway, periodEnd: "2026-09-30", medianLagDays: 15, fromPeriods: 12, precision: 0.9, isFpi: false, lastReportedOn: "2026-07-15", lastReportedPeriodEnd: "2026-06-30" });
-  const expected = { kind: "listed", considered: 50, rows: [exp("UNH", 10), exp("JPM", 2), exp("NFLX", 26), exp("BRK-B", 12), exp("TSM", 11)] };
+  // THE WEEK GRID (#552 COWORK #179): a busy "Next week" (11 names, so "+ 3
+  // more"), long names to truncate, a due name, and an empty week.
+  const busy = ["BAC", "WFC", "C", "GS", "MS", "PNC", "USB", "SCHW", "BLK", "AXP", "COF"];
+  const expected = { kind: "listed", considered: 50, rows: [exp("UNH", 10), exp("JPM", 2), exp("NFLX", 26), exp("BRK-B", 12), exp("TSM", 11), ...busy.map((s) => exp(s, 9))] };
   const due = { kind: "listed", coverage: 1, entries: [{ symbol: "MU", periodEnd: "2026-08-27", dueFrom: "2026-09-15", expectedOn: "2026-09-19", daysOutstanding: 39 }] };
+  const names = { UNH: "UnitedHealth Group Incorporated", JPM: "JPMorgan Chase & Co.", NFLX: "Netflix, Inc.", "BRK-B": "Berkshire Hathaway Inc.",
+    TSM: "Taiwan Semiconductor Manufacturing Company Limited", MU: "Micron Technology, Inc.", SCHW: "The Charles Schwab Corporation" };
+  const facts = Object.fromEntries([...expected.rows.map((r) => r.symbol), "MU"].map((s, i) => [s, { company: names[s] ?? `${s} Financial Holdings Corporation`, cap: 1e12 - i * 1e9 }]));
   return renderToStaticMarkup(React.createElement("main", { style: { background: "#06080d", color: "#f1f5f9", padding: "20px 10px" } }, // the page's own padding at ≤400 px
     React.createElement(Week, { days, initial: "2026-10-01" }),
-    React.createElement(ComingUp, { expected, due, today })));
+    React.createElement(ComingUp, { expected, due, today, facts })));
 }
 
 /**
@@ -461,6 +467,46 @@ for (const pg of PAGES) {
     console.log(`  ${label}: ${r.n} tiles in ${r.rows} row · ${fail ? `${r.scrolls ? "SCROLLS SIDEWAYS " : ""}${r.bad.slice(0, 4).join("; ")} — FAIL` : "no tile line wraps or cuts"}`);
     if (fail) failures++;
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `earnings-week-${width}${css ? "-root20" : ""}.png`), fullPage: true });
+    await page.close();
+  }
+}
+// ── "COMING UP" AS A WEEK GRID (#552 COWORK #179): 4 / 2 / 1 COLUMNS ───────
+// The column count at each width, no sideways scroll, and no row text leaving
+// its column (a long name is cut by its ellipsis, inside the column), with
+// "+ N more" closed and open.
+{
+  const html = await earningsWeekFixture();
+  console.log("\n/earnings-calendar Coming up grid (#552 COWORK #179)");
+  for (const [label, width, cols, css] of [["1280px", 1280, 4, ""], ["768px", 768, 2, ""], ["390px", 390, 1, ""], ["320px", 320, 1, ""], ["390px, root 20px", 390, 1, "html { font-size: 20px; }"], ["1280px, root 20px", 1280, 4, "html { font-size: 20px; }"]]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.setContent(doc(html, css));
+    const measure = () => page.evaluate(() => {
+      const colsEl = [...document.querySelectorAll(".cuCol")];
+      const lefts = new Set(colsEl.map((c) => Math.round(c.getBoundingClientRect().left)));
+      const bad = [];
+      for (const c of colsEl) {
+        const cr = c.getBoundingClientRect();
+        const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          if (!n.textContent.trim() || n.parentElement.closest("details:not([open]) > :not(summary)")) continue;
+          // A NAME CUT BY ITS ELLIPSIS is measured by its box, not its text.
+          const el = n.parentElement.classList.contains("cuName") ? n.parentElement : null;
+          const range = document.createRange(); range.selectNodeContents(n);
+          const rects = el ? [el.getBoundingClientRect()] : [...range.getClientRects()];
+          if (rects.some((r) => r.width && (r.left < cr.left - 0.5 || r.right > cr.right + 0.5))) bad.push(`${c.dataset.col} "${n.textContent.trim().slice(0, 24)}"`);
+        }
+      }
+      const ellipsed = [...document.querySelectorAll(".cuName")].filter((e) => e.scrollWidth > e.clientWidth).length;
+      return { n: colsEl.length, across: lefts.size, bad, ellipsed, scrolls: document.documentElement.scrollWidth > innerWidth };
+    });
+    const closed = await measure();
+    await page.evaluate(() => document.querySelectorAll(".cuMore").forEach((d) => { d.open = true; }));
+    const open = await measure();
+    const fail = closed.n !== 4 || closed.across !== cols || closed.bad.length || open.bad.length || closed.scrolls || open.scrolls;
+    console.log(`  ${label}: ${closed.n} columns, ${closed.across} across (want ${cols}), ${closed.ellipsed} name(s) ellipsized · ` +
+      (fail ? `${closed.scrolls || open.scrolls ? "SCROLLS SIDEWAYS " : ""}${[...closed.bad, ...open.bad].slice(0, 4).join("; ")} — FAIL` : "no text leaves its column, open or closed"));
+    if (fail) failures++;
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `coming-up-${width}${css ? "-root20" : ""}.png`), fullPage: true });
     await page.close();
   }
 }

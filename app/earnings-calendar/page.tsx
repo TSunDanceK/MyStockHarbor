@@ -25,7 +25,7 @@ import { gridAdmits, gridCompanyName } from "@/lib/server/secTickerNames";
 import { fillWeekFigures, readWeekFigures } from "@/lib/server/earningsWeekStore";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsWeek, { type WeekDay, type WeekRow } from "./EarningsWeek";
-import EarningsComingUp from "./EarningsComingUp";
+import EarningsComingUp, { type ComingUpFacts } from "./EarningsComingUp";
 import { getCalendarForwardSections, type CalendarForwardSections } from "@/lib/server/dueInputs";
 
 // ── "EARNINGS THIS WEEK" (#552 COWORK #170, owner pick) ────────────────────
@@ -89,7 +89,7 @@ const signed$ = (v: number) => `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`
 //
 //   day lists         1   the month index, memoised 6h per instance (2 across
 //                         a month boundary, on a cold instance)
-//   market cap        1   one HMGET of the price pool, for the sort
+//   market cap        1   one HMGET of the price pool, for the sorts (strip and Coming up)
 //   row figures       1   one MGET of the strip's 14 keys
 //   latest closes     1   the Tiingo last-bar blob (Data Cache, 24h)
 //   forward sections  1   the analysis-universe symbol key
@@ -201,7 +201,16 @@ export default async function EarningsCalendarPage({
 
   // The day lists: the month index the calendar already reads (one HGETALL,
   // memoised 6h per instance; two months across a boundary).
-  const raw = await Promise.all(days.map((d) => getDayCandidates(d)));
+  // AND THE FORWARD SECTIONS FIRST (memoised 6h), so "Coming up"'s names join
+  // the strip's in the ONE market-cap read below (#552 COWORK #179).
+  const [raw, forward] = await Promise.all([
+    Promise.all(days.map((d) => getDayCandidates(d))),
+    getForwardSections(today),
+  ]);
+  const comingUpSymbols = [
+    ...(forward.expected.kind === "listed" ? forward.expected.rows.map((r) => r.symbol) : []),
+    ...(forward.due.kind === "listed" ? forward.due.entries.map((e) => e.symbol) : []),
+  ];
   // A CLASS TICKER'S BASE ON THE SAME CIK (MKC-V → MKC) is offered too, so the
   // row can show the class readers know (#552 COWORK #174).
   const siblingsOf = (s: string) => {
@@ -211,15 +220,17 @@ export default async function EarningsCalendarPage({
     return cik && registrantFor(base)?.cik === cik && gridAdmits(base) ? [base] : [];
   };
   const symbols = [...new Set(raw.flat().flatMap((c) => [c.symbol, ...siblingsOf(c.symbol)]))];
-  const [pool, eodLast, week, forward] = await Promise.all([
-    // Market cap, for the sort only (one HMGET).
-    symbols.length ? readPricePoolBulk(symbols).catch(() => new Map()) : Promise.resolve(new Map()),
+  const capSymbols = [...new Set([...symbols, ...comingUpSymbols])];
+  const [pool, eodLast, week] = await Promise.all([
+    // Market cap, for the sorts only (one HMGET): the strip's and "Coming up"'s.
+    capSymbols.length ? readPricePoolBulk(capSymbols).catch(() => new Map()) : Promise.resolve(new Map()),
     // The latest close (one HGETALL blob, Data Cache 24h).
     symbols.length ? readTiingoEodLast().catch(() => ({})) : Promise.resolve({}),
     // The figures and closes the background fill wrote (one MGET).
     readWeekFigures(days),
-    getForwardSections(today),
   ]);
+  const comingUpFacts: ComingUpFacts = Object.fromEntries(comingUpSymbols.map((s) =>
+    [s, { company: gridCompanyName(s), cap: pool.get(s)?.marketCap ?? null }]));
 
   // ONE ROW PER FILER, under its most-traded class; the figures are filled
   // from the record the announcement is under (`source`).
@@ -375,7 +386,7 @@ export default async function EarningsCalendarPage({
               window that ends today, so every row read "Today" under a "Next up"
               heading. "Who reports soon" is this card: measured, and marked as
               an estimate. */}
-          <EarningsComingUp expected={forward.expected} due={forward.due} today={today} />
+          <EarningsComingUp expected={forward.expected} due={forward.due} today={today} facts={comingUpFacts} />
 
           {/* FINE PRINT: the source of the list, and of "Shares since". */}
           <p className="earnCalFine" data-fine-print="">
