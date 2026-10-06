@@ -2,3 +2,6 @@
 export async function readPeSectorMedians() {
   return { asOf: "2026-10-02", sectors: { Technology: { median: 31.2, n: 120, spreadPct: 8 }, Healthcare: { median: 24.5, n: 80, spreadPct: 10 }, Energy: { median: 12.1, n: 30, spreadPct: 12 } } };
 }
+// The insight page (#563 COWORK #133) also asks for the sector and the bank gate.
+export const peSectorOf = () => "Technology";
+export const isBankSic = () => false;

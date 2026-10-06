@@ -146,7 +146,7 @@ function readSortedPosts(): BlogPost[] {
       slug,
       title: String(data.title || ""),
       date: formatFrontmatterDate(data.date),
-      excerpt: String(data.excerpt || ""),
+      excerpt: String(data.excerpt || data.summary || ""), // a new-format post (#563 COWORK #132) has a summary, no excerpt
       symbol: data.symbol ? String(data.symbol) : null,
       timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
       chartBars: normalizeChartBars(data.chartBars),
@@ -302,7 +302,7 @@ export function getPostBySlug(slug: string): BlogPostFull {
     slug,
     title: String(data.title || ""),
     date: formatFrontmatterDate(data.date),
-    excerpt: String(data.excerpt || ""),
+    excerpt: String(data.excerpt || data.summary || ""), // a new-format post (#563 COWORK #132) has a summary, no excerpt
     symbol: data.symbol ? String(data.symbol) : null,
     timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
     chartBars: normalizeChartBars(data.chartBars),
