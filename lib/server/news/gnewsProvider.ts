@@ -19,6 +19,7 @@ import { normaliseCompanyName, assessCompanyName } from "./companyName";
 import { stripHtmlTags, containsHtmlMarkup, decodeHtml } from "./text";
 import { deriveEventType } from "./eventType";
 import type { NewsItem, NewsProvider } from "./types";
+import { cachedOutsideText } from "../outsideFetch";
 
 const FEED_URL = "https://news.google.com/rss/search";
 
@@ -203,14 +204,11 @@ async function fetchForSymbol(
   }
 
   try {
-    const res = await fetch(feedUrlFor(cleanName), {
-      // Unchanged from the FMP path. The store decides whether a refresh happens
-      // at all; this only bounds how stale one window may be if it does.
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return [];
-
-    const items = parseGoogleNewsFeed(await res.text(), symbol);
+    // The store decides whether a refresh happens at all; this only bounds how
+    // stale one window may be if it does. Bounded, and cached by our own entry
+    // rather than Next's fetch cache, whose refresh ran with no deadline
+    // (lib/server/outsideFetch.ts, #553 COWORK #171).
+    const items = parseGoogleNewsFeed(await cachedOutsideText(3600)(feedUrlFor(cleanName)), symbol);
     console.log(`[gnews] ${symbol} q=${JSON.stringify(buildQuery(cleanName))} items=${items.length}`);
     return items;
   } catch {
