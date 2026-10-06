@@ -22,6 +22,7 @@
 // the Tiingo clean-up reaches it (the rule earningsCalendar.stripPoolPrices
 // follows for the day blobs).
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { canWriteSecState } from "./secWriteGate";
 import { readFactSet } from "./secFactStore";
 import { readReportDates } from "./secReportDatesStore";
@@ -31,8 +32,10 @@ import { readTiingoHistory } from "./marketData/read";
 import { TIINGO_PREFIX } from "./marketData/keys";
 import { closeBeforeFiling, figuresForAnnouncement, type ReportedFigures } from "./earningsWeek";
 
+// THE PAGE-READ CLIENT, WITH ITS DEADLINE (#553 CODE-B #144): the same
+// options every page-path client carries.
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv(PAGE_READ_CACHE) : null;
 
 /** A preview fills and reads its own copy; production's is written by production only. */
 const scoped = (key: string) => (canWriteSecState() ? key : `${key}:preview`);
