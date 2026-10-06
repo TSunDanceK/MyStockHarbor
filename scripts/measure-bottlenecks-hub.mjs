@@ -10,7 +10,10 @@
 //   - the web's hub labels stay inside their circles and no two hubs overlap;
 //   - hovering a hub shows "N stocks depend on X" and lights its lines;
 //   - the leaderboard renders ten rows and "See full leaderboard"; a row opens
-//     to chips linking /bottlenecks/{slug}.
+//     to chips linking /bottlenecks/{slug};
+//   - THE RIM (#563 COWORK #131): every rim dot has a line to a hub, and the
+//     caption's count is the number of dots; a 250-page fixture draws sector
+//     arcs, not dots, and no arc label touches another label or a hub.
 // Mutants: the ≤560 px hide rule removed must be caught; a forced wide element
 // must be caught as sideways scroll.
 //
@@ -157,6 +160,60 @@ for (const width of [390, 1280]) {
   check(`leaderboard: ${r.rows} rows, "See full leaderboard" ${r.more ? "present" : "MISSING"}, first row opens to ${r.chipsVisible} chips (${r.href})`, r.rows === 10 && r.more && r.chips > 0 && r.chipsVisible === r.chips && /^\/bottlenecks\/[a-z0-9.-]+$/.test(r.href));
   if (SHOTS) await page.locator(".bottlenecksLeaderboardRail").screenshot({ path: path.join(SHOTS, "hub-1280-row-open.png") });
   await page.close();
+}
+
+// THE RIM (#131): every dot has a line; the caption counts the dots.
+{
+  const page = await open(browser, 1280);
+  const r = await page.evaluate(() => {
+    const ends = new Set([...document.querySelectorAll(".bnLinks line")].map((l) => `${l.getAttribute("x1")},${l.getAttribute("y1")}`));
+    const dots = [...document.querySelectorAll(".bnStock")];
+    return { dots: dots.length, lonely: dots.filter((d) => !ends.has(`${d.getAttribute("cx")},${d.getAttribute("cy")}`)).length, caption: document.querySelector(".bnCapDefault").textContent.trim() };
+  });
+  check(`rim: ${r.dots} dots, ${r.lonely} without a line; caption "${r.caption}"`, r.dots > 0 && r.lonely === 0 && r.caption.startsWith(`${r.dots} stocks that name one of these 8.`));
+  await page.close();
+}
+// THE SAFETY VALVE (#131): 250 connected pages over uneven sectors draw arcs; no label collides.
+{
+  const H = await import("../lib/bottleneckHub.ts");
+  const { default: Web } = await import("../app/components/BottleneckWeb.tsx");
+  const { SECTORS } = await import("../lib/sectors.ts");
+  const names = [...SECTORS.map((x) => x.shortName), "Other"];
+  const E = (name, ticker) => ({ name, ticker, pct: 10, blurb: "" });
+  const hubsOf = [["Amazon (AWS)", "AMZN"], ["Alphabet", "GOOGL"], ["Microsoft", "MSFT"], ["TSMC", "TSM"], ["Nvidia", "NVDA"], ["Samsung Electronics", null], ["Apple", "AAPL"], ["Broadcom", "AVGO"]];
+  const posts = Array.from({ length: 250 }, (_, i) => ({ slug: `f${i}`, symbol: `F${i}`, companyName: `F${i} Corp`, category: "", domain: "", title: "", date: "2026-10-01", summary: "", disclaimer: "", supplyChainNote: "", customersNote: "",
+    supplyChain: [E(...hubsOf[i % 8]), ...(i % 3 ? [] : [E(...hubsOf[(i * 7) % 8])])], customers: [] }));
+  // Uneven sectors: Technology large, a few mid-sized, some slivers too short to label.
+  const weights = [60, 12, 30, 25, 20, 8, 40, 3, 2, 15, 30, 5];
+  const cum = weights.map((w, i) => weights.slice(0, i + 1).reduce((a, b) => a + b, 0)), tot = cum.at(-1);
+  const sectorOf = (sym) => { const k = (Number(sym.slice(1)) * 37) % tot; return names[cum.findIndex((c) => k < c)]; };
+  const web = H.buildDependencyWeb(posts, H.buildHubCompanies(posts), 8, sectorOf);
+  const body = renderToStaticMarkup(React.createElement("div", { className: "bnWebBlock", style: { maxWidth: 560, margin: "0 auto" } }, React.createElement(Web, { web })));
+  for (const width of [1280, 600]) {
+    for (const root of [16, 20]) {
+      const page = await open(browser, width, `<style>html{font-size:${root}px}</style>${body}`);
+      const r = await page.evaluate(() => {
+        const svg = document.querySelector(".bnWeb");
+        const glyphs = (t) => Array.from({ length: t.getNumberOfChars() }, (_, i) => t.getExtentOfChar(i));
+        const labels = [...svg.querySelectorAll(".bnArcLabel")].map((t) => ({ t: t.textContent, g: glyphs(t) }));
+        const hubText = [...svg.querySelectorAll(".bnHub text")].map((t) => ({ t: t.textContent, g: glyphs(t) }));
+        const circles = [...svg.querySelectorAll(".bnHub circle")].map((c) => ({ x: +c.getAttribute("cx"), y: +c.getAttribute("cy"), r: +c.getAttribute("r") }));
+        const hit = (a, b) => a.x < b.x + b.width - 0.3 && b.x < a.x + a.width - 0.3 && a.y < b.y + b.height - 0.3 && b.y < a.y + a.height - 0.3;
+        const inCircle = (g, c) => [[g.x, g.y], [g.x + g.width, g.y], [g.x, g.y + g.height], [g.x + g.width, g.y + g.height]].some(([x, y]) => Math.hypot(x - c.x, y - c.y) < c.r + 2);
+        const bad = [];
+        labels.forEach((a, i) => {
+          for (const b of [...labels.slice(i + 1), ...hubText]) if (a.g.some((x) => b.g.some((y) => hit(x, y)))) bad.push(`${a.t} / ${b.t}`);
+          if (a.g.some((g) => circles.some((c) => inCircle(g, c)))) bad.push(`${a.t} on a hub`);
+          if (a.g.some((g) => g.x < 0 || g.y < 0 || g.x + g.width > 560 || g.y + g.height > 520)) bad.push(`${a.t} outside the web`);
+        });
+        return { dots: svg.querySelectorAll(".bnStock").length, arcs: svg.querySelectorAll(".bnArc").length, labels: labels.map((x) => x.t), bundles: svg.querySelectorAll(".bnBundle").length, caption: document.querySelector(".bnCapDefault").textContent.trim(), bad };
+      });
+      check(`250-page fixture at ${width}px, ${root}px root: ${r.arcs} sector arcs, ${r.dots} dots, ${r.bundles} bundles, ${r.labels.length} labels (${r.labels.join(", ")}); ${r.bad.length ? `COLLIDE: ${r.bad.join("; ")}` : "no label collisions"}`,
+        r.dots === 0 && r.arcs === web.arcs.length && r.arcs >= 10 && r.labels.length >= 4 && !r.bad.length && r.caption.startsWith("250 stocks that name one of these 8."));
+      if (SHOTS && root === 16 && width === 1280) await page.screenshot({ path: path.join(SHOTS, "hub-250-arcs.png") });
+      await page.close();
+    }
+  }
 }
 
 console.log("\n=== Mutants: each must be caught ===");

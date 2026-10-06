@@ -54,6 +54,21 @@ So the exact spelling no longer splits a ticker'd company. For a company with
 **no ticker** the spelling still decides the key unless it normalises the same
 or an alias joins it, so consistent spelling still matters there.
 
+### The dependency web's rim (2026-10-06, COWORK #131)
+
+- **Hubs:** the top 8 companies by distinct-page count, keyed as above.
+- **Rim:** only stock pages that name **at least one of the 8 hubs**, as a
+  supplier or a key customer. Every dot has a line. A page naming none of them
+  is left out of the web only: the stat tiles ("stocks mapped" is the total),
+  the leaderboard and the A–Z archive still count and list it. The caption
+  reads "N stocks that name one of these 8", where N is the number of dots.
+- **Safety valve:** above `WEB.maxDots` (200) connected pages, the rim switches
+  to **sector arcs** by itself: one arc per sector, sized by its page count.
+  Each hub draws one bundled line per sector, as wide as the pages behind it,
+  and hover or tap still shows the real count. The sector comes from A's SEC
+  resolver (`sicProfileFor` in `lib/server/staticProfile.ts`), passed in by
+  `app/bottlenecks/page.tsx`. A page with no SEC sector goes under "Other".
+
 ---
 
 ## Correction: SK hynix is Nasdaq-listed — use `ticker: SKHY`, not `ticker: null`

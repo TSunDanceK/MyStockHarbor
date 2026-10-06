@@ -7,6 +7,8 @@ import BottleneckLeaderboard from "@/app/components/BottleneckLeaderboard";
 import BottlenecksMobileTabs from "@/app/components/BottlenecksMobileTabs";
 import BottleneckHero from "@/app/components/BottleneckHero";
 import BottleneckThemes from "@/app/components/BottleneckThemes";
+import { getSectorByLabel } from "@/lib/sectors";
+import { sicProfileFor } from "@/lib/server/staticProfile";
 
 const PAGE_TITLE =
   "Stock Bottlenecks | Supply Chain & Customer Dependency | MyStockHarbor";
@@ -73,7 +75,7 @@ export default function BottlenecksIndexPage() {
   });
   // The hub (#125 COWORK): leaderboard, dependency web, themes and stat tiles,
   // computed from the same content files -- see lib/bottleneckHub.ts.
-  const hub = getBottleneckHub();
+  const hub = getBottleneckHub(webSectorOf);
   const searchItems = posts.map(({ slug, symbol, companyName }) => ({ slug, symbol, companyName }));
   // The leaderboard's rows: every company named on two or more pages (its top
   // ten first); the single-page tail is a count, not a list.
@@ -269,4 +271,14 @@ export default function BottlenecksIndexPage() {
       </main>
     </>
   );
+}
+
+/**
+ * A stock's sector for the web's sector arcs (#563 COWORK #131; drawn only past
+ * WEB.maxDots connected pages): A's SEC resolver, committed data with no I/O,
+ * as the sector's short name. Null when SEC has none; the web files it under "Other".
+ */
+function webSectorOf(symbol: string): string | null {
+  const label = sicProfileFor(symbol)?.sector ?? null;
+  return getSectorByLabel(label)?.shortName ?? label;
 }

@@ -7,6 +7,7 @@ import { readSpendingRecord } from "@/lib/server/capexSpending";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import WhyFollowMoney from "./WhyFollowMoney";
 import WhoIsReceivingMost from "./WhoIsReceivingMost";
+import CapexLogoRow from "./CapexLogoRow";
 import { normaliseCompanyName } from "@/lib/server/news/companyName";
 import { buildContractRows, buildInsights, buildReceiverGroups, buildSpendingRows, buildTopReceivers, formatAmount, type Insights, type ReceiverView, type SpendingView, type TopReceiverView } from "@/lib/capexPresent";
 
@@ -362,15 +363,8 @@ function InsightColumn({ insights: x, topReceivers, contractsWindow }: { insight
           <div className="cardEyebrow">Who is spending most</div>
           <h3>Largest reported capex, {x.year}</h3>
           <ul className="cardList">
-            {x.topSpenders.map((t) => (
-              <li key={t.ticker}>
-                <span>
-                  <Link href={`/stock/${encodeURIComponent(t.ticker)}`}>{t.ticker}</Link>
-                  <span className="cardName">{t.name}</span>
-                </span>
-                <span className="cardAmt">{t.amount}</span>
-              </li>
-            ))}
+            {/* Each company with its logo (#563 COWORK #130), as on the /bottlenecks leaderboard. */}
+            {x.topSpenders.map((t) => <CapexLogoRow key={t.ticker} ticker={t.ticker} name={t.name} amount={t.amount} />)}
           </ul>
           <p className="cardSource">Source: each company&apos;s cash-flow statement filed with the SEC, calendar {x.year}.</p>
         </section>

@@ -557,6 +557,12 @@ export const ZONE_LADDER_HEIGHT = 320;
  * height when larger text or a narrow card makes them taller (#563 COWORK #109).
  */
 export const ZONE_LABEL_GAP = 42;
+/**
+ * The tallest a ladder grows when it fills its card (the SPX page's levels row,
+ * #563 COWORK #129), in px: past this the zones spread too far apart to read as
+ * one scale, so the card centres the ladder in the spare height instead.
+ */
+export const ZONE_LADDER_FILL_MAX = 520;
 
 /** The ladder's height for `n` labels `gap` apart: ZONE_LADDER_HEIGHT, taller only when the labels need it. */
 export const ladderHeight = (n: number, gap = ZONE_LABEL_GAP) => Math.max(ZONE_LADDER_HEIGHT, Math.ceil(n * gap));

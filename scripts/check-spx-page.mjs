@@ -119,7 +119,7 @@ const MUTANTS = [
   ["the gauge is 'Trend score', in trend words, not 'Market mood' or Fear / Greed", "page", (s) => s.replace("${trendWords(trend.score)}", "${trend.label}")],
   ["the gauge is 'Trend score', in trend words, not 'Market mood' or Fear / Greed", "words", (s) => s.replace('"Strong uptrend"', '"Extreme Greed"')],
   ["the AI market backdrop is not called; the old page is kept, retired and dated", "page", (s) => s.replace('import { buildMarketMoodScore } from "@/lib/market-mood";', 'import { getSpxMarketAnalysis } from "@/lib/ai-market";\nimport { buildMarketMoodScore } from "@/lib/market-mood";')],
-  ["every live card says it is SPY and carries the Tiingo credit", "page", (s) => s.replace("<KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} credit={credit} />", "<KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} />")],
+  ["every live card says it is SPY and carries the Tiingo credit", "page", (s) => s.replace("<KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} fill credit={credit} />", "<KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} fill />")],
   ["every live card says it is SPY and carries the Tiingo credit", "page", (s) => s.replace('"Shown on SPY, the ETF that tracks the S&P 500"', '"Shown on the S&P 500"')],
   ["every live card says it is SPY and carries the Tiingo credit", "page", (s) => s.replace("<p data-fine-print style={{ ...small, marginTop: 4 }}>{liveLabel}</p>\n              <PerformanceStrip", "<PerformanceStrip")],
   ["the sections in the brief's order, the platform buttons after the weekly chart", "page", (s) => s.replace("</h1>", '</h1>\n            <AffiliateLink href="/api/go/etoro" eventLabel="x" style={secondaryBtn()}>eToro</AffiliateLink>')],

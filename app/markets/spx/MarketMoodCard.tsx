@@ -40,11 +40,15 @@ export function MoodSpark({ spark }: { spark: { d: string; r: number }[] }) {
   const W = 240, H = 44;
   const pts = spark.map((p, i) => `${((i / (spark.length - 1)) * W).toFixed(1)},${(H - (p.r / 100) * H).toFixed(1)}`).join(" ");
   return (
-    <figure className="moodSpark" style={{ margin: "12px 0 0" }}>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img" aria-label={`Market Mood over the last ${spark.length} sessions, from ${spark[0].r} to ${spark[spark.length - 1].r}`} style={{ display: "block", overflow: "visible" }}>
-        <line x1={0} x2={W} y1={H / 2} y2={H / 2} stroke="rgba(255,255,255,0.18)" strokeDasharray="3 3" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-        <polyline points={pts} fill="none" stroke="rgba(241,245,249,0.85)" strokeWidth={1.6} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-      </svg>
+    // FILLS THE CARD (#563 COWORK #129): in the SPX hero the card is a flex
+    // column, so the line takes the row's spare height; never below H.
+    <figure className="moodSpark" style={{ margin: "12px 0 0", flex: "1 1 auto", display: "flex", flexDirection: "column" }}>
+      <div className="moodSparkPlot" style={{ position: "relative", flex: "1 1 auto", minHeight: H }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" preserveAspectRatio="none" role="img" aria-label={`Market Mood over the last ${spark.length} sessions, from ${spark[0].r} to ${spark[spark.length - 1].r}`} style={{ position: "absolute", inset: 0, display: "block", overflow: "visible" }}>
+          <line x1={0} x2={W} y1={H / 2} y2={H / 2} stroke="rgba(255,255,255,0.18)" strokeDasharray="3 3" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          <polyline points={pts} fill="none" stroke="rgba(241,245,249,0.85)" strokeWidth={1.6} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        </svg>
+      </div>
       <figcaption style={{ marginTop: 4, fontSize: "var(--fs-read)", lineHeight: 1.5, color: "rgba(203,213,225,0.72)" }}>Last {spark.length} sessions · the dashed line is 50</figcaption>
     </figure>
   );

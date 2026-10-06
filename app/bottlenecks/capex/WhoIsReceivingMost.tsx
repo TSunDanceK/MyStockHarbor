@@ -4,10 +4,11 @@
 // lib/capexPresent.ts: supplier groups only, no broad or new lines, USD only.
 //
 // COPY RULES: describes, never advises; nothing estimates who pays whom.
+// Each row carries the company's logo (#130, CapexLogoRow).
 // Sizes in rem or the tokens (the sibling cards' px stay theirs).
 // scripts/check-capex-receiving.mjs pins the rows, the placement and the sizes.
 import type { CSSProperties } from "react";
-import Link from "next/link";
+import CapexLogoRow from "./CapexLogoRow";
 import type { TopReceiverView } from "@/lib/capexPresent";
 
 export const RECEIVING_FINE =
@@ -21,17 +22,8 @@ export default function WhoIsReceivingMost({ rows }: { rows: TopReceiverView[] }
       <h3 style={{ fontSize: "1.125rem" }}>Largest build-out sales lines</h3>
       <ul className="cardList">
         {rows.map((r) => (
-          <li key={r.id} style={rowStyle}>
-            <span style={{ minWidth: 0 }}>
-              <Link href={`/stock/${encodeURIComponent(r.ticker)}`}>{r.ticker}</Link>
-              <span className="cardName" style={{ fontSize: "var(--fs-label)" }}>{r.name}</span>
-              <span style={lineStyle}>
-                {r.line} · {r.fyTo}
-                {r.stale ? " · earlier filing" : ""}
-              </span>
-            </span>
-            <span className="cardAmt">{r.amount}</span>
-          </li>
+          <CapexLogoRow key={r.id} ticker={r.ticker} name={r.name} amount={r.amount} style={rowStyle} nameStyle={{ fontSize: "var(--fs-label)" }}
+            sub={<span style={lineStyle}>{r.line} · {r.fyTo}{r.stale ? " · earlier filing" : ""}</span>} />
         ))}
       </ul>
       <p data-fine-print style={fineStyle}>{RECEIVING_FINE}</p>
@@ -40,5 +32,5 @@ export default function WhoIsReceivingMost({ rows }: { rows: TopReceiverView[] }
 }
 
 const rowStyle: CSSProperties = { fontSize: "var(--fs-read)" };
-const lineStyle: CSSProperties = { display: "block", marginTop: 2, fontSize: "var(--fs-label)", color: "rgba(241,245,249,0.6)" };
+const lineStyle: CSSProperties = { display: "block", fontSize: "var(--fs-label)", color: "rgba(241,245,249,0.6)" };
 const fineStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(241,245,249,0.5)" };

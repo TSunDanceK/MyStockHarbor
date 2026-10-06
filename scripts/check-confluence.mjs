@@ -288,7 +288,7 @@ const RULES = {
     const marks = M.zoneLadder(rising, 400, 80), ys = marks.map((m) => m.labelY).sort((a, b) => a - b);
     return M.ladderHeight(5, 80) === 400 && M.ladderHeight(3) === M.ZONE_LADDER_HEIGHT && ys.every((y, i) => i === 0 || y - ys[i - 1] >= 80 - 1e-9) &&
       /querySelectorAll<HTMLElement>\("\.czLabel"\)\]\.map\(\(x\) => x\.offsetHeight\)/.test(c) && /const need = Math\.max\(ZONE_LABEL_GAP, Math\.ceil\(tallest\) \+ 6\);/.test(c) &&
-      /const height = ladderHeight\(count, gap\);\s*const marks = zoneLadder\(c, height, gap\);/.test(c) && /const priceY = ladderTop\(price, sc, height\);/.test(c) && /new ResizeObserver\(fit\)/.test(c);
+      /const natural = ladderHeight\(count, gap\);/.test(c) && /const height = fill && shown !== null \? Math\.min\(tallest, Math\.max\(natural, shown - extra\)\) : natural;\s*const marks = zoneLadder\(c, height, gap\);/.test(c) && /const priceY = ladderTop\(price, sc, height\);/.test(c) && /new ResizeObserver\(fit\)/.test(c);
   },
   "no fetch, no Redis, no provider reads": () =>
     [[LIB, read(LIB)], [CARD, read(CARD)]].every(([f, s]) => !/\bfetch\(|redis|upstash|tiingo|fmp/i.test(stripComments(s, { file: f }))),
@@ -321,7 +321,7 @@ const MUTANTS = [
   ["price inside a zone: shown as 'price inside zone', the next ones out above and below", "l", (s) => s.replace("const inside = insideZone ? withGaps(insideZone, gaps) : null;", "const inside = null;")],
   ["price inside a zone: shown as 'price inside zone', the next ones out above and below", "c", (s) => s.replace('{mark.side === "inside" ? <div className="czInside"', '{false ? <div className="czInside"')],
   ["a fixed scale: the shown zones and the price, padded; the dot at its true height, never centred", "l", (s) => s.replace("scale: { lo: lo - pad, hi: hi + pad }, levels:", "scale: { lo: price - Math.max(price - lo, hi - price) - pad, hi: price + Math.max(price - lo, hi - price) + pad }, levels:")],
-  ["a fixed scale: the shown zones and the price, padded; the dot at its true height, never centred", "c", (s) => s.replace("top: priceY + dotOff - 6,", "top: ZONE_LADDER_HEIGHT / 2 - 6 + dotOff,")],
+  ["a fixed scale: the shown zones and the price, padded; the dot at its true height, never centred", "c", (s) => s.replace("top: pos(priceY, dotOff - 6),", "top: pos(ZONE_LADDER_HEIGHT / 2, dotOff - 6),")],
   ["zone labels: stacked apart on one side, each band at its own price range", "l", (s) => s.replace("const ys = stackLabels(marks.map((m) => m.labelY), gap, height, gap / 2);", "const ys = marks.map((m) => m.labelY);")],
   ["projections marked ≈ in the tap note, as one-session projections", "l", (s) => s.replace("return `${ESTIMATE_SIGN} ${priceWords(m.value)}: ${m.derived} (a one-session projection).`;", "return `${priceWords(m.value)}: ${m.derived}.`;")],
   ["the copy describes, never forecasts or advises", "l", (s) => s.replace("Some traders watch areas like this; a description, not a forecast.", "Price will likely bounce at these zones.")],
