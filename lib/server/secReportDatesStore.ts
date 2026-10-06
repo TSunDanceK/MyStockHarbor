@@ -227,9 +227,9 @@ export async function readReportDatesChecked(symbol: string): Promise<ReportDate
 
 /**
  * MANY RECORDS IN ONE MGET (#552 COWORK #181). The calendar's forward sections
- * read the whole cut (150 since the widening) on every build; one GET each was
- * 150 commands a build, one MGET is one. A failed read is `ok: false` for the
- * whole set -- never 150 nulls, which would read as 150 filers with no record.
+ * read the whole cut (200 since #552 COWORK #186) on every build; one GET each
+ * was 200 commands a build, one MGET is one. A failed read is `ok: false` for the
+ * whole set -- never 200 nulls, which would read as 200 filers with no record.
  */
 export async function readReportDatesBulk(
   symbols: readonly string[],
