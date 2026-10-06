@@ -11,8 +11,11 @@
 // PUBLIC LOG (#553): counts, the build time and symbols only; never a price.
 //
 //   node scripts/pickers-live-counts.mjs   (relay: write-pickers-live-counts)
+import { register } from "node:module";
+register("./lib/ts-resolve-app.mjs", import.meta.url);
+
 if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) { console.error("FATAL: needs the Upstash credentials."); process.exit(2); }
-const READ_VERBS = new Set(["GET", "MGET"]);
+const READ_VERBS = new Set(["GET", "MGET", "HMGET"]);
 const UPSTASH = process.env.UPSTASH_REDIS_REST_URL.replace(/\/$/, "");
 let commands = 0;
 const realFetch = globalThis.fetch;
@@ -55,6 +58,30 @@ for (const sec of manifest.head?.sections ?? []) {
   const joinable = nonEmpty.filter((i) => { const pts = recBySym.get(i.symbol)?.chartPoints; if (!Array.isArray(pts)) return false; const ds = new Set(pts.map((p) => String(p?.date ?? "").slice(0, 10))); return i.trendSeries.dates.some((d) => ds.has(d)); });
   const noRecPts = nonEmpty.filter((i) => !Array.isArray(recBySym.get(i.symbol)?.chartPoints) || !recBySym.get(i.symbol).chartPoints.length).length;
   console.log(`  ${sec.title}: items ${items.length}, with trendSeries ${withSeries.length}, non-empty ${nonEmpty.length}, joinable to the record's chartPoints ${joinable.length}, record has no chartPoints ${noRecPts}`);
+  // The page's own join, against the OFF-PAYLOAD charts it re-attaches
+  // (msh:picker-charts:v1, readPickerChartsBulk): the real attachTrendHelper,
+  // then the points in the drawn 64 that came back with a trendLine.
+  if (!nonEmpty.length) continue;
+  const { attachTrendHelper } = await import("../lib/ta/trendHelper.ts");
+  const syms = nonEmpty.map((i) => i.symbol);
+  const raw = await redis.hmget("msh:picker-charts:v1", ...syms);
+  const got = Array.isArray(raw) ? raw : syms.map((s) => raw?.[s] ?? null);
+  let rows = 0, rowsWithLine = 0, drawn = 0, withLine = 0;
+  const shapes = new Map();
+  nonEmpty.forEach((it, k) => {
+    const pts = parse(got[k]);
+    if (!Array.isArray(pts) || !pts.length) return;
+    rows++;
+    const shape = `${typeof pts[0]?.date}:${String(pts[0]?.date ?? "").length} vs ${typeof it.trendSeries.dates[0]}:${String(it.trendSeries.dates[0] ?? "").length}`;
+    shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
+    const merged = attachTrendHelper(pts, it.trendSeries);
+    const tail = merged.slice(-64);
+    drawn += tail.length;
+    const n = tail.filter((p) => typeof p.trendLine === "number").length;
+    withLine += n;
+    if (n) rowsWithLine++;
+  });
+  console.log(`    page join over stored charts: rows with a stored chart ${rows}, rows that get a line ${rowsWithLine}, drawn points ${drawn}, points with a line ${withLine}; date shapes (type:length chart vs series) ${[...shapes].map(([k, v]) => `${k} ×${v}`).join("; ")}`);
 }
 
 const universe = parse(await redis.get("msh:pickers:v10:symbols"));
