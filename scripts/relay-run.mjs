@@ -1368,6 +1368,8 @@ const TASKS = {
   // task, added on a ruling. See scripts/lib/fmp-purge-plan.mjs.
   "write-fmp-purge-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--pool-figures", "--market-state", "--insight-snapshots", "--meters"], writes: true },
   "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
+  // READS ONLY (Relay B, #553 COWORK #175): which pickers rows have no cover share count, and A's cover-review reason. GET + ~8 HMGET + 1 HGETALL; symbols, codes, counts.
+  "write-share-count-gap-census": { script: "scripts/share-count-gap-census.mjs", args: () => [], writes: true },
   // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
   // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
