@@ -204,7 +204,7 @@ const MUTANTS = [
   ["the Tiingo credit", "card", (s) => s.replace("{credit ? <>Daily prices: {credit}</> : null}", "{null}")],
   ["no advice", "pole", (s) => s.replace('`Week = ${only}`', '`Week = today so far: a level to buy`')],
   ["sizes in rem", "card", (s) => s.replace('fontSize: "var(--fs-label)", fontWeight: 800, lineHeight: 1.4', "fontSize: 11, fontWeight: 800, lineHeight: 1.4")],
-  ["sizes in rem", "card", (s) => s.replace('style={{ position: "absolute", left: 0, right: 0, top: `calc(', 'style={{ transform: "translateY(-50%)", position: "absolute", left: 0, right: 0, top: `calc(')],
+  ["sizes in rem", "card", (s) => s.replace('style={{ position: "absolute", left: 0, right: 0, top: at,', 'style={{ transform: "translateY(-50%)", position: "absolute", left: 0, right: 0, top: at,')],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");
 for (const [start, where, mutate] of MUTANTS) {

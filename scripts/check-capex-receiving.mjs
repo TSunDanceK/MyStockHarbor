@@ -7,8 +7,8 @@
 // non-USD lines) holds AND its control shows the same line once it qualifies,
 // so no rule passes because the line was absent anyway; panel 2's lines and no
 // new read; directly under "Who is spending most"; the fine line; sizes from
-// rem or the tokens, the fine print tagged; describes, never advises. A
-// mutant each.
+// rem or the tokens, the fine print tagged; describes, never advises; every
+// row of both company cards with its logo or letter (#130). A mutant each.
 //
 // "Today's data" below is the committed entry list (data/capex/receivers.json)
 // with figures standing in for the stored record (which lives in Redis and is
@@ -23,15 +23,20 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { stripComments } from "./lib/source-code.mjs";
 
 const LIB = "lib/capexPresent.ts", CARD = "app/bottlenecks/capex/WhoIsReceivingMost.tsx", PAGE = "app/bottlenecks/capex/page.tsx";
+// THE LOGOS (#563 COWORK #130): both company cards' rows, and the hub leaderboard's own logo they reuse.
+const ROW = "app/bottlenecks/capex/CapexLogoRow.tsx", LOGO = "app/components/TickerLogo.tsx", LEADERBOARD = "app/components/BottleneckLeaderboard.tsx";
 const read = (f) => fs.readFileSync(f, "utf8");
 
 let n = 0;
-async function load(src, name) {
-  const js = ts.transpileModule(src.replace(/^import type[^;]+;$/gm, ""), { fileName: `${name}.tsx`, compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText
-    .replace(/from "next\/link";/, 'from "next/link.js";'); // bare Node needs the extension
-  const tmp = `scripts/.check-capex-receiving-${process.pid}-${n++}.mjs`;
-  fs.writeFileSync(tmp, js);
-  try { return await import(`${process.cwd()}/${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+const transpile = (src, name) => ts.transpileModule(src.replace(/^import type[^;]+;$/gm, ""), { fileName: `${name}.tsx`, compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "react" } }).outputText
+  .replace(/from "next\/link";/, 'from "next/link.js";'); // bare Node needs the extension
+/** A module, with the card's row (CapexLogoRow) and the row's TickerLogo transpiled beside it, from `rowSrc` as given. */
+async function load(src, name, rowSrc = read(ROW)) {
+  const tag = `${process.pid}-${n++}`, tmp = (x) => `scripts/.check-capex-receiving-${tag}-${x}.mjs`;
+  fs.writeFileSync(tmp("logo"), transpile(read(LOGO), "logo"));
+  fs.writeFileSync(tmp("row"), transpile(rowSrc, "row").replace('from "@/app/components/TickerLogo";', `from "./${tmp("logo").slice(8)}";`));
+  fs.writeFileSync(tmp("main"), transpile(src, name).replace('from "./CapexLogoRow";', `from "./${tmp("row").slice(8)}";`).replace('from "@/app/components/TickerLogo";', `from "./${tmp("logo").slice(8)}";`));
+  try { return await import(`${process.cwd()}/${tmp("main")}`); } finally { for (const x of ["logo", "row", "main"]) fs.rmSync(tmp(x), { force: true }); }
 }
 const text = (html) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
 const ADVICE = /\b(buy|buying|sell(?!s? to\b)|selling|should|must|recommend(?!ation\b)\w*|consider|opportunit\w*|bargain|undervalued|overvalued|cheap|target|upside|downside|will)\b/i;
@@ -108,7 +113,20 @@ const RULES = {
   "the card: eyebrow, title, ticker + company + amount, the line and 'FY to' under each": ({ html }) =>
     /<div class="cardEyebrow"[^>]*>Who is receiving most<\/div>/.test(html) && /<h3[^>]*>Largest build-out sales lines<\/h3>/.test(html) &&
     (html.match(/<li /g) ?? []).length === 5 &&
-    EXPECTED.every(([t, line, fy, amt]) => new RegExp(`<a href="/stock/${t}">${t}</a><span class="cardName"[^>]*>${NAMES[t]}</span><span[^>]*>${line} · ${fy}</span></span><span class="cardAmt">\\${amt}</span>`).test(html)),
+    EXPECTED.every(([t, line, fy, amt]) => new RegExp(`<a href="/stock/${t}">${t}</a><span class="cardName"[^>]*>${NAMES[t]}</span></span><span[^>]*>${line} · ${fy}</span></span><span class="cardAmt"[^>]*>\\${amt}</span>`).test(html)),
+  // THE LOGOS (#563 COWORK #130).
+  "every row in both company cards shows its logo or the letter tile, the leaderboard's own, at its size": ({ html, row, page, R }) => {
+    const rows = (h) => h.split(/<li /).slice(1);
+    const hasLogo = (li, t) => new RegExp(`<img [^>]*src="/logos/${t}\\.webp"`).test(li) && /^class="capexLogoRow"/.test(li);
+    const spend = renderToStaticMarkup(React.createElement("ul", null, ["MSFT", "AMZN"].map((t) => React.createElement(R.default, { key: t, ticker: t, name: t, amount: "$1bn" }))));
+    const letter = renderToStaticMarkup(React.createElement(R.default, { ticker: "", name: "Newco", amount: "$1bn" }));
+    const leader = /<TickerLogo symbol=\{c\.ticker\} name=\{c\.name\} size=\{(\d+)\} radius=\{(\d+)\} alt="" \/>/.exec(read(LEADERBOARD));
+    return rows(html).length === 5 && rows(html).every((li, i) => hasLogo(li, EXPECTED[i][0])) &&
+      rows(spend).length === 2 && rows(spend).every((li, i) => hasLogo(li, ["MSFT", "AMZN"][i])) && />N<\/div>/.test(letter) && !/<img /.test(letter) &&
+      !!leader && R.CAPEX_LOGO_PX === Number(leader[1]) && /<TickerLogo symbol=\{ticker\} name=\{name\} size=\{CAPEX_LOGO_PX\} radius=\{8\} alt="" \/>/.test(row) && leader[2] === "8" &&
+      /\{x\.topSpenders\.map\(\(t\) => <CapexLogoRow key=\{t\.ticker\} ticker=\{t\.ticker\} name=\{t\.name\} amount=\{t\.amount\} \/>\)\}/.test(page) &&
+      !/\bfetch\(|redis|@\/lib\/server/i.test(row);
+  },
   "the fine line, verbatim, tagged as fine print at --fs-fine": ({ M, html }) =>
     M.RECEIVING_FINE === "From each company's latest annual report. Fiscal years end in different months. These are what suppliers sold, not a record of who paid them." &&
     /<p data-fine-print="true" style="[^"]*font-size:var\(--fs-fine\)[^"]*">From each company&#x27;s latest annual report\. Fiscal years end in different months\. These are what suppliers sold, not a record of who paid them\.<\/p>/.test(html),
@@ -122,14 +140,15 @@ const RULES = {
 
 let failures = 0;
 const check = (label, ok, detail = "") => { console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`); if (!ok) failures++; };
-const measure = async (libSrc, cardSrc, pageSrc) => {
+const measure = async (libSrc, cardSrc, pageSrc, rowSrc = read(ROW)) => {
   const P = await load(libSrc, "lib");
-  const M = await load(cardSrc, "card");
-  return { P, M, html: renderToStaticMarkup(React.createElement(M.default, { rows: P.buildTopReceivers(ENTRIES, TODAY, name) })), card: stripComments(cardSrc, { file: CARD }), page: stripComments(pageSrc, { file: PAGE }) };
+  const M = await load(cardSrc, "card", rowSrc);
+  const R = await load(rowSrc, "row", rowSrc);
+  return { P, M, R, html: renderToStaticMarkup(React.createElement(M.default, { rows: P.buildTopReceivers(ENTRIES, TODAY, name) })), card: stripComments(cardSrc, { file: CARD }), page: stripComments(pageSrc, { file: PAGE }), row: stripComments(rowSrc, { file: ROW }) };
 };
 const run = (rule, m) => { try { return !!rule(m); } catch { return false; } };
 
-const libSrc = read(LIB), cardSrc = read(CARD), pageSrc = read(PAGE);
+const libSrc = read(LIB), cardSrc = read(CARD), pageSrc = read(PAGE), rowSrc = read(ROW);
 console.log("=== Rules ===");
 const base = await measure(libSrc, cardSrc, pageSrc);
 for (const [label, rule] of Object.entries(RULES)) check(label, run(rule, base));
@@ -138,7 +157,7 @@ console.log("  rows: " + base.P.buildTopReceivers(ENTRIES, TODAY, name).map((r) 
 const R = Object.keys(RULES);
 const find = (start) => { const r = R.find((x) => x.startsWith(start)); if (!r) throw new Error(`no rule ${start}`); return r; };
 const CARD_JSX = "\n      {/* Who is receiving most (#563 COWORK #124): directly under \"Who is spending most\". */}\n      <WhoIsReceivingMost rows={topReceivers} />\n";
-// [rule, "l" (lib), "c" (card) or "p" (page), mutation]
+// [rule, "l" (lib), "c" (card), "p" (page) or "r" (the logo row), mutation]
 const MUTANTS = [
   ["today's five", "l", (s) => s.replace("picked.sort((a, b) => b.f.current - a.f.current);", "picked.sort((a, b) => (b.f.changePct ?? 0) - (a.f.changePct ?? 0));")],
   ["today's five", "l", (s) => s.replace("const sub = e.subLabel && f.subLabelOk ? e.subLabel.text : null;", "const sub = e.subLabel ? e.subLabel.text : null;")],
@@ -158,14 +177,18 @@ const MUTANTS = [
   ["the fine line", "c", (s) => s.replace("<p data-fine-print style={fineStyle}>", "<p style={fineStyle}>")],
   ["sizes in rem", "c", (s) => s.replace('const rowStyle: CSSProperties = { fontSize: "var(--fs-read)" };', "const rowStyle: CSSProperties = { fontSize: 14 };")],
   ["sizes in rem", "c", (s) => s.replace('const lineStyle: CSSProperties = { display: "block",', 'const lineStyle: CSSProperties = { display: "block", transform: "translateY(1px)",')],
+  // The logo dropped from the row: neither card shows one.
+  ["every row in both", "r", (s) => s.replace('      <TickerLogo symbol={ticker} name={name} size={CAPEX_LOGO_PX} radius={8} alt="" />\n', "")],
+  // The spending card back to its own rows, without the logo.
+  ["every row in both", "p", (s) => s.replace("{x.topSpenders.map((t) => <CapexLogoRow key={t.ticker} ticker={t.ticker} name={t.name} amount={t.amount} />)}", "{x.topSpenders.map((t) => <li key={t.ticker}><span>{t.ticker}</span><span className=\"cardAmt\">{t.amount}</span></li>)}")],
   ["describes, never advises", "c", (s) => s.replace("not a record of who paid them.\";", "not a record of who paid them. Suppliers to watch.\";").replace("<h3 style={{ fontSize: \"1.125rem\" }}>Largest build-out sales lines</h3>", "<h3 style={{ fontSize: \"1.125rem\" }}>Largest build-out sales lines</h3><p>Who pays whom: hyperscalers → suppliers. Buy the leaders.</p>")],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");
 for (const [start, where, mutate] of MUTANTS) {
-  const label = find(start), src = where === "l" ? libSrc : where === "c" ? cardSrc : pageSrc, mut = mutate(src);
+  const label = find(start), src = { l: libSrc, c: cardSrc, p: pageSrc, r: rowSrc }[where], mut = mutate(src);
   if (mut === src) { check(`mutant bites: ${label} — the mutation did not apply`, false); continue; }
   let m;
-  try { m = await measure(where === "l" ? mut : libSrc, where === "c" ? mut : cardSrc, where === "p" ? mut : pageSrc); } catch { m = null; }
+  try { m = await measure(where === "l" ? mut : libSrc, where === "c" ? mut : cardSrc, where === "p" ? mut : pageSrc, where === "r" ? mut : rowSrc); } catch { m = null; }
   check(`mutant bites: ${label}`, !m || !run(RULES[label], m));
 }
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");

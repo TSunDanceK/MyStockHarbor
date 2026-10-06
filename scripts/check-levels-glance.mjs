@@ -9,8 +9,9 @@
 // nearer; no duplicate line when the main zone is also the nearest; the inside
 // wording; "just above / below" for a 0.0% distance (#94); the numbers match the Price zones card on the same bars (and the page
 // passes both one input object); no advice words; nothing that can push the
-// page sideways at 320–430 px; placement after Key levels, with the SPY label
-// and the Tiingo credit. A mutant each.
+// page sideways at 320–430 px; placement under Price zones in the left column
+// (#563 COWORK #129; after Key levels on a phone), with the SPY label and the
+// Tiingo credit. A mutant each.
 //
 //   node scripts/check-levels-glance.mjs
 import fs from "node:fs";
@@ -97,7 +98,7 @@ const RULES = {
       b[0].kind === "inside" && b[1].kind === "main" && b[1].zone === S.insideSmall.below[0] && a[0].side === "inside";
   },
   "the numbers match the Price zones card on the same bars, and the page passes both one input object": ({ M, page }) =>
-    /<ConfluenceCard \{\.\.\.zoneInput\} credit=\{credit\} \/>/.test(page) && /<LevelsGlanceCard \{\.\.\.zoneInput\} shownOn=/.test(page) &&
+    /<ConfluenceCard \{\.\.\.zoneInput\} fill credit=\{credit\} \/>/.test(page) && /<LevelsGlanceCard \{\.\.\.zoneInput\} shownOn=/.test(page) &&
     !/<LevelsGlanceCard \{\.\.\.zoneInput\}[^>]*\b(bars|lastPrice|nowMs|ma50|ma200|macro)=/.test(page) &&
     FIXTURES.every((p) => {
       const c = M.confluence(p), lines = M.glanceLines(c), shown = [...c.above, ...c.below, ...(c.inside ? [c.inside] : [])];
@@ -127,12 +128,17 @@ const RULES = {
     !ADVICE.test(stripComments(card, { file: CARD }).replace(/import[^;]+;/g, "")) && !ADVICE.test(stripComments(lib, { file: LIB }).replace(/import[^;]+;/g, "")),
   "nothing in the card can push the page sideways at 320–430 px": ({ card, page }) =>
     !/nowrap|width:\s*\d{3}|minWidth:\s*[1-9]/.test(card) && /overflowWrap: "anywhere"/.test(card) && /minWidth: 0,\s*boxSizing: "border-box"/.test(card) &&
-    /<div style=\{\{ marginTop: 10, minWidth: 0 \}\}>\s*<LevelsGlanceCard/.test(page) &&
-    /\.spxLevels, [^{]*\{ grid-template-columns: minmax\(0, 1fr\) !important; \}/.test(page),
-  "after Key levels (right column; next on a phone), with the SPY label and the Tiingo credit": ({ M, page }) => {
-    const k = page.indexOf("<KeyLevelsCard"), g = page.indexOf("<LevelsGlanceCard"), end = page.indexOf("</div>\n            </div>", k);
+    /<div className="spxGlanceCell">\s*<LevelsGlanceCard/.test(page) && /\.spxGlanceCell \{ grid-area: glance; min-width: 0; \}/.test(page) &&
+    /@media \(max-width: 900px\) \{[^@]*\.spxLevels \{ grid-template-columns: minmax\(0, 1fr\);/.test(page),
+  // UNDER PRICE ZONES (#563 COWORK #129): the left column on desktop; after Key levels on a phone, as before.
+  "under Price zones (left column; after Key levels on a phone), with the SPY label and the Tiingo credit": ({ M, page }) => {
+    const z = page.indexOf("<ConfluenceCard"), k = page.indexOf("<KeyLevelsCard"), g = page.indexOf("<LevelsGlanceCard"), end = page.indexOf("</div>\n            </div>", k);
+    const grid = /\.spxLevels \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); grid-template-rows: 1fr auto; grid-template-areas: "zones keys" "glance keys";/.test(page) &&
+      /\.spxZonesCell \{ grid-area: zones; \}/.test(page) && /\.spxKeysCell \{ grid-area: keys; \}/.test(page) &&
+      /@media \(max-width: 900px\) \{[^@]*grid-template-areas: "zones" "keys" "glance";/.test(page) &&
+      page.indexOf('<div className="spxZonesCell">') < z && page.indexOf('<div className="spxKeysCell">') < k && page.indexOf('<div className="spxGlanceCell">') < g;
     const html = text(renderToStaticMarkup(React.createElement(M.LevelsGlanceCard, { ...FIXTURES[0], shownOn: "Shown on SPY", credit: CREDIT })));
-    return k > 0 && g > k && g < end && /shownOn=\{onSpy \? "Shown on SPY" : "Shown on the S&P 500 index"\} credit=\{credit\} \/>/.test(page) &&
+    return grid && z > 0 && k > z && g > k && g < end && /shownOn=\{onSpy \? "Shown on SPY" : "Shown on the S&P 500 index"\} credit=\{credit\} \/>/.test(page) &&
       html.includes("Shown on SPY · Daily prices: Market data from Tiingo.com") && html.startsWith("At a glanceLevels to watch");
   },
 };
@@ -161,7 +167,9 @@ const MUTANTS = [
   [R[5], "lib", (s) => s.replace("cluster here,", "should hold here,")],
   [R[6], "card", (s) => s.replace('overflowWrap: "anywhere"', 'whiteSpace: "nowrap"')],
   [R[7], "card", (s) => s.replace("<> · Daily prices: {credit}</>", "<> {credit}</>")],
-  [R[7], "page", (s) => s.replace(/\n\s*\{\/\* LEVELS TO WATCH[^\n]*\n\s*<div style=\{\{ marginTop: 10, minWidth: 0 \}\}>\n\s*<LevelsGlanceCard[^\n]*\n\s*<\/div>/, "").replace("<ConfluenceCard {...zoneInput} credit={credit} />", '<LevelsGlanceCard {...zoneInput} shownOn={onSpy ? "Shown on SPY" : "Shown on the S&P 500 index"} credit={credit} />\n<ConfluenceCard {...zoneInput} credit={credit} />')],
+  [R[7], "page", (s) => s.replace(/\n\s*\{\/\* LEVELS TO WATCH[^\n]*\n\s*<div className="spxGlanceCell">\n\s*<LevelsGlanceCard[^\n]*\n\s*<\/div>/, "").replace("<ConfluenceCard {...zoneInput} fill credit={credit} />", '<LevelsGlanceCard {...zoneInput} shownOn={onSpy ? "Shown on SPY" : "Shown on the S&P 500 index"} credit={credit} />\n<ConfluenceCard {...zoneInput} fill credit={credit} />')],
+  // Back under Key levels in the right column (the pre-#129 layout).
+  [R[7], "page", (s) => s.replace('grid-template-areas: "zones keys" "glance keys";', 'grid-template-areas: "zones keys" "zones glance";')],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");
 for (const [label, where, mutate] of MUTANTS) {

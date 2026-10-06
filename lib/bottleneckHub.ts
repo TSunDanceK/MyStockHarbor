@@ -285,15 +285,56 @@ export function buildThemes(companies: HubCompany[], map: Record<string, ThemeId
 // ── THE DEPENDENCY WEB ──────────────────────────────────────────────────────
 // Geometry in SVG user units, computed here so the page draws a plain
 // server-rendered <svg> with no chart library and no client code.
-export const WEB = { width: 560, height: 520, cx: 280, cy: 260, ring: 116, edge: 236, hubs: 8 };
+//
+// ONLY CONNECTED STOCKS ON THE RIM (#563 COWORK #131): a stock page is a rim
+// dot only when it names at least one of the hubs (keyed as the leaderboard
+// keys them), so every dot has a line. Pages naming none of the hubs are left
+// out of the web only; the stat tiles, the leaderboard and the A–Z archive
+// still count and list them.
+//
+// THE SAFETY VALVE: above WEB.maxDots connected pages the rim turns into
+// sector arcs (one per sector, sized by its page count, the sector from A's
+// SEC resolver, passed in as `sectorOf`), and each hub draws one bundled line
+// per sector, as wide as the pages behind it. The switch is automatic.
+export const WEB = { width: 560, height: 520, cx: 280, cy: 260, ring: 116, edge: 236, hubs: 8, maxDots: 200 };
 
 export type WebHub = { key: string; label: string; name: string; count: number; x: number; y: number; r: number };
 export type WebStock = { slug: string; symbol: string; companyName: string; x: number; y: number; hubs: string[] };
-export type DependencyWeb = { hubs: WebHub[]; stocks: WebStock[] };
+/** One sector's arc on the rim, and one bundled line per hub its pages name. */
+export type WebArc = {
+  sector: string;
+  /** The sector's name along the arc, or null when the arc is too short to carry it. */
+  label: string | null;
+  count: number;
+  d: string;
+  /** The label's own path, just inside the rim and always read left to right. */
+  labelPath: string;
+  /** Where the bundles meet the arc. */
+  x: number; y: number;
+  bundles: { hub: string; pages: number; width: number }[];
+};
+export type DependencyWeb = {
+  hubs: WebHub[];
+  /** The rim's dots: connected stocks only; empty when the rim is arcs. */
+  stocks: WebStock[];
+  /** The rim's sector arcs when the connected count passes WEB.maxDots, else null. */
+  arcs: WebArc[] | null;
+  /** Stock pages naming at least one hub: the rim, as dots or summed over the arcs. */
+  connected: number;
+};
 
 const round = (v: number) => Math.round(v * 10) / 10;
+const ARC_GAP = 0.035;
+/** A label's room along its arc, in user units: about 7 per character at the label's size, plus air. */
+const labelRoom = (text: string) => text.length * 7.5 + 14;
 
-export function buildDependencyWeb(posts: BottleneckPost[], companies: HubCompany[], hubCount = WEB.hubs): DependencyWeb {
+export function buildDependencyWeb(
+  posts: BottleneckPost[],
+  companies: HubCompany[],
+  hubCount = WEB.hubs,
+  sectorOf: (symbol: string) => string | null = () => null,
+  maxDots = WEB.maxDots,
+): DependencyWeb {
   const top = companies.slice(0, hubCount);
   const max = top[0]?.count ?? 1;
   const hubs: WebHub[] = top.map((c, i) => {
@@ -310,21 +351,71 @@ export function buildDependencyWeb(posts: BottleneckPost[], companies: HubCompan
     };
   });
   const pagesOf = new Map(top.map((c) => [c.key, new Set(c.pages.map((p) => p.slug))]));
-  // Each stock sits on the edge at the angle of the hubs it names, so its
-  // lines stay short and the clusters read; stocks naming none of the hubs
-  // fill the gaps in alphabetical order.
-  const placed = [...posts].sort((a, b) => a.symbol.localeCompare(b.symbol)).map((p, i, all) => {
-    const linked = hubs.filter((h) => pagesOf.get(h.key)!.has(p.slug));
+  // The angle a set of hubs pulls toward, so lines stay short and clusters read.
+  const pull = (keys: string[]) => {
     let vx = 0, vy = 0;
-    for (const h of linked) { vx += h.x - WEB.cx; vy += h.y - WEB.cy; }
-    const want = linked.length && (Math.abs(vx) > 0.01 || Math.abs(vy) > 0.01) ? Math.atan2(vy, vx) : -Math.PI / 2 + (i / all.length) * Math.PI * 2;
-    return { p, linked: linked.map((h) => h.key), want: (want + Math.PI * 2.5) % (Math.PI * 2) };
-  }).sort((a, b) => a.want - b.want || a.p.symbol.localeCompare(b.p.symbol));
+    for (const k of keys) { const h = hubs.find((x) => x.key === k)!; vx += h.x - WEB.cx; vy += h.y - WEB.cy; }
+    return Math.abs(vx) > 0.01 || Math.abs(vy) > 0.01 ? (Math.atan2(vy, vx) + Math.PI * 2.5) % (Math.PI * 2) : null;
+  };
+  const linked = [...posts]
+    .sort((a, b) => a.symbol.localeCompare(b.symbol))
+    .map((p) => ({ p, linked: hubs.filter((h) => pagesOf.get(h.key)!.has(p.slug)).map((h) => h.key) }))
+    .filter((x) => x.linked.length > 0);
+
+  if (linked.length > maxDots) return { hubs, stocks: [], arcs: sectorArcs(linked, hubs, sectorOf, pull), connected: linked.length };
+
+  // Each stock sits on the edge at the angle of the hubs it names.
+  const placed = linked
+    .map((x, i, all) => ({ ...x, want: pull(x.linked) ?? (i / all.length) * Math.PI * 2 }))
+    .sort((a, b) => a.want - b.want || a.p.symbol.localeCompare(b.p.symbol));
   const stocks: WebStock[] = placed.map(({ p, linked }, i) => {
     const a = -Math.PI / 2 + (i / Math.max(1, placed.length)) * Math.PI * 2;
     return { slug: p.slug, symbol: p.symbol, companyName: p.companyName, x: round(WEB.cx + WEB.edge * Math.cos(a)), y: round(WEB.cy + WEB.edge * Math.sin(a)), hubs: linked };
   });
-  return { hubs, stocks };
+  return { hubs, stocks, arcs: null, connected: stocks.length };
+}
+
+function sectorArcs(
+  linked: { p: BottleneckPost; linked: string[] }[],
+  hubs: WebHub[],
+  sectorOf: (symbol: string) => string | null,
+  pull: (keys: string[]) => number | null,
+): WebArc[] {
+  const groups = new Map<string, { p: BottleneckPost; linked: string[] }[]>();
+  for (const x of linked) {
+    const sector = sectorOf(x.p.symbol) ?? "Other";
+    groups.set(sector, [...(groups.get(sector) ?? []), x]);
+  }
+  // Sectors round the rim in the order their pages' hubs pull them.
+  const order = [...groups.entries()]
+    .map(([sector, rows]) => ({ sector, rows, want: pull(rows.flatMap((r) => r.linked)) ?? 0 }))
+    .sort((a, b) => a.want - b.want || a.sector.localeCompare(b.sector));
+  const total = linked.length, span = Math.PI * 2 - ARC_GAP * order.length;
+  const bundleMax = Math.max(1, ...order.flatMap((g) => hubs.map((h) => g.rows.filter((r) => r.linked.includes(h.key)).length)));
+  let at = -Math.PI / 2 + ARC_GAP / 2;
+  return order.map(({ sector, rows }) => {
+    const a0 = at, a1 = at + (rows.length / total) * span, mid = (a0 + a1) / 2;
+    at = a1 + ARC_GAP;
+    const pt = (r: number, a: number) => [round(WEB.cx + r * Math.cos(a)), round(WEB.cy + r * Math.sin(a))];
+    const [x0, y0] = pt(WEB.edge, a0), [x1, y1] = pt(WEB.edge, a1), [x, y] = pt(WEB.edge, mid);
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    // The label rides inside the rim. On the lower half its path runs the
+    // other way, so the text reads left to right there too, rising inward.
+    const lower = Math.sin(mid) > 0, r = lower ? WEB.edge - 8 : WEB.edge - 14;
+    const [p0x, p0y] = pt(r, a0), [p1x, p1y] = pt(r, a1);
+    return {
+      sector,
+      label: (a1 - a0) * r >= labelRoom(sector) ? sector : null,
+      count: rows.length,
+      d: `M${x0} ${y0} A${WEB.edge} ${WEB.edge} 0 ${large} 1 ${x1} ${y1}`,
+      labelPath: lower ? `M${p1x} ${p1y} A${r} ${r} 0 ${large} 0 ${p0x} ${p0y}` : `M${p0x} ${p0y} A${r} ${r} 0 ${large} 1 ${p1x} ${p1y}`,
+      x, y,
+      bundles: hubs
+        .map((h) => ({ hub: h.key, pages: rows.filter((r) => r.linked.includes(h.key)).length }))
+        .filter((b) => b.pages > 0)
+        .map((b) => ({ ...b, width: round(1 + 7 * (b.pages / bundleMax)) })),
+    };
+  });
 }
 
 // ── EVERYTHING THE PAGE NEEDS ───────────────────────────────────────────────
@@ -337,12 +428,12 @@ export type BottleneckHub = {
   stats: { stocksMapped: number; companiesNamed: number; mostShared: HubCompany | null };
 };
 
-export function buildBottleneckHub(posts: BottleneckPost[]): BottleneckHub {
+export function buildBottleneckHub(posts: BottleneckPost[], sectorOf?: (symbol: string) => string | null): BottleneckHub {
   const companies = buildHubCompanies(posts);
   return {
     companies,
     themes: buildThemes(companies),
-    web: buildDependencyWeb(posts, companies),
+    web: buildDependencyWeb(posts, companies, WEB.hubs, sectorOf),
     stats: { stocksMapped: posts.length, companiesNamed: companies.length, mostShared: companies[0] ?? null },
   };
 }

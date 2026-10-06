@@ -5,8 +5,11 @@ import { WEB, type DependencyWeb } from "@/lib/bottleneckHub";
 // A plain server-rendered <svg>: no chart library, no client code. The
 // geometry comes from buildDependencyWeb() in lib/bottleneckHub.ts. The eight
 // most-shared companies are hubs in the middle, sized by how many stock pages
-// name them; every mapped stock is a dot on the rim with a line to each hub
-// it names.
+// name them; every stock page that names one of them is a dot on the rim with
+// a line to each hub it names (#563 COWORK #131: a page naming none of the
+// hubs is not drawn, so every dot has a line). Past WEB.maxDots such pages the
+// rim is sector arcs instead, each hub drawing one bundled line per sector, as
+// wide as the pages behind it; hover and tap work the same way.
 //
 // HOVER / TAP WITHOUT JAVASCRIPT. Each hub is a focusable <g>, and the
 // stylesheet below uses :has() on the wrapper: while hub i is hovered or
@@ -22,7 +25,7 @@ import { WEB, type DependencyWeb } from "@/lib/bottleneckHub";
 export const HUB_COLORS = ["#5FD4C7", "#93c5fd", "#f0abfc", "#fcd34d", "#86efac", "#fca5a5", "#c4b5fd", "#fdba74"];
 
 export default function BottleneckWeb({ web }: { web: DependencyWeb }) {
-  const { hubs, stocks } = web;
+  const { hubs, stocks, arcs, connected } = web;
   if (!hubs.length) return null;
   const hubIndex = new Map(hubs.map((h, i) => [h.key, i]));
 
@@ -41,7 +44,7 @@ export default function BottleneckWeb({ web }: { web: DependencyWeb }) {
         className="bnWeb"
         viewBox={`0 0 ${WEB.width} ${WEB.height}`}
         role="group"
-        aria-label={`Dependency web: ${stocks.length} mapped stocks and the ${hubs.length} companies they name most often`}
+        aria-label={`Dependency web: ${connected} stocks that name one of the ${hubs.length} companies named most often`}
         style={{ width: "100%", height: "auto", display: "block" }}
       >
         {hubs.map((h, i) => (
@@ -51,6 +54,28 @@ export default function BottleneckWeb({ web }: { web: DependencyWeb }) {
               .map((s) => (
                 <line key={s.slug} x1={s.x} y1={s.y} x2={h.x} y2={h.y} />
               ))}
+            {/* The safety valve's bundles: one line per sector, as wide as its pages. */}
+            {(arcs ?? []).flatMap((a) => a.bundles.filter((b) => b.hub === h.key).map((b) => (
+              <line key={a.sector} className="bnBundle" x1={a.x} y1={a.y} x2={h.x} y2={h.y} strokeWidth={b.width}>
+                <title>{`${b.pages} ${a.sector} stock${b.pages === 1 ? "" : "s"} name ${h.name}`}</title>
+              </line>
+            )))}
+          </g>
+        ))}
+
+        {(arcs ?? []).map((a, j) => (
+          <g key={a.sector} className={`bnArc ${a.bundles.map((b) => `bnTo-${hubIndex.get(b.hub)}`).join(" ")}`} fill="#cbd5e1" fillOpacity={0.7}>
+            <path d={a.d} fill="none" stroke="#475569" strokeWidth={8} strokeLinecap="butt">
+              <title>{`${a.sector}: ${a.count} stock${a.count === 1 ? "" : "s"}`}</title>
+            </path>
+            {a.label ? (
+              <>
+                <path id={`bnArcLabel-${j}`} d={a.labelPath} fill="none" stroke="none" />
+                <text className="bnArcLabel" style={{ fontSize: "0.75rem", fontWeight: 700 }}>
+                  <textPath href={`#bnArcLabel-${j}`} startOffset="50%" textAnchor="middle">{a.label}</textPath>
+                </text>
+              </>
+            ) : null}
           </g>
         ))}
 
@@ -92,7 +117,7 @@ export default function BottleneckWeb({ web }: { web: DependencyWeb }) {
       </svg>
 
       <p className="bnCapDefault" style={{ margin: "8px 0 0", fontSize: "var(--fs-read)", color: "rgba(241,245,249,0.7)", textAlign: "center" }}>
-        Hover or tap a hub to see who names it
+        {connected} stocks that name one of these {hubs.length}. Hover or tap a hub to see who names it.
       </p>
       {hubs.map((h, i) => (
         <p key={h.key} className={`bnCap bnCap-${i}`} style={{ margin: "8px 0 0", fontSize: "var(--fs-read)", textAlign: "center", color: HUB_COLORS[i % HUB_COLORS.length], fontWeight: 700 }}>

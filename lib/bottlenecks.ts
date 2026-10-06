@@ -131,8 +131,10 @@ export function getBottleneckBySlug(slug: string): BottleneckPost {
 // scripts/check-bottlenecks-hub.mjs can drive them): a company is keyed by
 // its ticker when present, otherwise by its normalised name plus a small alias
 // map, and counted once per stock page that names it.
-export function getBottleneckHub(): BottleneckHub {
-  return buildBottleneckHub(getAllBottleneckPosts());
+// The web's sector arcs (#563 COWORK #131, only past WEB.maxDots connected
+// pages) need each stock's sector: the page passes A's SEC resolver in.
+export function getBottleneckHub(sectorOf?: (symbol: string) => string | null): BottleneckHub {
+  return buildBottleneckHub(getAllBottleneckPosts(), sectorOf);
 }
 
 // How many distinct stock pages name each company - as a supplier or as a

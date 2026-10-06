@@ -336,7 +336,7 @@ export default async function SPXPage() {
         <div style={{ display: "grid", gap: 16 }}>
           {/* 1. HERO: the H1, the week's dated line, three tiles (two weekly, one live) and Market Mood (nightly). */}
           <section className="spxHero" style={card({ border: "1px solid rgba(59,130,246,0.24)", background: "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(15,23,42,0.92))", padding: 22 })}>
-            <div className="spxHeroGrid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 300px", gap: 18, alignItems: "start" }}>
+            <div className="spxHeroGrid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 300px", gap: 18, alignItems: "stretch" }}>
             <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: "var(--fs-label)", opacity: 0.72, fontWeight: 900 }}>MARKET ANALYSIS</div>
             <h1 style={{ margin: "10px 0 0", fontSize: "2.375rem", lineHeight: 1.1, letterSpacing: "-0.9px", maxWidth: 820, fontWeight: 500 }}>
@@ -393,18 +393,23 @@ export default async function SPXPage() {
           {/* 4. PRICE ZONES + KEY LEVELS (live): the stock page's cards, replacing hand-typed levels. */}
           {bars.length ? (
             <section style={{ display: "grid", gap: 4, minWidth: 0 }}>
-            <div className="spxLevels" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16, alignItems: "start" }}>
-              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
-                <ConfluenceCard {...zoneInput} credit={credit} />
+            {/* BALANCED BY STRUCTURE (#563 COWORK #129): Price zones with Levels to watch
+                under it on the left, Key levels alone on the right; each column's
+                stretching card takes the row's spare height (the CSS below), so no
+                week's levels leave a blank band. A phone keeps the old order:
+                Price zones, Key levels, then Levels to watch. */}
+            <div className="spxLevels">
+              <div className="spxZonesCell">
+                <ConfluenceCard {...zoneInput} fill credit={credit} />
                 <p data-fine-print style={{ ...small, margin: "0 4px" }}>{liveLabel}</p>
               </div>
-              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
-                <KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} credit={credit} />
+              <div className="spxKeysCell">
+                <KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} fill credit={credit} />
                 <p data-fine-print style={{ ...small, margin: "0 4px" }}>{liveLabel}</p>
-                {/* LEVELS TO WATCH (#93): the same zones as Price zones (same inputs), in the space under Key levels; after it on a phone. */}
-                <div style={{ marginTop: 10, minWidth: 0 }}>
-                  <LevelsGlanceCard {...zoneInput} shownOn={onSpy ? "Shown on SPY" : "Shown on the S&P 500 index"} credit={credit} />
-                </div>
+              </div>
+              {/* LEVELS TO WATCH (#93): the same zones as Price zones (same inputs), so it sits under them. */}
+              <div className="spxGlanceCell">
+                <LevelsGlanceCard {...zoneInput} shownOn={onSpy ? "Shown on SPY" : "Shown on the S&P 500 index"} credit={credit} />
               </div>
             </div>
             {weekly ? <div style={card({ paddingTop: 4 })}><WriteUp weekly={weekly} k="levels" stale={stale} /></div> : null}
@@ -557,10 +562,23 @@ export default async function SPXPage() {
         </div>
       </div>
       <style>{`
+        /* THE LEVELS ROW (#563 COWORK #129): Price zones takes the left column's spare height, Key levels the right's. */
+        .spxLevels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 1fr auto; grid-template-areas: "zones keys" "glance keys"; gap: 16px; align-items: stretch; }
+        .spxZonesCell, .spxKeysCell { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        .spxZonesCell { grid-area: zones; }
+        .spxKeysCell { grid-area: keys; }
+        .spxGlanceCell { grid-area: glance; min-width: 0; }
+        @media (min-width: 901px) {
+          .spxZonesCell .czCard { flex: 1 1 auto; display: flex; flex-direction: column; }
+          .spxKeysCell .klCard { flex: 1 1 auto; display: flex; flex-direction: column; }
+          /* THE HERO (#129): Market Mood fills the row, its 90-session line taking the spare height. */
+          .spxHeroGrid .moodCard { display: flex; flex-direction: column; }
+        }
         @media (max-width: 900px) {
           .spxTiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
           .spxHeroGrid { grid-template-columns: minmax(0, 1fr) !important; }
-          .spxLevels, .spxPoints, .spxWatch, .spxRead { grid-template-columns: minmax(0, 1fr) !important; }
+          .spxLevels { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "zones" "keys" "glance"; }
+          .spxPoints, .spxWatch, .spxRead { grid-template-columns: minmax(0, 1fr) !important; }
         }
         @media (max-width: 640px) {
           .spxWrap { padding: 16px !important; }

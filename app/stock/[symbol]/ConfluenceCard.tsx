@@ -30,6 +30,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, typ
 import { ESTIMATE_SIGN } from "@/app/components/estimateMark";
 import { priceWords, type KeyBar } from "@/lib/ta/keyLevels";
 import {
+  ZONE_LADDER_FILL_MAX,
   CONFLUENCE_NOTE, GAP_WHAT, NOTE_KINDS, ZONE_LABEL_GAP, ZONE_NOTE_FOOTER, bulletWords, confluence, countWords, ladderHeight, ladderTop, rangeWords, zoneDistance, zoneLadder, zoneNoteParts,
   type Confluence, type ZoneMark,
 } from "@/lib/ta/confluence";
@@ -87,9 +88,11 @@ export function ZoneNoteBody({ mark, price }: { mark: ZoneMark; price: number })
 }
 
 /** One zone's label and its note. On a phone the card pushes what sits below the open label down (`onPush`). */
-function ZoneLabel({ mark, index, price, offset, phone, onPush }: {
+function ZoneLabel({ mark, index, price, offset, phone, onPush, pos }: {
   mark: ZoneMark; index: number; price: number; offset: number; phone: boolean;
   onPush: (index: number, from: number, height: number | null) => void;
+  /** A height on the ladder as CSS: px on the stock page, a share of the ladder's own height when it fills its card. */
+  pos: (y: number, off: number) => number | string;
 }) {
   const note = useTapNote();
   const label = useRef<HTMLDivElement | null>(null);
@@ -107,7 +110,7 @@ function ZoneLabel({ mark, index, price, offset, phone, onPush }: {
   return (
     <>
       <div ref={label} {...note.owner} className="czLabel" data-side={mark.side}
-        style={{ position: "absolute", left: atPillar(ZONE_LABEL_OFFSET), right: 0, top: mark.labelY + offset, transform: "translateY(-50%)", lineHeight: 1.25, minWidth: 0 }}>
+        style={{ position: "absolute", left: atPillar(ZONE_LABEL_OFFSET), right: 0, top: pos(mark.labelY, offset), transform: "translateY(-50%)", lineHeight: 1.25, minWidth: 0 }}>
         {/* On a narrow card or at a large text size these wrap (#563 COWORK #109): the count and the distance as
             units, never mid-phrase; the range after its dash. The labels' measured height spaces them. */}
         <div className="czCount" style={{ fontSize: "0.78125rem", fontWeight: 850, color: ZONE_COLOUR[mark.side] }}>
@@ -128,13 +131,15 @@ function ZoneLabel({ mark, index, price, offset, phone, onPush }: {
   );
 }
 
-function Ladder({ c, count }: { c: Confluence; count: number }) {
+function Ladder({ c, count, fill = false }: { c: Confluence; count: number; fill?: boolean }) {
   const phone = useIsPhone();
   // THE LABELS' OWN HEIGHT SETS THEIR SPACING (#563 COWORK #109): at a large text
   // setting, or when a label wraps on a narrow card, the stacking gap grows to the
   // tallest label plus a little air, and the ladder grows only if they need it.
   const box = useRef<HTMLDivElement | null>(null);
   const [gap, setGap] = useState(ZONE_LABEL_GAP);
+  // FILLING ITS CARD (#563 COWORK #129, the SPX page): the ladder's own height, as the row gives it.
+  const [shown, setShown] = useState<number | null>(null);
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -142,47 +147,73 @@ function Ladder({ c, count }: { c: Confluence; count: number }) {
       const tallest = Math.max(0, ...[...el.querySelectorAll<HTMLElement>(".czLabel")].map((x) => x.offsetHeight));
       const need = Math.max(ZONE_LABEL_GAP, Math.ceil(tallest) + 6);
       setGap((g) => (g === need ? g : need));
+      if (fill) setShown((h) => (h === el.clientHeight ? h : el.clientHeight));
     };
     fit();
     const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
     ro?.observe(el);
     return () => ro?.disconnect();
-  }, []);
-  const height = ladderHeight(count, gap);
-  const marks = zoneLadder(c, height, gap);
+  }, [fill]);
+  const natural = ladderHeight(count, gap);
   const [push, setPush] = useState<{ index: number; from: number; height: number } | null>(null);
   const onPush = useCallback((index: number, from: number, height: number | null) => {
     setPush((p) => (height === null ? (p && p.index === index ? null : p) : p && p.index === index && p.from === from && p.height === height ? p : { index, from, height }));
   }, []);
+  const extra = push ? push.height + NOTE_GAP * 2 : 0;
+  // Filling: the scale is the height the row gives the ladder, never below its
+  // own need, never past ZONE_LADDER_FILL_MAX (beyond that the card centres it).
+  const tallest = Math.max(natural, ZONE_LADDER_FILL_MAX);
+  const height = fill && shown !== null ? Math.min(tallest, Math.max(natural, shown - extra)) : natural;
+  const marks = zoneLadder(c, height, gap);
   const sc = c.scale!, price = c.price!;
   const priceY = ladderTop(price, sc, height);
   // Phone, a note open: everything whose top is below the open label moves down by the note.
   const ys = [priceY, ...marks.map((m) => m.top), ...marks.map((m) => m.labelY)];
   const off = push ? pushOffsets(ys, push.from, push.height) : ys.map(() => 0);
   const dotOff = off[0], bandOff = off.slice(1, 1 + marks.length), labelOff = off.slice(1 + marks.length);
-  const extra = push ? push.height + NOTE_GAP * 2 : 0;
-  return (
-    <div ref={box} className="czLadder" style={{ position: "relative", height: height + extra, marginTop: 16, marginBottom: 6 }}>
+  // FILLING, every height is a share of the ladder's own height, so the server's
+  // markup is right at whatever height the row gives it, before any measure.
+  const share = (y: number) => `(100% - ${extra}px) * ${(y / height).toFixed(5)}`;
+  const pos = (y: number, o: number): number | string => (fill ? `calc(${share(y)} + ${o}px)` : y + o);
+  const span = (h: number): number | string => (fill ? `max(4px, calc(${share(h)}))` : Math.max(4, h));
+  const leadW = ZONE_LABEL_OFFSET - BAND_HALF - ZONE_LEADER_GAP;
+  const ladder = (
+    <div ref={box} className="czLadder" data-fill={fill ? "" : undefined}
+      style={fill
+        ? { position: "relative", flex: "1 1 auto", minHeight: natural + extra, maxHeight: tallest + extra }
+        : { position: "relative", height: height + extra, marginTop: 16, marginBottom: 6 }}>
       <div className="czAxis" style={{ position: "absolute", left: atPillar(-1), top: 0, bottom: 0, width: 2, background: C.axis, borderRadius: 1 }} />
       {marks.map((m, i) => (
         <div key={`b${i}`} className="czBand" data-side={m.side}
-          style={{ position: "absolute", left: atPillar(-BAND_HALF), width: BAND_HALF * 2, top: m.top + bandOff[i], height: Math.max(4, m.bottom - m.top), background: `${ZONE_COLOUR[m.side]}33`, border: `1px solid ${ZONE_COLOUR[m.side]}99`, borderRadius: 3, boxSizing: "border-box" }} />
+          style={{ position: "absolute", left: atPillar(-BAND_HALF), width: BAND_HALF * 2, top: pos(m.top, bandOff[i]), height: span(m.bottom - m.top), background: `${ZONE_COLOUR[m.side]}33`, border: `1px solid ${ZONE_COLOUR[m.side]}99`, borderRadius: 3, boxSizing: "border-box" }} />
       ))}
       {/* THE PRICE: at its true height on the fixed scale, labelled on the pillar's left. */}
-      <div className="czDot" style={{ position: "absolute", left: atPillar(-6), top: priceY + dotOff - 6, width: 12, height: 12, borderRadius: 999, background: "#f8fafc", border: "2px solid #0b1220", boxSizing: "border-box", zIndex: 2 }} />
+      <div className="czDot" style={{ position: "absolute", left: atPillar(-6), top: pos(priceY, dotOff - 6), width: 12, height: 12, borderRadius: 999, background: "#f8fafc", border: "2px solid #0b1220", boxSizing: "border-box", zIndex: 2 }} />
       {/* Sized to its text, ending 12px left of the pillar: never cut, whatever the price or text size. */}
-      <div className="czPrice" style={{ position: "absolute", right: `calc(100% - ${PILLAR} + 12px)`, top: priceY + dotOff, transform: "translateY(-50%)", textAlign: "right", lineHeight: 1.15, whiteSpace: "nowrap" }}>
+      <div className="czPrice" style={{ position: "absolute", right: `calc(100% - ${PILLAR} + 12px)`, top: pos(priceY, dotOff), transform: "translateY(-50%)", textAlign: "right", lineHeight: 1.15, whiteSpace: "nowrap" }}>
         <div style={{ fontSize: "var(--fs-label)", color: C.muted }}>price</div>
         <div style={{ fontSize: "var(--fs-label)", fontWeight: 850, color: C.value, fontVariantNumeric: "tabular-nums" }}>{priceWords(price)}</div>
       </div>
-      <svg className="czLeaders" width={ZONE_LABEL_OFFSET - BAND_HALF - ZONE_LEADER_GAP} height={height + extra} aria-hidden="true" style={{ position: "absolute", top: 0, left: atPillar(BAND_HALF) }}>
-        {marks.map((m, i) => (
-          <line key={i} x1={0} y1={(m.top + m.bottom) / 2 + bandOff[i]} x2={ZONE_LABEL_OFFSET - BAND_HALF - ZONE_LEADER_GAP} y2={m.labelY + labelOff[i]} stroke={ZONE_COLOUR[m.side]} strokeOpacity={0.5} strokeWidth={1} />
-        ))}
-      </svg>
-      {marks.map((m, i) => <ZoneLabel key={`l${i}`} mark={m} index={i} price={price} offset={labelOff[i]} phone={phone} onPush={onPush} />)}
+      {fill ? (
+        // Drawn on the ladder's scale and stretched with it; the stroke keeps its width.
+        <svg className="czLeaders" width={leadW} height="100%" viewBox={`0 0 ${leadW} ${height + extra}`} preserveAspectRatio="none" aria-hidden="true" style={{ position: "absolute", top: 0, left: atPillar(BAND_HALF) }}>
+          {marks.map((m, i) => (
+            <line key={i} x1={0} y1={(m.top + m.bottom) / 2 + bandOff[i]} x2={leadW} y2={m.labelY + labelOff[i]} stroke={ZONE_COLOUR[m.side]} strokeOpacity={0.5} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          ))}
+        </svg>
+      ) : (
+        <svg className="czLeaders" width={leadW} height={height + extra} aria-hidden="true" style={{ position: "absolute", top: 0, left: atPillar(BAND_HALF) }}>
+          {marks.map((m, i) => (
+            <line key={i} x1={0} y1={(m.top + m.bottom) / 2 + bandOff[i]} x2={leadW} y2={m.labelY + labelOff[i]} stroke={ZONE_COLOUR[m.side]} strokeOpacity={0.5} strokeWidth={1} />
+          ))}
+        </svg>
+      )}
+      {marks.map((m, i) => <ZoneLabel key={`l${i}`} mark={m} index={i} price={price} offset={labelOff[i]} phone={phone} onPush={onPush} pos={pos} />)}
     </div>
   );
+  // The card's spare height goes to the ladder up to its cap; past that, the ladder is centred in it.
+  // The wrapper carries the ladder's margins, so in a plain (phone) card they collapse with its neighbours' as before.
+  return fill ? <div className="czFill" style={{ flex: "1 1 auto", display: "flex", flexDirection: "column", justifyContent: "center", marginTop: 16, marginBottom: 6 }}>{ladder}</div> : ladder;
 }
 
 export default function ConfluenceCard({
@@ -193,6 +224,7 @@ export default function ConfluenceCard({
   ma200,
   macro,
   credit,
+  fill = false,
 }: {
   bars: readonly KeyBar[];
   lastPrice?: number | null;
@@ -203,6 +235,8 @@ export default function ConfluenceCard({
   /** The page's macro support zone. */
   macro?: { lower: number; upper: number } | null;
   credit?: ReactNode;
+  /** The SPX page (#563 COWORK #129): the ladder takes the card's spare height, which that page's CSS gives it. */
+  fill?: boolean;
 }) {
   const c = confluence({ bars, nowMs, lastPrice, ma50, ma200, macro });
   const marks = zoneLadder(c);
@@ -221,7 +255,7 @@ export default function ConfluenceCard({
         <div className="czWhat">{whatText}</div>
       </FlowPanel>
 
-      {marks.length && c.scale && c.price !== null ? <Ladder c={c} count={marks.length} /> : <p className="czReason" style={readStyle}>{c.reason}</p>}
+      {marks.length && c.scale && c.price !== null ? <Ladder c={c} count={marks.length} fill={fill} /> : <p className="czReason" style={readStyle}>{c.reason}</p>}
 
       {/* THE SMALL PRINT, FOLDED (#88 §1): the key, the kinds' dots and the hedge. The Tiingo credit stays below, outside. */}
       <HowToRead>
