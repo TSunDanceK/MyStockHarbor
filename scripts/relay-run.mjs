@@ -1408,6 +1408,22 @@ const TASKS = {
     writes: true,
     env: { MODE: "apply" },
   },
+  // WHY A SYMBOL HAS NO FACT SET (#552 COWORK #185, MS); -enqueue adds it to
+  // the existing cold queue (one ZADD), which the sec-facts run drains.
+  "write-sec-cold-diagnose": {
+    script: "scripts/sec-cold-enqueue.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+    env: { MODE: "read" },
+  },
+  "write-sec-cold-enqueue": {
+    script: "scripts/sec-cold-enqueue.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+    env: { MODE: "apply" },
+  },
 };
 
 const argv = process.argv.slice(2);
