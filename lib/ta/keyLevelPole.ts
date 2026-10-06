@@ -22,7 +22,7 @@
 //              run put eleven names on one price)
 //   crowding   past CROWD_LABELS labels, levels within CROWD_PCT % of each
 //              other (on one side of the last price) share a label ("Open D"
-//              over "Prev close", each name on its own line), its price "≈"
+//              over "Prev close", each name on its own line), its price "~"
 //              their mean; every level keeps its own tick
 //   side       green above the last price, red below, muted level with it
 //   labels     at least `gap` apart (two passes, down then up, inside the
@@ -90,7 +90,7 @@ export type PoleLevel = {
   parts: LabelPart[];
   /** Every name in words, whatever the label: "Day & Month high". */
   full: string;
-  /** The level's price, or "≈" their mean when crowded levels share the label: "≈117.18". */
+  /** The level's price, or "~" their mean when crowded levels share the label: "~117.18". */
   valueText: string;
   /** Each level behind the label, with its own tick height (rem) — more than one only for a crowded label. */
   members: { names: string[]; value: number; y: number }[];
@@ -243,7 +243,7 @@ export function keyLevelPole(k: KeyLevels, last: number | null | undefined, gap 
     const label = labelOf(r), vals = r.members.map((m) => m.value), crowded = r.members.length > 1;
     return {
       names: r.names, label, parts: r.last || /levels$/.test(label) ? [] : partsOf(r), full: r.last ? "Last price" : mergeNames(r.names), value: r.value,
-      valueText: crowded && !samePrice(Math.min(...vals), Math.max(...vals)) ? `≈${poleNumber(r.value)}` : poleNumber(r.value),
+      valueText: crowded && !samePrice(Math.min(...vals), Math.max(...vals)) ? `~${poleNumber(r.value)}` : poleNumber(r.value),
       members: r.members.map((m) => ({ names: m.names, value: m.value, y: y(m.value) })),
       side: r.last ? "at" : samePrice(r.value, last) ? "at" : r.value > last ? "up" : "down",
       dist: distWords(r.value, last), y: y(r.value), ly: ys[i], ...(r.last ? { last: true } : {}),

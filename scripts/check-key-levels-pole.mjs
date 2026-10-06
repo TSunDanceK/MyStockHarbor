@@ -107,11 +107,11 @@ const RULES = {
     M.partsWords(M.shortParts(["Sep close"])) === "Sep close" && M.partsWords(M.shortParts(["Day open", "Prev close"])) === "Open D · Prev close" &&
     /class="klPart" style="white-space:nowrap">[A-Z][a-z]+<span class="klTag"/.test(html.normal) && /className="klValue"[^\n]*whiteSpace: "nowrap"/.test(card) &&
     M.TAG_NOTE.includes("D = today") && M.TAG_NOTE.includes("W = this week") && M.TAG_NOTE.includes("M = this month") && /<div className="klTags"[^>]*>\{TAG_NOTE\}<\/div>/.test(card),
-  "crowding: past 8 labels, levels within 0.15% share one ('≈' their mean), never across the last price; each keeps its tick": ({ M, P, svg }) => {
+  "crowding: past 8 labels, levels within 0.15% share one ('~' their mean), never across the last price; each keeps its tick": ({ M, P, svg }) => {
     const levels = (p) => p.rows.filter((r) => !r.last);
     const shared = levels(P.intc).filter((r) => r.members.length > 1);
     return M.CROWD_LABELS === 8 && M.CROWD_PCT === 0.15 && levels(P.intc).length <= 8 && shared.length >= 1 &&
-      shared.every((r) => r.valueText.startsWith("≈") && r.members.every((m) => (m.value > P.intc.last) === (r.value > P.intc.last)) &&
+      shared.every((r) => r.valueText.startsWith("~") && r.members.every((m) => (m.value > P.intc.last) === (r.value > P.intc.last)) &&
         (Math.max(...r.members.map((m) => m.value)) - Math.min(...r.members.map((m) => m.value))) / P.intc.last * 100 < M.CROWD_PCT) &&
       levels(P.monday).every((r) => r.members.length === 1) &&
       // The last price between two close levels: they stay apart, one on each side.
