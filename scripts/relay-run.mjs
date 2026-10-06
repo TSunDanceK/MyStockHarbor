@@ -1375,6 +1375,10 @@ const TASKS = {
   // READS ONLY (Relay B, #553 COWORK #171): which posts the FMP-era insight snapshots belong to and
   // whether stored Tiingo bars could rebuild each. SCAN + MGET + GET; slugs, symbols, dates, counts.
   "write-insight-snapshot-census": { script: "scripts/insight-snapshot-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // THE 63 FMP-ERA INSIGHT SNAPSHOTS (Relay B, #553, the owner's OK 2026-10-06): dry first, then the
+  // deletion. Tiingo-path records are never touched; each post rebuilds from its stored Tiingo bars.
+  "write-fmp-purge-snapshots-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--insight-snapshots"], writes: true },
+  "write-fmp-purge-snapshots": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--insight-snapshots"], writes: true },
   // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
   // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
