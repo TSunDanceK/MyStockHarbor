@@ -32,6 +32,7 @@ import { CONTRACTS_KEY } from "@/lib/server/capexContracts";
 import { RECEIVERS_KEY } from "@/lib/server/capexReceivers";
 import { LAST_SEEN_CIK_KEY } from "@/lib/server/secListing";
 import { TIINGO_EOD_LAST_KEY, TIINGO_QUOTES_KEY } from "@/lib/server/marketData/keys";
+import { IPO_PROFILES_KEY } from "@/lib/server/ipoProfiles";
 import {
   PICKERS_MANIFEST_KEY,
   PICKERS_SYMBOLS_KEY,
@@ -237,6 +238,13 @@ const CANDIDATES: Candidate[] = [
     writtenBy: "tiingo-eod, a complete night (00:45 / 02:45 UTC)",
     shape: "hash",
     note: "Step 5: DEL + ONE HSET of every symbol's newest bar (~150 B a field; ~0.13 MB at 845, ~0.45 MB at 3,000).",
+  },
+  {
+    key: IPO_PROFILES_KEY,
+    owner: "lib/server/ipoProfiles.ts refreshIpoProfiles()",
+    writtenBy: "ipo-refresh 04:40 UTC, only when a profile changed",
+    shape: "string",
+    note: "#553 COWORK #159: one SEC profile per filer on /upcoming-ipos (~100 filers, ~1.5 KB each); filers off the page are dropped.",
   },
 ];
 
