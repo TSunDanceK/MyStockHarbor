@@ -59,7 +59,9 @@
 //
 // WHAT THAT FORCED, BOTH OF IT:
 //
-//   a. The fetch carries `next: { revalidate }` instead of `cache: "no-store"`.
+//   a. The fetch carried `next: { revalidate }` instead of `cache: "no-store"`
+//      WHILE IT RAN IN THE RENDER. It no longer does (the render never
+//      fetches), and since #552 COWORK #181 secFetch is no-store and bounded.
 //      Dropping the no-store hint is the same mechanism redisCacheMode.ts
 //      already documents and proved on the 32 screener pages. See fetchAndStore
 //      for why the data cache is immaterial either way.
@@ -537,10 +539,25 @@ async function paceSecRequest(): Promise<void> {
   throw new Error("cold SEC pace exhausted");
 }
 
-/** Every cold SEC request goes through here: paced, then fetched. */
+/**
+ * Every cold SEC request goes through here: paced, then fetched, NO-STORE
+ * AND BOUNDED (#552 COWORK #181, after #553 CODE-B #150).
+ *
+ * `next: { revalidate }` let Next refetch a stale entry in the background with
+ * the caller's signal STRIPPED (patch-fetch: "don't pass through signal when
+ * revalidating"), so nothing could bound that refetch. Every caller is now
+ * the human-gated server action (coldFillAction -> fillColdSymbol and the
+ * report-dates seed); the render never fetches (see resolveFactSetForRender),
+ * so a no-store hint here has no static contract to break -- the 500 recorded
+ * at the top of this file was a no-store fetch IN THE RENDER.
+ *
+ * A FRESH signal per request, covering the headers and the body read: the
+ * outer withTimeout only stops waiting, it never stopped the fetch.
+ */
+export const SEC_COLD_FETCH_DEADLINE_MS = SEC_COLD_TIMEOUT_MS;
 async function secFetch(url: string, init: RequestInit): Promise<Response> {
   await paceSecRequest();
-  return fetch(url, init);
+  return fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(SEC_COLD_FETCH_DEADLINE_MS) });
 }
 
 /** The queue's head, oldest first, for the cron. */
@@ -566,8 +583,6 @@ export async function clearColdQueue(symbols: string[]): Promise<number> {
 
 const SEC_UA = process.env.SEC_USER_AGENT || "";
 
-/** Matches `revalidate` in app/stock/[symbol]/layout.tsx. See fetchAndStore. */
-export const SEC_COLD_FETCH_REVALIDATE = 3600;
 
 async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet> {
   // A CITED SUCCESSOR (XOM) reads its predecessor's history too, through the
@@ -577,7 +592,7 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   // here is the shape where one path gains a condition and the other does not.
   const extracted = extractForSymbol(symbol, facts);
   // A CITED MULTI-CLASS FILER'S COVER COMES FROM ITS OWN FILING, per class.
-  const secGet = (url: string) => secFetch(url, { headers: { "User-Agent": SEC_UA }, next: { revalidate: SEC_COLD_FETCH_REVALIDATE } });
+  const secGet = (url: string) => secFetch(url, { headers: { "User-Agent": SEC_UA } });
   extracted.coverShares = await withClassCover(symbol, cik, extracted.coverShares, secGet);
   // TWELVE MONTHS OF EPS FROM THE 10-K AND 10-Q where the periods cannot give it. See secInstanceEps.
   extracted.ttmEps = await withInstanceEps(symbol, cik, extracted, secGet);
@@ -613,8 +628,6 @@ export async function fetchColdSubmissions(cik: string): Promise<Submissions> {
   if (!(await claimColdFetch(`submissions ${cik}`))) throw new Error("cold rate budget exhausted");
   const res = await secFetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
     headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" },
-    // THE SAME HINT AS fetchFactsFor, for the same reason: never "no-store".
-    next: { revalidate: SEC_COLD_FETCH_REVALIDATE },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as Submissions;
@@ -623,25 +636,9 @@ export async function fetchColdSubmissions(cik: string): Promise<Submissions> {
 async function fetchFactsFor(cik: string): Promise<CompanyFacts> {
   const res = await secFetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
     headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" },
-    // NOT `cache: "no-store"`. That hint opts the whole route out of static
-    // rendering, and on this route that is a 500 rather than a slow page --
-    // measured, see the caveat at the top of this file.
-    //
-    // AND THE DATA CACHE IS IMMATERIAL EITHER WAY, which is why matching the
-    // route's own window is enough rather than a value that needs tuning:
-    //   - a symbol reached here is written to Redis by the line below, so guard
-    //     2 means the NEXT render never reaches this fetch at all. The real
-    //     cache is the store, and it has no expiry.
-    //   - the measured body is 3.0MB p50 / 6.4MB max, over Vercel's 2MB Data
-    //     Cache entry limit, so it is offered and declined rather than stored.
-    //     CONFIRMED IN PRODUCTION LOGS, not predicted: "Failed to set Next.js
-    //     data cache for .../CIK0000723603.json, items over 2MB can not be
-    //     cached (4345527 bytes)". One such line per symbol for the life of the
-    //     site -- a warning about a response that was used anyway, not an error.
-    // A value BELOW the route's 3600 would be the harmful choice: Next takes
-    // the minimum of a segment's revalidate and its fetches', so it would
-    // shorten every stock page's window, not just this one's.
-    next: { revalidate: SEC_COLD_FETCH_REVALIDATE },
+    // NO-STORE AND BOUNDED, in secFetch (#552 COWORK #181). The body is
+    // 3.0MB p50 / 6.4MB max, over the 2MB Data Cache limit, so Next's cache
+    // never held it anyway; the real cache is the Redis write below.
   });
   // A 404 IS "SEC HAS NO COMPANY FACTS FOR THIS CIK" — stored as the empty
   // answer it is (see companyFactsAbsent), the same rule as the cron's fetch.

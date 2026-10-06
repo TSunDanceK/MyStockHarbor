@@ -114,7 +114,8 @@ const RULES = {
     const code = src;
     const bare = [...code.matchAll(/\bawait fetch\(|[^.\w]fetch\(url/g)].length;
     const sf = code.slice(code.indexOf("async function secFetch("));
-    return /await paceSecRequest\(\);\s*return fetch\(url, init\);/.test(sf.slice(0, 200))
+    // PACED, THEN ONE FETCH: no-store and bounded since #552 COWORK #181.
+    return /await paceSecRequest\(\);\s*return fetch\(url, \{ \.\.\.init, cache: "no-store", signal: AbortSignal\.timeout\(SEC_COLD_FETCH_DEADLINE_MS\) \}\);/.test(sf.slice(0, 260))
       && /const res = await secFetch\(`https:\/\/data\.sec\.gov\/api\/xbrl\/companyfacts/.test(code)
       && /const res = await secFetch\(`https:\/\/data\.sec\.gov\/submissions/.test(code)
       && /const secGet = \(url: string\) => secFetch\(url,/.test(code)
