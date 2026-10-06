@@ -1368,6 +1368,8 @@ const TASKS = {
   // task, added on a ruling. See scripts/lib/fmp-purge-plan.mjs.
   "write-fmp-purge-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--pool-figures", "--market-state", "--insight-snapshots", "--meters"], writes: true },
   "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
+  // READS ONLY (Relay B, #553 COWORK #168): Oversold / Overbought, old rule vs RSI-required, over the last 20 sessions. GET + ~70 MGET; counts, dates and symbols only.
+  "write-oversold-rule-census": { script: "scripts/oversold-rule-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
   // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
