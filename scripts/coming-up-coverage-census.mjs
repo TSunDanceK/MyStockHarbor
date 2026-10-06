@@ -77,10 +77,15 @@ const poolCaps = capOf.size;
 const PICKERS_SEC_KEY = keyOf("lib/server/pickersSecFundamentals.ts", "PICKERS_SEC_KEY");
 let secCaps = 0, poolPrices = 0;
 if (!poolCaps) {
+  // THE POOL'S PRICE IS NULL TOO since the FMP pull: the close is Tiingo's,
+  // from the last-bar hash every pool reader uses (one HMGET).
   const priceOf = new Map();
+  const EOD_LAST_KEY = "msh:tiingo:eod-last:v1";
+  const eod = await redis.hmget(EOD_LAST_KEY, ...fields); commands++;
   fields.forEach((f, i) => {
-    const row = Array.isArray(rawPool) ? rawPool[i] : rawPool?.[f];
-    const p = row && typeof row === "object" ? Number(row.price) : NaN;
+    let row = Array.isArray(eod) ? eod[i] : eod?.[f];
+    if (typeof row === "string") { try { row = JSON.parse(row); } catch { row = null; } }
+    const p = Number(row?.c);
     if (Number.isFinite(p) && p > 0) { priceOf.set(f, p); poolPrices++; }
   });
   const secRaw = await redis.hmget(PICKERS_SEC_KEY, ...fields); commands++;
@@ -97,8 +102,8 @@ if (!poolCaps) {
   });
 }
 const ranked = [...capOf.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s);
-console.log(`today ${TODAY} · universe ${universe.length} · market cap from the price pool: ${poolCaps} · pool prices ${poolPrices} · shares × price from the SEC hash: ${secCaps}`);
-if (!poolCaps) console.log("   NOTE: the price pool carries NO market cap, so the page's HMGET sort (strip and Coming up) has none to sort by.");
+console.log(`today ${TODAY} · universe ${universe.length} · market cap from the price pool: ${poolCaps} · Tiingo closes ${poolPrices} · shares × price from the SEC hash: ${secCaps}`);
+if (!poolCaps) console.log("   NOTE: the price pool carries NO market cap (nor price), so the page's HMGET sort (strip and Coming up) has none to sort by.");
 
 const want = [...new Set([...CUT50, ...ranked.slice(0, 150).map((s) => s), ...NAMED])];
 const records = new Map();
@@ -162,7 +167,7 @@ for (const s of NAMED) {
 }
 
 // ── 3. WIDENING ─────────────────────────────────────────────────────────────
-console.log(`\n3. WIDENING, SAME RULE AND SAME BAR (fresh ranking: ${poolCaps ? "the price pool's market cap" : "cover-page shares × pool price"})`);
+console.log(`\n3. WIDENING, SAME RULE AND SAME BAR (fresh ranking: ${poolCaps ? "the price pool's market cap" : "cover-page shares × Tiingo close"})`);
 const fresh50 = ranked.slice(0, 50);
 const drift = CUT50.filter((s) => !fresh50.includes(dashed(s)));
 console.log(`   the committed 50 vs today's top 50: ${drift.length} differ (${drift.join(" ") || "none"})`);
