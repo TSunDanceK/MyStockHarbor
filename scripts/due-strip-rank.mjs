@@ -12,7 +12,7 @@
 // and compares it with the committed cut: who enters, who leaves, and every
 // name that would rank inside the cut on cap but is missing an input (so a gap
 // in shares or closes is named, not silently ranked out -- the WFC/JNJ case).
-// The last line, CUT150_JSON, is the new `symbols` array; paste it into the
+// The last line, CUT_JSON, is the new `symbols` array; paste it into the
 // file with today's generatedAt. Run: relay task "write-due-strip-rank" (monthly,
 // at the first check-in of the month; see the file's _comment).
 //
@@ -48,7 +48,7 @@ if (!/TIINGO_EOD_LAST_KEY = `\$\{TIINGO_PREFIX\}eod-last:v1`/.test(fs.readFileSy
   console.error("FATAL: TIINGO_EOD_LAST_KEY changed shape"); process.exit(2);
 }
 
-const CUT = Number(process.env.CUT || 150);
+
 const NAMED = (process.env.NAMED || "WFC JNJ JPM BAC GS MS V").split(/\s+/).filter(Boolean);
 const redis = Redis.fromEnv();
 const dashed = toDashed;
@@ -76,6 +76,8 @@ const ranked = rows.filter((r) => r.shares && r.close).map((r) => ({ ...r, cap: 
 const rankOf = new Map(ranked.map((r, i) => [r.f, i + 1]));
 
 const doc = JSON.parse(fs.readFileSync("data/due-strip.json", "utf8"));
+// THE FILE STATES ITS OWN SIZE; CUT= overrides it to measure another width.
+const CUT = Number(process.env.CUT || doc.cut || 200);
 const committed = doc.symbols;
 // KEEP THE COMMITTED SPELLING (BRK.B stays BRK.B); a new entrant keeps the store's.
 const spelled = new Map(committed.map((s) => [dashed(s), s]));
@@ -103,4 +105,4 @@ console.log(`\nCOMMITTED BUT UNRANKED (${unranked.length}): ${unranked.map((s) =
   return `${s}(${!r ? "not in universe" : [!r.shares && "no shares", !r.close && "no close"].filter(Boolean).join("+")})`;
 }).join(" ") || "none"}`);
 console.log(`\nStore commands: ${JSON.stringify(counts)}`);
-console.log(`CUT150_JSON ${JSON.stringify(top)}`);
+console.log(`CUT_JSON ${JSON.stringify(top)}`);

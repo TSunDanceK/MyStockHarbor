@@ -283,14 +283,18 @@ console.log("\n6. THE THREE BRANCHES — ONE FROM REAL DATA, TWO FROM FORCED INP
 console.log("\n7. THE COMMITTED CUT, AND THE RECORD THAT EXPLAINS ITS SHORTFALL");
 {
   check("data/due-strip.json is committed", fs.existsSync(CUT_FILE));
-  // WIDENED TO 150 (#552 COWORK #181), ranked by cover-page shares × Tiingo close.
-  check("it holds exactly 150 symbols", cutDoc.symbols.length === 150, `${cutDoc.symbols.length}`);
-  check("with no duplicates", new Set(cutDoc.symbols).size === 150);
+  // WIDENED TO 150 (#552 COWORK #181), then to 200 over every SEC-hash row
+  // (#552 COWORK #186), ranked by cover-page shares × Tiingo close. The file
+  // states its own size, and the list must match it.
+  check("it declares a cut of 200", cutDoc.cut === 200, String(cutDoc.cut));
+  check("and holds exactly that many symbols", cutDoc.symbols.length === cutDoc.cut, `${cutDoc.symbols.length}`);
+  check("with no duplicates", new Set(cutDoc.symbols).size === cutDoc.symbols.length);
   check("it carries a generation date, so staleness is visible",
     /^\d{4}-\d{2}-\d{2}$/.test(cutDoc.generatedAt ?? ""), cutDoc.generatedAt);
   check("and it stores NO market-cap figure (a frozen reading on a live page)",
     !JSON.stringify(cutDoc).match(/"(marketCap|cap)":\s*\d/));
-  check("the module's cut IS the committed file", m.DUE_STRIP_CUT.length === 150);
+  check("the module's cut IS the committed file", m.DUE_STRIP_CUT.length === cutDoc.symbols.length &&
+    m.DUE_STRIP_CUT.every((s, i) => s === cutDoc.symbols[i]));
 
   // ── THE CENSUS MUST SURVIVE IN THE SOURCE ───────────────────────────────
   // The eight are structurally excluded by the ESTIMATOR, not by this module,

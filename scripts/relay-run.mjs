@@ -1384,7 +1384,7 @@ const TASKS = {
   // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
   "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
   // THE DUE-STRIP CUT, RE-RANKED (#552 COWORK #185). Read-only (its guard
-  // refuses anything but GET/HKEYS/HMGET); prints CUT150_JSON for
+  // refuses anything but GET/HKEYS/HMGET); prints CUT_JSON for
   // data/due-strip.json. -pickers measures the old rule (the analysis universe).
   "write-due-strip-rank": {
     script: "scripts/due-strip-rank.mjs",

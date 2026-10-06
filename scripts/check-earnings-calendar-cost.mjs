@@ -194,9 +194,9 @@ check(
 );
 
 // ── THE CUT IN ONE MGET (#552 COWORK #181) ──────────────────────────────
-// Widened to 150, one GET per record would be 150 commands a build. The
-// forward sections read them in one MGET, and a failed MGET is "we could not
-// read", never 150 filers with no record.
+// Widened to 200 (#552 COWORK #186), one GET per record would be 200 commands
+// a build. The forward sections read them in one MGET, and a failed MGET is
+// "we could not read", never 200 filers with no record.
 {
   const due = readCodeOnly("lib/server/dueInputs.ts");
   const fwd = grabFunction(due, "getCalendarForwardSections") ?? "";
