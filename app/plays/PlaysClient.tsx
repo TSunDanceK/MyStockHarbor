@@ -539,6 +539,7 @@ export default function PlaysClient({
                   gap: isNarrow ? 12 : 14,
                 }}
               >
+                <style>{PLAY_CARD_LINK_CSS}</style>
                 {section.items.map((item) => (
                   <article
                     key={`${section.title}-${item.symbol}-${item.timeframe}`}
@@ -549,6 +550,10 @@ export default function PlaysClient({
                       background:
                         "linear-gradient(180deg, rgba(15,23,42,0.86), rgba(2,6,23,0.94))",
                       boxShadow: "0 16px 36px rgba(0,0,0,0.22)",
+                      // A column, so the quiet link sits at the card's foot
+                      // and cards in a row end level (#553 COWORK #162).
+                      display: "flex",
+                      flexDirection: "column",
                     }}
                   >
                     <div
@@ -651,7 +656,15 @@ export default function PlaysClient({
                       </div>
                     </div>
 
-                    <MiniPlayChart item={item} />
+                    {/* The chart opens the full chart too (#553 COWORK #162),
+                        under the same name as the link below. */}
+                    <a
+                      href={toChartHref(item.dashboardHref)}
+                      aria-label={`Open full chart for ${item.symbol}`}
+                      className="playChartArea"
+                    >
+                      <MiniPlayChart item={item} />
+                    </a>
 
                     <p
                       style={{
@@ -665,24 +678,17 @@ export default function PlaysClient({
                       {item.note}
                     </p>
 
+                    {/* HIDDEN 2026-10-05 (#553 COWORK #162, owner): the full-width
+                        filled "Open full chart" button (with its per-pattern tint)
+                        made the card look "built for a kid". A quiet link at the
+                        foot instead, the tone of the other picker cards; the
+                        44 px tap area is padding, not a box. */}
                     <a
                       href={toChartHref(item.dashboardHref)}
-                      style={{
-                        marginTop: 14,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        textDecoration: "none",
-                        borderRadius: 14,
-                        padding: "11px 12px",
-                        background: "rgba(37,99,235,0.24)",
-                        border: "1px solid rgba(96,165,250,0.42)",
-                        color: "#dbeafe",
-                        fontSize: 13,
-                        fontWeight: 950,
-                      }}
+                      aria-label={`Open full chart for ${item.symbol}`}
+                      className="playOpenLink"
                     >
-                      Open full chart
+                      Open full chart →
                     </a>
                   </article>
                 ))}
@@ -693,6 +699,19 @@ export default function PlaysClient({
     </ScreenerShell>
   );
 }
+
+// The chart-play card's quiet link and clickable chart (#553 COWORK #162).
+const PLAY_CARD_LINK_CSS = `
+.playChartArea { display: block; color: inherit; text-decoration: none; border-radius: 12px; }
+.playChartArea:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+.playOpenLink {
+  margin-top: auto; align-self: flex-end; display: inline-flex; align-items: center; min-height: 44px;
+  padding: 6px 2px 0; color: #7dd3fc; font-size: var(--fs-label); font-weight: 700; text-decoration: none;
+  background: none; border: 0;
+}
+.playOpenLink:hover, .playOpenLink:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.playOpenLink:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; border-radius: 2px; }
+`;
 
 function MiniPlayChart({ item }: { item: PlayItem }) {
   const isNarrow = useIsNarrowScreen();

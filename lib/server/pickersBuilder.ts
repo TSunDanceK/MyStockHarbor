@@ -3579,7 +3579,14 @@ async function buildPickersPayload(
               chartPoints,
               tone: strongEarningsGrowthCandidate.tone,
               note: strongEarningsGrowthCandidate.note,
-              _score: strongEarningsGrowthCandidate.score + dynamicBoost(symbol),
+              // RANKED BY EPS GROWTH, HIGHEST FIRST, on the SEC default (#553
+              // COWORK #161): the page says so in a "Ranked by" line, so the
+              // order is the filed EPS growth alone -- no popularity boost and
+              // no capped blend, which would make that line untrue. The FMP
+              // rollback keeps its old composite.
+              _score: earningsGrowthFromSec
+                ? (strongEarningsGrowthCandidate.epsGrowthPct ?? 0)
+                : strongEarningsGrowthCandidate.score + dynamicBoost(symbol),
               epsGrowthPct: strongEarningsGrowthCandidate.epsGrowthPct,
               revenueGrowthPct: strongEarningsGrowthCandidate.revenueGrowthPct,
               releaseDate: strongEarningsGrowthCandidate.releaseDate,
@@ -4281,7 +4288,11 @@ async function buildPickersPayload(
         ? SEC_GROWTH_COPY.sectionDescription
         : "Stocks ranked by year-over-year EPS and revenue growth, recent positive earnings consistency and beat history.",
       source: strongEarningsGrowth,
-      take: 20,
+      // EVERY candidate, so every row the page lists is in growth order: the
+      // page's flag is exactly this bucket (strongEarningsGrowth: !!candidate),
+      // and a row past the section would fall back to the conditions-met
+      // score. Items are chartPoints-stripped, so this costs little (#553 COWORK #161).
+      take: Math.max(20, strongEarningsGrowth.length),
     }),
     buildSection({
       title: "Daily MA200 Proximity",
@@ -4308,7 +4319,9 @@ async function buildPickersPayload(
       // 40, not the 20 every other section uses: this section's ORDER is the
       // product, and the pages it backs show 36 rows before "See more". At 20
       // the last 16 rows would fall out of the ranked set and quietly revert to
-      // the tracked-conditions count.
+      // the tracked-conditions count. And at least every candidate (#553
+      // COWORK #161): the page now says "Ranked by most recent … flip", which
+      // must hold for every row it lists, not only the first 40.
       //
       // NO keepChartPoints, still: these items ship the symbol's ordinary daily
       // points via signalRecords. Their Trend Helper line rides along as
@@ -4318,28 +4331,28 @@ async function buildPickersPayload(
       // daily points", which stayed true and stopped being the whole story:
       // it read as a reason no chart data was needed here at all, which is how
       // the line came to be attached to chartPoints and silently stripped.
-      take: 40,
+      take: Math.max(40, trendFlipBullishDaily.length),
     }),
     buildSection({
       title: "Bearish Trend Flip Stocks (Daily)",
       description:
         "Stocks whose Trend Helper (Slow) state has confirmed a flip to bearish within the last four daily bars, most recent first.",
       source: trendFlipBearishDaily,
-      take: 40,
+      take: Math.max(40, trendFlipBearishDaily.length),
     }),
     buildSection({
       title: "Bullish Trend Flip Stocks (Weekly)",
       description:
         "Stocks whose Trend Helper (Slow) state has confirmed a flip to bullish within the last four closed weeks, most recent first.",
       source: trendFlipBullishWeekly,
-      take: 40,
+      take: Math.max(40, trendFlipBullishWeekly.length),
     }),
     buildSection({
       title: "Bearish Trend Flip Stocks (Weekly)",
       description:
         "Stocks whose Trend Helper (Slow) state has confirmed a flip to bearish within the last four closed weeks, most recent first.",
       source: trendFlipBearishWeekly,
-      take: 40,
+      take: Math.max(40, trendFlipBearishWeekly.length),
     }),
     buildSection({
       title: "Macro Support and Resistance Stocks",

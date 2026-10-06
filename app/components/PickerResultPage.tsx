@@ -7,6 +7,7 @@ import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
 import HowToCollapse from "@/app/components/HowToCollapse";
 import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
+import { pageRanking } from "@/lib/pickerRanking";
 import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGrid";
 import ScanFooter from "@/app/components/ScanFooter";
 import { PickerFilterProvider, PickerFilterUrlSync } from "@/app/components/PickerFilterContext";
@@ -131,6 +132,13 @@ export type PickerResultConfig = {
   //
   // WHERE THIS IS APPLIED MATTERS AND IS NOT OBVIOUS -- see applyOrderBy.
   orderBy?: { field: keyof ResultEntry; dir: "asc" | "desc"; label: string };
+  // THE RANKING, NAMED ON THE PAGE (#553 COWORK #161), for a page whose order
+  // comes from its pickers section rather than `orderBy` (which names itself).
+  // Only where the section's sort is one plain key -- the trend flips (most
+  // recent first) and the SEC earnings growth (EPS growth) -- never a page
+  // ranked by an opaque composite. `label` completes "Ranked by …"; `short`
+  // completes "Back to … ranking".
+  rankedBy?: { label: string; short: string };
   // "allSymbols" pages: show the whole list on load instead of hiding until a
   // condition is checked (used by the plain "All Stocks" / Stock Screener page).
   showAllImmediately?: boolean;
@@ -1547,6 +1555,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
   const tiingoPrices = priceProviderFor("PICKERS") === "tiingo" || priceProviderFor("POOL") === "tiingo";
   const priceWindow = formatPriceWindow(priceOldestTs, priceNewestTs);
   const initialVisibleCount = config.maxItems ?? 36;
+  const ranking = pageRanking(config);
 
   // THE ROWS THIS PAGE ACTUALLY PUTS ON SCREEN, recorded for the price-tier
   // signal. Everything past initialVisibleCount sits behind "Show more"
@@ -1899,6 +1908,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
 
                 <PickerResultsGrid
                   entries={entries}
+                  ranking={ranking}
                   initialVisibleCount={initialVisibleCount}
                   configHref={config.href}
                   configTitle={config.title}
