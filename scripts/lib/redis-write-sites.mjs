@@ -103,6 +103,8 @@ export const WRITE_SITES = [
   { file: "lib/server/secTickerMap.ts", key: "TICKER_REDIS_KEY", cls: "listed", candidate: "TICKER_REDIS_KEY", count: 2 },
   { file: "lib/server/sectorPanels.ts", key: "PERFORMANCE_KEY", cls: "listed", candidate: "SECTOR_PERFORMANCE_KEY" },
   { file: "lib/server/sectorPanels.ts", key: "key", cls: "small" },
+  // One sector's {label, score, at} per HSET, from its news build (#553 COWORK #157).
+  { file: "lib/server/sectorTone.ts", key: "sectorToneKey(", cls: "row" },
   { file: "lib/server/sectorUniverse.ts", key: "SECTOR_INDEX_KEY", cls: "listed", candidate: "SECTOR_INDEX_KEY" },
   { file: "lib/server/stalenessQueue.ts", key: "seededKey(dataset", cls: "small" },
   { file: "lib/server/stockDataCache.ts", key: "`${KEY_PREFIX}${symbol}`", cls: "chunked", bound: "REFRESH_SLICE_SIZE (40) rows x <=713 B = 0.03 MB" },

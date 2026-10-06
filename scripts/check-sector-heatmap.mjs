@@ -117,7 +117,7 @@ function sourceRules(mapRaw, pageRaw) {
   want("phones get a 2-column grid", /\.heatBox \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/.test(m));
   want("names never break mid-word", /\.heatName \{[^}]*word-break: normal;[^}]*hyphens: none;/.test(m));
   want("the toggle swaps the shown figure only", /const value = tile\[period\];/.test(m) && /useState<HeatPeriod>\(HEAT_DEFAULT_PERIOD\)/.test(m));
-  want("the page feeds the cards' own rows (no recomputing)", /day: row\?\.day \?\? null,\s*month: row\?\.month \?\? null,\s*ytd: row\?\.ytd \?\? null,/.test(p));
+  want("the page feeds the cards' own rows (no recomputing)", /day: row\?\.day \?\? null,\s*month: row\?\.month \?\? null,\s*ytd: row\?\.ytd \?\? null,\s*capSum: row\?\.capSum/.test(p));
   want("the treemap is laid out in the box's own 2:1 shape", /squarify\(tiles\.map\(\(t\) => t\.weight\), 200, 100\)\.map\(\(r\) => \(\{ x: r\.x \/ 2, y: r\.y, w: r\.w \/ 2, h: r\.h \}\)\)/.test(p) && /aspect-ratio: 2 \/ 1;/.test(m));
   want("the page passes the Tiingo credit and the sizing words", /credit=\{\{ text: TIINGO_CREDIT, href: TIINGO_URL \}\}/.test(p) && /sizing\.basis === "cap"/.test(p));
   return fails;

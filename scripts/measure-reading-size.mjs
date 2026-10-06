@@ -40,6 +40,11 @@ process.env.MEASURE_STUBS = JSON.stringify({
   "@/lib/server/marketData/read": "scripts/lib/measure-stubs/tiingo-read.mjs",
   "@/lib/server/marketMoodRead": "scripts/lib/measure-stubs/mood-read.mjs",
   "@/lib/server/secColdFetch": "scripts/lib/measure-stubs/sec-cold-fetch.mjs",
+  // /sector (#553 COWORK #157): a fixture sector table, counts, tones and A's medians.
+  "@/lib/server/sectorPanels": "scripts/lib/measure-stubs/sector-panels.mjs",
+  "@/lib/server/sectorUniverse": "scripts/lib/measure-stubs/sector-universe.mjs",
+  "@/lib/server/sectorTone": "scripts/lib/measure-stubs/sector-tone.mjs",
+  "@/lib/server/peSectorMedians": "scripts/lib/measure-stubs/pe-sector-medians.mjs",
 });
 process.env.PRICE_PROVIDER_SPX = "tiingo";
 delete process.env.UPSTASH_REDIS_REST_URL;
@@ -122,6 +127,10 @@ async function earningsPage() {
   const { default: Page } = await import("../app/stock/[symbol]/earnings/page.tsx");
   return renderToStaticMarkup(await Page({ params: Promise.resolve({ symbol: "AAPL" }) }));
 }
+async function sectorIndexPage() {
+  const { default: Page } = await import("../app/sector/page.tsx");
+  return renderToStaticMarkup(await Page());
+}
 
 /** "Earnings this week" (#552 COWORK #170) on fixture data: the page itself reads Redis for its lists. */
 async function earningsWeekFixture() {
@@ -181,6 +190,7 @@ const PAGES = [
   { name: "/stock/AAPL performance note (open)", render: performanceNote, enforce: true },
   { name: "/bottlenecks/capex why card", render: () => capexWhy(false), enforce: true },
   { name: "/bottlenecks/capex why card (How to use, open)", render: () => capexWhy(true), enforce: true },
+  { name: "/sector", render: async () => (await sectorIndexPage()).replace(/<details /g, "<details open "), enforce: true },
 ];
 
 // ── the browser pass ────────────────────────────────────────────────────────
