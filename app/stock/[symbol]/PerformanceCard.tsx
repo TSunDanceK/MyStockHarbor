@@ -6,7 +6,8 @@
 //
 // One row per period: the label; a bar from a centre zero line (green right for
 // a gain, red left for a loss) with the S&P 500's change as a thin tick on the
-// same square-root scale; the return and a "pts vs S&P" chip. A tap on the
+// same square-root scale; the return, and under it a quiet "▲ 4.4 pts vs S&P"
+// line (grey words, the colour on the glyph only: #563 COWORK #117). A tap on the
 // title opens what each row measures, the as-of time, the tick and the scale.
 //
 // Presentation only: the numbers are the performance strip's (lib/ta/
@@ -22,7 +23,8 @@ const C = {
   label: "rgba(147,197,253,0.82)", muted: "rgba(203,213,225,0.62)", value: "rgba(241,245,249,0.94)",
   track: "rgba(255,255,255,0.06)", zero: "rgba(255,255,255,0.28)", tick: "#e2e8f0",
 };
-const VS = { ahead: { fg: "#86efac", bg: "rgba(34,197,94,0.12)" }, behind: { fg: "#fca5a5", bg: "rgba(239,68,68,0.12)" }, level: { fg: C.muted, bg: "rgba(148,163,184,0.10)" } };
+/** The comparison is a sub-line, not a pill (#563 COWORK #117): the glyph alone takes a softened green or red. */
+const VS = { ahead: { glyph: "▲", fg: "rgba(74,222,128,0.7)", say: "ahead" }, behind: { glyph: "▼", fg: "rgba(248,113,113,0.7)", say: "behind" }, level: { glyph: "", fg: C.muted, say: "" } };
 
 /** One period: label, bar with its S&P 500 tick, return and chip. */
 export function PerfRowView({ r, valueRem }: { r: PerfRow; valueRem: number }) {
@@ -42,10 +44,12 @@ export function PerfRowView({ r, valueRem }: { r: PerfRow; valueRem: number }) {
         )}
       </div>
       <div className="pcPct" style={{ textAlign: "right", fontSize: "0.9375rem", fontWeight: 850, color: C[r.tone], whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{rowPctWords(r)}</div>
-      {/* The chip on its own line under the bar, so every row's track has the same width and the same zero line. */}
+      {/* The comparison on its own line under the bar, so every row's track has the same width and the same zero line. */}
       {r.vs && r.vsWords ? (
         <div style={{ gridColumn: "2 / 4", justifySelf: "end" }}>
-          <span className="pcVs" style={{ display: "inline-block", padding: "1px 6px", borderRadius: 999, fontSize: "var(--fs-fine)", fontWeight: 700, color: VS[r.vs].fg, background: VS[r.vs].bg, whiteSpace: "nowrap" }}>{r.vsWords}</span>
+          <span className="pcVs" style={{ fontSize: "var(--fs-label)", fontWeight: 600, color: C.muted, whiteSpace: "nowrap" }}>
+            {VS[r.vs].glyph ? <><span className="pcVsGlyph" role="img" aria-label={VS[r.vs].say} style={{ color: VS[r.vs].fg }}>{VS[r.vs].glyph}</span>{" "}</> : null}{r.vsWords}
+          </span>
         </div>
       ) : null}
     </li>

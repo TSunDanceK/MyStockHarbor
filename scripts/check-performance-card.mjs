@@ -8,7 +8,7 @@
 //
 // Rules: the bar's direction from the zero line; the S&P 500 tick on the same
 // scale; the shared square-root scale; the "x of 6" count; a missing period is
-// "—" with its reason in the tap note, never 0; the vs chip; no "best" /
+// "—" with its reason in the tap note, never 0; the vs line (a grey sub-line, #117); no "best" /
 // "weakest" tags (#113); the note (price only, the as-of end, the tick, the scale); the credit
 // and stamp as fine print; no advice; placement (left column under Key levels,
 // above Latest earnings; before the chart on a phone); the figures are the
@@ -71,7 +71,7 @@ async function measure(M, src) {
   const cards = { gains: M.performanceCard(GAINS), mixed: M.performanceCard(MIXED), level: M.performanceCard(LEVEL), equal: M.performanceCard(EQUAL), young: M.performanceCard(young) };
   const render = (s, credit) => renderToStaticMarkup(React.createElement(M.PerformanceCard, { strip: s, credit }));
   const noteHtml = (c) => renderToStaticMarkup(React.createElement("div", null, c.note.map((t) => React.createElement("p", { key: t }, t))));
-  return { M, young, cards, html: { gains: render(GAINS, React.createElement("a", { href: "#" }, "Market data from Tiingo.com")), mixed: render(MIXED), young: render(young) }, noteHtml, ...src };
+  return { M, young, cards, html: { gains: render(GAINS, React.createElement("a", { href: "#" }, "Market data from Tiingo.com")), mixed: render(MIXED), level: render(LEVEL), young: render(young) }, noteHtml, ...src };
 }
 const row = (c, k) => c.rows.find((r) => r.key === k);
 
@@ -104,10 +104,17 @@ const RULES = {
       ((li) => />—</.test(li) && !/pcBar|pcTick|pcVs/.test(li))(/<li class="pcRow" data-key="5Y"[\s\S]*?<\/li>/.exec(html.young)[0]) &&
       cards.young.note.some((t) => /^5Y: Prices on file start /.test(t));
   },
-  "the vs chip: '+13.2 pts vs S&P' green, '−4.1 pts vs S&P' red, 'level with S&P' when level": ({ cards, html }) =>
-    row(cards.gains, "1Y").vsWords === "+13.2 pts vs S&P" && row(cards.mixed, "1M").vsWords === "−4.7 pts vs S&P" && row(cards.mixed, "1M").vs === "behind" &&
-    cards.level.rows.every((r) => r.vs === "level" && r.vsWords === "level with S&P") &&
-    /class="pcVs" style="[^"]*color:#86efac[^"]*">\+13\.2 pts vs S&amp;P</.test(html.gains) && /class="pcVs" style="[^"]*color:#fca5a5[^"]*">−4\.7 pts vs S&amp;P</.test(html.mixed),
+  // #563 COWORK #117: a quiet sub-line, not a pill: no fill, no border, no rounded chip; grey words at --fs-label;
+  // the colour (a softened green or red) on the ▲ / ▼ alone, which also speaks the direction.
+  "the vs line: '▲ 13.2 pts vs S&P' / '▼ 4.7 pts vs S&P' in grey, the colour on the glyph only, no pill; 'level with S&P' when level": ({ cards, html, card }) => {
+    const span = /<span className="pcVs" style=\{\{([^}]*)\}\}>/.exec(card)?.[1] ?? "";
+    return row(cards.gains, "1Y").vsWords === "13.2 pts vs S&P" && row(cards.mixed, "1M").vsWords === "4.7 pts vs S&P" && row(cards.mixed, "1M").vs === "behind" &&
+      cards.level.rows.every((r) => r.vs === "level" && r.vsWords === "level with S&P") &&
+      /fontSize: "var\(--fs-label\)"/.test(span) && /color: C\.muted/.test(span) && !/background|border|padding|borderRadius|VS\[/.test(span) &&
+      /class="pcVs" style="[^"]*color:rgba\(203,213,225,0\.62\)[^"]*"><span class="pcVsGlyph" role="img" aria-label="ahead" style="color:rgba\(74,222,128,0\.7\)">▲<\/span> (?:<!-- -->)?13\.2 pts vs S&amp;P</.test(html.gains) &&
+      /<span class="pcVsGlyph" role="img" aria-label="behind" style="color:rgba\(248,113,113,0\.7\)">▼<\/span> (?:<!-- -->)?4\.7 pts vs S&amp;P</.test(html.mixed) &&
+      !/pcVsGlyph/.test(html.level) && />level with S&amp;P</.test(html.level);
+  },
   "no 'best' / 'weakest' tags: returns over different spans aren't ranked (COWORK #113)": ({ cards, html, lib, card }) =>
     Object.values(cards).every((c) => c.rows.every((r) => !("tag" in r))) && !/pcTag|"best"|"weakest"/.test(lib + card) && !/(best|weakest)/.test(text(html.gains) + text(html.mixed)),
   "the note: price change only, the as-of end, the S&P tick, the scale": ({ M, cards }) => {
@@ -158,8 +165,9 @@ const MUTANTS = [
   ["the summary counts", "lib", (s) => s.replace("of ${compared.length} period", "of 6 period")],
   ["a missing period", "lib", (s) => s.replace("export const rowPctWords = (r: PerfRow) => (r.pct === null ? \"—\" : pctWords(r.pct));", "export const rowPctWords = (r: PerfRow) => pctWords(r.pct ?? 0);")],
   ["a missing period", "lib", (s) => s.replace("    ...rows.filter((r) => r.reason).map((r) => `${r.key}: ${r.reason}`),\n", "")],
-  ["the vs chip", "lib", (s) => s.replace('return `${diff > 0 ? "+" : "−"}${d.toFixed(1)} pts vs S&P`;', 'return `${d.toFixed(1)} pts vs S&P`;')],
-  ["the vs chip", "card", (s) => s.replace('ahead: { fg: "#86efac", bg: "rgba(34,197,94,0.12)" }, behind: { fg: "#fca5a5"', 'ahead: { fg: "#fca5a5", bg: "rgba(34,197,94,0.12)" }, behind: { fg: "#86efac"')],
+  ["the vs line", "lib", (s) => s.replace(': diff > 0 ? "ahead" : "behind";', ': diff > 0 ? "behind" : "ahead";')],
+  ["the vs line", "card", (s) => s.replace('<span className="pcVs" style={{ fontSize: "var(--fs-label)", fontWeight: 600, color: C.muted,', '<span className="pcVs" style={{ display: "inline-block", padding: "1px 6px", borderRadius: 999, background: "rgba(34,197,94,0.12)", fontSize: "var(--fs-label)", fontWeight: 600, color: C.muted,')],
+  ["the vs line", "card", (s) => s.replace('fontWeight: 600, color: C.muted, whiteSpace: "nowrap" }}>', 'fontWeight: 600, color: VS[r.vs].fg, whiteSpace: "nowrap" }}>')],
   ["no 'best'", "lib", (s) => s.replace("      vs, vsWords: diff === null ? null : vsWords(diff),\n", "      vs, vsWords: diff === null ? null : vsWords(diff),\n      tag: c.pct !== null && c.pct > 50 ? \"best\" : null,\n")],
   ["no 'best'", "card", (s) => s.replace("        {r.key}\n", "        {r.key}\n        {r.pct !== null && r.pct < 0 ? <div className=\"pcTag\">weakest</div> : null}\n")],
   ["the note:", "lib", (s) => s.replace("    SCALE_NOTE,\n", "")],
