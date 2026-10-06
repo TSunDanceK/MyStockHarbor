@@ -106,7 +106,7 @@ export type CapexMention =
 export type CapexFlowItem = { ticker: string; value: number; amount: string };
 export type CapexShared = { mentions: Record<string, CapexMention>; topSpenders: CapexFlowItem[]; topReceivers: CapexFlowItem[] };
 const bn = (v: number) => `$${(v / 1e9).toFixed(1)}bn`;
-const readCapexShared = unstable_cache(
+export const readCapexShared = unstable_cache(
   async (): Promise<CapexShared | null> => {
     const [sp, rc] = await Promise.all([readSpendingRecord().catch(() => null), readReceiversRecord().catch(() => null)]);
     if (!sp && !rc) return null;

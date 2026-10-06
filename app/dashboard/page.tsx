@@ -20,6 +20,8 @@ import { getInternalNewsPayload } from "@/lib/server/internalNews";
 import { cleanSymbol, SYMBOL_COOKIE } from "@/lib/symbol";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { DASHBOARD_SOURCE_BUDGET_MS, withBudget } from "@/lib/server/sourceBudget";
+import { EMPTY_LANDING, getDashboardLanding } from "@/lib/server/dashboardCards";
+import { LANDING_CSS, LandingCards, MarketNow } from "./DashboardLanding";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -171,7 +173,7 @@ export default async function DashboardPage({ searchParams }: Props) {
   const budget = <T,>(source: string, work: Promise<T>, fallback: T) =>
     withBudget("dashboard", source, symbol, work, fallback, DASHBOARD_SOURCE_BUDGET_MS);
 
-  const [rawHistory, quoteAndName, benchmarks, news, earningsSummary] =
+  const [rawHistory, quoteAndName, benchmarks, news, earningsSummary, landing] =
     await Promise.all([
       // STEP 3 (#553 COWORK #71 row 3), behind PRICE_PROVIDER_HISTORY, the same
       // gate as /api/history, which this chart calls on every timeframe change:
@@ -197,6 +199,10 @@ export default async function DashboardPage({ searchParams }: Props) {
       budget("benchmarks", getInitialBenchmarks(), null),
       budget("news", getInitialNews(symbol), null),
       budget("earnings", getInitialEarningsSummary(symbol), null),
+      // THE LANDING (#563 COWORK #134): "Market right now" and the cards, one
+      // Data Cache entry for every visitor (15 min; lib/server/dashboardCards.ts).
+      // Not per symbol. A miss renders every card's empty state, never a failure.
+      budget("landing", getDashboardLanding().catch(() => EMPTY_LANDING), EMPTY_LANDING),
     ]);
 
   const initialHistory: Point[] = Array.isArray(rawHistory.points) ? rawHistory.points : [];
@@ -246,6 +252,13 @@ export default async function DashboardPage({ searchParams }: Props) {
           // symbol-scoped, precisely because chooseSymbol() swaps symbols here
           // without a reload. See lib/server/quoteToken.ts.
           pageToken={mintQuoteToken()}
+          landing={{
+            market: <MarketNow m={landing.market} />,
+            cards: <LandingCards c={landing.cards} />,
+            mapped: landing.market.mapped,
+            bottlenecks: landing.bottlenecks,
+            css: LANDING_CSS,
+          }}
         />
       </Suspense>
 
