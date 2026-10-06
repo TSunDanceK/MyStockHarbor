@@ -60,12 +60,14 @@ export const CELL_WHY_WORDS = {
   naEv: "Doesn't apply: debt isn't reported in a comparable way for banks and insurers",
   naPs: "Doesn't apply: revenue isn't comparable for banks and insurers",
   naFcf: "Doesn't apply: free cash flow isn't comparable for banks and insurers",
+  // #553 COWORK #168 item 2: preferreds and notes (pickerEquity "debt-or-preferred").
+  notCommon: "Not a common share: this listing appears to be a preferred stock or note, so stock ratios don't apply",
 } as const;
 
 export type CellWhyCode = keyof typeof CELL_WHY_WORDS;
 
 /** Codes that mark a figure as not applicable ("n/a"), not missing ("–"). */
-export const NOT_APPLICABLE_CODES: ReadonlySet<string> = new Set<CellWhyCode>(["naEv", "naPs", "naFcf"]);
+export const NOT_APPLICABLE_CODES: ReadonlySet<string> = new Set<CellWhyCode>(["naEv", "naPs", "naFcf", "notCommon"]);
 
 /**
  * The grid column keys a filings row can explain. The page attaches
@@ -117,7 +119,7 @@ export const CELL_WHY_TABLE_NOTE_BY_TAB: Record<PickerNoteTab, string> = {
   general:
     "Market Cap and P/E are based on company SEC filings where available, and price, change and volume on market data; " +
     "'–' means a figure isn't available, and 'Loss' means earnings per share weren't positive and 'Not meaningful' that they were close to zero, " +
-    "so a P/E isn't meaningful.",
+    "so a P/E isn't meaningful; 'n/a' means the listing isn't a common share.",
   performance:
     "Returns are calculated from price history, and Market Cap is based on company SEC filings where available; " +
     "'–' means there isn't enough data to calculate a figure.",
@@ -128,7 +130,7 @@ export const CELL_WHY_TABLE_NOTE_BY_TAB: Record<PickerNoteTab, string> = {
   valuation:
     `${OWNER_LEAD}; 'Loss', 'Neg.', 'Not meaningful' or 'n/a' means a ratio isn't meaningful ` +
     "(a loss, negative free cash flow or equity, earnings near zero, an incomplete revenue line, or equity that is very small next to market value) " +
-    "or doesn't apply (banks and insurers).",
+    "or doesn't apply (banks and insurers, or a listing that isn't a common share).",
   dividends: `${OWNER_LEAD}.`,
   financials: `${OWNER_LEAD}.`,
   analysts: "Analyst figures aren't from company filings; '–' means a figure isn't available.",
@@ -173,9 +175,14 @@ export const CELL_WORDS: Readonly<Partial<Record<CellWhyColumn, Partial<Record<C
   // HIDDEN, NOT DELETED (2026-10-03, #553 COWORK #102): `pe: { epsNeg: "Loss" }`
   // and `pb: { eqNeg: "Neg." }` were here; the same words now come from A's
   // REFUSAL_CELL_WORD via entry.cellWord, so they live once.
-  pfcf: { fcfNeg: "Neg.", naFcf: "n/a" },
-  ev: { naEv: "n/a" },
-  ps: { naPs: "n/a" },
+  pfcf: { fcfNeg: "Neg.", naFcf: "n/a", notCommon: "n/a" },
+  ev: { naEv: "n/a", notCommon: "n/a" },
+  ps: { naPs: "n/a", notCommon: "n/a" },
+  // Market Cap is on every tab, so a non-common listing's cap keeps the dash
+  // (with the "Not a common share" reason on tap) rather than an "n/a" every
+  // tab's note would then have to name.
+  pe: { notCommon: "n/a" },
+  pb: { notCommon: "n/a" },
 };
 
 /**

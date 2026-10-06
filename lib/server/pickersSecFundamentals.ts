@@ -49,6 +49,7 @@
 // to end. Only a symbol with NO row at all (the job has not reached it) keeps
 // the old values, and that is the pre-merge state rather than a steady one.
 import { Redis } from "@upstash/redis";
+import { symbolSpellings } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { readFactSet } from "./secFactStore";
 import { valueOf, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
@@ -610,19 +611,36 @@ function isRow(v: unknown): v is SecPickerRow {
  * malformed field is simply absent from the map; a Redis failure is an empty
  * map (the page then keeps its previous values, the pre-merge state).
  */
+//
+// BOTH SPELLINGS, STILL ONE HMGET (#553 COWORK #168 item 2, from A's census in
+// CODE-A #177): the grid asks for BRK.B while the warm job writes the row
+// under the Tiingo universe's BRK-B, so all six valuation cells were empty for
+// a spelling reason alone. Each symbol's dot/dash twin rides in the same
+// HMGET via symbolSpellings (more fields, not more commands); the asked
+// spelling wins, and the
+// row is returned under the symbol the caller asked for.
 export async function readSecPickerRows(symbols: string[]): Promise<Map<string, SecPickerRow>> {
   const out = new Map<string, SecPickerRow>();
-  const fields = [...new Set(symbols.filter(Boolean))];
-  if (!redis || !fields.length) return out;
+  const asked = [...new Set(symbols.filter(Boolean))];
+  if (!redis || !asked.length) return out;
+  const spellingsOf = (sym: string): string[] => symbolSpellings(sym);
+  const fields = [...new Set(asked.flatMap(spellingsOf))];
   try {
     const raw = (await redis.hmget(pickersSecKey(), ...fields)) as unknown;
-    const get = (sym: string, i: number): unknown =>
-      Array.isArray(raw) ? raw[i] : raw && typeof raw === "object" ? (raw as Record<string, unknown>)[sym] : null;
+    const byField = new Map<string, unknown>();
+    fields.forEach((f, i) =>
+      byField.set(f, Array.isArray(raw) ? raw[i] : raw && typeof raw === "object" ? (raw as Record<string, unknown>)[f] : null)
+    );
     const staleBefore = Date.now() - PICKERS_SEC_TTL_SECONDS * 1000;
-    fields.forEach((sym, i) => {
-      const row = get(sym, i);
-      if (isRow(row) && row.at >= staleBefore) out.set(sym, row);
-    });
+    for (const sym of asked) {
+      for (const f of spellingsOf(sym)) {
+        const row = byField.get(f);
+        if (isRow(row) && row.at >= staleBefore) {
+          out.set(sym, row);
+          break;
+        }
+      }
+    }
   } catch {
     // Absent, not an error the reader sees.
   }

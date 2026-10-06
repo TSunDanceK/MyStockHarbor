@@ -2424,12 +2424,39 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
   };
 }
 
+// THE OVERSOLD / OVERBOUGHT RULE (#553 COWORK #168, owner-approved
+// 2026-10-06). It was any 2 of the 6 checks, so a stock simply 5%+ under both
+// its MA50 and MA200 was "oversold" with no momentum reading at all (302 of 685
+// on 5 Oct). Now RSI(14) must be one of them: RSI <= 30 AND at least one more
+// oversold check, with more oversold readings than overbought; overbought
+// mirrors it with RSI >= 70. `rule: "any-two"` keeps the old rule for the
+// before/after census only.
+export type CompositeGateRule = "rsi-plus-one" | "any-two";
+
+export function compositeGate(
+  c: Pick<CompositeResult, "oversold" | "overbought" | "oversoldIndicators" | "overboughtIndicators">,
+  side: "oversold" | "overbought",
+  rule: CompositeGateRule = "rsi-plus-one"
+): boolean {
+  const mine = side === "oversold" ? c.oversold : c.overbought;
+  const theirs = side === "oversold" ? c.overbought : c.oversold;
+  if (!(mine >= 2 && mine > theirs)) return false;
+  if (rule === "any-two") return true;
+  const fired = (side === "oversold" ? c.oversoldIndicators : c.overboughtIndicators) ?? [];
+  return fired.includes("RSI(14)");
+}
+
 function pickIsGreenOverallSignal(c: CompositeResult) {
-  return c.oversold >= 2 && c.oversold > c.overbought;
+  return compositeGate(c, "oversold");
 }
 
 function pickIsRedOverallSignal(c: CompositeResult) {
-  return c.overbought >= 2 && c.overbought > c.oversold;
+  return compositeGate(c, "overbought");
+}
+
+/** The composite, for the read-only rule census (scripts/oversold-rule-census.mjs). */
+export function compositeForStudy(points: Point[]) {
+  return buildCompositeFromHistory(points);
 }
 
 function buildTrendScoreFromHistory(points: Point[]): TrendScoreResult | null {
@@ -4653,10 +4680,11 @@ export async function buildPickerStructureDiagnostics() {
   // than coincidental:
   //   /stock/[symbol]            tile reads "Overbought" iff rsi >= 70.
   //   /overbought-stocks-today   lists a stock iff comp.overbought >= 2 AND
-  //                              comp.overbought > comp.oversold AND it lands
-  //                              in the section's top 20.
-  // RSI is one of roughly six checks feeding the second, so neither implies the
-  // other. The rule is spelled out here so it can be checked rather than taken
+  //                              comp.overbought > comp.oversold AND RSI(14)
+  //                              is one of them (COWORK #168) AND it lands in
+  //                              the section's top 20.
+  // Since #168 the second implies rsi >= 70; the first does not imply the
+  // second. The rule is spelled out here so it can be checked rather than taken
   // on trust; both directions are listed separately.
   const obRank = new Map<string, number>();
   rows
@@ -4667,7 +4695,7 @@ export async function buildPickerStructureDiagnostics() {
   const inSection = (sym: string) => (obRank.get(sym) ?? Infinity) <= SECTION_TAKE;
 
   const vocabularyContradictions = {
-    rule: "stock page says Overbought iff rsi >= 70; screener lists iff compOverbought >= 2 && compOverbought > compOversold && sectionRank <= 20",
+    rule: "stock page says Overbought iff rsi >= 70; screener lists iff compOverbought >= 2 && compOverbought > compOversold && rsi >= 70 && sectionRank <= 20",
     onScreenerButNotOverboughtOnStockPage: rows
       .filter((r) => inSection(r.symbol) && (r.rsi === null || r.rsi < 70))
       .map((r) => ({ symbol: r.symbol, rsi: r.rsi, compOverbought: r.compOverbought, compOversold: r.compOversold, sectionRank: obRank.get(r.symbol) ?? null }))
