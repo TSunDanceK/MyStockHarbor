@@ -1409,6 +1409,8 @@ const TASKS = {
   "write-earnings-growth-census": { script: "scripts/earnings-growth-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY (Relay B, #553 COWORK #182): the top 300 by cap missing from the analysis universe, and why. Symbols, ranks, counts.
   "write-universe-gap-census": { script: "scripts/universe-gap-census.mjs", args: () => [], writes: true },
+  // READS ONLY (Relay B, #553 COWORK #186 ruling 4): the ATR spike rule and two alternatives over 60 sessions. Counts only.
+  "write-atr-spike-census": { script: "scripts/atr-spike-census.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
