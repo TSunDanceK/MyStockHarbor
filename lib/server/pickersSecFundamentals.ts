@@ -95,6 +95,10 @@ export const PICKERS_SEC_TTL_SECONDS = 3 * 24 * 60 * 60;
  * before (the FMP warm jobs keep running until this is verified -- the owner's
  * rule that FMP stays on until each replacement is). Anything else reads SEC.
  * An env read, so a change needs a production redeploy to take effect.
+ *
+ * FMP IS CANCELLED (2026-10-06, #553 COWORK #170/#171). Flipping this back
+ * would read nothing without a new FMP key, and the purge removed the FMP rows
+ * it served.
  */
 export function pickersFundamentalsSource(): "sec" | "fmp" {
   return process.env.PICKERS_FUNDAMENTALS === "fmp" ? "fmp" : "sec";
