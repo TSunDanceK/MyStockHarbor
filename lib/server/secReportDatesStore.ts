@@ -225,6 +225,31 @@ export async function readReportDatesChecked(symbol: string): Promise<ReportDate
   }
 }
 
+/**
+ * MANY RECORDS IN ONE MGET (#552 COWORK #181). The calendar's forward sections
+ * read the whole cut (150 since the widening) on every build; one GET each was
+ * 150 commands a build, one MGET is one. A failed read is `ok: false` for the
+ * whole set -- never 150 nulls, which would read as 150 filers with no record.
+ */
+export async function readReportDatesBulk(
+  symbols: readonly string[],
+): Promise<{ ok: true; recs: Map<string, StoredReportDates | null> } | { ok: false }> {
+  if (!redis) return { ok: false };
+  const recs = new Map<string, StoredReportDates | null>();
+  if (!symbols.length) return { ok: true, recs };
+  try {
+    const raw = await redis.mget<(StoredReportDates | null)[]>(...symbols.map(reportDatesKey));
+    symbols.forEach((s, i) => {
+      const r = raw?.[i];
+      recs.set(s, r && typeof r === "object" && Array.isArray(r.events) ? r : null);
+    });
+    return { ok: true, recs };
+  } catch (err) {
+    console.error("[sec-report-dates] bulk read failed", symbols.length, err);
+    return { ok: false };
+  }
+}
+
 export async function readReportDates(symbol: string): Promise<StoredReportDates | null> {
   const got = await readReportDatesChecked(symbol);
   return got.ok ? got.rec : null;

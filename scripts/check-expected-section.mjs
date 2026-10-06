@@ -198,9 +198,9 @@ console.log("\n6. EVERY SYMBOL IS A ROW OR A NAMED SKIP");
 }
 
 // ── The render ────────────────────────────────────────────────────────────
-// SINCE THE WEEK PAGE (#552 COWORK #170) the estimates render as compact chips
-// in "Coming up" (EarningsComingUp), grouped by calendar week, the evidence
-// behind a tap. The SHIPPED component is rendered through its real imports.
+// SINCE COWORK #179 (#552) the estimates render in "Coming up" as a grid of
+// four WEEK WINDOWS (EarningsComingUp): a row says which week, never a day.
+// The SHIPPED component is rendered through its real imports.
 (await import("node:module")).register("./lib/tsx-render-hooks.mjs", import.meta.url);
 const C = { ...(await import("../lib/server/expectedCopy.ts")), ...(await import("../app/earnings-calendar/EarningsComingUp.tsx")) };
 
@@ -219,41 +219,33 @@ const ROW = {
   lastReportedOn: "2026-09-23", lastReportedPeriodEnd: "2026-08-27",
 };
 
-console.log("\n7. THE ESTIMATE IS A MARKED APPROXIMATION, NEVER A BARE DATE");
+console.log("\n7. THE ESTIMATE IS A WEEK WINDOW, MARKED AS AN ESTIMATE, NEVER A DAY");
 {
-  // THE OWNER'S PICK (COWORK #170) replaced "Expected in about 4 days" with
-  // "~26 Sep" on a chip, under a line saying each may be off by a week or two.
-  // What this file keeps asserting is the honesty of that: the estimate's
-  // date never appears without its "~", never as an ISO date, and the line
-  // that qualifies it is always on the card.
+  // THE OWNER'S PICK (COWORK #179) replaced "~26 Sep" on a chip with a week
+  // column: an estimate that may be off by days is placed in a window, and
+  // the card says once, in its header, that the windows are estimates.
   const r = render({ kind: "listed", rows: [ROW], considered: 50 });
   const estimated = iso(Date.parse(`${TODAY}T00:00:00Z`) + ROW.daysAway * DAY);
-  check("the week heading renders", r.text.includes("This week"));
-  check("the chip carries the approximate date", r.text.includes("MU ~26 Sep"));
-  const bare = (r.text.match(/26 Sep/g) ?? []).length, marked = (r.text.match(/~26 Sep/g) ?? []).length;
-  check("the estimated date appears ONLY with its '~'", bare === marked && marked === 1, `${marked} marked of ${bare}`);
+  check("the row sits under its week window", /This week [^·]+· 1 company MU/.test(r.text), r.text.slice(0, 200));
+  check("no day is printed for the estimate: no '~date' and no '26 Sep' at all",
+    !/~\d/.test(r.text) && !/26 Sep/.test(r.text));
   check("the estimated date never appears as an ISO date", !r.markup.includes(estimated), estimated);
-  check("the line under the title says each may be off by a week or two (COWORK #174)", r.text.includes(C.COMING_UP_LINE) && /may be off by a week or two/.test(C.COMING_UP_LINE));
+  check("the card is marked ESTIMATED, once", (r.markup.match(/data-estimated-tag=""/g) ?? []).length === 1 && C.ESTIMATED_TAG === "Estimated");
+  check("'How we estimate' says the dates are estimated and the day may differ (behind a tap)",
+    /<details class="cuHow">/.test(r.markup) && /estimated from each company's usual SEC reporting pattern/i.test(C.HOW_WE_ESTIMATE) &&
+    /may differ/.test(C.HOW_WE_ESTIMATE) && r.text.includes(C.HOW_WE_ESTIMATE));
   const FORECAST = [/\bwill report\b/i, /\bnext up\b/i, /\breports on\b/i, /\bconfirmed\b/i];
   check("no forecast vocabulary", !FORECAST.some((re) => re.test(r.text)));
-  check("the line says the dates are estimated and not announced",
-    /estimated from each company/i.test(r.text) && /aren't announced dates/i.test(r.text));
 }
 
-console.log("\n8. THE EVIDENCE, THE DENOMINATOR, AND THE TWO EMPTIES");
+console.log("\n8. THE ROW, AND THE TWO EMPTIES");
 {
   const r = render({ kind: "listed", rows: [ROW], considered: 50 });
-  check("the filer's own habit renders WITH its sample size (behind the tap)",
-    r.text.includes(C.habitLabel(ROW.medianLagDays, ROW.fromPeriods)));
-  check("...and that label carries the period count, not just the lag",
-    /over its last 12 periods/.test(r.text));
-  check("the period the report would cover renders", r.text.includes("For the period ending 27 Nov 2026"));
-  check("the last filing on record renders", r.text.includes(ROW.lastReportedOn));
-  check("the evidence is behind a native tap, in the server HTML",
-    /<details class="cuChip" data-chip="MU"><summary>[\s\S]*?<\/summary><div class="cuBody">[\s\S]*Usually reports/.test(r.markup));
-  check("the chip links to the symbol's earnings page", r.markup.includes('href="/stock/MU/earnings"'));
-  check("the coverage line names BOTH shown and considered",
-    r.text.includes("Showing 1 of the 50"), C.coverageLabel(1, 50));
+  check("the row links to the symbol's earnings page", r.markup.includes('href="/stock/MU/earnings"'));
+  // THE EVIDENCE NOTE WENT WITH THE CHIPS (COWORK #179, 2026-10-06): the
+  // words stay in expectedCopy.ts; the row is logo, ticker and name.
+  check("the evidence note is not on the row any more (hidden, not restated)",
+    !r.text.includes(C.habitLabel(ROW.medianLagDays, ROW.fromPeriods)) && !/cuChip/.test(r.markup));
 
   const none = render({ kind: "none" });
   const un = render({ kind: "unavailable" });
@@ -262,8 +254,9 @@ console.log("\n8. THE EVIDENCE, THE DENOMINATOR, AND THE TWO EMPTIES");
   check("'unavailable' is a claim about US, and a different sentence",
     un.text.includes(C.EXPECTED_UNAVAILABLE) && !un.text.includes(C.EXPECTED_NONE));
   check("the two empties render differently", none.text !== un.text);
-  check("both keep the title and the line",
-    none.text.includes(C.COMING_UP_TITLE) && un.text.includes(C.COMING_UP_LINE));
+  check("both keep the title and the ESTIMATED tag",
+    none.text.includes(C.COMING_UP_TITLE) && un.text.includes(C.COMING_UP_TITLE) &&
+    /data-estimated-tag/.test(none.markup) && /data-estimated-tag/.test(un.markup));
 }
 
 console.log("\n9. THE PAGE: LADDER ORDER, THE TICKER'S REMOVAL, AND THE PLACEHOLDER");
@@ -282,7 +275,7 @@ console.log("\n9. THE PAGE: LADDER ORDER, THE TICKER'S REMOVAL, AND THE PLACEHOL
   check("the week's filed results come BEFORE Coming up in the page",
     page.search(/<EarningsWeek\s/) > 0 && page.search(/<EarningsWeek\s/) < page.indexOf("<EarningsComingUp "));
   check("...and inside Coming up the due group comes BEFORE the estimate weeks",
-    cu.indexOf('data-group="due"') > 0 && cu.indexOf('data-group="due"') < cu.indexOf("data-group={w.key}"));
+    cu.indexOf('data-group="due"') > 0 && cu.indexOf('data-group="due"') < cu.indexOf("cuAfterDue"));
 
   check("EarningsUpcomingTicker is not rendered", !/<EarningsUpcomingTicker/.test(page));
   check("...and not imported", !/^import .*EarningsUpcomingTicker/m.test(page));

@@ -79,6 +79,9 @@ const STUBS = {
   "secReportDatesStore.mjs":
     `export const readReportDates = async (symbol) =>\n` +
     `  (globalThis.__OUTLOOK_RECORDS__?.get(symbol) ?? null);\n` +
+    // THE BULK READ (#552 COWORK #181), from the same fixtures: one map.
+    `export const readReportDatesBulk = async (symbols) =>\n` +
+    `  ({ ok: true, recs: new Map(symbols.map((s) => [s, globalThis.__OUTLOOK_RECORDS__?.get(s) ?? null])) });\n` +
     transpile(realFunction("lib/server/secReportDatesStore.ts", "latestResults"), "latestResults.ts"),
 };
 
