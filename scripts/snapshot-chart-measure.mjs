@@ -3,10 +3,11 @@
 // Renders the card (app/components/LatestEarningsCard.tsx, server markup, as
 // the page ships it) for the fact-set fixtures, profitable and loss-making, in
 // the stock page's 300 px sidebar and full width at 320–430 px, at a 16 px and
-// a 20 px root. It fails when a chart label overlaps another label, a bar or a
-// margin dot; when a label leaves the chart; when the chart does not reach the
-// card's inner edges; or when the page scrolls sideways. With an output
-// directory it saves 1280 and 390 px screenshots.
+// a 20 px root, plus an INTC-like large-loss card. It fails when a chart label
+// overlaps another label, a bar or a margin dot; when a label leaves the
+// chart; when the chart does not reach the card's inner edges; or when the
+// page scrolls sideways. With an output directory it saves 1280 and 390 px
+// screenshots.
 //
 // NOT IN check-all: it needs a browser.
 //
@@ -30,6 +31,17 @@ const cards = SYMBOLS.flatMap((sym) => {
   const snapshot = M.buildSecEarningsSnapshot({ symbol: sym, view, score, reported: null, nextReport: { kind: "none" } });
   return snapshot.annualChart && !snapshot.annualChart.reason ? [[sym, html(React.createElement(M.default, { snapshot, symbol: sym }))]] : [];
 });
+// AN INTC-LIKE LARGE LOSS (#563 COWORK #126/#127): the margin scale reaches higher for its -35% low,
+// so its top label (13%, at its own line) sits close above the "0%" label.
+{
+  const set = JSON.parse(fs.readFileSync("data/sec/factset-fixture-AAPL.json", "utf8"));
+  const view = M.buildSecEarningsView(set);
+  const score = M.scoreFromSec(view, "AAPL", { status: "ready", set, cold: false });
+  const base = M.buildSecEarningsSnapshot({ symbol: "AAPL", view, score, reported: null, nextReport: { kind: "none" } });
+  const yr = (label, revenue, netIncome, netMargin) => ({ label, short: `'${label.slice(4)}`, revenue, revenueText: null, revenueGap: null, netIncome, netIncomeText: null, profitGap: null, netMargin, oneOff: null, derivedNotes: [] });
+  const snapshot = { ...base, annualChart: { reason: null, years: [yr("FY2022", 63.05e9, 8.01e9, 12.7), yr("FY2023", 54.23e9, 1.69e9, 3.1), yr("FY2024", 53.1e9, -18.76e9, -35.3), yr("FY2025", 52.9e9, -0.27e9, -0.5)] } };
+  cards.push(["INTC-like", html(React.createElement(M.default, { snapshot, symbol: "AAPL" }))]);
+}
 
 const CSS = fs.readFileSync("app/globals.css", "utf8").replace(/@import[^;]*;|@tailwind[^;]*;|@theme inline \{[^}]*\}/g, "");
 const doc = (root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>

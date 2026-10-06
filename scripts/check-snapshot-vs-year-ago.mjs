@@ -12,6 +12,8 @@
 //   - the partial-score paragraph behind a tap, one muted line in its place
 //   - the chart to the card's edges: scale labels inside the plot, the newest
 //     margin in the legend, never floating on the plot
+//   - the scale labels are the data's: the $ floor the worst year (#126), the
+//     margin top the highest margin plotted, not a raised plot top (#127)
 // A mutant each. Chromium's no-overlap measure for the chart's labels is
 // scripts/snapshot-chart-measure.mjs (not in check-all: it needs a browser).
 //
@@ -103,6 +105,16 @@ const RULES = {
       ys.length === 8 && ys.every(([a, b]) => a >= 22 - 0.01 && b <= bottom + 0.01) && Math.max(...ys.map(([, b]) => b)) > bottom - 0.01 &&
       dots.length === 4 && dots.every((y) => y >= 22 - 0.01 && y <= bottom + 0.01);
   },
+  // THE MARGIN TOP IS THE DATA'S (#563 COWORK #127): INTC's raised plot top read 119%; its highest margin is 12.7%.
+  "the margin scale's top label is the highest margin plotted (13%), at its own line; no margin label past 100% without a margin there": ({ html }) => {
+    const svg = /data-snapshot-chart="">(<svg[\s\S]*?<\/svg>)/.exec(html.bigLoss)?.[1] ?? "";
+    const right = [...svg.matchAll(/<text data-scale="r"[^>]*>([^<]+)<\/text>/g)].map((m) => m[1]);
+    const pct = right.map((t) => Number(t.replace("%", "")));
+    const line = /<line data-margin-top=""[^>]*y1="([\d.]+)"/.exec(svg);
+    const dot = Math.min(...[...svg.matchAll(/<circle [^>]*cy="([\d.-]+)"/g)].map((m) => Number(m[1])));
+    return JSON.stringify(right) === JSON.stringify(["0%", "13%", "-35%"]) && Math.max(...pct) === Math.round(12.7) && pct.every((v) => v <= 100) &&
+      !!line && Math.abs(Number(line[1]) - dot) < 0.01;
+  },
   "the chart to the card's edges: scale labels inside the plot, the newest margin in the legend, not on the plot": ({ html }) => {
     const svg = /<div style="margin-top:14px" data-snapshot-chart="">(<svg[\s\S]*?<\/svg>)/.exec(html.plain)?.[1] ?? "";
     const legend = /data-snapshot-legend="">([\s\S]*?)<\/div>/.exec(html.plain)?.[1] ?? "";
@@ -126,6 +138,8 @@ const MUTANTS = [
   // The floor stretched to the margin scale's ratio again: -$175B for INTC.
   ["the $ floor", (s) => once("const below = moneyMin < 0 ? moneyBelow : pctBelow;", "const below = Math.max(moneyBelow, pctBelow);")(s)],
   ["the $ floor", (s) => once('{tick(zeroY, "$0", "l", -3)}', "")(s)],
+  // The raised plot top labelled again: 119% for INTC.
+  ["the margin scale's top", (s) => once("tick(pctTopY, `${Math.round(pctMax)}%`", "tick(pctTopY, `${Math.round(pTop)}%`")(s)],
   ["the chart to", (s) => once("{segments.map((d) => (", '{last ? <text data-margin-latest="" x={last.x} y={last.y - 6}>{formatLevel(last.v)}</text> : null}\n        {segments.map((d) => (')(s)],
 ];
 

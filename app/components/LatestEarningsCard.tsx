@@ -442,6 +442,8 @@ const CHART_PAD_B_NEG = 22;
 const CHART_PAD_B = 4;
 /** The years' slots stop this short of each edge, so the $0 / 0% labels there never meet a bar (#126). */
 const CHART_EDGE = 6;
+/** The least gap between a raised margin top's label and the "0%" label on the zero line (#127). */
+const CHART_LABEL_GAP = 22;
 
 function moneyTick(v: number): string {
   if (v === 0) return "$0";
@@ -526,6 +528,9 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
     </text>
   );
   const plotBottom = CHART_PAD_T + plotH;
+  // A raised margin top's label sits above its own line, lifted only as far as
+  // it takes to clear the "0%" label when the two lines are close.
+  const pctTopY = pTop > pctMax ? Math.min(yPct(pctMax), zeroY - CHART_LABEL_GAP) : CHART_PAD_T;
   const leftPct = ((CHART_PAD_L + CHART_EDGE) / CHART_W) * 100;
   const rightPct = ((CHART_PAD_R + CHART_EDGE) / CHART_W) * 100;
 
@@ -535,13 +540,16 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
         <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={zeroY} y2={zeroY} stroke={C.rule} strokeWidth={1} />
         <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={CHART_PAD_T} y2={CHART_PAD_T} stroke={C.rule} strokeWidth={0.5} strokeDasharray="2 3" />
         {mBottom < 0 ? <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={plotBottom} y2={plotBottom} stroke={C.rule} strokeWidth={0.5} strokeDasharray="2 3" /> : null}
-        {tick(CHART_PAD_T, moneyTick(mTop), "l", -9)}
+        {moneyMax > 0 ? tick(yMoney(moneyMax), moneyTick(moneyMax), "l", -9) : null}
         {/* The $0 / 0% line, labelled at the edges, where no bar stands (#126). */}
         {tick(zeroY, "$0", "l", -3)}
         {tick(zeroY, "0%", "r", -3)}
         {/* A scale's bottom only where that scale has a negative: the other may reach down for it. */}
         {mBottom < 0 && moneyMin < 0 ? tick(plotBottom, moneyTick(mBottom), "l", 18) : null}
-        {tick(CHART_PAD_T, `${Math.round(pTop)}%`, "r", -9)}
+        {/* THE MARGIN TOP IS THE DATA'S (#563 COWORK #127): the highest margin
+            plotted, at its own height, never the raised plot top (INTC read 119%). */}
+        {pctMax > 0 && pTop > pctMax ? <line data-margin-top="" x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={yPct(pctMax)} y2={yPct(pctMax)} stroke={C.rule} strokeWidth={0.5} strokeDasharray="2 3" /> : null}
+        {pctMax > 0 ? tick(pctTopY, `${Math.round(pctMax)}%`, "r", pTop > pctMax ? -3 : -9) : null}
         {pBottom < 0 && pctMin < 0 ? tick(plotBottom, `${Math.round(pBottom)}%`, "r", 18) : null}
         {years.map((y, i) => {
           const x = xOf(i);
