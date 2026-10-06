@@ -45,6 +45,8 @@ import {
 } from "./dynamicUniverseCache";
 import { readSearchDemand } from "./searchDemand";
 import { PRESET_UNIVERSE } from "./presetUniverse";
+import { readTopByCap, TOP_BY_CAP } from "./topByCap";
+import { toDashed } from "../symbolSpellings.mjs";
 import { isPriceExcluded } from "../priceExcluded.mjs";
 import { POSITIVE_LAST_EARNINGS_ENABLED } from "../positiveLastEarnings";
 import { moneyIsUsd, pickersFundamentalsSource, readSecPickerRows, type SecPickerRow } from "./pickersSecFundamentals";
@@ -3403,6 +3405,9 @@ async function buildPickersPayload(
   //                          filling whatever slots remain up to UNIVERSE_CAP.
   // Slice 3 backfills any slots slices 1-2 didn't use, so there are never gaps.
   const universeSlots = new Set<string>();
+  // ONE SYMBOL, ONE SLOT, WHATEVER ITS SPELLING (#553 COWORK #186): the preset
+  // writes BRK.B, the SEC and Tiingo stores (the size slice) write BRK-B.
+  const slotSpellings = new Set<string>();
   const fillSlots = (symbols: string[], maxFromThisSource: number) => {
     let added = 0;
     for (const raw of symbols) {
@@ -3412,11 +3417,19 @@ async function buildPickersPayload(
       // The dated PRICE_EXCLUDED list (#553 COWORK #61): hidden from the
       // universe, so from every preset, signal and section built on it.
       if (!s || universeSlots.has(s) || isPriceExcluded(s)) continue;
+      if (slotSpellings.has(toDashed(s))) continue;
       universeSlots.add(s);
+      slotSpellings.add(toDashed(s));
       added++;
     }
   };
   fillSlots(PRESET_UNIVERSE, PRESET_UNIVERSE.length);
+  // THE SIZE SLICE (#553 COWORK #182/#186): the largest TOP_BY_CAP companies by
+  // SEC cover shares x the stored Tiingo close, straight after the preset, so
+  // a large steady company no longer depends on having been a mover once
+  // (topByCap.ts). Read from the Data Cache, no new command.
+  const topByCap = await readTopByCap(TOP_BY_CAP);
+  fillSlots(topByCap, TOP_BY_CAP);
   fillSlots(popularSearchSymbols, POPULAR_SEARCH_QUOTA);
   fillSlots(dynamicUniverse, UNIVERSE_CAP); // backfills the remainder
   const universe = Array.from(universeSlots);
