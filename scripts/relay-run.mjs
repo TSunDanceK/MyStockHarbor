@@ -1411,6 +1411,8 @@ const TASKS = {
   "write-universe-gap-census": { script: "scripts/universe-gap-census.mjs", args: () => [], writes: true },
   // READS ONLY (Relay B, #553 COWORK #186 ruling 4): the ATR spike rule and two alternatives over 60 sessions. Counts only.
   "write-atr-spike-census": { script: "scripts/atr-spike-census.mjs", args: () => [], writes: true },
+  // READS ONLY (Relay B, #553 COWORK #184 item 1): the stored dividend shapes behind the cut / special / payout fixes.
+  "write-dividend-shape-census": { script: "scripts/dividend-shape-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
