@@ -1411,6 +1411,8 @@ const TASKS = {
   },
   // WHICH TAGS THE §3/§4 GAPS FILE (#552 COWORK #191). companyfacts only, no store.
   "sec-tag-probe": { script: "scripts/sec-tag-probe.mjs", args: () => [] },
+  // BLAST RADIUS OF THE §3/§4 CHAIN EDITS OVER THE 200 CUT (#552 COWORK #191). No store.
+  "sec-chain-blast-census": { script: "scripts/sec-chain-blast-census.mjs", args: () => [] },
 };
 
 const argv = process.argv.slice(2);
