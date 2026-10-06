@@ -1383,6 +1383,31 @@ const TASKS = {
   "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
   // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
   "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
+  // THE feedShort BACKFILL (#552 COWORK #182 part 2). scan and dry are
+  // read-only (the script's store guard refuses anything but GET/MGET/SCAN);
+  // apply SETs report-dates records only, and refuses a checkout without
+  // carryOlderEvents.
+  "write-report-dates-feedshort-scan": {
+    script: "scripts/report-dates-backfill.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+    env: { MODE: "scan" },
+  },
+  "write-report-dates-feedshort-dry": {
+    script: "scripts/report-dates-backfill.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+    env: { MODE: "dry" },
+  },
+  "write-report-dates-feedshort-apply": {
+    script: "scripts/report-dates-backfill.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+    env: { MODE: "apply" },
+  },
 };
 
 const argv = process.argv.slice(2);
