@@ -1405,6 +1405,8 @@ const TASKS = {
   // READS ONLY (Relay B, #553 COWORK #169): every picker screen over the last 60 sessions, one dry build per
   // session cut of the stored Tiingo bars. Refuses any write verb before it is sent. Counts, %, dates, names.
   "write-picker-screen-audit": { script: "scripts/picker-screen-audit.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #178): the Strong Earnings Growth screen in detail. GET + HMGET; symbols, counts, derived %.
+  "write-earnings-growth-census": { script: "scripts/earnings-growth-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
