@@ -1407,6 +1407,8 @@ const TASKS = {
   "write-picker-screen-audit": { script: "scripts/picker-screen-audit.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY (Relay B, #553 COWORK #178): the Strong Earnings Growth screen in detail. GET + HMGET; symbols, counts, derived %.
   "write-earnings-growth-census": { script: "scripts/earnings-growth-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #182): the top 300 by cap missing from the analysis universe, and why. Symbols, ranks, counts.
+  "write-universe-gap-census": { script: "scripts/universe-gap-census.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
