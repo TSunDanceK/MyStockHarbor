@@ -148,12 +148,17 @@ console.log("\n=== 3. THE HEADER IS ACTUALLY SENT ON THE WIRE FETCH ===\n");
 // anywhere in wireProvider.ts would satisfy a whole-file regex while the fetch
 // went out bare. The init object is read from the call site outwards.
 const wireCode = readCodeOnly("lib/server/news/wireProvider.ts");
-const atFetch = wireCode.slice(wireCode.indexOf("fetch(source.url"));
+// Since #553 COWORK #171 the wire poll goes through lib/server/outsideFetch.ts
+// (a deadline, and our own hourly cache in place of Next's fetch cache, whose
+// background refresh ran with no deadline). The request is the same GET.
+const CALL = "cachedOutsideText(3600)(source.url";
+const atFetch = wireCode.slice(wireCode.indexOf(CALL));
 const fetchInit = atFetch.slice(0, 260);
 check(
   "the wire fetch exists and is the only one in the adapter",
-  wireCode.indexOf("fetch(source.url") >= 0 &&
-    (wireCode.match(/\bfetch\(/g) || []).length === 1,
+  wireCode.indexOf(CALL) >= 0 &&
+    (wireCode.match(/\bcachedOutsideText\(/g) || []).length === 1 &&
+    !/(^|[^\w.])fetch\(/m.test(wireCode),
   "a second fetch would need its own header and this assertion would not see it"
 );
 check(
@@ -162,9 +167,9 @@ check(
   "without it globenewswire returns zero bytes for the full adapter budget"
 );
 check(
-  "...and it still uses the render's cache mode",
-  /next:\s*\{\s*revalidate:\s*3600\s*\}/.test(fetchInit),
-  "cell D measured the header against revalidate:3600 specifically"
+  "...and it still refreshes hourly",
+  fetchInit.startsWith("cachedOutsideText(3600)"),
+  "cell D measured the header on an hourly-cached poll; the cache moved from Next's fetch cache to ours (#171), the request did not change"
 );
 check(
   "the adapter imports the shared constant rather than inlining a second literal",
@@ -182,7 +187,7 @@ console.log("\n=== 4. GNEWS IS LEFT ALONE — the leg currently carrying the pag
 const gnewsCode = readCodeOnly("lib/server/news/gnewsProvider.ts");
 check(
   "the gnews harness is reading real code, not an over-stripped file",
-  /fetch\(/.test(gnewsCode) && gnewsCode.length > 500,
+  /cachedOutsideText\(|fetch\(/.test(gnewsCode) && gnewsCode.length > 500,
   "a negative assertion against an empty string passes for the wrong reason"
 );
 check(

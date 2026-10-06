@@ -12,6 +12,7 @@ import {
 } from "@/lib/server/news/text";
 import type { NewsItem } from "@/lib/server/news/types";
 import { unstable_cache } from "next/cache";
+import { cachedOutsideText } from "@/lib/server/outsideFetch";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
@@ -264,14 +265,9 @@ async function fetchYahooChart(
   )}?interval=1d&range=${range}`;
 
   try {
-    const res = await fetch(url, {
-      next: { revalidate: 3600 },
-      headers: YAHOO_FETCH_HEADERS,
-    });
-
-    if (!res.ok) return null;
-
-    const json = await res.json();
+    // Bounded (lib/server/outsideFetch.ts, #553 COWORK #171): Next refreshed the
+    // old `next: { revalidate }` entry after the response with no deadline.
+    const json = JSON.parse(await cachedOutsideText(3600)(url, YAHOO_FETCH_HEADERS));
     const result = json?.chart?.result?.[0];
     return result ?? null;
   } catch {
@@ -328,13 +324,11 @@ async function fetchYahooHistory(symbol: string): Promise<Point[]> {
 
 async function fetchCompanyName(symbol: string): Promise<string> {
   try {
+    // Bounded and cached daily by lib/server/outsideFetch.ts (#553 COWORK #171),
+    // the same entries lib/server/companyNames.ts reads.
     const [nasdaqTxt, otherTxt] = await Promise.all([
-      fetch("https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt", {
-        next: { revalidate: 86400 },
-      }).then((r) => r.text()),
-      fetch("https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt", {
-        next: { revalidate: 86400 },
-      }).then((r) => r.text()),
+      cachedOutsideText(86400)("https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"),
+      cachedOutsideText(86400)("https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"),
     ]);
 
     const rows = `${nasdaqTxt}\n${otherTxt}`.split("\n");
@@ -468,13 +462,8 @@ async function fetchGoogleNewsFallback(
   )}&hl=en-GB&gl=GB&ceid=GB:en`;
 
   try {
-    const res = await fetch(url, {
-      next: { revalidate: 1800 },
-    });
-
-    if (!res.ok) return [];
-
-    const xml = await res.text();
+    // Bounded (lib/server/outsideFetch.ts, #553 COWORK #171).
+    const xml = await cachedOutsideText(1800)(url);
     return parseRss(xml).slice(0, 12);
   } catch {
     return [];
