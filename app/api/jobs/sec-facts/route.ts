@@ -113,7 +113,9 @@ export const maxDuration = 300;
  */
 export const SEC_COLD_PER_RUN = 50;
 export const SEC_REVERIFY_PER_RUN = 150;
-export const SEC_POPULATE_PER_RUN = 300;
+// HALVED TO 150 (#552 COWORK #175): at 300, populate and reverify took the whole
+// facts phase and rewindow did 0; 150 frees ~75 s for it and still grows coverage ~150 a run.
+export const SEC_POPULATE_PER_RUN = 150;
 
 /**
  * Symbols whose SEC REPORT DATES are refreshed per run, from `submissions`.
@@ -173,7 +175,7 @@ export const SEC_REPORT_DATES_BACKFILL_SLICE = 100;
  * the NEXT window change, when the whole populated universe is eligible at
  * once. At 759 SYMBOLS, 5 a run is 152 days — a permanent state rather than a
  * migration. At 25 it is ~31 days, still small enough never to compete with
- * work a reader is waiting on (reverify takes 150 and populate 300 in the same
+ * work a reader is waiting on (reverify takes 150 and populate 150 in the same
  * run), and short enough to actually finish.
  */
 export const SEC_REWINDOW_PER_RUN = 25;
@@ -198,8 +200,8 @@ const REWINDOW_PRIORITY: ReadonlySet<string> = new Set(
  * pressure — a page reading "not loaded yet" is worse than a page reading a
  * figure from an older window — and rewindow drops back to its guaranteed floor.
  *
- * 400 is a ceiling on the BACKLOG, not on the slice. populate takes 300/run, so
- * a backlog under 400 clears in two runs; above it, the queue is growing faster
+ * 400 is a ceiling on the BACKLOG, not on the slice. populate takes 150/run, so
+ * a backlog under 400 clears in three runs; above it, the queue is growing faster
  * than one run drains and the slack is not spare.
  */
 export const SEC_POPULATE_SLACK_CEILING = 400;

@@ -410,7 +410,7 @@ export async function GET(req: NextRequest) {
   // AND THE PICKERS/TIINGO UNIVERSE, LAST (#552 COWORK #158, CODE-A #165
   // option 1). 1,675 eligible stocks had no set and no entry, so no cron
   // queue ever reached them. Seeded here, through the same gate, they join
-  // sec-facts' populate queue: 300 a run, two runs a day. See secSeedUniverse.
+  // sec-facts' populate queue: 150 a run, two runs a day. See secSeedUniverse.
   const seedUniverse = await readSecSeedUniverse();
   const universe = [
     // AND EACH CITED PRIMARY LISTING (#552 COWORK #48): BIP was never in any
