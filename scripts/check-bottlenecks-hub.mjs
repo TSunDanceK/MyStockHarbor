@@ -162,7 +162,7 @@ const RULES = {
     /<a (?=[^>]*class="bnCapexCard")(?=[^>]*href="\/bottlenecks\/capex")[^>]*>[\s\S]*?Follow the money: AI and data-centre capex[\s\S]*?<\/a>/.test(themesHtml) && /<BottleneckThemes themes=\{hub\.themes\} \/>/.test(page),
   "the hero: eyebrow, the one-line title in the h1, three stat tiles, the reworded search, the source note": ({ heroHtml, hub }) =>
     /<h1[^>]*><span[^>]*text-transform:uppercase[^>]*>Stock Bottlenecks<\/span><span[^>]*>Which companies the market can&#x27;t easily do without<\/span><\/h1>/.test(heroHtml) &&
-    new RegExp(`>${hub.stats.stocksMapped}</div><div[^>]*>stocks mapped</div>`).test(heroHtml) && new RegExp(`>${hub.stats.companiesNamed}</div><div[^>]*>companies named</div>`).test(heroHtml) &&
+    new RegExp(`>${hub.stats.stocksMapped}</div><div[^>]*>stocks mapped</div>`).test(heroHtml) && new RegExp(`>about </span>${hub.stats.companiesNamed}</div><div[^>]*>companies named</div>`).test(heroHtml) &&
     new RegExp(`>AMZN <span[^>]*>×${hub.stats.mostShared.count}</span></div><div[^>]*>most shared</div>`).test(heroHtml) &&
     /<label[^>]*>Search a stock: what does it depend on\?<\/label>/.test(heroHtml) && /Dependencies come from public filings and research\. The shares on each stock page are editorial estimates/.test(heroHtml),
   "the web: server-rendered SVG, the top 8 hubs sized by page count, a line per stock naming each, 'N stocks depend on X'": ({ heroHtml, hub, webSrc }) => {

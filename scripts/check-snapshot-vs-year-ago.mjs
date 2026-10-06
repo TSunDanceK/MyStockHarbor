@@ -46,12 +46,15 @@ async function measure(mutate) {
     return markup.slice(start, markup.indexOf("</div></div>", i) + 12);
   };
   const margins = at({ margins: { gross: 45, operating: 30.3, net: 20 }, marginReasons: { gross: null, operating: null, net: null }, yearAgo: { label, eps: 1, gross: 42.9, operating: 30 } });
+  // A LARGE LOSS YEAR (#563 COWORK #126, INTC): the $ floor is the worst year's own figure, -$18.76B, not a stretch of it.
+  const yr = (label, revenue, netIncome, netMargin) => ({ label, short: `'${label.slice(4)}`, revenue, revenueText: null, revenueGap: null, netIncome, netIncomeText: null, profitGap: null, netMargin, oneOff: null, derivedNotes: [] });
+  const bigLoss = at({ annualChart: { reason: null, years: [yr("FY2022", 63.05e9, 8.01e9, 12.7), yr("FY2023", 54.23e9, 1.69e9, 3.1), yr("FY2024", 53.1e9, -18.76e9, -35.3), yr("FY2025", 52.9e9, -0.27e9, -0.5)] } });
   const partial = at({ partial: true, toneLabel: "Partial · 4 of 5 measured", partialNote: "1 of 5 score inputs wasn't measured (EPS growth — diluted EPS negative in both quarters), so this score isn't comparable." });
   return {
     M, view, snap, label,
     html: {
       up: render(eps(1.2, 1.0)), down: render(eps(0.8, 1.0)), narrowed: render(eps(-0.1, -0.3)), widened: render(eps(-0.5, -0.3)),
-      none: render(at({ yearAgo: null, eps: { ...snap.eps, value: 1, emptyReason: null } })), margins: render(margins), partial: render(partial), plain: render(snap),
+      none: render(at({ yearAgo: null, eps: { ...snap.eps, value: 1, emptyReason: null } })), margins: render(margins), partial: render(partial), plain: render(snap), bigLoss: render(bigLoss),
     },
     tile,
   };
@@ -90,6 +93,16 @@ const RULES = {
     M.partialLine("Partial · 4 of 5 measured") === "1 input not measured: tap for why" && M.partialLine("Partial · 3 of 5 measured") === "2 inputs not measured: tap for why" &&
     /<details data-snapshot-partial=""[^>]*><summary[^>]*font-size:var\(--fs-label\)[^>]*>1 input not measured: tap for why<\/summary><div style="[^"]*font-size:var\(--fs-read\)[^"]*">1 of 5 score inputs/.test(html.partial) &&
     (html.partial.match(/1 of 5 score inputs/g) ?? []).length === 1 && html.partial.indexOf("data-snapshot-partial") < html.partial.indexOf("data-snapshot-chart"),
+  "the $ floor is the worst year's figure (-$18.76B), $0 labelled, every bar and dot inside the plot": ({ html }) => {
+    const svg = /data-snapshot-chart="">(<svg[\s\S]*?<\/svg>)/.exec(html.bigLoss)?.[1] ?? "";
+    const left = [...svg.matchAll(/<text data-scale="l"[^>]*>([^<]+)<\/text>/g)].map((m) => m[1]);
+    const ys = [...svg.matchAll(/<rect [^>]*y="([\d.]+)"[^>]*height="([\d.]+)"/g)].map((m) => [Number(m[1]), Number(m[1]) + Number(m[2])]);
+    const dots = [...svg.matchAll(/<circle [^>]*cy="([\d.-]+)"/g)].map((m) => Number(m[1]));
+    const bottom = 150 - 22;
+    return JSON.stringify(left) === JSON.stringify(["$63.05B", "$0", "-$18.76B"]) && /<text data-scale="r"[^>]*>0%<\/text>/.test(svg) &&
+      ys.length === 8 && ys.every(([a, b]) => a >= 22 - 0.01 && b <= bottom + 0.01) && Math.max(...ys.map(([, b]) => b)) > bottom - 0.01 &&
+      dots.length === 4 && dots.every((y) => y >= 22 - 0.01 && y <= bottom + 0.01);
+  },
   "the chart to the card's edges: scale labels inside the plot, the newest margin in the legend, not on the plot": ({ html }) => {
     const svg = /<div style="margin-top:14px" data-snapshot-chart="">(<svg[\s\S]*?<\/svg>)/.exec(html.plain)?.[1] ?? "";
     const legend = /data-snapshot-legend="">([\s\S]*?)<\/div>/.exec(html.plain)?.[1] ?? "";
@@ -110,6 +123,9 @@ const MUTANTS = [
   ["the tiles:", (s) => once("meta={snapshot.marginReasons.gross ?? grossVs.words} tone={snapshot.marginReasons.gross ? undefined : toneOf(grossVs.tone)}", "meta={snapshot.marginReasons.gross}")(s)],
   ["the partial-score", (s) => once('<details data-snapshot-partial="" style={earningsHowStyle}>\n          <summary style={partialSummaryStyle}>{partialLine(snapshot.toneLabel)}</summary>\n          <div style={earningsHowBodyStyle}>{snapshot.partialNote}</div>\n        </details>', "<div style={earningsFootnoteStyle}>{snapshot.partialNote}</div>")(s)],
   ["the chart to", (s) => once("const CHART_PAD_L = 2;", "const CHART_PAD_L = 58;")(s)],
+  // The floor stretched to the margin scale's ratio again: -$175B for INTC.
+  ["the $ floor", (s) => once("const below = moneyMin < 0 ? moneyBelow : pctBelow;", "const below = Math.max(moneyBelow, pctBelow);")(s)],
+  ["the $ floor", (s) => once('{tick(zeroY, "$0", "l", -3)}', "")(s)],
   ["the chart to", (s) => once("{segments.map((d) => (", '{last ? <text data-margin-latest="" x={last.x} y={last.y - 6}>{formatLevel(last.v)}</text> : null}\n        {segments.map((d) => (')(s)],
 ];
 

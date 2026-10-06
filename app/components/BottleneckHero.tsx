@@ -71,7 +71,8 @@ export default function BottleneckHero({ hub, items }: { hub: BottleneckHub; ite
               <div style={tileLabel}>stocks mapped</div>
             </div>
             <div style={tile}>
-              <div style={tileValue}>{stats.companiesNamed}</div>
+              {/* "about" (#563 COWORK #126): a few single-page generic names remain in the count. */}
+              <div style={tileValue}><span style={{ fontSize: "var(--fs-label)", fontWeight: 700 }}>about </span>{stats.companiesNamed}</div>
               <div style={tileLabel}>companies named</div>
             </div>
             <div className="bnTileWide" style={tile}>

@@ -426,9 +426,10 @@ export default function LatestEarningsCard({
 // THE FULL WIDTH FOR THE BARS (#563 COWORK #123): the plot runs to the card's
 // inner edges and the scale labels sit inside it, small and muted: the $ scale
 // on the left, the margin % on the right, in LANES NO MARK REACHES: the top of
-// each scale above the plot, a negative scale's bottom under it. The zero line
-// is the solid one and goes unlabelled (at the edges a "$0" sat on the first
-// and last bars). The newest margin is in the legend, not floating on the plot.
+// each scale above the plot, a negative scale's bottom under it (the $ floor is
+// the worst year's own figure, #126), and "$0" / "0%" on the zero line at the
+// very edges, where the years' slots stop short (CHART_EDGE). The newest margin
+// is in the legend, not floating on the plot.
 // scripts/snapshot-chart-measure.mjs holds it to no label on a label, bar or dot.
 
 const CHART_W = 320;
@@ -439,6 +440,8 @@ const CHART_PAD_T = 22;
 /** Room under the plot for a negative scale's bottom label; a little otherwise. */
 const CHART_PAD_B_NEG = 22;
 const CHART_PAD_B = 4;
+/** The years' slots stop this short of each edge, so the $0 / 0% labels there never meet a bar (#126). */
+const CHART_EDGE = 6;
 
 function moneyTick(v: number): string {
   if (v === 0) return "$0";
@@ -472,15 +475,18 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
   const moneyMin = Math.min(0, ...money);
   const pctMax = Math.max(0, ...margins);
   const pctMin = Math.min(0, ...margins);
-  // How far below zero each scale must reach, as a fraction of its top; the
-  // larger wins for both so the zero lines coincide.
-  const below = Math.max(
-    moneyMax > 0 ? -moneyMin / moneyMax : 0,
-    pctMax > 0 ? -pctMin / pctMax : 0,
-    moneyMax <= 0 || pctMax <= 0 ? 1 : 0,
-  );
+  // How far below zero the plot reaches, as a fraction of its top, shared so the
+  // zero lines coincide. THE $ FLOOR IS THE DATA'S (#563 COWORK #126): with a
+  // loss on the $ scale the plot ends exactly at the worst year's figure, and the
+  // margin scale makes room for its own low point by reaching higher (pTop),
+  // never by stretching the $ floor past the data (INTC read −$175B for a worst
+  // year of −$18.8B). Without a $ loss, the margin's low point sets the floor.
+  const moneyBelow = moneyMax > 0 ? -moneyMin / moneyMax : moneyMin < 0 ? 1 : 0;
+  const pctBelow = pctMax > 0 ? -pctMin / pctMax : pctMin < 0 ? 1 : 0;
+  const below = moneyMin < 0 ? moneyBelow : pctBelow;
   const mTop = moneyMax > 0 ? moneyMax : Math.max(1, -moneyMin);
-  const pTop = pctMax > 0 ? pctMax : Math.max(1, -pctMin);
+  const pTop0 = pctMax > 0 ? pctMax : Math.max(1, -pctMin);
+  const pTop = below > 0 && pctMin < 0 ? Math.max(pTop0, -pctMin / below) : pTop0;
   const mBottom = -below * mTop;
   const pBottom = -below * pTop;
   const padB = below > 0 ? CHART_PAD_B_NEG : CHART_PAD_B;
@@ -489,9 +495,9 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
   const yPct = (v: number) => CHART_PAD_T + ((pTop - v) / (pTop - pBottom)) * plotH;
   const zeroY = yMoney(0);
 
-  const slot = plotW / n;
-  const barW = slot * 0.26;
-  const xOf = (i: number) => CHART_PAD_L + slot * i + slot / 2;
+  const slot = (plotW - 2 * CHART_EDGE) / n;
+  const barW = slot * 0.24;
+  const xOf = (i: number) => CHART_PAD_L + CHART_EDGE + slot * i + slot / 2;
 
   const dots = years
     .map((y, i) => (y.netMargin === null ? null : { x: xOf(i), y: yPct(y.netMargin), v: y.netMargin, i }))
@@ -520,8 +526,8 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
     </text>
   );
   const plotBottom = CHART_PAD_T + plotH;
-  const leftPct = (CHART_PAD_L / CHART_W) * 100;
-  const rightPct = (CHART_PAD_R / CHART_W) * 100;
+  const leftPct = ((CHART_PAD_L + CHART_EDGE) / CHART_W) * 100;
+  const rightPct = ((CHART_PAD_R + CHART_EDGE) / CHART_W) * 100;
 
   return (
     <div style={{ marginTop: 14 }} data-snapshot-chart="">
@@ -530,6 +536,9 @@ function AnnualChart({ chart }: { chart: SnapshotAnnualChart }) {
         <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={CHART_PAD_T} y2={CHART_PAD_T} stroke={C.rule} strokeWidth={0.5} strokeDasharray="2 3" />
         {mBottom < 0 ? <line x1={CHART_PAD_L} x2={CHART_W - CHART_PAD_R} y1={plotBottom} y2={plotBottom} stroke={C.rule} strokeWidth={0.5} strokeDasharray="2 3" /> : null}
         {tick(CHART_PAD_T, moneyTick(mTop), "l", -9)}
+        {/* The $0 / 0% line, labelled at the edges, where no bar stands (#126). */}
+        {tick(zeroY, "$0", "l", -3)}
+        {tick(zeroY, "0%", "r", -3)}
         {/* A scale's bottom only where that scale has a negative: the other may reach down for it. */}
         {mBottom < 0 && moneyMin < 0 ? tick(plotBottom, moneyTick(mBottom), "l", 18) : null}
         {tick(CHART_PAD_T, `${Math.round(pTop)}%`, "r", -9)}
