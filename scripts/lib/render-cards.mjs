@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import { grabConst } from "./source-code.mjs";
 import { grabFunction } from "./earnings-plan.mjs";
+import { splitAdjustSource } from "./split-adjust-source.mjs";
 import ts from "typescript";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -78,6 +79,8 @@ export async function loadCards(mutate = (src) => src) {
     stripImports("lib/server/fxRates.ts"),
     stripImports("lib/server/secCurrency.ts"),
     stripImports("lib/server/secFactCodec.ts"),
+    // THE SPLIT ADJUSTMENT the view (and secValuation below) call at entry.
+    splitAdjustSource(),
     stripImports("lib/server/secEarningsView.ts"),
     // THE CARDS' OTHER TWO SOURCES. SecEarningsCards.tsx imports the tone
     // bands and the trend median from secPresentation and the valuation legs

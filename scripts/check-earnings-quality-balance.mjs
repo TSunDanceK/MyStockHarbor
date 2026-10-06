@@ -61,11 +61,16 @@ function measure(M) {
   intc.cashQuality.operatingCashFlow.derivedNote = "Derived: the quarter is the year-to-date figure less the previous one.";
   intc.cashQuality.freeCashFlow = 4.45e9;
   const lossBoth = structuredClone(A); lossBoth.snapshot.epsYoY = "loss-both";
+  // #552 COWORK #188: TSLA's shape (217%-825%, over the 300% cap) and TXN's
+  // (72%-194%, under it), on AAPL's eight labels, net income $1B a period.
+  const withPcts = (pcts) => { const v = structuredClone(A); v.cashHistory = A.cashHistory.slice(-pcts.length).map((h, i) => ({ ...h, netIncome: 1e9, ocf: pcts[i] * 1e7 })); return v; };
+  const TSLA_PCTS = [217, 288, 454, 527, 610, 700, 760, 825], TXN_PCTS = [72, 95, 110, 130, 150, 170, 185, 194];
   return {
     views,
     cash: Object.fromEntries(SYMS.map((s) => [s, cash(views[s])])),
     bal: Object.fromEntries(SYMS.map((s) => [s, bal(views[s])])),
     behind: cash(behind), negFcf: cash(negFcf), few: cash(few), intc: cash(intc),
+    tslaConv: cash(withPcts(TSLA_PCTS)), txnConv: cash(withPcts(TXN_PCTS)), convLabels: A.cashHistory.slice(-8).map((h) => h.label),
     snap: html(el(M.SecSnapshotCard, { view: lossBoth, pending: null })),
     toneColor: M.toneColor,
   };
@@ -115,10 +120,24 @@ const RULES = {
     const pairs = [["Operating cash flow", ni], ["Free cash flow", ni], ["Spent on equipment", ocf], ["Paid in shares", fcf]];
     return pairs.every(([t, of]) => !(of !== null && of <= 0) || !/%/.test(value(tile(m.cash[s], t))));
   }),
-  "Q4a. a quarter over 200% is drawn to the top with its true label (KGC FY2021, 513%)": (m) => {
+  "Q4a. a period over the 300% cap is drawn to the top, with a break mark and its true label (KGC FY2021, 513%)": (m) => {
     const g = slot(m.cash.KGC, "FY2021");
-    return /^[^>]*data-height="100\.00"/.test(g) && />513%</.test(g) && /class="convBar"/.test(g);
+    return /^[^>]*data-height="100\.00"/.test(g) && /data-clamped="1"/.test(g) && /data-break=""/.test(g) && />513%</.test(g) && /class="convBar"/.test(g);
   },
+  "Q4d. TSLA's shape (217%-825%): heights ordered by value up to the 300% cap, the capped bars break-marked, 100% line at a third (#552 COWORK #188)": (m) => {
+    const h = m.convLabels.map((l) => slot(m.tslaConv, l));
+    const height = (g) => Number((g.match(/data-height="([\d.]+)"/) ?? [])[1]);
+    const ordered = height(h[0]) < height(h[1]) && height(h[1]) < height(h[2]) && Math.abs(height(h[0]) - 72.33) < 0.01;
+    const capped = h.slice(2).every((g) => height(g) === 100 && /data-clamped="1"/.test(g) && /data-break=""/.test(g));
+    const notCapped = h.slice(0, 2).every((g) => /data-clamped="0"/.test(g) && !/data-break=""/.test(g));
+    return ordered && capped && notCapped && /data-line-100=""[^>]*\* 0\.3333/.test(m.tslaConv) && />825%</.test(h[7]);
+  },
+  "Q4e. TXN's shape (72%-194%): the top follows the data (200%), no break marks, 100% line at half": (m) => {
+    const h = m.convLabels.map((l) => slot(m.txnConv, l));
+    return /data-height="97\.00"/.test(h[7]) && !/data-break=""/.test(m.txnConv) && /data-line-100=""[^>]*\* 0\.5000/.test(m.txnConv);
+  },
+  "Q4f. the tap says bars above 300% are cut short and the label shows the real figure": (m) =>
+    /bars above 300% are cut short; the label shows the real figure/.test(m.cash.AAPL.replace(/<!-- -->/g, "")),
   "Q4b. a loss period: a 'loss' marker and no bar (KGC FY2022)": (m) => {
     const g = slot(m.cash.KGC, "FY2022");
     return /^[^>]*data-loss="1"/.test(g) && !/class="convBar"/.test(g) && />loss</.test(g);
@@ -179,7 +198,10 @@ const MUTANTS = [
   ["the n/m guard dropped (a % of a negative figure)", (s) => once(s, `  if (of <= 0) return { ok: false, why: "not-meaningful" };\n`, "")],
   ["green from 0% instead of 100%", (s) => once(s, `return s.pct >= 100 ? "good" : "neutral";`, `return s.pct >= 0 ? "good" : "neutral";`)],
   ["capex and share-based pay inked too", (s) => once(s, `if (!s.ok || tile === "capex" || tile === "sbc") return null;`, `if (!s.ok) return null;`)],
-  ["the 200% clamp removed", (s) => once(s, "(Math.min(Math.max(pct, 0), CONVERSION_MAX_PCT) / CONVERSION_MAX_PCT) * 100", "(Math.max(pct, 0) / CONVERSION_MAX_PCT) * 100")],
+  ["the fixed 200% clip restored (#552 COWORK #188)", (s) => once(s, "const top = Math.min(CONVERSION_MAX_PCT, Math.max(100, Math.ceil(high / CONVERSION_TOP_STEP) * CONVERSION_TOP_STEP));", "const top = 200;")],
+  ["the 300% cap removed", (s) => once(s, "const top = Math.min(CONVERSION_MAX_PCT, Math.max(100, Math.ceil(high / CONVERSION_TOP_STEP) * CONVERSION_TOP_STEP));", "const top = Math.max(100, Math.ceil(high / CONVERSION_TOP_STEP) * CONVERSION_TOP_STEP);")],
+  ["the break mark dropped", (s) => once(s, `{b.clamped ? <span className="convBreak" data-break="" /> : null}`, "{null}")],
+  ["the 100% line on the cap's scale, not the plot's", (s) => once(s, "const linePct = (100 / top) * 100;", "const linePct = (100 / CONVERSION_MAX_PCT) * 100;")],
   ["a loss period no longer marked", (s) => once(s, "const loss = h.netIncome !== null && h.netIncome <= 0;", "const loss = false;")],
   ["the chart shown with too few periods", (s) => once(s, "if (usable < CONVERSION_MIN_PERIODS) {", "if (usable < 1) {")],
   ["net cash and net debt swapped", (s) => once(s, `return net >= 0 ? { kind: "cash", amount: net } : { kind: "debt", amount: -net };`, `return net < 0 ? { kind: "cash", amount: -net } : { kind: "debt", amount: net };`)],

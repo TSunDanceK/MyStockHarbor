@@ -201,6 +201,26 @@ export type TrendLine = {
    * meaningful (marginMoveMeaningful).
    */
   move: { tone: EarningsTone; word: string } | null;
+  /**
+   * THE CHIP'S VERDICT AND ITS COUNT (#552 COWORK #187 §2). The chip used to be
+   * the median's tone beside "N of M" where N was every period MEASURED, so it
+   * read "Growing 8 of 8" on TXN with two of the eight down. Now the chip is the
+   * tone most periods share (ties go to the latest period's tone, then the
+   * median's), and `matched` is how many periods carry it, out of `compared`.
+   * A rate line counts each period's YoY; the margin line counts each period's
+   * move against its year-earlier margin. Null when the line is refused or has
+   * fewer than TREND_MIN_PERIODS comparisons.
+   */
+  chipTone: EarningsTone | null;
+  matched: number | null;
+  compared: number;
+  /**
+   * THE LATEST PERIOD, WHEN IT DISAGREES WITH THE CHIP (#552 COWORK #190): TXN's
+   * margin read "Narrowing 5 of 8" beside a latest quarter up 7.1pp on the year.
+   * The majority is right, but the chip reads as the current state, so the tile
+   * adds "Latest: widening". Null when the latest agrees or has no tone.
+   */
+  latestChip: { tone: EarningsTone; word: string } | null;
 };
 
 export type TrendSummary = {
@@ -250,6 +270,27 @@ function median(xs: number[]): number | null {
 }
 
 /**
+ * THE TONE MOST PERIODS SHARE, and how many share it (#552 COWORK #187 §2).
+ * Ties go to the latest period's tone, then the median's, then the order
+ * good, weak, neutral (a tie between a move and no move names the move).
+ * Exported for the check.
+ */
+export function modalTone(
+  tones: (EarningsTone | null)[],
+  latest: EarningsTone | null,
+  median: EarningsTone | null,
+): { tone: EarningsTone; matched: number } | null {
+  const counts = new Map<EarningsTone, number>();
+  for (const t of tones) if (t) counts.set(t, (counts.get(t) ?? 0) + 1);
+  if (!counts.size) return null;
+  const top = Math.max(...counts.values());
+  const tied = [...counts.keys()].filter((t) => counts.get(t) === top);
+  const tone = (latest && tied.includes(latest) ? latest : median && tied.includes(median) ? median : null)
+    ?? (["good", "weak", "neutral"] as EarningsTone[]).find((t) => tied.includes(t))!;
+  return { tone, matched: top };
+}
+
+/**
  * Summarise the rendered run, NEVER averaging across an n/m.
  *
  * Crossings and absences are counted and excluded, and a line that drops below
@@ -283,10 +324,15 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
           ? `Not measured: ${subject} was a loss in the year-earlier ${w.many}, so a % change isn't meaningful.`
           : `Not measured: ${subject} crossed between profit and loss in these ${w.many}, so a % change isn't meaningful.`
         : `Not measured: needs ${TREND_MIN_PERIODS} comparable ${w.many}, has ${nums.length}.`;
-      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped, reason, latestWords, move: null };
+      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped, reason, latestWords, move: null,
+        chipTone: null, matched: null, compared: nums.length, latestChip: null };
     }
     const m = median(nums);
-    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), latest, latestTone, counted: nums.length, skipped, reason: null, latestWords, move: null };
+    const tone = toneForGrowth(m as Pct);
+    const chip = modalTone(nums.map((n) => toneForGrowth(n)), latestTone, tone);
+    return { label, kind: "rate", value: m, tone, latest, latestTone, counted: nums.length, skipped, reason: null, latestWords, move: null,
+      chipTone: chip?.tone ?? null, matched: chip?.matched ?? null, compared: nums.length,
+      latestChip: chip && latestTone && latestTone !== chip.tone ? { tone: latestTone, word: `Latest: ${growthToneWord(latestTone).toLowerCase()}` } : null };
   };
 
   const growth = view.growth ?? [];
@@ -303,7 +349,16 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
     const newest = view.margins.length ? view.margins[view.margins.length - 1].operating : null;
     // THE DIRECTION, NOT THE LEVEL (#552 COWORK #47): AXTI's typical −15.5%
     // beside a latest 21.9% had no chip, while revenue had "Growing".
-    const moveTone = m !== null && newest !== null && marginMoveMeaningful(m, newest) ? toneForMarginDelta(newest - m) : null;
+    // EACH PERIOD AGAINST ITS YEAR-EARLIER MARGIN (#552 COWORK #187 §2): the
+    // chip is the move most periods made, and the count is how many made it.
+    // HSY read "Widening 8 of 8" while its margin fell; the old chip compared
+    // only the latest with the typical and counted every period measured.
+    const deltas = view.margins.map((r) => r.operatingYoYpp).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+    const newestDelta = view.margins.length ? view.margins[view.margins.length - 1].operatingYoYpp ?? null : null;
+    const chip = deltas.length >= TREND_MIN_PERIODS
+      ? modalTone(deltas.map((d) => toneForMarginDelta(d)), toneForMarginDelta(newestDelta), null)
+      : null;
+    const moveTone = chip && m !== null && newest !== null && marginMoveMeaningful(m, newest) ? chip.tone : null;
     lines.push({
       label: "Operating margin",
       kind: "level",
@@ -319,6 +374,15 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
       reason: null,
       latestWords: null,
       move: moveTone && m !== null && newest !== null ? { tone: moveTone, word: marginToneWord(moveTone, { older: m, newer: newest }) } : null,
+      chipTone: moveTone,
+      matched: moveTone ? chip!.matched : null,
+      compared: deltas.length,
+      latestChip: (() => {
+        const t = toneForMarginDelta(newestDelta);
+        if (!moveTone || !t || t === moveTone || newest === null || newestDelta === null) return null;
+        // The latest period's own move, so the verb follows its own ends (a negative margin improves, not widens).
+        return { tone: t, word: `Latest: ${marginToneWord(t, { older: newest - newestDelta, newer: newest }).toLowerCase()}` };
+      })(),
     });
   }
 
@@ -990,8 +1054,16 @@ export function cashTileTone(tile: "ocf" | "fcf" | "capex" | "sbc", s: ShareOf):
   return s.pct >= 100 ? "good" : "neutral";
 }
 
-/** The chart's fixed scale: one outlier quarter must not flatten the rest. */
-export const CONVERSION_MAX_PCT = 200;
+/**
+ * THE CHART'S CEILING (#552 COWORK #188). The plot top is the window's highest
+ * share, rounded up to the next CONVERSION_TOP_STEP and never below 100% (so the
+ * dashed 100% line sits inside the plot), but never above this: one freak
+ * quarter must not flatten the rest. It was a FIXED 200%, which drew all eight
+ * of TSLA's 217%–825% at the same height.
+ */
+export const CONVERSION_MAX_PCT = 300;
+/** The plot top rounds up to a multiple of this. */
+export const CONVERSION_TOP_STEP = 50;
 /** Fewer usable periods than this and the chart is hidden, with the reason. */
 export const CONVERSION_MIN_PERIODS = 4;
 
@@ -1000,23 +1072,27 @@ export type ConversionBar = {
   /** OCF ÷ net income, %, or null for a loss period or a missing leg. */
   pct: number | null;
   loss: boolean;
-  /** Bar height as % of the 0–200% scale, clamped; 0 below zero. */
+  /** Bar height as % of the plot top (see conversionBars' `top`), clamped; 0 below zero. */
   heightPct: number;
+  /** Above the top: drawn to it with a break mark, labelled with its true figure. */
   clamped: boolean;
 };
 /** Oldest first, as drawn. A loss period has no bar, only its marker. */
-export function conversionBars(history: { label: string; ocf: number | null; netIncome: number | null }[]): { bars: ConversionBar[]; usable: number } {
-  const bars = history.map((h) => {
+export function conversionBars(history: { label: string; ocf: number | null; netIncome: number | null }[]): { bars: ConversionBar[]; usable: number; top: number } {
+  const pcts = history.map((h) => {
     const loss = h.netIncome !== null && h.netIncome <= 0;
     const s = loss ? null : shareOf(h.ocf, h.netIncome);
-    const pct = s && s.ok ? s.pct : null;
-    return {
-      label: h.label, pct, loss,
-      heightPct: pct === null ? 0 : (Math.min(Math.max(pct, 0), CONVERSION_MAX_PCT) / CONVERSION_MAX_PCT) * 100,
-      clamped: pct !== null && pct > CONVERSION_MAX_PCT,
-    };
+    return { label: h.label, loss, pct: s && s.ok ? s.pct : null };
   });
-  return { bars, usable: bars.filter((b) => b.pct !== null).length };
+  // SCALED TO THE DATA, WITHIN [100%, CONVERSION_MAX_PCT].
+  const high = Math.max(0, ...pcts.map((p) => p.pct ?? 0));
+  const top = Math.min(CONVERSION_MAX_PCT, Math.max(100, Math.ceil(high / CONVERSION_TOP_STEP) * CONVERSION_TOP_STEP));
+  const bars = pcts.map(({ label, loss, pct }) => ({
+    label, pct, loss,
+    heightPct: pct === null ? 0 : (Math.min(Math.max(pct, 0), top) / top) * 100,
+    clamped: pct !== null && pct > top,
+  }));
+  return { bars, usable: bars.filter((b) => b.pct !== null).length, top };
 }
 
 /**
@@ -1065,4 +1141,15 @@ export function balanceBars(cash: number | null, sti: number | null, debt: numbe
     cashPct: pct(c), stiPct: pct(s), debtPct: pct(d), liquid,
     gap: { fromPct: pct(Math.min(liquid, d)), toPct: pct(Math.max(liquid, d)), kind: net >= 0 ? "cash" : "debt", amount: Math.abs(net) },
   };
+}
+
+/**
+ * THE "SPLIT-ADJUSTED" LINE (#552 COWORK #187 §1): which split, and what was
+ * done about it, in the fine print of the card whose figures moved.
+ */
+export function splitAdjustedNote(a: { splits: { ratio: number }[] }): string {
+  const name = (k: number) => (k >= 1 ? `${+k.toFixed(2)}-for-1 split` : `1-for-${+(1 / k).toFixed(2)} reverse split`);
+  const which = a.splits.map((s) => name(s.ratio)).join(" and the ");
+  return `Split-adjusted: per-share figures (EPS and dividends per share) from before the company's ${which} ` +
+    `are restated to today's share count, using the split the company's own filings record, so every period compares like for like.`;
 }
