@@ -4,7 +4,8 @@
 // Vercel env and real throwaway git repos:
 //   - production always builds, whatever the branch, message or diff;
 //   - relay/*, mockup/*, claude/*-census, claude/*-study, claude/*-mockup skip;
-//   - [skip preview] in the commit message skips;
+//   - [skip preview] in the commit SUBJECT skips; in the body only, it builds
+//     (#791's own first push was skipped that way, COWORK #166);
 //   - a diff of only reports/, claude/, docs/ or *.md skips; any other file
 //     (scripts/ included) builds;
 //   - a diff that cannot be computed (no previous commit, bad SHA) or is
@@ -79,6 +80,10 @@ function rules(src) {
   }
   // Message.
   want("[skip preview] skips", is(run(src, env({ VERCEL_GIT_COMMIT_MESSAGE: "copy tweak [skip preview]", VERCEL_GIT_PREVIOUS_SHA: code.prev }), code.dir), 0));
+  // #553 COWORK #166: #791's own preview was skipped because its commit BODY
+  // described the rule. A body that mentions the token builds; only the subject counts.
+  want("[skip preview] only in the commit body builds", is(run(src, env({ VERCEL_GIT_COMMIT_MESSAGE: "Vercel: an ignored build step\n\nSkips: a commit message with [skip preview] in it.", VERCEL_GIT_PREVIOUS_SHA: scripts.prev }), scripts.dir), 1));
+  want("a normal PR branch touching scripts/ builds", is(run(src, env({ VERCEL_GIT_COMMIT_REF: "claude/kind-albattani-lxnf2p-ignore", VERCEL_GIT_COMMIT_MESSAGE: "Vercel: ignored build step", VERCEL_GIT_PREVIOUS_SHA: scripts.prev }), scripts.dir), 1));
   // Diffs.
   want("docs-only (reports/, claude/, docs/, *.md) skips", is(run(src, env({ VERCEL_GIT_PREVIOUS_SHA: docs.prev }), docs.dir), 0));
   want("scripts/ changes build", is(run(src, env({ VERCEL_GIT_PREVIOUS_SHA: scripts.prev }), scripts.dir), 1));
@@ -105,7 +110,8 @@ try {
     ["relay/* no longer skips", '  relay/*) skip "read-only relay branch ($ref)" ;;\n', ""],
     ["mockup/* no longer skips", '  mockup/*) skip "mock-up branch ($ref)" ;;\n', ""],
     ["the census/study/mockup pattern widened to every claude/ branch", "^claude/.+-(census|study|mockup)$", "^claude/"],
-    ["[skip preview] ignored", '  skip "commit message says [skip preview]"', '  :'],
+    ["[skip preview] ignored", '  skip "commit subject says [skip preview]"', '  :'],
+    ["[skip preview] matched anywhere in the message (the #791 bug)", 'subject="${subject%%$\'\\n\'*}"\n', ""],
     ["scripts/ treated as docs", "    reports/*|claude/*|docs/*|*.md) ;;", "    reports/*|claude/*|docs/*|scripts/*|*.md) ;;"],
     ["an uncomputable diff skips", '  build "diff since $base could not be computed"', '  skip "diff since $base could not be computed"'],
     ["an empty diff skips", '  build "no changed files found since $base"', '  skip "no changed files found since $base"'],
