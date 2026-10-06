@@ -1397,6 +1397,13 @@ const TASKS = {
     writes: true,
     env: { UNIVERSE: "pickers" },
   },
+  // STOCK SPLITS IN THE STORED PER-SHARE SERIES (#552 COWORK #187 §1). Read-only.
+  "write-split-census": {
+    script: "scripts/split-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
