@@ -190,10 +190,27 @@ async function intcCardsFixture() {
   return styles + body;
 }
 
+/** The price-reaction day slider (#552 COWORK #189) on fixture rows, in the earnings page's frame and styles. */
+async function reactionSliderFixture() {
+  const RC = await import("../app/stock/[symbol]/earnings/ReactionCharts.tsx");
+  const D = await import("../app/stock/[symbol]/earnings/reactionDays.ts");
+  const bars = Array.from({ length: 60 }, (_, i) => ({ date: new Date(Date.UTC(2026, 3, 1) + i * 86400000).toISOString().slice(0, 10), close: 200 + Math.sin(i / 3) * 18 + i }));
+  const spy = bars.map((b, i) => ({ date: b.date, close: 500 + i * 0.4 }));
+  const reports = [2, 12, 22, 32, 42, 50].map((i, k) => ({ label: `Q${(k % 4) + 1} FY202${5 + Math.floor(k / 4)}`, date: bars[i].date, time: k % 2 ? "bmo" : "amc", anchor: { baseIdx: i, reactIdx: i + 1 } }));
+  const styles = ((await earningsPage()).match(/<style[\s\S]*?<\/style>/g) ?? []).join("");
+  const body = renderToStaticMarkup(React.createElement("main", { className: "earningsPage" },
+    React.createElement("div", { className: "earningsWrap" }, React.createElement("section", { className: "contentGrid" },
+      React.createElement("div", { className: "mainColumn" }, React.createElement(RC.PriceReactionCard, {
+        symbol: "TSLA", latest: null, reaction: [{ label: "Q1 FY2026", value: 4.2 }], drift: [], days: D.reactionDayRows(reports, bars, spy),
+        datesFromSec: true, uncoveredLabels: [], noPriceHistoryNote: "" }))))));
+  return styles + body;
+}
+
 const PAGES = [
   { name: "/stock/AAPL", render: stockPage, enforce: true },
   { name: "/markets/spx", render: spxPage, enforce: true },
   { name: "/stock/AAPL/earnings", render: earningsPage, enforce: true },
+  { name: "/stock/TSLA/earnings day slider (fixture)", render: reactionSliderFixture, enforce: true },
   { name: "/earnings-calendar (week fixture)", render: earningsWeekFixture, enforce: true },
   { name: "/stock/AAPL strength note (open)", render: strengthNote, enforce: true },
   { name: "/stock/AAPL performance note (open)", render: performanceNote, enforce: true },

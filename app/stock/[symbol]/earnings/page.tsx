@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
 import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
+import { reactionDayRows } from "./reactionDays";
 import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
 import { TIINGO_CREDIT, TIINGO_URL, readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";
 import {
@@ -106,6 +107,8 @@ type EarningsReactionPoint = {
    * back to this report. See NO_PRICE_HISTORY_NOTE.
    */
   reason: "uncovered" | null;
+  /** The base and reaction sessions in the bars (see computeEarningsReactionDetail). */
+  anchor?: { baseIdx: number; reactIdx: number } | null;
 };
 
 
@@ -148,8 +151,11 @@ const REACTION_SESSION_GAP_DAYS = 7;
 /** Sessions of volume the average needs before a multiple is shown. */
 const VOLUME_MIN_SESSIONS = 20;
 
-function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; volumeSessions?: number | null; drift5Pct: number | null; drift20Pct: number | null; drift5Pending: boolean; drift20Pending: boolean; reason: "uncovered" | null } {
-  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null, drift5Pending: false, drift20Pending: false, reason: null as "uncovered" | null };
+function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; volumeSessions?: number | null; drift5Pct: number | null; drift20Pct: number | null; drift5Pending: boolean; drift20Pending: boolean; reason: "uncovered" | null; anchor: { baseIdx: number; reactIdx: number } | null } {
+  // `anchor` is the base and reaction sessions chosen below -- the day slider
+  // (#552 COWORK #189) walks from the same two, so this stays the one home of
+  // the after-close / before-open rule.
+  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null, drift5Pending: false, drift20Pending: false, reason: null as "uncovered" | null, anchor: null };
   /** The series does not reach this report — a fact about the bars, not the filing. */
   const uncovered = { ...empty, reason: "uncovered" as const };
   if (!row.date || !points.length) return empty;
@@ -234,7 +240,7 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   // horizon: the chart draws a "not yet" marker rather than a bar or a gap.
   const drift5Pending = drift5Pct === null && reactionPct !== null && reactIdx + 4 > points.length - 1;
   const drift20Pending = drift20Pct === null && reactionPct !== null && reactIdx + 19 > points.length - 1;
-  return { reactionPct, volumeMultiple, volumeSessions, drift5Pct, drift20Pct, drift5Pending, drift20Pending, reason: null };
+  return { reactionPct, volumeMultiple, volumeSessions, drift5Pct, drift20Pct, drift5Pending, drift20Pending, reason: null, anchor: { baseIdx, reactIdx } };
 }
 
 
@@ -292,7 +298,10 @@ async function getEarningsData(symbol: string) {
   // FMP fallback the dates arrive in the same round trip that would have to
   // carry them, so bounding would mean a second sequential read — worse than
   // the thing it saves. That path keeps the full series.
-  const BAR_WINDOW_DAYS = 45;
+  // 50, not 45 (#552 COWORK #189): the day slider walks 30 TRADING days past the
+  // reaction session, which is about 42 calendar days plus holidays. The read
+  // is one value per symbol whatever the range, so this costs no command.
+  const BAR_WINDOW_DAYS = 50;
   const shiftIso = (iso: string, days: number) =>
     new Date(Date.parse(iso) + days * 86400000).toISOString().slice(0, 10);
   const barWindow = (() => {
@@ -310,7 +319,7 @@ async function getEarningsData(symbol: string) {
   // same gate through readSurfacePrice (the newer of the EOD close and the IEX
   // trade, labelled). Unset, every read below is what it was.
   const onTiingo = historyOnTiingo("CHARTS");
-  const [cold, chartHistory, latestBars, surfacePrice] = await Promise.all([
+  const [cold, chartHistory, latestBars, surfacePrice, spyHistory] = await Promise.all([
     resolveFactSetForRender(symbol),
     // THE ~110 KB MEASUREMENT THAT ASKED FOR A BOUNDED RANGE now lives on
     // getDailyBars in lib/server/historyCache.ts, with the thing it justifies —
@@ -347,6 +356,14 @@ async function getEarningsData(symbol: string) {
     // reaction card then said "Dates here come from an earnings calendar"
     // (BYND, LAZR). With no SEC dates the card is hidden instead — see
     // hidePriceReaction.
+    // SPY OVER THE SAME DAYS, for the day slider's "vs the market" figure (#552
+    // COWORK #189). The same surface and window as the symbol's bars; only its
+    // percentages reach the page.
+    historyForSurface("CHARTS", "SPY", () =>
+      barWindow
+        ? getDailyBars("SPY", barWindow.from, barWindow.to, { caller: "stock-earnings-spy" })
+        : getDailyHistory("SPY", { caller: "stock-earnings-spy" })
+    ).catch(() => ({ points: [] as Point[], provider: "none" as const })),
   ]);
   // ── THE ANNUAL-ONLY LAYOUT (#535 COWORK #15) ─────────────────────────────
   // A 20-F/40-F filer whose newest stored quarter is over 6 months old: the page is about
@@ -450,6 +467,13 @@ async function getEarningsData(symbol: string) {
     label,
     ...computeEarningsReactionDetail(row, dailyHistory),
   }));
+  // THE DAY SLIDER (#552 COWORK #189): percentages only, from the same anchors.
+  const spyDaily: Point[] = (spyHistory.points as (Point & { partial?: true })[]).filter((p) => !p.partial);
+  const reactionDays = reactionDayRows(
+    reactionRows.map(({ label, row }, i) => ({ label, date: String(row.date), time: row.time, anchor: priceReactionQuarters[i].anchor ?? null })),
+    dailyHistory,
+    spyDaily,
+  );
 
   // ── THE NEXT REPORT ──────────────────────────────────────────────────────
   //
@@ -509,7 +533,7 @@ async function getEarningsData(symbol: string) {
 
   return {
     earningsRows, completedRows, latest, next, nextReport,
-    priceReactionQuarters, score, secView, cold, annualForm, hidePriceReaction,
+    priceReactionQuarters, reactionDays, score, secView, cold, annualForm, hidePriceReaction,
     valuation, latestClose, latestCloseOn, latestPriceLabel, pricesFromTiingo,
     /**
      * THE DATE THIS RENDER RAN, read once here rather than inside a component.
@@ -915,6 +939,26 @@ export default async function StockEarningsPage({ params }: Props) {
         .convPlot { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; width: 100%; height: calc(var(--conv-plot) + 1.5em); font-size: var(--fs-label); }
         .convBar { position: relative; display: block; width: min(1.6rem, 70%); border-radius: 3px 3px 0 0; }
         .convBreak { position: absolute; left: -1px; right: -1px; top: 18%; height: 7px; background: linear-gradient(135deg, transparent 35%, #0b1220 35%, #0b1220 65%, transparent 65%) 0 0 / 7px 7px repeat-x; }
+        /* THE DAY SLIDER (#552 COWORK #189). Two columns, stacked on a phone. */
+        .rds { margin-top: 10px; }
+        .rdsAll { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; font-size: var(--fs-label); color: #cbd5e1; margin-bottom: 8px; }
+        .rdsAll .rdsRange { flex: 1 1 10rem; max-width: 22rem; }
+        .rdsReset { background: none; border: 0; padding: 0; color: #93c5fd; font: inherit; text-decoration: underline; cursor: pointer; }
+        .rdsRows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+        .rdsRow { display: grid; grid-template-columns: minmax(8.5rem, 11rem) minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+        .rdsWhen { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+        .rdsLabel { font-weight: 800; color: #f1f5f9; font-size: var(--fs-read); }
+        .rdsDate { color: #94a3b8; font-size: var(--fs-label); }
+        .rdsTag { font-size: var(--fs-fine); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.4); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+        .rdsControl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; }
+        .rdsRange { width: 100%; accent-color: #60a5fa; min-height: 24px; }
+        .rdsReadout { font-size: var(--fs-read); color: #e2e8f0; overflow-wrap: anywhere; }
+        .rdsTo { color: #94a3b8; font-size: var(--fs-label); }
+        .rdsMarket { color: #94a3b8; font-size: var(--fs-label); }
+        .rdsBar { position: relative; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.05); }
+        .rdsZero { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: rgba(226,232,240,0.5); }
+        .rdsFill { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+        @media (max-width: 560px) { .rdsRow { grid-template-columns: minmax(0, 1fr); } }
         .convPct { font-weight: 800; color: #cbd5e1; white-space: nowrap; line-height: 1.5; }
         .convLoss { font-weight: 700; color: #94a3b8; line-height: 1.5; }
         .convLatest .convPct, .convLatest .convPeriod { color: #f8fafc; font-weight: 900; }
@@ -1180,6 +1224,7 @@ export default async function StockEarningsPage({ params }: Props) {
                 latest={latestReaction ? { label: latestReaction.label, reactionPct: latestReaction.reactionPct, volumeMultiple: latestReaction.volumeMultiple, volumeSessions: latestReaction.volumeSessions ?? null } : null}
                 reaction={reactionData}
                 drift={driftQuarters}
+                days={data.reactionDays}
                 datesFromSec={data.datesFromSec}
                 uncoveredLabels={uncoveredLabels}
                 noPriceHistoryNote={NO_PRICE_HISTORY_NOTE}
