@@ -32,7 +32,7 @@ export function PositionBar({ pos, ticks = [], colour = "rgba(241,245,249,0.9)" 
 
 const price = (v: number) => `$${v.toFixed(2)}`;
 
-/** The day's high on top (green), the low below (red); today's candle on the 52-week range sits beside them (DayCandle). */
+/** The day's high on top (green), the low below (red); today's candle on today's range sits beside them (DayCandle). */
 export function DayRange({ low, high }: { low: number | null | undefined; high: number | null | undefined; /** Kept for the call site; the candle shows it now. */ last?: number | null }) {
   if (typeof low !== "number" || typeof high !== "number" || !Number.isFinite(low) || !Number.isFinite(high)) return <div className="stock-stat-value">—</div>;
   const row: CSSProperties = { display: "flex", alignItems: "baseline", gap: 6, fontSize: "0.9375rem", fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.2, fontVariantNumeric: "tabular-nums" };
@@ -65,20 +65,21 @@ export function TrendSpark({ closes, colour }: { closes: readonly number[]; colo
 const behind: CSSProperties = { position: "absolute", left: 10, right: 10, bottom: 10, width: "calc(100% - 20px)", height: "55%", pointerEvents: "none" };
 
 /**
- * Today's candle on a faint 52-week track, in a 26 px column at the cell's right
- * edge starting below the label (#563 COWORK #114: visible at a glance): a 6 px
- * track, an 8 px body (a 1 px stroke keeps a flat day at least ~2 px), a
- * 1.25 px wick and a small tick at the last price.
+ * Today's candle on today's own range (#563 COWORK #123; the 52-week track is
+ * gone, its range stays in words), in a 26 px column at the cell's right edge
+ * starting below the label (#114): an 8 px body, green when last ≥ open, red
+ * below (a 1 px stroke keeps a flat day at least ~2 px), a lighter wick in the
+ * same colour, and a small tick at the last price.
  */
-export function DayCandle({ open, high, low, last, yearLow, yearHigh }: { open?: number | null; high?: number | null; low?: number | null; last?: number | null; yearLow?: number | null; yearHigh?: number | null }) {
-  const c = dayCandle({ open, high, low, last, yearLow, yearHigh });
+export function DayCandle({ open, high, low, last }: { open?: number | null; high?: number | null; low?: number | null; last?: number | null }) {
+  const c = dayCandle({ open, high, low, last });
   if (!c) return null;
   const colour = c.up ? UP : DOWN;
+  // The wick in the body's colour, lighter (#563 COWORK #123).
   return (
     <svg className="hsCandle" data-up={c.up ? "1" : "0"} aria-hidden="true" focusable="false" viewBox="0 0 26 100" preserveAspectRatio="none"
-      style={{ position: "absolute", right: 10, top: "calc(12px + 1.5rem)", bottom: 12, width: 26, height: "calc(100% - 24px - 1.5rem)", opacity: 0.7, pointerEvents: "none" }}>
-      {c.onYear ? <rect className="hsYear" x={10} y={0} width={6} height={100} rx={3} fill="rgba(255,255,255,0.14)" /> : null}
-      <line className="hsWick" x1={13} x2={13} y1={c.wickTop} y2={c.wickBottom} stroke={colour} strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
+      style={{ position: "absolute", right: 10, top: "calc(12px + 1.5rem)", bottom: 12, width: 26, height: "calc(100% - 24px - 1.5rem)", opacity: 0.8, pointerEvents: "none" }}>
+      <line className="hsWick" x1={13} x2={13} y1={c.wickTop} y2={c.wickBottom} stroke={colour} strokeOpacity={0.6} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
       <rect className="hsBody" x={9} y={c.bodyTop} width={8} height={c.bodyBottom - c.bodyTop} fill={colour} stroke={colour} strokeWidth={1} vectorEffect="non-scaling-stroke" />
       <line className="hsLast" x1={5} x2={21} y1={c.lastY} y2={c.lastY} stroke="rgba(241,245,249,0.85)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
     </svg>

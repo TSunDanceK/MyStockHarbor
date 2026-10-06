@@ -58,23 +58,26 @@ const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinit
 const yOn = (v: number, lo: number, hi: number, h: number) => (hi > lo ? h - ((v - lo) / (hi - lo)) * h : h / 2);
 
 /**
- * Today's candle on the 52-week range (both as y in % of the track, 0 = the
- * 52-week high): the wick low–high, the body open–last (at least MIN_BODY_PCT
- * tall, so a flat day still draws), green when last ≥ open. Without a 52-week
- * range the day's own range fills the track. Null without the day's figures.
+ * Today's candle on TODAY'S RANGE (#563 COWORK #123: on the 52-week range a
+ * whole day was a few pixels): y in % of the column, the day's high at
+ * CANDLE_PAD_PCT from the top and its low CANDLE_PAD_PCT from the bottom. The
+ * wick low–high, the body open–last (at least MIN_BODY_PCT tall, so a flat day
+ * still draws), green when last ≥ open. The 52-week range stays in words
+ * under the cell, not in the graphic. Null without the day's figures.
  */
 export const MIN_BODY_PCT = 2;
-export function dayCandle(q: { open?: number | null; high?: number | null; low?: number | null; last?: number | null; yearLow?: number | null; yearHigh?: number | null }):
-  { wickTop: number; wickBottom: number; bodyTop: number; bodyBottom: number; lastY: number; up: boolean; onYear: boolean } | null {
+export const CANDLE_PAD_PCT = 8;
+export function dayCandle(q: { open?: number | null; high?: number | null; low?: number | null; last?: number | null }):
+  { wickTop: number; wickBottom: number; bodyTop: number; bodyBottom: number; lastY: number; up: boolean } | null {
   const { high, low, last } = q;
   if (!fin(high) || !fin(low) || !fin(last) || high < low) return null;
   const open = fin(q.open) ? q.open : last;
-  const onYear = fin(q.yearLow) && fin(q.yearHigh) && q.yearHigh > q.yearLow;
-  const lo = onYear ? Math.min(q.yearLow as number, low) : low, hi = onYear ? Math.max(q.yearHigh as number, high) : high;
-  const y = (v: number) => (hi > lo ? ((hi - v) / (hi - lo)) * 100 : 50);
+  // The open and last sit inside the day's range; clamp in case a feed's figures disagree by a tick.
+  const lo = Math.min(low, open, last), hi = Math.max(high, open, last);
+  const y = (v: number) => (hi > lo ? CANDLE_PAD_PCT + ((hi - v) / (hi - lo)) * (100 - 2 * CANDLE_PAD_PCT) : 50);
   let bodyTop = y(Math.max(open, last)), bodyBottom = y(Math.min(open, last));
   if (bodyBottom - bodyTop < MIN_BODY_PCT) { const mid = (bodyTop + bodyBottom) / 2; bodyTop = mid - MIN_BODY_PCT / 2; bodyBottom = mid + MIN_BODY_PCT / 2; }
-  return { wickTop: y(high), wickBottom: y(low), bodyTop, bodyBottom, lastY: y(last), up: last >= open, onYear };
+  return { wickTop: y(hi), wickBottom: y(lo), bodyTop, bodyBottom, lastY: y(last), up: last >= open };
 }
 
 /**

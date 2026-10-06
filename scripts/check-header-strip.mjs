@@ -57,24 +57,30 @@ const RULES = {
     return agree && M.changeDirection(null) === null && M.changeAria(-2.5, -1.1) === "Down 2.50 (1.10%) today" &&
       /<PriceChange change=\{quote\?\.change\} pct=\{quote\?\.changePercentage\} label=\{formatChangeLabel\(quote\?\.change, quote\?\.changePercentage\)!\} \/>/.test(M.page);
   },
-  "the day range: the high on top in green, the low below in red; today's candle on the 52-week track, green when last ≥ open": ({ M }) => {
+  "the day range: the high on top in green, the low below in red; today's candle on today's range, green when last ≥ open, red below": ({ M }) => {
     const out = html(M, "DayRange", { low: 100, high: 110, last: 107.5 });
     const hi = out.indexOf("hsHigh"), lo = out.indexOf("hsLow");
-    const up = M.dayCandle({ open: 102, high: 110, low: 100, last: 107.5, yearLow: 90, yearHigh: 140 }), down = M.dayCandle({ open: 108, high: 110, low: 100, last: 101, yearLow: 90, yearHigh: 140 });
-    const flat = M.dayCandle({ open: 11.24, high: 11.24, low: 11.24, last: 11.24, yearLow: 11.24, yearHigh: 13.67 }), pre = M.dayCandle({ open: null, high: 110, low: 100, last: 105 });
-    const svg = html(M, "DayCandle", { open: 108, high: 110, low: 100, last: 101, yearLow: 90, yearHigh: 140 });
+    // #563 COWORK #123: the column is today's range (high at 8%, low at 92%), not the 52-week one.
+    const up = M.dayCandle({ open: 102, high: 110, low: 100, last: 107.5 }), down = M.dayCandle({ open: 108, high: 110, low: 100, last: 101 });
+    const flat = M.dayCandle({ open: 11.24, high: 11.24, low: 11.24, last: 11.24 }), pre = M.dayCandle({ open: null, high: 110, low: 100, last: 105 });
+    const intc = M.dayCandle({ open: 117.26, high: 118.19, low: 112.91, last: 114.47 });
+    const svg = html(M, "DayCandle", { open: 108, high: 110, low: 100, last: 101 }), svgUp = html(M, "DayCandle", { open: 102, high: 110, low: 100, last: 107.5 });
+    const near = (a, b) => Math.abs(a - b) < 1e-9;
     return hi > 0 && lo > hi && /hsHigh" style="[^"]*color:#22c55e/.test(out) && /hsLow" style="[^"]*color:#ef4444/.test(out) && out.includes("$110.00") && out.includes("$100.00") &&
       html(M, "DayRange", { low: null, high: 110, last: 100 }).includes("—") &&
-      up.up && !down.up && Math.abs(up.wickTop - 60) < 1e-9 && Math.abs(up.wickBottom - 80) < 1e-9 && Math.abs(up.bodyTop - 65) < 1e-9 && Math.abs(up.bodyBottom - 76) < 1e-9 &&
-      flat.up && flat.bodyBottom - flat.bodyTop >= M.MIN_BODY_PCT - 1e-9 && flat.wickTop === flat.wickBottom && !pre.onYear && pre.wickTop === 0 && pre.wickBottom === 100 &&
+      M.CANDLE_PAD_PCT === 8 && up.up && !down.up && near(up.wickTop, 8) && near(up.wickBottom, 92) && near(up.bodyTop, 29) && near(up.bodyBottom, 75.2) && near(down.lastY, 83.6) &&
+      !intc.up && intc.bodyBottom - intc.bodyTop > 40 &&
+      flat.up && flat.bodyBottom - flat.bodyTop >= M.MIN_BODY_PCT - 1e-9 && flat.wickTop === flat.wickBottom && near(pre.bodyBottom - pre.bodyTop, M.MIN_BODY_PCT) &&
       M.dayCandle({ high: null, low: 1, last: 1 }) === null &&
-      /<svg class="hsCandle" data-up="0" aria-hidden="true"/.test(svg) && /class="hsBody"[^>]*fill="#ef4444"/.test(svg) && /class="hsYear"/.test(svg) &&
-      // A column wide enough to read (#114): 26 px, starting below the label; a 6 px track, an 8 px body, a last-price tick.
-      /viewBox="0 0 26 100"/.test(svg) && /width:26px/.test(svg) && /top:calc\(12px \+ 1\.5rem\)/.test(svg) && /class="hsYear" x="10" y="0" width="6"/.test(svg) &&
-      /class="hsBody" x="9" y="[\d.]+" width="8"/.test(svg) && /class="hsLast"/.test(svg) && Math.abs(down.lastY - 78) < 1e-9 &&
-      /<DayCandle open=\{quote\?\.open\} high=\{quote\?\.dayHigh\} low=\{quote\?\.dayLow\} last=\{quote\?\.price\} yearLow=\{quote\?\.yearLow\} yearHigh=\{quote\?\.yearHigh\} \/>/.test(M.page) &&
+      /<svg class="hsCandle" data-up="0" aria-hidden="true"/.test(svg) && /class="hsBody"[^>]*fill="#ef4444"/.test(svg) && /class="hsWick"[^>]*stroke="#ef4444" stroke-opacity="0.6"/.test(svg) &&
+      /class="hsBody"[^>]*fill="#22c55e"/.test(svgUp) && !/hsYear/.test(svg) &&
+      // A column wide enough to read (#114): 26 px, starting below the label; an 8 px body, a last-price tick.
+      /viewBox="0 0 26 100"/.test(svg) && /width:26px/.test(svg) && /top:calc\(12px \+ 1\.5rem\)/.test(svg) &&
+      /class="hsBody" x="9" y="[\d.]+" width="8"/.test(svg) && /class="hsLast"/.test(svg) &&
+      /<DayCandle open=\{quote\?\.open\} high=\{quote\?\.dayHigh\} low=\{quote\?\.dayLow\} last=\{quote\?\.price\} \/>/.test(M.page) &&
       /<DayRange low=\{quote\?\.dayLow\} high=\{quote\?\.dayHigh\} last=\{quote\?\.price\} \/>\s*<div className="stock-stat-sub">52wk <span style=\{\{ whiteSpace: "nowrap" \}\}>\{formatRange\(quote\?\.yearLow, quote\?\.yearHigh\)\}<\/span><\/div>/.test(M.page);
   },
+
   "the Trend score's line is decorative (aria-hidden), over the chart's window, in the score's colour; the number and word stay": ({ M }) => {
     const closes = Array.from({ length: 300 }, (_, i) => 100 + Math.sin(i / 9) * 10);
     const out = html(M, "TrendSpark", { closes, colour: "#22c55e" });
@@ -163,7 +169,9 @@ const MUTANTS = [
   [R[0], "lib", (s) => s.replace('export const ARROW: Record<Direction, string> = { up: "▲", down: "▼", flat: "" };', 'export const ARROW: Record<Direction, string> = { up: "▼", down: "▲", flat: "" };')],
   [R[0], "parts", (s) => s.replace(' aria-label={changeAria(change, pct) ?? undefined}', "")],
   [R[1], "parts", (s) => s.replace('<div className="hsHigh" style={{ ...row, color: UP }}><span style={tag}>High</span>{price(high)}</div>\n      <div className="hsLow" style={{ ...row, color: DOWN }}><span style={tag}>Low</span>{price(low)}</div>', '<div className="hsLow" style={{ ...row, color: DOWN }}><span style={tag}>Low</span>{price(low)}</div>\n      <div className="hsHigh" style={{ ...row, color: UP }}><span style={tag}>High</span>{price(high)}</div>')],
-  [R[1], "lib", (s) => s.replace("up: last >= open, onYear", "up: last > open + 1, onYear")],
+  [R[1], "lib", (s) => s.replace("up: last >= open };", "up: last > open + 1 };")],
+  // Back on the 52-week range: the day shrinks to a few pixels again.
+  [R[1], "lib", (s) => s.replace("const lo = Math.min(low, open, last), hi = Math.max(high, open, last);", "const lo = Math.min(low, open, last) * 0.3, hi = Math.max(high, open, last) * 1.25;")],
   [R[1], "lib", (s) => s.replace("if (bodyBottom - bodyTop < MIN_BODY_PCT) {", "if (false) {")],
   [R[1], "parts", (s) => s.replace("const colour = c.up ? UP : DOWN;", "const colour = c.up ? DOWN : UP;")],
   [R[2], "parts", (s) => s.replace('<svg className="hsSpark" aria-hidden="true" focusable="false"', '<svg className="hsSpark" role="img" focusable="false"')],
