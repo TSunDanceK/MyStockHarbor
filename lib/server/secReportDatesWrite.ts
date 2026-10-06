@@ -11,7 +11,7 @@ import {
   latestResultsAnnouncement, pairingPeriodEnds, pendingResults,
   type NextReportEstimate, type PendingResults, type ReportEvent, type Submissions,
 } from "./secReportDates";
-import { latestResults, writeReportDates, STORED_EVENT_LIMIT, type StoredReportDates } from "./secReportDatesStore";
+import { latestResults, readReportDatesChecked, writeReportDates, STORED_EVENT_LIMIT, type StoredReportDates } from "./secReportDatesStore";
 import { recordResultsDays } from "./secResultsDays";
 import { predecessorCikFor } from "./secSuccession";
 import type { StoredFactSet } from "./secFactCodec";
@@ -28,6 +28,7 @@ export function buildReportDatesRecord(
   subs: Submissions,
   todayIso: string,
   nowIso: string,
+  prior: StoredReportDates | null = null,
 ): StoredReportDates {
   const quarterEnds = set.quarters.map((p) => p.e).filter(Boolean);
   const yearEnds = set.years.map((p) => p.e).filter(Boolean);
@@ -39,8 +40,10 @@ export function buildReportDatesRecord(
   // pairingPeriodEnds): the set lags its filings, and a 2.02 must not be
   // grouped into last quarter or dropped past the 120-day window.
   const pairing = resultsPairing(subs, pairingPeriodEnds(quarterEnds, yearEnds, subs));
-  const events = pairing.events
-    .filter((e) => e.periodEnd)
+  // MERGED WITH THE STORED RECORD, NOT REBUILT FROM `recent` ALONE (#552
+  // COWORK #182): see carryOlderEvents. The carried events feed the estimate
+  // below, so a backfilled history counts toward the bar.
+  const events = carryOlderEvents(pairing.events.filter((e) => e.periodEnd), prior, cik, subs)
     .slice(0, STORED_EVENT_LIMIT);
   const earlyNonResults = earlyNonResultsPattern(pairing.periods);
   // ROLLED FORWARD PAST WHAT HAS ALREADY BEEN REPORTED. The fact set
@@ -88,6 +91,38 @@ export function buildReportDatesRecord(
     feedShort: feedIsShort(subs, todayIso),
     earlyNonResults,
   };
+}
+
+/**
+ * KEEP WHAT `recent` CAN NO LONGER SEE (#552 COWORK #182, the banks).
+ *
+ * SEC's `recent` block holds about 1,000 filings. For JPM, BAC, GS, WFC and MS
+ * that is one year (thousands of 424B2 notes), so a record rebuilt from it
+ * alone held 3-4 results events, and every nightly rebuild threw away whatever
+ * a backfill from the older `filings.files` pages had added.
+ *
+ * So a stored event survives the rebuild when it is OLDER than the oldest
+ * filing in `recent` -- the part this payload cannot speak for -- and its
+ * period end is not already among the fresh events (the fresh pairing wins any
+ * overlap). An event inside `recent`'s span is never carried: if the fresh
+ * pairing dropped it, that is the pairing's answer, not a gap. A prior record
+ * for another CIK (a reassigned symbol) carries nothing. Newest first, the
+ * order resultsPairing returns.
+ */
+export function carryOlderEvents(
+  fresh: ReportEvent[],
+  prior: StoredReportDates | null,
+  cik: string,
+  subs: Submissions,
+): ReportEvent[] {
+  if (!prior || String(prior.cik) !== String(cik) || !Array.isArray(prior.events)) return fresh;
+  const dates = (subs.filings?.recent?.filingDate ?? []).filter((d): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d));
+  if (!dates.length) return fresh;
+  const oldest = dates.reduce((m, d) => (d < m ? d : m));
+  const have = new Set(fresh.map((e) => e.periodEnd));
+  const older = prior.events.filter((e) => e?.periodEnd && typeof e.announcedOn === "string" && e.announcedOn < oldest && !have.has(e.periodEnd));
+  if (!older.length) return fresh;
+  return [...fresh, ...older].sort((a, b) => (a.announcedOn < b.announcedOn ? 1 : a.announcedOn > b.announcedOn ? -1 : 0));
 }
 
 /**
@@ -187,7 +222,17 @@ export async function buildAndWriteReportDates(
   subs: Submissions,
   todayIso: string,
 ): Promise<{ ok: boolean; events: ReportEvent[]; next: NextReportEstimate; pending: PendingResults | null }> {
-  const rec = buildReportDatesRecord(symbol, cik, set, subs, todayIso, new Date().toISOString());
+  // THE STORED RECORD, READ ONLY WHEN OLDER PAGES EXIST: with no
+  // `filings.files` the list is whole and nothing can be older than `recent`,
+  // so most filers cost no extra command. A FAILED read skips the write -- a
+  // rebuild without the prior record would wipe the history it carries.
+  let prior: StoredReportDates | null = null;
+  if (Array.isArray(subs.filings?.files) && subs.filings.files.length > 0) {
+    const got = await readReportDatesChecked(symbol);
+    if (!got.ok) return { ok: false, events: [], next: { kind: "none", reason: "report-dates read failed" }, pending: null };
+    prior = got.rec;
+  }
+  const rec = buildReportDatesRecord(symbol, cik, set, subs, todayIso, new Date().toISOString(), prior);
   const ok = await writeReportDates(rec);
   // THE GRID'S DAY INDEX FOLLOWS THE RECORD (lib/server/secResultsDays.ts).
   if (ok) await recordResultsDays(symbol, rec);

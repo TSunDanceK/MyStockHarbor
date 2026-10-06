@@ -171,6 +171,62 @@ console.log("\n2b. JPM: a short filing list is named as ours, not the filer's");
   check("MUTATION: short-feed branch removed → JPM blamed for 'too few periods' again (caught)", gm.mod.outlookFrom("JPM", rec, TODAY).reason === "thin-history");
 }
 
+console.log("\n2c. JPM: a rebuild keeps the history `recent` can no longer see (#552 COWORK #182)");
+{
+  const g = await loadOutlookGraph();
+  const { outlookFrom } = g.mod;
+  const set = setOf(ENDS, YEARS);
+  // THE FIXTURE: a filer whose `recent` covers ONE year (the last four
+  // quarters, then a year of 424B2 notes), with older pages. `full` is the
+  // record a backfill from those pages would have stored.
+  const yearRows = history(ALL.slice(-4)).concat(Array.from({ length: 40 }, (_, i) => row("424B2", "", plus("2025-10-01", i * 9))));
+  const shortSubs = subsOf(yearRows.sort((a, b) => (a.filed < b.filed ? 1 : -1)), [{ name: "CIK0000019617-submissions-001.json" }]);
+  const full = W.buildReportDatesRecord("JPM", "19617", set, subsOf(history(ALL)), TODAY, NOW);
+  const alone = W.buildReportDatesRecord("JPM", "19617", set, shortSubs, TODAY, NOW);
+  const kept = W.buildReportDatesRecord("JPM", "19617", set, shortSubs, TODAY, NOW, full);
+  const ends = (r) => r.events.map((e) => e.periodEnd).join(",");
+  check("rebuilt from a one-year `recent` alone, the record is thin (the bug)", alone.events.length <= 4, String(alone.events.length));
+  check("with the stored record, every older event survives, newest first",
+    ends(kept) === ends(full) && kept.events.length >= 12, `${kept.events.length} · ${ends(kept)}`);
+  check("...and the estimate reads the carried history (no longer refused as short or thin)",
+    outlookFrom("JPM", kept, TODAY).kind !== "no-estimate" && outlookFrom("JPM", alone, TODAY).kind === "no-estimate",
+    `${outlookFrom("JPM", kept, TODAY).kind} vs ${outlookFrom("JPM", alone, TODAY).reason}`);
+  const again = W.buildReportDatesRecord("JPM", "19617", set, shortSubs, TODAY, NOW, kept);
+  check("the next refresh keeps it too (rebuilt on its own output: unchanged)", ends(again) === ends(kept));
+  const oldest = shortSubs.filings.recent.filingDate.reduce((m, d) => (d < m ? d : m));
+  // INSIDE `recent`'s span, the fresh pairing is the answer: a stored event it
+  // no longer produces is dropped, and a stored event for a period it does
+  // produce loses to the fresh one.
+  const inSpan = { ...full.events[0], periodEnd: "2026-05-15", announcedOn: plus(oldest, 30), accession: "in-span" };
+  // Announced BEFORE `recent`'s oldest filing, so only the period-end dedupe stops it.
+  const stale = { ...full.events[0], announcedOn: plus(oldest, -1), accession: "stale-accession" };
+  const withExtra = { ...full, events: [stale, inSpan, ...full.events.slice(1)] };
+  const k2 = W.buildReportDatesRecord("JPM", "19617", set, shortSubs, TODAY, NOW, withExtra);
+  check("a stored event inside `recent`'s span that the fresh pairing dropped is not carried", !k2.events.some((e) => e.accession === "in-span"));
+  check("an overlapping period keeps the fresh event, once", !k2.events.some((e) => e.accession === "stale-accession") &&
+    k2.events.filter((e) => e.periodEnd === full.events[0].periodEnd).length === 1);
+  check("a stored record for another CIK (a reassigned symbol) carries nothing",
+    W.buildReportDatesRecord("JPM", "19617", set, shortSubs, TODAY, NOW, { ...full, cik: "99999" }).events.length === alone.events.length);
+  check("a filer with a whole list is unchanged by a prior record", ends(W.buildReportDatesRecord("JPM", "19617", set, subsOf(history(ALL)), TODAY, NOW, full)) === ends(full));
+  // THE WRITER: reads the stored record only when older pages exist, and a
+  // failed read skips the write instead of wiping the history.
+  const WSRC = readCodeOnly("lib/server/secReportDatesWrite.ts");
+  check("buildAndWriteReportDates reads the prior record only with older pages, and a failed read never writes",
+    /if \(Array\.isArray\(subs\.filings\?\.files\) && subs\.filings\.files\.length > 0\) \{\s*const got = await readReportDatesChecked\(symbol\);\s*if \(!got\.ok\) return \{ ok: false,/.test(WSRC) &&
+      /buildReportDatesRecord\(symbol, cik, set, subs, todayIso, new Date\(\)\.toISOString\(\), prior\)/.test(WSRC) &&
+      WSRC.indexOf("const got = await readReportDatesChecked(symbol)") < WSRC.indexOf("const ok = await writeReportDates(rec)"));
+  // MUTATION: the old events dropped (the rebuild-from-recent behaviour).
+  const SRC2 = fs.readFileSync("lib/server/secReportDatesWrite.ts", "utf8");
+  const A2 = "  if (!older.length) return fresh;";
+  if (SRC2.split(A2).length !== 2) throw new Error("carry mutation anchor must match once");
+  const tmp2 = `lib/server/.check-nrf-carry-${process.pid}.ts`;
+  fs.writeFileSync(tmp2, SRC2.replace(A2, "  return fresh;"));
+  let M2;
+  try { M2 = await import(`../${tmp2}`); } finally { fs.rmSync(tmp2, { force: true }); }
+  check("MUTATION: the stored older events dropped → JPM back to a thin record (caught)",
+    M2.buildReportDatesRecord("JPM", "19617", set, shortSubs, TODAY, NOW, full).events.length <= 4);
+}
+
 console.log("\n3. WDFC: a cold fill seeds the report-dates record");
 {
   const set = setOf(["2025-11-30", "2026-02-28", "2026-05-31"], ["2024-08-31", "2025-08-31"]);
