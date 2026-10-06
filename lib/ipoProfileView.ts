@@ -42,8 +42,17 @@ export const PROFILE_FORMS = /^(S-1|S-1\/A|F-1|F-1\/A|424B1|424B4|8-A12B)$/;
 
 /** SIC 6770 (blank checks) or a name that says "blank check": a SPAC. */
 export function isSpac(sic: string | null | undefined, company: string): boolean {
-  return String(sic ?? "").trim() === "6770" || /\bblank[- ]check\b/i.test(company);
+  const code = String(sic ?? "").trim();
+  if (/\bblank[- ]check\b/i.test(company)) return true;
+  if (code) return code === "6770";
+  // NO SIC ON FILE YET (#553 COWORK #187): the profile fills over the first
+  // nights after a filer appears, so until then the name decides. Once the SIC
+  // is known it wins, both ways.
+  return SPAC_NAME.test(company);
 }
+
+/** The name a blank-check company files under: "... Acquisition Corp", "... Acquisition Corp. II". */
+export const SPAC_NAME = /\bacquisition\s+(corp(oration)?|co|company|inc|ltd|limited)\b/i;
 
 /** A foreign private issuer registers on Form F-1. */
 export function isForeignFiler(filings: readonly { form: string }[]): boolean {

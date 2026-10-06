@@ -95,6 +95,7 @@ function viewRules(V, S) {
   const f = S.profileFromSubmissions("3", FOREIGN, "x");
   want("a country is named, not coded", f.region === "SINGAPORE" && f.incorporatedIn === "CAYMAN ISLANDS");
   want("SPAC: SIC 6770, or a blank-check name", V.isSpac("6770", "Gamma Acquisition Corp") && V.isSpac(null, "Epsilon Blank Check Co") && !V.isSpac("3569", "Acme Acquisition Holdings"));
+  want("no SIC yet: the name decides (\"Acquisition Corp\"), and a known SIC wins over the name", V.isSpac(null, "Eaglesky Acquisition Corp") && V.isSpac(undefined, "Live Oak Acquisition Corp. VI") && !V.isSpac(null, "Acme Robotics Inc") && !V.isSpac("3569", "Zeta Acquisition Corp"));
   want("FOREIGN: an F-1 filer; a SPAC badge wins over it", V.ipoKind("7372", "Delta", f.filings) === "foreign" && V.ipoKind("6770", "Gamma", f.filings) === "spac" && V.ipoKind("3569", "Acme", p.filings) === "company");
   want("the fee maximum is ffd:TtlOfferingAmt (not the fee)", S.parseFeeExhibitMax(FEE_HTML) === 172500000);
   want("the tag's scale is applied", S.parseFeeExhibitMax(FEE_SCALED) === 86250000);
@@ -221,7 +222,9 @@ try {
 
   console.log("\n5. Planted mutants");
   const VIEW_M = [
-    ["SPAC by SIC only (a blank-check name missed)", "  return String(sic ?? \"\").trim() === \"6770\" || /\\bblank[- ]check\\b/i.test(company);", "  return String(sic ?? \"\").trim() === \"6770\";"],
+    ["SPAC by SIC only (a blank-check name missed)", "  if (/\\bblank[- ]check\\b/i.test(company)) return true;\n", ""],
+    ["no name fallback before the SIC is known", "  return SPAC_NAME.test(company);", "  return false;"],
+    ["the name overriding a known SIC", "  if (code) return code === \"6770\";", "  if (code && code === \"6770\") return true;"],
     ["FOREIGN before SPAC", "  if (isSpac(sic, company)) return \"spac\";\n  if (isForeignFiler(filings)) return \"foreign\";", "  if (isForeignFiler(filings)) return \"foreign\";\n  if (isSpac(sic, company)) return \"spac\";"],
     ["listed counted from the prospectus alone", "    { key: \"listed\", label: \"Listed (exchange registration)\", date: listed?.date ?? null, detail: null, done: Boolean(listed) },", "    { key: \"listed\", label: \"Listed (exchange registration)\", date: listed?.date ?? null, detail: null, done: Boolean(listed) || Boolean(priced) },"],
   ];
