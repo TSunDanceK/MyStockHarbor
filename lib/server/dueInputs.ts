@@ -20,6 +20,8 @@
 // no amount of code here raises it.
 //
 // ── EIGHT OF THE MISSES ARE STRUCTURAL. DO NOT "FIX" THIS. ────────────────
+// (BABA left the cut when it was widened to 150 on 2026-10-06, #552 COWORK
+// #181; the other seven are in it.)
 // ASML, BABA, HSBC, RY, MUFG, NVS, AZN and SHEL are foreign private issuers:
 // they announce results on a 6-K, and estimateNextReport counts only events
 // whose basis is "8-K item 2.02", so they can never earn a dated estimate and
@@ -36,7 +38,7 @@
 // of the cut is a true statement about 29 companies; it is not a claim to be
 // exhaustive, and no new copy is needed.
 import { readPickersSymbolsIfCached } from "./pickersBuilder";
-import { readReportDates, type StoredReportDates } from "./secReportDatesStore";
+import { readReportDatesBulk, type StoredReportDates } from "./secReportDatesStore";
 import { selectDue, type DueInput } from "./dueToReport";
 import { resolveDueStrip, type DueStripState } from "./dueStripState";
 import { buildExpected, type ExpectedSectionState } from "./expectedToReport";
@@ -260,13 +262,16 @@ export async function getCalendarForwardSections(today: string): Promise<Calenda
     };
   }
 
-  // ONLY THE CUT IS READ PER SYMBOL. 50 GETs, not 700 -- see coverageOfCut.
-  const records = new Map<string, StoredReportDates | null>();
-  await Promise.all(
-    DUE_STRIP_CUT.map(async (symbol) => {
-      records.set(symbol, await readReportDates(symbol));
-    }),
-  );
+  // ONLY THE CUT IS READ, IN ONE MGET (#552 COWORK #181): 150 records, one
+  // command, where one GET each was 50. A failed read is not an empty market.
+  const read = await readReportDatesBulk(DUE_STRIP_CUT);
+  if (!read.ok) {
+    return {
+      due: resolveDueStrip({ universeSize: 0, withResultsDate: 0, manifestRead: false, entries: [] }),
+      expected: { kind: "unavailable" },
+    };
+  }
+  const records: ReadonlyMap<string, StoredReportDates | null> = read.recs;
 
   const { inputs } = buildDueInputs(DUE_STRIP_CUT, records);
   const { universeSize, withResultsDate } = coverageOfCut(DUE_STRIP_CUT, records);

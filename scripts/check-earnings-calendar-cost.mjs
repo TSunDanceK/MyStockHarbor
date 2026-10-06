@@ -193,9 +193,37 @@ check(
     `fill has already run is a counter, not a gate`
 );
 
+// ── THE CUT IN ONE MGET (#552 COWORK #181) ──────────────────────────────
+// Widened to 150, one GET per record would be 150 commands a build. The
+// forward sections read them in one MGET, and a failed MGET is "we could not
+// read", never 150 filers with no record.
+{
+  const due = readCodeOnly("lib/server/dueInputs.ts");
+  const fwd = grabFunction(due, "getCalendarForwardSections") ?? "";
+  const bulkRule = (src) => /await readReportDatesBulk\(DUE_STRIP_CUT\)/.test(src) && !/readReportDates\(/.test(src);
+  check("the forward sections read the cut in one bulk read, no per-symbol GET", bulkRule(fwd));
+  check("MUTATION: back to one GET per symbol → caught",
+    !bulkRule(fwd.replace("await readReportDatesBulk(DUE_STRIP_CUT)", "await Promise.all(DUE_STRIP_CUT.map((s) => readReportDates(s)))")));
+  check("a failed bulk read resolves both sections to 'unavailable'",
+    /if \(!read\.ok\) \{[\s\S]*?manifestRead: false[\s\S]*?expected: \{ kind: "unavailable" \}/.test(fwd));
+
+  const store = readCodeOnly("lib/server/secReportDatesStore.ts");
+  const bulk = grabFunction(store, "readReportDatesBulk") ?? "";
+  const load = (src) => lift(`const reportDatesKey = (s) => "k:" + s;\n${src.replace(/^export /, "")}\nexport { readReportDatesBulk };`);
+  const run = async (src, stub) => { globalThis.__redis = stub; return (await load(src.replace(/\bredis\b/g, "globalThis.__redis"))).readReportDatesBulk(["A", "B", "C"]); };
+  let calls = 0;
+  const good = await run(bulk, { mget: async (...keys) => { calls++; return keys.map((k) => (k === "k:B" ? null : { events: [] })); } });
+  check("one MGET for three records, a missing one null", calls === 1 && good.ok && good.recs.get("A") !== null && good.recs.get("B") === null, `calls ${calls}`);
+  const bad = await run(bulk, { mget: async () => { throw new Error("down"); } });
+  check("a thrown MGET is ok:false, not three nulls", bad.ok === false);
+  const folded = bulk.replace(/(bulk read failed[^\n]*\n\s*)return \{ ok: false \};/, "$1return { ok: true, recs: new Map() };");
+  const swallowed = await run(folded, { mget: async () => { throw new Error("down"); } }).catch(() => ({ ok: false }));
+  check("MUTATION: the failure folded into an empty set → caught", folded !== bulk && swallowed.ok === true);
+}
+
 console.log(
   failures === 0
-    ? "\nThe fifty forward reads are memoised, the render reads no marker, and the scan is gated.\n"
+    ? "\nThe forward reads (one MGET of the cut) are memoised, the render reads no marker, and the scan is gated.\n"
     : `\n${failures} assertion(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);

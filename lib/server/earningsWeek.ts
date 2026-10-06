@@ -11,7 +11,7 @@
 //                  ANNOUNCEMENT COVERS, never simply the newest stored one;
 //                  "Shares since" from the last close before the filing to
 //                  the latest close;
-//   coming up      the estimates, grouped by calendar week from today.
+//   coming up      the estimates, in four week windows from today.
 
 const DAY = 86_400_000;
 const parse = (d: string) => Date.parse(`${d}T00:00:00.000Z`);
@@ -139,38 +139,103 @@ export function primaryPerFiler<T extends { symbol: string }>(
   });
 }
 
-// ── COMING UP: grouped by calendar week from today ─────────────────────────
+// ── COMING UP: four week windows from today (#552 COWORK #179) ────────────
+//
+// THE COLUMNS ARE DATE WINDOWS, NOT DAYS: the dates are estimates, so a row
+// says "this week" or "the week of 19 Oct", never a day. Column one is the
+// rest of this week (today to Sunday); then the next three Mon–Sun weeks.
+// They roll forward on Monday because they are computed from today.
+//
+// AN EMPTY "THIS WEEK" IS NOT A COLUMN (#552 COWORK #180): with nothing
+// estimated and no due name for the rest of the week, the page says so in one
+// line and the grid shows the next FOUR Mon–Sun weeks instead.
 
 /** Monday of the week holding `d`. */
 const mondayOf = (d: string) => addDays(d, -((dow(d) + 6) % 7));
-/** "12–18 Oct", or "26 Oct–1 Nov" across a month. */
-export function weekRange(monday: string): string {
-  const sunday = addDays(monday, 6);
-  return mon(monday) === mon(sunday)
-    ? `${dayNum(monday)}–${dayNum(sunday)} ${MONTH[mon(sunday)]}`
-    : `${dayNum(monday)} ${MONTH[mon(monday)]}–${dayNum(sunday)} ${MONTH[mon(sunday)]}`;
+/** "12–18 Oct"; "26 Oct–1 Nov" across a month; "11 Oct" for one day. */
+export function dayRange(start: string, end: string): string {
+  if (start === end) return `${dayNum(start)} ${MONTH[mon(start)]}`;
+  return mon(start) === mon(end)
+    ? `${dayNum(start)}–${dayNum(end)} ${MONTH[mon(end)]}`
+    : `${dayNum(start)} ${MONTH[mon(start)]}–${dayNum(end)} ${MONTH[mon(end)]}`;
 }
-/** "~15 Oct": an estimate, never a date as such. */
-export const approxDate = (d: string) => `~${dayNum(d)} ${MONTH[mon(d)]}`;
 
-export type WeekGroup<T> = { key: string; heading: string; items: T[] };
+export const COMING_UP_COLUMNS = 4;
+export type ComingUpColumn<T> = {
+  key: string;
+  /** "This week" / "Next week" / "Week of 19 Oct". */
+  label: string;
+  /** "12–18 Oct": column one starts today, not on Monday. */
+  range: string;
+  start: string;
+  end: string;
+  isThisWeek: boolean;
+  items: T[];
+};
+
 /**
- * Rows grouped by the calendar week (Mon–Sun) their estimated date falls in:
- * "This week", "Next week · 12–18 Oct", "In 2 weeks · 19–25 Oct", … in order.
- * `pinned` goes first under its own heading (the "Due to report" names).
+ * The four columns, each sorted by market cap, largest first; an unknown cap
+ * last, then A–Z. A row estimated before today or after the last window is not
+ * placed. Column one is the rest of this week, UNLESS it would be empty and
+ * `thisWeekHasDue` is false: then the four are the next four Mon–Sun weeks
+ * (the caller tells by `columns[0].isThisWeek`). A later week that is empty
+ * stays, and says so.
  */
-export function groupByWeek<T extends { estimatedOn: string }>(rows: readonly T[], today: string): WeekGroup<T>[] {
-  const thisMonday = mondayOf(today);
-  const byWeek = new Map<number, T[]>();
-  for (const r of [...rows].sort((a, b) => (a.estimatedOn < b.estimatedOn ? -1 : a.estimatedOn > b.estimatedOn ? 1 : 0))) {
-    const w = Math.round((parse(mondayOf(r.estimatedOn)) - parse(thisMonday)) / (7 * DAY));
-    if (w < 0) continue;
-    if (!byWeek.has(w)) byWeek.set(w, []);
-    byWeek.get(w)!.push(r);
+export function comingUpColumns<T extends { symbol: string; estimatedOn: string; cap: number | null }>(
+  rows: readonly T[],
+  today: string,
+  opts: { thisWeekHasDue?: boolean } = {},
+): ComingUpColumn<T>[] {
+  const all = weekColumns(rows, today, COMING_UP_COLUMNS + 1);
+  const skip = all[0].items.length === 0 && !opts.thisWeekHasDue;
+  return skip ? all.slice(1) : all.slice(0, COMING_UP_COLUMNS);
+}
+
+function weekColumns<T extends { symbol: string; estimatedOn: string; cap: number | null }>(
+  rows: readonly T[],
+  today: string,
+  count: number,
+): ComingUpColumn<T>[] {
+  const monday = mondayOf(today);
+  const cols = Array.from({ length: count }, (_, w): ComingUpColumn<T> => {
+    const weekStart = addDays(monday, 7 * w);
+    const start = w === 0 ? today : weekStart;
+    const end = addDays(weekStart, 6);
+    const label = w === 0 ? "This week" : w === 1 ? "Next week" : `Week of ${dayNum(weekStart)} ${MONTH[mon(weekStart)]}`;
+    return { key: `w${w}`, label, range: dayRange(start, end), start, end, isThisWeek: w === 0, items: [] };
+  });
+  for (const r of rows) {
+    const col = cols.find((c) => r.estimatedOn >= c.start && r.estimatedOn <= c.end);
+    if (col) col.items.push(r);
   }
-  return [...byWeek.entries()].sort((a, b) => a[0] - b[0]).map(([w, items]) => {
-    const monday = addDays(thisMonday, 7 * w);
-    const heading = w === 0 ? "This week" : w === 1 ? `Next week · ${weekRange(monday)}` : `In ${w} weeks · ${weekRange(monday)}`;
-    return { key: `w${w}`, heading, items };
+  for (const c of cols) c.items.sort(byCapThenSymbol);
+  return cols;
+}
+
+/**
+ * ONE ROW PER COMPANY (#552 COWORK #180): GOOGL and GOOG are one Alphabet
+ * row. Rows on the same CIK collapse to the class with the larger market cap
+ * (ties: a ticker without a class suffix, then A–Z); the others ride along as
+ * `also`, for a small "also GOOG". A row with no CIK on record stands alone.
+ */
+export function onePerCompany<T extends { symbol: string; cap: number | null }>(
+  rows: readonly T[],
+  cikOf: (symbol: string) => string | null,
+): (T & { also: string[] })[] {
+  const groups = new Map<string, T[]>();
+  for (const r of rows) {
+    const key = cikOf(r.symbol) ?? `sym:${r.symbol}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  return [...groups.values()].map((g) => {
+    const [lead, ...rest] = [...g].sort((a, b) =>
+      (b.cap ?? -1) - (a.cap ?? -1)
+      || Number(hasClassSuffix(a.symbol)) - Number(hasClassSuffix(b.symbol))
+      || (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0));
+    return { ...lead, also: [...new Set(rest.map((r) => r.symbol))].filter((s) => s !== lead.symbol) };
   });
 }
+
+/** Market cap, largest first; an unknown cap last; then A–Z. */
+export const byCapThenSymbol = (a: { symbol: string; cap: number | null }, b: { symbol: string; cap: number | null }) =>
+  (b.cap ?? -1) - (a.cap ?? -1) || (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0);
