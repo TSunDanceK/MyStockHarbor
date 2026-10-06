@@ -36,6 +36,7 @@ import {
   type EarningsDayPlan,
 } from "../../../../lib/server/earningsPlan";
 import { JOBS, cronIntervalSeconds } from "../../../../lib/server/jobRuns";
+import { JOB_REDIS_OPTS } from "../../../../lib/server/redisCacheMode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ export const maxDuration = 300;
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(JOB_REDIS_OPTS)
     : null;
 
 // Key, row type, normaliser and TTL rule all live in lib/server/earningsStore.ts

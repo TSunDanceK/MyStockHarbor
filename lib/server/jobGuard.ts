@@ -38,6 +38,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Redis } from "@upstash/redis";
 import { JOB_RUN_PREFIX, type JobKey } from "./jobRuns";
+import { JOB_REDIS_OPTS } from "./redisCacheMode";
 
 export type GuardedJob = Extract<
   JobKey,
@@ -243,7 +244,7 @@ export function jobEnabledIn(item: unknown, job: GuardedJob): boolean {
 
 // ── the breaker's store ──────────────────────────────────────────────────────
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv(JOB_REDIS_OPTS) : null;
 
 const dayKey = (nowMs: number) => `${JOB_COMMANDS_PREFIX}:${new Date(nowMs).toISOString().slice(0, 10)}`;
 

@@ -12,7 +12,7 @@
 // lock defined in this module and stay perfectly consistent.
 
 import { Redis } from "@upstash/redis";
-import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { BULK_READ_CACHE, PAGE_READ_CACHE } from "./redisCacheMode";
 import { REQUEST_BYTE_BUDGET, pctOfRequestLimit, trySetRequestBytes } from "./chunkByBytes";
 import { detectBullFlag, type BullFlagResult } from "../ta/bullFlag";
 import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
@@ -154,6 +154,12 @@ let memo:
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv(PAGE_READ_CACHE)
+    : null;
+// The payload write is measured against the 5 MB request budget, so it takes
+// the 20 s deadline; reads and the lock stay on the page's 6 s (#553 COWORK #156).
+const bulkRedis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(BULK_READ_CACHE)
     : null;
 
 const MEMORY_CACHE_MS = 60_000;
@@ -333,7 +339,8 @@ async function writePlaysCache(data: PlaysPayload) {
       );
       return;
     }
-    await redis.set(PLAYS_REDIS_KEY, entry, {
+    const writeRedis = bulkRedis ?? redis;
+    await writeRedis.set(PLAYS_REDIS_KEY, entry, {
       ex: PLAYS_REDIS_TTL_SECONDS,
     });
     console.log(`[bull-flags] payload write ${measured?.bodyBytes ?? "?"} bytes ok`);

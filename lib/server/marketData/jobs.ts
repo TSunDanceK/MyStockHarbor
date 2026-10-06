@@ -73,6 +73,7 @@ import { loadTickerMap } from "../secTickerMap";
 import { readLastSeenCiks } from "../secListing";
 import { lookupBySpelling, toDashed } from "../../symbolSpellings.mjs";
 import { pctOfRequestLimit } from "../chunkByBytes";
+import { JOB_REDIS_OPTS } from "../redisCacheMode";
 
 /**
  * THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step.
@@ -100,7 +101,7 @@ const EOD_WRITE_CHUNK = 25;
 const EOD_BUDGET_MS = 240_000;
 
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv(JOB_REDIS_OPTS) : null;
 
 function mustRedis(): Redis {
   if (!redis) throw new Error("no redis");

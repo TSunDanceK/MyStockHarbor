@@ -43,4 +43,33 @@
 // correctness bug" does not apply. As the paragraph above says, `cache:
 // "default"` only drops the no-store hint -- Upstash calls are POST and Next's
 // fetch cache only caches GET, so nothing here becomes cacheable either way.
-export const PAGE_READ_CACHE = { cache: "default" } as const;
+// ── A DEADLINE ON EVERY UPSTASH REQUEST (#553 CODE-B #144, COWORK #155) ──────
+// @upstash/redis sets no request timeout, so a connection that never answers
+// held a render until Vercel killed the function at 300 s (the /dashboard
+// timeouts, CODE-B #137). Every client now carries a per-request deadline.
+//
+// THE FUNCTION FORM, ALWAYS: `signal: () => AbortSignal.timeout(ms)` builds a
+// fresh signal per request, and on abort the client THROWS without retrying,
+// so the caller's own catch path (absent, lock-error, missed symbol) runs. The
+// plain form `signal: AbortSignal.timeout(ms)` must never be used: the client
+// turns an abort on a non-function signal into a fake HTTP 200 whose result is
+// the string "Aborted", so a read would return junk instead of failing.
+// scripts/check-redis-timeouts.mjs holds every client to one of the options
+// below and runs both forms against a server that never answers.
+//
+// The values: a single REST command answers in tens of milliseconds and the
+// whole /dashboard (five sources) took 4.3 s off Vercel, so 6 s for anything a
+// visitor's request waits on; 20 s for jobs and for the multi-MB bulk reads,
+// matching jobBudget's FETCH_TIMEOUT_MS. Each timeout is logged once per key
+// prefix by lib/server/redisTimeoutLog.ts (installed in instrumentation.ts).
+export const REDIS_PAGE_TIMEOUT_MS = 6_000;
+export const REDIS_JOB_TIMEOUT_MS = 20_000;
+
+/** Page reads: the prerender-safe cache mode plus the 6 s deadline. */
+export const PAGE_READ_CACHE = { cache: "default", signal: () => AbortSignal.timeout(REDIS_PAGE_TIMEOUT_MS) } as const;
+/** Bulk reads on a page or build path (multi-MB MGETs): the cache mode plus 20 s. */
+export const BULK_READ_CACHE = { cache: "default", signal: () => AbortSignal.timeout(REDIS_JOB_TIMEOUT_MS) } as const;
+/** A request-path client that keeps the no-store default (rate limits, API routes): 6 s. */
+export const PAGE_TIMEOUT_OPTS = { signal: () => AbortSignal.timeout(REDIS_PAGE_TIMEOUT_MS) } as const;
+/** Jobs and job-only stores: 20 s. */
+export const JOB_REDIS_OPTS = { signal: () => AbortSignal.timeout(REDIS_JOB_TIMEOUT_MS) } as const;

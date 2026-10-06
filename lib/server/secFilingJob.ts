@@ -31,10 +31,11 @@ import { priorStandsForFx, toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { sicChangeOf, type SicChange } from "./secSicChange";
 import { instanceToFacts, isLagging, mergeFillOnly, newestPeriodicFiling, newestStoredEnd } from "./secFilingFill";
+import { JOB_REDIS_OPTS } from "./redisCacheMode";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(JOB_REDIS_OPTS)
     : null;
 
 export const FILING_JOB_FILLS_PER_RUN = 60;

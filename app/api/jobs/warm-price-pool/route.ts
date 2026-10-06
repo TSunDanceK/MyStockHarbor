@@ -7,6 +7,7 @@ import { MOOD_ETFS } from "../../../../lib/marketMood";
 import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
 import { planTiingoUniverse, writeTiingoUniverse, refreshTiingoUniverseOffHours, STOCK_PAGE_SYMBOLS } from "../../../../lib/server/tiingoUniverse";
 import { priceProviderFor } from "../../../../lib/server/marketData/provider";
+import { JOB_REDIS_OPTS } from "../../../../lib/server/redisCacheMode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,7 +46,7 @@ export const maxDuration = 300;
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(JOB_REDIS_OPTS)
     : null;
 
 const PRICE_POOL_LOCK_KEY = "msh:price-pool:v1:warm-lock";
