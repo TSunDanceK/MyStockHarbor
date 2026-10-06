@@ -201,6 +201,19 @@ export type TrendLine = {
    * meaningful (marginMoveMeaningful).
    */
   move: { tone: EarningsTone; word: string } | null;
+  /**
+   * THE CHIP'S VERDICT AND ITS COUNT (#552 COWORK #187 §2). The chip used to be
+   * the median's tone beside "N of M" where N was every period MEASURED, so it
+   * read "Growing 8 of 8" on TXN with two of the eight down. Now the chip is the
+   * tone most periods share (ties go to the latest period's tone, then the
+   * median's), and `matched` is how many periods carry it, out of `compared`.
+   * A rate line counts each period's YoY; the margin line counts each period's
+   * move against its year-earlier margin. Null when the line is refused or has
+   * fewer than TREND_MIN_PERIODS comparisons.
+   */
+  chipTone: EarningsTone | null;
+  matched: number | null;
+  compared: number;
 };
 
 export type TrendSummary = {
@@ -250,6 +263,27 @@ function median(xs: number[]): number | null {
 }
 
 /**
+ * THE TONE MOST PERIODS SHARE, and how many share it (#552 COWORK #187 §2).
+ * Ties go to the latest period's tone, then the median's, then the order
+ * good, weak, neutral (a tie between a move and no move names the move).
+ * Exported for the check.
+ */
+export function modalTone(
+  tones: (EarningsTone | null)[],
+  latest: EarningsTone | null,
+  median: EarningsTone | null,
+): { tone: EarningsTone; matched: number } | null {
+  const counts = new Map<EarningsTone, number>();
+  for (const t of tones) if (t) counts.set(t, (counts.get(t) ?? 0) + 1);
+  if (!counts.size) return null;
+  const top = Math.max(...counts.values());
+  const tied = [...counts.keys()].filter((t) => counts.get(t) === top);
+  const tone = (latest && tied.includes(latest) ? latest : median && tied.includes(median) ? median : null)
+    ?? (["good", "weak", "neutral"] as EarningsTone[]).find((t) => tied.includes(t))!;
+  return { tone, matched: top };
+}
+
+/**
  * Summarise the rendered run, NEVER averaging across an n/m.
  *
  * Crossings and absences are counted and excluded, and a line that drops below
@@ -283,10 +317,14 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
           ? `Not measured: ${subject} was a loss in the year-earlier ${w.many}, so a % change isn't meaningful.`
           : `Not measured: ${subject} crossed between profit and loss in these ${w.many}, so a % change isn't meaningful.`
         : `Not measured: needs ${TREND_MIN_PERIODS} comparable ${w.many}, has ${nums.length}.`;
-      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped, reason, latestWords, move: null };
+      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped, reason, latestWords, move: null,
+        chipTone: null, matched: null, compared: nums.length };
     }
     const m = median(nums);
-    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), latest, latestTone, counted: nums.length, skipped, reason: null, latestWords, move: null };
+    const tone = toneForGrowth(m as Pct);
+    const chip = modalTone(nums.map((n) => toneForGrowth(n)), latestTone, tone);
+    return { label, kind: "rate", value: m, tone, latest, latestTone, counted: nums.length, skipped, reason: null, latestWords, move: null,
+      chipTone: chip?.tone ?? null, matched: chip?.matched ?? null, compared: nums.length };
   };
 
   const growth = view.growth ?? [];
@@ -303,7 +341,16 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
     const newest = view.margins.length ? view.margins[view.margins.length - 1].operating : null;
     // THE DIRECTION, NOT THE LEVEL (#552 COWORK #47): AXTI's typical −15.5%
     // beside a latest 21.9% had no chip, while revenue had "Growing".
-    const moveTone = m !== null && newest !== null && marginMoveMeaningful(m, newest) ? toneForMarginDelta(newest - m) : null;
+    // EACH PERIOD AGAINST ITS YEAR-EARLIER MARGIN (#552 COWORK #187 §2): the
+    // chip is the move most periods made, and the count is how many made it.
+    // HSY read "Widening 8 of 8" while its margin fell; the old chip compared
+    // only the latest with the typical and counted every period measured.
+    const deltas = view.margins.map((r) => r.operatingYoYpp).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+    const newestDelta = view.margins.length ? view.margins[view.margins.length - 1].operatingYoYpp ?? null : null;
+    const chip = deltas.length >= TREND_MIN_PERIODS
+      ? modalTone(deltas.map((d) => toneForMarginDelta(d)), toneForMarginDelta(newestDelta), null)
+      : null;
+    const moveTone = chip && m !== null && newest !== null && marginMoveMeaningful(m, newest) ? chip.tone : null;
     lines.push({
       label: "Operating margin",
       kind: "level",
@@ -319,6 +366,9 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
       reason: null,
       latestWords: null,
       move: moveTone && m !== null && newest !== null ? { tone: moveTone, word: marginToneWord(moveTone, { older: m, newer: newest }) } : null,
+      chipTone: moveTone,
+      matched: moveTone ? chip!.matched : null,
+      compared: deltas.length,
     });
   }
 

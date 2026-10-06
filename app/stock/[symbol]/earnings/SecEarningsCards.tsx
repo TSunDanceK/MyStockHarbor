@@ -2080,8 +2080,10 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
         {t.lines.map((l) => {
           // THE KIND, NOT THE LABEL'S SPELLING. trendSummary says which lines
           // are rates and which are levels.
-          const word = l.kind === "level" ? marginToneWord(l.tone) : growthToneWord(l.tone);
-          const total = l.counted + l.skipped;
+          // THE CHIP IS THE TONE MOST PERIODS SHARE, and the count is how many
+          // share it (#552 COWORK #187 §2) -- not the median's tone beside the
+          // number of periods measured, which always read "8 of 8".
+          const word = growthToneWord(l.chipTone);
           return (
             <div className="metricCard trendTile" key={l.label} data-trend-tile="">
               <div className="metricLabel trendTileLabel">{l.label}</div>
@@ -2111,9 +2113,9 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
                     (latest against typical): l.move. */}
                 {l.kind === "level"
                   ? (l.move ? <ToneChip tone={l.move.tone} word={l.move.word} /> : null)
-                  : l.value === null ? null : <ToneChip tone={l.tone} word={word} />}
-                {l.value !== null ? (
-                  <span className="trendCount">{`${l.counted} of ${total} ${total === 1 ? w.one : w.many}`}</span>
+                  : l.value === null || l.chipTone === null ? null : <ToneChip tone={l.chipTone} word={word} />}
+                {l.value !== null && l.matched !== null ? (
+                  <span className="trendCount">{`${l.matched} of ${l.compared} ${l.compared === 1 ? w.one : w.many}`}</span>
                 ) : null}
               </div>
             </div>
