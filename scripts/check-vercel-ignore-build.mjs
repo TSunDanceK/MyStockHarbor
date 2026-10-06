@@ -62,9 +62,9 @@ function rules(src) {
   const fails = [];
   const want = (label, ok) => { if (!ok) fails.push(label); };
   const code = repo(["app/page.tsx"]);
-  const docs = repo(["claude/notes.md", "reports/x.json", "docs/a.txt", "README.md"]);
+  const docs = repo(["claude/notes.txt", "reports/x.json", "docs/a.txt", "README.md"]);
   const scripts = repo(["scripts/check-x.mjs"]);
-  const mixed = repo(["claude/notes.md", "lib/x.ts"]);
+  const mixed = repo(["claude/notes.txt", "lib/x.ts"]);
   const first = repo([], { firstOnly: true });
   const env = (o) => ({ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "claude/feature", VERCEL_GIT_COMMIT_MESSAGE: "a change", ...o });
   const is = (r, code) => r.code === code && /^vercel-ignore-build: (SKIP|BUILD) — /.test(r.out);
