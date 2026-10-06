@@ -15,7 +15,7 @@
 //   4. the command cost per forward-section build for each cut, as GETs (as
 //      shipped) and as one MGET.
 //
-// Commands: 1 GET (universe) + 1 HMGET (pool) + up to ~200 GETs (records).
+// Commands: 1 GET (universe) + 1 HMGET (pool) + up to 3 (Pickers caps) + up to ~200 GETs (records).
 import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 import { readCodeOnly, grabConst } from "./lib/source-code.mjs";
@@ -61,8 +61,25 @@ fields.forEach((f, i) => {
   const c = row && typeof row === "object" ? Number(row.marketCap) : NaN;
   if (Number.isFinite(c) && c > 0) capOf.set(f, c);
 });
+const poolCaps = capOf.size;
+// THE POOL HOLDS NO CAP SINCE THE FMP PULL (#738 "no frozen FMP figures"), so
+// the ranking falls back to the Pickers rows' SEC market cap (price × cover-
+// page shares, pickersSecFundamentals): the manifest, then one MGET of chunks.
+const PICKERS_MANIFEST_KEY = keyOf("lib/server/pickersBuilder.ts", "PICKERS_MANIFEST_KEY");
+const PICKERS_LAST_GOOD_KEY = keyOf("lib/server/pickersBuilder.ts", "PICKERS_LAST_GOOD_MANIFEST_KEY");
+let pickersCaps = 0;
+if (!poolCaps) {
+  let man = await redis.get(PICKERS_MANIFEST_KEY); commands++;
+  if (!man?.chunkKeys) { man = await redis.get(PICKERS_LAST_GOOD_KEY); commands++; }
+  const chunks = man?.chunkKeys?.length ? await redis.mget(...man.chunkKeys) : []; commands++;
+  for (const item of (chunks ?? []).flat()) {
+    const c = Number(item?.marketCap);
+    if (item?.symbol && Number.isFinite(c) && c > 0) { capOf.set(dashed(item.symbol), c); pickersCaps++; }
+  }
+}
 const ranked = [...capOf.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s);
-console.log(`today ${TODAY} · universe ${universe.length} · with a pool market cap ${capOf.size}`);
+console.log(`today ${TODAY} · universe ${universe.length} · market cap from the price pool: ${poolCaps} · from the Pickers rows (SEC × price): ${pickersCaps}`);
+if (!poolCaps) console.log("   NOTE: the price pool carries NO market cap, so the page's HMGET sort (strip and Coming up) has none to sort by.");
 
 const want = [...new Set([...CUT50, ...ranked.slice(0, 150).map((s) => s), ...NAMED])];
 const records = new Map();
@@ -126,7 +143,7 @@ for (const s of NAMED) {
 }
 
 // ── 3. WIDENING ─────────────────────────────────────────────────────────────
-console.log("\n3. WIDENING, SAME RULE AND SAME BAR (fresh ranking: the price pool's market cap)");
+console.log(`\n3. WIDENING, SAME RULE AND SAME BAR (fresh ranking: ${poolCaps ? "the price pool" : "the Pickers rows' SEC"} market cap)`);
 const fresh50 = ranked.slice(0, 50);
 const drift = CUT50.filter((s) => !fresh50.includes(dashed(s)));
 console.log(`   the committed 50 vs today's top 50: ${drift.length} differ (${drift.join(" ") || "none"})`);
