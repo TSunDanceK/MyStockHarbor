@@ -15,6 +15,7 @@
 //   node scripts/check-nonop-trend.mjs
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift } from "./lib/earnings-plan.mjs";
+import { splitAdjustSource } from "./lib/split-adjust-source.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -28,7 +29,7 @@ const once = (src, from, to) => {
 };
 const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const FIELDS = readCodeOnly("lib/server/secFields.ts");
-const BASE = [FIELDS, strip("lib/server/secExtract.ts"), strip("lib/server/fxRates.ts"), strip("lib/server/secCurrency.ts"), strip("lib/server/secFactCodec.ts")].join("\n");
+const BASE = [FIELDS, strip("lib/server/secExtract.ts"), strip("lib/server/fxRates.ts"), strip("lib/server/secCurrency.ts"), strip("lib/server/secFactCodec.ts"), splitAdjustSource()].join("\n");
 const VIEW = strip("lib/server/secEarningsView.ts");
 const PRES = strip("lib/server/secPresentation.ts");
 const build = (view = VIEW, pres = PRES) => lift([BASE, view, pres].join("\n"), "", "nonop-trend");

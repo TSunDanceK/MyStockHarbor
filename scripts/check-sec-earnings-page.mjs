@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift, grabFunction } from "./lib/earnings-plan.mjs";
+import { splitAdjustSource } from "./lib/split-adjust-source.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -251,6 +252,7 @@ console.log("\n7b. the YoY base is a FISCAL MATCH, run rather than read");
       strip("lib/server/fxRates.ts"),
       strip("lib/server/secCurrency.ts"),
       strip("lib/server/secFactCodec.ts"),
+      splitAdjustSource(),
       strip(VIEW),
     ].join("\n"),
     "",

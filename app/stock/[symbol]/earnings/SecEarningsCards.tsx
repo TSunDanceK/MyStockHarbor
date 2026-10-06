@@ -14,7 +14,7 @@ import {
 import {
   STALE_PRICE_WORDS, growthToneWord, marginToneWord, priceIsCurrent,
   GROWTH_BAND_PCT, MARGIN_BAND_PP, fiscalYearEndNote, stalePriceNote, toneBg, toneColor, toneTint,
-  toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate, waterfallGeometry,
+  splitAdjustedNote, toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate, waterfallGeometry,
   TREND_MIN_PERIODS, coverageIsInformative, partialScoreLabel, partialScoreNote, scaledAmount, scoreSummaryLine,
   CONVERSION_MAX_PCT, CONVERSION_MIN_PERIODS, RATIO_METER_MAX, cashLead, cashTileTone, balanceBars, conversionBars, netPosition, ratioMeter, shareOf,
   type EarningsTone, type ScoreCoverage, type ShareOf,
@@ -774,6 +774,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
             had a second one at its foot, below "See all the numbers", carrying
             only the crossing note and the source; both now live here. */}
         {crossingNoteHome(view) === "growth" ? <p>{CROSSING_NOTE}</p> : null}
+        {view.splitAdjustment ? <p data-split-adjusted="">{splitAdjustedNote(view.splitAdjustment)}</p> : null}
         <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>
       </details>
       <MarginDelta view={view} />
@@ -1002,7 +1003,7 @@ function periodLines(label: string): string[] {
 function ConversionChart({ view }: { view: SecEarningsView }) {
   const one = periodWords(view.tableBasis).one;
   const many = periodWords(view.tableBasis).many;
-  const { bars, usable } = conversionBars(view.cashHistory);
+  const { bars, usable, top } = conversionBars(view.cashHistory);
   if (usable < CONVERSION_MIN_PERIODS) {
     return (
       <p className="earningsDataNote" data-conversion-hidden="">
@@ -1013,7 +1014,8 @@ function ConversionChart({ view }: { view: SecEarningsView }) {
   const latest = bars.length - 1;
   // HTML, NOT SVG TEXT: the labels scale with the reader's root size (the
   // reading-size measure), which text inside a viewBox does not.
-  const linePct = (100 / CONVERSION_MAX_PCT) * 100;
+  // THE 100% LINE AT ITS TRUE HEIGHT on the data-scaled plot (#552 COWORK #188).
+  const linePct = (100 / top) * 100;
   return (
     <div className="chartBlock" data-conversion-chart="">
       <div className="chartBlockTitle">Operating cash flow as % of net income — last {bars.length} {many}</div>
@@ -1023,11 +1025,14 @@ function ConversionChart({ view }: { view: SecEarningsView }) {
         {bars.map((b, i) => {
           const colour = b.pct === null ? null : b.pct >= 100 ? toneColor("good") : toneColor("neutral");
           return (
-            <div key={b.label} className={`convSlot${i === latest ? " convLatest" : ""}`} data-bar={b.label} data-pct={b.pct === null ? "" : b.pct.toFixed(1)} data-height={b.heightPct.toFixed(2)} data-loss={b.loss ? "1" : "0"}>
+            <div key={b.label} className={`convSlot${i === latest ? " convLatest" : ""}`} data-bar={b.label} data-pct={b.pct === null ? "" : b.pct.toFixed(1)} data-height={b.heightPct.toFixed(2)} data-loss={b.loss ? "1" : "0"} data-clamped={b.clamped ? "1" : "0"}>
               <div className="convPlot">
                 {b.pct !== null ? <span className="convPct">{Math.round(b.pct)}%</span> : b.loss ? <span className="convLoss">loss</span> : null}
                 {b.pct !== null && b.heightPct > 0 ? (
-                  <span className="convBar" style={{ height: `calc(var(--conv-plot) * ${(b.heightPct / 100).toFixed(4)})`, background: colour ?? undefined, opacity: i === latest ? 1 : 0.62 }} />
+                  <span className="convBar" style={{ height: `calc(var(--conv-plot) * ${(b.heightPct / 100).toFixed(4)})`, background: colour ?? undefined, opacity: i === latest ? 1 : 0.62 }}>
+                    {/* CUT SHORT: the bar runs past the plot's ceiling, and the label above carries its true figure. */}
+                    {b.clamped ? <span className="convBreak" data-break="" /> : null}
+                  </span>
                 ) : null}
               </div>
               {/* TWO SHORT LINES ("Q3" over "’26"): one line ran into its neighbours at 390px. */}
@@ -1151,8 +1156,9 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           equipment as a share of operating cash flow, and share-based pay as a share of free cash
           flow. Where the figure divided by is zero or negative — a loss, or negative cash flow —
           the share is not meaningful (n/m) and the dollar figure is shown instead. In the chart, a
-          loss {periodWords(view.tableBasis).one} has no bar, only a &ldquo;loss&rdquo; marker, and a
-          share above {CONVERSION_MAX_PCT}% is drawn to the top with its true figure.
+          loss {periodWords(view.tableBasis).one} has no bar, only a &ldquo;loss&rdquo; marker. The
+          chart&rsquo;s scale follows its highest bar, up to {CONVERSION_MAX_PCT}%: bars above{" "}
+          {CONVERSION_MAX_PCT}% are cut short; the label shows the real figure.
         </p>
         <p>
           {c.basis === "year" ? (

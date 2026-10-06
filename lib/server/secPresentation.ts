@@ -1040,8 +1040,16 @@ export function cashTileTone(tile: "ocf" | "fcf" | "capex" | "sbc", s: ShareOf):
   return s.pct >= 100 ? "good" : "neutral";
 }
 
-/** The chart's fixed scale: one outlier quarter must not flatten the rest. */
-export const CONVERSION_MAX_PCT = 200;
+/**
+ * THE CHART'S CEILING (#552 COWORK #188). The plot top is the window's highest
+ * share, rounded up to the next CONVERSION_TOP_STEP and never below 100% (so the
+ * dashed 100% line sits inside the plot), but never above this: one freak
+ * quarter must not flatten the rest. It was a FIXED 200%, which drew all eight
+ * of TSLA's 217%–825% at the same height.
+ */
+export const CONVERSION_MAX_PCT = 300;
+/** The plot top rounds up to a multiple of this. */
+export const CONVERSION_TOP_STEP = 50;
 /** Fewer usable periods than this and the chart is hidden, with the reason. */
 export const CONVERSION_MIN_PERIODS = 4;
 
@@ -1050,23 +1058,27 @@ export type ConversionBar = {
   /** OCF ÷ net income, %, or null for a loss period or a missing leg. */
   pct: number | null;
   loss: boolean;
-  /** Bar height as % of the 0–200% scale, clamped; 0 below zero. */
+  /** Bar height as % of the plot top (see conversionBars' `top`), clamped; 0 below zero. */
   heightPct: number;
+  /** Above the top: drawn to it with a break mark, labelled with its true figure. */
   clamped: boolean;
 };
 /** Oldest first, as drawn. A loss period has no bar, only its marker. */
-export function conversionBars(history: { label: string; ocf: number | null; netIncome: number | null }[]): { bars: ConversionBar[]; usable: number } {
-  const bars = history.map((h) => {
+export function conversionBars(history: { label: string; ocf: number | null; netIncome: number | null }[]): { bars: ConversionBar[]; usable: number; top: number } {
+  const pcts = history.map((h) => {
     const loss = h.netIncome !== null && h.netIncome <= 0;
     const s = loss ? null : shareOf(h.ocf, h.netIncome);
-    const pct = s && s.ok ? s.pct : null;
-    return {
-      label: h.label, pct, loss,
-      heightPct: pct === null ? 0 : (Math.min(Math.max(pct, 0), CONVERSION_MAX_PCT) / CONVERSION_MAX_PCT) * 100,
-      clamped: pct !== null && pct > CONVERSION_MAX_PCT,
-    };
+    return { label: h.label, loss, pct: s && s.ok ? s.pct : null };
   });
-  return { bars, usable: bars.filter((b) => b.pct !== null).length };
+  // SCALED TO THE DATA, WITHIN [100%, CONVERSION_MAX_PCT].
+  const high = Math.max(0, ...pcts.map((p) => p.pct ?? 0));
+  const top = Math.min(CONVERSION_MAX_PCT, Math.max(100, Math.ceil(high / CONVERSION_TOP_STEP) * CONVERSION_TOP_STEP));
+  const bars = pcts.map(({ label, loss, pct }) => ({
+    label, pct, loss,
+    heightPct: pct === null ? 0 : (Math.min(Math.max(pct, 0), top) / top) * 100,
+    clamped: pct !== null && pct > top,
+  }));
+  return { bars, usable: bars.filter((b) => b.pct !== null).length, top };
 }
 
 /**
@@ -1115,4 +1127,15 @@ export function balanceBars(cash: number | null, sti: number | null, debt: numbe
     cashPct: pct(c), stiPct: pct(s), debtPct: pct(d), liquid,
     gap: { fromPct: pct(Math.min(liquid, d)), toPct: pct(Math.max(liquid, d)), kind: net >= 0 ? "cash" : "debt", amount: Math.abs(net) },
   };
+}
+
+/**
+ * THE "SPLIT-ADJUSTED" LINE (#552 COWORK #187 §1): which split, and what was
+ * done about it, in the fine print of the card whose figures moved.
+ */
+export function splitAdjustedNote(a: { splits: { ratio: number }[] }): string {
+  const name = (k: number) => (k >= 1 ? `${+k.toFixed(2)}-for-1 split` : `1-for-${+(1 / k).toFixed(2)} reverse split`);
+  const which = a.splits.map((s) => name(s.ratio)).join(" and the ");
+  return `Split-adjusted: per-share figures (EPS and dividends per share) from before the company's ${which} ` +
+    `are restated to today's share count, using the split the company's own filings record, so every period compares like for like.`;
 }

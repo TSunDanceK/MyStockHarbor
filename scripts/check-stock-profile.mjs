@@ -22,6 +22,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import { grabConst } from "./lib/source-code.mjs";
 import { grabFunction } from "./lib/earnings-plan.mjs";
+import { splitAdjustSource } from "./lib/split-adjust-source.mjs";
 import { loadProfile, html, visibleText, once, React } from "./lib/render-snapshot.mjs";
 
 let failures = 0;
@@ -41,6 +42,7 @@ async function loadComposer(mutate = (s) => s) {
     strip("lib/server/fxRates.ts"),
     strip("lib/server/secCurrency.ts"),
     strip("lib/server/secFactCodec.ts"),
+    splitAdjustSource({ withHistory: false }),
     strip("lib/server/secEarningsView.ts"),
     grabConst("lib/server/secReportDates.ts", "DEADLINE_FALLBACK"),
     // THE ANNUAL-ONLY PREDICATE (#548), AHEAD OF secValuation THAT READS IT

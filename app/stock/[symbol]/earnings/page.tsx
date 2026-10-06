@@ -912,7 +912,8 @@ export default async function StockEarningsPage({ params }: Props) {
         .convChart { --conv-plot: 7.5rem; --conv-axis: calc(var(--fs-fine) * 2.9); position: relative; display: grid; gap: 4px; max-width: 34rem; padding: 0 6px; }
         .convSlot { display: flex; flex-direction: column; align-items: center; min-width: 0; }
         .convPlot { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; width: 100%; height: calc(var(--conv-plot) + 1.5em); font-size: var(--fs-label); }
-        .convBar { display: block; width: min(1.6rem, 70%); border-radius: 3px 3px 0 0; }
+        .convBar { position: relative; display: block; width: min(1.6rem, 70%); border-radius: 3px 3px 0 0; }
+        .convBreak { position: absolute; left: -1px; right: -1px; top: 18%; height: 7px; background: linear-gradient(135deg, transparent 35%, #0b1220 35%, #0b1220 65%, transparent 65%) 0 0 / 7px 7px repeat-x; }
         .convPct { font-weight: 800; color: #cbd5e1; white-space: nowrap; line-height: 1.5; }
         .convLoss { font-weight: 700; color: #94a3b8; line-height: 1.5; }
         .convLatest .convPct, .convLatest .convPeriod { color: #f8fafc; font-weight: 900; }

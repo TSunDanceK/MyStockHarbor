@@ -7,6 +7,7 @@
 // and nothing downstream can tell them apart.
 import { readCodeOnly, grabConst } from "./lib/source-code.mjs";
 import { lift, grabFunction } from "./lib/earnings-plan.mjs";
+import { splitAdjustSource } from "./lib/split-adjust-source.mjs";
 
 const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 
@@ -17,6 +18,7 @@ const PRELUDE = [
   strip("lib/server/fxRates.ts"),
   strip("lib/server/secCurrency.ts"),
   strip("lib/server/secFactCodec.ts"),
+  splitAdjustSource(),
   strip("lib/server/secEarningsView.ts"),
   // DEADLINE_FALLBACK ONLY, lifted from secReportDates by name.
   //

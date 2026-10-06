@@ -11,6 +11,7 @@ import {
 import { storedInReportingCurrency } from "./secCurrency";
 import { SEC_FIELDS, revenueLineIncompleteValues, type Statement } from "./secFields";
 import type { AnnualForm } from "./annualOnly";
+import { splitAdjusted, type SplitAdjustment } from "./secSplitAdjust";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 
@@ -854,6 +855,12 @@ export type SecEarningsView = {
    */
   tableBasis: PeriodBasis;
   /**
+   * The proven splits this view's per-share figures were moved through, and
+   * the periods moved (#552 COWORK #187 §1). Null when nothing moved. Optional:
+   * hand-built views omit it.
+   */
+  splitAdjustment?: SplitAdjustment | null;
+  /**
    * Up to five fiscal years, oldest first. Rendered on EVERY stock as its own
    * card, and it is the only growth table an annual-only filer has.
    */
@@ -1218,6 +1225,9 @@ export function buildSecEarningsView(
     cik?: string | null;
   } = {},
 ): SecEarningsView | null {
+  // PER-SHARE FIGURES ON TODAY'S SHARE BASIS (#552 COWORK #187 §1): a split the
+  // filer proved moves the old-basis periods' EPS and DPS. See secSplitAdjust.
+  set = splitAdjusted(set);
   const annualFiler = opts.annualForm ?? null;
   // ── A SET THAT IS NOT IN DOLLARS DOES NOT RENDER ─────────────────────────
   //
@@ -1851,6 +1861,7 @@ export function buildSecEarningsView(
     ttmNetIncome: ttm(q, "netIncome"),
     coverShares: set.cover,
     asOf: set.at,
+    splitAdjustment: (set as { spa?: SplitAdjustment }).spa ?? null,
   };
 }
 
