@@ -11,6 +11,8 @@
 //      the meters and FMP-era insight snapshots go only with their own flags;
 //      Tiingo-path snapshots are never deleted.
 //   4. An unknown argument stops the run before any Redis command.
+//   5. --opt-ins-only deletes the opted-in groups and leaves every default key
+//      (#553 CODE-B #152: the snapshot purge must not touch A's refilled keys).
 // Each rule also gets a planted mutant.
 //
 //   node scripts/check-fmp-purge.mjs
@@ -148,6 +150,11 @@ async function rules(M) {
   const pfDry = await run1(["--pool-figures"]);
   want("--pool-figures without --apply writes nothing", pfDry.r.calls.every(([c]) => c !== "hset" && c !== "del") && pfDry.state.hash.get("msh:price-pool:v1").get("AAPL").price === 10);
 
+  const only = await run1(["--apply", "--opt-ins-only", "--insight-snapshots"]);
+  want("--opt-ins-only deletes the opted-in snapshots and keeps every default key", only.code === 0 && !only.state.kv.has("insight-snapshot:vrt-june-19-2026") && [...B_KEYS, ...A_KEYS, ...KEEP_ALWAYS].every((k) => only.state.kv.has(k)));
+  const onlyDry = await run1(["--opt-ins-only", "--insight-snapshots"]);
+  want("--opt-ins-only's dry run counts only the opted-in keys", /DRY RUN: would DEL 1 key\(s\)/.test(onlyDry.out));
+
   const bad = await run1(["--aply"]);
   want("an unknown argument stops before any Redis command", bad.code === 2 && bad.r.calls.length === 0);
   return fails;
@@ -173,6 +180,7 @@ try {
     ["run", "applies on a dry run", /const apply = args\.has\("--apply"\);/, "const apply = true;"],
     ["run", "opt-ins without their flag", /const optedIn = new Set\(OPT_IN_GROUPS\.filter\(\(g\) => args\.has\(g\.flag\)\)/, "const optedIn = new Set(OPT_IN_GROUPS.filter(() => true)"],
     ["run", "every snapshot deleted, Tiingo ones too", /toDelete\.push\(\.\.\.fmpSnaps\)/, "toDelete.push(...snapKeys)"],
+    ["run", "--opt-ins-only still deletes the defaults", /if \(!optInsOnly\) for \(const g of DEFAULT_GROUPS\)/, "for (const g of DEFAULT_GROUPS)"],
     ["run", "unknown arguments ignored", /if \(unknown\.length\) \{/, "if (false) {"],
     ["run", "the SCAN loop stops after one page", /\} while \(cursor !== "0"\);\n    return byGroup;/, "} while (false);\n    return byGroup;"],
   ];
