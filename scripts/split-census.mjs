@@ -37,6 +37,10 @@ globalThis.fetch = async (input, init = {}) => {
 };
 
 const { cell } = await import("../lib/server/secFactCodec.ts");
+const { splitRatioOf, SHARE_SCALE_MAX_STEP, SHARE_PROVEN_SPLIT_YEARS } = await import("../lib/server/secShareHistory.ts");
+const plusYears = (iso, n) => `${Number(iso.slice(0, 4)) + n}${iso.slice(4)}`;
+const nearStep = (e, at) => e >= plusYears(at, -SHARE_PROVEN_SPLIT_YEARS) && e <= plusYears(at, SHARE_PROVEN_SPLIT_YEARS);
+const cls = { proven: new Set(), unproven: new Set(), unit: new Set(), other: new Set() };
 const FACTS_PREFIX = (fs.readFileSync("lib/server/secManifest.ts", "utf8").match(/SEC_FACTS_PREFIX = "([^"]+)"/) ?? [])[1];
 if (!FACTS_PREFIX) { console.error("FATAL: SEC_FACTS_PREFIX moved"); process.exit(2); }
 const NAMED = (process.env.NAMED || "BKNG DECK SONY").split(/\s+/).filter(Boolean);
@@ -67,6 +71,8 @@ for (let i = 0; i < keys.length; i += 20) {
     out.sets++;
     const sym = k.slice(FACTS_PREFIX.length + 1);
     const hits = { share: [], eps: [], dps: [], epsBasis: [] };
+    // THE FILER'S OWN SPLIT EVIDENCE (asr: restated ÷ first-filed share counts).
+    const proven = (Array.isArray(set.asr) ? set.asr : []).map(([e, r]) => ({ e, k: splitRatioOf(r) })).filter((x) => x.k !== null);
     for (const [basis, list] of [["Q", set.quarters], ["FY", set.years ?? []]]) {
       const ps = [...list].filter((p) => p?.e).sort((a, b) => (a.e < b.e ? -1 : 1));
       // ONE PERIOD, TWO BASES: net income / (EPS x shares) should be ~1. Far
@@ -83,7 +89,13 @@ for (let i = 0; i < keys.length; i += 20) {
         const [a, b] = [ps[n - 1], ps[n]];
         const sa = shares(a), sb = shares(b);
         const shareJump = sa > 0 && sb > 0 && ratio(sa, sb) >= JUMP;
-        if (shareJump) hits.share.push(`${basis} ${a.e}→${b.e} ×${(sb / sa).toFixed(2)}`);
+        if (shareJump) {
+          hits.share.push(`${basis} ${a.e}→${b.e} ×${(sb / sa).toFixed(2)}`);
+          const r = sb / sa, k = splitRatioOf(r);
+          const kind = ratio(sa, sb) >= SHARE_SCALE_MAX_STEP ? "unit" : k === null ? "other"
+            : proven.some((x) => Math.abs(x.k / k - 1) < 0.1 && nearStep(x.e, b.e)) ? "proven" : "unproven";
+          cls[kind].add(sym);
+        }
         for (const [kind, f] of [["eps", eps], ["dps", (p) => val(p, "dividendsDeclaredPerShare")]]) {
           const ea = f(a), eb = f(b);
           if (ea === null || eb === null || Math.sign(ea) !== Math.sign(eb) || Math.min(Math.abs(ea), Math.abs(eb)) < MIN_EPS || ratio(ea, eb) < JUMP) continue;
@@ -111,6 +123,13 @@ for (let i = 0; i < keys.length; i += 20) {
 console.log(`sets read ${out.sets} of ${keys.length} keys`);
 console.log(`\n1. SHARE JUMPS (>= ${JUMP}x between adjacent periods): ${out.shareJump.length} symbols`);
 for (const [s, h] of out.shareJump) console.log(`   ${s.padEnd(7)} ${h.join(" · ")}`);
+console.log(`\n1b. THE SHARE STEPS, CLASSIFIED (a symbol can sit in more than one):`);
+console.log(`   split ratio, PROVEN by the filer's restated comparatives (asr): ${cls.proven.size} · ${[...cls.proven].join(" ")}`);
+console.log(`   split ratio, no restatement on file: ${cls.unproven.size} · ${[...cls.unproven].join(" ")}`);
+console.log(`   unit slip (>= ${SHARE_SCALE_MAX_STEP}x, thousands/millions): ${cls.unit.size} · ${[...cls.unit].join(" ")}`);
+console.log(`   other step (issuance, IPO/SPAC, reverse merger): ${cls.other.size} · ${[...cls.other].join(" ")}`);
+const provenMix = out.splitMixEps.filter(([s]) => cls.proven.has(s)).map(([s]) => s);
+console.log(`   of the ${out.splitMixEps.length} with EPS on two bases, ${provenMix.length} sit on a PROVEN split: ${provenMix.join(" ")}`);
 console.log(`\n2. EPS ON TWO BASES (an EPS jump on the same pair as a share jump): ${out.splitMixEps.length} symbols`);
 for (const [s, h] of out.splitMixEps) console.log(`   ${s.padEnd(7)} ${h.join(" · ")}`);
 console.log(`\n3. DPS ON TWO BASES: ${out.splitMixDps.length} symbols`);
