@@ -1410,6 +1410,8 @@ const TASKS = {
   "write-market-dynamic-dry-run": { script: "scripts/market-dynamic-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY (Relay B, #553 COWORK #191 item 1): stored news, junk headlines by day.
   "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (#552 COWORK #198): both readers on TSLA's Q2 FY2026, its companyfacts, and a census. GET/SCAN/MGET + one SEC request.
+  "write-tsla-q2-readers": { script: "scripts/tsla-q2-readers.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
