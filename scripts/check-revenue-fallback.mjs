@@ -122,13 +122,37 @@ console.log("\n3b. AFRM: the total becomes the filer's one concept (#552 COWORK 
   const fy24 = r.years.find((p) => p.end === "2024-06-30")?.values?.[REV];
   check("FY2025 reads the $3.22B total, not the $1.11B contract line", fy25?.val === 3220 * M && fy25?.tag === "Revenues", JSON.stringify(fy25));
   check("...and FY2024 the $2.32B total (one concept for the filer)", fy24?.val === 2320 * M && fy24?.tag === "Revenues", JSON.stringify(fy24));
+  // Five years, `Revenues` on the newest four (the floor's window) but not the
+  // oldest: the floor holds, and the oldest year reads Not reported.
+  const fy = (y, c, r) => [yr(`${y - 1}-07-01`, `${y}-06-30`, c * M), r == null ? null : yr(`${y - 1}-07-01`, `${y}-06-30`, r * M)];
+  const years5 = [fy(2026, 1440, 4260), fy(2025, 1110, 3220), fy(2024, 830, 2320), fy(2023, 600, 1590), fy(2022, 450, null)];
   const gap = payload({
-    [CONTRACT]: [yr("2023-07-01", "2024-06-30", 830 * M), ["2026-04-01", "2026-06-30", 380 * M]],
-    Revenues: [["2026-04-01", "2026-06-30", 1100 * M]],
-    [OP]: [["2026-04-01", "2026-06-30", 90 * M]],
+    [CONTRACT]: years5.map(([c]) => c),
+    Revenues: years5.map(([, r]) => r).filter(Boolean),
+    [OP]: years5.map(([c]) => [c[0], c[1], 10 * M]),
   });
-  const old = X.extractCompanyFacts("AFRM", gap).years.find((p) => p.end === "2024-06-30")?.values?.[REV];
-  check("a period with no Revenues reads Not reported, never the contract line beside the total", old == null, JSON.stringify(old));
+  const gr = X.extractCompanyFacts("AFRM", gap);
+  const old = gr.years.find((p) => p.end === "2022-06-30")?.values?.[REV];
+  const fy26 = gr.years.find((p) => p.end === "2026-06-30")?.values?.[REV];
+  check("the floor holds (Revenues on the newest 4 years) and the total is used", fy26?.val === 4260 * M && fy26?.tag === "Revenues", JSON.stringify(fy26));
+  check("...and a period with no Revenues reads Not reported, never the contract line beside the total", old == null, JSON.stringify(old));
+
+  // BANC's shape (#552 COWORK #194): `Revenues` on the newest year only, the
+  // contract line on all four -- the floor fails and the contract line stays.
+  const banc = payload({
+    [CONTRACT]: years5.slice(0, 4).map(([c]) => c),
+    Revenues: [years5[0][1]],
+    [OP]: years5.slice(0, 4).map(([c]) => [c[0], c[1], 10 * M]),
+  });
+  const b23 = X.extractCompanyFacts("BANC", banc).years.find((p) => p.end === "2023-06-30")?.values?.[REV];
+  const b26 = X.extractCompanyFacts("BANC", banc).years.find((p) => p.end === "2026-06-30")?.values?.[REV];
+  check("the floor fails (Revenues on 1 of 4 years): the contract line is kept everywhere",
+    b23?.val === 600 * M && b26?.val === 1440 * M && b26?.tag === CONTRACT, JSON.stringify({ b23, b26 }));
+  const nofloor = extractRaw.replace("const floorHolds = covers(quarterCells, fbQuarter, 8) && covers(yearCells, fbYear, 4);", "const floorHolds = true;");
+  check("the floor mutation applied", nofloor !== extractRaw);
+  const XF = await load(nofloor);
+  const f23 = XF.extractCompanyFacts("BANC", banc).years.find((p) => p.end === "2023-06-30")?.values?.[REV];
+  check("MUTATION: without the floor BANC's older years go unreported (caught)", f23 == null, JSON.stringify(f23));
   // ADP's shape: the newest end carries a contract QUARTER and a Revenues YEAR
   // only. Like for like, there is nothing to compare: the rule must not fire.
   const adp = payload({
@@ -142,7 +166,9 @@ console.log("\n3b. AFRM: the total becomes the filer's one concept (#552 COWORK 
   const mixed = extractRaw.replace("const pair = pairAt(quarterCells, fbQuarter) ?? pairAt(yearCells, fbYear);",
     "const pair = (() => { const r = newest ? (quarterCells.get(newest) ?? yearCells.get(newest))?.get(\"revenue\") : undefined; const f = newest ? (fbQuarter.get(newest) ?? fbYear.get(newest))?.get(\"revenue\") : undefined; return r && f ? { rev: r, fb: f } : null; })();");
   check("the duration mutation applied", mixed !== extractRaw);
-  const XD = await load(mixed);
+  // The floor disabled too: ADP has no quarterly Revenues, so the floor alone
+  // would also refuse, and the duration guard must be tested on its own.
+  const XD = await load(mixed.replace("const floorHolds = covers(quarterCells, fbQuarter, 8) && covers(yearCells, fbYear, 4);", "const floorHolds = true;"));
   const dq = XD.extractCompanyFacts("ADP", adp).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
   check("MUTATION: quarter-against-year comparison flips ADP's quarter away (caught)", !(dq?.val === 5474 * M && dq?.tag === CONTRACT), JSON.stringify(dq));
   const mutated = extractRaw.replace("if (!filerTagsExcise(facts)) {", "if (false) {");
