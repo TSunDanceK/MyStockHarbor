@@ -50,7 +50,7 @@ const cikMap = JSON.parse(fs.readFileSync("data/cik-map.json", "utf8"));
 const today = new Date().toISOString().slice(0, 10);
 const days = (s, e) => (s && e ? Math.round((Date.parse(e) - Date.parse(s)) / 864e5) + 1 : null);
 const f2 = (v) => (typeof v === "number" ? (Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : v.toFixed(4)) : "—");
-const pct = (v) => (typeof v === "number" ? `${(v * (Math.abs(v) <= 1.5 ? 100 : 1)).toFixed(1)}%` : "—");
+const pct = (v) => (typeof v === "number" ? `${v.toFixed(1)}%` : "—"); // margin rows are already in percent
 
 /** The two readers, each built as its own module builds it. */
 function readers(symbol, set) {
@@ -107,6 +107,7 @@ let cursor = "0";
 do { const [next, batch] = await redis.scan(cursor, { match: `${FACTS}:*`, count: 1000 }); cursor = String(next); keys.push(...batch); } while (cursor !== "0");
 let built = 0, epsDiff = 0, opDiff = 0, longQ = 0, labelOff = 0;
 const ex = { eps: [], op: [], long: [], label: [] };
+const finds = [];
 for (let i = 0; i < keys.length; i += 20) {
   const chunk = keys.slice(i, i + 20);
   const raw = await redis.mget(...chunk);
@@ -116,14 +117,22 @@ for (let i = 0; i < keys.length; i += 20) {
     if (!set?.quarters || set.h !== secFieldsHash()) return;
     for (const q of set.quarters) if ((days(q.s, q.e) ?? 0) > 100) { longQ++; if (ex.long.length < 25) ex.long.push(`${sym} ${periodLabel(q)} ${q.s}→${q.e}`); break; }
     let r; try { r = readers(sym, set); } catch { return; }
+    // WHO SHOWS COWORK'S TILE? EPS 0.68 at +51.1%, operating margin 35.0% (+7.0 pt).
+    if (r) {
+      const yoy = r.snap.epsYoY?.kind === "pct" ? r.snap.epsYoY.value : (typeof r.snap.epsYoY?.value === "number" ? r.snap.epsYoY.value : null);
+      const ya = r.view.margins.find((x) => x.label === r.snap.yearAgo)?.operating ?? null;
+      const epsHit = typeof r.snap.eps === "number" && Math.abs(r.snap.eps - 0.68) < 0.005;
+      const opHit = typeof r.snap.opMargin === "number" && Math.abs(r.snap.opMargin - 35.0) < 0.05 && typeof ya === "number" && Math.abs(r.snap.opMargin - ya - 7.0) < 0.06;
+      if (epsHit || opHit) finds.push(`${sym} ${r.snap.label}: EPS ${f2(r.snap.eps)} (YoY ${JSON.stringify(r.snap.epsYoY)}) · op ${pct(r.snap.opMargin)} vs ${pct(ya)}${epsHit && opHit ? "  <== BOTH" : ""}`);
+    }
     if (!r || r.snap.basis !== "quarter") return;
     built++;
     const d0 = r.dash.at(0);
     if (d0 && d0.label !== r.snap.label) { labelOff++; if (ex.label.length < 25) ex.label.push(`${sym} snap ${r.snap.label} / dash ${d0.label}`); }
     const same = r.dash.find((d) => d.label === r.snap.label);
     if (same && typeof r.snap.eps === "number" && Math.abs(same.eps - r.snap.eps) > 0.005) { epsDiff++; if (ex.eps.length < 25) ex.eps.push(`${sym} ${r.snap.label} ${f2(r.snap.eps)} vs ${f2(same.eps)}`); }
-    const snapOp = typeof r.snap.opMargin === "number" ? r.snap.opMargin * (Math.abs(r.snap.opMargin) <= 1.5 ? 100 : 1) : null;
-    if (same && snapOp !== null && same.opPct !== null && Math.abs(snapOp - same.opPct) > 1) { opDiff++; if (ex.op.length < 25) ex.op.push(`${sym} ${r.snap.label} ${snapOp.toFixed(1)}% vs ${same.opPct}%`); }
+    const snapOp = typeof r.snap.opMargin === "number" ? r.snap.opMargin : null;
+    if (same && snapOp !== null && same.opPct !== null && Math.abs(snapOp - same.opPct) > 1.01) { opDiff++; if (ex.op.length < 25) ex.op.push(`${sym} ${r.snap.label} ${snapOp.toFixed(1)}% vs ${same.opPct}%`); }
   });
 }
 console.log(`  stored sets ${keys.length} · quarter-basis views built ${built}`);
@@ -131,4 +140,6 @@ console.log(`  a stored QUARTER spanning > 100 days: ${longQ} sets${ex.long.leng
 console.log(`  snapshot period != dashboard newest period: ${labelOff}${ex.label.length ? ` · ${ex.label.join(" | ")}` : ""}`);
 console.log(`  same period, EPS differs: ${epsDiff}${ex.eps.length ? ` · ${ex.eps.join(" | ")}` : ""}`);
 console.log(`  same period, operating margin differs > 1 pt: ${opDiff}${ex.op.length ? ` · ${ex.op.join(" | ")}` : ""}`);
+console.log(`  sets whose snapshot shows EPS $0.68 or op margin 35.0% (+7.0 pt): ${finds.length}`);
+for (const f of finds) console.log(`    ${f}`);
 console.log(`\nStore commands: ${JSON.stringify(counts)} · SEC requests: ${secCalls} · No writes were performed.`);
