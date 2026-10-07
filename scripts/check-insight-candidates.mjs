@@ -54,7 +54,7 @@ function quiet(n = 300) {
 }
 const withLast = (bars, f) => { const b = bars.map((x) => [...x]); f(b[b.length - 1], b); return b; };
 const USD = { reporting: "USD", converted: false };
-const row = (shares, eps = true) => ({ v: 1, unit: USD, at: 0, inputs: { shares: { val: shares, asOf: "2026-07-20" }, refusals: [] }, ...(eps ? { eps: { val: 5, basis: "four-quarters", periodEnd: "2026-06-30" } } : {}) });
+const row = (shares, eps = true, refusals = eps ? [] : ["no-twelve-month-eps"]) => ({ v: 1, unit: USD, at: 0, inputs: { shares: { val: shares, asOf: "2026-07-20" }, refusals }, ...(eps ? { eps: { val: 5, basis: "four-quarters", periodEnd: "2026-06-30" } } : {}) });
 
 function eventRules(C) {
   const fails = [];
@@ -84,22 +84,26 @@ function selectRules(C) {
   const prev = q[q.length - 2][4];
   const gap = withLast(q, (b) => { b[1] = prev * 1.06; b[2] = prev * 1.07; b[3] = prev * 1.05; b[4] = prev * 1.06; });
   const vol = withLast(q, (b) => { b[5] = 2.5e6; });
-  const bars = new Map([["MEGA", vol], ["BIG", gap], ["SMALL", gap], ["NOFACT", gap], ["NOEPS", gap], ["QUIET", q], ["BRK-B", gap]]);
+  const bars = new Map([["MEGA", vol], ["BIG", gap], ["SMALL", gap], ["NOFACT", gap], ["NOEPS", gap], ["ADSEPS", gap], ["QUIET", q], ["BRK-B", gap], ["GOOG", gap]]);
   const close = gap[gap.length - 1][4];
   const secRows = {
     MEGA: row(3e10 / close * 100), // ~3tn at vol's close, the weakest event
     BIG: row(1e9),                 // ~$106bn, the strongest event
     SMALL: row(1e7),               // ~$1bn
     NOEPS: row(1e9, false),
+    ADSEPS: row(1e7, false, ["ads-ratio-makes-eps-incomparable"]), // EPS refused, period on file
+    GOOG: row(1e9),
     QUIET: row(5e9),
     "BRK.B": row(2e9),             // dotted field, dashed bars
   };
   const value = C.selectInsightCandidates({ asOf: ASOF, bars, secRows, reportDates: new Map(), demand: [{ symbol: "SMALL", score: 99 }, { symbol: "BIG", score: 50 }] }, "t");
   const syms = value.ranked.map((c) => c.symbol);
   want("a quiet stock is not a candidate", !syms.includes("QUIET"));
-  want("size x strength: a $100bn gap outranks a $3tn volume spike; the dotted field ranks dashed", syms.join() === "BRK-B,BIG,MEGA,SMALL" || syms.join() === "BIG,BRK-B,MEGA,SMALL", syms.join());
+  want("size x strength: a $100bn gap outranks a $3tn volume spike; the dotted field ranks dashed", syms.filter((x) => x !== "ADSEPS").join() === "BRK-B,BIG,MEGA,SMALL" || syms.filter((x) => x !== "ADSEPS").join() === "BIG,BRK-B,MEGA,SMALL", syms.join());
   want("#188: no fact set is not ranked (it has no row, so no cap either)", !syms.includes("NOFACT"));
   want("#188: no filed period is left out, recorded", !syms.includes("NOEPS") && value.excluded.some((e) => e.symbol === "NOEPS" && e.why === "no-filed-period"), JSON.stringify(value.excluded));
+  want("#188: an EPS refused for another reason (ADS) still has its period: ranked", syms.includes("ADSEPS"));
+  want("a second share class is not a second candidate", !syms.includes("GOOG"));
   want("the cap bucket", value.ranked.find((c) => c.symbol === "MEGA")?.capBucket === "mega" && value.ranked.find((c) => c.symbol === "SMALL")?.capBucket === "mid");
   want("buzz: the most-searched $10bn+ name with an event (SMALL is under $10bn)", value.buzz?.symbol === "BIG" && value.buzz?.buzz === true, value.buzz?.symbol);
   want("the reason is words", /^Gapped up 5% or more at the open/.test(value.ranked.find((c) => c.symbol === "BIG")?.reason ?? ""));
@@ -188,6 +192,8 @@ try {
     ["ranked by size alone", "return size * (top + 0.25 * rest.reduce((a, b) => a + b, 0));", "return size;", (C) => selectRules(C).fails],
     ["#188 dropped", "    if (why) { excluded.push({ symbol, why }); continue; }\n", "", (C) => selectRules(C).fails],
     ["the whole universe, not the top by cap", "const top = all.slice(0, INSIGHT_UNIVERSE);", "const top = all;", (C) => selectRules(C).fails],
+    ["#188 on any EPS refusal", "return r.includes(\"no-twelve-month-eps\") || r.includes(\"eps-period-is-stale\") ? \"no-filed-period\" : null;", "return \"no-filed-period\";", (C) => selectRules(C).fails],
+    ["second classes kept", "|| SECONDARY_CLASS.has(symbol)) continue;", ") continue;", (C) => selectRules(C).fails],
     ["buzz under $10bn", "if (!hit || hit.cap < BUZZ_MIN_CAP || filedOk(hit.row)) continue;", "if (!hit || filedOk(hit.row)) continue;", (C) => selectRules(C).fails],
     ["repeats within 60 days", "return d !== undefined && daysBetween(d, value.asOf) < INSIGHT_REPEAT_DAYS;", "return d !== undefined && daysBetween(d, value.asOf) < 60;", (C) => readRules(C, selectRules(C).value)],
     ["the buzz pick repeats", "buzz: value.buzz && !recent(value.buzz.symbol) ? value.buzz : null,", "buzz: value.buzz,", (C) => readRules(C, selectRules(C).value)],

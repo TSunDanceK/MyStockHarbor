@@ -185,7 +185,7 @@ export function capRanked(bars: InsightInputs["bars"], secRows: InsightInputs["s
   const seen = new Set<string>();
   for (const [field, row] of Object.entries(secRows)) {
     const symbol = toDashed(field);
-    if (seen.has(symbol) || CAP_RANK_HOLD_OUT.has(symbol)) continue;
+    if (seen.has(symbol) || CAP_RANK_HOLD_OUT.has(symbol) || SECONDARY_CLASS.has(symbol)) continue;
     seen.add(symbol);
     const b = bars.get(symbol);
     const close = b && b.length ? b[b.length - 1][4] : null;
@@ -196,9 +196,26 @@ export function capRanked(bars: InsightInputs["bars"], secRows: InsightInputs["s
   return out.sort((a, b) => b.cap - a.cap || a.symbol.localeCompare(b.symbol));
 }
 
-/** #188: a fact set with a latest filed period (the row's EPS period). */
-const filedOk = (row: SecCapRow | undefined): InsightExclusion["why"] | null =>
-  !row ? "no-fact-set" : row.eps && typeof row.eps.periodEnd === "string" ? null : "no-filed-period";
+/**
+ * #188: a fact set with a latest filed period. No row is no fact set. A row
+ * whose EPS is refused only because no twelve months are on file, or because
+ * the newest period is stale, has no current filed period. Any other EPS
+ * refusal (an ADS unit, a share-basis change, a loss) still has the period on
+ * file, which is all the post's right rail needs.
+ */
+const filedOk = (row: SecCapRow | undefined): InsightExclusion["why"] | null => {
+  if (!row) return "no-fact-set";
+  if (row.eps && typeof row.eps.periodEnd === "string") return null;
+  const r = row.inputs.refusals;
+  return r.includes("no-twelve-month-eps") || r.includes("eps-period-is-stale") ? "no-filed-period" : null;
+};
+
+/**
+ * A company's second listed class, left out so one company is not two
+ * candidates (GOOG beside GOOGL on every list of the dry run). The first
+ * class keeps the slot.
+ */
+export const SECONDARY_CLASS: ReadonlySet<string> = new Set(["GOOG", "FOX", "NWS", "BRK-A", "UHAL-B", "LEN-B", "HEI-A", "BF-A"]);
 
 /** Pure. The night's ranked list, buzz pick and #188 exclusions. Repeats are NOT applied here. */
 export function selectInsightCandidates(input: InsightInputs, at: string): InsightCandidatesValue {
