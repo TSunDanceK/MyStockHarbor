@@ -1413,6 +1413,13 @@ const TASKS = {
   "sec-tag-probe": { script: "scripts/sec-tag-probe.mjs", args: () => [] },
   // BLAST RADIUS OF THE §3/§4 CHAIN EDITS OVER THE 200 CUT (#552 COWORK #191). No store.
   "sec-chain-blast-census": { script: "scripts/sec-chain-blast-census.mjs", args: () => [] },
+  // #191 ITEM 6 (#552): roll-forward six, V's cover, the five no-shares rows. GET/HGET only.
+  "write-overnight-readonly-report": {
+    script: "scripts/sec-overnight-readonly-report.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
