@@ -1420,6 +1420,8 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // THE 05:05 CHECK-IN (#552 COWORK #191 item 5). GET/ZCARD/EXISTS only.
+  "write-morning-check": { script: "scripts/sec-morning-check.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
