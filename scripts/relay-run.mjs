@@ -1414,6 +1414,7 @@ const TASKS = {
   "write-ipo-about-measure": { script: "scripts/ipo-about-measure.mjs", args: () => [], needsTypescript: true, writes: true },
   // The #813 screens on the live build (#553 COWORK #194), read-only.
   "write-screen-live-counts": { script: "scripts/screen-live-counts.mjs", args: () => [], needsTypescript: true, writes: true },
+  "write-cap-reason-trace": { script: "scripts/cap-reason-trace.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
