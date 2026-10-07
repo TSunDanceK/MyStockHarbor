@@ -377,7 +377,16 @@ const INCOME: FieldDef[] = ([
       "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
     ], unit: "USD" },
   { key: "incomeTaxExpense", chain: ["IncomeTaxExpenseBenefit"], unit: "USD" },
-  { key: "netIncome", chain: ["NetIncomeLoss", "ProfitLoss"], unit: "USD" },
+  // NetIncomeLossAvailableToCommonStockholdersBasic LAST (#552 COWORK #187 §4,
+  // 2026-10-07). BKNG stopped tagging NetIncomeLoss on its 10-Qs (newest
+  // quarterly row 2012) and files its quarters only under this concept, so its
+  // quarterly net income read "Not reported" 8 of 8 and Q4 never derived.
+  // Measured over the 200 cut (relay sec-chain-blast-census 37548884491): it
+  // becomes the filer's newest-period concept for BKNG ALONE, filling 209 rows,
+  // equal to NetIncomeLoss on all 36 it shares and differing on none. It is a
+  // different measure where preferred dividends exist, which is why it is last:
+  // a filer that tags NetIncomeLoss on its newest period keeps it.
+  { key: "netIncome", chain: ["NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"], unit: "USD" },
   { key: "netIncomeToNoncontrollingInterest", chain: ["NetIncomeLossAttributableToNoncontrollingInterest"], unit: "USD" },
   // EarningsPerShareBasicAndDiluted IS NOT A TIDY-UP. ASTS publishes only the
   // combined tag and came back with EPS empty on all 8 quarters, which is how it
