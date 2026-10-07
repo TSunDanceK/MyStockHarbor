@@ -26,6 +26,7 @@ supplyChain:
   - name: Carl Zeiss SMT
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       The sole supplier of ASML's projection optics and EUV multilayer
       mirrors, built to atomic-scale precision; ASML holds a near-25%
@@ -35,6 +36,7 @@ supplyChain:
   - name: TRUMPF
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Supplies the high-power drive lasers that vaporize tin droplets into
       EUV light inside ASML's scanners, with no economical substitute at
@@ -43,6 +45,7 @@ supplyChain:
   - name: VDL Groep
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Builds the ultra-precision wafer and reticle stages and mechatronic
       modules that let ASML's scanners hold sub-nanometer overlay
@@ -51,6 +54,7 @@ supplyChain:
   - name: MKS Instruments
     ticker: MKSI
     pct: 10
+    grade: some
     blurb: >
       Provides critical gas-control, RF power, and vacuum-subsystem
       components used across ASML's DUV and EUV platforms, an area with
@@ -58,6 +62,7 @@ supplyChain:
   - name: Coherent Corp
     ticker: COHR
     pct: 8
+    grade: spread
     blurb: >
       Supplies laser and photonics components integrated into ASML's
       lithography and metrology systems, a specialty with limited alternate
@@ -65,6 +70,7 @@ supplyChain:
   - name: Prodrive Technologies
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Builds custom electronic and power modules to ASML's exact
       specifications, embedding deep IP that would be costly and slow to
@@ -72,6 +78,7 @@ supplyChain:
   - name: Pfeiffer Vacuum Technology
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Supplies the high-end vacuum pump systems required to maintain the
       near-total-vacuum environment ASML's EUV light and mirrors need to
@@ -80,6 +87,7 @@ supplyChain:
   - name: Neways Electronics International
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Supplies wiring harnesses and electrical power-control units built
       directly into ASML system modules. Taken private in 2023, with no
@@ -87,6 +95,7 @@ supplyChain:
   - name: Schott AG
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Supplies purified optical glass and crystal blanks used in DUV lens
       elements, a niche materials-science capability concentrated in very
@@ -96,6 +105,7 @@ customers:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 30
+    grade: hard
     blurb: >
       The world's dominant leading-edge foundry and ASML's single largest,
       most consistently reported EUV and High-NA customer; TSMC's capex
@@ -103,6 +113,7 @@ customers:
   - name: Samsung Electronics
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Buys EUV systems for both its foundry and memory businesses, and has
       been an active buyer of ASML's newest High-NA tools. Trades
@@ -110,6 +121,7 @@ customers:
   - name: Intel
     ticker: INTC
     pct: 13
+    grade: some
     blurb: >
       A founding-era ASML customer and former equity co-investor; Intel's
       Arizona fab was the first to install a commercial High-NA EUV tool,
@@ -117,6 +129,7 @@ customers:
   - name: Chinese foundries (SMIC and other mainland fabs)
     ticker: null
     pct: 17
+    grade: some
     blurb: >
       Not a single company — China has been one of ASML's largest
       single-country revenue sources in recent years, driven by mature-node
@@ -126,6 +139,7 @@ customers:
   - name: SK hynix
     ticker: SKHY
     pct: 12
+    grade: some
     blurb: >
       A major memory and HBM customer whose AI-driven DRAM expansion has
       made it an increasingly important EUV and DUV buyer — it disclosed a
@@ -135,6 +149,7 @@ customers:
   - name: Micron Technology
     ticker: MU
     pct: 8
+    grade: spread
     blurb: >
       The largest US-based memory maker and a recurring large buyer of
       ASML's DUV and EUV systems for DRAM and NAND capacity expansion.

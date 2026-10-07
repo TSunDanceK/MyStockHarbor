@@ -25,6 +25,7 @@ supplyChain:
   - name: GE Aerospace
     ticker: GE
     pct: 30
+    grade: hard
     blurb: >
       Under a 2025 teaming agreement, GE Aerospace is co-developing and manufacturing the GEK800
       and GEK1500 small turbofan/turbojet engines for Kratos's next-generation unmanned aerial
@@ -34,6 +35,7 @@ supplyChain:
   - name: L3Harris Technologies
     ticker: LHX
     pct: 25
+    grade: some
     blurb: >
       Kratos has issued letters of intent to L3Harris for dozens of large-diameter Zeus 1 and
       Zeus 2 solid rocket motors used in its MACH-TB 2.0 hypersonic test-launch program. Kratos
@@ -42,6 +44,7 @@ supplyChain:
   - name: Williams International
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Williams International's small turbofan engines (including the FJ33) have powered Kratos's
       subsonic aerial target drones and the original XQ-58A Valkyrie demonstrator, giving Kratos
@@ -50,6 +53,7 @@ supplyChain:
   - name: RAFAEL Advanced Defense Systems
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Through the Prometheus Energetics joint venture announced in 2025, Kratos partners with
       Israel's RAFAEL to build a U.S.-based merchant supplier of solid rocket motors, reflecting
@@ -59,6 +63,7 @@ customers:
   - name: U.S. Federal Government (all agencies combined)
     ticker: null
     pct: 68
+    grade: hard
     blurb: >
       Kratos discloses that U.S. Government agency customers in aggregate accounted for roughly
       67-69% of revenue in recent fiscal years, spanning the Air Force, Space Force/Space Systems
@@ -69,6 +74,7 @@ customers:
   - name: International & Allied Government Customers
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Foreign military sales of aerial target drones (BQM-167, MQM-178 Firejet), satellite ground
       systems and defense electronics to NATO and allied nations make up a meaningful, if
@@ -77,6 +83,7 @@ customers:
   - name: Commercial Customers
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Kratos names commercial customers including satellite operator Intelsat, Microsoft (Azure
       Orbital cloud ground-station services), Amazon, Siemens, Rolls-Royce and Boom Supersonic

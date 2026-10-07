@@ -35,6 +35,7 @@ supplyChain:
   - name: Vanguard International Semiconductor
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       MPWR's only foundry partner it has confirmed by name: a December
       2022 agreement securing long-term 8-inch wafer capacity at
@@ -44,6 +45,7 @@ supplyChain:
   - name: Third-party wafer foundries (China, Taiwan, South Korea & Singapore)
     ticker: null
     pct: 40
+    grade: hard
     blurb: >
       Not a single company. As a fabless chipmaker, MPWR's 10-K discloses
       that it "contract[s] with several suppliers to manufacture our
@@ -53,6 +55,7 @@ supplyChain:
   - name: Outsourced assembly, packaging & test subcontractors
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Not a single company. MPWR's 10-K discloses that final assembly,
       packaging, and test are handled by independent subcontractors
@@ -62,6 +65,7 @@ customers:
   - name: Largest distributor ("Customer A" in MPWR's 10-K)
     ticker: null
     pct: 26
+    grade: some
     blurb: >
       MPWR's 10-K discloses its single largest distributor at 26% of
       2025 revenue without naming it. Industry reporting has tied MPWR's
@@ -71,18 +75,21 @@ customers:
   - name: Second-largest distributor
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       MPWR's second-largest distributor, accounting for 18% of 2025
       revenue per its 10-K. Not named in the filing.
   - name: Third-largest distributor
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       MPWR's third-largest distributor, accounting for 10% of 2025
       revenue per its 10-K. Not named in the filing.
   - name: Diversified remaining customer base
     ticker: null
     pct: 46
+    grade: hard
     blurb: >
       Not a single company. MPWR's 10-K states no other direct customer
       or distributor exceeded 10% of revenue in 2025, spanning

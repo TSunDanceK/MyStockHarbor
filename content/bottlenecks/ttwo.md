@@ -39,6 +39,7 @@ supplyChain:
   - name: Sony Interactive Entertainment
     ticker: SONY
     pct: 20
+    grade: some
     blurb: >
       Sony certifies and controls approved manufacturing of every PlayStation
       title Take-Two ships, under a license agreement set to expire in March
@@ -48,6 +49,7 @@ supplyChain:
   - name: Microsoft Corporation
     ticker: MSFT
     pct: 15
+    grade: some
     blurb: >
       Microsoft plays the same certification and manufacturing-approval role
       for Xbox releases under a comparable licensing arrangement, and its
@@ -56,6 +58,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 15
+    grade: some
     blurb: >
       Zynga's mobile portfolio runs its backend hosting, matchmaking, and
       live-operations infrastructure on Amazon Web Services, a dependency
@@ -64,6 +67,7 @@ supplyChain:
   - name: Epic Games
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Take-Two's Gearbox Software builds the Borderlands franchise and other
       titles on Epic Games' Unreal Engine, tying a meaningful slice of 2K's
@@ -72,6 +76,7 @@ supplyChain:
   - name: Valve Corporation
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Valve's Steam client is the dominant PC digital storefront, DRM, and
       anti-cheat backbone for Rockstar and 2K's biggest PC releases, giving
@@ -80,6 +85,7 @@ supplyChain:
   - name: National Basketball Association (NBA)
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       2K's NBA 2K franchise, one of Take-Two's largest annual releases,
       exists only under an exclusive licensing partnership with the NBA and
@@ -88,6 +94,7 @@ supplyChain:
   - name: Nintendo Co., Ltd.
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Nintendo runs its own certification and manufacturing-approval process
       for any Take-Two title ported to Switch hardware, mirroring the
@@ -97,6 +104,7 @@ supplyChain:
   - name: Contract development, localization & QA vendors
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Beyond its owned labels, Take-Two relies on a broad roster of external
       co-development studios, localization houses, motion-capture facilities,
@@ -106,6 +114,7 @@ customers:
   - name: Apple Inc.
     ticker: AAPL
     pct: 24
+    grade: some
     blurb: >
       Apple's App Store is the largest single revenue channel Take-Two names
       in its fiscal 2026 10-K, one of four platform partners the company
@@ -114,6 +123,7 @@ customers:
   - name: Sony Interactive Entertainment
     ticker: SONY
     pct: 22
+    grade: some
     blurb: >
       Sony is named as one of Take-Two's four customers exceeding 10% of net
       revenue in fiscal 2026, reflecting PlayStation's weight among console
@@ -122,6 +132,7 @@ customers:
   - name: Alphabet Inc. (Google)
     ticker: GOOGL
     pct: 18
+    grade: some
     blurb: >
       Google, via the Google Play Store, is another of the four platform
       partners Take-Two's 10-K names as individually exceeding 10% of net
@@ -130,6 +141,7 @@ customers:
   - name: Microsoft Corporation
     ticker: MSFT
     pct: 15
+    grade: some
     blurb: >
       Microsoft rounds out the four channel partners Take-Two discloses as
       each exceeding 10% of net revenue in fiscal 2026, reflecting Xbox
@@ -137,6 +149,7 @@ customers:
   - name: Valve Corporation
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Take-Two's 10-K discloses that its five largest customers together
       equaled 80.6% of net revenue in fiscal 2026, with only four named
@@ -147,6 +160,7 @@ customers:
   - name: Retail, other storefronts & individual consumers
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       The remainder of Take-Two's revenue is spread across physical retail
       chains, other regional digital storefronts, and ultimately tens of

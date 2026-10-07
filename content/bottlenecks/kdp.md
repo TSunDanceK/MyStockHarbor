@@ -32,6 +32,7 @@ supplyChain:
   - name: Crown Holdings, Inc.
     ticker: CCK
     pct: 20
+    grade: some
     blurb: >
       Crown Cork & Seal, a Crown Holdings subsidiary, has supplied aluminum
       beverage cans and ends to Keurig Dr Pepper's bottling operations,
@@ -42,6 +43,7 @@ supplyChain:
   - name: Ball Corporation
     ticker: BALL
     pct: 15
+    grade: some
     blurb: >
       Ball is, alongside Crown Holdings, one of only two dominant makers of
       aluminum beverage cans in North America, supplying most major
@@ -51,6 +53,7 @@ supplyChain:
   - name: Green coffee growers & global trading houses
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Not a single company. Keurig Dr Pepper's coffee business — Green
       Mountain Coffee and Keurig K-Cup pods, plus Peet's and Douwe Egberts
@@ -62,6 +65,7 @@ supplyChain:
   - name: Indorama Ventures Public Company Limited
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Indorama Ventures is one of the world's largest producers of PET
       resin, the plastic used in KDP's bottled beverages and in K-Cup pod
@@ -70,6 +74,7 @@ supplyChain:
   - name: Ingredion Incorporated
     ticker: INGR
     pct: 9
+    grade: spread
     blurb: >
       Ingredion is a major North American supplier of corn-based sweeteners,
       including high-fructose corn syrup, used across KDP's sugar-sweetened
@@ -78,6 +83,7 @@ supplyChain:
   - name: O-I Glass, Inc.
     ticker: OI
     pct: 8
+    grade: spread
     blurb: >
       O-I Glass, formerly Owens-Illinois, is one of the largest glass
       container makers in the world and a longstanding source of glass
@@ -87,6 +93,7 @@ supplyChain:
   - name: Asian contract electronics manufacturers (Keurig brewers)
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. Keurig-branded single-serve coffee brewers are
       assembled largely by contract electronics manufacturers in China,
@@ -96,6 +103,7 @@ supplyChain:
   - name: Smurfit WestRock plc
     ticker: WS
     pct: 10
+    grade: some
     blurb: >
       Smurfit WestRock is one of the largest producers of containerboard
       and corrugated packaging in North America, supplying the cardboard
@@ -106,6 +114,7 @@ customers:
   - name: Walmart Inc.
     ticker: WMT
     pct: 16
+    grade: some
     blurb: >
       Walmart is Keurig Dr Pepper's largest single customer, representing
       approximately 16% of consolidated net sales in 2025 according to
@@ -115,6 +124,7 @@ customers:
   - name: Costco Wholesale Corporation
     ticker: COST
     pct: 10
+    grade: some
     blurb: >
       Costco's warehouse-club format is a major outlet for KDP's bulk
       multi-packs, particularly large-format Keurig K-Cup pod boxes and
@@ -123,6 +133,7 @@ customers:
   - name: The Kroger Co.
     ticker: KR
     pct: 9
+    grade: spread
     blurb: >
       Kroger, the largest traditional US supermarket operator, is a
       significant grocery-channel customer for KDP's full beverage and
@@ -131,6 +142,7 @@ customers:
   - name: Amazon.com, Inc.
     ticker: AMZN
     pct: 7
+    grade: spread
     blurb: >
       Amazon has become an increasingly important online and Whole
       Foods-linked grocery channel for KDP's K-Cup pods and canned or
@@ -139,6 +151,7 @@ customers:
   - name: Target Corporation
     ticker: TGT
     pct: 6
+    grade: spread
     blurb: >
       Target is a significant big-box retail customer for KDP's beverage
       and coffee lines, competing for endcap placement and promotional
@@ -146,6 +159,7 @@ customers:
   - name: All other retail, club, grocery, convenience & foodservice channels
     ticker: null
     pct: 52
+    grade: spread
     blurb: >
       Not a single company. The remainder of KDP's net sales are spread
       across thousands of other retailers, wholesalers, convenience stores,

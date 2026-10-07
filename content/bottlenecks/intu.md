@@ -35,6 +35,7 @@ supplyChain:
   - name: Amazon Web Services
     ticker: AMZN
     pct: 28
+    grade: some
     blurb: >
       Intuit describes itself as running an "all-in" cloud approach on AWS,
       hosting most of the systems, networks, and databases behind
@@ -45,6 +46,7 @@ supplyChain:
   - name: Alphabet (Google Cloud Platform)
     ticker: GOOGL
     pct: 12
+    grade: some
     blurb: >
       Intuit's own SEC filings name Google Cloud Platform alongside AWS as
       a public cloud provider for its online offerings, giving it a second
@@ -53,6 +55,7 @@ supplyChain:
   - name: US IRS & state tax authorities
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. TurboTax's core business depends on
       authorization to electronically transmit returns through the IRS
@@ -62,6 +65,7 @@ supplyChain:
   - name: TransUnion
     ticker: TRU
     pct: 12
+    grade: some
     blurb: >
       Credit Karma's free credit scores and reports are built on
       VantageScore data supplied by TransUnion, making it the credit
@@ -70,6 +74,7 @@ supplyChain:
   - name: Visa
     ticker: V
     pct: 8
+    grade: spread
     blurb: >
       QuickBooks Payments and Credit Karma/QuickBooks money-movement
       features rely on the Visa card network to authorize and settle
@@ -77,6 +82,7 @@ supplyChain:
   - name: Mastercard
     ticker: MA
     pct: 7
+    grade: spread
     blurb: >
       Alongside Visa, Mastercard's network handles a meaningful share of
       the card transactions processed through QuickBooks Payments for
@@ -84,6 +90,7 @@ supplyChain:
   - name: Green Dot Corporation
     ticker: GDOT
     pct: 8
+    grade: spread
     blurb: >
       Green Dot is the FDIC-member bank partner behind QuickBooks
       Money/Checking, actually holding the deposits and providing the
@@ -92,6 +99,7 @@ supplyChain:
   - name: MVB Financial Corp (MVB Bank)
     ticker: MVBF
     pct: 5
+    grade: spread
     blurb: >
       MVB Bank is the FDIC-member bank partner disclosed on Credit Karma
       Money's checking and savings accounts, supplying the regulated
@@ -99,6 +107,7 @@ supplyChain:
   - name: Anthropic
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       A private company with no public ticker. Intuit has integrated
       Anthropic's Claude models (accessed via AWS Bedrock) into Intuit
@@ -108,6 +117,7 @@ customers:
   - name: Global Business Solutions (QuickBooks small-business ecosystem)
     ticker: null
     pct: 59
+    grade: hard
     blurb: >
       Not a single company — this is Intuit's own reported segment
       covering QuickBooks Online, payroll, payments, and other
@@ -117,6 +127,7 @@ customers:
   - name: Consumer Group (TurboTax)
     ticker: null
     pct: 26
+    grade: some
     blurb: >
       Not a single company. TurboTax's do-it-yourself and TurboTax Live
       assisted tax-filing products for individual consumers form Intuit's
@@ -125,6 +136,7 @@ customers:
   - name: Credit Karma
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company. Acquired in 2020, Credit Karma monetizes its
       free credit-monitoring user base by matching members with
@@ -133,6 +145,7 @@ customers:
   - name: ProTax Group
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       Not a single company. Intuit's smallest reported segment sells tax
       preparation software (Lacerte, ProSeries, ProConnect) to

@@ -35,6 +35,7 @@ supplyChain:
   - name: Outsourced optics, laser & photonics component manufacturing
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Not a single company - KLA's inspection and metrology systems depend
       on precision optical, laser, and photonics components that KLA's own
@@ -44,6 +45,7 @@ supplyChain:
   - name: Israel-based manufacturing & engineering operations
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company - KLA lists Israel among its named manufacturing
       and component-sourcing locations, reflecting optics and inspection
@@ -52,6 +54,7 @@ supplyChain:
   - name: Outsourced precision motion-stage & mechanical subassembly manufacturing
     ticker: null
     pct: 20
+    grade: hard
     blurb: >
       Not a single company - the ultra-precise wafer and sample stages and
       mechanical subassemblies inside KLA's systems are manufactured by a
@@ -60,6 +63,7 @@ supplyChain:
   - name: Singapore contract manufacturing & systems assembly
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company - KLA names Singapore among its manufacturing
       locations for component sourcing and system assembly, part of its
@@ -68,6 +72,7 @@ supplyChain:
   - name: China-based component sourcing & manufacturing operations
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company - KLA names China among its manufacturing and
       sourcing locations, an exposure that sits alongside its large China
@@ -76,6 +81,7 @@ supplyChain:
   - name: Germany, UK & Italy precision component manufacturing
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company - KLA names Germany, the United Kingdom, and
       Italy among its manufacturing and component-sourcing locations for
@@ -84,6 +90,7 @@ customers:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 32
+    grade: hard
     blurb: >
       Named directly in KLA's 10-K as a customer representing more than
       10% of total revenue in fiscal 2025, 2024, and 2023, and widely
@@ -92,6 +99,7 @@ customers:
   - name: Samsung Electronics
     ticker: null
     pct: 26
+    grade: some
     blurb: >
       Named directly in KLA's 10-K as a customer representing more than
       10% of total revenue in fiscal 2025, 2024, and 2023. Trades
@@ -99,6 +107,7 @@ customers:
   - name: China-based fabs
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company - customers in China made up 33% of KLA's
       fiscal 2025 revenue, down from 43% in fiscal 2024, a large and
@@ -107,6 +116,7 @@ customers:
   - name: Intel
     ticker: INTC
     pct: 10
+    grade: some
     blurb: >
       A historically large KLA customer for both its own leading-edge fabs
       and its newer Intel Foundry business, though not currently named at
@@ -114,6 +124,7 @@ customers:
   - name: SK hynix
     ticker: SKHY
     pct: 7
+    grade: spread
     blurb: >
       A significant buyer of KLA's process-control tools for memory-fab
       yield management, per analyst coverage, though not currently named
@@ -123,6 +134,7 @@ customers:
   - name: Micron Technology
     ticker: MU
     pct: 5
+    grade: spread
     blurb: >
       A known industry customer for KLA's memory-fab process control
       tools, though not currently named at KLA's 10%-of-revenue disclosure

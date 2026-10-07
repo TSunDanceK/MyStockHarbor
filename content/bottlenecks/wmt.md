@@ -36,6 +36,7 @@ supplyChain:
   - name: Procter & Gamble
     ticker: PG
     pct: 20
+    grade: some
     blurb: >
       Walmart is P&G's largest customer, at roughly 16% of P&G's total
       sales per its own 10-K, spanning Tide, Pampers, Gillette, Bounty, and
@@ -44,6 +45,7 @@ supplyChain:
   - name: PepsiCo
     ticker: PEP
     pct: 19
+    grade: some
     blurb: >
       PepsiCo discloses Walmart and its affiliates, including Sam's Club,
       as roughly 14% of its consolidated net revenue — its single largest
@@ -52,6 +54,7 @@ supplyChain:
   - name: Tyson Foods
     ticker: TSN
     pct: 15
+    grade: some
     blurb: >
       Walmart accounts for close to 19% of Tyson's consolidated sales,
       making it Tyson's largest customer. Tyson supplies a large share of
@@ -61,6 +64,7 @@ supplyChain:
   - name: Coca-Cola
     ticker: KO
     pct: 12
+    grade: some
     blurb: >
       Coca-Cola brands are among the highest-volume, most consistently
       stocked beverage SKUs at Walmart, distributed through Coca-Cola's
@@ -69,6 +73,7 @@ supplyChain:
   - name: Nestlé
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Supplies packaged food, coffee, and pet food across many Walmart
       aisles. As one of the world's largest food companies, its breadth
@@ -77,6 +82,7 @@ supplyChain:
   - name: Kraft Heinz
     ticker: KHC
     pct: 8
+    grade: spread
     blurb: >
       Walmart is Kraft Heinz's largest customer, at roughly 21% of net
       sales per its 10-K. Pantry staples like Heinz ketchup and Kraft mac &
@@ -85,6 +91,7 @@ supplyChain:
   - name: Unilever
     ticker: UL
     pct: 6
+    grade: spread
     blurb: >
       Supplies major personal-care and home-care brands across Walmart's
       health-and-beauty and grocery aisles. Its brand density makes it a
@@ -93,6 +100,7 @@ supplyChain:
   - name: Mondelez International
     ticker: MDLZ
     pct: 5
+    grade: spread
     blurb: >
       Supplies leading snack brands with prominent Walmart shelf space.
       Mondelez's globally diversified revenue base means Walmart is a
@@ -101,6 +109,7 @@ supplyChain:
   - name: Kimberly-Clark
     ticker: KMB
     pct: 4
+    grade: spread
     blurb: >
       Discloses Walmart at roughly 14% of its consolidated net sales — its
       largest customer — driven by paper and personal-care staples that
@@ -108,6 +117,7 @@ supplyChain:
   - name: Clorox
     ticker: CLX
     pct: 3
+    grade: spread
     blurb: >
       Walmart is Clorox's largest customer by far, at roughly 27% of its
       fiscal net sales — the highest dependency ratio of any supplier on
@@ -117,6 +127,7 @@ customers:
   - name: Procter & Gamble
     ticker: PG
     pct: 22
+    grade: some
     blurb: >
       Reported as one of the largest advertisers on Walmart Connect, and
       has publicly described deepening its retail-media integration with
@@ -124,6 +135,7 @@ customers:
   - name: PepsiCo
     ticker: PEP
     pct: 16
+    grade: some
     blurb: >
       One of the largest advertisers across US retail media generally and
       a major Walmart Connect participant for its snack and beverage
@@ -131,6 +143,7 @@ customers:
   - name: Unilever
     ticker: UL
     pct: 12
+    grade: some
     blurb: >
       Runs sizable Walmart Connect campaigns across its personal-care and
       home-care portfolio, consistent with reporting that the largest
@@ -139,6 +152,7 @@ customers:
   - name: Coca-Cola
     ticker: KO
     pct: 11
+    grade: some
     blurb: >
       A heavy US measured-media and retail-media advertiser, reinforcing
       its near-universal Walmart shelf presence with consistent ad and
@@ -146,6 +160,7 @@ customers:
   - name: Nestlé
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Nestlé's global ad budget is among the largest of any consumer goods
       company, and its extensive Walmart shelf footprint is backed by
@@ -154,6 +169,7 @@ customers:
   - name: Kraft Heinz
     ticker: KHC
     pct: 8
+    grade: spread
     blurb: >
       Advertises its packaged-food staples through Walmart Connect as part
       of its broader trade-marketing spend, mirroring its position as one
@@ -161,6 +177,7 @@ customers:
   - name: Mondelez International
     ticker: MDLZ
     pct: 7
+    grade: spread
     blurb: >
       Runs retail-media campaigns for its snack brands on Walmart Connect,
       part of industry-wide CPG ad spend on retail media reported at over
@@ -168,6 +185,7 @@ customers:
   - name: Johnson & Johnson
     ticker: JNJ
     pct: 7
+    grade: spread
     blurb: >
       Named alongside P&G as a company using Walmart Connect's
       social-commerce ad tools to market its health and personal-care
@@ -176,6 +194,7 @@ customers:
   - name: Kimberly-Clark
     ticker: KMB
     pct: 4
+    grade: spread
     blurb: >
       Advertises its paper and personal-care brands through Walmart
       Connect as part of the same supplier-funded retail-media spend
@@ -183,6 +202,7 @@ customers:
   - name: Church & Dwight
     ticker: CHD
     pct: 3
+    grade: spread
     blurb: >
       Itself heavily Walmart-dependent for merchandise sales, and also
       participates in Walmart Connect advertising as part of its trade-spend

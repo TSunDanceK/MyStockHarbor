@@ -31,6 +31,7 @@ supplyChain:
   - name: Panasonic
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Tesla's original and longest-standing battery cell partner, supplying
       cells from its Nevada Gigafactory line. Trades primarily on the Tokyo
@@ -38,6 +39,7 @@ supplyChain:
   - name: LG Energy Solution
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       A major battery supplier, including a reported $4.3 billion LFP
       battery deal with Tesla. Trades primarily on the Korea Exchange with
@@ -45,6 +47,7 @@ supplyChain:
   - name: CATL
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       The world's largest battery maker, supplying LFP cells for vehicles
       built at Tesla's Shanghai Gigafactory. Trades primarily on the
@@ -52,6 +55,7 @@ supplyChain:
   - name: Samsung SDI
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A battery supplier to Tesla, including a reported $2.1 billion deal.
       Trades primarily on the Korea Exchange with no proper US-listed
@@ -59,18 +63,21 @@ supplyChain:
   - name: NVIDIA
     ticker: NVDA
     pct: 8
+    grade: spread
     blurb: >
       Supplies the AI training chips Tesla uses for its self-driving and
       robotics compute clusters.
   - name: Albemarle Corporation
     ticker: ALB
     pct: 8
+    grade: spread
     blurb: >
       A major lithium supplier feeding the battery supply chain Tesla
       depends on.
   - name: Glencore
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       A major supplier of nickel and cobalt used in EV battery production.
       Trades primarily on the London Stock Exchange with no proper
@@ -78,17 +85,20 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 4
+    grade: spread
     blurb: >
       Fabricates chips used in Tesla's in-house full self-driving computer.
   - name: Samsung Electronics
     ticker: null
     pct: 2
+    grade: spread
     blurb: >
       A foundry partner for some of Tesla's custom silicon. Trades
       primarily on the Korea Exchange with no proper US-listed ticker.
   - name: Broadcom
     ticker: AVGO
     pct: 2
+    grade: spread
     blurb: >
       Supplies networking and connectivity chips used across Tesla's
       vehicle and compute platforms.
@@ -96,58 +106,68 @@ customers:
   - name: Ford Motor Company
     ticker: F
     pct: 22
+    grade: some
     blurb: >
       Adopted Tesla's NACS charging standard, giving its EV customers
       access to - and paying for use of - the Tesla Supercharger network.
   - name: General Motors
     ticker: GM
     pct: 20
+    grade: some
     blurb: >
       Adopted the NACS standard and pays to give its EV customers access to
       Tesla's Supercharger network.
   - name: Rivian Automotive
     ticker: RIVN
     pct: 16
+    grade: some
     blurb: >
       An NACS adopter whose vehicles rely on access to Tesla's charging
       network.
   - name: Hyundai Motor
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Adopted the NACS standard for its EV lineup. Trades primarily on the
       Korea Exchange with no proper US-listed ticker.
   - name: Honda Motor
     ticker: HMC
     pct: 10
+    grade: some
     blurb: >
       Adopted Tesla's NACS charging standard for its EV lineup.
   - name: Nissan Motor
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Adopted the NACS standard for its EV lineup. Trades primarily on the
       Tokyo Stock Exchange with no proper US-listed ticker.
   - name: Stellantis
     ticker: STLA
     pct: 6
+    grade: spread
     blurb: >
       A historical buyer of Tesla's regulatory emissions credits, a real
       (if now shrinking) Tesla revenue line.
   - name: Toyota Motor
     ticker: TM
     pct: 4
+    grade: spread
     blurb: >
       Adopted the NACS standard for a portion of its EV lineup.
   - name: Polestar
     ticker: PSNY
     pct: 1
+    grade: spread
     blurb: >
       An NACS adopter giving its EV customers access to Tesla's Supercharger
       network.
   - name: Volvo Cars
     ticker: null
     pct: 1
+    grade: spread
     blurb: >
       An NACS adopter giving its EV customers access to Tesla's Supercharger
       network. Trades primarily on the Stockholm Stock Exchange with no

@@ -43,6 +43,7 @@ supplyChain:
   - name: Nike, Inc.
     ticker: NKE
     pct: 16
+    grade: some
     blurb: >
       Widely reported to have leaned on wholesale and off-price channels to
       clear a well-documented 2022-2023 inventory glut, making footwear and
@@ -51,6 +52,7 @@ supplyChain:
   - name: VF Corporation
     ticker: VFC
     pct: 13
+    grade: some
     blurb: >
       Owner of Vans, The North Face, and Timberland; overproduction and
       order cancellations across its portfolio are a recurring source of
@@ -58,6 +60,7 @@ supplyChain:
   - name: PVH Corp.
     ticker: PVH
     pct: 12
+    grade: some
     blurb: >
       Owner of Calvin Klein and Tommy Hilfiger, two of the most common
       name-brand labels found in off-price stores when wholesale orders are
@@ -65,6 +68,7 @@ supplyChain:
   - name: Ralph Lauren Corporation
     ticker: RL
     pct: 10
+    grade: some
     blurb: >
       A long-documented source of excess inventory for off-price retailers,
       alongside its own outlet-store channel, giving Ross access to a
@@ -72,6 +76,7 @@ supplyChain:
   - name: Levi Strauss & Co.
     ticker: LEVI
     pct: 10
+    grade: some
     blurb: >
       Denim and casualwear overruns and canceled wholesale orders make
       Levi's one of the more consistently available name brands in
@@ -79,6 +84,7 @@ supplyChain:
   - name: Under Armour, Inc.
     ticker: UAA
     pct: 9
+    grade: spread
     blurb: >
       Has publicly discussed leaning more heavily on wholesale and
       off-price distribution while working through inventory and brand
@@ -86,6 +92,7 @@ supplyChain:
   - name: Columbia Sportswear Company
     ticker: COLM
     pct: 8
+    grade: spread
     blurb: >
       Outdoor apparel and footwear overproduction, especially in
       weather-dependent categories, regularly flows into off-price
@@ -93,6 +100,7 @@ supplyChain:
   - name: Gap Inc.
     ticker: GAP
     pct: 8
+    grade: spread
     blurb: >
       Basics and casualwear overruns across Gap's brand portfolio are a
       long-standing source of off-price inventory in the value apparel
@@ -100,6 +108,7 @@ supplyChain:
   - name: Diversified apparel, footwear & home-goods closeout network
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Not a single company - covers the remaining several hundred vendors
       among Ross's 800+ merchandise vendors and manufacturers, spanning
@@ -109,6 +118,7 @@ customers:
   - name: Home Accents and Bed and Bath
     ticker: null
     pct: 26
+    grade: some
     blurb: >
       Not a single company - Ross's own reported merchandise category mix
       for fiscal 2024, and its single largest department, covering home
@@ -116,30 +126,35 @@ customers:
   - name: Ladies
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Not a single company - Ross's women's apparel department, its second-
       largest reported category for fiscal 2024.
   - name: Men's
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Not a single company - Ross's men's apparel department, per its
       fiscal 2024 reported sales mix.
   - name: Accessories, Lingerie, Fine Jewelry & Cosmetics
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company - a combined department covering smaller
       discretionary categories, per Ross's fiscal 2024 reported sales mix.
   - name: Shoes
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company - Ross's footwear department, per its fiscal
       2024 reported sales mix.
   - name: Children's
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Not a single company - Ross's smallest reported department for
       fiscal 2024, covering kids' apparel.

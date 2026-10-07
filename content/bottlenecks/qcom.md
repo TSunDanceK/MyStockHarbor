@@ -24,6 +24,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 32
+    grade: hard
     blurb: >
       Named directly in Qualcomm's 10-K as a primary foundry supplier and
       widely reported as the fabricator of Qualcomm's newest leading-edge
@@ -31,6 +32,7 @@ supplyChain:
   - name: Samsung Electronics (Foundry)
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       Named directly in Qualcomm's 10-K as one of its three primary foundry
       suppliers alongside TSMC and GlobalFoundries, and has fabricated
@@ -39,6 +41,7 @@ supplyChain:
   - name: GlobalFoundries
     ticker: GFS
     pct: 14
+    grade: some
     blurb: >
       Named directly in Qualcomm's 10-K as a primary foundry supplier, under
       a long-term supply agreement extended through 2028 covering RF and
@@ -46,18 +49,21 @@ supplyChain:
   - name: Amkor Technology
     ticker: AMKR
     pct: 12
+    grade: some
     blurb: >
       Named directly in Qualcomm's 10-K as a primary semiconductor assembly
       and test (OSAT) supplier for finished chip packaging.
   - name: ASE Technology Holding
     ticker: ASX
     pct: 10
+    grade: some
     blurb: >
       Named directly in Qualcomm's 10-K as a primary assembly and test
       supplier, alongside Amkor, for packaging Snapdragon and RF chips.
   - name: STATS ChipPAC (JCET Group)
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Named in Qualcomm's 10-K among its primary assembly and test
       suppliers. A majority-owned subsidiary of JCET Group, which trades
@@ -65,6 +71,7 @@ supplyChain:
   - name: Arm Holdings
     ticker: ARM
     pct: 6
+    grade: spread
     blurb: >
       Qualcomm licenses Arm's CPU instruction-set architecture for its
       Snapdragon and Oryon processor cores, a dependency that became highly
@@ -74,6 +81,7 @@ customers:
   - name: Apple
     ticker: AAPL
     pct: 24
+    grade: some
     blurb: >
       Named directly in Qualcomm's FY2025 10-K as a customer representing
       10% or more of consolidated revenue, though Qualcomm's own filing
@@ -83,6 +91,7 @@ customers:
   - name: Samsung Electronics
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Named directly in Qualcomm's FY2025 10-K as a customer representing
       10% or more of consolidated revenue, driven by the "Snapdragon for
@@ -92,6 +101,7 @@ customers:
   - name: Xiaomi
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       Named directly in Qualcomm's FY2025 10-K as a customer representing
       10% or more of consolidated revenue, reflecting Xiaomi's position as
@@ -101,6 +111,7 @@ customers:
   - name: OPPO
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       A consistently cited top-tier Android Snapdragon customer in
       Qualcomm's earnings commentary and industry reporting, though not
@@ -109,6 +120,7 @@ customers:
   - name: vivo
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Another consistently cited top-tier Android Snapdragon customer,
       alongside OPPO, though not individually named at the 10%
@@ -117,6 +129,7 @@ customers:
   - name: Automotive OEMs (Snapdragon Digital Chassis)
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company - a growing group of automakers including
       General Motors, Honda, Mercedes-Benz, and BMW that have announced

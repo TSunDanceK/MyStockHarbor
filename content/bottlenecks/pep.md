@@ -25,6 +25,7 @@ supplyChain:
   - name: Ball Corporation
     ticker: BALL
     pct: 13
+    grade: some
     blurb: >
       One of the two dominant North American beverage-can makers; PepsiCo's
       own 10-K names aluminum among its key packaging materials, and the
@@ -33,6 +34,7 @@ supplyChain:
   - name: Crown Holdings, Inc.
     ticker: CCK
     pct: 9
+    grade: spread
     blurb: >
       The other half of the North American beverage-can duopoly alongside
       Ball Corporation, supplying aluminum cans across PepsiCo's
@@ -40,6 +42,7 @@ supplyChain:
   - name: Amcor plc
     ticker: AMCR
     pct: 15
+    grade: some
     blurb: >
       A leading global producer of PET resin bottles and flexible plastic
       packaging; PepsiCo's 10-K lists PET, polyethylene, and polypropylene
@@ -48,6 +51,7 @@ supplyChain:
   - name: Cargill, Incorporated
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       A privately held agribusiness giant and major supplier of corn
       sweeteners, sugar, and other agricultural inputs named in PepsiCo's
@@ -55,6 +59,7 @@ supplyChain:
   - name: Archer-Daniels-Midland Company
     ticker: ADM
     pct: 10
+    grade: some
     blurb: >
       One of a small number of companies that dominate US corn-sweetener
       refining and vegetable-oil processing, both listed among PepsiCo's
@@ -62,12 +67,14 @@ supplyChain:
   - name: Ingredion Incorporated
     ticker: INGR
     pct: 8
+    grade: spread
     blurb: >
       Supplies corn-based starches and sweeteners used across PepsiCo's
       snack and beverage formulations.
   - name: Independent bottling & co-manufacturing partners
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. PepsiCo's own 10-K discloses it operates "in
       conjunction with third parties," including authorized bottlers and
@@ -75,6 +82,7 @@ supplyChain:
   - name: Frito-Lay's contracted potato growers
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Not a single company. Frito-Lay sources potatoes through a large
       network of independent contract farmers rather than a concentrated
@@ -83,6 +91,7 @@ supplyChain:
   - name: Smurfit WestRock plc
     ticker: SW
     pct: 8
+    grade: spread
     blurb: >
       A major producer of cardboard and paperboard packaging, explicitly
       named among the packaging materials in PepsiCo's 10-K supply-chain
@@ -90,6 +99,7 @@ supplyChain:
   - name: ASR Group (Domino Sugar)
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       The largest cane-sugar refiner in North America and a key supplier
       of the sugar PepsiCo lists among its principal raw materials. A
@@ -98,6 +108,7 @@ customers:
   - name: Walmart Inc.
     ticker: WMT
     pct: 14
+    grade: some
     blurb: >
       PepsiCo's own FY2025 10-K discloses that sales to Walmart and its
       affiliates, including Sam's Club, represented approximately 14% of
@@ -107,6 +118,7 @@ customers:
   - name: Sysco Corporation
     ticker: SYY
     pct: 10
+    grade: some
     blurb: >
       The largest US foodservice distributor, supplying PepsiCo beverages
       and snacks into restaurants, schools, and other institutional
@@ -114,24 +126,28 @@ customers:
   - name: Costco Wholesale Corporation
     ticker: COST
     pct: 8
+    grade: spread
     blurb: >
       A major bulk-retail channel for PepsiCo's beverage and snack lines
       through its warehouse club format.
   - name: The Kroger Co.
     ticker: KR
     pct: 7
+    grade: spread
     blurb: >
       The largest traditional US grocery chain by revenue and a
       significant retail channel for PepsiCo products.
   - name: Target Corporation
     ticker: TGT
     pct: 5
+    grade: spread
     blurb: >
       A major big-box retail customer for PepsiCo's grocery and snack
       aisle products.
   - name: Amazon.com, Inc.
     ticker: AMZN
     pct: 5
+    grade: spread
     blurb: >
       PepsiCo's 10-K flags growing e-commerce and mobile-commerce sales as
       an increasing source of customer concentration risk, with Amazon as
@@ -139,6 +155,7 @@ customers:
   - name: Other mass retail, grocery, convenience & club channel
     ticker: null
     pct: 51
+    grade: hard
     blurb: >
       Not a single company. PepsiCo's remaining revenue is spread across a
       highly fragmented worldwide network of grocery chains, convenience

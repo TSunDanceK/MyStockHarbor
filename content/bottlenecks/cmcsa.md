@@ -34,6 +34,7 @@ supplyChain:
   - name: National Football League
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Sunday Night Football is NBC's single largest live-programming rights
       cost and has been broadcast TV's top-rated program for years. A
@@ -41,6 +42,7 @@ supplyChain:
   - name: Broadcom
     ticker: AVGO
     pct: 14
+    grade: some
     blurb: >
       Every Xfinity cable gateway runs on Broadcom's DOCSIS system-on-chip
       silicon, a single dominant chip architecture across Comcast's modem
@@ -48,6 +50,7 @@ supplyChain:
   - name: National Basketball Association
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       An 11-year, multi-billion-dollar media-rights deal returned NBA games
       to NBC and Peacock starting the 2025-26 season, a major recurring
@@ -56,6 +59,7 @@ supplyChain:
   - name: Warner Bros. Discovery
     ticker: WBD
     pct: 12
+    grade: some
     blurb: >
       Licenses the Harry Potter and Wizarding World intellectual property
       to Universal theme parks, powering some of Universal's most-visited
@@ -63,6 +67,7 @@ supplyChain:
   - name: Vantiva SA
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       The primary contract manufacturer of current-generation Xfinity
       gateway hardware after acquiring CommScope's Arris CPE business.
@@ -70,6 +75,7 @@ supplyChain:
   - name: International Olympic Committee
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Exclusive US Olympic media rights were extended through the 2036
       Games, anchoring NBC and Peacock's marquee quadrennial programming. A
@@ -77,6 +83,7 @@ supplyChain:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 8
+    grade: spread
     blurb: >
       Peacock's live-streaming and video-delivery infrastructure runs
       substantially on AWS, per published case studies covering major live
@@ -84,6 +91,7 @@ supplyChain:
   - name: CommScope Holding Company
     ticker: COMM
     pct: 8
+    grade: spread
     blurb: >
       Supplies legacy Arris-brand gateway hardware still in the field and
       broader coax and fiber network infrastructure used in Comcast's
@@ -91,6 +99,7 @@ supplyChain:
   - name: Cisco Systems
     ticker: CSCO
     pct: 6
+    grade: spread
     blurb: >
       A long-standing core routing and network-infrastructure vendor,
       including an expanded SD-WAN and secure-networking partnership for
@@ -98,6 +107,7 @@ supplyChain:
   - name: Nokia
     ticker: NOK
     pct: 5
+    grade: spread
     blurb: >
       A partner on private 5G wireless network infrastructure for Comcast
       Business's enterprise customers, and a fiber and optical equipment
@@ -106,6 +116,7 @@ customers:
   - name: Charter Communications
     ticker: CHTR
     pct: 20
+    grade: some
     blurb: >
       The largest other major US cable operator, carrying NBC-affiliated
       stations under retransmission agreements and Comcast's 50/50 partner
@@ -113,6 +124,7 @@ customers:
   - name: Alphabet (YouTube TV)
     ticker: GOOGL
     pct: 18
+    grade: some
     blurb: >
       The largest US virtual pay-TV provider, which had a public 2025
       carriage dispute with NBCUniversal before renewing terms, and now
@@ -120,6 +132,7 @@ customers:
   - name: DirecTV
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       A major satellite and IPTV pay-TV distributor paying affiliate and
       retransmission fees for NBC stations and NBCUniversal content. A
@@ -127,6 +140,7 @@ customers:
   - name: Roku
     ticker: ROKU
     pct: 14
+    grade: some
     blurb: >
       A major streaming-device and platform partner; Peacock became
       available as a subscription channel via The Roku Channel in 2026, a
@@ -134,24 +148,28 @@ customers:
   - name: EchoStar Corporation (Dish Network / Sling TV)
     ticker: SATS
     pct: 12
+    grade: some
     blurb: >
       Operates Dish Network and Sling TV as a separate pay-TV and
       virtual-MVPD carriage partner for NBCUniversal content.
   - name: Amazon
     ticker: AMZN
     pct: 10
+    grade: some
     blurb: >
       Peacock is distributed and sold via Amazon Prime Video Channels and
       Fire TV devices, a named subscriber-acquisition channel.
   - name: Walmart
     ticker: WMT
     pct: 7
+    grade: spread
     blurb: >
       Bundles Peacock Premium into Walmart+ memberships, a real and
       expanding subscriber-acquisition partnership.
   - name: Apple
     ticker: AAPL
     pct: 5
+    grade: spread
     blurb: >
       Sells a bundled Apple TV and Peacock subscription offer through the
       Apple TV app and App Store.

@@ -39,6 +39,7 @@ supplyChain:
   - name: China & Taiwan fastener and MRO manufacturers
     ticker: null
     pct: 38
+    grade: hard
     blurb: >
       Not a single company - Fastenal's 10-K states that "suppliers in China
       and Taiwan represent a significant source of product," reflecting the
@@ -50,6 +51,7 @@ supplyChain:
   - name: North American and other diversified manufacturer base
     ticker: null
     pct: 27
+    grade: some
     blurb: >
       Not a single company - the balance of Fastenal's inventory is sourced
       from a broad, undisclosed base of domestic and other international
@@ -59,6 +61,7 @@ supplyChain:
   - name: Single largest unnamed inventory supplier
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single named company - Fastenal discloses that "during 2025, we
       had a single supplier that accounted for more than 5% of our inventory
@@ -68,6 +71,7 @@ supplyChain:
   - name: Private truck fleet and leased delivery vehicles
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company - Fastenal operates roughly 590 leased trucks that
       handle about 90% of the volume moving between its distribution centers
@@ -77,6 +81,7 @@ supplyChain:
   - name: Third-party freight and parcel carriers
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company - the portion of shipping volume Fastenal does not
       move on its own private fleet is handled by outside freight and parcel
@@ -85,6 +90,7 @@ supplyChain:
   - name: FASTVend industrial vending equipment (single-source hardware)
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single named company - Fastenal's 10-K discloses that it relies
       primarily on one supplier for the hardware behind its industrial
@@ -94,6 +100,7 @@ supplyChain:
   - name: Distribution and warehouse automation equipment vendors
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Not a single company - Fastenal's 10-K notes a limited supplier base for
       the automated material-handling and distribution-center equipment used
@@ -103,6 +110,7 @@ customers:
   - name: Manufacturing end markets
     ticker: null
     pct: 75
+    grade: spread
     blurb: >
       Not a single customer - manufacturing accounts made up roughly
       three-quarters (75.4%) of Fastenal's fourth-quarter 2025 sales, the
@@ -114,6 +122,7 @@ customers:
   - name: Other end markets (government, reseller, transportation, and more)
     ticker: null
     pct: 17
+    grade: some
     blurb: >
       Not a single customer - Fastenal groups government agencies, reseller
       accounts, transportation-services customers, and other non-manufacturing,
@@ -122,6 +131,7 @@ customers:
   - name: Non-residential construction
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single customer - non-residential construction contractors and
       related accounts made up 8.1% of Fastenal's fourth-quarter 2025 sales,

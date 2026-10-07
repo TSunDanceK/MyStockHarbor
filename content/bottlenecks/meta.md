@@ -30,11 +30,13 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 26
+    grade: some
     blurb: >
       Fabricates Meta's custom MTIA AI accelerator chips.
   - name: NVIDIA
     ticker: NVDA
     pct: 24
+    grade: some
     blurb: >
       Meta is one of Nvidia's single largest GPU customers, buying at
       enormous scale to train its Llama models and power its
@@ -42,22 +44,26 @@ supplyChain:
   - name: Broadcom
     ticker: AVGO
     pct: 14
+    grade: some
     blurb: >
       Co-designs Meta's custom MTIA AI accelerator chips.
   - name: AMD
     ticker: AMD
     pct: 10
+    grade: some
     blurb: >
       Supplies GPUs and CPUs used across Meta's AI training and data-center
       infrastructure.
   - name: Micron Technology
     ticker: MU
     pct: 8
+    grade: spread
     blurb: >
       Supplies memory used across Meta's AI training infrastructure.
   - name: SK hynix
     ticker: SKHY
     pct: 8
+    grade: spread
     blurb: >
       A major memory and HBM supplier to Meta's AI infrastructure. Its
       primary listing is the Korea Exchange, but it has also traded on
@@ -65,24 +71,28 @@ supplyChain:
   - name: Vertiv Holdings
     ticker: VRT
     pct: 5
+    grade: spread
     blurb: >
       Supplies power and cooling infrastructure across Meta's AI data
       centers.
   - name: Arista Networks
     ticker: ANET
     pct: 3
+    grade: spread
     blurb: >
       Supplies networking hardware used across Meta's data-center
       infrastructure.
   - name: Corning
     ticker: GLW
     pct: 1
+    grade: spread
     blurb: >
       Supplies fiber and optical components used in Meta's data-center
       networking.
   - name: Quanta Computer
     ticker: null
     pct: 1
+    grade: spread
     blurb: >
       An ODM manufacturing partner supporting Meta's server production.
       Trades primarily on the Taiwan Stock Exchange with no proper
@@ -91,6 +101,7 @@ customers:
   - name: PDD Holdings (Temu)
     ticker: PDD
     pct: 14
+    grade: some
     blurb: >
       Temu has been reported among the platform's largest and most volatile
       advertisers, scaling spend up and down sharply with tariff and trade
@@ -98,24 +109,28 @@ customers:
   - name: Amazon
     ticker: AMZN
     pct: 13
+    grade: some
     blurb: >
       One of the largest and most consistent advertisers across Meta's
       platforms.
   - name: Shein
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       A major fast-fashion advertiser reported among Meta's largest ad
       spenders alongside Temu. A private company with no public ticker.
   - name: Procter & Gamble
     ticker: PG
     pct: 11
+    grade: some
     blurb: >
       One of the world's largest advertisers across every major channel,
       including Meta's platforms.
   - name: Samsung Electronics
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A large global advertiser on Meta's platforms for its device lineup.
       Trades primarily on the Korea Exchange with no proper US-listed
@@ -123,29 +138,34 @@ customers:
   - name: Walmart
     ticker: WMT
     pct: 10
+    grade: some
     blurb: >
       A large and growing advertiser on Meta's platforms as it builds out
       its own retail media business.
   - name: Disney
     ticker: DIS
     pct: 9
+    grade: spread
     blurb: >
       A major entertainment advertiser promoting films, streaming, and
       theme parks on Meta's platforms.
   - name: DoorDash
     ticker: DASH
     pct: 8
+    grade: spread
     blurb: >
       A large performance-marketing advertiser on Meta's platforms.
   - name: Coinbase
     ticker: COIN
     pct: 7
+    grade: spread
     blurb: >
       A notable advertiser on Meta's platforms during periods of high
       crypto-market interest.
   - name: Unilever
     ticker: UL
     pct: 7
+    grade: spread
     blurb: >
       One of the world's largest consumer-goods advertisers, spending
       heavily across Meta's platforms.

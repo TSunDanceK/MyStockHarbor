@@ -28,10 +28,15 @@ disclaimer: >
   to illustrate relative reliance, not precise or audited figures. Companies
   without a proper, reliably tradable ticker on this site are shown without
   stock/earnings links. This is not financial advice.
+watch:
+  - "Chip supply: a named second source in a future 10-K may lower the top risk."
+  - "Cloud: a wider AWS roll-out might reduce reliance on Azure."
+  - "Budgets: US city and state budget seasons may shift order timing."
 supplyChain:
   - name: Single-source semiconductor & battery-component suppliers
     ticker: null
     pct: 40
+    grade: hard
     blurb: >
       Not a single company. Axon's 10-K flags recurring semiconductor
       supply-chain disruption risk and discloses that it still sources
@@ -41,6 +46,7 @@ supplyChain:
   - name: Microsoft Corporation (Azure)
     ticker: MSFT
     pct: 30
+    grade: hard
     blurb: >
       Axon Evidence, the digital-evidence-management cloud underpinning
       Axon's subscription business, is built on Microsoft Azure - chosen
@@ -49,6 +55,7 @@ supplyChain:
   - name: Skydio, Inc.
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       A private drone maker Axon partnered with in 2024 to supply the
       hardware behind its Drone as First Responder (DFR) program,
@@ -57,6 +64,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 15
+    grade: some
     blurb: >
       Axon Evidence is also listed and available for procurement through
       AWS Marketplace, giving Axon a secondary cloud-distribution channel
@@ -65,6 +73,7 @@ customers:
   - name: US state & local law enforcement agencies
     ticker: null
     pct: 65
+    grade: spread
     blurb: >
       Not a single company. Axon's 10-K names US state and local police
       departments as its largest customer vertical, spread across
@@ -73,6 +82,7 @@ customers:
   - name: US federal government agencies
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. Federal law-enforcement, corrections, and
       defense customers make up a smaller share of Axon's largest
@@ -81,6 +91,7 @@ customers:
   - name: International law enforcement & justice agencies
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. Axon's expansion outside the US adds police
       and justice-system customers in other countries, a smaller but

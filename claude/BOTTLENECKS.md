@@ -153,3 +153,31 @@ above.
 
 Copying the authoritative policy content into this file would remove that class
 of failure entirely. Owner decision, not yet done.
+
+## New data fields for the redesigned page (2026-10-07, #563 COWORK #158)
+
+The individual page (`/bottlenecks/[ticker]`) was redesigned. Three frontmatter
+fields are new; the daily automation's stored prompt and the Claude Project doc
+need the same lines (this mirror does not drive anything):
+
+- **`grade`, on every `supplyChain` and `customers` row:** `hard`, `some` or
+  `spread`. The page shows them as Hard to replace (red), Some alternatives
+  (amber) and Spread out (green). They replace the old "Critical" on every row.
+  - **Default when a row has none** (`lib/bottleneckPage.ts`, defaultGrade):
+    - a supplier at ≥ 30%, or one described as single-source or a sole
+      cloud/provider, is `hard`;
+    - 10–29% is `some`;
+    - under 10% is `spread`;
+    - a customer group the page calls diversified ("thousands of", or "no
+      single … > 10%") is `spread`.
+  - All 109 existing pages had the default written in by
+    `scripts/bottleneck-grades.mjs`, which is safe to rerun.
+- **`watch`, optional:** 2–3 hedged bullets for "What could change this map".
+  The card hides when the field is absent. Only AXON has them so far.
+- **`updated`, optional:** set it when the page's data changes. It becomes the
+  JSON-LD dateModified; without it, dateModified is the page's `date`.
+
+`scripts/check-bottleneck-page.mjs` (in check-all) checks that every row
+resolves to a grade. A row with no written grade gets the default and is only
+counted, not failed, so the automation's pages keep landing until its prompt
+carries the field.

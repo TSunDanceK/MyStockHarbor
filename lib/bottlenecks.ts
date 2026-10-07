@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
 import { buildBottleneckHub, buildHubCompanies, type BottleneckHub } from "./bottleneckHub";
+import { defaultGrade, isGrade, type Grade, type Side } from "./bottleneckPage";
 
 const bottlenecksDirectory = path.join(process.cwd(), "content/bottlenecks");
 
@@ -10,6 +11,8 @@ export type BottleneckCompany = {
   ticker: string | null;
   pct: number;
   blurb: string;
+  /** How replaceable it is (#563 COWORK #158): the data file's `grade`, else the default rule. */
+  grade: Grade;
 };
 
 export type BottleneckPost = {
@@ -30,6 +33,10 @@ export type BottleneckPost = {
   customersNote: string;
   supplyChain: BottleneckCompany[];
   customers: BottleneckCompany[];
+  /** "What could change this map" (#158): 2–3 hedged bullets, optional; the card hides without them. */
+  watch: string[];
+  /** The day the page's data last changed, when set; the JSON-LD's dateModified (else `date`). */
+  updated: string;
 };
 
 // How many distinct stock pages name a company, across both charts (see
@@ -52,7 +59,7 @@ function formatFrontmatterDate(value: unknown): string {
   return "";
 }
 
-function normalizeCompanies(value: unknown): BottleneckCompany[] {
+function normalizeCompanies(value: unknown, side: Side): BottleneckCompany[] {
   if (!Array.isArray(value)) return [];
 
   return value
@@ -75,7 +82,7 @@ function normalizeCompanies(value: unknown): BottleneckCompany[] {
 
       if (!name || !Number.isFinite(pct)) return null;
 
-      return { name, ticker, pct, blurb };
+      return { name, ticker, pct, blurb, grade: isGrade(record.grade) ? record.grade : defaultGrade(side, pct, blurb) };
     })
     .filter((item): item is BottleneckCompany => item !== null);
 }
@@ -99,8 +106,10 @@ function readPost(fileName: string): BottleneckPost {
     disclaimer: String(data.disclaimer || "").trim(),
     supplyChainNote: String(data.supplyChainNote || "").trim(),
     customersNote: String(data.customersNote || "").trim(),
-    supplyChain: normalizeCompanies(data.supplyChain),
-    customers: normalizeCompanies(data.customers),
+    supplyChain: normalizeCompanies(data.supplyChain, "supplier"),
+    customers: normalizeCompanies(data.customers, "customer"),
+    watch: Array.isArray(data.watch) ? data.watch.map((w: unknown) => String(w ?? "").trim()).filter(Boolean).slice(0, 3) : [],
+    updated: formatFrontmatterDate(data.updated),
   };
 }
 

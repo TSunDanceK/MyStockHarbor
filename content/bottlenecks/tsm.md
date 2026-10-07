@@ -23,6 +23,7 @@ supplyChain:
   - name: ASML
     ticker: ASML
     pct: 28
+    grade: some
     blurb: >
       The sole global supplier of extreme ultraviolet (EUV) lithography
       machines needed to print the smallest chip features. No alternative
@@ -31,18 +32,21 @@ supplyChain:
   - name: Applied Materials
     ticker: AMAT
     pct: 14
+    grade: some
     blurb: >
       A major supplier of deposition and etch equipment used across TSMC's
       advanced fabs.
   - name: Lam Research
     ticker: LRCX
     pct: 12
+    grade: some
     blurb: >
       Supplies etch and deposition tools critical to patterning TSMC's most
       advanced process nodes.
   - name: Tokyo Electron
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A leading supplier of coater/developer and etch systems for TSMC's
       fabs. Trades primarily on the Tokyo Stock Exchange with no proper
@@ -50,12 +54,14 @@ supplyChain:
   - name: KLA Corporation
     ticker: KLAC
     pct: 8
+    grade: spread
     blurb: >
       Provides the process-control and defect-inspection equipment TSMC
       relies on to keep advanced-node yields high enough to be profitable.
   - name: Shin-Etsu Chemical
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A leading supplier of the ultra-pure silicon wafers TSMC's chips are
       built on. Trades primarily on the Tokyo Stock Exchange with no proper
@@ -63,24 +69,28 @@ supplyChain:
   - name: Entegris
     ticker: ENTG
     pct: 6
+    grade: spread
     blurb: >
       Supplies specialty materials and contamination-control filtration used
       throughout TSMC's fabrication process.
   - name: Air Products and Chemicals
     ticker: APD
     pct: 5
+    grade: spread
     blurb: >
       Supplies the industrial gases TSMC's fabs require to operate at
       semiconductor-grade purity.
   - name: Linde
     ticker: LIN
     pct: 5
+    grade: spread
     blurb: >
       A second major industrial-gas supplier underpinning TSMC's fab
       operations.
   - name: Advantest
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       A leading supplier of the automated test equipment used to validate
       finished chips. Trades primarily on the Tokyo Stock Exchange with no
@@ -89,6 +99,7 @@ customers:
   - name: NVIDIA
     ticker: NVDA
     pct: 24
+    grade: some
     blurb: >
       Overtook Apple in January 2026 to become TSMC's single largest
       customer, driven by explosive demand for AI GPUs built on TSMC's most
@@ -96,24 +107,28 @@ customers:
   - name: Apple
     ticker: AAPL
     pct: 20
+    grade: some
     blurb: >
       TSMC's long-time largest customer for iPhone and Mac processors, now
       narrowly in second place behind Nvidia.
   - name: AMD
     ticker: AMD
     pct: 12
+    grade: some
     blurb: >
       A major fabless customer relying on TSMC for its CPU and AI GPU
       product lines.
   - name: Broadcom
     ticker: AVGO
     pct: 10
+    grade: some
     blurb: >
       Uses TSMC to fabricate its networking chips and the custom AI ASICs it
       co-designs for hyperscalers like Google.
   - name: MediaTek
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A major mobile and smart-device chipmaker that relies heavily on TSMC.
       Trades primarily on the Taiwan Stock Exchange with no proper US-listed
@@ -121,28 +136,33 @@ customers:
   - name: Qualcomm
     ticker: QCOM
     pct: 8
+    grade: spread
     blurb: >
       A long-standing TSMC customer for its mobile and PC processors.
   - name: Amazon
     ticker: AMZN
     pct: 7
+    grade: spread
     blurb: >
       TSMC fabricates Amazon's in-house Trainium and Graviton chips designed
       by its Annapurna Labs division.
   - name: Alphabet (Google)
     ticker: GOOGL
     pct: 6
+    grade: spread
     blurb: >
       TSMC fabricates Google's custom TPU AI accelerators.
   - name: Microsoft
     ticker: MSFT
     pct: 3
+    grade: spread
     blurb: >
       Relies on TSMC to fabricate its custom Maia AI and Cobalt CPU chips
       for Azure.
   - name: Sony
     ticker: SONY
     pct: 2
+    grade: spread
     blurb: >
       Uses TSMC to fabricate the image sensors and processors behind its
       camera and PlayStation businesses.

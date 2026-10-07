@@ -33,6 +33,7 @@ supplyChain:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 24
+    grade: some
     blurb: >
       Adobe built its Firefly generative-AI training pipeline on AWS GPU
       instances, S3, and Inferentia2, with Adobe citing a 20x scale-up in
@@ -40,6 +41,7 @@ supplyChain:
   - name: NVIDIA
     ticker: NVDA
     pct: 16
+    grade: some
     blurb: >
       Adobe and NVIDIA partnered to build next-generation Firefly models on
       NVIDIA's CUDA, NeMo, and Omniverse stack, and NVIDIA GPUs underlie
@@ -47,12 +49,14 @@ supplyChain:
   - name: Microsoft (Azure)
     ticker: MSFT
     pct: 15
+    grade: some
     blurb: >
       A long-running strategic alliance covers Experience Cloud hosting and
       integration with Microsoft's productivity and cloud tools.
   - name: Alphabet (Google Cloud)
     ticker: GOOGL
     pct: 13
+    grade: some
     blurb: >
       An expanded partnership integrates Google's AI models into Firefly
       and Adobe's creative apps, and Google Play remains the Android
@@ -60,6 +64,7 @@ supplyChain:
   - name: Apple
     ticker: AAPL
     pct: 9
+    grade: spread
     blurb: >
       The App Store is the distribution gatekeeper for Adobe's iOS apps,
       and Apple's Mac platform underpins much of Adobe's Creative Cloud
@@ -67,6 +72,7 @@ supplyChain:
   - name: Digital River
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Adobe's named platinum partner and merchant of record for global
       cross-border e-commerce, running subscription billing and tax
@@ -75,6 +81,7 @@ supplyChain:
   - name: Adyen N.V.
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       A confirmed payment-processing partner for Adobe's own subscription
       billing and for Adobe Commerce merchants. Trades primarily on
@@ -82,6 +89,7 @@ supplyChain:
   - name: PayPal Holdings
     ticker: PYPL
     pct: 5
+    grade: spread
     blurb: >
       Named alongside Adyen and Stripe as a checkout partner Adobe depends
       on for seamless payments in its commerce and agentic-checkout
@@ -89,6 +97,7 @@ supplyChain:
   - name: Akamai Technologies
     ticker: AKAM
     pct: 4
+    grade: spread
     blurb: >
       A long-documented content-delivery-network vendor for distributing
       Adobe's video and web content, consistent with the generic
@@ -96,6 +105,7 @@ supplyChain:
   - name: OpenAI
     ticker: null
     pct: 2
+    grade: spread
     blurb: >
       Adobe's AI agents and Marketing Agent are available within OpenAI's
       ChatGPT Enterprise as part of a multi-model AI distribution strategy.
@@ -104,6 +114,7 @@ customers:
   - name: Accenture
     ticker: ACN
     pct: 24
+    grade: some
     blurb: >
       A named global systems integrator partner Adobe depends on to
       implement Experience Cloud and Document Cloud products across large
@@ -111,24 +122,28 @@ customers:
   - name: IBM
     ticker: IBM
     pct: 16
+    grade: some
     blurb: >
       IBM Consulting is a major implementation partner helping enterprise
       clients deploy and integrate Adobe's Experience Cloud platform.
   - name: Cognizant
     ticker: CTSH
     pct: 13
+    grade: some
     blurb: >
       A large systems integrator that builds and maintains Adobe Experience
       Cloud implementations for enterprise customers.
   - name: Infosys
     ticker: INFY
     pct: 12
+    grade: some
     blurb: >
       A major global systems integrator and Adobe implementation partner
       for enterprise digital-experience deployments.
   - name: WPP
     ticker: WPP
     pct: 10
+    grade: some
     blurb: >
       One of the largest advertising and marketing holding companies, whose
       agencies build campaigns and content on top of Adobe's Experience
@@ -136,18 +151,21 @@ customers:
   - name: Omnicom Group
     ticker: OMC
     pct: 9
+    grade: spread
     blurb: >
       A major agency holding company whose network relies on Adobe's
       Experience and Creative Cloud tools to deliver client marketing work.
   - name: Stagwell
     ticker: STGW
     pct: 8
+    grade: spread
     blurb: >
       A marketing-services holding company and named Adobe partner
       integrating Experience Cloud into client-facing agency work.
   - name: Deloitte Digital
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       A named professional-services partner implementing Adobe's
       Experience Cloud for large enterprise clients. A private
@@ -155,6 +173,7 @@ customers:
   - name: PwC
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       A professional-services partner supporting enterprise Adobe
       implementations. A private professional-services partnership with no
