@@ -129,6 +129,22 @@ console.log("\n3b. AFRM: the total becomes the filer's one concept (#552 COWORK 
   });
   const old = X.extractCompanyFacts("AFRM", gap).years.find((p) => p.end === "2024-06-30")?.values?.[REV];
   check("a period with no Revenues reads Not reported, never the contract line beside the total", old == null, JSON.stringify(old));
+  // ADP's shape: the newest end carries a contract QUARTER and a Revenues YEAR
+  // only. Like for like, there is nothing to compare: the rule must not fire.
+  const adp = payload({
+    [CONTRACT]: [["2026-04-01", "2026-06-30", 5474 * M], yr("2025-07-01", "2026-06-30", 21000 * M)],
+    Revenues: [yr("2025-07-01", "2026-06-30", 21947 * M)],
+    [OP]: [["2026-04-01", "2026-06-30", 1200 * M], yr("2025-07-01", "2026-06-30", 5500 * M)],
+  });
+  const aq = X.extractCompanyFacts("ADP", adp).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
+  check("a quarter is never compared with a year (ADP: the year is 4.5% above, so nothing moves)",
+    aq?.val === 5474 * M && aq?.tag === CONTRACT, JSON.stringify(aq));
+  const mixed = extractRaw.replace("const pair = pairAt(quarterCells, fbQuarter) ?? pairAt(yearCells, fbYear);",
+    "const pair = (() => { const r = newest ? (quarterCells.get(newest) ?? yearCells.get(newest))?.get(\"revenue\") : undefined; const f = newest ? (fbQuarter.get(newest) ?? fbYear.get(newest))?.get(\"revenue\") : undefined; return r && f ? { rev: r, fb: f } : null; })();");
+  check("the duration mutation applied", mixed !== extractRaw);
+  const XD = await load(mixed);
+  const dq = XD.extractCompanyFacts("ADP", adp).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
+  check("MUTATION: quarter-against-year comparison flips ADP's quarter away (caught)", !(dq?.val === 5474 * M && dq?.tag === CONTRACT), JSON.stringify(dq));
   const mutated = extractRaw.replace("if (!filerTagsExcise(facts)) {", "if (false) {");
   check("the mutation applied", mutated !== extractRaw);
   const XM = await load(mutated);
