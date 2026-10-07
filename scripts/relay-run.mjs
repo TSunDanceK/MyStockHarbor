@@ -1412,6 +1412,7 @@ const TASKS = {
   "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // The #813 screens on the live build (#553 COWORK #194), read-only.
   "write-screen-live-counts": { script: "scripts/screen-live-counts.mjs", args: () => [], needsTypescript: true, writes: true },
+  "write-cap-reason-trace": { script: "scripts/cap-reason-trace.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
