@@ -5,7 +5,7 @@
 //      of the 5, one of them overbought or a bearish divergence.
 //   2. ATR spike, alternative B: today's true range >= 2x the PRIOR ATR(14).
 //   3. Earnings growth order (lib/epsGrowthView): % highest first, then the
-//      small-base group (prior EPS under $0.10) by $ change, then no figure, A-Z.
+//      small-base group (prior EPS under $0.50, #553 COWORK #195) by $ change, then no figure, A-Z.
 //   4. Dividends (pickersSecFundamentals.dividendRead): a Q4 stated only in the
 //      10-K is derived (NSC); a special is left out (PGR); a cut shows the
 //      latest quarter x4, marked (FMC, LYB); the row is split-adjusted (BKNG);
@@ -89,7 +89,8 @@ function viewRules(V) {
   ];
   const order = [...rows].sort(V.compareEpsGrowth).map((r) => r.symbol).join();
   want("% highest first, then small bases by $ change, then no figure A-Z", order === "TOP,LOW,SMB,SMA,AAA,ZZZ");
-  want("a prior EPS under $0.10 is a small base", g(0.5, 0.0999).small && !g(0.5, 0.1).small && V.SMALL_BASE_PRIOR_EPS === 0.1);
+  // #553 COWORK #195: the line is $0.50 -- $0.49 a year ago is a small base, $0.50 is ranked by %.
+  want("a prior EPS under $0.50 is a small base ($0.49 is, $0.50 is not)", g(1, 0.49).small && !g(1, 0.5).small && g(0.5, 0.0999).small && V.SMALL_BASE_PRIOR_EPS === 0.5);
   want("a small base shows the $ change, not the %", V.epsGrowthText(g(0.5, 0.07)) === "+$0.43" && V.epsGrowthText(g(3, 1)) === "+200.0%");
   want("the tap names both periods and, for a small base, why dollars", /Q2 FY2026 vs Q2 FY2025/.test(V.epsGrowthTip(g(3, 1))) && /small base/i.test(V.epsGrowthTip(g(0.5, 0.07))));
   return fails;
@@ -208,6 +209,7 @@ try {
     ["ATR ignores the gap", RULES, rulesSrc, "Math.max(h - l, Math.abs(h - prevClose), Math.abs(l - prevClose))", "(h - l)", ruleRules],
     ["small bases ranked by %", VIEW, viewSrc, "(ga.small ? gb.change - ga.change : gb.pct - ga.pct)", "(gb.pct - ga.pct)", viewRules],
     ["small bases mixed into the ranking", VIEW, viewSrc, "(g === null ? 2 : g.small ? 1 : 0)", "(g === null ? 2 : 0)", viewRules],
+    ["the small-base line back at $0.10", VIEW, viewSrc, "SMALL_BASE_PRIOR_EPS = 0.5;", "SMALL_BASE_PRIOR_EPS = 0.1;", viewRules],
     ["no Q4 derivation", FUND, fundSrc, `if (own !== null || q.fp !== "Q4" || q.fy == null) return own;`, "return own;", dividendRules],
     ["specials counted as regular", FUND, fundSrc, "if (top > 0 && x > SPECIAL_MULTIPLE * top) {", "if (false) {", dividendRules],
     ["specials against the median of all four", FUND, fundSrc, "const top = Math.max(...others);", "const top = median(v);", dividendRules],

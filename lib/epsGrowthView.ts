@@ -8,15 +8,22 @@
 //              by EPS growth %, highest first
 //   small base members whose year-ago EPS is under SMALL_BASE_PRIOR_EPS go
 //              BELOW the ranked list, by the $ change, largest first: off a
-//              few cents a % says little (+2,913% was a 7-cent base), so the
+//              few cents a % says little (+2,913% was a 7-cent base; TWLO's +4,671%
+//              came off a base under 50 cents), so the
 //              cell shows the change in dollars instead
 //   no figure  rows with no growth figure (not members) go last, A-Z
 //
 // The membership rule is unchanged (pickersSecEarningsGrowth: +15% and
 // revenue up; the stricter cut was not approved).
 
-/** Year-ago diluted EPS under this, in dollars, is a small base. */
-export const SMALL_BASE_PRIOR_EPS = 0.1;
+/**
+ * Year-ago diluted EPS under this, in dollars, is a small base. $0.50 by the
+ * owner's ruling (#553 COWORK #195, 2026-10-07; it was $0.10): on the live
+ * build TWLO read +4,671%, BCE +3,672% and AFRM +3,587%, each off a year-ago
+ * EPS above $0.10 but still too small for a % to say much. Display only: the
+ * list's membership is unchanged.
+ */
+export const SMALL_BASE_PRIOR_EPS = 0.5;
 
 export type EpsGrowthView = {
   /** EPS growth, percent, rounded as the membership rule rounds it. */

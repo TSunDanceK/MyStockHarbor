@@ -94,7 +94,7 @@ export type InsightCandidate = {
   buzz?: true;
 };
 
-export type InsightExclusion = { symbol: string; why: "no-fact-set" | "no-filed-period" };
+export type InsightExclusion = { symbol: string; why: "no-fact-set" | "filed-period-stale" };
 
 export type InsightCandidatesValue = {
   v: 1;
@@ -197,17 +197,21 @@ export function capRanked(bars: InsightInputs["bars"], secRows: InsightInputs["s
 }
 
 /**
- * #188: a fact set with a latest filed period. No row is no fact set. A row
- * whose EPS is refused only because no twelve months are on file, or because
- * the newest period is stale, has no current filed period. Any other EPS
- * refusal (an ADS unit, a share-basis change, a loss) still has the period on
- * file, which is all the post's right rail needs.
+ * #188: a fact set with a latest filed period. No row is no fact set (every
+ * picker SEC row is built from A's stored set, msh:sec:facts:v1:<SYM>).
+ *
+ * THE PERIOD TEST IS STALENESS ONLY (#553 COWORK #195, CODE-A #204 §2). The
+ * first version also left out a row whose EPS was refused as
+ * no-twelve-month-eps, reading "no twelve months of EPS" as "no filed period".
+ * It is not: C and CRWV carry a filed Q2 FY2026, FERG and KB a filed period
+ * whose EPS line or currency is the refusal, yet all four (with CRWD) were
+ * left out. The one refusal that does mean "no current filed period" is A's
+ * eps-period-is-stale (UMC), so that is the test.
  */
 const filedOk = (row: SecCapRow | undefined): InsightExclusion["why"] | null => {
   if (!row) return "no-fact-set";
   if (row.eps && typeof row.eps.periodEnd === "string") return null;
-  const r = row.inputs.refusals;
-  return r.includes("no-twelve-month-eps") || r.includes("eps-period-is-stale") ? "no-filed-period" : null;
+  return row.inputs.refusals.includes("eps-period-is-stale") ? "filed-period-stale" : null;
 };
 
 /**
