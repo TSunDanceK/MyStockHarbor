@@ -7,9 +7,9 @@
 //   2. FALSE POSITIVES, MEASURED: of the 365 real Google News headlines in
 //      scripts/fixtures/churn-sample.tsv, only the one quote page is flagged
 // Source:
-//   3. applied in dedupeNews, the step every pool passes through (the symbol
-//      and sector stores at each refresh, the page renders, the market and
-//      /headlines feeds); the symbol feed and the sector ranking go through it.
+//   3. applied in the news store's readOrRefresh (what is held and what is
+//      fetched, for every symbol and sector record), its direct read of
+//      constituents for the sector feed, and /headlines' keepForHeadlines.
 // Every rule has a planted mutant.
 //
 //   node scripts/check-news-junk.mjs
@@ -64,16 +64,14 @@ function rules(J) {
 function sourceRules(src) {
   const fails = [];
   const want = (label, ok) => { if (!ok) fails.push(label); };
-  const stock = stripComments(src.stock, { file: "stock.ts" });
-  const sector = stripComments(src.sector, { file: "sector.ts" });
-  // ONE PLACE: dedupeNews, which every pool passes through (the symbol and
-  // sector stores' dedupe step at each refresh, the page renders, the market
-  // and /headlines feeds). The stores' own dedupe lines are pinned by
-  // check-news-purge / check-headlines-off-fmp and stay as they were.
-  const body = stock.slice(stock.indexOf("export function dedupeNews("));
-  want("dedupeNews drops junk before anything else", /for \(const item of items\) \{\s*if \(!isNotJunkNews\(item\)\) continue;/.test(body));
-  want("the symbol page's feed passes through dedupeNews", /const feedPool = dedupeNews\(/.test(stock));
-  want("the sector page's ranking passes through dedupeNews", /function rankSectorNews\(news: NewsItem\[\]\): NewsItem\[\] \{\s*return dedupeNews\(/.test(sector));
+  const store = stripComments(src.store, { file: "newsStore.ts" });
+  const heads = stripComments(src.headlines, { file: "headlineFeeds.ts" });
+  // ONE STORE FUNCTION (readOrRefresh) reads and refreshes every symbol and
+  // sector record; readStoredSymbolNews is the sector feed's direct read.
+  want("the store: what is held", /const storedItems = \(stored\?\.items \?\? \[\]\)\.filter\(isNotJunkNews\);/.test(store));
+  want("the store: what is fetched", /fetched = \(await deps\.fetchWindow\(from\)\)\.filter\(isNotJunkNews\);/.test(store));
+  want("the sector feed's direct read of constituents", /out\.set\(upper\[i\], \(entry\.items as \(T & NewsMergeItem\)\[\]\)\.filter\(isNotJunkNews\)\);/.test(store));
+  want("/headlines and the market feed", /if \(!isNotJunkNews\(item\)\) return false;/.test(heads));
   return fails;
 }
 
@@ -83,9 +81,9 @@ try {
   const r = rules(await load(lib));
   check(`filing notice, quote page, foreign listing; ${SAMPLE.length} real headlines`, r.length === 0, r.join("; "));
   console.log("\n3. Where it applies");
-  const src = { stock: read("lib/stock-news-data.ts"), sector: read("lib/sector-news-data.ts") };
+  const src = { store: read("lib/server/newsStore.ts"), headlines: read("lib/server/news/headlineFeeds.ts") };
   const s = sourceRules(src);
-  check("dedupeNews, and the page paths through it", s.length === 0, s.join("; "));
+  check("the store (held, fetched, the sector read) and /headlines", s.length === 0, s.join("; "));
   console.log("\n4. Planted mutants");
   const LM = [
     ["the SEC exemption dropped", 'if (provider !== "sec" && FILING_NOTICE', "if (FILING_NOTICE"],
@@ -101,9 +99,10 @@ try {
     check(`mutant "${label}" is caught`, f.length > 0, f[0] ?? "no rule failed");
   }
   const SM = [
-    ["the filter removed from dedupeNews", "stock", "    if (!isNotJunkNews(item)) continue;\n", ""],
-    ["the symbol feed not deduped", "stock", "const feedPool = dedupeNews(", "const feedPool = ("],
-    ["the sector ranking not deduped", "sector", "): NewsItem[] {\n  return dedupeNews(", "): NewsItem[] {\n  return ("],
+    ["held items kept", "store", "(stored?.items ?? []).filter(isNotJunkNews);", "stored?.items ?? [];"],
+    ["fetched items kept", "store", "(await deps.fetchWindow(from)).filter(isNotJunkNews);", "await deps.fetchWindow(from);"],
+    ["the sector read unfiltered", "store", ".filter(isNotJunkNews));\n", ");\n"],
+    ["/headlines unfiltered", "headlines", "  if (!isNotJunkNews(item)) return false;\n", ""],
   ];
   for (const [label, which, from, to] of SM) {
     if (!src[which].includes(from)) { check(`mutant "${label}" applies`, false, "the anchor matched nothing"); continue; }

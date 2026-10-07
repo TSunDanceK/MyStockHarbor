@@ -3,7 +3,6 @@ import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
 import { fetchSymbolNewsWindow, feedMaxAgeDays, activeNewsProviders, newsProviderMode } from "@/lib/server/news";
 import { isFromActiveProvider } from "@/lib/server/news/provenance";
 import { isFilingChurn } from "@/lib/server/news/filingChurn";
-import { isNotJunkNews } from "@/lib/server/news/junkTitle";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import {
   cleanRssDescription,
@@ -1406,12 +1405,6 @@ export function dedupeNews(items: NewsItem[]): NewsItem[] {
   const keptTokens: Set<string>[] = [];
 
   for (const item of items) {
-    // NOT NEWS (#553 COWORK #191): filing notices copied by aggregators, quote
-    // pages, foreign-listing pages (lib/server/news/junkTitle.ts). Here because
-    // every pool passes through this step -- the symbol and sector stores at
-    // each refresh (so what is already stored clears too), the page render, the
-    // /headlines and market feeds -- so one rule covers them all.
-    if (!isNotJunkNews(item)) continue;
     const linkKey = item.link.trim();
     if (!linkKey || seenLinks.has(linkKey)) continue;
 

@@ -19,9 +19,12 @@
 //                    company, not this one's news. A US share class (BRK.B) is a
 //                    single letter and is not matched
 //
-// Applied in dedupeNews (lib/stock-news-data.ts), the step every pool already
-// passes through: the symbol and sector stores at each refresh (so what is
-// already stored clears too), the page renders, the market and /headlines feeds.
+// Applied in the news store (lib/server/newsStore.ts readOrRefresh: what is
+// held and what is fetched, for every symbol and sector record, so a stored
+// record reads clean at once and clears at its next refresh; and its direct
+// read of constituents for the sector feed) and in /headlines'
+// keepForHeadlines. Not in dedupeNews: several checks run that function in a
+// sandbox without imports.
 // Pure; scripts/check-news-junk.mjs measures it against real headlines.
 
 export type JunkReason = "filing-notice" | "quote-page" | "foreign-listing";
