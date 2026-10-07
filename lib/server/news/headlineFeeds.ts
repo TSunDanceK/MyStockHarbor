@@ -26,7 +26,6 @@
 // literally, which means an item with NO flag is dropped too: advertising
 // presented as a headline is worse than one fewer headline.
 import { stripHtmlTags, containsHtmlMarkup } from "./text";
-import { isNotJunkNews } from "./junkTitle";
 import { deriveEventType } from "./eventType";
 import { newsUserAgent } from "./userAgent";
 import type { NewsItem } from "./types";
@@ -152,8 +151,6 @@ export async function fetchHeadlineFeeds(): Promise<NewsItem[]> {
  */
 export function keepForHeadlines(item: NewsItem): boolean {
   if (!isEnglish(item)) return false;
-  // Filing notices, quote pages, foreign-listing pages (#553 COWORK #191).
-  if (!isNotJunkNews(item)) return false;
   return !(item.provider === "wire" && item.source === "GlobeNewswire" && !item.tickers?.length);
 }
 

@@ -44,7 +44,6 @@ import { fmpNewsProvider } from "./fmpProvider";
 import { gnewsProvider } from "./gnewsProvider";
 import { wireProvider } from "./wireProvider";
 import { secProvider } from "./secProvider";
-import { isNotJunkNews } from "./junkTitle";
 import type { NewsItem, NewsProvider } from "./types";
 
 export type NewsProviderMode = "free" | "fmp";
@@ -298,7 +297,5 @@ export async function fetchSymbolNewsWindow(
     );
   }
 
-  // NOT NEWS, DROPPED AT INGEST (#553 COWORK #191): filing notices copied by
-  // aggregators, quote pages, foreign-listing pages (news/junkTitle.ts).
-  return fulfilled.flatMap((result) => result.value).filter(isNotJunkNews);
+  return fulfilled.flatMap((result) => result.value);
 }

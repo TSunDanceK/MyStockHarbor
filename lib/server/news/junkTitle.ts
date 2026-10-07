@@ -19,8 +19,9 @@
 //                    company, not this one's news. A US share class (BRK.B) is a
 //                    single letter and is not matched
 //
-// Applied at ingest (fetchSymbolNewsWindow, the /headlines feeds) and on the
-// stored set at each refresh and read, so what is already stored clears too.
+// Applied in dedupeNews (lib/stock-news-data.ts), the step every pool already
+// passes through: the symbol and sector stores at each refresh (so what is
+// already stored clears too), the page renders, the market and /headlines feeds.
 // Pure; scripts/check-news-junk.mjs measures it against real headlines.
 
 export type JunkReason = "filing-notice" | "quote-page" | "foreign-listing";

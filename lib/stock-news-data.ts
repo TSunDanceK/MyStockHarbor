@@ -397,8 +397,7 @@ async function fetchStoredSymbolNews(symbol: string, companyName: string): Promi
     // see lib/server/news/index.ts. In step 1 it is always the FMP adapter, and
     // the adapter is the code that used to sit inline here.
     fetchWindow: (from) => fetchSymbolNewsWindow(symbol, companyName, from),
-    // Junk headlines (news/junkTitle.ts, #553 COWORK #191) leave the stored set at its next refresh.
-    dedupe: (list) => dedupeNews(list.filter(fromActive).filter(isNotJunkNews)),
+    dedupe: (list) => dedupeNews(list.filter(fromActive)),
     // The earnings pin. Once an article qualifies it survives eviction until a
     // newer qualifying one replaces it, or 7 days pass -- which is the part
     // only persistence makes possible. Today an earnings article vanishes the
@@ -415,8 +414,7 @@ async function fetchStoredSymbolNews(symbol: string, companyName: string): Promi
     },
   });
 
-  // ...and on read, for a record served from cache before that refresh.
-  return items.filter(fromActive).filter(isNotJunkNews);
+  return items.filter(fromActive);
 }
 
 export function isVideoOrLowQualitySource(item: NewsItem) {
@@ -1408,6 +1406,12 @@ export function dedupeNews(items: NewsItem[]): NewsItem[] {
   const keptTokens: Set<string>[] = [];
 
   for (const item of items) {
+    // NOT NEWS (#553 COWORK #191): filing notices copied by aggregators, quote
+    // pages, foreign-listing pages (lib/server/news/junkTitle.ts). Here because
+    // every pool passes through this step -- the symbol and sector stores at
+    // each refresh (so what is already stored clears too), the page render, the
+    // /headlines and market feeds -- so one rule covers them all.
+    if (!isNotJunkNews(item)) continue;
     const linkKey = item.link.trim();
     if (!linkKey || seenLinks.has(linkKey)) continue;
 
