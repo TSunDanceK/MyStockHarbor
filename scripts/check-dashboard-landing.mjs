@@ -116,15 +116,18 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
   const W = FULL_LANDING.cards.earnings.windows;
   want("the earnings card lists two weeks, each headed with its dates and count", weeks.length === 2 &&
     weeks.every((h, i) => h.includes(`<p class="dlWeekHead">${W[i].range} · ${W[i].count} companies</p>`)));
-  want("each week lists up to 4 companies, one per line: logo, bold ticker, name (full name in title), estimated day", weeks.every((h, i) => {
+  // #162/#163: the week heading carries the timing; a row has no date and no "Estimated" tag.
+  want("each week lists up to 4 companies, one per line: logo, bold ticker, name (full name in title); no per-row date or tag", weeks.every((h, i) => {
     const rows = [...h.matchAll(/<li class="dlEarnRow" data-earn-row="">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
     return rows.length === Math.min(4, W[i].top.length) && rows.every((r, k) => {
       const e = W[i].top[k], esc = (t) => t.replace(/&/g, "&amp;");
       return new RegExp(`title="${esc(e.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`).test(r) && /<img src="\/logos\//.test(r) && r.includes(`<strong>${e.symbol}</strong>`) &&
-        r.includes(`<span class="dlEarnCo">${esc(e.name)}</span>`) && r.includes(`<span class="dlEarnDay">${e.day} <em>Estimated</em></span>`);
+        r.includes(`<span class="dlEarnCo">${esc(e.name)}</span>`) && !r.includes(e.day) && !/Estimated|dlEarnDay|<em>/.test(r);
     });
   }));
   want("the rest of each week is counted: \"+N more in the calendar →\"", weeks.every((h, i) => h.includes(`href="/earnings-calendar" class="dlEarnMore" data-earn-more="">+${W[i].count - W[i].top.length} more in the calendar →</a>`)));
+  want("the fine line under the card says the dates are estimated (#162 keeps it)", ea.includes('<p class="dlFine" data-fine-print=""><strong style="color:#f59e0b">Estimated</strong> from each company&#x27;s own SEC reporting pattern'));
+  want("the name takes the full remaining width (#163: nothing beside it)", /\.dlEarnName\{[^}]*flex:1 1 auto;/.test(mod.LANDING_CSS) && !/dlEarnDay/.test(mod.LANDING_CSS));
   want("a long name truncates on one line with an ellipsis", /\.dlEarnCo\{[^}]*overflow:hidden;[^}]*text-overflow:ellipsis;[^}]*white-space:nowrap;/.test(mod.LANDING_CSS) && !/dlLogoChip|data-logo-chip/.test(ea));
   // #148 §3, lined up by #154 §1: every connector has one end on the hub (no line joins two
   // companies); each leaves its own row level, at that row's centre (rows 28 px, gap 8); the
@@ -210,11 +213,16 @@ function wiring(client, page, cardsSrc, root = read(ROOT)) {
   // #154 §2/§4 data: four names a week from the committed snapshot (no read), the newest two posts.
   want("the earnings rows: 4 a week, named from the committed snapshot, the estimated day", /export const EARNINGS_ROWS = 4;/.test(d) && /top: c\.items\.slice\(0, EARNINGS_ROWS\)\.map\(\(i\) => \(\{ symbol: i\.symbol, name: cleanName\(snapshotCompanyName\(i\.symbol\)\) \|\| i\.symbol, day: shortDay\(i\.estimatedOn\) \}\)\)/.test(d));
   want("the insight card reads the newest two posts", /export const INSIGHTS_SHOWN = 2;/.test(d) && /getAllPosts\(\)\.slice\(0, INSIGHTS_SHOWN\)/.test(d));
-  // #154 §5: the tabs on one line on a phone: icon + short label, full name in aria-label and on desktop.
-  want("the analyser tabs: full name in aria-label and on desktop; icon + short label on one line at 480 px and under",
-    /aria-label=\{t\.label\} data-tab=\{t\.key\} className="dlTab"/.test(c) && /<span className="dlTabFull">\{t\.label\}<\/span><span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/.test(c) &&
-    /short: "Chart"[\s\S]*short: "Levels"[\s\S]*short: "Zones"[\s\S]*short: "Earnings"[\s\S]*short: "News"/.test(c) &&
-    /@media\(max-width:480px\)\{\.dlTabs\{flex-wrap:nowrap;overflow-x:auto;[^}]*\}[\s\S]*\.dlTab\{[^}]*flex-direction:column;[^}]*\}[\s\S]*\.dlTabFull\{display:none;\}\.dlTabShort\{display:inline;\}\}/.test(c));
+  // #161 (the phone style of #154 §5 at every width): icon over a short label, one line; the full name in aria-label and title.
+  want("the analyser tabs: an icon over a short label, full name in aria-label and title",
+    /aria-label=\{t\.label\} title=\{t\.label\} data-tab=\{t\.key\} className="dlTab"/.test(c) && /<svg className="dlTabIcon"[^\n]*<\/svg>\s*<span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/.test(c) && !/dlTabFull/.test(c) &&
+    /short: "Chart"[\s\S]*short: "Levels"[\s\S]*short: "Zones"[\s\S]*short: "Earnings"[\s\S]*short: "News"/.test(c));
+  // At 1280 px no media query applies, so the base rules alone must draw the icon tabs on one line.
+  const base = c.replace(/@media\([^)]*\)\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, "");
+  want("at 1280 px (the base rules): the icons shown, icon over label, one line; nothing hides the icon or the short label at any width",
+    /\.dlTabs\{[^}]*flex-wrap:nowrap;/.test(base) && /\.dlTab\{[^}]*flex-direction:column;/.test(base) && /\.dlTabIcon\{display:block;/.test(base) &&
+    !/\.dlTabIcon\{[^}]*display:none/.test(c) && !/\.dlTabShort\{[^}]*display:none/.test(c));
+  want("at 480 px and under: a scroll strip, never the page sideways", /@media\(max-width:480px\)\{\.dlTabs\{overflow-x:auto;/.test(c));
   // #160 (replacing #154 §6): the Filed earnings tab is the stock page's snapshot card; its empty state the brief's words.
   want("the Filed earnings tab's card is called, not mounted (a mount remounts and refetches the chart each render)", /else if \(tab === "earnings"\) body = SectionCard\(\{/.test(c));
   want("the Filed earnings tab draws the stock page's snapshot, with the brief's empty state", /<FiledEarningsChart symbol=\{symbol\} \/>/.test(c) && /Filed figures not available for \{symbol\}\./.test(c) && !/The latest filed quarter reads/.test(c));
@@ -245,6 +253,9 @@ const LANDING_MUTANTS = [
   ["#154 §2: the rest of the week not counted", "{w.count > w.top.length ? <Link", "{false ? <Link"],
   ["#154 §2: long names wrap instead of truncating", ".dlEarnCo{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;", ".dlEarnCo{min-width:0;"],
   ["#154 §2: the full name dropped from title", "className=\"dlEarnName\" title={e.name}", "className=\"dlEarnName\""],
+  ["#163: the per-row date back", "                          )}\n                        </li>", "                          )}\n                          <span className=\"dlEarnDay\">{e.day}</span>\n                        </li>"],
+  ["#162: the per-row \"Estimated\" tag back", "                          )}\n                        </li>", "                          )}\n                          <em>Estimated</em>\n                        </li>"],
+  ["#162: the fine line dropped", "<p className=\"dlFine\" data-fine-print=\"\"><strong style={{ color: \"#f59e0b\" }}>Estimated</strong> from", "<p className=\"dlFine\" data-fine-print=\"\">From"],
   ["#154 §3: the old eyebrow", 'eyebrow="Sector growth · year to date"', 'eyebrow="Sectors · year to date"'],
   ["#154 §3: the plain line dropped", '<p className="dlRead dlSecWhat" data-sector-what="">{SECTOR_WHAT}</p>', ""],
   ["#154 §4: one post only", "{c.insights.map((p, i) => (", "{c.insights.slice(0, 1).map((p, i) => ("],
@@ -281,8 +292,12 @@ const WIRING_MUTANTS = [
   ["\"/\" back on the phone-only router", ROOT, /<DashboardPage searchParams=\{searchParams\} \/>/, "<HomePageRouter initialIsMobile={false} />"],
   ["\"/\" loses its structured data", ROOT, /"@type": "WebApplication",/, '"@type": "Thing",'],
   ["the thumbnails read the publisher picture regardless", CARDS_SRC, /if \(SHOW_PUBLISHER_IMAGES && image && /, "if (image && "],
-  ["#154 §5: the tabs lose their accessible full names", CLIENT, /aria-label=\{t\.label\} data-tab/, "data-tab"],
-  ["#154 §5: the tabs wrap on a phone", CLIENT, /\.dlTabs\{flex-wrap:nowrap;overflow-x:auto;/, ".dlTabs{flex-wrap:wrap;"],
+  ["#154 §5: the tabs lose their accessible full names", CLIENT, /aria-label=\{t\.label\} title/, "title"],
+  ["#154 §5: the tabs wrap on a phone", CLIENT, /@media\(max-width:480px\)\{\.dlTabs\{overflow-x:auto;/, "@media(max-width:480px){.dlTabs{flex-wrap:wrap;"],
+  ["#161: text-only tabs back on desktop (icons hidden above 480 px)", CLIENT, /\.dlTabIcon\{display:block;width:18px;height:18px;flex:0 0 auto;\}/, ".dlTabIcon{display:none;width:18px;height:18px;flex:0 0 auto;}"],
+  ["#161: desktop tabs side by side, not icon over label", CLIENT, /flex-direction:column;align-items:center;/, "align-items:center;"],
+  ["#161: the full name back as the desktop label", CLIENT, /<span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/, '<span className="dlTabFull">{t.label}</span><span className="dlTabShort" aria-hidden="true">{t.short}</span>'],
+  ["#161: the tooltip dropped", CLIENT, / title=\{t\.label\} data-tab/, " data-tab"],
   ["#154 §5: the short labels gone", CLIENT, /<span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/, ""],
   ["#154 §6: the tab's card mounted (remounts the chart)", CLIENT, /else if \(tab === "earnings"\) body = SectionCard\(\{/, 'else if (tab === "earnings") body = <SectionCard title="x">{null}</SectionCard>; else if (false) body = SectionCard({'],
   ["#154 §6: the tab back to one sentence", CLIENT, /: <FiledEarningsChart symbol=\{symbol\}[^\n]*\/>,/, ": <p className=\"dlRead\">The latest filed quarter reads <strong>{earningsSummary?.toneLabel}</strong>.</p>,"],

@@ -73,10 +73,10 @@ export type DashboardLandingProps = {
   css: string;
 };
 type AnalyserTab = "chart" | "levels" | "zones" | "earnings" | "news";
-// THE TABS ON ONE LINE ON A PHONE (#563 COWORK #154 §5): an icon and a short
-// label (the icon over it) at 480 px and under, the full name everywhere else and always in the
-// accessible name; a horizontal strip, never page sideways-scroll, if 320 px
-// still cannot fit them.
+// THE ICON TABS AT EVERY WIDTH (#563 COWORK #161; the phone style of #154 §5):
+// an icon over a short label, on one line. The full name is the accessible name
+// and the tooltip (aria-label and title). Wider on desktop; on a phone a
+// horizontal strip, never page sideways-scroll, if 320 px still cannot fit them.
 const ANALYSER_TABS: { key: AnalyserTab; label: string; short: string; icon: string }[] = [
   { key: "chart", label: "Chart", short: "Chart", icon: "M3 17l5-6 4 3 6-8M3 21h18" },
   { key: "levels", label: "Key levels", short: "Levels", icon: "M3 6h18M3 12h18M3 18h18" },
@@ -105,13 +105,11 @@ const LANDING_CLIENT_CSS = `
 .dlChipsRow{display:flex;flex-wrap:wrap;gap:8px;}
 .dlInfoChip{display:inline-flex;gap:8px;align-items:baseline;padding:8px 12px;border:1px solid #222c40;border-radius:12px;background:#0f1624;color:#eaf0fa;font-size:var(--fs-read);font-weight:700;text-decoration:none;}
 .dlInfoLabel{font-size:var(--fs-label);color:#8a97ad;text-transform:uppercase;letter-spacing:.05em;font-weight:800;}
-.dlTabs{display:flex;flex-wrap:wrap;gap:8px;}
-.dlTab{padding:8px 14px;border-radius:10px;border:1px solid #222c40;background:#0f1624;color:#cbd5e1;font-weight:800;font-size:var(--fs-label);cursor:pointer;}
+.dlTabs{display:flex;flex-wrap:nowrap;gap:8px;}
+.dlTab{flex:1 1 0;min-width:0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 10px;border-radius:10px;border:1px solid #222c40;background:#0f1624;color:#cbd5e1;font-weight:800;font-size:var(--fs-label);white-space:nowrap;cursor:pointer;}
 .dlTab[aria-selected="true"]{border-color:#2f6bff;background:#13213f;color:#fff;}
-.dlTab{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
-.dlTabIcon{width:16px;height:16px;flex:0 0 auto;display:none;}
-.dlTabShort{display:none;}
-@media(max-width:480px){.dlTabs{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;gap:4px;}.dlTabs::-webkit-scrollbar{display:none;}.dlTab{flex:1 0 auto;flex-direction:column;justify-content:center;padding:6px 6px;gap:3px;}.dlTabIcon{display:block;width:16px;height:16px;}.dlTabFull{display:none;}.dlTabShort{display:inline;}}
+.dlTabIcon{display:block;width:18px;height:18px;flex:0 0 auto;}
+@media(max-width:480px){.dlTabs{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;gap:4px;}.dlTabs::-webkit-scrollbar{display:none;}.dlTab{flex:1 0 auto;padding:6px 6px;gap:3px;}.dlTabIcon{width:16px;height:16px;}}
 @media(max-width:960px){.dlHero{grid-template-columns:minmax(0,1fr);}}
 @media(max-width:560px){.dlSearch{padding:0 8px;gap:6px;}.dlSearch .msh-go{padding:0 12px;}.dlHeroLeft{padding:18px;}.dlH1{font-size:2rem;}.dlVerdict{font-size:var(--fs-read);}}
 `;
@@ -1539,9 +1537,9 @@ export default function DashboardClient({
       <div className="msh-col dlTabbed">
         <div className="dlTabs" role="tablist" aria-label={`${symbol} analyser views`}>
           {ANALYSER_TABS.map((t) => (
-            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} aria-label={t.label} data-tab={t.key} className="dlTab" onClick={() => setTab(t.key)}>
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} aria-label={t.label} title={t.label} data-tab={t.key} className="dlTab" onClick={() => setTab(t.key)}>
               <svg className="dlTabIcon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={t.icon} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-              <span className="dlTabFull">{t.label}</span><span className="dlTabShort" aria-hidden="true">{t.short}</span>
+              <span className="dlTabShort" aria-hidden="true">{t.short}</span>
             </button>
           ))}
         </div>

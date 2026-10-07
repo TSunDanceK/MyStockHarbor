@@ -250,7 +250,10 @@ export function LandingCards({ c, hasFiledEarnings }: { c: DashboardCards; hasFi
           {c.earnings ? (
             <>
               {/* A LIST, LIKE THE PICKERS CARD (#563 COWORK #154 §2): a heading per
-                  week, then one company per line, biggest first, the rest counted. */}
+                  week, then one company per line, biggest first, the rest counted.
+                  #162/#163: the week heading carries the timing, so a row is just the
+                  logo, the ticker and the name (no date, no "Estimated" tag); the fine
+                  line below says the dates are estimated. */}
               <div className="dlWeeks">
                 {c.earnings.windows.map((w) => (
                   <div key={w.range} className="dlWeek" data-week="">
@@ -271,7 +274,6 @@ export function LandingCards({ c, hasFiledEarnings }: { c: DashboardCards; hasFi
                               <span className="dlEarnCo">{e.name}</span>
                             </span>
                           )}
-                          <span className="dlEarnDay">{e.day} <em>Estimated</em></span>
                         </li>
                       ))}
                     </ul>
@@ -421,8 +423,6 @@ export const LANDING_CSS = `
 .dlEarnName{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 auto;color:#e2e8f0;text-decoration:none;}
 .dlEarnName strong{color:#f8fafc;font-weight:900;flex:0 0 auto;}
 .dlEarnCo{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#94a3b8;}
-.dlEarnDay{flex:0 0 auto;white-space:nowrap;font-weight:700;color:#cbd5e1;font-size:var(--fs-label);}
-.dlEarnDay em{font-style:normal;color:#f59e0b;font-weight:800;margin-left:4px;}
 .dlEarnMore{display:inline-block;margin-top:6px;font-size:var(--fs-label);font-weight:800;color:#7dd3fc;text-decoration:none;}
 .dlSecWhat{margin:0 0 10px;color:#cbd5e1;}
 .dlInsights{display:grid;gap:16px;}
