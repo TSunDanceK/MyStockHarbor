@@ -677,11 +677,13 @@ export type EstimatorId = "A" | "B" | "C";
 /** The year-ago announcement for the same fiscal quarter, or null. */
 export function sameQuarterLastYear(
   events: readonly ReportEvent[],
-  nextPeriodEnd: string
+  nextPeriodEnd: string,
+  /** Which evidence to read; 8-K unless the caller has ruled a 6-K filer in (estimateNextReport). */
+  basis: ReportEvent["basis"] = "8-K item 2.02"
 ): ReportEvent | null {
   let best: ReportEvent | null = null;
   for (const e of events) {
-    if (!e.periodEnd || e.basis !== "8-K item 2.02") continue;
+    if (!e.periodEnd || e.basis !== basis) continue;
     const gap = daysBetween(e.periodEnd, nextPeriodEnd);
     // A YEAR, GENEROUSLY: a 52/53-week calendar moves the anniversary by a
     // week either way, and a 4-4-5 year can be 371 days.
@@ -697,9 +699,10 @@ const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 export function runEstimator(
   id: EstimatorId,
   events: readonly ReportEvent[],
-  nextPeriodEnd: string
+  nextPeriodEnd: string,
+  basis: ReportEvent["basis"] = "8-K item 2.02"
 ): string | null {
-  const yearAgo = sameQuarterLastYear(events, nextPeriodEnd);
+  const yearAgo = sameQuarterLastYear(events, nextPeriodEnd, basis);
   if (id === "A") {
     if (!yearAgo) return null;
     return iso(Date.parse(nextPeriodEnd) + daysBetween(yearAgo.periodEnd!, yearAgo.announcedOn) * DAY);
@@ -712,7 +715,7 @@ export function runEstimator(
     return iso(Date.parse(yearAgo.announcedOn) + 364 * DAY);
   }
   const lags = events
-    .filter((e) => e.periodEnd && e.basis === "8-K item 2.02")
+    .filter((e) => e.periodEnd && e.basis === basis)
     .map((e) => daysBetween(e.periodEnd!, e.announcedOn))
     .filter((d) => d >= 0 && d <= 200);
   const lag = median(lags);
@@ -755,19 +758,28 @@ export function estimateNextReport(
   // honest output is silence — not a date computed from the announcement, which
   // is the conflation this whole module exists to keep out.
   if (!nextPeriodEnd) return { kind: "none", reason: "no matched fiscal period end" };
-  const usable = events.filter((e) => e.periodEnd && e.basis === "8-K item 2.02");
+  // A 6-K FILER'S OWN RESULTS EVENTS COUNT (#552 COWORK #192). RY, BMO, BNS
+  // and CM announce every quarter by 6-K and file no 8-K at all, so an 8-K-only
+  // bar left them at "only 0 prior announcements" with four or more matched
+  // 6-K events stored. A filer with ANY 8-K 2.02 event keeps the 8-K bar
+  // alone -- the stronger signal is never diluted by the weaker one
+  // (SIX_K_IS_A_WEAKER_SIGNAL) -- and the spread rule below still refuses an
+  // irregular 6-K history exactly as it refuses an irregular 8-K one.
+  const eightK = events.filter((e) => e.periodEnd && e.basis === "8-K item 2.02");
+  const basis: ReportEvent["basis"] = eightK.length ? "8-K item 2.02" : "6-K near period end";
+  const usable = eightK.length ? eightK : events.filter((e) => e.periodEnd && e.basis === "6-K near period end");
   const lags = usable
     .map((e) => daysBetween(e.periodEnd!, e.announcedOn))
     .filter((d) => d >= 0 && d <= 200);
   if (lags.length < REGULARITY_WINDOW) {
-    return { kind: "none", reason: `only ${lags.length} prior 8-K item 2.02 announcement(s)` };
+    return { kind: "none", reason: `only ${lags.length} prior ${basis === "8-K item 2.02" ? "8-K item 2.02" : "6-K results"} announcement(s)` };
   }
 
   const recent = lags.slice(0, REGULARITY_WINDOW);
   const spread = Math.max(...recent) - Math.min(...recent);
 
-  const primary = runEstimator(PRIMARY_ESTIMATOR, usable, nextPeriodEnd);
-  const predicted = primary ?? runEstimator("C", usable, nextPeriodEnd);
+  const primary = runEstimator(PRIMARY_ESTIMATOR, usable, nextPeriodEnd, basis);
+  const predicted = primary ?? runEstimator("C", usable, nextPeriodEnd, basis);
   if (!predicted) return { kind: "none", reason: "no usable prior announcement" };
 
   const cap = new Date(Date.parse(nextPeriodEnd) + deadlineDays(category, annual) * DAY);
@@ -775,6 +787,19 @@ export function estimateNextReport(
 
   const timings = usable.slice(0, REGULARITY_WINDOW).map((e) => e.timing);
   const timing = timings.length && timings.every((t) => t === timings[0]) ? timings[0] : null;
+
+  // A 6-K HISTORY EARNS A MONTH AT MOST (#552 COWORK #192 with
+  // SIX_K_IS_A_WEAKER_SIGNAL). Its events count toward the bar, but a
+  // positionally-selected 6-K must not carry the most specific claim the page
+  // makes: a regular 6-K filer reads "expected in <month>", never a day.
+  if (basis === "6-K near period end") {
+    const months = new Set(recent.map((d) => iso(Date.parse(nextPeriodEnd) + d * DAY).slice(0, 7)));
+    if (spread <= REGULAR_SPREAD_DAYS || months.size === 1) {
+      const month = (clamped ? cap.toISOString() : predicted).slice(0, 7);
+      return { kind: "month", month, spreadDays: spread, fromEvents: lags.length, timing };
+    }
+    return { kind: "none", reason: `last ${REGULARITY_WINDOW} 6-K lags spread ${spread} days across ${months.size} months` };
+  }
 
   if (spread <= REGULAR_SPREAD_DAYS) {
     return {
@@ -1030,7 +1055,16 @@ export function estimateUpcoming(
   let end = snap(cadence.end);
   let estimate = estimateNextReport(events, end, category, cadence.annual);
   for (let i = 0; i < 8; i++) {
-    if (estimate.kind !== "date" || estimate.date >= floor) break;
+    if (estimate.kind === "date") {
+      if (estimate.date >= floor) break;
+    } else if (Date.parse(end) + deadlineDays(category, cadence.annual) * DAY >= Date.parse(floor)) {
+      // ROLLED WHATEVER THE KIND (#552 COWORK #192). With no date to test, a
+      // period whose statutory deadline has passed has been reported, so the
+      // estimate is not for it: RY's record sat on 2026-04-30 in October
+      // because only a DATE estimate used to roll. Stops at the first period
+      // still inside its deadline.
+      break;
+    }
     end = snap(new Date(Date.parse(end) + cadence.stepDays * DAY).toISOString().slice(0, 10));
     estimate = estimateNextReport(events, end, category, cadence.annual);
   }
