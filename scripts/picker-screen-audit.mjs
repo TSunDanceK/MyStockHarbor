@@ -57,6 +57,11 @@ const { buildPickersPayloadDryRun, PICKERS_SYMBOLS_KEY } = await import("../lib/
 const { tiingoEodKey } = await import("../lib/server/marketData/keys.ts");
 const { eodBarsToPoints } = await import("../lib/server/marketData/pickerHistory.ts");
 const { getBuySignalCount } = await import("../lib/signalCounts.ts");
+// The #169 fix (#553 COWORK #186) moves Buy/Sell to lib/pickerScreenRules.ts.
+// Read through it where the branch has it, so the same script measures
+// before (main) and after (the fix branch).
+const screenRules = await import("../lib/pickerScreenRules.ts").catch(() => null);
+console.log(`buy/sell rule: ${screenRules ? "pickerScreenRules (the #169 fix)" : "main's (score > 0)"}`);
 const { toDashed } = await import("../lib/symbolSpellings.mjs");
 const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);
 const SESSIONS = Number(process.env.SESSIONS || 60);
@@ -91,8 +96,10 @@ function membersOf(payload) {
   const recs = payload.signalRecords ?? [];
   for (const [page, field] of FLAG_SCREENS) out.set(page, new Set(recs.filter((r) => r[field] === true).map((r) => r.symbol)));
   for (const [page, needles] of SECTION_SCREENS) out.set(page, new Set((findSection(payload.sections ?? [], needles)?.items ?? []).map((i) => i.symbol)));
-  out.set("top-stocks-with-buy-signals", new Set(recs.filter((r) => getBuySignalCount(r) > 0).map((r) => r.symbol)));
-  out.set("top-stocks-with-sell-signals", new Set(recs.filter((r) => sellCount(r) > 0).map((r) => r.symbol)));
+  const buyOk = (r) => (screenRules ? screenRules.qualifiesBuySignal(getBuySignalCount(r)) : getBuySignalCount(r) > 0);
+  const sellOk = (r) => (screenRules ? screenRules.qualifiesSellSignal(r, sellCount(r)) : sellCount(r) > 0);
+  out.set("top-stocks-with-buy-signals", new Set(recs.filter(buyOk).map((r) => r.symbol)));
+  out.set("top-stocks-with-sell-signals", new Set(recs.filter(sellOk).map((r) => r.symbol)));
   return out;
 }
 
@@ -120,6 +127,13 @@ for (const date of [...sessions].reverse()) {
   const t = Date.now();
   const payload = await buildPickersPayloadDryRun(hist);
   perSession.push({ date, measured: (payload.signalRecords ?? []).length, members: membersOf(payload) });
+  // THE PAYLOAD'S SIZE on the newest cut (the weekly flip cards add candles): bytes only.
+  if (perSession.length === 1) {
+    const total = JSON.stringify(payload).length;
+    const bySection = (payload.sections ?? []).filter((x) => /trend flip|strong earnings|daily ma200/i.test(String(x.title)))
+      .map((x) => `${x.title}: ${x.items?.length ?? 0} items, ${JSON.stringify(x).length} B`);
+    console.log(`  payload ${total} B on ${date}; ${bySection.join("; ")}`);
+  }
   console.log(`  built ${date}: ${(payload.signalRecords ?? []).length} records (${Date.now() - t} ms)`);
 }
 perSession.reverse();
