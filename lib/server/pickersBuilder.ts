@@ -3879,6 +3879,14 @@ async function buildPickersPayload(
           // they duplicate signalRecords, so the line has to ride separately.
           // The weekly sections never take this daily line: their flip is weekly,
           // so it would contradict the date printed in the same row.
+          // THE FULL SERIES STAY OUT OF THE RECORD (#553 COWORK #186 ruling 6,
+          // measured 2026-10-07): spread whole, every qualifying record carried
+          // its entire daily and weekly Trend Helper history -- 0.9 MB of
+          // signalRecords for the weekly one alone. Only the drawn window ships,
+          // as the sections' trendSeries; nothing reads these from a record.
+          const { dailyTrend: _dailyFull, weeklyTrend: _weeklyFull, ...trendFlipFlags } = trendFlips;
+          void _dailyFull;
+          void _weeklyFull;
           const dailyTrendSeries = trendFlips.dailyTrend
             ? trendTailForPoints(chartPoints, trendFlips.dailyTrend)
             : undefined;
@@ -4211,7 +4219,7 @@ async function buildPickersPayload(
             dailyMa200Proximity: hasDailyMa200Proximity,
             weeklyMa200Proximity: hasWeeklyMa200Proximity,
             weeklyMa200DistancePct,
-            ...trendFlips,
+            ...trendFlipFlags,
             bullishRsiDivergence,
             bearishRsiDivergence,
             bullishMacdDivergence,
