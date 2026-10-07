@@ -7,6 +7,7 @@
 //
 //   node scripts/market-dynamic-dry-run.mjs   (relay: write-market-dynamic-dry-run)
 import { register } from "node:module";
+import { toDashed } from "../lib/symbolSpellings.mjs";
 register("./lib/next-cache-stub-hooks.mjs", import.meta.url);
 register("./lib/ts-resolve-app.mjs", import.meta.url);
 if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) { console.error("FATAL: needs the Upstash credentials."); process.exit(2); }
@@ -45,7 +46,7 @@ console.log(`NEW: dynamic ${v.dynamicSymbols.length} · topTraded ${v.topTraded.
 console.log(`  top traded: ${v.topTraded.map((r) => r.symbol).join(" ")}`);
 console.log(`  top movers: ${v.topMovers.map((r) => r.symbol).join(" ")}`);
 const old = parse(await redis.get("msh:market:state"));
-const oldSyms = new Set(Object.keys(old?.dynamic ?? {}).map((s) => s.toUpperCase().replace(/\./g, "-")));
+const oldSyms = new Set(Object.keys(old?.dynamic ?? {}).map((s) => toDashed(s.toUpperCase())));
 const newSyms = new Set(v.dynamicSymbols);
 const both = [...newSyms].filter((s) => oldSyms.has(s)).length;
 console.log(`OLD (frozen msh:market:state): dynamic ${oldSyms.size}`);
