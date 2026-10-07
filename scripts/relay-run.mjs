@@ -1410,6 +1410,8 @@ const TASKS = {
   "write-market-dynamic-dry-run": { script: "scripts/market-dynamic-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY (Relay B, #553 COWORK #191 item 1): stored news, junk headlines by day.
   "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // The #813 screens on the live build (#553 COWORK #194), read-only.
+  "write-screen-live-counts": { script: "scripts/screen-live-counts.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
