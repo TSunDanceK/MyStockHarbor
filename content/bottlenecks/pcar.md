@@ -35,6 +35,7 @@ supplyChain:
   - name: Cummins Inc.
     ticker: CMI
     pct: 24
+    grade: some
     blurb: >
       PACCAR installed its own PACCAR-brand engines in only about 29-33%
       of Kenworth and Peterbilt heavy-duty trucks sold in the US and
@@ -43,24 +44,28 @@ supplyChain:
   - name: Eaton Corporation plc
     ticker: ETN
     pct: 14
+    grade: some
     blurb: >
       A major supplier of manual and automated transmissions across
       PACCAR's Kenworth, Peterbilt, and DAF truck lines.
   - name: Magna International Inc.
     ticker: MGA
     pct: 11
+    grade: some
     blurb: >
       Supplies cab stampings for PACCAR's North American truck
       production.
   - name: Goodyear Tire & Rubber Company
     ticker: GT
     pct: 9
+    grade: spread
     blurb: >
       A leading original-equipment tire supplier for PACCAR's heavy-duty
       trucks.
   - name: ZF Friedrichshafen AG
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       A major transmission and driveline-component supplier to PACCAR's
       truck lines; ZF is privately held by the Zeppelin Foundation and
@@ -68,6 +73,7 @@ supplyChain:
   - name: AB Volvo (Renault Trucks)
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       PACCAR's own 10-K names AB Volvo's Renault Trucks division as a
       supplier of certain cab components to DAF in Europe — while also
@@ -77,6 +83,7 @@ supplyChain:
   - name: Knorr-Bremse AG (Bendix)
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Knorr-Bremse's Bendix brand is the dominant supplier of braking and
       ABS systems for North American heavy trucks, including PACCAR's;
@@ -85,6 +92,7 @@ supplyChain:
   - name: Compagnie Générale des Établissements Michelin
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Another major original-equipment tire supplier for PACCAR's truck
       lines; Michelin trades primarily on Euronext Paris, with only a
@@ -93,6 +101,7 @@ customers:
   - name: Kenworth Dealer Network
     ticker: null
     pct: 28
+    grade: some
     blurb: >
       Not a single company — hundreds of independently owned Kenworth
       dealerships across North America handle sales, financing referrals,
@@ -100,6 +109,7 @@ customers:
   - name: Peterbilt Dealer Network
     ticker: null
     pct: 26
+    grade: some
     blurb: >
       Not a single company — Peterbilt's independent North American
       dealer network is PACCAR's other primary US sales and service
@@ -107,6 +117,7 @@ customers:
   - name: DAF Dealer Network (Europe)
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company — DAF's independent European dealer network
       performs the same distribution role for PACCAR's European truck
@@ -114,6 +125,7 @@ customers:
   - name: Ryder System, Inc.
     ticker: R
     pct: 14
+    grade: some
     blurb: >
       One of the largest third-party truck-leasing and fleet-management
       companies in North America, and a large-scale buyer of PACCAR
@@ -121,6 +133,7 @@ customers:
   - name: PACCAR Financial Services (PacLease)
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       PACCAR's own captive leasing and finance arm, not an external
       customer — included here because it originates a meaningful share

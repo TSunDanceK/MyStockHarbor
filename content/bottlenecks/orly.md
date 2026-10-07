@@ -30,6 +30,7 @@ supplyChain:
   - name: Dorman Products, Inc.
     ticker: DORM
     pct: 8
+    grade: spread
     blurb: >
       One of O'Reilly's largest branded and private-label parts suppliers,
       with an extensive lineup of Dorman and Dorman OE Solutions
@@ -38,6 +39,7 @@ supplyChain:
   - name: Standard Motor Products, Inc.
     ticker: SMP
     pct: 5
+    grade: spread
     blurb: >
       A major supplier of ignition, emission-control, and electrical
       components - brands including Standard and Four Seasons - carried
@@ -45,6 +47,7 @@ supplyChain:
   - name: Tenneco / DRiV
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Owns Monroe (shocks/struts), Walker (exhaust), Champion (spark plugs
       and wipers), and Wagner (brakes) - four of the best-known aftermarket
@@ -53,6 +56,7 @@ supplyChain:
   - name: Robert Bosch GmbH
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       A leading original-equipment and aftermarket supplier of ignition,
       fuel-injection, brake, and electrical components sold under the Bosch
@@ -61,6 +65,7 @@ supplyChain:
   - name: ACDelco (General Motors)
     ticker: GM
     pct: 3
+    grade: spread
     blurb: >
       General Motors' aftermarket parts division supplies ACDelco-branded
       batteries, filters, and OE-quality replacement parts widely stocked
@@ -68,6 +73,7 @@ supplyChain:
   - name: Diversified aftermarket parts manufacturer network
     ticker: null
     pct: 77
+    grade: hard
     blurb: >
       Not a single company - O'Reilly's 10-K discloses purchasing from more
       than 655 suppliers in total, with its five largest accounting for
@@ -78,6 +84,7 @@ customers:
   - name: DIY customers
     ticker: null
     pct: 50
+    grade: hard
     blurb: >
       Not a single company - individual do-it-yourself vehicle owners
       buying parts for their own repairs. O'Reilly's 10-K reports these
@@ -85,6 +92,7 @@ customers:
   - name: Professional service-provider customers
     ticker: null
     pct: 50
+    grade: hard
     blurb: >
       Not a single company - independent repair shops, dealerships, and
       fleet operators buying parts for paying customers. O'Reilly's 10-K

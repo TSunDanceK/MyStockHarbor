@@ -37,6 +37,7 @@ supplyChain:
   - name: Specialty Steel, Superalloy Castings & Forgings Suppliers
     ticker: null
     pct: 35
+    grade: hard
     blurb: >
       GE Vernova's 10-K flags "certain steel" as a limited- or sole-source
       supply risk, reflecting the reality that only a handful of foundries
@@ -46,6 +47,7 @@ supplyChain:
   - name: Semiconductor & Power-Electronics Suppliers (incl. Mitsubishi Electric)
     ticker: null
     pct: 25
+    grade: hard
     blurb: >
       GE Vernova's 10-K names semiconductor chips as a limited/sole-source
       risk category feeding its grid and HVDC transmission equipment; in 2025
@@ -56,6 +58,7 @@ supplyChain:
   - name: Rare-Earth, Cobalt & Hafnium Critical-Mineral Suppliers
     ticker: null
     pct: 25
+    grade: hard
     blurb: >
       Cobalt, hafnium, and rare-earth metals are separately called out in
       GE Vernova's 10-K as limited/sole-source inputs; rare-earth magnets in
@@ -65,6 +68,7 @@ supplyChain:
   - name: Cameco Corporation
     ticker: CCJ
     pct: 15
+    grade: some
     blurb: >
       Cameco is collaborating with GE Hitachi Nuclear Energy and Global
       Nuclear Fuel to help supply and develop the uranium fuel cycle for the
@@ -75,6 +79,7 @@ customers:
   - name: Diversified Global Utility, IPP & Industrial Customer Base
     ticker: null
     pct: 55
+    grade: spread
     blurb: >
       The large majority of GE Vernova's revenue is spread across thousands
       of individual utilities, independent power producers, and industrial
@@ -84,6 +89,7 @@ customers:
   - name: NextEra Energy
     ticker: NEE
     pct: 15
+    grade: some
     blurb: >
       America's largest regulated utility/IPP operator and one of GE
       Vernova's longest-standing heavy-duty gas turbine customers; the two
@@ -92,6 +98,7 @@ customers:
   - name: Chevron Corporation
     ticker: CVX
     pct: 10
+    grade: some
     blurb: >
       Chevron, together with Engine No. 1, formed a joint venture with GE
       Vernova to build multi-gigawatt gas turbine power plants dedicated to
@@ -100,6 +107,7 @@ customers:
   - name: Xcel Energy
     ticker: XEL
     pct: 8
+    grade: spread
     blurb: >
       Xcel Energy signed a strategic alliance with GE Vernova (alongside
       NextEra) to secure several gigawatts of new gas turbine generation and
@@ -108,6 +116,7 @@ customers:
   - name: U.S. Federal Government & Federal Power Programs
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       GE Vernova's 10-K flags "governmental owned or affiliated entities...
       including the U.S. federal government" as a customer category,
@@ -117,6 +126,7 @@ customers:
   - name: State-Owned & International Power Utilities
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       A meaningful share of GE Vernova's international gas turbine, grid,
       and nuclear orders comes from government-owned or state-affiliated

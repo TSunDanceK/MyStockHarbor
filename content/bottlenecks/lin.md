@@ -61,6 +61,7 @@ supplyChain:
   - name: Natural gas feedstock
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Not a single company. Linde produces most of its hydrogen and
       synthesis gas through steam methane reforming and auto-thermal
@@ -71,6 +72,7 @@ supplyChain:
   - name: Electricity & purchased power
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Not a single company. Linde's own SEC filings state that energy is
       the single largest cost item in producing and distributing industrial
@@ -80,6 +82,7 @@ supplyChain:
   - name: Purchased helium, CO2, CO & other outside-sourced raw materials
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company. Linde's 10-K discloses that raw materials for
       hydrogen, helium, carbon dioxide, carbon monoxide and specialty gases
@@ -91,6 +94,7 @@ supplyChain:
   - name: Cryogenic equipment, compressor & turbomachinery manufacturing
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. Air separation units and hydrogen plants depend
       on large centrifugal compressors, cryogenic cold boxes and
@@ -101,6 +105,7 @@ supplyChain:
   - name: Third-party construction & engineering contractors
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Not a single company. Linde designs much of its own plant technology
       in-house through its Linde Engineering division, but executing its
@@ -112,6 +117,7 @@ supplyChain:
   - name: Specialty steel & cryogenic-grade alloys
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. The vessels, piping and heat exchangers used
       across Linde's on-site and merchant plants require specialty steel
@@ -122,6 +128,7 @@ customers:
   - name: Manufacturing end market
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Linde's largest end market by revenue, spanning metal fabrication,
       welding, automotive, aerospace and general industrial manufacturing
@@ -131,6 +138,7 @@ customers:
   - name: Chemicals & energy end market
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Refiners, petrochemical producers and other energy customers that
       take hydrogen, nitrogen, oxygen and other process gases under
@@ -140,6 +148,7 @@ customers:
   - name: Dow Inc.
     ticker: DOW
     pct: 6
+    grade: spread
     blurb: >
       Linde is investing more than $2 billion to build and operate a
       large-scale autothermal reforming and carbon-capture hydrogen complex
@@ -150,6 +159,7 @@ customers:
   - name: Metals & mining end market
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Steelmakers and other metals producers that rely on large volumes of
       oxygen and nitrogen for blast furnaces, electric-arc furnaces and
@@ -161,6 +171,7 @@ customers:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 6
+    grade: spread
     blurb: >
       Linde agreed to invest roughly $600 million to build, own and
       operate a complex of on-site plants supplying ultra-high-purity
@@ -170,6 +181,7 @@ customers:
   - name: Samsung Electronics
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Linde has supplied industrial gases to Samsung in South Korea for
       more than 45 years and is building an eighth on-site air separation
@@ -180,6 +192,7 @@ customers:
   - name: Other electronics & semiconductor manufacturers
     ticker: null
     pct: 2
+    grade: spread
     blurb: >
       Not a single company. Beyond its named U.S. and South Korean
       projects, Linde supplies ultra-pure bulk and specialty gases to other
@@ -189,6 +202,7 @@ customers:
   - name: Healthcare end market
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Not a single company. Linde supplies medical oxygen, nitrous oxide
       and other gases plus related equipment and homecare services to
@@ -198,6 +212,7 @@ customers:
   - name: Food & beverage end market
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Not a single company. Linde supplies carbon dioxide and nitrogen for
       beverage carbonation, food freezing and modified-atmosphere packaging
@@ -206,6 +221,7 @@ customers:
   - name: Other diversified industrial & merchant/packaged-gas customers
     ticker: null
     pct: 16
+    grade: spread
     blurb: >
       Not a single company. The remainder of Linde's revenue comes from
       tens of thousands of smaller industrial, welding, laboratory and

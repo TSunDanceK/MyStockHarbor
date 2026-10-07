@@ -31,6 +31,7 @@ supplyChain:
   - name: Amazon Web Services
     ticker: AMZN
     pct: 28
+    grade: some
     blurb: >
       AWS hosts Palantir's Foundry and Gotham deployments, including GovCloud and classified
       regions, and is the platform through which Anthropic's Claude models are made available
@@ -39,6 +40,7 @@ supplyChain:
   - name: NVIDIA
     ticker: NVDA
     pct: 26
+    grade: some
     blurb: >
       NVIDIA GPUs supply the compute underlying Palantir's AI Platform (AIP), and the two
       companies expanded their partnership in 2026 to build sovereign AI infrastructure for
@@ -47,6 +49,7 @@ supplyChain:
   - name: Microsoft
     ticker: MSFT
     pct: 22
+    grade: some
     blurb: >
       Microsoft's Azure Government cloud hosts Palantir software on classified networks under
       a 2024 partnership serving U.S. defense and intelligence agencies. This gives Palantir a
@@ -54,6 +57,7 @@ supplyChain:
   - name: Alphabet (Google Cloud)
     ticker: GOOGL
     pct: 14
+    grade: some
     blurb: >
       Google Cloud is a formal infrastructure partner integrating Foundry and AIP for joint
       commercial and public-sector customers, giving Palantir a third major hyperscaler option
@@ -61,6 +65,7 @@ supplyChain:
   - name: OpenAI and Anthropic
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Palantir's AIP is explicitly "model agnostic," built to plug in third-party large
       language models from labs such as OpenAI and Anthropic rather than models Palantir
@@ -69,6 +74,7 @@ customers:
   - name: U.S. Army
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       The Army is Palantir's single largest customer relationship, culminating in an
       up-to-$10 billion enterprise software agreement announced in 2025 that consolidated
@@ -77,6 +83,7 @@ customers:
   - name: Other U.S. Department of Defense components
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Beyond the Army, the Air Force, Navy, Space Force, and Special Operations Command use
       Palantir software including the Maven Smart System, a warfighting AI/ISR program that
@@ -84,6 +91,7 @@ customers:
   - name: U.S. Intelligence Community
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Agencies including the CIA, NSA, and FBI have used Palantir's Gotham platform for data
       integration and analysis since the company's earliest years, though most of this work is
@@ -91,6 +99,7 @@ customers:
   - name: U.S. federal civilian agencies
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Palantir has expanded into non-defense federal work, including CDC disease-surveillance
       contracts, an HHS blanket purchase agreement, DHS/ICE immigration systems, and IRS/Treasury
@@ -98,6 +107,7 @@ customers:
   - name: UK and allied foreign governments
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       The UK Ministry of Defence and NHS, along with other NATO-aligned governments, form
       Palantir's largest concentration of revenue outside the United States. Not a publicly
@@ -105,6 +115,7 @@ customers:
   - name: Airbus
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Airbus has used Palantir's Foundry-based Skywise platform since 2016 to run its aviation
       data ecosystem, making it one of Palantir's longest-standing named commercial accounts.
@@ -113,6 +124,7 @@ customers:
   - name: Lear Corporation
     ticker: LEA
     pct: 4
+    grade: spread
     blurb: >
       Lear, a major automotive components manufacturer, expanded its Palantir partnership in
       2024 into a five-year deal to run manufacturing and supply-chain operations on Foundry
@@ -120,6 +132,7 @@ customers:
   - name: Other commercial enterprise customers
     ticker: null
     pct: 32
+    grade: hard
     blurb: >
       Palantir's broader commercial book spans energy, healthcare, financial services, and
       manufacturing customers worldwide; U.S. commercial revenue has been Palantir's

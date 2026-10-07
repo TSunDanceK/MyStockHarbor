@@ -46,6 +46,7 @@ supplyChain:
   - name: Coinbase Custody Trust Company
     ticker: COIN
     pct: 22
+    grade: some
     blurb: >
       One of Strategy's three named bitcoin custodians, holding roughly 40%
       of the company's bitcoin per its SEC filings. Coinbase has also acted as
@@ -54,6 +55,7 @@ supplyChain:
   - name: Anchorage Digital Bank
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       A federally chartered digital-asset bank and one of Strategy's named
       bitcoin custodians, holding roughly 37% of the company's bitcoin. A
@@ -61,6 +63,7 @@ supplyChain:
   - name: Fidelity Digital Assets
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       The third named custodian holding a portion of Strategy's bitcoin,
       reported at roughly 23% of total holdings. Operated by Fidelity
@@ -68,6 +71,7 @@ supplyChain:
   - name: TD Securities (Toronto-Dominion Bank)
     ticker: TD
     pct: 10
+    grade: some
     blurb: >
       A lead agent in Strategy's at-the-market equity and preferred-stock
       sales programs, the mechanism through which the company has raised
@@ -75,6 +79,7 @@ supplyChain:
   - name: Barclays Capital
     ticker: BCS
     pct: 8
+    grade: spread
     blurb: >
       A recurring underwriter and ATM sales agent across Strategy's
       convertible note and equity offerings, helping distribute the
@@ -82,6 +87,7 @@ supplyChain:
   - name: Morgan Stanley
     ticker: MS
     pct: 7
+    grade: spread
     blurb: >
       Named as a sales agent in Strategy's equity and preferred ATM
       programs and has participated in its convertible debt offerings,
@@ -89,6 +95,7 @@ supplyChain:
   - name: Cantor Fitzgerald & Co.
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       A repeat underwriter on Strategy's convertible note and ATM equity
       programs. Cantor Fitzgerald & Co. is a private partnership with no
@@ -96,6 +103,7 @@ supplyChain:
   - name: ATM & convertible-note underwriting syndicate
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       A broader group of banks (including Canaccord Genuity, BTIG, Mizuho
       Securities, Keefe Bruyette & Woods, and Santander) named as agents
@@ -104,6 +112,7 @@ supplyChain:
   - name: Amazon Web Services
     ticker: AMZN
     pct: 6
+    grade: spread
     blurb: >
       A cloud infrastructure partner for Strategy's enterprise analytics
       software, including its Strategy Cloud platform marketed for
@@ -111,6 +120,7 @@ supplyChain:
   - name: Microsoft Azure
     ticker: MSFT
     pct: 4
+    grade: spread
     blurb: >
       A second cloud infrastructure partner supporting Strategy's
       enterprise analytics software offerings, which the company markets
@@ -119,6 +129,7 @@ customers:
   - name: Retail / individual investors
     ticker: null
     pct: 41
+    grade: hard
     blurb: >
       The general public, holding roughly 48% of Strategy's shares
       according to ownership analyses, making individual retail investors
@@ -127,6 +138,7 @@ customers:
   - name: Convertible-note & derivatives hedge funds
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Convertible-arbitrage funds and options market-makers have been
       reported as major buyers of Strategy's convertible bonds, a dynamic
@@ -135,6 +147,7 @@ customers:
   - name: Other institutional & index asset managers
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       A broader group of institutional holders, including sovereign wealth
       funds like Norges Bank and other asset managers, that hold Strategy
@@ -143,6 +156,7 @@ customers:
   - name: Capital Group
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       One of Strategy's largest disclosed shareholders through its Capital
       Research and Management funds. A privately held asset manager with
@@ -150,6 +164,7 @@ customers:
   - name: The Vanguard Group
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       A top disclosed institutional shareholder of Strategy, largely
       through its index funds. Vanguard is mutually owned by its funds and
@@ -157,6 +172,7 @@ customers:
   - name: Michael Saylor & company insiders
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Executive Chairman Michael Saylor and other insiders retain a
       meaningful equity stake even after years of dilutive share issuance
@@ -165,12 +181,14 @@ customers:
   - name: BlackRock
     ticker: BLK
     pct: 6
+    grade: spread
     blurb: >
       A top institutional shareholder of Strategy, primarily through its
       iShares index funds and other managed portfolios.
   - name: State Street
     ticker: STT
     pct: 4
+    grade: spread
     blurb: >
       An institutional shareholder of Strategy, largely through its SPDR
       index fund business.

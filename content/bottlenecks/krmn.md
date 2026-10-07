@@ -47,6 +47,7 @@ supplyChain:
   - name: Hexcel Corporation
     ticker: HXL
     pct: 22
+    grade: some
     blurb: >
       Hexcel is the largest Western merchant supplier of carbon fiber and the epoxy,
       BMI and phenolic prepreg systems Karman lists among its primary raw materials.
@@ -57,6 +58,7 @@ supplyChain:
   - name: Toray Industries
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Toray is the world's largest carbon fiber producer and, through its Toray
       Advanced Composites and former TenCate/Zoltek operations, a primary source of
@@ -65,6 +67,7 @@ supplyChain:
   - name: Syensqo (Solvay Composite Materials)
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Syensqo, the specialty materials business spun out of Solvay in 2023, supplies
       the phenolic, BMI and ablative resin systems used in high-temperature rocket
@@ -74,6 +77,7 @@ supplyChain:
   - name: ATI Inc.
     ticker: ATI
     pct: 12
+    grade: some
     blurb: >
       ATI is a leading US producer of titanium, nickel superalloys and specialty
       plate used in missile and launch-vehicle structures and hot-section hardware.
@@ -83,6 +87,7 @@ supplyChain:
   - name: Carpenter Technology
     ticker: CRS
     pct: 9
+    grade: spread
     blurb: >
       Carpenter is one of the few domestic mills producing the premium-melt specialty
       steels and high-temperature alloys that go into missile structural hardware and
@@ -92,6 +97,7 @@ supplyChain:
   - name: Howmet Aerospace
     ticker: HWM
     pct: 9
+    grade: spread
     blurb: >
       Howmet supplies the forgings, castings and engineered fastening systems that
       structural aerospace assemblies are built around. For load-bearing interstages
@@ -100,6 +106,7 @@ supplyChain:
   - name: Kaiser Aluminum
     ticker: KALU
     pct: 9
+    grade: spread
     blurb: >
       Kaiser is a major supplier of aerospace-grade aluminum plate and extrusions,
       the material behind much of Karman's machined structural work — including at
@@ -108,6 +115,7 @@ supplyChain:
   - name: Refractory metal mills (H.C. Starck Solutions, Global Advanced Metals)
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Karman's Metal Technology Inc. business specializes in ultra-high-temperature
       refractory alloy systems — rhenium, tantalum, tungsten and niobium hardware for
@@ -117,6 +125,7 @@ supplyChain:
   - name: Energetic materials & specialty chemical suppliers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Karman lists energetic materials and specialty chemicals among its primary raw
       materials, reflecting the ordnance, separation and launcher work done at
@@ -127,6 +136,7 @@ customers:
   - name: U.S. Government (Missile Defense Agency, Navy, Army, Air Force, NASA)
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Karman sells directly to government customers as well as through primes — its
       Systima facility was awarded a position under the Missile Defense Agency's
@@ -137,6 +147,7 @@ customers:
   - name: Northrop Grumman
     ticker: NOC
     pct: 16
+    grade: some
     blurb: >
       Northrop is the most consistently visible named customer: Karman was awarded a
       $21.3m contract in July 2026 for the U.S. Navy MK 54 torpedo fleet exercise
@@ -145,6 +156,7 @@ customers:
   - name: Lockheed Martin
     ticker: LMT
     pct: 15
+    grade: some
     blurb: >
       Lockheed is named on Karman's own customer-facing material and is the prime on
       the strategic missile defense franchises — THAAD, PAC-3 and the Next Generation
@@ -153,6 +165,7 @@ customers:
   - name: RTX Corporation
     ticker: RTX
     pct: 9
+    grade: spread
     blurb: >
       RTX is the largest US tactical missile prime, and Karman's tactical missiles and
       integrated defense segment — about 31% of fiscal 2025 revenue — supplies
@@ -162,6 +175,7 @@ customers:
   - name: Blue Origin
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Karman references work supporting Blue Origin's New Glenn launch vehicle, part
       of the space and launch end market that made up roughly 37% of fiscal 2025
@@ -169,6 +183,7 @@ customers:
   - name: General Dynamics (Electric Boat)
     ticker: GD
     pct: 8
+    grade: spread
     blurb: >
       Karman's January 2026 acquisition of Seemann Composites and Materials Sciences
       moved it into advanced composite structures for submarines, UUVs, USVs and
@@ -178,6 +193,7 @@ customers:
   - name: United Launch Alliance
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Karman references supporting ULA's Vulcan certification work, and its structures
       fly on the GEM 63XL boosters that strap to Vulcan. ULA is a private joint
@@ -185,6 +201,7 @@ customers:
   - name: Anduril Industries
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Karman developed, tested and delivered the rocket motor case for Anduril's
       18-inch Denali hypersonic booster, positioning it inside one of the most
@@ -193,6 +210,7 @@ customers:
   - name: Boeing
     ticker: BA
     pct: 7
+    grade: spread
     blurb: >
       Boeing appears among the customers Karman references on its own site, spanning
       launch and defense programs, and is one half of the ULA joint venture that

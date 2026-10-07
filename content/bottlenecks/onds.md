@@ -28,6 +28,7 @@ supplyChain:
   - name: Detroit Manufacturing Systems
     ticker: null
     pct: 40
+    grade: hard
     blurb: >
       Detroit Manufacturing Systems assembles Ondas' American Robotics drone
       hardware — including the Optimus drone-in-a-box platform and Iron Drone
@@ -38,6 +39,7 @@ supplyChain:
   - name: Diversified Contract Manufacturers (OAS & Ondas Networks)
     ticker: null
     pct: 45
+    grade: hard
     blurb: >
       Beyond its flagship Detroit Manufacturing Systems partnership, Ondas
       outsources the rest of its hardware — Ondas Networks' radio products and
@@ -48,6 +50,7 @@ supplyChain:
   - name: Palantir Technologies
     ticker: PLTR
     pct: 15
+    grade: some
     blurb: >
       Palantir's data-fusion and AI software underpins the multi-domain ISR
       layer Ondas is building around its drone and counter-drone products, a
@@ -58,6 +61,7 @@ customers:
   - name: Undisclosed Government/Defense Customer
     ticker: null
     pct: 55
+    grade: hard
     blurb: >
       Ondas's single largest customer accounted for roughly 55% of 2025
       revenue (about $27.8 million), per its 10-K — but consistent with the
@@ -68,6 +72,7 @@ customers:
   - name: Undisclosed Global Semiconductor Manufacturer
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Ondas's Airobotics unit has provided round-the-clock automated drone
       security and data services since 2016 at an Israeli fabrication
@@ -78,6 +83,7 @@ customers:
   - name: Other OAS Defense, Security & Counter-Drone Customers
     ticker: null
     pct: 32
+    grade: hard
     blurb: >
       The remainder of Ondas's OAS revenue is spread across similarly
       unnamed government and security buyers — European airport and
@@ -88,6 +94,7 @@ customers:
   - name: Class I Railroads & Passenger Rail Operators
     ticker: null
     pct: 2
+    grade: spread
     blurb: >
       Ondas Networks' rail business — supplying private wireless radio
       networks for Amtrak's ACSES program, Chicago's Metra commuter rail, and

@@ -45,6 +45,7 @@ supplyChain:
   - name: Procter & Gamble
     ticker: PG
     pct: 15
+    grade: some
     blurb: >
       Stocks a large share of Costco's household and personal-care aisles -
       Tide, Bounty, Charmin, Pampers, Gillette and Olay in Costco-sized
@@ -55,6 +56,7 @@ supplyChain:
   - name: The Coca-Cola Company
     ticker: KO
     pct: 11
+    grade: some
     blurb: >
       Fills much of Costco's beverage aisle, and the 2009 public pricing
       dispute - when Costco pulled Coca-Cola products from shelves for
@@ -64,6 +66,7 @@ supplyChain:
   - name: Tyson Foods
     ticker: TSN
     pct: 10
+    grade: some
     blurb: >
       One of the country's largest meat and poultry processors, supplying
       beef, pork and chicken for Costco's meat cases. Costco still depends
@@ -73,6 +76,7 @@ supplyChain:
   - name: Kraft Heinz
     ticker: KHC
     pct: 9
+    grade: spread
     blurb: >
       A core supplier of shelf-stable condiments, sauces and packaged foods
       - Heinz ketchup, Kraft cheese, Oscar Mayer meats - sold in the
@@ -80,6 +84,7 @@ supplyChain:
   - name: Kimberly-Clark
     ticker: KMB
     pct: 9
+    grade: spread
     blurb: >
       Documented as the manufacturer behind Kirkland Signature diapers,
       which sit on Costco's shelves next to Kimberly-Clark's own Huggies and
@@ -88,6 +93,7 @@ supplyChain:
   - name: Duracell (Berkshire Hathaway)
     ticker: BRK.B
     pct: 7
+    grade: spread
     blurb: >
       Reported as the maker of Kirkland Signature batteries, in addition to
       selling its own branded batteries at Costco - another documented case
@@ -96,6 +102,7 @@ supplyChain:
   - name: Niagara Bottling
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Widely reported as the bottler behind Kirkland Signature purified
       water, one of Costco's highest-volume private-label products by unit
@@ -103,6 +110,7 @@ supplyChain:
   - name: Harris Ranch Beef Company
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       A major West Coast beef processor reported to supply a significant
       share of the beef sold in Costco's meat department, illustrating how
@@ -111,6 +119,7 @@ supplyChain:
   - name: Diamond Pet Foods
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Manufactures Kirkland Signature dog and cat food, one of Costco's
       best-selling private-label lines; losing this single co-packer would
@@ -119,6 +128,7 @@ supplyChain:
   - name: Diversified CPG & Kirkland Signature co-manufacturing network
     ticker: null
     pct: 19
+    grade: some
     blurb: >
       Not a single company - this covers Costco's remaining vendor base,
       including the dozens of additional contract manufacturers (spanning
@@ -131,6 +141,7 @@ customers:
   - name: United States Operations
     ticker: null
     pct: 73
+    grade: hard
     blurb: >
       Not a single company - Costco's own reported U.S. segment, covering
       roughly 629 warehouses and the large majority of its worldwide
@@ -139,6 +150,7 @@ customers:
   - name: Other International Operations
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Not a single company - Costco's combined reporting segment for its
       smaller but fast-growing markets outside the U.S. and Canada,
@@ -147,6 +159,7 @@ customers:
   - name: Canadian Operations
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Not a single company - Costco's largest and most mature international
       market, with around 110 warehouses. Canada has historically ranked

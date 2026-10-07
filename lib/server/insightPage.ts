@@ -60,6 +60,7 @@ import {
 } from "@/lib/insightView";
 import { SCREEN_ROUTES, screenFor, type ScreenFlag } from "@/lib/insightScreens";
 import { junkReason } from "@/lib/server/news/junkTitle";
+import { sectorOf } from "@/lib/server/sectorOf";
 import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
 import { cleanName } from "@/lib/server/companyNames";
 import { easternDate } from "@/lib/server/calendarDayState";
@@ -255,13 +256,6 @@ export type InsightPageData = {
 };
 
 const capText = (v: number) => (v >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`);
-
-function sectorOf(symbol: string): { name: string; slug: string | null } | null {
-  const label = sicProfileFor(symbol)?.sector ?? null;
-  if (!label) return null;
-  const def = getSectorByLabel(label);
-  return { name: def?.shortName ?? label, slug: def?.slug ?? null };
-}
 
 /** The news pipeline's library art for a symbol's item (the insight hero's, and the dashboard news thumbnails'). Pure. */
 export function artFor(symbol: string, title: string, key: string, taken: { names: Set<string>; buckets: Map<string, Set<number>> }): CardArt {

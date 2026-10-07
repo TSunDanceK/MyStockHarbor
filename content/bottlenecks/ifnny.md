@@ -38,6 +38,7 @@ supplyChain:
   - name: ASML
     ticker: ASML
     pct: 25
+    grade: some
     blurb: >
       ASML is the sole global supplier of the advanced lithography systems
       Infineon needs to pattern wafers at its Dresden, Villach and other
@@ -47,6 +48,7 @@ supplyChain:
   - name: TSMC
     ticker: TSM
     pct: 25
+    grade: some
     blurb: >
       TSMC is an external contract foundry Infineon uses for select
       leading-edge microcontroller and logic components it doesn't
@@ -58,6 +60,7 @@ supplyChain:
   - name: Wolfspeed
     ticker: WOLF
     pct: 20
+    grade: some
     blurb: >
       Wolfspeed supplies Infineon with 150mm silicon carbide wafers under a
       multi-year agreement expanded and extended in January 2024, feeding
@@ -67,6 +70,7 @@ supplyChain:
   - name: UMC
     ticker: UMC
     pct: 15
+    grade: some
     blurb: >
       UMC has a long-term foundry agreement with Infineon, extended in
       2023, to manufacture 40nm eNVM automotive microcontrollers - a
@@ -75,6 +79,7 @@ supplyChain:
   - name: SK Siltron CSS
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       SK Siltron CSS began supplying Infineon with 200mm (8-inch) silicon
       carbide substrates under a deal reported in January 2024, diversifying
@@ -85,6 +90,7 @@ customers:
   - name: Automotive OEMs & Tier-1 Suppliers
     ticker: null
     pct: 50
+    grade: hard
     blurb: >
       Infineon's Automotive (ATV) segment is its largest and most cyclical
       revenue source, at roughly half of group sales in fiscal 2025.
@@ -95,6 +101,7 @@ customers:
   - name: Power & Sensor Systems Customers
     ticker: null
     pct: 29
+    grade: some
     blurb: >
       The Power & Sensor Systems (PSS) segment sells discrete power
       semiconductors and sensors into a broad base of industrial,
@@ -104,6 +111,7 @@ customers:
   - name: Green Industrial Power Customers
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Green Industrial Power (GIP) supplies manufacturers of industrial
       drives, renewable-energy inverters, solar equipment and EV-charging
@@ -113,6 +121,7 @@ customers:
   - name: Connected Secure Systems Customers
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Connected Secure Systems (CSS) sells security chips, NFC/secure
       elements and IoT connectivity silicon into smartphones, payment

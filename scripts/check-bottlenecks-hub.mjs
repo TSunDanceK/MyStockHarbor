@@ -45,6 +45,7 @@ const read = (f) => fs.readFileSync(f, "utf8");
 const UNITS = {
   hub: "lib/bottleneckHub.ts",
   content: "lib/bottlenecks.ts",
+  bnpage: "lib/bottleneckPage.ts", // #563 COWORK #158: grades, imported by lib/bottlenecks.ts
   logo: "app/components/TickerLogo.tsx",
   web: "app/components/BottleneckWeb.tsx",
   search: "app/components/BottleneckHubSearch.tsx",
@@ -59,8 +60,9 @@ const IMPORT_OF = {
   "@/lib/bottleneckHub": "hub", "./bottleneckHub": "hub",
   "@/app/components/TickerLogo": "logo", "@/app/components/BottleneckWeb": "web",
   "@/app/components/BottleneckHubSearch": "search",
+  "@/lib/bottleneckPage": "bnpage", "./bottleneckPage": "bnpage",
 };
-const ORDER = ["hub", "content", "logo", "web", "search", "hero", "board", "themes", "archive"];
+const ORDER = ["hub", "bnpage", "content", "logo", "web", "search", "hero", "board", "themes", "archive"];
 
 let n = 0;
 /** Transpiles every unit (with any overrides) to fresh temp modules wired to each other, and imports them. */

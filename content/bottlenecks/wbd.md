@@ -38,6 +38,7 @@ supplyChain:
   - name: Amazon.com, Inc.
     ticker: AMZN
     pct: 30
+    grade: hard
     blurb: >
       AWS is Warner Bros. Discovery's named preferred cloud provider,
       hosting Max's streaming infrastructure, live sports production
@@ -46,6 +47,7 @@ supplyChain:
   - name: National Basketball Association
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       WBD lost its longtime domestic NBA broadcast package in 2025 to
       ESPN, NBC, and Amazon, but settled a related lawsuit for an 11-year
@@ -55,6 +57,7 @@ supplyChain:
   - name: Alphabet Inc.
     ticker: GOOGL
     pct: 15
+    grade: some
     blurb: >
       Google Cloud provides AI-powered captioning and accessibility
       technology across WBD's platforms as a secondary cloud partner
@@ -62,6 +65,7 @@ supplyChain:
   - name: Paramount Skydance Corporation
     ticker: PSKY
     pct: 15
+    grade: some
     blurb: >
       WBD's Turner Sports and Paramount's CBS Sports jointly hold NCAA
       March Madness broadcast rights through a long-running joint venture
@@ -71,6 +75,7 @@ supplyChain:
   - name: IMAX Corporation
     ticker: IMAX
     pct: 12
+    grade: some
     blurb: >
       IMAX is Warner Bros. Pictures' long-running premium large-format
       theatrical partner, a key distribution channel for the studio's
@@ -78,6 +83,7 @@ supplyChain:
   - name: SES S.A.
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       The Luxembourg-based satellite operator distributes several of
       WBD's European linear channels; it trades on Euronext Paris with no
@@ -86,6 +92,7 @@ customers:
   - name: Comcast Corporation
     ticker: CMCSA
     pct: 20
+    grade: some
     blurb: >
       Comcast/Xfinity is one of WBD's largest cable-carriage partners,
       paying affiliate fees to distribute WBD's linear networks (TNT, CNN,
@@ -93,6 +100,7 @@ customers:
   - name: Charter Communications
     ticker: CHTR
     pct: 18
+    grade: some
     blurb: >
       Charter's Spectrum cable systems are another major carriage-fee
       distributor of WBD's linear network bundle, under a similarly
@@ -100,6 +108,7 @@ customers:
   - name: Alphabet Inc. (YouTube TV)
     ticker: GOOGL
     pct: 20
+    grade: some
     blurb: >
       YouTube TV is forecast to become the largest pay-TV distributor in
       the US by 2026-27, making it an increasingly important carriage and
@@ -107,6 +116,7 @@ customers:
   - name: DirecTV
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       DirecTV remains a major traditional satellite-TV distributor of
       WBD's channel bundle; it was taken fully private by TPG in 2025 and
@@ -114,6 +124,7 @@ customers:
   - name: Amazon.com, Inc. (Prime Video Channels)
     ticker: AMZN
     pct: 12
+    grade: some
     blurb: >
       Amazon's Prime Video Channels storefront distributes Max as an
       add-on subscription channel, giving Amazon a cut of a growing share
@@ -121,12 +132,14 @@ customers:
   - name: Roku, Inc.
     ticker: ROKU
     pct: 8
+    grade: spread
     blurb: >
       Roku's channel store and ad platform is another significant
       distribution and monetization partner for the Max streaming app.
   - name: Paramount Skydance Corporation
     ticker: PSKY
     pct: 4
+    grade: spread
     blurb: >
       Beyond the pending acquisition, Paramount's CBS Sports shares NCAA
       March Madness rights revenue with WBD's Turner Sports through their
@@ -134,6 +147,7 @@ customers:
   - name: Nexstar Media Group
     ticker: NXST
     pct: 3
+    grade: spread
     blurb: >
       WBD holds a minority stake in The CW alongside majority owner
       Nexstar, giving Nexstar's ad sales and distribution decisions an

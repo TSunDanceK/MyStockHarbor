@@ -33,6 +33,7 @@ supplyChain:
   - name: Wabtec Corporation
     ticker: WAB
     pct: 28
+    grade: some
     blurb: >
       CSX's primary locomotive supplier, having signed a $670 million deal
       (later extended) to build and modernize hundreds of locomotives, and
@@ -43,6 +44,7 @@ supplyChain:
   - name: Caterpillar Inc. (Progress Rail)
     ticker: CAT
     pct: 20
+    grade: some
     blurb: >
       Through its Progress Rail subsidiary (the successor to EMD), Caterpillar
       is the other major North American locomotive and diesel-engine
@@ -52,6 +54,7 @@ supplyChain:
   - name: Diesel and refined-fuel market
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. CSX buys ultra-low-sulfur diesel on the wholesale
       and spot market from numerous refiners and fuel marketers; fuel is one
@@ -61,6 +64,7 @@ supplyChain:
   - name: North American rail-steel mill (EVRAZ North America / Orion Steel)
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       A private company with no public ticker. Only one rail-steel mill
       remains in North America — the Pueblo, Colorado plant historically
@@ -72,6 +76,7 @@ supplyChain:
   - name: Koppers Inc.
     ticker: KOP
     pct: 8
+    grade: spread
     blurb: >
       A leading North American supplier of treated wood crossties, a
       consumable CSX replaces continuously across thousands of miles of
@@ -80,6 +85,7 @@ supplyChain:
   - name: The Greenbrier Companies
     ticker: GBX
     pct: 7
+    grade: spread
     blurb: >
       A major North American freight-car manufacturer that supplies railcars
       for CSX's owned fleet (hoppers, boxcars, and other equipment),
@@ -88,6 +94,7 @@ supplyChain:
   - name: L.B. Foster Company
     ticker: FSTR
     pct: 7
+    grade: spread
     blurb: >
       A specialized supplier of rail, trackwork, friction-management, and
       rail-technology products used in track construction and maintenance.
@@ -96,6 +103,7 @@ customers:
   - name: Chemicals
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. CSX's largest revenue category, covering
       plastics, industrial and petroleum-based chemicals moving mainly from
@@ -104,6 +112,7 @@ customers:
   - name: Intermodal
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. Containerized freight, much of it moving in
       partnership with ocean carriers through East Coast ports and competing
@@ -112,6 +121,7 @@ customers:
   - name: Coal
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Not a single company. Combines export coal (shipped via ports such as
       Baltimore and Mobile, driven by global demand) and domestic utility
@@ -120,6 +130,7 @@ customers:
   - name: Agricultural and food products
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Not a single company. Grain, feed, and food products, much of it
       arriving via interline connections from western railroads and moving
@@ -127,6 +138,7 @@ customers:
   - name: Trucking and other revenue
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. Includes CSX's Quality Carriers trucking
       subsidiary (bulk liquid chemical hauling, acquired in 2021) along with
@@ -135,6 +147,7 @@ customers:
   - name: Automotive
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company. Finished vehicles and auto parts tied to the
       Southeast's vehicle-manufacturing cluster; a cyclical segment sensitive
@@ -142,6 +155,7 @@ customers:
   - name: Forest products
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Not a single company. Lumber, pulp, paper, and wood pellets (including
       pellets exported for European biomass power generation), tied closely
@@ -149,6 +163,7 @@ customers:
   - name: Metals and equipment
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company. Steel, machinery, and related industrial
       equipment shipments that track broader industrial production and
@@ -156,6 +171,7 @@ customers:
   - name: Minerals
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company. Crushed stone, aggregates, cement, and sand used
       primarily in construction, closely linked to regional building and
@@ -163,6 +179,7 @@ customers:
   - name: Fertilizers
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Not a single company. Phosphate and other fertilizer products,
       notably originating from Florida's phosphate-mining region, moved to

@@ -26,6 +26,7 @@ supplyChain:
   - name: Ichor Holdings
     ticker: ICHR
     pct: 20
+    grade: some
     blurb: >
       Builds the gas and chemical/fluid delivery subsystems used inside
       Applied Materials' etch and deposition tools. Ichor's own 10-K
@@ -35,6 +36,7 @@ supplyChain:
   - name: Advanced Energy Industries
     ticker: AEIS
     pct: 18
+    grade: some
     blurb: >
       Supplies the RF and plasma power-delivery generators used to strike
       and sustain plasmas inside Applied Materials' etch, deposition, and
@@ -43,6 +45,7 @@ supplyChain:
   - name: Ultra Clean Holdings
     ticker: UCTT
     pct: 16
+    grade: some
     blurb: >
       Manufactures the precision chambers, frames, and gas/chemical
       delivery modules that Applied Materials assembles into finished
@@ -52,6 +55,7 @@ supplyChain:
   - name: MKS Instruments
     ticker: MKSI
     pct: 14
+    grade: some
     blurb: >
       A broad "surround the wafer" subsystem supplier providing RF/
       microwave power, vacuum and pressure control, and gas-delivery
@@ -60,6 +64,7 @@ supplyChain:
   - name: Entegris
     ticker: ENTG
     pct: 12
+    grade: some
     blurb: >
       Supplies specialty materials, filtration, and contamination-control
       components used throughout Applied Materials' tools; Entegris has
@@ -68,6 +73,7 @@ supplyChain:
   - name: VAT Group
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       The dominant global supplier of the high-precision vacuum valves used
       to isolate and control chamber environments in semiconductor process
@@ -76,6 +82,7 @@ supplyChain:
   - name: Atlas Copco (Edwards Vacuum)
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Edwards Vacuum, an Atlas Copco company, supplies the vacuum pump
       systems that maintain the near-total-vacuum environments Applied
@@ -86,6 +93,7 @@ customers:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 24
+    grade: some
     blurb: >
       The world's largest leading-edge foundry and, by industry consensus,
       Applied Materials' single largest customer for advanced deposition,
@@ -96,6 +104,7 @@ customers:
   - name: Samsung Electronics
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       A major buyer of Applied Materials tools for both its foundry and
       memory businesses; press coverage directly ties Applied Materials'
@@ -104,6 +113,7 @@ customers:
   - name: SK hynix
     ticker: SKHY
     pct: 16
+    grade: some
     blurb: >
       A major memory maker and buyer of Applied Materials' deposition and
       etch tools for DRAM and HBM capacity expansion, and since March 2026
@@ -113,6 +123,7 @@ customers:
   - name: Intel
     ticker: INTC
     pct: 14
+    grade: some
     blurb: >
       A longstanding IDM customer buying Applied Materials equipment to
       build out both its own leading-edge fabs and its newer Intel Foundry
@@ -120,12 +131,14 @@ customers:
   - name: Micron Technology
     ticker: MU
     pct: 12
+    grade: some
     blurb: >
       A recurring large buyer of Applied Materials' deposition and etch
       systems for DRAM and NAND capacity expansion in the US and abroad.
   - name: SMIC (Semiconductor Manufacturing International Corporation)
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Mainland China's largest foundry and the subject of a $252.5 million
       US Commerce Department fine against Applied Materials in early 2026
@@ -136,6 +149,7 @@ customers:
   - name: Other China-based fabs
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company — the broader group of mainland Chinese
       foundries and memory makers that drove Applied Materials' China

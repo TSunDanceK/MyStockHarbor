@@ -39,6 +39,7 @@ supplyChain:
   - name: Corning Incorporated
     ticker: GLW
     pct: 60
+    grade: hard
     blurb: >
       Corning and QuantumScape announced a September 2025 agreement to
       jointly develop and commercialize high-volume manufacturing of
@@ -51,6 +52,7 @@ supplyChain:
   - name: Murata Manufacturing Co., Ltd.
     ticker: null
     pct: 40
+    grade: hard
     blurb: >
       Murata, a Japanese electronics-ceramics manufacturer, signed an
       earlier-stage framework agreement with QuantumScape in April 2025 to
@@ -63,6 +65,7 @@ customers:
   - name: Volkswagen Group / PowerCo
     ticker: null
     pct: 80
+    grade: hard
     blurb: >
       Volkswagen is QuantumScape's largest shareholder, with a stake of
       roughly 16%, and its only publicly disclosed commercial partner.
@@ -78,6 +81,7 @@ customers:
   - name: Other top-10 global automakers (undisclosed)
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       QuantumScape has disclosed that several other top-10 global
       automakers across Europe, North America, and Japan are actively

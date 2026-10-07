@@ -32,6 +32,7 @@ supplyChain:
   - name: SpaceX
     ticker: SPCX
     pct: 40
+    grade: hard
     blurb: >
       Exclusive launch provider for every Nova-C mission flown or manifested
       to date (IM-1, IM-2, and the planned IM-3), launching each lander on a
@@ -40,6 +41,7 @@ supplyChain:
   - name: Boeing
     ticker: BA
     pct: 20
+    grade: some
     blurb: >
       Teammate on Intuitive Machines' "Moon RACER" bid, which won NASA's
       Lunar Terrain Vehicle (LTV) award — providing vehicle engineering and
@@ -47,6 +49,7 @@ supplyChain:
   - name: Michelin
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Moon RACER teammate supplying purpose-built, non-pneumatic tires
       engineered for the Moon's vacuum and abrasive regolith. Trades only as
@@ -55,6 +58,7 @@ supplyChain:
   - name: L3Harris Technologies
     ticker: LHX
     pct: 12
+    grade: some
     blurb: >
       Supplied avionics and communications electronics integrated into the
       IM-2 Nova-C lander ahead of its 2025 launch — a supplier relationship
@@ -63,6 +67,7 @@ supplyChain:
   - name: AVL List GmbH
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Austrian engineering firm and Moon RACER teammate, contributing
       electric powertrain design for the Lunar Terrain Vehicle. A private
@@ -70,6 +75,7 @@ supplyChain:
   - name: Aitech Systems
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Supplied the space-rated avionics computer that handled image data
       processing and payload control on the IM-1 Nova-C mission — flight
@@ -80,6 +86,7 @@ customers:
   - name: NASA
     ticker: null
     pct: 70
+    grade: hard
     blurb: >
       By far Intuitive Machines' largest and founding customer, predating
       its 2023 public listing. Spans CLPS lunar-delivery task orders (IM-1,
@@ -95,6 +102,7 @@ customers:
   - name: L3Harris Technologies
     ticker: LHX
     pct: 10
+    grade: some
     blurb: >
       Selected Intuitive Machines as a subcontractor to supply spacecraft
       buses for the Space Development Agency's proliferated missile-tracking
@@ -105,6 +113,7 @@ customers:
   - name: U.S. Air Force
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Contracted (and later extended) Intuitive Machines for lunar fission
       surface-power technology development, a second defense-adjacent
@@ -113,6 +122,7 @@ customers:
   - name: Korea Aerospace Research Institute (KARI)
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Foreign government space agency; Intuitive Machines holds a prime
       contract to operate KARI's lunar imaging instrument aboard NASA's
@@ -121,6 +131,7 @@ customers:
   - name: Nokia
     ticker: NOK
     pct: 5
+    grade: spread
     blurb: >
       Commercial hosted-payload customer — contracted with Intuitive
       Machines to fly and integrate its 4G/LTE lunar cellular network
@@ -128,6 +139,7 @@ customers:
   - name: Lonestar Data Holdings
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Commercial hosted-payload customer — contracted with Intuitive
       Machines to fly a lunar data-center payload on IM-2 to demonstrate

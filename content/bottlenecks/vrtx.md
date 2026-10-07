@@ -33,6 +33,7 @@ supplyChain:
   - name: CRISPR Therapeutics
     ticker: CRSP
     pct: 25
+    grade: some
     blurb: >
       Co-developed and co-commercializes Casgevy under a joint agreement
       with a 60/40 profit split favoring Vertex, which leads global
@@ -42,6 +43,7 @@ supplyChain:
   - name: Rose BioSolutions
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Operates the Memphis, Tennessee cell-therapy site cleared by the FDA
       and EMA to manufacture Casgevy. The business was spun out of Charles
@@ -51,6 +53,7 @@ supplyChain:
   - name: Lonza
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Selected in 2024 as a contract manufacturer for Casgevy's global
       commercial supply, producing at its cell-therapy facility in Geleen,
@@ -60,6 +63,7 @@ supplyChain:
   - name: RoslinCT
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       A UK-based cell and gene-therapy contract manufacturer selected in
       2023 as a commercial manufacturer for Casgevy at its Edinburgh
@@ -68,6 +72,7 @@ supplyChain:
   - name: Contract manufacturers based in China
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company - Vertex's own 10-K states that "third-party
       contract manufacturers, including some based in China, perform
@@ -76,6 +81,7 @@ supplyChain:
   - name: Cell-culture reagent & gene-editing component suppliers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company - Vertex's 10-K discloses reliance on
       third-party manufacturers to produce cell-culture reagents and
@@ -85,6 +91,7 @@ customers:
   - name: McKesson
     ticker: MCK
     pct: 18
+    grade: some
     blurb: >
       Named by Vertex as both an authorized wholesaler (for Journavx) and,
       through its McKesson Plasma and Biologics subsidiary, an authorized
@@ -93,6 +100,7 @@ customers:
   - name: Accredo Health Group (Evernorth / The Cigna Group)
     ticker: CI
     pct: 14
+    grade: some
     blurb: >
       Named by Vertex as an authorized specialty pharmacy for its cystic
       fibrosis franchise. Accredo, part of Cigna's Evernorth division, is
@@ -101,6 +109,7 @@ customers:
   - name: CVS Specialty Pharmacy (CVS Health)
     ticker: CVS
     pct: 13
+    grade: some
     blurb: >
       Named by Vertex as an authorized specialty pharmacy for its cystic
       fibrosis franchise, and one of the largest PBM-affiliated specialty
@@ -108,6 +117,7 @@ customers:
   - name: Cencora
     ticker: COR
     pct: 12
+    grade: some
     blurb: >
       Named by Vertex as an authorized wholesaler for Journavx. Formerly
       AmerisourceBergen, one of the largest pharmaceutical distributors in
@@ -115,6 +125,7 @@ customers:
   - name: Optum Specialty Pharmacy (UnitedHealth Group)
     ticker: UNH
     pct: 12
+    grade: some
     blurb: >
       Named by Vertex as an authorized specialty pharmacy for its cystic
       fibrosis franchise, and part of the "big three" PBM-affiliated
@@ -122,12 +133,14 @@ customers:
   - name: Cardinal Health
     ticker: CAH
     pct: 10
+    grade: some
     blurb: >
       Named by Vertex as an authorized wholesaler for Journavx, one of the
       three dominant national pharmaceutical wholesalers in the US.
   - name: Foundation Care (Centene / AcariaHealth)
     ticker: CNC
     pct: 8
+    grade: spread
     blurb: >
       Named by Vertex as an authorized specialty pharmacy for its cystic
       fibrosis franchise, operating under Centene's AcariaHealth specialty
@@ -135,6 +148,7 @@ customers:
   - name: Walgreens Specialty Pharmacy
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Named by Vertex as an authorized specialty pharmacy for its cystic
       fibrosis franchise. Walgreens Boots Alliance was taken private by
@@ -142,12 +156,14 @@ customers:
   - name: Maxor Specialty Pharmacy
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Named by Vertex as an authorized specialty pharmacy for its cystic
       fibrosis franchise. A private company with no public ticker.
   - name: DMS Pharmaceutical Group
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       Named by Vertex as an authorized specialty distributor for its
       cystic fibrosis franchise. A private company with no public ticker.

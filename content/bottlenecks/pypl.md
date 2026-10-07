@@ -44,6 +44,7 @@ supplyChain:
   - name: Alphabet Inc. (Google Cloud)
     ticker: GOOGL
     pct: 22
+    grade: some
     blurb: >
       PayPal expanded its multi-year partnership with Google Cloud in 2025,
       moving core payment-processing systems, fraud-detection AI, and data
@@ -53,6 +54,7 @@ supplyChain:
   - name: Visa Inc.
     ticker: V
     pct: 20
+    grade: some
     blurb: >
       A large share of card-funded PayPal and Venmo transactions move over
       Visa's network rails, and PayPal has separately partnered with Visa
@@ -61,6 +63,7 @@ supplyChain:
   - name: Mastercard Incorporated
     ticker: MA
     pct: 17
+    grade: some
     blurb: >
       Alongside Visa, Mastercard's rails carry a substantial portion of
       PayPal-funded and PayPal-linked card transactions, and Mastercard is
@@ -69,6 +72,7 @@ supplyChain:
   - name: The Bancorp, Inc.
     ticker: TBBK
     pct: 12
+    grade: some
     blurb: >
       The Bancorp Bank is one of PayPal's disclosed "Program Banks" that
       actually hold customer balances behind the scenes, enabling
@@ -78,6 +82,7 @@ supplyChain:
   - name: Synchrony Financial
     ticker: SYF
     pct: 10
+    grade: some
     blurb: >
       Synchrony issues the PayPal Credit and PayPal-branded co-brand credit
       products under a long-running partnership, extending consumer credit
@@ -85,6 +90,7 @@ supplyChain:
   - name: American Express
     ticker: AXP
     pct: 8
+    grade: spread
     blurb: >
       Amex is another major card network whose rails carry Amex-branded
       cards linked to PayPal and Venmo wallets, alongside Visa and
@@ -92,6 +98,7 @@ supplyChain:
   - name: Plaid Inc.
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       PayPal and Venmo rely on Plaid's bank-linking infrastructure to let
       users securely connect external checking and savings accounts for
@@ -101,6 +108,7 @@ customers:
   - name: Diversified global merchant & consumer base
     ticker: null
     pct: 48
+    grade: hard
     blurb: >
       PayPal's revenue is a take rate spread across tens of millions of
       merchants of every size and hundreds of millions of consumer accounts
@@ -109,6 +117,7 @@ customers:
   - name: Uber Technologies
     ticker: UBER
     pct: 16
+    grade: some
     blurb: >
       PayPal's Braintree unit expanded its global processing partnership
       with Uber in 2023, handling card payments for rides and Uber Eats
@@ -117,6 +126,7 @@ customers:
   - name: Shopify Inc.
     ticker: SHOP
     pct: 16
+    grade: some
     blurb: >
       Since a September 2024 partnership, PayPal's payment technology has
       powered a portion of Shopify Payments transactions in the US,
@@ -125,6 +135,7 @@ customers:
   - name: Airbnb, Inc.
     ticker: ABNB
     pct: 13
+    grade: some
     blurb: >
       Airbnb has used PayPal's Braintree platform to process card payments
       for hosts and guests for years, making it one of the more prominent
@@ -133,6 +144,7 @@ customers:
   - name: eBay Inc.
     ticker: EBAY
     pct: 7
+    grade: spread
     blurb: >
       eBay was PayPal's former parent and, for years, its single largest
       source of payment volume; that relationship wound down as eBay

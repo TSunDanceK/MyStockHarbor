@@ -1,4 +1,6 @@
 "use client";
+// RETIRED 7 OCT 2026 (#563 COWORK #158): /bottlenecks/[ticker] now renders
+// app/bottlenecks/[ticker]/BottleneckView.tsx. Kept, unused, rather than deleted.
 
 import Link from "next/link";
 import { chartHref } from "@/lib/chartHref";

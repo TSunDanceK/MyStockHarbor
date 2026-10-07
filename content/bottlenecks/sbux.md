@@ -36,6 +36,7 @@ supplyChain:
   - name: Thermoplan AG
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       The exclusive manufacturer of the Mastrena espresso machine line used
       across Starbucks stores worldwide, built specifically to Starbucks'
@@ -44,6 +45,7 @@ supplyChain:
   - name: Oatly Group
     ticker: OTLY
     pct: 13
+    grade: some
     blurb: >
       Starbucks' flagship national oat-milk partner in the US since a 2020
       rollout, at a time when Starbucks itself has said oat-milk demand has
@@ -51,6 +53,7 @@ supplyChain:
   - name: Keurig Dr Pepper
     ticker: KDP
     pct: 12
+    grade: some
     blurb: >
       Manufactures Starbucks-branded K-Cup pods for the North American
       at-home and grocery channel under a long-term partnership with Nestlé
@@ -59,6 +62,7 @@ supplyChain:
   - name: Olam Group
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Named on Starbucks' own published coffee-supplier list as a major
       green-coffee trader and importer. Listed on the Singapore Exchange
@@ -66,6 +70,7 @@ supplyChain:
   - name: ECOM Agroindustrial
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Named on Starbucks' own published coffee-supplier list; one of the
       largest privately held green-coffee importers and exporters globally.
@@ -73,6 +78,7 @@ supplyChain:
   - name: Louis Dreyfus Company
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Named on Starbucks' own published coffee-supplier list; a major
       global agricultural-commodities trading house with a significant
@@ -80,6 +86,7 @@ supplyChain:
   - name: Volcafe (ED&F Man)
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Named on Starbucks' own published coffee-supplier list; one of the
       oldest and largest specialty green-coffee trading houses. A privately
@@ -87,6 +94,7 @@ supplyChain:
   - name: Huhtamaki
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A confirmed packaging partner developing compostable molded-fiber
       lids for Starbucks' cold cups, part of the paper and plastic-products
@@ -95,6 +103,7 @@ supplyChain:
   - name: Itochu Corporation
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Named on Starbucks' own published coffee-supplier list as an importer
       and trading conglomerate with a coffee arm. Trades primarily on the
@@ -103,6 +112,7 @@ supplyChain:
   - name: COFCO Americas
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Named on Starbucks' own published coffee-supplier list; the trading
       arm of COFCO Corporation, China's largest state-owned food and
@@ -111,6 +121,7 @@ customers:
   - name: Nestlé
     ticker: null
     pct: 35
+    grade: hard
     blurb: >
       Under the 2018 Global Coffee Alliance, Nestlé paid Starbucks $7.15
       billion upfront for perpetual global rights to market and distribute
@@ -121,6 +132,7 @@ customers:
   - name: PepsiCo
     ticker: PEP
     pct: 30
+    grade: hard
     blurb: >
       The North American Coffee Partnership, a 50/50 joint venture with
       Starbucks since 1994, manufactures and distributes Starbucks-branded
@@ -129,6 +141,7 @@ customers:
   - name: Arla Foods
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       A named, long-running strategic partnership - extended in 2018 for a
       further 21 years - under which Arla manufactures and distributes
@@ -137,6 +150,7 @@ customers:
   - name: Alshaya Group
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       The largest single Starbucks licensee, operating Starbucks stores
       across the Middle East and North Africa under a retail-licensing
@@ -145,6 +159,7 @@ customers:
   - name: Suntory Beverage & Food
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Manufactures and distributes Starbucks-branded ready-to-drink
       products - Doubleshot Espresso and chilled cup coffee lines - across
@@ -153,6 +168,7 @@ customers:
   - name: Tata Starbucks (Tata Consumer Products)
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       A 50/50 joint venture between Starbucks and Tata Consumer Products
       that operates all Starbucks stores in India under a retail-licensing

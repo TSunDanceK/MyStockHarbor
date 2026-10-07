@@ -2,8 +2,15 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAllBottleneckPosts, getBottleneckBySlug } from "@/lib/bottlenecks";
-import BottleneckShockView from "@/app/components/BottleneckShockView";
-import { filedEarningsGate } from "@/lib/server/filedEarnings";
+import BottleneckView from "./BottleneckView";
+import { BOTTLENECK_PAGE_CSS } from "./bottleneckPageCss";
+import { getBottleneckPageData } from "@/lib/server/bottleneckPage";
+import { buildFaq, customerMeter, shortName, supplierMeter } from "@/lib/bottleneckPage";
+
+// THE REDESIGNED PAGE (#563 COWORK #158). Statically generated, refreshed hourly
+// so the closes and the filed figures stay current; every read is a cached one
+// (lib/server/bottleneckPage.ts lists them).
+export const revalidate = 3600;
 
 type Props = {
   params: Promise<{ ticker: string }>;
@@ -151,6 +158,15 @@ export default async function BottleneckPage({ params }: Props) {
   const publishedTime = post.date
     ? new Date(post.date).toISOString()
     : new Date().toISOString();
+  // dateModified MOVES ONLY WHEN THE DATA FILE SAYS SO (#158): its `updated`, else its date.
+  const modifiedTime = post.updated ? new Date(post.updated).toISOString() : publishedTime;
+
+  const name = shortName(post.title, post.companyName);
+  const data = await getBottleneckPageData(post);
+  const sMeter = supplierMeter(post.supplyChain.map((c) => c.pct));
+  const cMeter = customerMeter(post.customers.map((c) => c.pct), [post.customersNote, ...post.customers.map((c) => c.blurb)].join(" "));
+  const listed = [...new Set([post.symbol, ...[...post.supplyChain, ...post.customers].map((c) => c.ticker).filter((t): t is string => !!t)])];
+  const faq = buildFaq({ name, symbol: post.symbol, suppliers: post.supplyChain, customerMeter: cMeter, listed: listed.filter((t) => t !== post.symbol) });
 
   const bottleneckJsonLd = {
     "@context": "https://schema.org",
@@ -161,7 +177,7 @@ export default async function BottleneckPage({ params }: Props) {
         headline: post.title,
         description: post.summary,
         datePublished: publishedTime,
-        dateModified: publishedTime,
+        dateModified: modifiedTime,
         mainEntityOfPage: { "@type": "WebPage", "@id": `${pageUrl}#webpage` },
         url: pageUrl,
         author: {
@@ -219,6 +235,12 @@ export default async function BottleneckPage({ params }: Props) {
           },
         ],
       },
+      // THE FAQ, FROM THE DATA (#158): the same three questions the page shows.
+      {
+        "@type": "FAQPage",
+        "@id": `${pageUrl}#faq`,
+        mainEntity: faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+      },
     ],
   };
 
@@ -229,75 +251,12 @@ export default async function BottleneckPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(bottleneckJsonLd) }}
       />
 
-      <main
-        className="bottlenecksTickerMain"
-        style={{
-          minHeight: "100vh",
-          background: "#06080d",
-          color: "#f1f5f9",
-          fontFamily: "system-ui, Arial",
-          padding: "40px 20px",
-          overflowX: "hidden",
-        }}
-      >
-        <div style={{ maxWidth: 1160, margin: "0 auto" }}>
-          <div
-            style={{
-              marginBottom: 24,
-              display: "flex",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 12,
-            }}
-          >
-            <Link
-              href="/bottlenecks"
-              style={{
-                color: "#93c5fd",
-                textDecoration: "none",
-                fontWeight: 700,
-                fontSize: 14,
-              }}
-            >
-              ← Back to Bottlenecks
-            </Link>
-            <Link
-              href={`/stock/${encodeURIComponent(post.symbol)}`}
-              style={{
-                color: "#93c5fd",
-                textDecoration: "none",
-                fontWeight: 700,
-                fontSize: 14,
-              }}
-            >
-              {post.symbol} stock analysis →
-            </Link>
-          </div>
-
-          {/* #552 COWORK #197: a card's "Earnings →" only for a ticker with a filed SEC set. */}
-          <BottleneckShockView
-            post={post}
-            filedTickers={[...post.supplyChain, ...post.customers]
-              .map((c) => c.ticker)
-              .filter((t): t is string => Boolean(t))
-              .filter(await filedEarningsGate())}
-          />
-
-          <p
-            style={{
-              fontSize: 13,
-              lineHeight: 1.6,
-              opacity: 0.6,
-              marginTop: 24,
-              fontStyle: "italic",
-            }}
-          >
-            {post.disclaimer}
-          </p>
-
+      <main className="bottlenecksTickerMain bnMain">
+        <div className="bnWrap">
+          <BottleneckView post={post} name={name} data={data} supplierMeter={sMeter} customerMeter={cMeter} faq={faq} listed={listed} />
           <ContinueExploring />
         </div>
-
+        <style>{BOTTLENECK_PAGE_CSS}</style>
         <style>{`
           @media (max-width: 860px) {
             .bottleneckColumns {

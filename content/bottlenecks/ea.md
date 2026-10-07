@@ -61,6 +61,7 @@ supplyChain:
   - name: Sony Group Corporation (PlayStation)
     ticker: SONY
     pct: 19
+    grade: some
     blurb: >
       PlayStation is one of EA's two primary console gatekeepers for its
       biggest franchises (EA SPORTS FC, Madden NFL, Battlefield, Apex
@@ -70,6 +71,7 @@ supplyChain:
   - name: National Football League
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Madden NFL depends entirely on an exclusive license with the NFL
       (and NFLPA for player likenesses), which EA and the league extended
@@ -79,6 +81,7 @@ supplyChain:
   - name: UEFA and major global football leagues (EA SPORTS FC)
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Since EA lost the FIFA trademark and rebranded to EA SPORTS FC in
       2023, its top-selling franchise's authenticity rests on a patchwork
@@ -90,6 +93,7 @@ supplyChain:
   - name: Microsoft Corporation (Xbox)
     ticker: MSFT
     pct: 12
+    grade: some
     blurb: >
       Xbox is EA's other primary console gatekeeper, controlling
       certification and taking a standard digital storefront cut on EA
@@ -98,6 +102,7 @@ supplyChain:
   - name: Valve Corporation (Steam)
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Steam is the dominant PC digital storefront and EA's primary channel
       for distributing PC versions of Battlefield, EA SPORTS FC and other
@@ -106,6 +111,7 @@ supplyChain:
   - name: Apple Inc. (App Store)
     ticker: AAPL
     pct: 8
+    grade: spread
     blurb: >
       EA runs a large mobile business (EA SPORTS FC Mobile, Madden NFL
       Mobile, The Sims Mobile, Star Wars: Galaxy of Heroes) that can only
@@ -114,6 +120,7 @@ supplyChain:
   - name: Alphabet Inc. (Google Play)
     ticker: GOOGL
     pct: 6
+    grade: spread
     blurb: >
       Google Play is the Android counterpart gatekeeper for EA's mobile
       portfolio, similarly taking a commission of up to 30% on in-app
@@ -121,6 +128,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 5
+    grade: spread
     blurb: >
       EA has publicly documented using Amazon Web Services - including
       Amazon S3 and S3 Glacier - for game data storage, patch delivery and
@@ -129,6 +137,7 @@ supplyChain:
   - name: Epic Games (Unreal Engine)
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       EA's own Frostbite engine powers most of its biggest franchises, but
       studios such as Respawn Entertainment license Epic Games' Unreal
@@ -137,6 +146,7 @@ supplyChain:
   - name: Other licensed sports properties (NHL/NHLPA, PGA TOUR, college NIL/CLC)
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       EA holds additional exclusive or near-exclusive licenses underpinning
       smaller but meaningful franchises - the NHL and NHLPA for EA SPORTS
@@ -148,6 +158,7 @@ customers:
   - name: Diversified individual consumers
     ticker: null
     pct: 75
+    grade: hard
     blurb: >
       The large majority of EA's revenue comes from direct game purchases
       and live-service spending (Ultimate Team packs, Apex Legends
@@ -158,6 +169,7 @@ customers:
   - name: Microsoft Corporation (Xbox Game Pass Ultimate / EA Play)
     ticker: MSFT
     pct: 14
+    grade: some
     blurb: >
       Separate from its role as a console storefront gatekeeper shown in
       the supply-chain chart, Microsoft is also a direct customer of EA's
@@ -167,6 +179,7 @@ customers:
   - name: Sony Group Corporation (PlayStation Plus)
     ticker: SONY
     pct: 11
+    grade: some
     blurb: >
       Likewise, beyond taking a storefront cut on direct sales, Sony pays
       EA to include the EA Play catalog in the PlayStation Plus Extra and

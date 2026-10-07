@@ -27,6 +27,7 @@ supplyChain:
   - name: Third-party contract manufacturing organizations
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Not a single company. Amgen's own 10-K discloses that it uses
       third-party contract manufacturers "to supplement the capacity or
@@ -35,6 +36,7 @@ supplyChain:
   - name: Single-source raw material & component suppliers
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Not a single company. Amgen's 10-K warns that certain raw
       materials, medical devices, and components used in commercial and
@@ -43,6 +45,7 @@ supplyChain:
   - name: West Pharmaceutical Services, Inc.
     ticker: WST
     pct: 20
+    grade: some
     blurb: >
       A confirmed packaging supplier - Amgen has publicly selected West's
       polymer vials and Daikyo Crystal Zenith vial technology for its
@@ -51,6 +54,7 @@ supplyChain:
   - name: Bioprocessing consumables & cell-culture media suppliers
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. Biologics manufacturers broadly depend on a
       small group of specialized suppliers for single-use bioreactor
@@ -60,6 +64,7 @@ supplyChain:
   - name: Specialty cold-chain logistics & distribution partners
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. Amgen's biologic products require
       temperature-controlled storage and transport, adding a logistics
@@ -69,6 +74,7 @@ customers:
   - name: McKesson Corporation
     ticker: MCK
     pct: 28
+    grade: some
     blurb: >
       One of the "Big Three" US pharmaceutical wholesalers; Amgen's own
       10-K discloses that McKesson individually accounted for more than
@@ -77,6 +83,7 @@ customers:
   - name: Cencora, Inc.
     ticker: COR
     pct: 26
+    grade: some
     blurb: >
       Formerly AmerisourceBergen, and another of Amgen's three largest
       wholesale distributors, individually exceeding 10% of total revenue
@@ -84,6 +91,7 @@ customers:
   - name: Cardinal Health, Inc.
     ticker: CAH
     pct: 23
+    grade: some
     blurb: >
       The third of Amgen's "Big Three" wholesale distributors, also
       individually above 10% of total revenue - together with McKesson
@@ -92,6 +100,7 @@ customers:
   - name: Other wholesalers, specialty pharmacies & direct customers
     ticker: null
     pct: 23
+    grade: some
     blurb: >
       Not a single company. The remainder of Amgen's revenue flows
       through smaller wholesalers, specialty pharmacies, group purchasing

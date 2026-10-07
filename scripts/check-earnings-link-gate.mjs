@@ -102,6 +102,7 @@ const MUTANTS = [
   ["app/components/StockPagesBottomNav.tsx", "the stock page's Earnings tab", "...(hasFiledEarnings(symbol || FALLBACK_SYMBOL)", "...(true"],
   ["app/dashboard/FiledEarningsChart.tsx", "the dashboard's filed-earnings tab link", "{hasFiledEarnings(symbol) ? <Link", "{true ? <Link"],
   ["app/stock/[symbol]/news/page.tsx", "the news page's earnings card (via LatestEarningsCard)", "hasFiledEarnings={await hasFiledEarnings(upper)}", "hasFiledEarnings={true}"],
+  ["app/bottlenecks/[ticker]/BottleneckView.tsx", "the bottleneck page's partner-row Earnings → (#563 COWORK #158)", "{hasFiledEarnings ? <Link href={`/stock/${encodeURIComponent(t)}/earnings`}", "{true ? <Link href={`/stock/${encodeURIComponent(t)}/earnings`}"],
 ];
 for (const [rel, label, from, to] of MUTANTS) {
   const raw = fs.readFileSync(path.join(ROOT, rel), "utf8");

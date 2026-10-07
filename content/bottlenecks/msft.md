@@ -29,28 +29,33 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 24
+    grade: some
     blurb: >
       Fabricates Microsoft's custom Maia AI accelerator and Cobalt CPU
       chips.
   - name: NVIDIA
     ticker: NVDA
     pct: 24
+    grade: some
     blurb: >
       Supplies the GPUs underpinning most of Azure's AI compute capacity.
   - name: AMD
     ticker: AMD
     pct: 14
+    grade: some
     blurb: >
       Supplies GPUs and CPUs used across Azure's cloud and AI
       infrastructure.
   - name: Micron Technology
     ticker: MU
     pct: 8
+    grade: spread
     blurb: >
       Supplies memory used across Microsoft's data-center infrastructure.
   - name: SK hynix
     ticker: SKHY
     pct: 8
+    grade: spread
     blurb: >
       A major memory and HBM supplier to Microsoft's AI infrastructure,
       including the HBM3E stacked onto Microsoft's in-house Maia
@@ -59,36 +64,42 @@ supplyChain:
   - name: Samsung Electronics
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       A major memory supplier to Microsoft's data centers. Trades primarily
       on the Korea Exchange with no proper US-listed ticker.
   - name: Vertiv Holdings
     ticker: VRT
     pct: 6
+    grade: spread
     blurb: >
       Supplies power and cooling infrastructure across Microsoft's rapidly
       expanding AI data centers.
   - name: Broadcom
     ticker: AVGO
     pct: 5
+    grade: spread
     blurb: >
       Supplies networking silicon used across Microsoft's data-center
       infrastructure.
   - name: Corning
     ticker: GLW
     pct: 3
+    grade: spread
     blurb: >
       Supplies fiber and optical components used in Microsoft's networking
       infrastructure.
   - name: Arista Networks
     ticker: ANET
     pct: 2
+    grade: spread
     blurb: >
       Supplies networking hardware used across Microsoft's data centers.
 customers:
   - name: OpenAI
     ticker: null
     pct: 26
+    grade: some
     blurb: >
       Azure's single most consequential AI relationship - Microsoft has
       invested tens of billions of dollars and committed enormous compute
@@ -98,54 +109,63 @@ customers:
   - name: Meta Platforms
     ticker: META
     pct: 10
+    grade: some
     blurb: >
       Uses Azure cloud infrastructure for some of its enterprise and AI
       workloads.
   - name: Boeing
     ticker: BA
     pct: 10
+    grade: some
     blurb: >
       A long-standing large enterprise customer for Microsoft's software and
       cloud products.
   - name: Accenture
     ticker: ACN
     pct: 10
+    grade: some
     blurb: >
       A major enterprise consulting partner and customer implementing
       Microsoft software and cloud services at scale.
   - name: Walmart
     ticker: WMT
     pct: 9
+    grade: spread
     blurb: >
       A large enterprise customer running significant infrastructure on
       Azure.
   - name: AT&T
     ticker: T
     pct: 9
+    grade: spread
     blurb: >
       A major enterprise customer for Microsoft's cloud and productivity
       software.
   - name: Coca-Cola
     ticker: KO
     pct: 9
+    grade: spread
     blurb: >
       A large enterprise customer for Microsoft's cloud and AI productivity
       tools.
   - name: Ford Motor Company
     ticker: F
     pct: 9
+    grade: spread
     blurb: >
       A long-standing enterprise customer for Microsoft's cloud and
       productivity software.
   - name: US federal government
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Federal agencies are large, long-standing customers of Microsoft's
       software and cloud products. Not a publicly traded company.
   - name: Small & mid-size business & consumer channel
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       Microsoft's broad consumer and small-business customer base remains
       large but highly diversified. Not a single company.

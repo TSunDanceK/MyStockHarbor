@@ -34,6 +34,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 22
+    grade: some
     blurb: >
       Cadence's design flows must be certified against TSMC's leading-edge
       process nodes before customers can tape out chips there - a 2026
@@ -42,6 +43,7 @@ supplyChain:
   - name: Samsung Foundry
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       A 2026 collaboration deepened Cadence's tool certification for
       Samsung's 2nm process and 3D-IC packaging, the same "stay compatible
@@ -50,6 +52,7 @@ supplyChain:
   - name: Intel Foundry
     ticker: INTC
     pct: 14
+    grade: some
     blurb: >
       A 2026 collaboration to co-optimize Cadence's tools for Intel's 14A
       process node and expand IP support for Intel's 18A and 18A-P nodes,
@@ -58,6 +61,7 @@ supplyChain:
   - name: Arm Holdings
     ticker: ARM
     pct: 14
+    grade: some
     blurb: >
       A long-running, multi-year technology-access agreement lets Cadence
       verify its tools against Arm's CPU architecture and IP - the specific
@@ -65,6 +69,7 @@ supplyChain:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 10
+    grade: some
     blurb: >
       Cadence Cloud runs on AWS infrastructure through a formal AWS
       Partner Network relationship, with Cadence's managed cloud EDA
@@ -72,18 +77,21 @@ supplyChain:
   - name: Microsoft (Azure)
     ticker: MSFT
     pct: 9
+    grade: spread
     blurb: >
       A formal collaboration lets semiconductor and system-design workloads
       using Cadence's cloud EDA tools run on Microsoft Azure infrastructure.
   - name: Alphabet (Google Cloud)
     ticker: GOOGL
     pct: 8
+    grade: spread
     blurb: >
       A collaboration hosts Cadence's cloud EDA infrastructure on Google
       Cloud, extended in 2026 to host Cadence's ChipStack AI design agent.
   - name: AMD (Xilinx)
     ticker: AMD
     pct: 4
+    grade: spread
     blurb: >
       Cadence's own Protium X3 hardware-prototyping system is built on AMD
       (Xilinx) UltraScale FPGAs rather than custom silicon designed from
@@ -91,6 +99,7 @@ supplyChain:
   - name: ASML
     ticker: ASML
     pct: 3
+    grade: spread
     blurb: >
       A longer-standing computational-lithography partnership keeps
       Cadence's tape-out flows compatible with the lithography systems
@@ -99,6 +108,7 @@ customers:
   - name: NVIDIA
     ticker: NVDA
     pct: 30
+    grade: hard
     blurb: >
       One of Cadence's most publicized single-customer relationships, with
       a dedicated joint case study and an expanded 2026 partnership;
@@ -107,6 +117,7 @@ customers:
   - name: Broadcom
     ticker: AVGO
     pct: 22
+    grade: some
     blurb: >
       A series of collaborations since 2020 expanded joint work on advanced
       process-node design and AI-driven verification; Broadcom's large
@@ -115,6 +126,7 @@ customers:
   - name: Apple
     ticker: AAPL
     pct: 18
+    grade: spread
     blurb: >
       Runs an internal chip-design organization of thousands of engineers
       and is part of the "systems companies" customer segment that has
@@ -122,6 +134,7 @@ customers:
   - name: Qualcomm
     ticker: QCOM
     pct: 16
+    grade: some
     blurb: >
       A longtime major fabless customer for Cadence's design and
       verification tools, among the core semiconductor companies that
@@ -129,6 +142,7 @@ customers:
   - name: MediaTek
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A named customer win for Cadence's Cerebrus AI design tool. Trades
       primarily on the Taiwan Stock Exchange; its US ADR is thin OTC with
@@ -136,6 +150,7 @@ customers:
   - name: Renesas Electronics
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       A named customer for Cadence's Cerebrus AI-driven digital design
       flow. Trades primarily on the Tokyo Stock Exchange; its US ADR is

@@ -42,6 +42,7 @@ supplyChain:
   - name: Banks & the ACH payment network
     ticker: null
     pct: 35
+    grade: hard
     blurb: >
       Not a single company. Paychex's own 10-K flags reliance on banks
       used to electronically transfer payroll funds from client accounts
@@ -51,6 +52,7 @@ supplyChain:
   - name: UnitedHealth Group (UnitedHealthcare)
     ticker: UNH
     pct: 25
+    grade: some
     blurb: >
       UnitedHealthcare is a named health-benefits carrier partner for
       Paychex's PEO clients, offering group health coverage in multiple
@@ -58,6 +60,7 @@ supplyChain:
   - name: CVS Health Corporation (Aetna)
     ticker: CVS
     pct: 20
+    grade: some
     blurb: >
       Aetna, part of CVS Health, is a second major insurance-network
       partner integrated into Paychex's PEO health-benefits offerings for
@@ -65,12 +68,14 @@ supplyChain:
   - name: HireRight Holdings Corporation
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       A background-check provider integrated into Paychex's hiring and
       onboarding tools. Privately held since 2024, with no public ticker.
   - name: Checkr, Inc.
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A second background-check vendor integrated into Paychex's
       applicant-screening workflow. A private company with no public
@@ -79,6 +84,7 @@ customers:
   - name: Management Solutions clients
     ticker: null
     pct: 77
+    grade: spread
     blurb: >
       Not a single company. Core payroll, HR administration, retirement,
       and time & attendance services for small and mid-sized businesses -
@@ -88,6 +94,7 @@ customers:
   - name: PEO & Insurance Solutions clients
     ticker: null
     pct: 23
+    grade: some
     blurb: >
       Not a single company. Businesses that co-employ their workforce
       through the Paychex PEO, plus clients buying workers' compensation

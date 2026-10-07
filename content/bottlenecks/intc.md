@@ -26,6 +26,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 22
+    grade: some
     blurb: >
       Intel outsources a meaningful share of its wafers to TSMC for
       leading-edge nodes it can't yet produce competitively in-house;
@@ -34,6 +35,7 @@ supplyChain:
   - name: ASML Holding
     ticker: ASML
     pct: 20
+    grade: some
     blurb: >
       The sole global supplier of EUV lithography scanners essential to
       sub-10nm chipmaking. There is no alternative vendor, making ASML the
@@ -41,6 +43,7 @@ supplyChain:
   - name: Applied Materials
     ticker: AMAT
     pct: 14
+    grade: some
     blurb: >
       Supplies deposition, etch, and materials-engineering tools used
       across nearly every layer of Intel's fabs — one of only a few
@@ -48,6 +51,7 @@ supplyChain:
   - name: Lam Research
     ticker: LRCX
     pct: 12
+    grade: some
     blurb: >
       A key supplier of etch and deposition equipment, especially for the
       advanced transistor structures Intel needs for its newest and future
@@ -55,6 +59,7 @@ supplyChain:
   - name: KLA Corporation
     ticker: KLAC
     pct: 8
+    grade: spread
     blurb: >
       The dominant supplier of process-control and defect-inspection
       equipment, critical for yield management on advanced nodes where
@@ -62,6 +67,7 @@ supplyChain:
   - name: Synopsys
     ticker: SNPS
     pct: 8
+    grade: spread
     blurb: >
       A major EDA (electronic design automation) software provider used to
       design Intel's chips; switching design toolchains mid-node would be
@@ -69,6 +75,7 @@ supplyChain:
   - name: Cadence Design Systems
     ticker: CDNS
     pct: 7
+    grade: spread
     blurb: >
       The other core EDA duopoly partner alongside Synopsys, supplying
       chip design and verification software Intel's engineering teams
@@ -76,12 +83,14 @@ supplyChain:
   - name: Amkor Technology
     ticker: AMKR
     pct: 5
+    grade: spread
     blurb: >
       An advanced-packaging partner collaborating with Intel on packaging
       capacity that supplements Intel's own in-house packaging technology.
   - name: Tokyo Electron
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       A major supplier of coater/developer and other wafer-processing
       tools that work alongside ASML's scanners. Trades only on the Tokyo
@@ -90,6 +99,7 @@ customers:
   - name: Dell Technologies
     ticker: DELL
     pct: 19
+    grade: some
     blurb: >
       Intel's single largest disclosed customer per its 10-K — a top-tier
       PC and server OEM reselling Core and Xeon platforms at massive
@@ -97,6 +107,7 @@ customers:
   - name: Lenovo Group
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       The world's largest PC maker by unit shipments and a long-running
       top-3 Intel customer. Trades on the Hong Kong Stock Exchange, with
@@ -104,12 +115,14 @@ customers:
   - name: HP Inc.
     ticker: HPQ
     pct: 12
+    grade: some
     blurb: >
       A top-3 disclosed Intel customer and a major buyer of Core mobile
       and desktop platforms for its consumer and commercial PC lines.
   - name: Microsoft
     ticker: MSFT
     pct: 10
+    grade: some
     blurb: >
       Buys Xeon server CPUs at scale for Azure and became one of Intel
       Foundry's first major external customers on its newest process node,
@@ -117,6 +130,7 @@ customers:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 9
+    grade: spread
     blurb: >
       Buys Xeon CPUs for AWS infrastructure and signed a multi-year,
       multi-billion-dollar Intel Foundry deal covering a custom AI fabric
@@ -124,6 +138,7 @@ customers:
   - name: Alphabet (Google Cloud)
     ticker: GOOGL
     pct: 6
+    grade: spread
     blurb: >
       A major hyperscaler buyer of Xeon server CPUs for Google Cloud data
       centers, and reported to be in discussions for future Intel Foundry
@@ -131,6 +146,7 @@ customers:
   - name: Super Micro Computer
     ticker: SMCI
     pct: 6
+    grade: spread
     blurb: >
       A large server-system integrator that buys Xeon and other Intel
       platforms in volume to build and resell servers to enterprise and
@@ -138,12 +154,14 @@ customers:
   - name: TD SYNNEX
     ticker: SNX
     pct: 5
+    grade: spread
     blurb: >
       A major global IT distributor reselling Intel components through the
       broad small-business, enterprise, and channel market.
   - name: Other OEMs, cloud & channel customers
     ticker: null
     pct: 21
+    grade: some
     blurb: >
       Not a single company — the remaining diversified base of smaller PC
       and server OEMs, ODMs, and distribution channel partners that don't

@@ -25,6 +25,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 44
+    grade: hard
     blurb: >
       Manufactures all AMD wafers at 7nm and below — every leading-edge
       CPU, GPU, and AI accelerator die. AMD's own 10-K states it relies on
@@ -33,6 +34,7 @@ supplyChain:
   - name: SK hynix
     ticker: SKHY
     pct: 12
+    grade: some
     blurb: >
       The dominant supplier of HBM (high-bandwidth memory) for AI
       accelerators industry-wide, including AMD's Instinct MI300-series —
@@ -42,6 +44,7 @@ supplyChain:
   - name: Samsung Electronics
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Dual-sources HBM3E memory for AMD's MI325X and MI350 GPUs and is
       emerging as an additional advanced-node foundry option as TSMC
@@ -50,6 +53,7 @@ supplyChain:
   - name: GlobalFoundries
     ticker: GFS
     pct: 10
+    grade: some
     blurb: >
       AMD's primary foundry for wafers at nodes larger than 7nm, including
       I/O dies and chipsets, under a long-standing wafer supply agreement
@@ -57,6 +61,7 @@ supplyChain:
   - name: Micron Technology
     ticker: MU
     pct: 8
+    grade: spread
     blurb: >
       A second HBM3E source, alongside Samsung, for AMD's MI325X and MI350
       AI GPUs — confirmed directly by Micron as a design win on AMD's
@@ -64,6 +69,7 @@ supplyChain:
   - name: ASE Technology Holding
     ticker: ASX
     pct: 8
+    grade: spread
     blurb: >
       A key assembly, test, and packaging partner named in AMD's own
       filings, critical for the advanced chiplet packaging capacity AMD's
@@ -71,6 +77,7 @@ supplyChain:
   - name: Tongfu Microelectronics
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       AMD operates two outsourced packaging joint ventures directly with
       Tongfu, an unusually tight structural dependency for chip packaging.
@@ -78,12 +85,14 @@ supplyChain:
   - name: United Microelectronics Corporation
     ticker: UMC
     pct: 2
+    grade: spread
     blurb: >
       A secondary foundry, used alongside TSMC and Samsung, for some of
       AMD's programmable-logic and lower-complexity chips.
   - name: Synopsys
     ticker: SNPS
     pct: 1
+    grade: spread
     blurb: >
       Part of the EDA design-software duopoly essential to AMD's chip
       design flow; AMD cannot tape out modern chiplet-based designs
@@ -91,6 +100,7 @@ supplyChain:
   - name: Cadence Design Systems
     ticker: CDNS
     pct: 1
+    grade: spread
     blurb: >
       The other half of the EDA duopoly alongside Synopsys, supplying
       design and verification software AMD's engineering teams depend on
@@ -99,6 +109,7 @@ customers:
   - name: Sony Group (PlayStation)
     ticker: SONY
     pct: 20
+    grade: some
     blurb: >
       AMD's 10-K has disclosed a single customer accounting for roughly
       18% of consolidated net revenue tied to Gaming-segment semi-custom
@@ -106,6 +117,7 @@ customers:
   - name: Microsoft
     ticker: MSFT
     pct: 15
+    grade: some
     blurb: >
       Both an Xbox semi-custom chip customer and one of the first
       hyperscale cloud buyers of AMD's Instinct MI300X accelerators for
@@ -113,6 +125,7 @@ customers:
   - name: OpenAI
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Signed a multi-year strategic partnership to deploy several gigawatts
       of AMD GPUs, with warrants attached for a meaningful equity stake in
@@ -121,6 +134,7 @@ customers:
   - name: Meta Platforms
     ticker: META
     pct: 13
+    grade: some
     blurb: >
       Expanded its AI infrastructure partnership with AMD to deploy several
       more gigawatts of Instinct GPUs in a large, multi-year deal with
@@ -129,12 +143,14 @@ customers:
   - name: Oracle
     ticker: ORCL
     pct: 8
+    grade: spread
     blurb: >
       Expanded its AI infrastructure partnership with AMD to deploy
       Instinct GPUs at scale across Oracle Cloud Infrastructure.
   - name: Dell Technologies
     ticker: DELL
     pct: 8
+    grade: spread
     blurb: >
       A major OEM channel for EPYC servers and Ryzen/Radeon client systems,
       among the first server makers shipping AMD's newest GPU and CPU
@@ -142,12 +158,14 @@ customers:
   - name: HP Inc.
     ticker: HPQ
     pct: 7
+    grade: spread
     blurb: >
       A top-tier PC OEM for Ryzen-based laptops and desktops, part of
       AMD's core commercial client revenue base.
   - name: Lenovo Group
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       A major global PC OEM and server partner for AMD's EPYC and Ryzen
       platforms. Trades on the Hong Kong Stock Exchange, with no proper
@@ -155,6 +173,7 @@ customers:
   - name: Distributor channel (aggregate)
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Not a single company — AMD's filings disclose that distributor
       customers as a channel represent a meaningful, sometimes
@@ -163,6 +182,7 @@ customers:
   - name: Alphabet (Google Cloud)
     ticker: GOOGL
     pct: 4
+    grade: spread
     blurb: >
       A disclosed hyperscale buyer of AMD's EPYC server CPUs and part of
       AMD's broader cloud-customer base for both CPU and AI accelerator
