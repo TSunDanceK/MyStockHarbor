@@ -88,6 +88,17 @@ async function suite(mod, code) {
   const f = mod.applySecEarnings(fyOnly, PRICE);
   ok("a fiscal-year EPS with that year's payout: shown, labelled FY", close(f.payoutRatio, fyPair) && f.payoutBasis === `FY${y.fy}`, JSON.stringify(f));
 
+  // A SPECIAL DIVIDEND IS LEFT OUT (#553 COWORK #184 item 1, PGR): a quarter
+  // over 3x the largest of the other three is taken at their median.
+  const spec = JSON.parse(JSON.stringify(aapl));
+  const di = idx("dividendsDeclaredPerShare");
+  const r = spec.quarters.slice(0, 4).map((q) => q.v[di]);
+  spec.quarters[2].v[di] = r[2] * 20;
+  const others = [r[0], r[1], r[3]].sort((x, z) => x - z);
+  const regular = r[0] + r[1] + others[1] + r[3];
+  const sp = earn(spec);
+  ok("a special dividend is left out of the TTM payout", close(sp.payoutRatio, (regular / inputs.eps.val) * 100), JSON.stringify(sp));
+
   // A loss has no payout, in either period.
   const loss = JSON.parse(JSON.stringify(mixed));
   loss.years[0].v[idx("epsDiluted")] = -1;
@@ -178,7 +189,11 @@ const mut = (label, s, from, to) => {
   return s.replace(from, () => to);
 };
 const MUTANTS = [
-  ["payout divides FY dividends by TTM EPS", () => [mut("period", src, `if (dps && dps.basis === "four-quarters" && dps.periodEnd === eps.periodEnd) {`, `if (dps) {`), code]],
+  // Was "payout divides FY dividends by TTM EPS" (`if (dps) {`): since #553
+  // COWORK #184 item 1 the four quarters are read by dividendRead, whose period
+  // is the quarters' own, so that mutant is equivalent. The FY/TTM mix stays
+  // pinned by the "mixed periods" assertions; this one pins the special.
+  ["payout keeps a special dividend", () => [mut("special", src, `return { val: (read.four.regular / eps.val) * 100,`, `return { val: ((read.four.regular + read.four.special) / eps.val) * 100,`), code]],
   ["a fiscal-year loss still gets a payout", () => [mut("loss", src, `if (e === null || e <= 0 || d === null) return null;`, `if (e === null || d === null) return null;`), code]],
   ["ADS EPS shown", () => [mut("ads", src, `const epsTtm = usd && !ads && eps ? eps.val : null;`, `const epsTtm = usd && eps ? eps.val : null;`), code]],
   ["the basis always reads TTM", () => [mut("label", src, "const label = b.basis === \"fiscal-year\" ? (b.fiscalYear ? `FY${b.fiscalYear}` : `FY to ${date}`) : `TTM to ${date}`;", "const label = `TTM to ${date}`;"), code]],

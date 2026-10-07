@@ -1,4 +1,6 @@
 import { getBuySignalCount } from "@/lib/signalCounts";
+import { qualifiesBuySignal, qualifiesSellSignal } from "@/lib/pickerScreenRules";
+import type { EpsGrowthView } from "@/lib/epsGrowthView";
 import { attachTrendHelper } from "@/lib/ta/trendHelper";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -191,6 +193,8 @@ type PickerSectionItem = {
    * below with attachTrendHelper.
    */
   trendSeries?: { dates: string[]; line: number[]; state: number[] };
+  /** The Earnings Growth page's column (#553 COWORK #186 ruling 1). */
+  epsGrowth?: EpsGrowthView;
 };
 
 type PickerSection = {
@@ -299,6 +303,8 @@ export type ResultEntryFlags = {
 
 export type ResultEntry = ResultEntryFlags & {
   symbol: string;
+  /** Section members on /stocks-with-strong-earnings-growth only (lib/epsGrowthView). */
+  epsGrowth?: EpsGrowthView;
   companyName?: string;
   note: string;
   tone: PickerTone;
@@ -372,6 +378,10 @@ export type ResultEntry = ResultEntryFlags & {
    * take Payout Ratio as filed rather than recomputing it from EPS.
    */
   fundamentalsFrom?: "sec";
+  /** Div ($) is the latest quarter annualised; the trailing total it sits below (#553 COWORK #184 item 1). */
+  divCut?: { ttm: number };
+  /** A special dividend left out of Div ($), yield and growth (#553 COWORK #184 item 1). */
+  divSpecial?: number;
   /** Grid column key -> lib/pickerCellWhy.ts code, for each empty filings cell (#553 COWORK #69). */
   cellWhy?: Partial<Record<CellWhyColumn, CellWhyCode>>;
   /**
@@ -772,7 +782,8 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
       // 0: getBuySignalCount gates the whole score on aboveMA200, so a stock
       // below its MA200 scores 0 while getReasons would still return chips for
       // any other conditions it happens to meet.
-      const qualifies = score > 0;
+      // ON THE PAGE: above MA200 and at least 2 more (#553 COWORK #186 ruling 2).
+      const qualifies = qualifiesBuySignal(score);
       const reasons = qualifies ? getReasons(record, BUY_REASON_DEFS) : [];
       return {
         symbol,
@@ -804,7 +815,9 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
       // Same reasoning as buySignals above -- blank the note, score pill and
       // chips for rows meeting no bearish conditions, since they're only
       // visible once Sell Signals has been unticked.
-      const qualifies = score > 0;
+      // ON THE PAGE: 2+ of the 5, one of them a reading rather than a plain
+      // below-MA state (#553 COWORK #186 ruling 3).
+      const qualifies = qualifiesSellSignal(record, score);
       const reasons = qualifies ? getReasons(record, SELL_REASON_DEFS) : [];
       return {
         symbol,
@@ -918,6 +931,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         const badge = [item.timeframe, item.indicator].filter(Boolean).join(" · ");
         if (badge) entry.badge = badge;
         if (item.firedIndicators?.length) entry.firedIndicators = item.firedIndicators;
+        if (item.epsGrowth) entry.epsGrowth = item.epsGrowth;
         return { entry, rank: hit.rank };
       });
 
@@ -978,8 +992,8 @@ function buildCategoryFlags(sections: PickerSection[], signalRecords: SignalReco
 
   for (const record of signalRecords) {
     if (!record.symbol) continue;
-    if (getBuySignalCount(record) > 0) setFlag(record.symbol, "hasBuySignal");
-    if (getSellSignalCount(record) > 0) setFlag(record.symbol, "hasSellSignal");
+    if (qualifiesBuySignal(getBuySignalCount(record))) setFlag(record.symbol, "hasBuySignal");
+    if (qualifiesSellSignal(record, getSellSignalCount(record))) setFlag(record.symbol, "hasSellSignal");
   }
 
   return flags;
@@ -1374,6 +1388,11 @@ async function getPickerData(config: PickerResultConfig) {
             else delete entry.payoutBasis;
           }
           entry.fundamentalsFrom = "sec";
+          // THE DIVIDEND'S MARK (#553 COWORK #184 item 1): only beside a figure shown.
+          if (row.div?.cut && figures.divPerShare !== null) entry.divCut = row.div.cut;
+          else delete entry.divCut;
+          if (row.div?.special && figures.divPerShare !== null) entry.divSpecial = row.div.special;
+          else delete entry.divSpecial;
           // WHY EACH EMPTY CELL IS EMPTY (#553 COWORK #69): a short code per
           // refused column, read from A's refusals; the grid turns it into a
           // reason on hover or tap (lib/pickerCellWhy.ts holds the words).

@@ -75,6 +75,8 @@ import { lookupBySpelling, toDashed } from "../../symbolSpellings.mjs";
 import { pctOfRequestLimit } from "../chunkByBytes";
 import { JOB_REDIS_OPTS } from "../redisCacheMode";
 import { writeSectorSparks } from "../sectorSparks";
+import { writeInsightCandidates } from "../insightCandidates";
+import { writeMarketDynamic } from "../marketDynamic";
 
 /**
  * THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step.
@@ -338,6 +340,12 @@ export async function runTiingoEod(
   // THE /sector CARDS' 3-MONTH LINES (#553 COWORK #167): from the bars already
   // in memory, a complete night only. +1 SET; never fails the job.
   const sectorSparks = complete ? await writeSectorSparks(r, bars, nowMs) : null;
+  // THE INSIGHT WRITER'S CANDIDATES (#553 COWORK #181): tickers and event
+  // labels from the same bars, a complete night only. +1 SET; never fails the job.
+  const insightCandidates = complete ? await writeInsightCandidates(r, bars, expected, nowMs) : null;
+  // THE MARKET STATE FROM THESE BARS (#553 COWORK #173/#190): the builders'
+  // movers and dynamic symbols, replacing the frozen FMP key. +1 SET; never fails the job.
+  const marketDynamic = complete ? await writeMarketDynamic(r, bars, expected, nowMs) : null;
   // Only a complete night stamps the meta key, so the 02:45 retry re-runs a partial one.
   if (complete) await r.set(TIINGO_EOD_META_KEY, JSON.stringify(summary), { ex: TIINGO_EOD_TTL_SECONDS });
   if (bars.size) revalidateTag(EOD_TAG, "max");
@@ -352,6 +360,8 @@ export async function runTiingoEod(
     largestWriteRequestBytes,
     eodLastRows,
     sectorSparks,
+    insightCandidates,
+    marketDynamic,
     ms: Date.now() - started,
   };
 }
