@@ -1426,6 +1426,8 @@ const TASKS = {
   "write-gaps-oxy-check": { script: "scripts/sec-gaps-oxy-check.mjs", args: () => [], needsTypescript: true, writes: true },
   // DERIVED Q4s THAT DON'T MATCH THEIR YEAR (#552 COWORK #196). SCAN + MGET only.
   "write-q4-scope-census": { script: "scripts/sec-q4-scope-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // COWORK #197: earnings links to symbols with no filed fact set. SMEMBERS/SCAN/MGET only.
+  "write-earnings-link-census": { script: "scripts/sec-earnings-link-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
