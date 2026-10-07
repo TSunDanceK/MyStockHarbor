@@ -1402,6 +1402,8 @@ const TASKS = {
   // --opt-ins-only keeps every default key; use these two in its place.
   "write-fmp-purge-snapshots-only-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--opt-ins-only", "--insight-snapshots"], writes: true },
   "write-fmp-purge-snapshots-only": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--opt-ins-only", "--insight-snapshots"], writes: true },
+  // #811 ROUND 2 CENSUS (#552 COWORK #192): flips, rescales, short-only debt. GET manifest only.
+  "write-round2-census": { script: "scripts/sec-round2-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
