@@ -539,8 +539,15 @@ const BALANCE_SHEET: FieldDef[] = ([
   // that publishes both is unaffected.
   { key: "payables", chain: ["AccountsPayableCurrent", "AccountsPayableAndAccruedLiabilitiesCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalCurrentLiabilities", chain: ["LiabilitiesCurrent"], unit: "USD", taxonomy: "us-gaap" },
-  { key: "shortTermDebt", chain: ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings"], unit: "USD", taxonomy: "us-gaap" },
-  { key: "longTermDebt", chain: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebt"], unit: "USD", taxonomy: "us-gaap" },
+  // NotesPayableCurrent / LongTermNotesPayable LAST (#552 COWORK #192 ruling B):
+  // ORCL files its debt only under these -- 7.625B current at 2026-08-31,
+  // 122.342B noncurrent at its 2026-05-31 10-K (relay sec-tag-probe). On a
+  // balance sheet carrying only the current line, the view shows it as
+  // "Short-term debt" and withholds Total (secEarningsView). Ranked last, so a
+  // filer that already resolves a debt line is unchanged (one filer, ORCL, in
+  // the 200 cut: relay sec-chain-blast-census).
+  { key: "shortTermDebt", chain: ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings", "NotesPayableCurrent"], unit: "USD", taxonomy: "us-gaap" },
+  { key: "longTermDebt", chain: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "LongTermNotesPayable"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalLiabilities", chain: ["Liabilities"], unit: "USD", taxonomy: "us-gaap" },
   // PARENT-ONLY, deliberately: this is the figure a reader means by
   // "shareholders' equity", and it is what the per-share book value must use.
@@ -696,6 +703,30 @@ export function revenueLineIncompleteValues(
  */
 export const REVENUE_FALLBACK_CHAIN: readonly string[] = ["Revenues", "RevenuesNetOfInterestExpense"];
 
+/**
+ * THE TOTAL OVER THE CONTRACT LINE (#552 COWORK #192 ruling A): where a
+ * filer's newest period files `Revenues` more than this factor above
+ * `RevenueFromContractWithCustomerExcludingAssessedTax`, and the filer tags no
+ * excise, `Revenues` is its one revenue concept (secExtract). AFRM: $3.22B
+ * against a $1.11B contract line in FY2025.
+ */
+export const REVENUE_TOTAL_OVER_CONTRACT = 1.05;
+
+/**
+ * SHARE COUNTS ON A UNIT SLIP (#552 COWORK #192): the factors a period's
+ * weighted shares may be rescaled by, and how close net income ÷ (EPS ×
+ * shares) must land to one of them (secExtract.unitSlipFactor). Thousands and
+ * millions, both directions; 3% leaves room for rounding in a filed EPS.
+ */
+export const SHARE_UNIT_SLIP_FACTORS: readonly number[] = [1e3, 1e6, 1e-3, 1e-6];
+export const SHARE_UNIT_SLIP_TOLERANCE = 0.03;
+/**
+ * …AND CORROBORATED: the rescaled count must sit within this factor of the
+ * cover share count or of the filer's own clean periods, since the ratio alone
+ * cannot say whether the shares or the net income slipped.
+ */
+export const SHARE_UNIT_SLIP_CORROBORATION = 2;
+
 export const SEC_FIELD_KEYS: string[] = SEC_FIELDS.map((f) => f.key);
 
 /** Field index by key, for the positional encoding. */
@@ -783,6 +814,12 @@ export function secChainsHash(): string {
   // flagged periods, so a set written without it must read as stale and be
   // re-read — the same migration any chain edit gets.
   feed(`revenue-fallback|${REVENUE_FALLBACK_CHAIN.join(",")}`);
+  // AND THE TOTAL-OVER-CONTRACT RULE (#552 COWORK #192): it moves stored
+  // revenue for every filer it reaches, so it re-reads like a chain edit.
+  feed(`revenue-total-over-contract|${REVENUE_TOTAL_OVER_CONTRACT}|no-excise|floor:8q4y`);
+  // AND THE SHARE UNIT-SLIP RESCALE (#552 COWORK #192): it moves stored
+  // weighted shares on every period it proves.
+  feed(`share-unit-slip|${SHARE_UNIT_SLIP_FACTORS.join(",")}|${SHARE_UNIT_SLIP_TOLERANCE}|corroborated:${SHARE_UNIT_SLIP_CORROBORATION}`);
   return h.toString(16).padStart(8, "0");
 }
 
