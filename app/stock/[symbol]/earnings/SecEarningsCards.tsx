@@ -1281,6 +1281,11 @@ function BalanceLegend({ b }: { b: NonNullable<SecEarningsView["balance"]> }) {
       <span aria-hidden="true" style={{ color: green }}>■</span> {b.cashIncludesRestricted ? "Cash (incl. restricted)" : "Cash"} <CellValue cell={b.cash} compact />
       {" · "}<span aria-hidden="true" style={{ color: green, opacity: 0.55 }}>■</span> Short-term investments <CellValue cell={b.shortTermInvestments} compact />
       {" · "}<span aria-hidden="true" style={{ color: red }}>■</span> Total debt <DerivedValue value={b.totalDebt} missing={b.totalDebtMissing} />
+      {/* A CURRENT LINE WITH NO LONG-TERM LINE BESIDE IT (#552 COWORK #192 ruling B):
+          shown under its own name, never summed into a total. */}
+      {b.shortTermDebtOnly !== null && b.shortTermDebtOnly !== undefined ? (
+        <span data-short-term-debt-only="">{" · "}Short-term debt <strong>{shortMoney(b.shortTermDebtOnly)}</strong></span>
+      ) : null}
     </p>
   );
 }

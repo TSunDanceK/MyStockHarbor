@@ -453,11 +453,33 @@ const ev = (period, accepted, basis = "8-K item 2.02") => ({
   check("fewer than four prior announcements gets nothing",
     t.kind === "none", `${t.kind}: ${t.reason ?? ""}`);
 
-  // 6-K events, however regular, are refused: the selection rule is positional.
+  // 6-K EVENTS COUNT TOWARD THE BAR for a filer with no 8-K (#552 COWORK #192:
+  // RY, BMO, BNS, CM), but the selection rule is positional, so a regular 6-K
+  // history earns a MONTH at most -- the weakest evidence must not carry the
+  // most specific claim (this replaced "a 6-K history earns no estimate").
   const sixK = regular.map((e) => ({ ...e, basis: "6-K near period end" }));
   const sk = m.estimateNextReport(sixK, "2026-09-30", "Large accelerated filer");
-  check("a 6-K history earns no estimate at all",
-    sk.kind === "none", `${sk.kind}: ${sk.reason ?? ""} — the weakest evidence must not carry the most specific claim`);
+  check("a regular 6-K history earns a month, never a day",
+    sk.kind === "month" && sk.month === "2026-11", `${sk.kind}: ${sk.month ?? sk.reason ?? sk.date ?? ""}`);
+  // A filer with ANY 8-K 2.02 keeps the 8-K bar alone: its 6-Ks never top it up.
+  const mixed = [...sixK.slice(0, 3), regular[3]];
+  const mx = m.estimateNextReport(mixed, "2026-09-30", "Large accelerated filer");
+  check("one 8-K plus three 6-Ks: the 8-K bar alone, so nothing",
+    mx.kind === "none" && /only 1 prior 8-K item 2.02/.test(mx.reason ?? ""), `${mx.kind}: ${mx.reason ?? ""}`);
+  // An irregular 6-K history is refused like an irregular 8-K one.
+  const ragged = [ev("2026-06-30", "2026-07-02"), ev("2026-03-31", "2026-05-20"), ev("2025-12-31", "2026-01-30"), ev("2025-09-30", "2025-11-01")]
+    .map((e) => ({ ...e, basis: "6-K near period end" }));
+  const rg = m.estimateNextReport(ragged, "2026-09-30", "Large accelerated filer");
+  check("an irregular 6-K history across months gets nothing", rg.kind === "none", `${rg.kind}: ${rg.reason ?? rg.month ?? ""}`);
+  // MUTANTS: the 6-K bar removed (back to "only 0"), and the month cap removed (a day).
+  {
+    const m1 = await load((src) => src.replace('const usable = eightK.length ? eightK : events.filter((e) => e.periodEnd && e.basis === "6-K near period end");', "const usable = eightK;"), 61);
+    const r1 = m1.estimateNextReport(sixK, "2026-09-30", "Large accelerated filer");
+    check("MUTATION: 8-K-only bar → the 6-K filer reads 'only 0' again (caught)", r1.kind === "none" && /only 0/.test(r1.reason ?? ""), `${r1.kind}: ${r1.reason ?? ""}`);
+    const m2 = await load((src) => src.replace('if (basis === "6-K near period end") {', "if (false) {"), 62);
+    const r2 = m2.estimateNextReport(sixK, "2026-09-30", "Large accelerated filer");
+    check("MUTATION: month cap removed → a 6-K history claims a day (caught)", r2.kind === "date", `${r2.kind}`);
+  }
 
   // ── NO MATCHED PERIOD END, NO DATE ─────────────────────────────────────
   // All three estimators are arithmetic on a period end and the deadline that
@@ -476,6 +498,23 @@ const ev = (period, accepted, basis = "8-K item 2.02") => ({
   check("a lag past the statutory deadline is clamped to it",
     c.kind === "date" && c.clamped && c.date === "2026-11-09",
     `${c.kind} ${c.date ?? ""} clamped=${c.clamped} — 40 days after 2026-09-30`);
+}
+
+console.log("\n4a. the period end rolls forward whatever the estimate kind (#552 COWORK #192)");
+{
+  // RY's shape: no estimate (kind none), cadence anchored on 2026-04-30, read in October.
+  const cad = { end: "2026-04-30", annual: false, stepDays: 92 };
+  const today = "2026-10-07";
+  const dl = m.deadlineDays("", false);
+  const r = m.estimateUpcoming([], cad, "", today);
+  const end = r.periodEnd ?? "";
+  const inside = Date.parse(end) + dl * 86400000 >= Date.parse(today);
+  const prevInside = Date.parse(end) - 92 * 86400000 + dl * 86400000 >= Date.parse(today);
+  check("a none estimate no longer pins the period at 2026-04-30", r.estimate.kind === "none" && end > "2026-04-30", `${r.estimate.kind} for ${end}`);
+  check("...it stops at the FIRST period still inside its filing deadline", inside && !prevInside, `${end} (deadline ${dl} days)`);
+  const mr = await load((src) => src.replace('} else if (Date.parse(end) + deadlineDays(category, cadence.annual) * DAY >= Date.parse(floor)) {', "} else if (true) {"), 63);
+  const r2 = mr.estimateUpcoming([], cad, "", today);
+  check("MUTATION: only a date rolls → the period stays at 2026-04-30 (caught)", r2.periodEnd === "2026-04-30", String(r2.periodEnd));
 }
 
 console.log("\n4b. \"next expected\" is never a date that has already passed");
