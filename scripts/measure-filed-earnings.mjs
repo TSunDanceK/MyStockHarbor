@@ -1,18 +1,17 @@
-// THE "FILED EARNINGS" TAB AND THE PHONE TABS, HYDRATED (#563 COWORK #154 §5, §6).
+// THE "FILED EARNINGS" TAB AND THE PHONE TABS, HYDRATED (#563 COWORK #154 §5, #160).
 //
 // Bundles the REAL DashboardClient (esbuild, as measure-dashboard-search does),
-// mounts it with a landing, answers its two earnings routes from fixtures (no
-// network), opens the "Filed earnings" tab and checks, at 1280, 390 and 320 px:
-//   - AMZN: the chart with 8 EPS bars, only the newest highlighted, the margin
-//     line, the snapshot's verdict chip ("Good"), and "Full earnings →" to
-//     /stock/AMZN/earnings; nothing scrolls the page sideways;
+// mounts it with a landing, answers its routes from fixtures (no network), opens
+// the "Filed earnings" tab and checks, at 1280, 390 and 320 px:
+//   - AMZN: the stock page's Earnings snapshot card (#160), whole: its tiles,
+//     its yearly chart, "See full report →" to /stock/AMZN/earnings and "About
+//     these figures"; no chart of the tab's own; the card inside the tab and
+//     nothing scrolling the page sideways;
 //   - SPY (a fund, available: false): "Filed figures not available for SPY.";
 //   - the five tabs on one line at 390 and 320 px, each with its full name as
 //     its accessible name; at 390 px they fit without scrolling.
-// (The card is called, not mounted, and the chart keeps one answer per symbol,
-// so a re-render never refetches: check-dashboard-landing holds both.)
 // With --shots DIR it saves the tab at 1280 and 390 px.
-// The fixture's figures are illustrative, not AMZN's filings.
+// The snapshot is the AAPL measure fixture relabelled AMZN: illustrative, not AMZN's filings.
 //
 //   node scripts/measure-filed-earnings.mjs [--shots DIR]
 //
@@ -30,6 +29,9 @@ try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require(
 const tmp = fs.mkdtempSync(path.join("scripts", ".filed-earnings-"));
 process.on("exit", () => fs.rmSync(tmp, { recursive: true, force: true }));
 fs.writeFileSync(path.join(tmp, "nav.js"), `const r={push(){},replace(){},prefetch(){},back(){},refresh(){}};export const useRouter=()=>r;export const usePathname=()=>"/dashboard";export const useSearchParams=()=>new URLSearchParams(location.search);export const useParams=()=>({});export const notFound=()=>{};export const redirect=()=>{};`);
+// ColdFill (the not-yet-read prompt inside A's card) calls a server action, which Next
+// compiles to a reference and esbuild cannot; the fixture snapshot is read, so it never shows.
+fs.writeFileSync(path.join(tmp, "coldfill.js"), `export default function ColdFill(){return null;}`);
 fs.writeFileSync(path.join(tmp, "link.js"), `import React from "react";export default React.forwardRef(function Link({href,prefetch,scroll,replace,...p},ref){return React.createElement("a",{...p,href:typeof href==="string"?href:"#",ref});});`);
 function bundle(client, name) {
 const entry = `scripts/.filed-earnings-entry-${name}.tsx`, out = path.join(tmp, `${name}.js`);
@@ -41,7 +43,7 @@ const sym = (new URLSearchParams(location.search).get("symbol") || "AMZN").toUpp
 createRoot(document.getElementById("root")!).render(React.createElement(DashboardClient, { defaultSymbol: sym, landing }));
 `);
 try {
-  const args = [entry, "--bundle", "--platform=browser", "--format=iife", "--jsx=automatic", "--alias:@=.", `--alias:next/navigation=./${path.join(tmp, "nav.js")}`, `--alias:next/link=./${path.join(tmp, "link.js")}`, '--define:process.env.NODE_ENV="production"', '--banner:js=var process={env:{NODE_ENV:"production"}};', `--outfile=${out}`, "--log-level=error"];
+  const args = [entry, "--bundle", "--platform=browser", "--format=iife", "--jsx=automatic", "--alias:@=.", `--alias:next/navigation=./${path.join(tmp, "nav.js")}`, `--alias:next/link=./${path.join(tmp, "link.js")}`, `--alias:@/app/stock/[symbol]/ColdFill=./${path.join(tmp, "coldfill.js")}`, '--define:process.env.NODE_ENV="production"', '--banner:js=var process={env:{NODE_ENV:"production"}};', `--outfile=${out}`, "--log-level=error"];
   if (process.env.ESBUILD_BIN) execFileSync(process.env.ESBUILD_BIN, args, { stdio: "inherit" });
   else execFileSync("npx", ["--yes", "esbuild@0.24.2", ...args], { stdio: "inherit" });
 } finally { fs.rmSync(entry, { force: true }); }
@@ -54,10 +56,8 @@ const css = fs.readFileSync("app/globals.css", "utf8").replace(/@tailwind[^;]*;|
 const LANDING_CSS = fs.readFileSync("app/dashboard/DashboardLanding.tsx", "utf8").match(/export const LANDING_CSS = `([\s\S]*?)`;/)[1];
 const docOf = (js) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style><style>${LANDING_CSS}</style></head><body style="margin:0;background:#05080f"><div class="msh-wrap" id="root"></div><script>${js}</script></body></html>`;
 
-// Illustrative figures (the shape the route returns), oldest first.
-const Q = ["Q4 FY2024", "Q1 FY2025", "Q2 FY2025", "Q3 FY2025", "Q4 FY2025", "Q1 FY2026", "Q2 FY2026", "Q3 FY2026"];
-const EPS = [1.43, 1.26, 1.68, 1.95, 1.86, 1.59, 1.74, 2.05], OP = [11.3, 10.8, 11.4, 11.1, 11.8, 11.6, 12.2, 12.9];
-const AMZN = { symbol: "AMZN", available: true, many: "quarters", periods: Q.map((label, i) => ({ label, short: label.replace(/ FY20(\d\d)/, " '$1"), eps: EPS[i], epsText: `$${EPS[i].toFixed(2)}`, opPct: Math.round(OP[i]), opText: `${OP[i].toFixed(1)}%` })) };
+// The route's answer: A's snapshot (the AAPL measure fixture, relabelled).
+const AMZN = { ...JSON.parse(fs.readFileSync("scripts/fixtures/measure-earnings-snapshot-AAPL.json", "utf8")), symbol: "AMZN" };
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || "/opt/pw-browsers/chromium" });
 async function openTab(sym, width, js = realJs) {
@@ -67,6 +67,7 @@ async function openTab(sym, width, js = realJs) {
   await page.route("**/*", (r) => {
     const url = r.request().url();
     if (url.startsWith("http://dash.test/dashboard")) return r.fulfill({ body: docOf(js), contentType: "text/html" });
+    if (url.endsWith("/api/sec/filed-earnings")) return r.fulfill({ body: JSON.stringify({ symbols: ["AMZN"] }), contentType: "application/json" });
     if (url.endsWith("/api/dashboard-earnings/AMZN")) return r.fulfill({ body: JSON.stringify(AMZN), contentType: "application/json" });
     if (url.endsWith("/api/dashboard-earnings/SPY")) return r.fulfill({ body: JSON.stringify({ symbol: "SPY", available: false }), contentType: "application/json" });
     if (url.endsWith("/api/stock-earnings/AMZN")) return r.fulfill({ body: JSON.stringify({ hasStructuredData: true, tone: "green", toneLabel: "Good" }), contentType: "application/json" });
@@ -89,13 +90,15 @@ async function openTab(sym, width, js = realJs) {
   await page.waitForTimeout(200);
   const r = await page.evaluate(() => {
     const fe = [...document.querySelectorAll("[data-filed-earnings]")].find((x) => x.getClientRects().length);
-    const bars = fe ? [...fe.querySelectorAll("[data-eps-bar]")] : [];
+    const tab = [...document.querySelectorAll(".dlTabbed")].find((x) => x.getClientRects().length)?.getBoundingClientRect();
+    const card = fe?.querySelector(".snapshotMetricsWrap")?.getBoundingClientRect();
     return {
       state: fe?.getAttribute("data-filed-earnings"),
-      bars: bars.length, latest: bars.map((b) => b.getAttribute("data-eps-bar")).join(","),
-      line: !!document.querySelector("[data-op-line]"),
-      chip: document.querySelector("[data-verdict-chip]")?.textContent ?? null,
-      more: [...document.querySelectorAll("[data-filed-earnings] a")].map((a) => [a.textContent, a.getAttribute("href")]),
+      card: !!card, inside: !!card && !!tab && card.left >= tab.left - 1 && card.right <= tab.right + 1,
+      ownChart: !!fe?.querySelector("[data-eps-bar], [data-op-line], [data-filed-chart]"),
+      cardChart: !!fe?.querySelector(".snapshotMetricsWrap svg"),
+      about: !!fe && /About these figures/.test(fe.textContent),
+      more: [...document.querySelectorAll("[data-filed-earnings] a")].map((a) => [a.textContent.trim(), a.getAttribute("href")]),
       empty: document.querySelector("[data-filed-empty]")?.textContent ?? null,
       sideways: document.documentElement.scrollWidth > innerWidth,
     };
@@ -115,10 +118,10 @@ const FULL = ["Chart", "Key levels", "Price zones", "Filed earnings", "News"];
 for (const width of [1280, 390, 320]) {
   const { errors, tabs, r } = await openTab("AMZN", width);
   say(`AMZN at ${width}px`, errors.length ? `the page threw: ${errors[0]}`
-    : r.state !== "chart" ? `the tab shows "${r.state}"`
-    : r.bars !== 8 || r.latest !== ",,,,,,,latest" ? `${r.bars} bars, highlighted: ${r.latest}`
-    : !r.line ? "no margin line" : r.chip !== "Good" ? `verdict chip "${r.chip}"`
-    : !r.more.some(([t, h]) => t === "Full earnings →" && h === "/stock/AMZN/earnings") ? "no Full earnings link"
+    : r.state !== "snapshot" ? `the tab shows "${r.state}"`
+    : !r.card ? "no snapshot card" : r.ownChart ? "a chart of the tab's own is drawn" : !r.cardChart ? "the card's yearly chart is missing"
+    : !r.about ? "no About these figures" : !r.inside ? "the card spills out of the tab"
+    : !r.more.some(([t, h]) => t === "See full report →" && h === "/stock/AMZN/earnings") ? "no See full report link"
     : r.sideways ? "the page scrolls sideways"
     : width <= 480 && !tabs.oneLine ? "the tabs wrap"
     : tabs.names.join("|") !== FULL.join("|") ? `tab names ${tabs.names.join("|")}`
@@ -126,7 +129,7 @@ for (const width of [1280, 390, 320]) {
 }
 {
   const { errors, r } = await openTab("SPY", 390);
-  say("SPY at 390px (a fund)", errors.length ? `the page threw: ${errors[0]}` : r.empty !== "Filed figures not available for SPY." ? `empty state "${r.empty}"` : r.bars ? "bars drawn for a fund" : "");
+  say("SPY at 390px (a fund)", errors.length ? `the page threw: ${errors[0]}` : r.empty !== "Filed figures not available for SPY." ? `empty state "${r.empty}"` : r.card ? "a card drawn for a fund" : "");
 }
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
