@@ -45,7 +45,11 @@ for (let i = 0; i < keys.length; i += 25) {
     records++;
     for (const it of rec.items) {
       items++;
-      const day = String(it.pubDate ?? "").slice(0, 10) || "undated";
+      // pubDate is an RFC 822 string ("Wed, 30 Sep 2026 ...") or an ISO one: parse it,
+      // then group by the UTC calendar day. (The first run sliced the raw string,
+      // which grouped "Wed, 30 Se" and showed only Wednesdays.)
+      const ms = Date.parse(String(it.pubDate ?? it.publishedAt ?? ""));
+      const day = Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : "undated";
       const d = byDay.get(day) ?? { total: 0, "filing-notice": 0, "quote-page": 0, "foreign-listing": 0 };
       d.total++;
       const why = junkReason(it.title, it.provider);
@@ -56,12 +60,15 @@ for (let i = 0; i < keys.length; i += 25) {
 }
 console.log(`records ${records} (of ${keys.length} keys) · items ${items}`);
 console.log("day | held | filing notices | quote pages | foreign listings | kept");
-for (const day of [...byDay.keys()].sort().reverse().slice(0, 14)) {
+const days = [...byDay.keys()].filter((d) => d !== "undated").sort().reverse();
+for (const day of [...days.slice(0, 14), ...(byDay.has("undated") ? ["undated"] : [])]) {
   const d = byDay.get(day);
   const drop = d["filing-notice"] + d["quote-page"] + d["foreign-listing"];
   console.log(`${day} | ${d.total} | ${d["filing-notice"]} | ${d["quote-page"]} | ${d["foreign-listing"]} | ${d.total - drop}`);
 }
 const all = [...byDay.values()].reduce((a, d) => ({ fn: a.fn + d["filing-notice"], qp: a.qp + d["quote-page"], fl: a.fl + d["foreign-listing"] }), { fn: 0, qp: 0, fl: 0 });
+const older = days.slice(14).reduce((n, d) => n + byDay.get(d).total, 0);
+console.log(`older than the 14 days shown: ${older} items`);
 console.log(`all held: filing notices ${all.fn} · quote pages ${all.qp} · foreign listings ${all.fl} · of ${items}`);
 for (const [why, ex] of examples) console.log(`  e.g. ${why}: ${ex.join(" | ")}`);
 console.log(`\nRedis commands ${commands} (read-only)`);
