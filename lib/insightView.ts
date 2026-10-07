@@ -77,16 +77,6 @@ export function parseDrivers(raw: unknown): { drivers: InsightDrivers | null; pr
   return problems.length ? { drivers: null, problems } : { drivers: { asOf, text, sources }, problems: [] };
 }
 
-/**
- * HEADLINES THE NEWS CARD SKIPS (#563 COWORK #146 §5), until B's ingest filter
- * (#814) lands; then this imports B's predicate instead. Filing notices, quote
- * pages and foreign listings are not news about the company.
- */
-export function isJunkHeadline(title: string): boolean {
-  return /^form\s*(?:4|3|5|144)\b/i.test(title) || /historical (?:stock )?prices?(?: and data)?/i.test(title) ||
-    /\bstock (?:price|quote)s?(?: today)?\s*(?:[-|:]|$)/i.test(title) || /\b[A-Z0-9]{1,6}\.BK\b/.test(title);
-}
-
 export type NormalisedInsight = {
   format: InsightFormat;
   slug: string;

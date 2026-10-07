@@ -23,7 +23,8 @@
 //     empty, bad URL, too many sources); every post's `drivers` valid and free
 //     of advice words; the card leads with the dated paragraph, its sources as
 //     nofollow publisher links, then at most three headlines, and falls back to
-//     the tone line without it; filing notices and quote pages are skipped.
+//     the tone line without it; junk headlines are skipped with B's predicate
+//     (lib/server/news/junkTitle.ts, #818), never a copy of it.
 // A mutant each.
 //
 //   node scripts/check-insight-page.mjs
@@ -156,9 +157,8 @@ const RULES = {
     /<p className="inRead inDrivers" data-insight-drivers="">\{n\.drivers\.text\}<\/p>/.test(page) &&
     /rel="nofollow noopener"/.test(page) && /\{src\.publisher\}/.test(page) &&
     /\) : d\.news\?\.score \? \(/.test(page) && /Latest headlines/.test(page) &&
-    /export const NEWS_SHOWN = 3;/.test(loader) && /!isJunkHeadline\(i\.title\)\)\.slice\(0, NEWS_SHOWN\)/.test(loader) &&
-    V.isJunkHeadline("Form 4 Amazon.com Inc For: Oct 03 Filed by: Jassy Andrew R") && V.isJunkHeadline("Amazon.com, Inc. (AMZN) historical prices and data") &&
-    V.isJunkHeadline("BKNG.BK board approves dividend") && !V.isJunkHeadline("Amazon raises its 2026 capex estimate as AWS growth speeds up"),
+    /export const NEWS_SHOWN = 3;/.test(loader) && /junkReason\(i\.title\) === null\)\.slice\(0, NEWS_SHOWN\)/.test(loader) &&
+    /import \{ junkReason \} from "@\/lib\/server\/news\/junkTitle";/.test(loader) && !/isJunkHeadline/.test(read(VIEW)),
   "the fixture is served off production only, noindex, and never listed": () => {
     const loader = stripComments(read(LOADER), { file: LOADER }), route = stripComments(read(ROUTE), { file: ROUTE });
     return /export const fixturesServed = \(\) => process\.env\.VERCEL_ENV !== "production";/.test(loader) && /fixturesServed\(\) && /.test(loader) &&
@@ -182,7 +182,6 @@ const MUTANTS = [
   ["drivers: the loader", "v", (s) => s.replace("if (list.length < 1 || list.length > DRIVERS_MAX_SOURCES)", "if (list.length > 99)")],
   ["drivers: the loader", "v", (s) => s.replace("if (!/^https:\\/\\/[^\\s/]+\\.[^\\s]+$/.test(src.url))", "if (!/^https?:\\/\\//.test(src.url))")],
   ["drivers: the loader", "v", (s) => s.replace("return problems.length ? { drivers: null, problems } :", "return false ? { drivers: null, problems } :")],
-  ["drivers: the card", "v", (s) => s.replace("return /^form\\s*(?:4|3|5|144)\\b/i.test(title) ||", "return false ||")],
   ["the screens link", "s", (s) => s.replace('href: "/oversold-stocks-today"', 'href: "/oversold-today"')],
   ["no advice words", "v", (s) => s.replace('case "held": return { word: "Held", detail: "No daily close below it since", tone: "up" };', 'case "held": return { word: "Held", detail: "A level to buy while it holds", tone: "up" };')],
 ];
@@ -195,6 +194,7 @@ const SRC_MUTANTS = [
   ["drivers: the card", PAGE, (s) => s.replace('rel="nofollow noopener"', 'rel="noopener"')],
   ["drivers: the card", PAGE, (s) => s.replace(") : d.news?.score ? (", ") : null}{d.news?.score ? (")],
   ["drivers: the card", LOADER, (s) => s.replace("export const NEWS_SHOWN = 3;", "export const NEWS_SHOWN = 5;")],
+  ["drivers: the card", LOADER, (s) => s.replace("&& junkReason(i.title) === null)", ")")],
   ["the rail:", PAGE, (s) => s.replace('{d.snapshot?.available ? <EarningsTiles d={d} /> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet.</p>}', "<EarningsTiles d={d} />")],
 ];
 const R = Object.keys(RULES);

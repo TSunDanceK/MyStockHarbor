@@ -55,10 +55,11 @@ import { toSpendingInput } from "@/lib/server/capexSpendingJob";
 import { confluence } from "@/lib/ta/confluence";
 import type { KeyBar } from "@/lib/ta/keyLevels";
 import {
-  dayWords, differenceNote, indexOnOrBefore, isJunkHeadline, levelSeries, normaliseInsight, setupLabel, sinceView, LEVEL_NAME,
+  dayWords, differenceNote, indexOnOrBefore, levelSeries, normaliseInsight, setupLabel, sinceView, LEVEL_NAME,
   type EodBar, type NormalisedInsight, type SetupLabel, type SinceView,
 } from "@/lib/insightView";
 import { SCREEN_ROUTES, screenFor, type ScreenFlag } from "@/lib/insightScreens";
+import { junkReason } from "@/lib/server/news/junkTitle";
 
 const INSIGHTS_DIR = path.join(process.cwd(), "content/insights");
 /**
@@ -357,8 +358,11 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
 
   // WHAT'S DRIVING IT NOW: the news page's lead items (newest, deduped, on topic) and its score.
   const news: InsightNews | null = newsBase ? {
-    // AT MOST THREE, AND NO FILING NOTICES OR QUOTE PAGES (#563 COWORK #146 §2/§5).
-    items: (newsBase.detailedNews ?? []).filter((i) => i.title && /^https?:\/\//.test(i.link ?? "") && !isJunkHeadline(i.title)).slice(0, NEWS_SHOWN).map((i) => ({ title: i.title, link: i.link, source: i.source ?? null, date: i.pubDate ?? null })),
+    // AT MOST THREE, AND NO FILING NOTICES, QUOTE PAGES OR FOREIGN LISTINGS
+    // (#563 COWORK #146 §2/§5, #147): B's predicate (lib/server/news/junkTitle.ts,
+    // #818), the same rule the news store applies. The card's items carry no
+    // provider, so the SEC adapter's exemption does not arise here.
+    items: (newsBase.detailedNews ?? []).filter((i) => i.title && /^https?:\/\//.test(i.link ?? "") && junkReason(i.title) === null).slice(0, NEWS_SHOWN).map((i) => ({ title: i.title, link: i.link, source: i.source ?? null, date: i.pubDate ?? null })),
     score: newsBase.newsScore?.available ? { label: newsBase.newsScore.label, tone: newsBase.newsScore.tone, reason: newsBase.newsScore.reason } : null,
   } : null;
   const SHORT: Record<string, string> = { MA50: "50-day", MA200: "200-day", WMA200: "200-week", BBMID: "20-day" };
