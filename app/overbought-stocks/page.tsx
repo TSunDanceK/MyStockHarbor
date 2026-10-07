@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { chartHref } from "@/lib/chartHref";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -231,7 +232,7 @@ export default function OverboughtStocksPage() {
           <p style={{ marginTop: 10, opacity: 0.86, lineHeight: 1.6, maxWidth: 820 }}>Use MyStockHarbor to review trend, momentum, divergence and stretch conditions in one place. Start with live stock ideas, then decide whether the chart deserves a closer look.</p>
           <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link href="/overbought-stocks-today" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "13px 18px", borderRadius: 14, border: "1px solid rgba(239,68,68,0.42)", background: "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))", color: "#fef2f2", textDecoration: "none", fontWeight: 900, minHeight: 48, whiteSpace: "nowrap" }}>See Overbought Stocks Now →</Link>
-            <Link href="/" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "13px 18px", borderRadius: 14, border: "1px solid rgba(250,204,21,0.42)", background: "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))", color: "#fefce8", textDecoration: "none", fontWeight: 900, minHeight: 48, whiteSpace: "nowrap" }}>Open Dashboard →</Link>
+            <Link href={chartHref()} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "13px 18px", borderRadius: 14, border: "1px solid rgba(250,204,21,0.42)", background: "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))", color: "#fefce8", textDecoration: "none", fontWeight: 900, minHeight: 48, whiteSpace: "nowrap" }}>Open Dashboard →</Link>
           </div>
         </section>
       </div>

@@ -1,5 +1,6 @@
 "use client";
 import { EstimatedValue, ReasonedValue } from "@/app/components/EstimatedValue";
+import { chartHref } from "@/lib/chartHref";
 import { EstimateKey } from "@/app/components/EstimateKey";
 import type { EstimateMark } from "@/app/components/estimateMark";
 
@@ -1172,7 +1173,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
                   <h2 style={sectionHeadingStyle}>{symbol} with MA50 and MA200</h2>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", maxWidth: "100%" }}>
-                    <Link href={`/?symbol=${encodeURIComponent(symbol)}`} style={chartLinkStyle("blue")}>Dashboard</Link>
+                    <Link href={chartHref(symbol)} style={chartLinkStyle("blue")}>Dashboard</Link>
                     <Link href={`/stock/${encodeURIComponent(symbol)}/news`} style={chartLinkStyle("red")}>News</Link>
                     <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
                   </div>

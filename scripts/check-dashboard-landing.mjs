@@ -147,7 +147,7 @@ function wiring(client, page, cardsSrc, root = read(ROOT)) {
   want("the page reads the landing through the budget", /budget\("landing", getDashboardLanding\(\)/.test(p));
   want("the page hands the landing to the client", /landing=\{\{\s*market: <MarketNow m=\{landing\.market\} \/>,\s*cards: <LandingCards c=\{landing\.cards\} \/>/.test(p));
   want("the analyser carries the #analyser anchor", /<section id="analyser" ref=\{analyserRef\}/.test(c));
-  want("a ?symbol= deep link scrolls to the analyser", /if \(!landing \|\| !cleanSymbol\(deepSymbol\)\) return;\s*analyserRef\.current\?\.scrollIntoView\(/.test(c) && /const deepSymbol = searchParams\.get\("symbol"\)/.test(c));
+  want("a ?symbol= or #analyser deep link scrolls to the analyser", /if \(!landing \|\| !wantsAnalyser\(window\.location\.hash, deepSymbol\)\) return;\s*analyserRef\.current\?\.scrollIntoView\(/.test(c) && /const deepSymbol = searchParams\.get\("symbol"\)/.test(c));
   want("a hero pick routes through chooseSymbol, then scrolls to the analyser", /function pickFromHero\([^)]*\) \{\s*chooseSymbol\(sym, name, "stock"\);[\s\S]{0,120}analyserRef\.current\?\.scrollIntoView/.test(c));
   // #148 §2: the three points under the hero are gone.
   want("the three points under the hero are gone", !/dlPoints|"As filed"|Explained, not advised/.test(c));
@@ -214,7 +214,7 @@ for (const [label, from, to] of LANDING_MUTANTS) {
   check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no rule failed");
 }
 const WIRING_MUTANTS = [
-  ["the deep link no longer scrolls", CLIENT, /if \(!landing \|\| !cleanSymbol\(deepSymbol\)\) return;\s*analyserRef\.current\?\.scrollIntoView\(\{ block: "start" \}\);/, "if (!landing || !cleanSymbol(deepSymbol)) return;"],
+  ["the deep link no longer scrolls", CLIENT, /if \(!landing \|\| !wantsAnalyser\(window\.location\.hash, deepSymbol\)\) return;\s*analyserRef\.current\?\.scrollIntoView\(\{ behavior: "instant", block: "start" \}\);/, "if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;"],
   ["the analyser loses its anchor", CLIENT, /<section id="analyser" ref=\{analyserRef\}/, '<section ref={analyserRef}'],
   ["the hero mounted as a component again", CLIENT, /\{LandingHero\(\)\}/, "<LandingHero />"],
   ["the three points come back", CLIENT, /<div className="dlTry">/, '<div className="dlPoints"><h2>As filed</h2></div><div className="dlTry">'],

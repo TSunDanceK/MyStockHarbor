@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { chartHref } from "@/lib/chartHref";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -490,7 +491,7 @@ export default function BreakoutStocksPage() {
             </Link>
 
             <Link
-              href="/"
+              href={chartHref()}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

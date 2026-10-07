@@ -13,6 +13,7 @@
 // module and stay perfectly consistent.
 
 import { Redis } from "@upstash/redis";
+import { chartHref } from "@/lib/chartHref";
 import { BULK_READ_CACHE, PAGE_READ_CACHE } from "./redisCacheMode";
 import { REQUEST_BYTE_BUDGET, pctOfRequestLimit, trySetRequestBytes } from "./chunkByBytes";
 import {
@@ -461,11 +462,8 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
 }
 
 function buildDashboardHref(symbol: string, timeframe: "M" | "ST" | "D" | "W") {
-  const params = new URLSearchParams();
-  params.set("symbol", symbol);
-  params.set("tf", timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe);
-
-  return `/?${params.toString()}`;
+  // Lands on the analyser (#563 COWORK #151).
+  return chartHref(symbol, { tf: timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe });
 }
 
 function toPlayItem(

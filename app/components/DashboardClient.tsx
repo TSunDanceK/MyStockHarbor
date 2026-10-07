@@ -1,7 +1,8 @@
 "use client";
 
 import { CRYPTO_MODE_ENABLED } from "@/lib/cryptoMode";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { scrollMotion, wantsAnalyser } from "@/lib/chartHref";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
@@ -637,12 +638,14 @@ export default function DashboardClient({
   const selectedTimeframe = useMemo(() => TIMEFRAMES.find(t => t.label === activeTimeframe) ?? TIMEFRAMES[0], [activeTimeframe]);
   const COLORS = useMemo(() => ({ isDark: true, pageBg: "#0a0f1a", pageFg: "#eaf0fa", mutedFg: "#8a97ad", mutedFg2: "#5f6b80", cardBg: "#141b2b", cardFg: "#eaf0fa", cardBg2: "#0f1624", border: "#222c40", borderSoft: "#1a2336", controlBg: "#0f1624", controlBgSolid: "#0f1624", controlBorder: "#222c40", controlFg: "#eaf0fa", blue: "#2f6bff", blueSoft: "#13213f", blueBorder: "#27406f", green: "#16c784", greenSoft: "#0f2a23", greenBorder: "#1c4a3c", amber: "#f5a524", amberSoft: "#2c2310", amberBorder: "#3a2f10", red: "#f04444", yellowBorder: "rgba(234,179,8,0.38)", yellowBg: "rgba(234,179,8,0.10)", yellowText: "#fde68a" }), []);
 
-  // A ?symbol= DEEP LINK LANDS ON THE ANALYSER (#563 COWORK #134): it moved
-  // below the landing, so the page scrolls to it rather than to the hero.
+  // A CHART LINK LANDS ON THE ANALYSER (#563 COWORK #134, #151): chartHref's
+  // #analyser, the older #chart, or a ?symbol= deep link. A layout effect, so
+  // the jump lands before the first paint after hydration and the hero never
+  // flashes; always a jump ("instant"), never an animation.
   const deepSymbol = searchParams.get("symbol");
-  useEffect(() => {
-    if (!landing || !cleanSymbol(deepSymbol)) return;
-    analyserRef.current?.scrollIntoView({ block: "start" });
+  useLayoutEffect(() => {
+    if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;
+    analyserRef.current?.scrollIntoView({ behavior: "instant", block: "start" });
   }, [landing, deepSymbol]);
   useEffect(() => { const r = () => setIsMobile(window.innerWidth <= 768); r(); window.addEventListener("resize", r); return () => window.removeEventListener("resize", r); }, []);
   useEffect(() => { if (symbolName.trim()) return; const list = assetType === "crypto" ? CRYPTO_PRESETS : PRESET_TICKERS; const f = list.find(x => x.symbol.toUpperCase() === symbol.toUpperCase()); if (f?.name) setSymbolName(f.name); }, [symbol, symbolName, assetType]);
@@ -836,7 +839,7 @@ export default function DashboardClient({
     return () => { c = true; clearTimeout(t); };
   }, [query, assetType]);
   useEffect(() => { let c = false; async function lb() { if (seededBenchRef.current) { seededBenchRef.current = false; return; } try { const scope = assetType === "crypto" ? "crypto" : "stock"; const r = await fetch(`/api/benchmarks?scope=${scope}`); if (!r.ok) throw new Error(""); const raw = (await r.json()) as any; if (!c) setBench({ updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(), scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks", items: Array.isArray(raw?.items) ? raw.items : [], ...(raw?.provider === "tiingo" ? { provider: "tiingo" as const } : {}) }); } catch { if (!c) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] }); } } lb(); return () => { c = true; }; }, [assetType]);
-  useEffect(() => { const h = typeof window !== "undefined" ? window.location.hash : ""; if (h !== "#chart" || !historyAll.length) return; const t = window.setTimeout(() => { chartSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); setHighlightChart(true); setTimeout(() => setHighlightChart(false), 1200); }, 80); return () => window.clearTimeout(t); }, [historyAll, symbol]);
+  useEffect(() => { const h = typeof window !== "undefined" ? window.location.hash : ""; if (h !== "#chart" || !historyAll.length) return; const t = window.setTimeout(() => { chartSectionRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }); setHighlightChart(true); setTimeout(() => setHighlightChart(false), 1200); }, 80); return () => window.clearTimeout(t); }, [historyAll, symbol]);
   useEffect(() => { if (assetType === "crypto") { setNews(null); return; } if (seededNewsRef.current) { seededNewsRef.current = false; return; } let c = false; async function ln() { try { const r = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`); if (!r.ok) throw new Error(""); if (!c) setNews((await r.json()) as NewsPayload); } catch { if (!c) setNews(null); } } ln(); return () => { c = true; }; }, [symbol, assetType]);
   useEffect(() => { if (assetType === "crypto") { setEarningsSummary(null); return; } if (seededEarningsRef.current) { seededEarningsRef.current = false; return; } let c = false; async function le() { setEarningsSummary(null); try { const r = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" }); if (!r.ok) throw new Error(""); if (!c) setEarningsSummary((await r.json()) as StockEarningsSummary); } catch { if (!c) setEarningsSummary(null); } } le(); return () => { c = true; }; }, [symbol, assetType]);
 
@@ -933,7 +936,7 @@ export default function DashboardClient({
   function pickFromHero(sym: string, name?: string) {
     chooseSymbol(sym, name, "stock");
     setTab("chart");
-    if (landing) requestAnimationFrame(() => analyserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    if (landing) requestAnimationFrame(() => analyserRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }));
   }
   function switchAssetType(next: AssetType) {
     if (next === assetType) return;
