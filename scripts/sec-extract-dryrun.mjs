@@ -43,5 +43,12 @@ for (const sym of SYMBOLS) {
   for (const p of [...a.quarters].sort((x, y) => (x.end < y.end ? 1 : -1)).slice(0, 8)) {
     console.log(`  ${p.end} ${p.fp ?? ""} FY${p.fy ?? "?"}: ${cell(bq.get(p.end)?.values?.[NI])} → ${cell(p.values?.[NI])}`);
   }
+  const REV = AFTER.SEC_FIELD_KEYS.indexOf("revenue");
+  const rc = (v) => (v ? `${(v.val / 1e6).toFixed(0)}M [${v.tag}]` : "Not reported");
+  console.log(`  revenue, newest 4 quarters (main → #811): ${[...a.quarters].sort((x, y) => (x.end < y.end ? 1 : -1)).slice(0, 4).map((p) => `${p.end} ${rc(bq.get(p.end)?.values?.[REV])} → ${rc(p.values?.[REV])}`).join(" · ")}`);
+  console.log(`  revenue, newest 2 years (#811): ${[...a.years].sort((x, y) => (x.end < y.end ? 1 : -1)).slice(0, 2).map((p) => `${p.end} ${rc(p.values?.[REV])}`).join(" · ")}`);
+  console.log(`  revenue notes: ${(a.notes ?? []).filter((n) => /revenue/.test(n)).slice(0, 3).join(" | ") || "none"}`);
+  const g = r.body.facts?.["us-gaap"] ?? {};
+  console.log(`  revenue-like concepts filed: ${Object.keys(g).filter((k) => /^(Revenue|Revenues|SalesRevenue)/.test(k)).join(", ") || "none"} · excise-tagged: ${Object.keys(g).some((k) => /Excise/.test(k))}`);
   console.log(`  years (after): ${[...a.years].sort((x, y) => (x.end < y.end ? 1 : -1)).slice(0, 3).map((p) => `${p.end} ${cell(p.values?.[NI])}`).join(" · ")}`);
 }
