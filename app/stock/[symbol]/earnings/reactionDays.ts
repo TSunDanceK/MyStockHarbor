@@ -92,5 +92,7 @@ export function reactionDayRows(
       truncated: pct.length < REACTION_SLIDER_DAYS,
     });
   }
-  return rows;
+  // NEWEST REPORT FIRST (#552 COWORK #192): a reader looks for the latest
+  // report first, whatever order the reports arrive in.
+  return rows.sort((a, b) => (a.reportDate < b.reportDate ? 1 : a.reportDate > b.reportDate ? -1 : 0));
 }

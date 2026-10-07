@@ -67,6 +67,22 @@ console.log("\n2. the latest report stops at the series end; SPY over the same d
   check("a report the series does not cover is left out", D.reactionDayRows([{ label: "x", date: "2020-01-01", time: "amc", anchor: null }], series, SPY).length === 0);
 }
 
+console.log("\n2b. newest report first (#552 COWORK #192)");
+{
+  const rep = (i, label) => ({ label, date: series[i].date, time: "amc", anchor: RX.computeEarningsReactionDetail({ date: series[i].date, time: "amc" }, series).anchor });
+  const order = (mod) => mod.reactionDayRows([rep(5, "old"), rep(25, "mid"), rep(40, "new")], series, SPY).map((r) => r.label).join(",");
+  check("oldest-first input renders newest first", order(D) === "new,mid,old", order(D));
+  const src = fs.readFileSync("app/stock/[symbol]/earnings/reactionDays.ts", "utf8");
+  const mutant = src.replace(/return rows\.sort\([^\n]*\n/, "return rows;\n");
+  check("the mutation applied", mutant !== src);
+  const tmp = "app/stock/[symbol]/earnings/reactionDays.mutant-order.ts";
+  fs.writeFileSync(tmp, mutant);
+  try {
+    const M = await import(`../${tmp}`);
+    check("MUTATION: without the sort the oldest report leads (caught)", order(M) === "old,mid,new", order(M));
+  } finally { fs.rmSync(tmp, { force: true }); }
+}
+
 console.log("\n3. no price reaches the client");
 const ALLOWED = ["label", "reportDate", "timing", "pct", "spy", "dayDates", "truncated"];
 const leaks = (rows) => {
