@@ -1415,6 +1415,8 @@ const TASKS = {
   "write-atr-spike-census": { script: "scripts/atr-spike-census.mjs", args: () => [], writes: true },
   // READS ONLY (Relay B, #553 COWORK #184 item 1): the stored dividend shapes behind the cut / special / payout fixes.
   "write-dividend-shape-census": { script: "scripts/dividend-shape-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #191 item 2): why a large name has no cap and no reason.
+  "write-cap-reason-census": { script: "scripts/cap-reason-census.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
