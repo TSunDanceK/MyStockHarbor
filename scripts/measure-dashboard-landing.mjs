@@ -12,7 +12,11 @@
 //   - a card is missing, or (empty run) a card shows no empty state;
 //   - the analyser is missing, or opening #analyser does not land on it;
 //   - at 560 px and under, the order is not hero, Market right now, the cards,
-//     then the analyser.
+//     then the analyser;
+//   - (#154) the capex hub (where the card is wide enough to draw it) is off the middle row, or its label wraps or crowds
+//     a bar; an earnings row wraps or a long name has no ellipsis; the insight
+//     card does not show 2 posts at 1024 px and up and 1 below; the analyser
+//     tabs wrap at 480 px and under (and at 390 px need scrolling).
 // The news thumbnails (#149 §2) must draw 56–64 px square, left of their
 // headline, at every width. And "/" (#149 §1), rendered from app/page.tsx and
 // opened at 390 px with a phone's user agent, must be this same landing: its
@@ -97,6 +101,38 @@ function probe(cards) {
     const t = row.querySelector("[data-news-thumb]")?.getBoundingClientRect(), a = row.querySelector("a")?.getBoundingClientRect();
     if (!t || !a) { bad.push("a news item has no thumbnail"); break; }
     if (t.width < 56 || t.width > 64 || Math.abs(t.width - t.height) > 1 || t.right > a.left) { bad.push(`news thumbnail ${Math.round(t.width)}x${Math.round(t.height)}, or not left of its headline`); break; }
+  }
+  // #154 §1: the hub on the middle spender row's centre; the label under it, one line, clear of the bars.
+  // Stacked (no hub drawn): no lines either, and the label sits between the two lists.
+  if (!empty && q(".dlCxHub") && !vis(q(".dlCxHub")) && q(".dlCxLines") && vis(q(".dlCxLines"))) bad.push("the stacked capex chart still draws the star's lines");
+  // (A card too narrow for the star, a phone or a large text size, stacks it: the hub is not drawn.)
+  if (!empty && q(".dlCxHub") && vis(q(".dlCxHub"))) {
+    const hub = q(".dlCxHub")?.getBoundingClientRect(), mid = document.querySelectorAll('[data-side="spend"] .dlCxRow')[1]?.getBoundingClientRect();
+    const label = q(".dlCxNodeLabel")?.getBoundingClientRect();
+    if (!hub || !mid || Math.abs((hub.top + hub.height / 2) - (mid.top + mid.height / 2)) > 2) bad.push(`the hub is not on the middle row (${hub ? Math.round(hub.top + hub.height / 2) : "?"} vs ${mid ? Math.round(mid.top + mid.height / 2) : "?"})`);
+    if (!label || !hub || label.top < hub.bottom || label.height > 26) bad.push("the hub label is not one line under the hub");
+    for (const r of document.querySelectorAll(".dlCxRow")) { const b = r.getBoundingClientRect(); if (label && label.right > b.left && label.left < b.right && label.bottom > b.top && label.top < b.bottom) { bad.push("the hub label crowds a bar"); break; } }
+  }
+  // #154 §2: each earnings row on one line; a long name ends in an ellipsis.
+  if (!empty) {
+    for (const r of document.querySelectorAll(".dlEarnRow")) {
+      const co = r.querySelector(".dlEarnCo"), day = r.querySelector(".dlEarnDay");
+      if (!co || !day || co.getBoundingClientRect().height > parseFloat(getComputedStyle(co).fontSize) * 1.6 || Math.abs(co.getBoundingClientRect().top - day.getBoundingClientRect().top) > 8) { bad.push(`an earnings row wraps: ${r.textContent.trim().slice(0, 30)}`); break; }
+    }
+    const long = [...document.querySelectorAll(".dlEarnCo")].find((e) => e.textContent.length > 40);
+    if (long && !(long.scrollWidth > long.clientWidth && getComputedStyle(long).textOverflow === "ellipsis")) bad.push("a long company name does not end in an ellipsis");
+  }
+  // #154 §4: two posts at 1024 px and up, one below.
+  if (!empty) {
+    const shown = [...document.querySelectorAll(".dlInsight")].filter(vis).length;
+    if (shown !== (innerWidth >= 1024 ? 2 : 1)) bad.push(`${shown} insight posts shown at ${innerWidth}px`);
+  }
+  // #154 §5: the analyser tabs on one line at 480 px and under, never the page sideways.
+  if (innerWidth <= 480) {
+    const tabs = [...document.querySelectorAll(".dlTab")].filter(vis).map((t) => t.getBoundingClientRect());
+    if (tabs.length !== 5 || tabs.some((t) => Math.abs(t.top - tabs[0].top) > 1)) bad.push("the analyser tabs wrap onto two lines");
+    const strip = [...document.querySelectorAll(".dlTabs")].find(vis);
+    if (innerWidth >= 390 && strip && strip.scrollWidth > strip.clientWidth + 1) bad.push(`the tabs need scrolling at ${innerWidth}px`);
   }
   // At 560 px and under: hero, Market right now, the cards, then the analyser.
   if (innerWidth <= 560) {

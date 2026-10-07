@@ -7,6 +7,8 @@
 //   B. No hand-built chart link anywhere in app/ or lib/ (API routes aside):
 //      no "/dashboard?", "/dashboard#", "/?…" or "/#chart" literal outside
 //      lib/chartHref.ts, and the builders' buildDashboardHref returns chartHref.
+//      (#153) Nor one made in code: router.push/replace, location or
+//      window.open to "/dashboard…" or "/?…", or a `/dashboard${…}` template.
 //   C. A link whose words are chart intent ("Chart", "Open the dashboard",
 //      "Charting dashboard") is built by chartHref, never a plain "/" or
 //      "/dashboard"; a plain "/dashboard" literal lives only in the navigation
@@ -70,14 +72,19 @@ function helperRules(H) {
 
 const LINK_RE = /href(?:=|:\s*)(?:"(\/(?:dashboard)?)"|\{`[^`]*`\}|\{([A-Za-z_.]+)\([^)]*\)\})/g;
 const INTENT = /(^|\s)(Chart\b|Open (the )?dashboard|Charting dashboard)/i;
+const STRIPPED = new Map();
+const stripped = (f) => { if (!STRIPPED.has(f)) STRIPPED.set(f, stripComments(read(f), { file: f })); return STRIPPED.get(f); };
 /** B and C over every file's source (with any overrides), comments stripped. */
 function scanRules(over = {}) {
   const fails = [];
   for (const f of files) {
     if (f === HELPER || f.startsWith("app/api/")) continue;
-    const raw = over[f] ?? read(f), s = stripComments(raw, { file: f });
-    const lit = s.match(/["'`](\/dashboard[?#]|\/\?[a-z$]|\/#chart)/);
+    const s = over[f] !== undefined ? stripComments(over[f], { file: f }) : stripped(f);
+    const lit = s.match(/["'`](\/dashboard[?#]|\/dashboard\$\{|\/\?[a-z$]|\/#chart)/);
     if (lit) fails.push(`${f}: a hand-built chart link (${lit[1]}…), not chartHref`);
+    // #153: a chart link made in code, not an <a href>: router.push/replace, location, window.open.
+    const nav = s.match(/(?:router\.(?:push|replace)|location\.(?:assign|replace)|location\.href\s*=|window\.open)\(?\s*["'`](\/dashboard|\/\?)/);
+    if (nav) fails.push(`${f}: navigates to "${nav[1]}…" in code, not through chartHref`);
     for (const m of s.matchAll(LINK_RE)) {
       if (m[1] === undefined) continue;
       const after = s.slice(m.index, m.index + 1500);
@@ -154,6 +161,9 @@ const SRC_MUTANTS = [
   ["the stock page's Dashboard button on a plain /dashboard", "app/stock/[symbol]/StockSymbolPageClient.tsx", "<Link href={chartHref(symbol)} style={chartLinkStyle(\"blue\")}>Dashboard</Link>", "<Link href=\"/dashboard\" style={chartLinkStyle(\"blue\")}>Dashboard</Link>", scanRules],
   ["the earnings calendar's back link on a plain /", "app/earnings-calendar/page.tsx", '<Link href={chartHref()} className="earnCalBack">', '<Link href="/" className="earnCalBack">', scanRules],
   ["the headlines back link on a plain /", "app/headlines/page.tsx", "href={chartHref()}", 'href="/"', scanRules],
+  ["a screen's Chart button pushed by the router (#153)", "app/components/PickerResultsGrid.tsx", '<Link href={entry.chartHref} className="mRowAction">Chart</Link>', '<button type="button" onClick={() => router.push(`/dashboard?symbol=${entry.symbol}`)} className="mRowAction">Chart</button>', scanRules],
+  ["a chart link pushed to a plain /dashboard (#153)", "app/components/PickerResultsGrid.tsx", '<Link href={entry.chartHref} className="mRowAction">Chart</Link>', '<button type="button" onClick={() => router.push("/dashboard")} className="mRowAction">Chart</button>', scanRules],
+  ["a chart link through location.href (#153)", "app/pickers/PickersClient.tsx", "function toChartHref(href: string, symbol?: string) {", "function goChart(s: string) { location.href = `/dashboard${s}`; }\nfunction toChartHref(href: string, symbol?: string) {", scanRules],
   ["#analyser ignored by the landing", CLIENT, "if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;", "if (!landing || !cleanSymbol(deepSymbol)) return;", landingRules],
   ["the hero scroll ignores reduced motion", CLIENT, "scrollIntoView({ behavior: scrollMotion(), block: \"start\" }));", "scrollIntoView({ behavior: \"smooth\", block: \"start\" }));", landingRules],
 ];

@@ -13,7 +13,11 @@
 //   6. (#149) a news item has no thumbnail (60 px, lazy, alt="") or fallback, or
 //      the thumbnails stop coming from the stored image / the art library; "/"
 //      stops serving this page on every device, or loses its own SEO, or
-//      /dashboard stops canonicalising to "/".
+//      /dashboard stops canonicalising to "/";
+//   7. (#154) the capex star off its rows, the earnings card not a list, the
+//      sectors card not saying what it measures, one insight on a wide screen,
+//      the phone tabs wrapping or losing their names, or the Filed earnings tab
+//      not the filed chart (its reader, route and bars checked here).
 // Each card's empty state, the market's, the screen links and the deep-link
 // scroll each get a planted mutant.
 //
@@ -104,18 +108,38 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
   const peeks = [...pk.matchAll(/data-peek=""[^>]*>([\s\S]*?)<\/span>/g)].map((m) => (m[1].match(/<img src="\/logos\//g) ?? []).length);
   const wantPeeks = FULL_LANDING.cards.pickers.screens.filter((x) => x.peek.length).map((x) => x.peek.length);
   want("each screen shows its members' logos (up to 3)", peeks.length === wantPeeks.length && peeks.every((n, i) => n === wantPeeks[i] && n <= 3));
-  // #148 §5: two week-windows, each name a logo and a ticker.
+  // #154 §2: a list like the Pickers card: "12–18 Oct · 11 companies", then one company
+  // per line (logo, bold ticker, its name truncated with the full name in title, the
+  // estimated day), up to 4 a week, then "+N more in the calendar →".
   const ea = cardHtml(full, "earnings") ?? "";
-  want("the earnings card shows two week-windows", (ea.match(/class="dlWeek"/g) ?? []).length === 2);
-  want("each estimated name is a logo plus its ticker", (ea.match(/data-logo-chip=""/g) ?? []).length === FULL_LANDING.cards.earnings.windows.reduce((a, w) => a + w.top.length, 0) &&
-    [...ea.matchAll(/data-logo-chip=""[^>]*>([\s\S]*?)<\/a>/g)].every((m) => /<img src="\/logos\//.test(m[1]) && /<span>[A-Z.]+<\/span>/.test(m[1])));
-  // #148 §3: the flow chart; every connector has one end on the build-out node, so no line joins two companies.
+  const weeks = [...ea.matchAll(/<div class="dlWeek" data-week="">([\s\S]*?)(?=<div class="dlWeek"|<p class="dlFine")/g)].map((m) => m[1]);
+  const W = FULL_LANDING.cards.earnings.windows;
+  want("the earnings card lists two weeks, each headed with its dates and count", weeks.length === 2 &&
+    weeks.every((h, i) => h.includes(`<p class="dlWeekHead">${W[i].range} · ${W[i].count} companies</p>`)));
+  want("each week lists up to 4 companies, one per line: logo, bold ticker, name (full name in title), estimated day", weeks.every((h, i) => {
+    const rows = [...h.matchAll(/<li class="dlEarnRow" data-earn-row="">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    return rows.length === Math.min(4, W[i].top.length) && rows.every((r, k) => {
+      const e = W[i].top[k], esc = (t) => t.replace(/&/g, "&amp;");
+      return new RegExp(`title="${esc(e.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`).test(r) && /<img src="\/logos\//.test(r) && r.includes(`<strong>${e.symbol}</strong>`) &&
+        r.includes(`<span class="dlEarnCo">${esc(e.name)}</span>`) && r.includes(`<span class="dlEarnDay">${e.day} <em>Estimated</em></span>`);
+    });
+  }));
+  want("the rest of each week is counted: \"+N more in the calendar →\"", weeks.every((h, i) => h.includes(`href="/earnings-calendar" class="dlEarnMore" data-earn-more="">+${W[i].count - W[i].top.length} more in the calendar →</a>`)));
+  want("a long name truncates on one line with an ellipsis", /\.dlEarnCo\{[^}]*overflow:hidden;[^}]*text-overflow:ellipsis;[^}]*white-space:nowrap;/.test(mod.LANDING_CSS) && !/dlLogoChip|data-logo-chip/.test(ea));
+  // #148 §3, lined up by #154 §1: every connector has one end on the hub (no line joins two
+  // companies); each leaves its own row level, at that row's centre (rows 28 px, gap 8); the
+  // hub sits on the middle row's centre; "the build-out" sits under it, on one line.
   const cx = cardHtml(full, "capex") ?? "";
-  const lines = [...cx.matchAll(/<line ([^>]*?)\/?>/g)].map((m) => Object.fromEntries([...m[1].matchAll(/(x1|y1|x2|y2)="([\d.]+)"/g)].map((a) => [a[1], Number(a[2])])));
-  const onNode = (l) => (l.x1 === 40 && l.y1 === 60) || (l.x2 === 40 && l.y2 === 60);
-  want("the capex chart draws every line into or out of the build-out node, never company to company",
-    /data-capex-chart=""/.test(cx) && lines.length === 6 && lines.every(onNode) && /data-node="">the build-out</.test(cx) &&
+  const hubY = Number(cx.match(/data-hub-y="([\d.]+)"/)?.[1] ?? NaN);
+  const rowY = (i) => i * 36 + 14;
+  const ins = [...cx.matchAll(/<path data-into-node="" data-row-y="([\d.]+)" d="([^"]+)"/g)], outs = [...cx.matchAll(/<path data-from-node="" data-row-y="([\d.]+)" d="([^"]+)"/g)];
+  want("the capex star: each line level with its own row's centre and ending on the hub, never company to company",
+    /data-capex-chart=""/.test(cx) && ins.length === 3 && outs.length === 3 &&
+    ins.every((m, i) => Number(m[1]) === rowY(i) && m[2] === `M0 ${rowY(i)} H14 L40 ${hubY}`) && outs.every((m, i) => Number(m[1]) === rowY(i) && m[2] === `M40 ${hubY} L66 ${rowY(i)} H80`) &&
     (cx.match(/class="dlCxFill"/g) ?? []).length === 6 && (cx.match(/<img src="\/logos\//g) ?? []).length === 6);
+  want("the hub sits on the middle row's centre, the label under it on one line", hubY === rowY(1) &&
+    new RegExp(`<i class="dlCxHub" style="top:${hubY}px"`).test(cx) && new RegExp(`data-node="" style="top:${hubY + 12}px">the build-out<`).test(cx) &&
+    /\.dlCxNodeLabel\{[^}]*white-space:nowrap;/.test(mod.LANDING_CSS) && /\.dlCxRow\{[^}]*height:28px;/.test(mod.LANDING_CSS) && /\.dlCapexChart\{[^}]*grid-template-columns:minmax\(0,1fr\) auto minmax\(0,1fr\);[^}]*align-items:end;/.test(mod.LANDING_CSS) && /<span class="dlCxSize" aria-hidden="true">the build-out<\/span>/.test(cx));
   // #148 §6: all eleven sectors on one diverging axis, with the S&P 500 reference line.
   const sc = cardHtml(full, "sectors") ?? "";
   const rowsSeen = (sc.match(/data-sector-row="/g) ?? []).length;
@@ -123,6 +147,14 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
   want("the sectors chart has all 11 rows, green right / red left of 0, and the S&P reference line",
     rowsSeen === 11 && /data-spx-ref=""/.test(sc) && /S&amp;P 500 \(SPY\)/.test(sc) && bars.length === 11 &&
     bars.every((b) => (b[1] === "up" ? Number(b[2]) === 50 : Math.abs(Number(b[2]) + Number(b[3]) - 50) < 0.01)));
+  // #154 §3: the sectors card says what it measures.
+  want("the sectors card is \"Sector growth · year to date\", with its one plain line", sc.includes(">Sector growth · year to date<") &&
+    sc.includes(`<p class="dlRead dlSecWhat" data-sector-what="">${mod.SECTOR_WHAT.replace(/\u2019/g, "’")}</p>`) && /since 1 January, weighted by company size\.$/.test(mod.SECTOR_WHAT));
+  // #154 §4: the newest two posts, the second shown only at 1024 px and up.
+  const ins2 = cardHtml(full, "insight") ?? "";
+  want("Insight of the day holds the two newest posts; the second shows at 1024 px and up only", ins2.includes(">Insight of the day<") && /data-insights="2"/.test(ins2) &&
+    FULL_LANDING.cards.insights.every((p) => ins2.includes(`href="/insights/${p.slug}"`)) &&
+    /\.dlInsights\[data-insights="2"\] \.dlInsight\+\.dlInsight\{display:none;\}/.test(mod.LANDING_CSS) && /@media\(min-width:1024px\)\{\.dlInsights\[data-insights="2"\]\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(mod.LANDING_CSS));
   // #149 §2: a thumbnail left of every headline, the item's stored picture or the art library's, else the fallback block.
   const newsRows = [...(cardHtml(full, "news") ?? "").matchAll(/<li class="dlNewsRow">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
   const thumbOk = (row, item) => item.thumb
@@ -174,7 +206,18 @@ function wiring(client, page, cardsSrc, root = read(ROOT)) {
     !/\bfetch\(/.test(d));
   // #142 §3: every curated ETF has a name, and the analyser seeds it.
   want("every curated ETF has a name", ETFS.every((t) => typeof ETF_NAMES[t] === "string" && ETF_NAMES[t].length > 3) && /initialSymbolName \|\| ETF_NAMES\[defaultSymbol\.toUpperCase\(\)\]/.test(c));
-  want("the cards are cached with their sources (15 min)", /unstable_cache\(loadDashboardLanding, \["dashboard-landing-v4"\], \{ revalidate: 900/.test(stripComments(cardsSrc, { file: CARDS_SRC })));
+  want("the cards are cached with their sources (15 min)", /unstable_cache\(loadDashboardLanding, \["dashboard-landing-v5"\], \{ revalidate: 900/.test(stripComments(cardsSrc, { file: CARDS_SRC })));
+  // #154 §2/§4 data: four names a week from the committed snapshot (no read), the newest two posts.
+  want("the earnings rows: 4 a week, named from the committed snapshot, the estimated day", /export const EARNINGS_ROWS = 4;/.test(d) && /top: c\.items\.slice\(0, EARNINGS_ROWS\)\.map\(\(i\) => \(\{ symbol: i\.symbol, name: cleanName\(snapshotCompanyName\(i\.symbol\)\) \|\| i\.symbol, day: shortDay\(i\.estimatedOn\) \}\)\)/.test(d));
+  want("the insight card reads the newest two posts", /export const INSIGHTS_SHOWN = 2;/.test(d) && /getAllPosts\(\)\.slice\(0, INSIGHTS_SHOWN\)/.test(d));
+  // #154 §5: the tabs on one line on a phone: icon + short label, full name in aria-label and on desktop.
+  want("the analyser tabs: full name in aria-label and on desktop; icon + short label on one line at 480 px and under",
+    /aria-label=\{t\.label\} data-tab=\{t\.key\} className="dlTab"/.test(c) && /<span className="dlTabFull">\{t\.label\}<\/span><span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/.test(c) &&
+    /short: "Chart"[\s\S]*short: "Levels"[\s\S]*short: "Zones"[\s\S]*short: "Earnings"[\s\S]*short: "News"/.test(c) &&
+    /@media\(max-width:480px\)\{\.dlTabs\{flex-wrap:nowrap;overflow-x:auto;[^}]*\}[\s\S]*\.dlTab\{[^}]*flex-direction:column;[^}]*\}[\s\S]*\.dlTabFull\{display:none;\}\.dlTabShort\{display:inline;\}\}/.test(c));
+  // #154 §6: the Filed earnings tab is the chart, its empty state the brief's words.
+  want("the Filed earnings tab's card is called, not mounted (a mount remounts and refetches the chart each render)", /else if \(tab === "earnings"\) body = SectionCard\(\{/.test(c));
+  want("the Filed earnings tab draws the filed chart, with the brief's empty state", /<FiledEarningsChart symbol=\{symbol\} verdict=/.test(c) && /Filed figures not available for \{symbol\}\./.test(c) && !/The latest filed quarter reads/.test(c));
   return fails;
 }
 
@@ -193,15 +236,27 @@ const LANDING_MUTANTS = [
   ["a news thumbnail loses lazy loading", 'width={60} height={60} loading="lazy"', 'width={60} height={60}'],
   ["a news item without a picture loses its fallback", '<span className="dlNewsThumb" data-news-thumb="fallback" aria-hidden="true" />', "null"],
   ["the thumbnail gets alt text", 'src={n.thumb} alt=""', "src={n.thumb} alt={n.title}"],
-  ...CARDS.filter((id) => id !== "hub").map((id) => [`the ${id} card loses its empty state`, `empty={c.${id} ? null : EMPTY.${id}}`, "empty={null}"]),
+  ...CARDS.filter((id) => id !== "hub" && id !== "insight").map((id) => [`the ${id} card loses its empty state`, `empty={c.${id} ? null : EMPTY.${id}}`, "empty={null}"]),
+  ["the insight card loses its empty state", "empty={c.insights ? null : EMPTY.insight}", "empty={null}"],
+  ["#154 §1: the hub off the middle row", "const H = n * CX_ROW + (n - 1) * CX_GAP, hubY = H / 2;", "const H = n * CX_ROW + (n - 1) * CX_GAP, hubY = H / 3;"],
+  ["#154 §1: the label back above the hub", "style={{ top: hubY + 12 }}>the build-out", "style={{ top: hubY - 30 }}>the build-out"],
+  ["#154 §1: the lines no longer level with their rows", "d={`M0 ${cy(i)} H14 L40 ${hubY}`}", "d={`M0 ${(i + 0.5) * 30} L40 ${hubY}`}"],
+  ["#154 §2: the earnings card back to chips", '<strong>{e.symbol}</strong>', '<span>{e.symbol}</span>'],
+  ["#154 §2: the rest of the week not counted", "{w.count > w.top.length ? <Link", "{false ? <Link"],
+  ["#154 §2: long names wrap instead of truncating", ".dlEarnCo{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;", ".dlEarnCo{min-width:0;"],
+  ["#154 §2: the full name dropped from title", "className=\"dlEarnName\" title={e.name}", "className=\"dlEarnName\""],
+  ["#154 §3: the old eyebrow", 'eyebrow="Sector growth · year to date"', 'eyebrow="Sectors · year to date"'],
+  ["#154 §3: the plain line dropped", '<p className="dlRead dlSecWhat" data-sector-what="">{SECTOR_WHAT}</p>', ""],
+  ["#154 §4: one post only", "{c.insights.map((p, i) => (", "{c.insights.slice(0, 1).map((p, i) => ("],
+  ["#154 §4: the second post on phones too", '.dlInsights[data-insights="2"] .dlInsight+.dlInsight{display:none;}', ""],
   ["the hub card loses its empty state", "empty={hub ? null : EMPTY.hub}", "empty={null}"],
   ["Market right now says nothing when empty", `{!m.mood && !tiles.length ? <p className="dlEmpty" data-card="market" data-empty="">{EMPTY.market}</p> : null}`, ""],
   ["a Pickers screen links off the picker routes", `<Link href={s.href} prefetch={false}>{s.label}</Link>`, `<Link href={s.href + "-x"} prefetch={false}>{s.label}</Link>`],
   ["the capex card advises", "From each company&apos;s filings.", "You should buy these. From each company&apos;s filings."],
   ["the screener link points back at /pickers", 'more={{ href: "/stock-screener", label: "Build your own screen" }}', 'more={{ href: "/pickers", label: "Build your own screen" }}'],
   ["the screens lose their logos", '{s.peek.length ? <span className="dlPeek"', '{false ? <span className="dlPeek"'],
-  ["the earnings names lose their logos", '<TickerLogo symbol={s} size={18} radius={4} alt="" /><span>{s}</span>', '<span>{s}</span>'],
-  ["a line runs company to company", '<line key={`out${y}`} data-from-node="" x1={40} y1={60} x2={80} y2={y}', '<line key={`out${y}`} data-from-node="" x1={0} y1={y} x2={80} y2={y}'],
+  ["the earnings names lose their logos", '<TickerLogo symbol={e.symbol} size={20} radius={5} alt="" />', ""],
+  ["a line runs company to company", "d={`M40 ${hubY} L66 ${cy(i)} H80`}", "d={`M0 ${cy(i)} H80`}"],
   ["the S&P reference line is dropped", '{spx !== null ? <i className="dlSecRef"', '{false ? <i className="dlSecRef"'],
   ["a falling sector's bar draws to the right", 'style={up ? { left: "50%", width: `${at(v) - 50}%` } : { left: `${at(v)}%`, width: `${50 - at(v)}%` }}', 'style={{ left: "50%", width: `${Math.abs(at(v) - 50)}%` }}'],
   ["a news chip links to the wrong page", "href={`/stock/${encodeURIComponent(n.symbol)}/news`}", "href={`/stock/${encodeURIComponent(n.symbol)}`}"],
@@ -226,6 +281,13 @@ const WIRING_MUTANTS = [
   ["\"/\" back on the phone-only router", ROOT, /<DashboardPage searchParams=\{searchParams\} \/>/, "<HomePageRouter initialIsMobile={false} />"],
   ["\"/\" loses its structured data", ROOT, /"@type": "WebApplication",/, '"@type": "Thing",'],
   ["the thumbnails read the publisher picture regardless", CARDS_SRC, /if \(SHOW_PUBLISHER_IMAGES && image && /, "if (image && "],
+  ["#154 §5: the tabs lose their accessible full names", CLIENT, /aria-label=\{t\.label\} data-tab/, "data-tab"],
+  ["#154 §5: the tabs wrap on a phone", CLIENT, /\.dlTabs\{flex-wrap:nowrap;overflow-x:auto;/, ".dlTabs{flex-wrap:wrap;"],
+  ["#154 §5: the short labels gone", CLIENT, /<span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/, ""],
+  ["#154 §6: the tab's card mounted (remounts the chart)", CLIENT, /else if \(tab === "earnings"\) body = SectionCard\(\{/, 'else if (tab === "earnings") body = <SectionCard title="x">{null}</SectionCard>; else if (false) body = SectionCard({'],
+  ["#154 §6: the tab back to one sentence", CLIENT, /: <FiledEarningsChart symbol=\{symbol\}[^\n]*\/>,/, ": <p className=\"dlRead\">The latest filed quarter reads <strong>{earningsSummary?.toneLabel}</strong>.</p>,"],
+  ["#154 §2: earnings names from a live read", CARDS_SRC, /name: cleanName\(snapshotCompanyName\(i\.symbol\)\) \|\| i\.symbol/, "name: (await getCompanyNameMap()).get(i.symbol) ?? i.symbol"],
+  ["#154 §4: the newest post only", CARDS_SRC, /export const INSIGHTS_SHOWN = 2;/, "export const INSIGHTS_SHOWN = 1;"],
   ["the landing read unbudgeted", PAGE, /budget\("landing", (getDashboardLanding\(\)\.catch\(\(\) => EMPTY_LANDING\)), EMPTY_LANDING\)/, "$1"],
 ];
 for (const [label, file, from, to] of WIRING_MUTANTS) {
@@ -233,6 +295,52 @@ for (const [label, file, from, to] of WIRING_MUTANTS) {
   const m = src.replace(from, to);
   if (m === src) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
   const fails = file === CLIENT ? wiring(m, pageSrc, cardsSrc) : file === PAGE ? wiring(clientSrc, m, cardsSrc) : file === ROOT ? wiring(clientSrc, pageSrc, cardsSrc, m) : wiring(clientSrc, pageSrc, m);
+  check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no rule failed");
+}
+
+// 7. THE FILED EARNINGS TAB (#563 COWORK #154 §6): the reader is A's, cut down; the chart
+// draws what it is given. Rules on the data module and route as source, the bars rendered.
+console.log("\n7. The Filed earnings tab");
+const FE_DATA = "lib/server/dashboardEarnings.ts", FE_ROUTE = "app/api/dashboard-earnings/[symbol]/route.ts", FE_CHART = "app/dashboard/FiledEarningsChart.tsx";
+const fePeriods = Array.from({ length: 8 }, (_, i) => ({ label: `Q${(i % 4) + 1} FY${2025 + Math.floor(i / 4)}`, short: `Q${(i % 4) + 1} '${25 + Math.floor(i / 4)}`, eps: i === 2 ? -0.4 : 1 + i * 0.1, epsText: `$${(1 + i * 0.1).toFixed(2)}`, opPct: i === 5 ? null : 20 + i, opText: i === 5 ? null : `${20 + i}.0%` }));
+function earningsTab(dataSrc, routeSrc, chartMod) {
+  const fails = [], want = (l, ok) => { if (!ok) fails.push(l); };
+  const dsrc = stripComments(dataSrc, { file: FE_DATA }), rsrc = stripComments(routeSrc, { file: FE_ROUTE });
+  want("the reader imports A's fact set, view and margin rule (not copies)", /import \{ cikForSymbol, resolveFactSetForRender \} from "@\/lib\/server\/secColdFetch";/.test(dsrc) && /import \{ buildSecEarningsView \} from "@\/lib\/server\/secEarningsView";/.test(dsrc) && /import \{ buildGrowthVisuals \} from "@\/lib\/growthVisuals";/.test(dsrc) && !/function splitAdjusted|readFactSet\(/.test(dsrc));
+  want("the newest 8 filed quarters with a filed diluted EPS, oldest first", /export const FILED_PERIODS = 8;/.test(dsrc) &&
+    /\.filter\(\(p\) => typeof p\.epsDiluted\.val === "number" && Number\.isFinite\(p\.epsDiluted\.val\)\)\s*\.slice\(0, FILED_PERIODS\)\s*\.reverse\(\)/.test(dsrc));
+  want("not-yet-read (or an unreadable store) is never cached; the cache is an hour per symbol", /if \(cold\.status === "pending"\) throw new NotSettled\(\);/.test(dsrc) && /unstable_cache\(loadDashboardEarnings, \["dashboard-earnings-v1"\], \{ revalidate: 3600/.test(dsrc));
+  want("the route: BotID first, the CDN window only on a settled answer, no-store otherwise", /if \(await isUnwantedBot\(\)\)/.test(rsrc) && /"Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400"/.test(rsrc) &&
+    /if \(e instanceof NotSettled\) return NextResponse\.json\(\{ symbol: cleanSymbol\(symbol\), available: false \}, \{ headers: \{ "Cache-Control": "no-store" \} \}\);/.test(rsrc) && /status: 503, headers: \{ "Cache-Control": "no-store" \}/.test(rsrc) &&
+    /\{ path: "\/api\/dashboard-earnings\/\*", method: "GET" \}/.test(read("instrumentation-client.ts")));
+  let html = "";
+  try { html = renderToStaticMarkup(React.createElement(chartMod.FiledBars, { periods: fePeriods })); } catch (e) { return [...fails, `the chart renders (${String(e.message).slice(0, 60)})`]; }
+  const bars = [...html.matchAll(/<rect [^>]*data-eps-bar="(latest)?"/g)];
+  want("8 EPS bars, the latest (and only the latest) highlighted, a negative one below zero", bars.length === 8 && bars.filter((b) => b[1]).length === 1 && bars[7][1] === "latest" && /fill="rgba\(239,68,68,0\.55\)"/.test(html));
+  want("the operating margin line skips a quarter with no margin", /<polyline points="([^"]+)"[^>]*data-op-line=""/.test(html) && html.match(/<polyline points="([^"]+)"/)[1].trim().split(" ").length === 7);
+  want("the chart labels each quarter, and the latest EPS", (html.match(/<text /g) ?? []).length === 9 && html.includes(fePeriods[7].epsText));
+  return fails;
+}
+const feData = read(FE_DATA), feRoute = read(FE_ROUTE), feChartSrc = read(FE_CHART);
+async function loadChart(src) {
+  const file = path.join("app/dashboard", `.check-fe-${process.pid}-${seq++}.tsx`);
+  fs.writeFileSync(file, src);
+  try { return await import(pathToFileURL(path.resolve(file)).href); } finally { fs.rmSync(file, { force: true }); }
+}
+const feReal = earningsTab(feData, feRoute, await loadChart(feChartSrc));
+check("the reader, the route and the chart pass every rule", feReal.length === 0, feReal.join("; "));
+for (const [label, file, from, to] of [
+  ["12 quarters instead of 8", FE_DATA, "export const FILED_PERIODS = 8;", "export const FILED_PERIODS = 12;"],
+  ["a quarter with no filed EPS drawn", FE_DATA, '.filter((p) => typeof p.epsDiluted.val === "number" && Number.isFinite(p.epsDiluted.val))', ""],
+  ["not-yet-read cached as none", FE_DATA, 'if (cold.status === "pending") throw new NotSettled();', ""],
+  ["a failed read pinned to the CDN", FE_ROUTE, 'return NextResponse.json({ error: "unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });', 'return NextResponse.json({ error: "unavailable" }, { status: 503, headers: { "Cache-Control": "public, s-maxage=3600" } });'],
+  ["the oldest bar highlighted", FE_CHART, 'data-eps-bar={i === last ? "latest" : ""}', 'data-eps-bar={i === 0 ? "latest" : ""}'],
+  ["the margin line drawn through a missing quarter", FE_CHART, "pts.filter(Boolean).join(\" \")", "periods.map((p, i) => `${left + slot * (i + 0.5)},${oy(p.opPct ?? 0)}`).join(\" \")"],
+]) {
+  const src = file === FE_DATA ? feData : file === FE_ROUTE ? feRoute : feChartSrc;
+  if (!src.includes(from)) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
+  const m = src.replace(from, to);
+  const fails = file === FE_CHART ? earningsTab(feData, feRoute, await loadChart(m)) : file === FE_DATA ? earningsTab(m, feRoute, await loadChart(feChartSrc)) : earningsTab(feData, m, await loadChart(feChartSrc));
   check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no rule failed");
 }
 

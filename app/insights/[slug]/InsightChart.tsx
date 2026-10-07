@@ -1,11 +1,15 @@
 "use client";
 // "DID THE LEVEL HOLD?" (#563 COWORK #133): the live chart for the post's
-// window, the level it discussed drawn on it, a slider from the publish date to
-// today with a readout, and four toggles (200-day, 50-day, Trend Helper,
+// window, the level it discussed drawn on it, a slider over the chart's own
+// sessions, lined up with its x-axis and marking the bar on it (#155), with a
+// readout, and four toggles (200-day, 50-day, Trend Helper,
 // today's levels). The chart is the site's PriceChart; this file owns only the
 // controls and the readout, both from the closes the server already sent.
 import { useMemo, useState } from "react";
-import PriceChart, { type Overlay } from "@/app/components/PriceChart";
+import PriceChart, { PRICE_CHART_PAD, type Overlay } from "@/app/components/PriceChart";
+
+/** The slider's thumb, in px: the input overhangs the plot by half of it on each side, so its centre runs from the first bar to the last. */
+export const THUMB_PX = 18;
 
 export type InsightChartProps = {
   symbol: string;
@@ -60,10 +64,16 @@ export default function InsightChart(p: InsightChartProps) {
     return out;
   }, [on, p.level?.kind]);
 
-  const pt = p.points[Math.max(p.publishIndex, Math.min(at, last))];
+  // THE SLIDER IS THE CHART'S X-AXIS (#563 COWORK #155): position n is bar n,
+  // the first bar to the last, and the chart marks the same bar. Sessions
+  // before publication are allowed and say so; the "vs publication" figure is
+  // only for sessions after it.
+  const i = Math.max(0, Math.min(at, last));
+  const pt = p.points[i];
   const pub = p.points[p.publishIndex];
-  const lv = p.level?.series[Math.max(p.publishIndex, Math.min(at, last))] ?? null;
+  const lv = p.level?.series[i] ?? null;
   const span = last - p.publishIndex;
+  const before = i < p.publishIndex;
 
   return (
     <div className="inChart" data-insight-chart="">
@@ -84,6 +94,7 @@ export default function InsightChart(p: InsightChartProps) {
         bollMid={p.bbMid ?? undefined}
         selectedIndicators={indicators}
         referenceLines={on.today ? p.todayLevels.map((l) => ({ price: l.price, label: l.label, color: "rgba(148,163,184,0.7)" })) : []}
+        marker={span >= 1 ? i : null}
         fullCloses={p.fullCloses}
         displayStart={p.displayStart}
         height={300}
@@ -94,10 +105,14 @@ export default function InsightChart(p: InsightChartProps) {
       {span >= 1 ? (
         <div className="inSlider">
           <label htmlFor="inSliderRange" className="inSliderLabel">Drag to a date</label>
-          <input id="inSliderRange" type="range" min={p.publishIndex} max={last} step={1} value={Math.max(p.publishIndex, at)}
-            onChange={(e) => setAt(Number(e.target.value))} aria-valuetext={day(pt.date)} />
-          <p className="inReadout" aria-live="polite">
-            <strong>{day(pt.date)}</strong> · close {money(pt.close)} · {pct(((pt.close - pub.close) / pub.close) * 100)} vs publication
+          {/* The track spans the plot area, not the card: the chart's own left and right inset, in % of the same width (shifted 1 px right: the chart's border). */}
+          <div className="inSliderTrack" data-slider-track="" style={{ paddingLeft: `calc(${(PRICE_CHART_PAD.left / PRICE_CHART_PAD.width) * 100}% + 1px)`, paddingRight: `calc(${(PRICE_CHART_PAD.right / PRICE_CHART_PAD.width) * 100}% - 1px)` }}>
+            <input id="inSliderRange" type="range" min={0} max={last} step={1} value={i}
+              style={{ ["--pub" as string]: `${(p.publishIndex / Math.max(1, last)) * 100}%` }}
+              onChange={(e) => setAt(Number(e.target.value))} aria-valuetext={`${day(pt.date)}${before ? ", before publication" : ""}`} />
+          </div>
+          <p className="inReadout" aria-live="polite" data-slider-readout={pt.date}>
+            <strong>{day(pt.date)}</strong> · close {money(pt.close)} · {before ? "before publication" : `${pct(((pt.close - pub.close) / pub.close) * 100)} vs publication`}
             {p.level && lv !== null ? <> · {pt.close >= lv ? "above" : "below"} the {p.level.name} ({money(lv)})</> : null}
           </p>
         </div>

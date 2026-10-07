@@ -35,7 +35,7 @@ import { execFileSync } from "node:child_process";
 import { createRequire, register } from "node:module";
 
 register("./lib/tsx-render-hooks.mjs", import.meta.url);
-const { chartHref } = await import("../lib/chartHref.ts");
+const { chartHref, chartHrefFrom } = await import("../lib/chartHref.ts");
 const require = createRequire(import.meta.url);
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("/opt/node22/lib/node_modules/playwright")); }
@@ -54,7 +54,10 @@ import { createRoot } from "react-dom/client";
 import DashboardClient from "@/${clientPath.replace(/\.tsx$/, "")}";
 const tall = { style: { minHeight: "140vh" } };
 const landing = { market: React.createElement("div", { "data-market-now": "", ...tall }, "Market right now"), cards: React.createElement("div", { className: "dlCards", ...tall }, "cards"), mapped: 109, bottlenecks: {}, css: "" };
-${phone ? `// The router's scroll after a client navigation runs after the page's own effects (a parent's didMount).
+${phone ? `import PickerResultsGrid from "@/app/components/PickerResultsGrid";
+// The screens' shipped row grid, for the #153 tap.
+(window as unknown as { mountGrid: (p: object) => void }).mountGrid = (p) => createRoot(document.getElementById("grid")!).render(React.createElement(PickerResultsGrid, p as React.ComponentProps<typeof PickerResultsGrid>));
+// The router's scroll after a client navigation runs after the page's own effects (a parent's didMount).
 class RouterScroll extends React.Component<{ children: React.ReactNode }> { componentDidMount() { window.scrollTo(0, 0); } render() { return this.props.children; } }
 // A hero picture with no reserved size, served late: the landing grows under the reader.
 landing.market = React.createElement("div", { "data-market-now": "" }, React.createElement("img", { src: "/slow-hero.svg", alt: "", style: { display: "block", width: "100%" } }), landing.market);` : ""}
@@ -181,6 +184,58 @@ async function tapFromStock(js, { swipe = false } = {}) {
   const ok = swipedTo > 200 && r.top > 200;
   if (!ok) failures++;
   console.log(`phone tap, then the reader scrolls up: ${ok ? `OK (the analyser stays ${Math.round(r.top)} px down where they left it; no re-scroll)` : `FAIL (the analyser was at ${Math.round(swipedTo)} px after their scroll, ${Math.round(r.top)} px after settling)`}`);
+}
+
+// THE SCREENS' "CHART" BUTTON (#153): the shipped PickerResultsGrid on a phone; expand a row, tap
+// Chart (its href built as PickerResultPage builds it, through chartHrefFrom → chartHref), land on the analyser.
+function gridPoints(seed) {
+  const out = [], d = new Date(Date.UTC(2026, 9, 2));
+  while (out.length < 120) { if (d.getUTCDay() % 6) out.unshift({ date: d.toISOString().slice(0, 10) }); d.setUTCDate(d.getUTCDate() - 1); }
+  out.forEach((p, k) => { const c = 100 + seed + 6 * Math.sin((k + seed) / 9); Object.assign(p, { close: +c.toFixed(2), open: +(c * 1.004).toFixed(2), high: +(c * 1.015).toFixed(2), low: +(c * 0.985).toFixed(2), volume: 1e6 }); });
+  return out;
+}
+const GRID_PAGES = [
+  // The builder's stored link for a 200-day screen (tf + indicator), rebuilt as the page rebuilds it.
+  { path: "/stocks-near-200-day-moving-average", configTitle: "Stocks near the 200-day moving average", stored: (s) => chartHref(s, { tf: "D", indicator: "MA200" }) },
+  { path: "/stock-screener", configTitle: "Advanced stock screener", stored: () => undefined },
+];
+async function tapGridChart(js, page0, sym = "NVDA") {
+  const entries = ["AAPL", "NVDA", "MSFT"].map((symbol, i) => ({ symbol, companyName: `${symbol} Inc.`, note: "fixture", tone: "bullish", stockHref: `/stock/${symbol}`, chartHref: chartHrefFrom(page0.stored(symbol), symbol), chartPoints: gridPoints(i * 4), price: 100 + i, changePct: 1.2, volume: 1e6, marketCap: 1e12, sector: "Technology", industry: "Semiconductors", reasons: ["fixture"] }));
+  const props = { entries, configHref: page0.path, configTitle: page0.configTitle, tone: "bullish", emptyText: "None", isEarnings: false };
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style></head><body style="margin:0;background:#05080f"><div id="grid" class="resultWrap"></div><div id="root"></div><script>${js}</script><script>window.mountGrid(${JSON.stringify(props)});document.addEventListener("click",(e)=>{const a=e.target.closest('a[href^="/dashboard"]');if(!a)return;e.preventDefault();history.pushState(null,"",a.getAttribute("href"));document.getElementById("grid").remove();window.mountDashboard();},true);</script></body></html>`;
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: IPHONE, deviceScaleFactor: 3 });
+  const page = await ctx.newPage();
+  await page.route("**/*", async (r) => {
+    const url = r.request().url();
+    if (url === `http://dash.test${page0.path}`) return r.fulfill({ body: html, contentType: "text/html" });
+    if (url.endsWith("/slow-hero.svg")) { await new Promise((res) => setTimeout(res, 900)); return r.fulfill({ body: HERO, contentType: "image/svg+xml" }); }
+    return r.fulfill({ status: 404, body: "{}", contentType: "application/json" });
+  });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e.message).slice(0, 200)));
+  await page.goto(`http://dash.test${page0.path}`);
+  const row = page.locator(".mRow", { has: page.locator(".mRowSym", { hasText: new RegExp(`^${sym}$`) }) });
+  await row.locator(".mRowToggle").tap();
+  await row.locator(".mRowPanel").waitFor();
+  const href = await row.locator(".mRowAction", { hasText: /^Chart$/ }).getAttribute("href");
+  await row.locator(".mRowAction", { hasText: /^Chart$/ }).tap();
+  await page.waitForSelector("#analyser", { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(2000);
+  const r = await page.evaluate(() => { const a = document.querySelector("#analyser"); return a ? { top: a.getBoundingClientRect().top, vh: innerHeight, text: a.textContent ?? "", url: location.pathname + location.search + location.hash } : null; });
+  await ctx.close();
+  return { errors, r, href };
+}
+for (const pg of GRID_PAGES) {
+  const { errors, r, href } = await tapGridChart(realPhone, pg);
+  const bad = errors.length ? `the page threw: ${errors[0]}` : !r ? "no analyser after the tap" : !/^\/dashboard\?symbol=NVDA.*#analyser$/.test(href ?? "") ? `the Chart button's href is ${href}` : r.top < -1 || r.top > 60 ? `the analyser's top is at ${Math.round(r.top)} px (viewport ${r.vh})` : !r.text.includes("NVDA") ? "the analyser does not show NVDA" : "";
+  if (bad) failures++;
+  console.log(`phone, ${pg.path}: expand NVDA, tap Chart → ${href}: ${bad ? `FAIL ${bad}` : `OK (the analyser's top at ${Math.round(r.top)} px of ${r.vh}, shows NVDA)`}`);
+}
+if (singleJs) {
+  const { r } = await tapGridChart(singleJs, GRID_PAGES[1]);
+  const caught = !r || r.top < -1 || r.top > 60;
+  console.log(`mutant (#151's single jump) on the screener tap: ${caught ? `caught — the analyser's top ends at ${r ? Math.round(r.top) : "?"} px` : "NOT CAUGHT"}`);
+  if (!caught) failures++;
 }
 if (!singleJs) { console.log("mutant (#151 single jump): did not apply"); failures++; }
 else {

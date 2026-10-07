@@ -40,6 +40,9 @@ process.env.MEASURE_STUBS = JSON.stringify({
   "@/lib/server/peSectorMedians": "scripts/lib/measure-stubs/pe-sector-medians.mjs",
   "@/lib/server/pickersBuilder": "scripts/lib/measure-stubs/insight-pickers.mjs",
   "@/lib/stock-news-data": "scripts/lib/measure-stubs/insight-news.mjs",
+  // Follow the money (#156 §2): AMZN as the top spender, three receivers' lines.
+  "@/lib/server/capexSpending": "scripts/lib/measure-stubs/insight-capex.mjs",
+  "@/lib/server/capexReceivers": "scripts/lib/measure-stubs/insight-capex.mjs",
 });
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -47,7 +50,15 @@ register("./lib/tsx-render-hooks.mjs", import.meta.url);
 const require = createRequire(import.meta.url);
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("/opt/node22/lib/node_modules/playwright")); }
-const { renderToStaticMarkup } = await import("react-dom/server");
+const { renderToPipeableStream } = await import("react-dom/server");
+const { Writable } = await import("node:stream");
+// The whole page, Suspense boundaries resolved (the Screens list streams in, #156): wait for all of it.
+const renderAll = (el) => new Promise((resolve, reject) => {
+  let html = "";
+  const sink = new Writable({ write(chunk, _e, cb) { html += chunk; cb(); } });
+  sink.on("finish", () => resolve(html));
+  const { pipe } = renderToPipeableStream(el, { onAllReady() { pipe(sink); }, onShellError: reject, onError: reject });
+});
 const { fixtureBars } = await import("./lib/measure-stubs/fixture-bars.mjs");
 const { default: Page } = await import("../app/insights/[slug]/page.tsx");
 
@@ -55,7 +66,7 @@ const { default: Page } = await import("../app/insights/[slug]/page.tsx");
 globalThis.__SPX_BARS = fixtureBars(230, "2021-06-01");
 export const SLUGS = ["amzn-daily-ma200-buy-zone-july-2026", "riot-daily-bollinger-accumulation-july-2026", "bbai-daily-bollinger-base-july-2026", "fixture-aapl-new-format"];
 const pages = [];
-for (const slug of SLUGS) pages.push([slug, renderToStaticMarkup(await Page({ params: Promise.resolve({ slug }) }))]);
+for (const slug of SLUGS) pages.push([slug, await renderAll(await Page({ params: Promise.resolve({ slug }) }))]);
 
 const CSS = fs.readFileSync("app/globals.css", "utf8").replace(/@import[^;]*;|@tailwind[^;]*;|@theme inline \{[^}]*\}/g, "");
 // Which posts have a level discussed, and which symbols have a fact set in the stub (AAPL only).
