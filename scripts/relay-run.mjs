@@ -1424,6 +1424,8 @@ const TASKS = {
   "write-morning-check": { script: "scripts/sec-morning-check.mjs", args: () => [], needsTypescript: true, writes: true },
   // COWORK #195 items 3-4: the six "no fact set" names and OXY/PSX revenue. GET/HGET/SISMEMBER.
   "write-gaps-oxy-check": { script: "scripts/sec-gaps-oxy-check.mjs", args: () => [], needsTypescript: true, writes: true },
+  // DERIVED Q4s THAT DON'T MATCH THEIR YEAR (#552 COWORK #196). SCAN + MGET only.
+  "write-q4-scope-census": { script: "scripts/sec-q4-scope-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
