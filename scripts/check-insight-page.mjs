@@ -23,7 +23,8 @@
 //     empty, bad URL, too many sources); every post's `drivers` valid and free
 //     of advice words; the card leads with the dated paragraph, its sources as
 //     nofollow publisher links, then at most three headlines, and falls back to
-//     the tone line without it; filing notices and quote pages are skipped;
+//     the tone line without it; junk headlines are skipped with B's predicate
+//     (lib/server/news/junkTitle.ts, #818), never a copy of it;
 //   - update (#149): the loader's validation on fixtures (missing, bad date,
 //     empty text); every post's `update` valid, free of advice words and dated
 //     as its `updated`; AMZN's text exactly as the owner wrote it; the box
@@ -175,9 +176,8 @@ const RULES = {
     /<p className="inRead inDrivers" data-insight-drivers="">\{n\.drivers\.text\}<\/p>/.test(page) &&
     /rel="nofollow noopener"/.test(page) && /\{src\.publisher\}/.test(page) &&
     /\) : d\.news\?\.score \? \(/.test(page) && /Latest headlines/.test(page) &&
-    /export const NEWS_SHOWN = 3;/.test(loader) && /!isJunkHeadline\(i\.title\)\)\.slice\(0, NEWS_SHOWN\)/.test(loader) &&
-    V.isJunkHeadline("Form 4 Amazon.com Inc For: Oct 03 Filed by: Jassy Andrew R") && V.isJunkHeadline("Amazon.com, Inc. (AMZN) historical prices and data") &&
-    V.isJunkHeadline("BKNG.BK board approves dividend") && !V.isJunkHeadline("Amazon raises its 2026 capex estimate as AWS growth speeds up"),
+    /export const NEWS_SHOWN = 3;/.test(loader) && /junkReason\(i\.title\) === null\)\.slice\(0, NEWS_SHOWN\)/.test(loader) &&
+    /import \{ junkReason \} from "@\/lib\/server\/news\/junkTitle";/.test(loader) && !/isJunkHeadline/.test(read(VIEW)),
   "update: the loader rejects a malformed note whole and keeps a good one": ({ V }) => {
     const ok = { date: "2026-10-07", text: "Since then, the report came out." };
     const bad = (over) => V.parseUpdate({ ...ok, ...over });
@@ -234,7 +234,6 @@ const MUTANTS = [
   ["drivers: the loader", "v", (s) => s.replace("if (list.length < 1 || list.length > DRIVERS_MAX_SOURCES)", "if (list.length > 99)")],
   ["drivers: the loader", "v", (s) => s.replace("if (!/^https:\\/\\/[^\\s/]+\\.[^\\s]+$/.test(src.url))", "if (!/^https?:\\/\\//.test(src.url))")],
   ["drivers: the loader", "v", (s) => s.replace("return problems.length ? { drivers: null, problems } :", "return false ? { drivers: null, problems } :")],
-  ["drivers: the card", "v", (s) => s.replace("return /^form\\s*(?:4|3|5|144)\\b/i.test(title) ||", "return false ||")],
   ["update: the loader", "v", (s) => s.replace('return problems.length ? { update: null, problems } :', 'return false ? { update: null, problems } :')],
   ["update: the loader", "v", (s) => s.replace('...(text ? [] : ["update.text is empty"])', "")],
   ["update: the loader", "v", (s) => s.replace("const update = parseUpdate(data.update).update;", "const update = null;")],
@@ -253,6 +252,7 @@ const SRC_MUTANTS = [
   ["drivers: the card", PAGE, (s) => s.replace('rel="nofollow noopener"', 'rel="noopener"')],
   ["drivers: the card", PAGE, (s) => s.replace(") : d.news?.score ? (", ") : null}{d.news?.score ? (")],
   ["drivers: the card", LOADER, (s) => s.replace("export const NEWS_SHOWN = 3;", "export const NEWS_SHOWN = 5;")],
+  ["drivers: the card", LOADER, (s) => s.replace("&& junkReason(i.title) === null)", ")")],
   ["update: the box", PAGE, (s) => s.replace("The original post · {dayWords(n.date)}", "The original post")],
   ["update: the box", PAGE, (s) => s.replace("{chartCard}\n                {newsCard}\n                <section", "<section")],
   ["update: the box", PAGE, (s) => s.replace("{shortCard}\n                  {whatCard}\n                </section>", "</section>\n                {shortCard}\n                {whatCard}")],
