@@ -1422,6 +1422,8 @@ const TASKS = {
   },
   // THE 05:05 CHECK-IN (#552 COWORK #191 item 5). GET/ZCARD/EXISTS only.
   "write-morning-check": { script: "scripts/sec-morning-check.mjs", args: () => [], needsTypescript: true, writes: true },
+  // COWORK #195 items 3-4: the six "no fact set" names and OXY/PSX revenue. GET/HGET/SISMEMBER.
+  "write-gaps-oxy-check": { script: "scripts/sec-gaps-oxy-check.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
