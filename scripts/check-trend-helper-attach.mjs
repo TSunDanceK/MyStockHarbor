@@ -272,6 +272,7 @@ const weeklyRules = (b) => {
   if (!/chartPoints: weekly && weeklyFlipPoints\?\.length \? weeklyFlipPoints : chartPoints,/.test(b)) fails.push("a weekly row draws weekly candles; a daily row its plain points (never enriched)");
   if (!/trendTailForPoints\(weeklyFlipPoints, trendFlips\.weeklyTrend, WEEKLY_FLIP_CANDLES\)/.test(b)) fails.push("the weekly series is the weekly line over the weekly candles");
   if (!/\.filter\(\(p\) => closedWeeks\.has\(p\.date\.slice\(0, 10\)\)\)/.test(b)) fails.push("only closed weeks are drawn, as the flip is measured");
+  if (!/const \{ dailyTrend: _dailyFull, weeklyTrend: _weeklyFull, \.\.\.trendFlipFlags \} = trendFlips;/.test(b) || !/\n\s*\.\.\.trendFlipFlags,\n/.test(b) || /\n\s*\.\.\.trendFlips,\n/.test(b)) fails.push("the record carries the flags, never the full daily or weekly series");
   for (const t of ["trendFlipBullishWeekly", "trendFlipBearishWeekly"]) {
     if (!new RegExp(`source: ${t},\\s*take: Math\\.max\\(40, ${t}\\.length\\),[\\s\\S]{0,200}?keepChartPoints: true,`).test(b)) fails.push(`the ${t} section keeps its weekly candles`);
   }
@@ -279,11 +280,12 @@ const weeklyRules = (b) => {
 };
 {
   const f = weeklyRules(builder);
-  check("weekly rows: weekly candles, the weekly line, closed weeks, kept through takeTop (never the daily line)", f.length === 0, f.join("; "));
+  check("weekly rows: weekly candles, the weekly line, closed weeks, kept through takeTop (never the daily line); records carry no full series", f.length === 0, f.join("; "));
   for (const [label, from, to] of [
     ["the daily line on a weekly row", "trendSeries: weekly ? weeklyTrendSeries : dailyTrendSeries,", "trendSeries: dailyTrendSeries,"],
     ["weekly rows on daily candles", "chartPoints: weekly && weeklyFlipPoints?.length ? weeklyFlipPoints : chartPoints,", "chartPoints,"],
     ["the week in progress drawn", ".filter((p) => closedWeeks.has(p.date.slice(0, 10)))", ""],
+    ["the full series spread into every record", "            ...trendFlipFlags,\n", "            ...trendFlips,\n"],
     ["the weekly candles stripped by takeTop", "take: Math.max(40, trendFlipBearishWeekly.length),\n      // The weekly candles ride with the item (#553 COWORK #186 ruling 6):\n      // signalRecords carries daily points only.\n      keepChartPoints: true,", "take: Math.max(40, trendFlipBearishWeekly.length),"],
   ]) {
     const m = builder.includes(from) ? weeklyRules(builder.replace(from, to)) : ["anchor matched nothing"];
