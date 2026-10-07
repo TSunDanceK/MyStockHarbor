@@ -130,8 +130,11 @@ for (const date of [...sessions].reverse()) {
   // THE PAYLOAD'S SIZE on the newest cut (the weekly flip cards add candles): bytes only.
   if (perSession.length === 1) {
     const total = JSON.stringify(payload).length;
-    const bySection = (payload.sections ?? []).filter((x) => /trend flip|strong earnings|daily ma200/i.test(String(x.title)))
-      .map((x) => `${x.title}: ${x.items?.length ?? 0} items, ${JSON.stringify(x).length} B`);
+    const bySection = [
+      ...(payload.sections ?? []).map((x) => `${x.title}: ${x.items?.length ?? 0} items, ${JSON.stringify(x).length} B`),
+      `signalRecords: ${(payload.signalRecords ?? []).length}, ${JSON.stringify(payload.signalRecords ?? []).length} B`,
+      `tickerFeed: ${JSON.stringify(payload.tickerFeed ?? {}).length} B`,
+    ];
     console.log(`  payload ${total} B on ${date}; ${bySection.join("; ")}`);
   }
   console.log(`  built ${date}: ${(payload.signalRecords ?? []).length} records (${Date.now() - t} ms)`);
