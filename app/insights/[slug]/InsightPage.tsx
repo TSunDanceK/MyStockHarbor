@@ -328,14 +328,18 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
           </>
         )}
         {flow.length ? (
-          <div className="inFlow" aria-label={m.mention.list === "spending" ? `${sym} to the largest build-out sellers` : `The largest spenders to ${sym}`}>
-            <span className="inFlowEnd">{m.mention.list === "spending" ? sym : "Spenders"}</span>
-            <span className="inFlowArrow" aria-hidden="true">→</span>
-            <ul className="inFlowList">
-              {flow.map((f) => (
-                <li key={f.ticker}><span className="inFlowSym">{f.ticker}</span><span className="inFlowBar" aria-hidden="true"><i style={{ width: `${Math.max(6, (100 * (f.value || 0)) / max)}%` }} /></span><span className="inFlowAmt">{f.amount}</span></li>
-              ))}
-            </ul>
+          <div className="inFlow" data-flow={m.mention.list} aria-label={m.mention.list === "spending" ? `${sym}'s capex, and separately the largest build-out sellers' own filed sales` : `The largest spenders' own capex, and separately ${sym}'s build-out sales`}>
+            {m.mention.list === "spending" ? <><span className="inFlowEnd">{sym}</span><span className="inFlowArrow" aria-hidden="true">→</span></> : null}
+            {/* THE ARROW POINTS AT THE GROUP'S HEADER, not at its first name (#563 COWORK #141 §1): each
+                figure is that company's own filing, never a payment from one to the other. */}
+            <div className="inFlowBox">
+              <p className="inFlowHead" data-flow-head="">{m.mention.list === "spending" ? "Top build-out receivers · their own filed sales" : "Top spenders · their own capex"}</p>
+              <ul className="inFlowList">
+                {flow.map((f) => (
+                  <li key={f.ticker}><span className="inFlowSym">{f.ticker}</span><span className="inFlowBar" aria-hidden="true"><i style={{ width: `${Math.max(6, (100 * (f.value || 0)) / max)}%` }} /></span><span className="inFlowAmt">{f.amount}</span></li>
+                ))}
+              </ul>
+            </div>
             {m.mention.list === "receiving" ? <><span className="inFlowArrow" aria-hidden="true">→</span><span className="inFlowEnd">{sym}</span></> : null}
           </div>
         ) : null}
@@ -398,10 +402,25 @@ function FaintChart({ closes, ref200 }: { closes: number[]; ref200: (number | nu
 }
 
 /** The snapshot's three tiles against the same quarter a year earlier, the P/E line under them. */
+const epsMoney = (v: number) => `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
+/**
+ * THE EPS TILE'S YEAR-AGO LINE (#563 COWORK #141 §2). The shared rule words
+ * only the loss cases ("loss narrowed from …"); a profit against a profit got
+ * a tint and no words, so AMZN's tile said nothing. When both quarters exist,
+ * say what the year-ago figure was.
+ */
+export function epsLine(now: number | null, ya: { label: string; eps: number | null } | null): Vs {
+  const vs = epsVsYearAgo(now, ya?.eps, epsMoney);
+  if (vs.words || now === null || !Number.isFinite(now) || ya?.eps == null || !Number.isFinite(ya.eps)) return vs;
+  const then = epsMoney(ya.eps), when = ya.label ? `, ${ya.label}` : " a year earlier";
+  const same = Math.round(now * 100) === Math.round(ya.eps * 100);
+  return { tone: vs.tone, words: same ? `level with ${then}${when}` : `${now > ya.eps ? "up" : "down"} from ${then}${when}` };
+}
+
 function EarningsTiles({ d }: { d: InsightPageData }) {
   const s = d.snapshot!, ya = s.yearAgo ?? null;
   const tiles: { label: string; value: string; vs: Vs }[] = [
-    { label: "EPS (diluted)", value: s.eps.value !== null ? `$${s.eps.value.toFixed(2)}` : "n/a", vs: epsVsYearAgo(s.eps.value, ya?.eps, (v) => `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`) },
+    { label: "EPS (diluted)", value: s.eps.value !== null ? `$${s.eps.value.toFixed(2)}` : "n/a", vs: epsLine(s.eps.value, ya) },
     { label: "Gross margin", value: s.margins.gross !== null ? `${s.margins.gross.toFixed(1)}%` : "n/a", vs: marginVsYearAgo(s.margins.gross, ya?.gross, ya?.label) },
     { label: "Operating margin", value: s.margins.operating !== null ? `${s.margins.operating.toFixed(1)}%` : "n/a", vs: marginVsYearAgo(s.margins.operating, ya?.operating, ya?.label) },
   ];
@@ -550,10 +569,12 @@ const CSS = `
 .inH3 { margin: 10px 0 0; font-size: var(--fs-read); font-weight: 800; }
 .inInline { font-size: 1.125rem; margin-left: 6px; }
 .inTight { margin-top: 6px; gap: 4px; }
-.inFlow { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-width: 0; }
-.inFlowEnd { font-size: var(--fs-label); font-weight: 900; color: #5fd4c7; white-space: nowrap; }
-.inFlowArrow { color: rgba(203,213,225,0.7); }
-.inFlowList { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; flex: 1; min-width: 0; }
+.inFlow { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; min-width: 0; }
+.inFlowBox { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid rgba(148,163,184,0.22); border-radius: 10px; }
+.inFlowHead { margin: 0 0 4px; font-size: var(--fs-read); line-height: 1.35; font-weight: 800; color: rgba(203,213,225,0.85); }
+.inFlowEnd { font-size: var(--fs-label); font-weight: 900; color: #5fd4c7; white-space: nowrap; margin-top: 7px; }
+.inFlowArrow { color: rgba(203,213,225,0.7); margin-top: 6px; }
+.inFlowList { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 0; }
 .inFlowList li { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto; gap: 6px; align-items: center; font-size: var(--fs-label); }
 .inFlowSym { font-weight: 800; }
 .inFlowBar { height: 6px; border-radius: 3px; background: rgba(148,163,184,0.15); overflow: hidden; }

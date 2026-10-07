@@ -11,6 +11,9 @@ import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
 import TickerLogo from "@/app/components/TickerLogo";
+import { ETF_NAMES } from "@/lib/etfNames";
+import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
+import ConfluenceCard from "@/app/stock/[symbol]/ConfluenceCard";
 import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
 import { indicatorRead, INDICATOR_MANUAL, type ReadUnit } from "@/lib/indicatorRead";
 import { activeRowStyle } from "@/lib/listboxNav";
@@ -40,7 +43,7 @@ type InternalNewsCard = { title: string; source: string | null; pubDate: string 
 // "Neutral tone \u00b7 Mixed / range" from a different code path entirely.
 export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string | null; newsScoreLabel: string | null; newsScoreValue: number | null; cards: InternalNewsCard[]; ctaHref: string; changePct?: number | null; sparkPoints?: number[]; };
 // FROM THE SEC SNAPSHOT (lib/server/secEarningsSummary.ts) since 2026-09-23: the band label ("Good", "Mixed", "Weak", "Unavailable").
-export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: string; };
+export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: string; nextReport?: { text: string; estimated: boolean } | null; };
 // `provider`: whose bars `history` is, as /api/history reported it ("tiingo" drives the chart credit, #553 COWORK #103).
 type CachedSymbolData = { quote: Quote | null; history: Point[]; provider?: string | null; };
 type DivergenceState = "bullish" | "bearish" | "none";
@@ -57,6 +60,49 @@ type TrendScore = { total: number; passed: number; known: boolean; details: { na
 // VWMA need 20, MA50 needs 50, so a 30-bar listing genuinely runs five of six.
 type StretchScore = { total: number; flagged: number; ran: number; oversold: number; overbought: number; details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[]; };
 type AssetType = "stock" | "crypto";
+/** What app/dashboard/page.tsx hands down for the landing (#563 COWORK #134). */
+export type DashboardLandingProps = {
+  market: React.ReactNode;
+  cards: React.ReactNode;
+  /** Stock pages on Bottlenecks, for the "Who depends on who" point; null hides the count. */
+  mapped: number | null;
+  /** Symbol → its Bottlenecks page slug, for the analyser's link. */
+  bottlenecks: Record<string, string>;
+  css: string;
+};
+type AnalyserTab = "chart" | "levels" | "zones" | "earnings" | "news";
+const ANALYSER_TABS: { key: AnalyserTab; label: string }[] = [
+  { key: "chart", label: "Chart" }, { key: "levels", label: "Key levels" }, { key: "zones", label: "Price zones" }, { key: "earnings", label: "Filed earnings" }, { key: "news", label: "News" },
+];
+/** The landing's hero and analyser styles (the server cards bring their own, LANDING_CSS). */
+const LANDING_CLIENT_CSS = `
+.dlHero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;padding:20px 0 16px;align-items:stretch;}
+.dlHeroLeft{display:flex;flex-direction:column;justify-content:center;padding:26px;border:1px solid #1f2b44;border-radius:20px;background:linear-gradient(160deg,rgba(37,99,235,0.16),rgba(13,20,34,0.96) 55%,rgba(16,185,129,0.08));min-width:0;}
+.dlH1{margin:8px 0 0;font-size:2.75rem;line-height:1.08;font-weight:800;letter-spacing:-0.02em;}
+.dlLead{margin:14px 0 0;font-size:1.0625rem;line-height:1.6;color:#cbd5e1;max-width:620px;}
+.dlSearch{margin-top:18px;height:56px;flex:0 0 auto;}
+.dlSearch input{font-size:1rem;min-width:0;}
+.dlSearch .msh-go{height:40px;padding:0 18px;font-size:var(--fs-read);}
+.dlTry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;}
+.dlTryLabel{font-size:var(--fs-label);color:#8a97ad;}
+.dlTryChip{padding:6px 12px;border-radius:999px;border:1px solid #222c40;background:#0f1624;color:#eaf0fa;font-weight:800;font-size:var(--fs-label);cursor:pointer;text-decoration:none;}
+.dlTryChip:hover{border-color:#27406f;}
+.dlAnalyser{scroll-margin-top:16px;margin:26px 0 14px;}
+.dlAnalyserHead{display:grid;gap:10px;}
+.dlAnalyserTitleRow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;}
+.dlVerdict{margin:0;font-size:1.125rem;line-height:1.6;color:#cbd5e1;max-width:900px;}
+.dlVerdict strong{color:#f1f5f9;}
+.dlChipsRow{display:flex;flex-wrap:wrap;gap:8px;}
+.dlInfoChip{display:inline-flex;gap:8px;align-items:baseline;padding:8px 12px;border:1px solid #222c40;border-radius:12px;background:#0f1624;color:#eaf0fa;font-size:var(--fs-read);font-weight:700;text-decoration:none;}
+.dlInfoLabel{font-size:var(--fs-label);color:#8a97ad;text-transform:uppercase;letter-spacing:.05em;font-weight:800;}
+.dlTabs{display:flex;flex-wrap:wrap;gap:8px;}
+.dlTab{padding:8px 14px;border-radius:10px;border:1px solid #222c40;background:#0f1624;color:#cbd5e1;font-weight:800;font-size:var(--fs-label);cursor:pointer;}
+.dlTab[aria-selected="true"]{border-color:#2f6bff;background:#13213f;color:#fff;}
+@media(max-width:960px){.dlHero{grid-template-columns:minmax(0,1fr);}}
+@media(max-width:560px){.dlSearch{padding:0 8px;gap:6px;}.dlSearch .msh-go{padding:0 12px;}.dlHeroLeft{padding:18px;}.dlH1{font-size:2rem;}.dlVerdict{font-size:var(--fs-read);}}
+`;
+/** The landing's Try chips (the brief's four). */
+const TRY_SYMBOLS = ["NVDA", "TSLA", "JPM", "AMZN"];
 
 function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null); let sum = 0;
@@ -242,7 +288,7 @@ function toneRank(t: OverviewItem["tone"]) { if (t === "red") return 4; if (t ==
 function renderFlagsMeter(opts: { flagged: number; total: number; color: string; isDark: boolean }) {
   const { flagged, total, color, isDark } = opts;
   const st = Math.max(1, Math.min(20, Math.floor(total))), sf = Math.max(0, Math.min(st, Math.floor(flagged)));
-  return (<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}><div style={{ display: "flex", gap: 6 }}>{Array.from({ length: st }).map((_, i) => <span key={i} style={{ width: 14, height: 6, borderRadius: 999, background: i < sf ? color : isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)", border: isDark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(0,0,0,0.10)" }} />)}</div><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>{sf}/{st}</div></div>);
+  return (<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{Array.from({ length: st }).map((_, i) => <span key={i} style={{ width: 14, height: 6, borderRadius: 999, background: i < sf ? color : isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)", border: isDark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(0,0,0,0.10)" }} />)}</div><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>{sf}/{st}</div></div>);
 }
 // ran === 0 means none of the checks executed. "Calm" is a real reading and the
 // intensity <= 1 arm would otherwise claim it from zero evidence -- the tag half
@@ -286,6 +332,8 @@ function buildStretchScore(a: { lastClose: number | null; rsi14: number | null; 
 
 const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "AAPL", name: "Apple Inc." }, { symbol: "ABBV", name: "AbbVie Inc." }, { symbol: "ABT", name: "Abbott Laboratories" }, { symbol: "ADBE", name: "Adobe Inc." }, { symbol: "AMZN", name: "Amazon.com Inc." }, { symbol: "AVGO", name: "Broadcom Inc." }, { symbol: "BAC", name: "Bank of America" }, { symbol: "BRK.B", name: "Berkshire Hathaway B" }, { symbol: "COST", name: "Costco Wholesale" }, { symbol: "CRM", name: "Salesforce Inc." }, { symbol: "CSCO", name: "Cisco Systems" }, { symbol: "CVX", name: "Chevron Corp." }, { symbol: "DIS", name: "Walt Disney Co." }, { symbol: "GOOGL", name: "Alphabet Inc. Class A" }, { symbol: "HD", name: "Home Depot" }, { symbol: "INTC", name: "Intel Corp." }, { symbol: "JNJ", name: "Johnson & Johnson" }, { symbol: "JPM", name: "JPMorgan Chase" }, { symbol: "KO", name: "Coca-Cola Co." }, { symbol: "LLY", name: "Eli Lilly & Co." }, { symbol: "MA", name: "Mastercard Inc." }, { symbol: "MCD", name: "McDonald's Corp." }, { symbol: "META", name: "Meta Platforms" }, { symbol: "MRK", name: "Merck & Co." }, { symbol: "MSFT", name: "Microsoft Corp." }, { symbol: "NFLX", name: "Netflix Inc." }, { symbol: "NVDA", name: "NVIDIA Corp." }, { symbol: "ORCL", name: "Oracle Corp." }, { symbol: "PEP", name: "PepsiCo Inc." }, { symbol: "PG", name: "Procter & Gamble" }, { symbol: "PYPL", name: "PayPal Holdings" }, { symbol: "QCOM", name: "Qualcomm Inc." }, { symbol: "SBUX", name: "Starbucks Corp." }, { symbol: "T", name: "AT&T Inc." }, { symbol: "TGT", name: "Target Corp." }, { symbol: "TSLA", name: "Tesla Inc." }, { symbol: "TXN", name: "Texas Instruments" }, { symbol: "UNH", name: "UnitedHealth Group" }, { symbol: "V", name: "Visa Inc." }, { symbol: "VZ", name: "Verizon Communications" }, { symbol: "WFC", name: "Wells Fargo" }, { symbol: "WMT", name: "Walmart Inc." }, { symbol: "XOM", name: "Exxon Mobil Corp." },
+  // The curated ETFs' names (#563 COWORK #142 §3): a fund's quote carries none.
+  ...Object.entries(ETF_NAMES).map(([symbol, name]) => ({ symbol, name })),
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
 const CRYPTO_PRESETS: { symbol: string; name: string }[] = [
@@ -365,6 +413,7 @@ export default function DashboardClient({
   tiingoCredit = null,
   historyCredit = null,
   initialHistoryProvider = null,
+  landing = null,
 }: {
   defaultSymbol?: string;
   initialQuote?: Quote | null;
@@ -385,6 +434,13 @@ export default function DashboardClient({
   // Whose bars `initialHistory` is ("tiingo", "fmp" or "none"); the credit
   // shows only beside a series that is Tiingo's (#553 COWORK #103).
   initialHistoryProvider?: string | null;
+  /**
+   * THE LANDING (#563 COWORK #134): /dashboard only. With it, the page leads
+   * with the hero, "Market right now" and the cards (server-rendered, passed
+   * in), and this analyser moves below them as "{SYM} at a glance". Without it
+   * (the home page), the layout is unchanged.
+   */
+  landing?: DashboardLandingProps | null;
 }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [assetType, setAssetType] = useState<AssetType>("stock");
@@ -441,7 +497,7 @@ export default function DashboardClient({
   // pre-existing client-fetch-on-mount behaviour for that symbol below --
   // no regression, the seed is simply unused in that case.
   const seedMatchesSymbol = symbol === defaultSymbol;
-  const [symbolName, setSymbolName] = useState(() => (seedMatchesSymbol ? initialSymbolName : ""));
+  const [symbolName, setSymbolName] = useState(() => (seedMatchesSymbol ? initialSymbolName || ETF_NAMES[defaultSymbol.toUpperCase()] || "" : ""));
   const [activeTimeframe, setActiveTimeframe] = useState("D");
   const [visibleBars, setVisibleBars] = useState(75);
   const [windowOffset, setWindowOffset] = useState(0);
@@ -480,6 +536,9 @@ export default function DashboardClient({
   const [earningsSummary, setEarningsSummary] = useState<StockEarningsSummary | null>(() => (seedMatchesSymbol ? initialEarningsSummary : null));
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  // THE ANALYSER'S TABS AND ITS ANCHOR (#563 COWORK #134), landing mode only.
+  const [tab, setTab] = useState<AnalyserTab>("chart");
+  const analyserRef = useRef<HTMLElement>(null);
   // WIDE CHART (#553 COWORK #27, layout only; lib/dashboardWide.ts). The chart
   // spans both columns and the Overview + Breakdown cards sit below it, side
   // by side. Remembered per viewer; renders normally without storage.
@@ -578,6 +637,13 @@ export default function DashboardClient({
   const selectedTimeframe = useMemo(() => TIMEFRAMES.find(t => t.label === activeTimeframe) ?? TIMEFRAMES[0], [activeTimeframe]);
   const COLORS = useMemo(() => ({ isDark: true, pageBg: "#0a0f1a", pageFg: "#eaf0fa", mutedFg: "#8a97ad", mutedFg2: "#5f6b80", cardBg: "#141b2b", cardFg: "#eaf0fa", cardBg2: "#0f1624", border: "#222c40", borderSoft: "#1a2336", controlBg: "#0f1624", controlBgSolid: "#0f1624", controlBorder: "#222c40", controlFg: "#eaf0fa", blue: "#2f6bff", blueSoft: "#13213f", blueBorder: "#27406f", green: "#16c784", greenSoft: "#0f2a23", greenBorder: "#1c4a3c", amber: "#f5a524", amberSoft: "#2c2310", amberBorder: "#3a2f10", red: "#f04444", yellowBorder: "rgba(234,179,8,0.38)", yellowBg: "rgba(234,179,8,0.10)", yellowText: "#fde68a" }), []);
 
+  // A ?symbol= DEEP LINK LANDS ON THE ANALYSER (#563 COWORK #134): it moved
+  // below the landing, so the page scrolls to it rather than to the hero.
+  const deepSymbol = searchParams.get("symbol");
+  useEffect(() => {
+    if (!landing || !cleanSymbol(deepSymbol)) return;
+    analyserRef.current?.scrollIntoView({ block: "start" });
+  }, [landing, deepSymbol]);
   useEffect(() => { const r = () => setIsMobile(window.innerWidth <= 768); r(); window.addEventListener("resize", r); return () => window.removeEventListener("resize", r); }, []);
   useEffect(() => { if (symbolName.trim()) return; const list = assetType === "crypto" ? CRYPTO_PRESETS : PRESET_TICKERS; const f = list.find(x => x.symbol.toUpperCase() === symbol.toUpperCase()); if (f?.name) setSymbolName(f.name); }, [symbol, symbolName, assetType]);
   useEffect(() => { setChartInterval(selectedTimeframe.interval); setVisibleBars(selectedTimeframe.defaultVisibleBars); setWindowOffset(0); }, [symbol, selectedTimeframe]);
@@ -862,6 +928,13 @@ export default function DashboardClient({
   const customMode = selectedIndicators.length > 0;
   function chartIndicatorLabel(v: Overlay[]) { return !v.length ? "Overview" : v.join(", "); }
   function chooseSymbol(s: string, name?: string, nextAssetType?: AssetType) { const c = s.trim().toUpperCase(); if (!c) return; symbolWasChosenRef.current = true; if (nextAssetType) setAssetType(nextAssetType); setSymbol(c); setSymbolName(name?.trim() ? name.trim() : ""); setQuery(c); setResults([]); setOpen(false); setActiveTimeframe("D"); setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); }
+  // THE HERO'S SEARCH (#563 COWORK #134): the same chooseSymbol routing, then
+  // down to the analyser, where the answer is.
+  function pickFromHero(sym: string, name?: string) {
+    chooseSymbol(sym, name, "stock");
+    setTab("chart");
+    if (landing) requestAnimationFrame(() => analyserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
   function switchAssetType(next: AssetType) {
     if (next === assetType) return;
     if (next === "crypto") { chooseSymbol(DEFAULT_CRYPTO_SYMBOL, CRYPTO_PRESETS[0]?.name, "crypto"); return; }
@@ -1024,8 +1097,8 @@ export default function DashboardClient({
     const tc = toneToColor(trendToneFromScore(trendScore), true), sc = toneToColor(compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0, stretchScore.ran).tone, true);
     return (<SectionCard title={`${symbol} Overview`} allowOverflow right={assetType === "stock" ? <Link href={`/stock/${encodeURIComponent(symbol)}`} style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>Company Overview →</Link> : null}>
       <div style={{ display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || "Name unavailable"}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || (landing ? "" : "Name unavailable")}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 10 }}>
           {/* Both scores now carry `known`. Stretch reports out of the number of
               checks that actually ran, not out of six, and the tone tag it feeds is
               guarded on the same count. See compositeToneFromCounts. */}
@@ -1162,7 +1235,12 @@ export default function DashboardClient({
     return <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} viewWidth={full ? undefined : basicViewWidth} />;
   }
 
+  // THE ANALYSER'S TABS TAKE THE CHART'S PLACE on the landing (#563 COWORK
+  // #134); everywhere else ChartPanel is the price chart, as before.
   function ChartPanel() {
+    return landing ? AnalyserTabs() : <PriceChartPanel />;
+  }
+  function PriceChartPanel() {
     const modeTitle = chartMode === "tradingview" ? `TradingView · ${symbol}` : chartMode === "interactive" ? `Interactive · ${symbol}` : `Price · ${chartIndicatorName}`;
     return (<div id="chart" ref={chartSectionRef} style={{ scrollMarginTop: 24 }}>
       <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
@@ -1354,6 +1432,101 @@ export default function DashboardClient({
     </div></SectionCard>);
   }
 
+  // ── THE LANDING (#563 COWORK #134) ──────────────────────────────────────
+  // The hero's search is the header search's markup and handlers (one
+  // `query`, one result list), so its routing is unchanged; a pick then
+  // scrolls down to the analyser.
+  //
+  // CALLED AS A FUNCTION, NEVER MOUNTED AS <LandingHero /> (#563 COWORK #148
+  // §1). It is declared inside this component, so as a JSX element it would be
+  // a NEW component type on every render: each keystroke (setQuery) remounted
+  // the input and threw the focus out. Called directly, its elements are part
+  // of this component's own tree and the input keeps its identity.
+  // scripts/measure-dashboard-search.mjs types into it key by key.
+  function LandingHero() {
+    return (
+      <div className="dlHeroLeft">
+        <p className="dlEyebrow" style={{ color: "#93c5fd" }}>MyStockHarbor</p>
+        <h1 className="dlH1">Stock research from the filings, not the hype.</h1>
+        <p className="dlLead">Every figure traced to the SEC filing or the price it came from. Every chart explained in plain English. Supply chains, capex flows and screens you won&apos;t find on other stock sites.</p>
+        <div className="msh-searchbox dlSearch" ref={searchBoxRef}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+          <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} {...navDesk.inputAria} aria-label="Search a ticker or company" onKeyDown={e => { if (navDesk.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) pickFromHero(f.symbol, f.name); } }} placeholder="Search a ticker or company… e.g. TSLA" />
+          <button className="msh-go" type="button" onClick={() => { if (results[0]) pickFromHero(results[0].symbol, results[0].name); }}>Analyse</button>
+          {open && results.length > 0 ? <div {...navDesk.listProps} aria-label="Ticker search results" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navDesk.optionProps(i)} onClick={() => pickFromHero(r.symbol, r.name)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navDesk.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
+        </div>
+        <div className="dlTry">
+          <span className="dlTryLabel">Try:</span>
+          {TRY_SYMBOLS.map((t) => <button key={t} type="button" className="dlTryChip" onClick={() => pickFromHero(t)}>{t}</button>)}
+          <Link href="/pickers" className="dlTryChip" prefetch={false}>Scan for ideas →</Link>
+        </div>
+      </div>
+    );
+  }
+
+  /** The plain-English verdict over the Chart Summary: the regime, then how stretched. */
+  const verdictHead = (() => {
+    const t = overviewMeta.trend;
+    if (!t) return null;
+    const tw = t === "Uptrend" ? "In an uptrend" : t === "Downtrend" ? "In a downtrend" : "In a range";
+    const f = stretchScore.ran ? stretchScore.flagged : null;
+    return `${tw}${f === null ? "" : f === 0 ? ", not stretched" : f <= 2 ? ", slightly stretched" : ", stretched"}.`;
+  })();
+
+  function AnalyserHead() {
+    const mapSlug = assetType === "stock" ? landing?.bottlenecks[symbol] ?? null : null;
+    const next = assetType === "stock" ? earningsSummary?.nextReport ?? null : null;
+    return (
+      <div className="dlAnalyserHead">
+        <div className="dlAnalyserTitleRow">
+          <h2 className="dlH2">{symbol} at a glance</h2>
+          <p className="dlFine" data-fine-print="">The analyser you know, with plain English first</p>
+        </div>
+        <p className="dlVerdict" data-verdict="">{verdictHead ? <strong>{verdictHead} </strong> : null}{chartSummaryText}</p>
+        {next || mapSlug || assetType === "stock" ? (
+          <div className="dlChipsRow">
+            {next ? <span className="dlInfoChip" data-next-report=""><span className="dlInfoLabel">Next report</span> {next.text}{next.estimated ? " (estimated)" : ""}</span> : null}
+            {mapSlug ? <Link className="dlInfoChip" href={`/bottlenecks/${mapSlug}`} prefetch={false} data-bottlenecks-link=""><span className="dlInfoLabel">On Bottlenecks</span> Supply map →</Link> : null}
+            {assetType === "stock" ? <Link className="dlInfoChip" href={`/stock/${encodeURIComponent(symbol)}`} prefetch={false}><span className="dlInfoLabel">Full breakdown</span> {symbol} stock page →</Link> : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // The Key levels and Price zones tabs read DAILY bars, the stock page's
+  // cards on the same history this chart already loaded: no extra read.
+  const dailyKeyBars = useMemo(() => activeTimeframe !== "D" ? [] : historyAll
+    .filter((p) => [p.open, p.high, p.low, p.close].every((v) => typeof v === "number" && Number.isFinite(v)))
+    .map((p) => ({ date: p.date, open: p.open as number, high: p.high as number, low: p.low as number, close: p.close })), [historyAll, activeTimeframe]);
+
+  function AnalyserTabs() {
+    const needDaily = <SectionCard><p className="dlEmpty">Key levels and price zones read daily bars. Switch the chart to D to see them for {symbol}.</p></SectionCard>;
+    const macroSupport = supportResistanceZones.find((z) => z.kind === "support") ?? null;
+    let body: React.ReactNode;
+    if (tab === "chart") body = <PriceChartPanel />;
+    else if (tab === "levels") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <KeyLevelsCard bars={dailyKeyBars} lastPrice={lastClose} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
+    else if (tab === "zones") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <ConfluenceCard bars={dailyKeyBars} lastPrice={lastClose} ma50={typeof lastMA50 === "number" ? lastMA50 : null} ma200={typeof lastMA200 === "number" ? lastMA200 : null} macro={macroSupport ? { lower: macroSupport.lower, upper: macroSupport.upper } : null} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
+    else if (tab === "earnings") body = (
+      <SectionCard title={`${symbol} filed earnings`}>
+        {assetType !== "stock" ? <p className="dlEmpty">Filed earnings are for stocks only.</p>
+          : earningsSummary?.hasStructuredData ? <p className="dlRead">The latest filed quarter reads <strong>{earningsSummary.toneLabel}</strong> on our earnings snapshot. The figures behind it (EPS, margins and cash flow, each against a year earlier) are on the earnings page.</p>
+          : <p className="dlEmpty">Filed figures aren&apos;t available for {symbol} yet.</p>}
+        {assetType === "stock" ? <Link className="dlMore" href={`/stock/${encodeURIComponent(symbol)}/earnings`} prefetch={false}>{symbol} filed earnings →</Link> : null}
+        <p className="dlFine" data-fine-print="">Filings from SEC EDGAR</p>
+      </SectionCard>
+    );
+    else body = <NewsPanel />;
+    return (
+      <div className="msh-col dlTabbed">
+        <div className="dlTabs" role="tablist" aria-label={`${symbol} analyser views`}>
+          {ANALYSER_TABS.map((t) => <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} data-tab={t.key} className="dlTab" onClick={() => setTab(t.key)}>{t.label}</button>)}
+        </div>
+        <div role="tabpanel" aria-label={ANALYSER_TABS.find((t) => t.key === tab)?.label}>{body}</div>
+      </div>
+    );
+  }
+
   function MobileHero() {
     return (<section style={{ marginBottom: 14, border: `1px solid ${COLORS.border}`, borderRadius: 18, background: COLORS.cardBg, overflow: "hidden" }}>
       <div style={{ padding: "16px 14px 14px", background: "linear-gradient(180deg, rgba(47,107,255,0.14), rgba(10,15,26,0))" }}>
@@ -1403,7 +1576,15 @@ export default function DashboardClient({
       `}</style>
 
 
+      {landing ? <style>{landing.css + LANDING_CLIENT_CSS}</style> : null}
       <div className="msh-wrap">
+        {landing ? (
+          <div className="dlHero" data-landing="">
+            {LandingHero()}
+            {landing.market}
+          </div>
+        ) : null}
+        {!landing ? (<>
         <div className="msh-hero">
           <div className="msh-hero-lead"><h1>Analyze any stock</h1><p>Search a ticker for its full breakdown, or scan for fresh ideas.</p></div>
           {/* Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62). */}
@@ -1424,8 +1605,13 @@ export default function DashboardClient({
         </div>
 
         <div className="msh-mobile-only">{isMobile ? MobileHero() : null}</div>
+        </>) : null}
 
         <DashboardTicker credit={tiingoCredit} />
+
+        {landing ? landing.cards : null}
+
+        {landing ? <section id="analyser" ref={analyserRef} className="dlAnalyser" aria-label={`${symbol} at a glance`}>{AnalyserHead()}</section> : null}
 
         {err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null}
 
@@ -1443,16 +1629,17 @@ export default function DashboardClient({
           )}
         </div>
 
-        <div className="msh-mobile-only" style={{ display: "grid", gap: 14 }}>
+        <div className="msh-mobile-only" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
           <OverviewPanel />
           <ChartPanel />
           <MobileBreakdownAccordion />
         </div>
 
+        {/* The landing's cards carry the news and the insight; the analyser's own
+            news is its News tab. Benchmarks stay (#563 COWORK #134: no feature removed). */}
         <div className="msh-lower">
           <BenchmarksPanel />
-          <NewsPanel />
-          <InsightsPanel />
+          {landing ? null : <><NewsPanel /><InsightsPanel /></>}
         </div>
       </div>
 
