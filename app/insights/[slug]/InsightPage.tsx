@@ -23,6 +23,7 @@ import TickerLogo from "@/app/components/TickerLogo";
 import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
 import { epsVsYearAgo, marginVsYearAgo, VS_TINT, type Vs } from "@/lib/snapshotVsYearAgo";
 import InsightChart from "./InsightChart";
+import InsightVote from "./InsightVote";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import type { InsightPageData, MoreCard } from "@/lib/server/insightPage";
 import { dayWords, outcomeWords, pctWords, ptsWords } from "@/lib/insightView";
@@ -168,6 +169,13 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
                 ) : null}
               </Card>
             ) : null}
+
+            {/* YOUR READ (#563 COWORK #132/#133, PR 2): a reader poll per report window, never advice. */}
+            <Card eyebrow="Your read" title={`Where do you think ${sym} goes into its next report?`} attr="data-insight-vote-card">
+              <InsightVote slug={n.slug} window={d.vote.window} />
+              {d.vote.called ? <p className="inRead" data-insight-vote-called="">{d.vote.called}</p> : null}
+              <p className="inFine" data-fine-print="">A poll of readers, not a forecast or advice. Votes reset at each report; after it, the page shows how readers called it. One vote per browser per report.</p>
+            </Card>
           </div>
 
           <aside className="inRail">
@@ -461,6 +469,15 @@ const CSS = `
 .inTap { margin-top: 12px; }
 .inTap summary { cursor: pointer; font-size: var(--fs-read); font-weight: 800; color: #93c5fd; }
 .inSources { margin: 12px 0 0; padding-left: 18px; font-size: var(--fs-read); line-height: var(--lh-read); }
+.inVote { margin-top: 10px; }
+.inVoteRow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.inVoteBtn { border: 1px solid rgba(148,163,184,0.28); background: #0b1220; color: #e2e8f0; border-radius: 12px; padding: 10px 8px; font-weight: 800; font-size: var(--fs-read); cursor: pointer; }
+.inVoteBtn:hover { border-color: #34507a; }
+.inVoteBtn:disabled { opacity: 0.6; cursor: default; }
+.inVoteBtn[data-choice="higher"] span { color: #22c55e; }
+.inVoteBtn[data-choice="lower"] span { color: #ef4444; }
+.inVoteBar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: #0b1220; margin-top: 4px; }
+.inVoteBar i { display: block; height: 100%; }
 .inScen { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .inScenBox { border-radius: 14px; padding: 12px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.06); min-width: 0; }
 .inScenBox[data-tone="down"] { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.06); }

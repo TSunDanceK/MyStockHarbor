@@ -14,7 +14,8 @@
 //   - (#138/#139) the news card is missing; the JSON-LD has no Article with its
 //     image, dates and author, or its breadcrumb is not Insights › TICKER ›
 //     post; there is more than one h1; the level discussed is not on the rail's
-//     pole (or its marker); the filed tiles show without facts, or hide with them.
+//     pole (or its marker); the filed tiles show without facts, or hide with them;
+//   - (PR 2) the reader vote's three buttons or its fine print are missing.
 // With --shots DIR it saves 1280 and 390 px screenshots. A mutant (a 700 px
 // wide block) must be caught as sideways scroll.
 //
@@ -76,6 +77,8 @@ function probe() {
   // #138/#139: the news card; the Article JSON-LD (image, dateModified, a 3-step breadcrumb); the rail's
   // pole with the level discussed drawn (or its marker); filed tiles, or "not available yet" without facts.
   if (!q("[data-insight-news]")) bad.push("missing: news card");
+  // PR 2: the reader vote, three buttons and its fine print, with no tally in the HTML.
+  if ((document.querySelectorAll("[data-insight-vote] .inVoteBtn").length !== 3) || !q("[data-insight-vote-card] [data-fine-print]")) bad.push("missing: the reader vote");
   // #146: the dated paragraph and its sources when the post has one, the old layout when not; never more than 3 headlines.
   if (document.body.dataset.drivers === "1" ? !q("[data-insight-drivers]") || !/^As of \d/.test(q("[data-insight-drivers-asof]")?.textContent ?? "") || !q('[data-insight-news] a[rel="nofollow noopener"]') : !!q("[data-insight-drivers]")) bad.push("the drivers paragraph shown / hidden wrongly");
   if (document.querySelectorAll("[data-insight-news] .inNews li").length > 3) bad.push("more than 3 headlines");
