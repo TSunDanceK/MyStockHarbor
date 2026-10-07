@@ -6,11 +6,16 @@
 //    target, and in the docked phone bar the thumbnail plus one word, no hint.
 // 2. The ranking: lib/pickerRanking names a page's default order (orderBy names
 //    itself; else `rankedBy`). Only the five pages whose section sorts by one
-//    plain key carry `rankedBy`. The grid shows "Ranked by …" while unsorted,
-//    and "Back to … ranking" (desktop and the phone Sort list) once sorted.
+//    plain key carry `rankedBy`, plus /stocks-near-200-day-moving-average,
+//    whose composite is named AS a composite (#553 COWORK #184 item 4). The
+//    grid shows "Ranked by …" while unsorted, and "Back to … ranking" (desktop
+//    and the phone Sort list) once sorted; a page with no ranking reads "The
+//    page's order" there, never a column it is not sorted by.
 // 3. The order matches the words: the SEC earnings-growth section is ranked by
-//    EPS growth alone (no popularity boost), and it and the four trend-flip
-//    sections take every candidate, so every listed row is in that order.
+//    EPS growth alone (no popularity boost), then the small-base group
+//    (lib/epsGrowthView, #553 COWORK #186 ruling 1); it, the four trend-flip
+//    sections and the daily MA200 section take every candidate, so every
+//    listed row is in that order.
 // 4. Figures sort highest first on the first click, and every growth column
 //    is a figure; the phone Sort list offers "(high to low)" first.
 // Every rule has a planted mutant.
@@ -34,6 +39,8 @@ const RANKED_PAGES = [
   "app/stocks-with-bearish-trend-flip/page.tsx",
   "app/stocks-with-weekly-bullish-trend-flip/page.tsx",
   "app/stocks-with-weekly-bearish-trend-flip/page.tsx",
+  // A composite, named as one (#553 COWORK #184 item 4, ruled in COWORK #186).
+  "app/stocks-near-200-day-moving-average/page.tsx",
 ];
 
 let failures = 0;
@@ -92,18 +99,23 @@ function wiringRules({ grid, page, pages, builder }) {
   want("the page derives the ranking and hands it to the grid", /const ranking = pageRanking\(config\);/.test(p) && /<PickerResultsGrid\s+entries=\{entries\}\s+ranking=\{ranking\}/.test(p));
   want('the grid says "Ranked by …" while unsorted', /\) : \(\s*<p className="rankLine">Ranked by \{ranking\.label\}<\/p>/.test(g));
   want('and "Back to … ranking" once sorted, restoring the preset order', /<button type="button" className="rankBack" onClick=\{\(\) => setSort\(null\)\}>\s*Back to \{ranking\.short\} ranking/.test(g));
+  want("unsorted, the phone Sort list names the page's order, never a column",
+    /value=\{!sort \? RANKING_OPTION : `\$\{sortKey\}:\$\{sortDir\}`\}/.test(g) && /<option value=\{RANKING_OPTION\}>\{sort \? "Back to the page's order" : "The page's order"\}<\/option>/.test(g));
   want("the phone Sort list carries the ranking, which resets the sort",
     /if \(e\.target\.value === RANKING_OPTION\) \{\s*setSort\(null\);\s*return;/.test(g) && /<option value=\{RANKING_OPTION\}>\{sort \? `Back to \$\{ranking\.short\} ranking` : `Ranked by \$\{ranking\.label\}`\}<\/option>/.test(g));
   want("unsorted means the page's order, untouched", /if \(!sortCol \|\| !sort\) return filteredEntries;/.test(g));
   // Which pages may name a section ranking: exactly the five plain-key ones.
   const carrying = Object.entries(pages).filter(([, src]) => /\n\s*rankedBy: /.test(stripComments(src, { file: "page.tsx" }))).map(([f]) => f).sort();
-  want("rankedBy sits on exactly the five plain-key pages (no composite-ranked page)", JSON.stringify(carrying) === JSON.stringify([...RANKED_PAGES].sort()));
-  want("the growth page names EPS growth only on the SEC default", /rankedBy: SEC \? \{ label: "EPS growth, highest first", short: "growth" \} : undefined,/.test(pages[RANKED_PAGES[0]] ?? ""));
+  want("rankedBy sits on exactly the listed pages (no unnamed composite-ranked page)", JSON.stringify(carrying) === JSON.stringify([...RANKED_PAGES].sort()));
+  want("the growth page names EPS growth only on the SEC default", /rankedBy: SEC \? \{ label: "EPS growth, highest first, then small bases by the \$ change", short: "growth" \} : undefined,/.test(pages[RANKED_PAGES[0]] ?? ""));
   // The order matches the words.
   const b = stripComments(builder, { file: BUILDER });
   want("the SEC growth section is ranked by EPS growth alone, no popularity boost",
     /_score: earningsGrowthFromSec\s*\? \(strongEarningsGrowthCandidate\.epsGrowthPct \?\? 0\)\s*: strongEarningsGrowthCandidate\.score \+ dynamicBoost\(symbol\),/.test(b));
   want("the growth section takes every candidate", /source: strongEarningsGrowth,\s*take: Math\.max\(20, strongEarningsGrowth\.length\),/.test(b));
+  want("the growth section is put in the page's order (lib/epsGrowthView) and that order is its rank",
+    /if \(earningsGrowthFromSec\) \{\s*strongEarningsGrowth\.sort\(compareEpsGrowth\);\s*strongEarningsGrowth\.forEach\(\(item, i\) => \{[\s\S]{0,200}?item\._score = strongEarningsGrowth\.length - i;/.test(b));
+  want("the daily MA200 section takes every candidate", /source: dailyMa200Proximity,[\s\S]{0,400}?take: Math\.max\(20, dailyMa200Proximity\.length\),/.test(b));
   for (const f of ["trendFlipBullishDaily", "trendFlipBearishDaily", "trendFlipBullishWeekly", "trendFlipBearishWeekly"]) {
     want(`the ${f} section takes every candidate`, new RegExp(`source: ${f},[\\s\\S]{0,2000}?take: Math\\.max\\(40, ${f}\\.length\\),`).test(b));
   }
@@ -133,7 +145,7 @@ try {
   check("orderBy names itself; rankedBy passes through; none is null", l.length === 0, l.join("; "));
   console.log("\n3. Wiring, and the order matches the words");
   const w = wiringRules(real);
-  check("shown while unsorted, a way back once sorted, five pages, builder order, highest first", w.length === 0, w.join("; "));
+  check("shown while unsorted, a way back once sorted, the listed pages, builder order, highest first", w.length === 0, w.join("; "));
 
   console.log("\n4. Planted mutants");
   const BTN = [
@@ -171,6 +183,9 @@ try {
     ["the growth section capped at 20 again", "builder", "take: Math.max(20, strongEarningsGrowth.length),", "take: 20,"],
     ["a flip section capped at 40 again", "builder", "take: Math.max(40, trendFlipBearishWeekly.length),", "take: 40,"],
     ["the page stops handing the ranking down", "page", "                  ranking={ranking}\n", ""],
+    ["unsorted claims the headline column again", "grid", "value={!sort ? RANKING_OPTION : `${sortKey}:${sortDir}`}", "value={ranking && !sort ? RANKING_OPTION : `${sortKey}:${sortDir}`}"],
+    ["the growth order's rank dropped", "builder", "      item._score = strongEarningsGrowth.length - i;\n", ""],
+    ["the daily MA200 section capped at 20 again", "builder", "take: Math.max(20, dailyMa200Proximity.length),", "take: 20,"],
   ];
   for (const [label, which, from, to] of WIRE) {
     const src = real[which];

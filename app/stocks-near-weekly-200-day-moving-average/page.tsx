@@ -64,7 +64,8 @@ const config: PickerResultConfig = {
     "Review stocks screening near the weekly 200-day moving average. These are slower, higher-timeframe levels that can matter for larger trend tests.",
   explainerTitle: "How to use weekly MA200 setups",
   explainerBody:
-    "The weekly 200-day moving average is a higher-timeframe reference point. These setups are usually slower than daily MA200 tests, so focus on whether the stock is building support, reclaiming the level, or rejecting from it.",
+    "The weekly 200-day moving average is a higher-timeframe reference point. These setups are usually slower than daily MA200 tests, so focus on whether the stock is building support, reclaiming the level, or rejecting from it. A weekly 200 average needs about 4 years of price history, so a recently listed stock may not appear here even if it is near the level.",
+  // ^ the history note (#553 COWORK #186, item 7): why a younger listing is absent.
   emptyText:
     "No weekly MA200 proximity stocks are currently available from the live picker feed.",
   tone: "yellow",

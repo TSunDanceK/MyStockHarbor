@@ -170,15 +170,14 @@ const mini = fs.readFileSync(path.join(process.cwd(), "app/components/MiniPicker
 const flipBranch = grid.indexOf('href.includes("trend-flip")');
 const bestTrendBranch = grid.indexOf('href.includes("best-trend")');
 
+// HIDDEN, NOT DELETED (2026-10-07, #553 COWORK #186 ruling 6): the weekly
+// pages were excluded (`&& !href.includes("weekly")`) while their cards drew
+// daily candles. They now draw weekly candles with the weekly line, and the
+// "never the daily line on a weekly row" rule moved to section 5.
 check(
-  "the daily trend-flip pages route to trendHelper",
-  /href\.includes\("trend-flip"\) && !href\.includes\("weekly"\)\) return "trendHelper"/.test(grid),
+  "every trend-flip page, daily and weekly, routes to trendHelper",
+  /if \(href\.includes\("trend-flip"\)\) return "trendHelper" as const;/.test(grid),
   "without a branch these pages fall through to bare candles, which is what they showed before"
-);
-check(
-  "the WEEKLY flip pages are excluded",
-  /!href\.includes\("weekly"\)/.test(grid),
-  "their flip is weekly and this line is daily, so it would contradict the date printed in the row"
 );
 check(
   "the trend-flip branch precedes the best-trend branch",
@@ -262,17 +261,35 @@ check(
   "declared on both PickerItem and the section item type, or it is dropped at whichever end omits it"
 );
 
-check(
-  "pushTrendFlip ships the series, not enriched chartPoints",
-  /trendSeries: weekly \? undefined : dailyTrendSeries/.test(builder) &&
-    !/chartPoints: weekly \?/.test(builder),
-  "enriched chartPoints are what takeTop discards; the series rides separately for exactly that reason"
-);
-check(
-  "the weekly sections get no series",
-  /weekly \? undefined :/.test(builder),
-  "their flip is weekly and this line is daily, so it would contradict the date printed in the row"
-);
+// HIDDEN, NOT DELETED (2026-10-07, #553 COWORK #186 ruling 6): the weekly
+// sections now draw WEEKLY candles with the WEEKLY line, so these two read:
+//   /trendSeries: weekly \? undefined : dailyTrendSeries/ and !/chartPoints: weekly \?/
+//   /weekly \? undefined :/  ("the weekly sections get no series")
+// The rule they held -- never the daily line on a weekly row -- is kept below.
+const weeklyRules = (b) => {
+  const fails = [];
+  if (!/trendSeries: weekly \? weeklyTrendSeries : dailyTrendSeries,/.test(b)) fails.push("pushTrendFlip ships a series, the weekly one on a weekly row");
+  if (!/chartPoints: weekly && weeklyFlipPoints\?\.length \? weeklyFlipPoints : chartPoints,/.test(b)) fails.push("a weekly row draws weekly candles; a daily row its plain points (never enriched)");
+  if (!/trendTailForPoints\(weeklyFlipPoints, trendFlips\.weeklyTrend, WEEKLY_FLIP_CANDLES\)/.test(b)) fails.push("the weekly series is the weekly line over the weekly candles");
+  if (!/\.filter\(\(p\) => closedWeeks\.has\(p\.date\.slice\(0, 10\)\)\)/.test(b)) fails.push("only closed weeks are drawn, as the flip is measured");
+  for (const t of ["trendFlipBullishWeekly", "trendFlipBearishWeekly"]) {
+    if (!new RegExp(`source: ${t},\\s*take: Math\\.max\\(40, ${t}\\.length\\),[\\s\\S]{0,200}?keepChartPoints: true,`).test(b)) fails.push(`the ${t} section keeps its weekly candles`);
+  }
+  return fails;
+};
+{
+  const f = weeklyRules(builder);
+  check("weekly rows: weekly candles, the weekly line, closed weeks, kept through takeTop (never the daily line)", f.length === 0, f.join("; "));
+  for (const [label, from, to] of [
+    ["the daily line on a weekly row", "trendSeries: weekly ? weeklyTrendSeries : dailyTrendSeries,", "trendSeries: dailyTrendSeries,"],
+    ["weekly rows on daily candles", "chartPoints: weekly && weeklyFlipPoints?.length ? weeklyFlipPoints : chartPoints,", "chartPoints,"],
+    ["the week in progress drawn", ".filter((p) => closedWeeks.has(p.date.slice(0, 10)))", ""],
+    ["the weekly candles stripped by takeTop", "take: Math.max(40, trendFlipBearishWeekly.length),\n      // The weekly candles ride with the item (#553 COWORK #186 ruling 6):\n      // signalRecords carries daily points only.\n      keepChartPoints: true,", "take: Math.max(40, trendFlipBearishWeekly.length),"],
+  ]) {
+    const m = builder.includes(from) ? weeklyRules(builder.replace(from, to)) : ["anchor matched nothing"];
+    check(`mutant "${label}" is caught`, builder.includes(from) && m.length > 0, m[0] ?? "no rule failed");
+  }
+}
 check(
   "PickerResultPage merges the series onto the record's points",
   /attachTrendHelper\(entry\.chartPoints, item\.trendSeries\)/.test(page),
@@ -323,6 +340,61 @@ check(
   }),
   "one join is used on both sides, so a divergence here would mean the shapes have drifted apart"
 );
+
+console.log("\n=== 7. Production shape (#553 COWORK #185): stored charts + section series -> the page join ===\n");
+
+// What production ships, rather than the clean shape above: the record's 72
+// DAILY points end in a LIVE bar (today, before the close) that the closed
+// series excludes, and the series rides as the section's trendTailForPoints.
+// The drawn card is the last 64 points.
+{
+  const live = { date: "2026-08-09", close: closes[N - 1] * 1.01 };
+  const stored = [...cleanIdx.slice(-71).map((i) => ({ date: dates[i], close: closes[i] })), live];
+  const section = JSON.parse(JSON.stringify(trendTailForPoints(stored, trend)));
+  const joined = attachTrendHelper(stored.map((p) => ({ ...p })), section);
+  const drawn = joined.slice(-64);
+  const coloured = drawn.filter((p) => typeof p.trendLine === "number");
+  check("the live bar carries no line (the series is closed bars only)", typeof drawn[drawn.length - 1].trendLine !== "number");
+  check("every other drawn bar is coloured", coloured.length === 63, `${coloured.length} of 64`);
+  const pos = joined.findIndex((p) => p.date === flipDate);
+  check(
+    "the colour changes on the flip date in the joined window",
+    pos > 0 && joined[pos].trendState === flip.direction && joined[pos - 1].trendState !== flip.direction,
+    `flip ${flipDate} at index ${pos} of ${joined.length}`
+  );
+}
+
+console.log("\n=== 8. Weekly cards (#553 COWORK #186 ruling 6): weekly candles, weekly line ===\n");
+{
+  const { resampleWeeklyClosed } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+  // Weekdays over ~3 years: a long fall, then a hard turn up.
+  const daily = [];
+  let t = Date.UTC(2023, 0, 2);
+  for (let k = 0; daily.length < 800; k++, t += 86400000) {
+    const wd = new Date(t).getUTCDay();
+    if (wd === 0 || wd === 6) continue;
+    const i = daily.length;
+    daily.push({ date: new Date(t).toISOString().slice(0, 10), close: i < 560 ? 400 - i * 0.4 : 400 - 560 * 0.4 + (i - 560) * 1.6 });
+  }
+  const weeks = resampleWeeklyClosed(daily);
+  const wSeries = computeTrendHelper(weeks.map((w) => w.close), trendLen, confirmBars);
+  const wTrend = { dates: weeks.map((w) => w.date), line: wSeries.line, state: wSeries.state };
+  const wFlip = latestTrendFlip(weeks.map((w) => w.close), trendLen, confirmBars);
+  check("the fixture has a weekly flip after the weekly warm-up", Boolean(wFlip) && wFlip.flipIndex > 60, `flip index ${wFlip?.flipIndex}`);
+  // The build's candles: the last 64 CLOSED weeks, each dated by its last session.
+  const candles = weeks.slice(-64).map((w) => ({ date: w.date, close: w.close }));
+  const wTail = JSON.parse(JSON.stringify(trendTailForPoints(candles, wTrend, 64)));
+  const wDrawn = attachTrendHelper(candles.map((p) => ({ ...p })), wTail);
+  const wDate = weeks[wFlip.flipIndex].date;
+  const wPos = wDrawn.findIndex((p) => p.date === wDate);
+  check("the flip week is inside the 64 drawn weeks", wPos >= 0, `week ending ${wDate}`);
+  check(
+    "the colour changes on the flip week (the row's \"week ending\" date)",
+    wPos > 0 && wDrawn[wPos].trendState === wFlip.direction && wDrawn[wPos - 1].trendState !== wFlip.direction,
+    `${wDrawn[wPos - 1]?.trendState} then ${wDrawn[wPos]?.trendState}`
+  );
+  check("every drawn week carries the weekly line", wDrawn.every((p) => typeof p.trendLine === "number"));
+}
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\nFAILED (${failures})\n`);
 process.exit(failures === 0 ? 0 : 1);
