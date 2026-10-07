@@ -13,6 +13,7 @@
 //   - the trend summary NEVER averages across an n/m
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift } from "./lib/earnings-plan.mjs";
+import { splitAdjustSource } from "./lib/split-adjust-source.mjs";
 
 const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const SRC = strip("lib/server/secPresentation.ts");
@@ -22,6 +23,7 @@ const PRELUDE = [
   strip("lib/server/fxRates.ts"),
   strip("lib/server/secCurrency.ts"),
   strip("lib/server/secFactCodec.ts"),
+  splitAdjustSource(),
   strip("lib/server/secEarningsView.ts"),
 ].join("\n");
 

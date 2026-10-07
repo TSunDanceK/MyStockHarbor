@@ -27,6 +27,7 @@
 // "declared something we cannot see", which changes the hide reason and
 // nothing a reader sees.
 import { resolveFactSetForRender } from "./secColdFetch";
+import { splitAdjusted } from "./secSplitAdjust";
 import { cell, periodLabel, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
 
 /**
@@ -139,6 +140,9 @@ function periodsNewestFirst(set: StoredFactSet): StoredPeriod[] {
  */
 export function buildProfileDividend(set: StoredFactSet | null): ProfileDividend {
   if (!set) return hidden("no-facts");
+  // DPS ON TODAY'S SHARE BASIS (#552 COWORK #187 §1): BKNG's pre-split
+  // dividends read as a 6% yield and +2,437% growth beside a post-split price.
+  set = splitAdjusted(set);
 
   // ── THE IFRS GATE COMES FIRST, AND IT IS A TAXONOMY TEST ────────────────
   // Not a currency test and not "the numbers look sparse". KGC was described in

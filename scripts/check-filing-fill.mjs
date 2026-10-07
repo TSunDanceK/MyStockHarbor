@@ -15,6 +15,7 @@
 // Each rule is broken on purpose below to show its assertion can fail.
 import fs from "node:fs";
 import { lift } from "./lib/earnings-plan.mjs";
+import { splitAdjustSource } from "./lib/split-adjust-source.mjs";
 import { loadCards, html, visibleText, React } from "./lib/render-cards.mjs";
 import { loadSnapshot } from "./lib/render-snapshot.mjs";
 
@@ -32,6 +33,7 @@ const extractSrc = [
   strip(fs.readFileSync("lib/server/fxRates.ts", "utf8")),
   strip(fs.readFileSync("lib/server/secCurrency.ts", "utf8")),
   strip(fs.readFileSync("lib/server/secFactCodec.ts", "utf8")),
+  splitAdjustSource(),
   strip(fs.readFileSync("lib/server/secEarningsView.ts", "utf8")),
 ].join("\n");
 const X = await lift(extractSrc);

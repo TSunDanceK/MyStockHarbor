@@ -16,6 +16,7 @@ import {
   HEAT_PERIODS,
   formatHeatPct,
   heatScale,
+  heatShortName,
   tileShade,
   type HeatPeriod,
   type HeatTile,
@@ -79,7 +80,10 @@ export default function SectorHeatMap({
                 ["--h" as string]: `${r.h}%`,
               }}
             >
-              <span className="heatName">{tile.name}</span>
+              <span className="heatName">
+                <span className="heatNameFull">{tile.name}</span>
+                {heatShortName(tile.name) !== tile.name ? <span className="heatNameShort" aria-hidden="true">{heatShortName(tile.name)}</span> : null}
+              </span>
               <span className="heatValue">{formatHeatPct(value)}</span>
               <span className="heatCount">{tile.companies} companies</span>
             </Link>
@@ -103,25 +107,44 @@ export default function SectorHeatMap({
         }
         .heatPeriod.on { background: rgba(56,189,248,0.16); color: #e0f2fe; box-shadow: inset 0 0 0 1px rgba(56,189,248,0.45); }
         .heatPeriod:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
-        .heatBox { margin-top: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+        .heatBox { margin-top: 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
         .heatTile {
-          display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; min-width: 0; min-height: 84px;
-          padding: 10px 12px; border-radius: 12px; color: #fff; text-decoration: none;
-          border: 1px solid rgba(255,255,255,0.08);
+          display: flex; flex-direction: column; justify-content: flex-end; gap: 1px; min-width: 0; min-height: 52px;
+          padding: 6px 8px; border-radius: 10px; color: #fff; text-decoration: none;
+          border: 1px solid rgba(255,255,255,0.06);
         }
-        .heatTile:hover { filter: brightness(1.12); }
+        .heatTile:hover { filter: brightness(1.15); }
         .heatTile:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
-        .heatName { font-size: var(--fs-label); font-weight: 800; line-height: 1.2; overflow-wrap: normal; word-break: normal; hyphens: none; }
-        .heatValue { font-size: 18px; font-weight: 950; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+        .heatName { font-size: var(--fs-label); font-weight: 800; line-height: 1.2; overflow-wrap: normal; word-break: normal; hyphens: none; white-space: normal; }
+        .heatValue { font-size: 15px; font-weight: 950; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
         .heatCount { font-size: var(--fs-label); font-weight: 600; color: rgba(255,255,255,0.82); }
+        /* SMALL TILES (#553 COWORK #180): the count goes first, then the name
+           shortens; the % never does. The full name stays in the link for
+           screen readers (visually hidden, not removed). */
+        .heatCount { display: none; }
+        .heatNameFull { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+        .heatName .heatNameFull:only-child { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+        .heatNameShort { display: inline; }
         .heatCredit { color: inherit; }
         .heatFine { margin: 10px 0 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(241,245,249,0.6); }
         @media (max-width: 430px) { .heatPeriod { padding: 6px 9px; } }
         @media (min-width: 641px) {
-          .heatBox { display: block; position: relative; aspect-ratio: 2 / 1; min-height: 420px; }
+          /* About half the old height (#553 COWORK #180): 4:1, ~260 px at 1280. */
+          .heatBox { display: block; position: relative; aspect-ratio: 4 / 1; min-height: 210px; }
           .heatTile {
-            position: absolute; left: calc(var(--x) + 3px); top: calc(var(--y) + 3px);
-            width: calc(var(--w) - 6px); height: calc(var(--h) - 6px); min-height: 0; overflow: hidden;
+            position: absolute; left: calc(var(--x) + 2px); top: calc(var(--y) + 2px);
+            width: calc(var(--w) - 4px); height: calc(var(--h) - 4px); min-height: 0; overflow: hidden;
+            padding: 8px 10px; container-type: size;
+          }
+          .heatValue { font-size: 17px; }
+          .heatCount { display: inline; }
+          .heatNameShort { display: none; }
+          .heatNameFull { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+          @container (max-height: 74px) { .heatCount { display: none; } }
+          @container (max-width: 150px) {
+            .heatCount { display: none; }
+            .heatName .heatNameShort { display: inline; }
+            .heatName .heatNameFull:not(:only-child) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
           }
         }
       `}</style>

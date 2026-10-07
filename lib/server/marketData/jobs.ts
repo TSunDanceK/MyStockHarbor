@@ -74,6 +74,7 @@ import { readLastSeenCiks } from "../secListing";
 import { lookupBySpelling, toDashed } from "../../symbolSpellings.mjs";
 import { pctOfRequestLimit } from "../chunkByBytes";
 import { JOB_REDIS_OPTS } from "../redisCacheMode";
+import { writeSectorSparks } from "../sectorSparks";
 
 /**
  * THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step.
@@ -334,6 +335,9 @@ export async function runTiingoEod(
       await p.exec();
     }
   }
+  // THE /sector CARDS' 3-MONTH LINES (#553 COWORK #167): from the bars already
+  // in memory, a complete night only. +1 SET; never fails the job.
+  const sectorSparks = complete ? await writeSectorSparks(r, bars, nowMs) : null;
   // Only a complete night stamps the meta key, so the 02:45 retry re-runs a partial one.
   if (complete) await r.set(TIINGO_EOD_META_KEY, JSON.stringify(summary), { ex: TIINGO_EOD_TTL_SECONDS });
   if (bars.size) revalidateTag(EOD_TAG, "max");
@@ -347,6 +351,7 @@ export async function runTiingoEod(
     bytesWritten,
     largestWriteRequestBytes,
     eodLastRows,
+    sectorSparks,
     ms: Date.now() - started,
   };
 }
