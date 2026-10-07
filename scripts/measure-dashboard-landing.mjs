@@ -13,6 +13,10 @@
 //   - the analyser is missing, or opening #analyser does not land on it;
 //   - at 560 px and under, the order is not hero, Market right now, the cards,
 //     then the analyser.
+// The news thumbnails (#149 §2) must draw 56–64 px square, left of their
+// headline, at every width. And "/" (#149 §1), rendered from app/page.tsx and
+// opened at 390 px with a phone's user agent, must be this same landing: its
+// H1, its cards and the analyser, with no old tile page.
 // With --shots DIR it saves 1280 and 390 px screenshots. A mutant (a 700 px
 // wide block) must be caught as sideways scroll.
 //
@@ -43,10 +47,16 @@ try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require(
 const { renderToStaticMarkup } = await import("react-dom/server");
 const { fixtureBars } = await import("./lib/measure-stubs/fixture-bars.mjs");
 const { default: Page } = await import("../app/dashboard/page.tsx");
+const { default: RootPage } = await import("../app/page.tsx");
 
 globalThis.__SPX_BARS = fixtureBars(260, "2021-06-01");
 const render = async () => renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ symbol: "TSLA" }) }));
 const runs = [["full", await render()]];
+// "/" returns the JSON-LD and <DashboardPage /> (a server component): resolve that child, as Next would.
+const rootTree = await RootPage({ searchParams: Promise.resolve({}) });
+const { createElement, Fragment } = await import("react");
+const rootKids = await Promise.all([].concat(rootTree.props.children).map(async (c) => (c && c.type === Page ? Page(c.props) : c)));
+const rootHtml = renderToStaticMarkup(createElement(Fragment, null, ...rootKids));
 process.env.MEASURE_LANDING = "empty";
 runs.push(["empty", await render()]);
 delete process.env.MEASURE_LANDING;
@@ -82,6 +92,12 @@ function probe(cards) {
       if (r.width && (r.right > c.right + 1 || r.left < c.left - 1)) { bad.push(`spills out of its card: ${el.tagName.toLowerCase()}.${el.className} "${el.textContent.trim().slice(0, 30)}"`); break; }
     }
   }
+  // #149 §2: each news thumbnail 56–64 px square, left of its headline.
+  for (const row of document.querySelectorAll(".dlNewsRow")) {
+    const t = row.querySelector("[data-news-thumb]")?.getBoundingClientRect(), a = row.querySelector("a")?.getBoundingClientRect();
+    if (!t || !a) { bad.push("a news item has no thumbnail"); break; }
+    if (t.width < 56 || t.width > 64 || Math.abs(t.width - t.height) > 1 || t.right > a.left) { bad.push(`news thumbnail ${Math.round(t.width)}x${Math.round(t.height)}, or not left of its headline`); break; }
+  }
   // At 560 px and under: hero, Market right now, the cards, then the analyser.
   if (innerWidth <= 560) {
     const top = (s) => q(s)?.getBoundingClientRect().top ?? NaN;
@@ -103,8 +119,9 @@ function probe(cards) {
 }
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || "/opt/pw-browsers/chromium" });
-const open = async (body, root, width, hash = "") => {
-  const page = await browser.newPage({ viewport: { width, height: 900 } });
+const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+const open = async (body, root, width, hash = "", userAgent = undefined) => {
+  const page = await browser.newPage({ viewport: { width, height: 900 }, userAgent, isMobile: !!userAgent, hasTouch: !!userAgent });
   await page.route("**/*", (r) => {
     const url = r.request().url();
     if (url.startsWith("http://dash.test/") && !/\/(news-art|logos)\//.test(url)) return r.fulfill({ body: doc(body, root), contentType: "text/html" });
@@ -133,6 +150,19 @@ for (const [name, body] of runs) {
       await page.close();
     }
   }
+}
+// "/" on a phone (#149 §1): the same landing, H1 and all, not the old tile page.
+{
+  mode = "full";
+  const page = await open(rootHtml, 16, 390, "", IPHONE);
+  const bad = await page.evaluate(probe, CARDS);
+  const h1 = await page.evaluate(() => document.querySelector("h1")?.textContent ?? "");
+  const ld = /"@type":"WebApplication"/.test(rootHtml);
+  const ok = !bad.length && h1 === "Stock research from the filings, not the hype." && ld && !/msh-mobile-home|MobileHomePage/.test(rootHtml);
+  console.log(`"/" at 390px, phone UA: ${ok ? `OK (h1 "${h1}")` : `FAIL h1 "${h1}"${ld ? "" : ", no structured data"}; ${bad.join("; ")}`}`);
+  if (!ok) failures++;
+  if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, "root-phone-390.png"), fullPage: false }); }
+  await page.close();
 }
 // The deep link's anchor: opening #analyser lands on the analyser (the ?symbol=
 // scroll itself is DashboardClient's effect, held by check-dashboard-landing).

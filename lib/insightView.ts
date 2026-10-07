@@ -47,6 +47,27 @@ export type InsightFormat = "v2" | "v1";
  * page's dateModified (only `updated` does).
  */
 export type InsightDrivers = { asOf: string; text: string; sources: { title: string; publisher: string; url: string }[] };
+/**
+ * AN UPDATE TO A POST (#563 COWORK #149 §3): a dated note shown in a box at
+ * the top of the body, above the original text, which then sits under "The
+ * original post · {date}". A real text change, so the post's `updated` date
+ * moves with it (the writer sets both).
+ */
+export type InsightUpdate = { date: string; text: string };
+
+const isRealDay = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+const dayOf = (v: unknown) => (v instanceof Date ? v.toISOString().slice(0, 10) : str(v));
+
+/** The loader's validation: absent is fine; present needs a real yyyy-mm-dd date and non-empty text, else it is rejected whole. */
+export function parseUpdate(raw: unknown): { update: InsightUpdate | null; problems: string[] } {
+  if (raw === undefined || raw === null) return { update: null, problems: [] };
+  if (typeof raw !== "object" || Array.isArray(raw)) return { update: null, problems: ["update is not a mapping"] };
+  const o = raw as Record<string, unknown>;
+  const date = dayOf(o.date), text = str(o.text).replace(/\s+/g, " ");
+  const problems = [...(isRealDay(date) ? [] : ["update.date is not a yyyy-mm-dd date"]), ...(text ? [] : ["update.text is empty"])];
+  return problems.length ? { update: null, problems } : { update: { date, text }, problems: [] };
+}
+
 /** At most this many sources under the paragraph. */
 export const DRIVERS_MAX_SOURCES = 5;
 
@@ -114,6 +135,8 @@ export type NormalisedInsight = {
   claimedSide: "above" | "below" | null;
   /** The dated "what's driving it now" paragraph, when the post has a valid one (#146). */
   drivers: InsightDrivers | null;
+  /** A dated update shown above the original text, when the post has a valid one (#149). */
+  update: InsightUpdate | null;
 };
 
 // ── FRONTMATTER → ONE SHAPE ─────────────────────────────────────────────────
@@ -173,6 +196,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
   const find = (re: RegExp) => secs.find((s) => re.test(s.heading));
   const whatHappened = find(/^what happened$/i)?.body || null;
   const drivers = parseDrivers(data.drivers).drivers;
+  const update = parseUpdate(data.update).update;
 
   if (data.eventType !== undefined || data.summary !== undefined) {
     // THE NEW SHAPE. No price fields are read even if present.
@@ -183,7 +207,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
     return {
       format: "v2", slug, title: str(data.title), date, updated: str(data.updated) || null, symbol, timeframe, eventType: str(data.eventType) || null, levels,
       summary: str(data.summary), why: str(data.why) || find(/^why it matter/i)?.body || null, whatHappened, sources,
-      bull: str(data.bull) || null, bear: str(data.bear) || null, originalRest: null, claimedSide: null, drivers,
+      bull: str(data.bull) || null, bear: str(data.bear) || null, originalRest: null, claimedSide: null, drivers, update,
     };
   }
 
@@ -199,7 +223,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
     format: "v1", slug, title: str(data.title), date, updated: str(data.updated) || null, symbol, timeframe, eventType: null, levels,
     summary, why: find(/^why it matters$/i)?.body || null, whatHappened, sources: [],
     bull: SCENARIO("Bullish", scen), bear: SCENARIO("Bearish", scen), originalRest: rest || null,
-    claimedSide: claimedSideOf(`${str(data.excerpt)} ${str(data.overallBreakdown)}`, levels[0]), drivers,
+    claimedSide: claimedSideOf(`${str(data.excerpt)} ${str(data.overallBreakdown)}`, levels[0]), drivers, update,
   };
 }
 

@@ -57,20 +57,23 @@ import { LANDING_CSS, LandingCards, MarketNow } from "./DashboardLanding";
 // remaining headers() call on this route).
 export const dynamic = "force-dynamic";
 
-// THE HERO LINE AS THE TITLE (#563 COWORK #142 §2); the canonical is unchanged.
+// THE HERO LINE AS THE TITLE (#563 COWORK #142 §2); the canonical is "/" since #149 §1 (below).
 const DASHBOARD_TITLE = "Stock research from the filings, not the hype | MyStockHarbor";
 const DASHBOARD_DESCRIPTION =
   "Every figure traced to the SEC filing or the price it came from, and every chart explained in plain English: supply chains, capex flows, screens and a full stock analyser.";
 export const metadata: Metadata = {
   title: DASHBOARD_TITLE,
   description: DASHBOARD_DESCRIPTION,
+  // "/" SERVES THIS SAME PAGE (#563 COWORK #149 §1), so this URL points at it:
+  // the homepage keeps its own title, description and structured data and is
+  // the one canonical copy.
   alternates: {
-    canonical: "https://www.mystockharbor.com/dashboard",
+    canonical: "https://www.mystockharbor.com/",
   },
   openGraph: {
     title: DASHBOARD_TITLE,
     description: DASHBOARD_DESCRIPTION,
-    url: "https://www.mystockharbor.com/dashboard",
+    url: "https://www.mystockharbor.com/",
     siteName: "MyStockHarbor",
     type: "website",
   },

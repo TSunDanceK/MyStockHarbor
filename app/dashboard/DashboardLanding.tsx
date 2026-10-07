@@ -278,7 +278,15 @@ export function LandingCards({ c }: { c: DashboardCards }) {
             <>
               <ul className="dlList dlNews">
                 {c.news.map((n) => (
-                  <li key={n.url}><a href={n.url} target="_blank" rel="noopener noreferrer nofollow">{n.title}</a><Link className="dlPill" href={`/stock/${encodeURIComponent(n.symbol)}/news`} prefetch={false}>{n.symbol}</Link></li>
+                  <li key={n.url} className="dlNewsRow">
+                    {/* THE THUMBNAIL (#563 COWORK #149 §2): decorative, the headline is the link text. */}
+                    {n.thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="dlNewsThumb" data-news-thumb="" src={n.thumb} alt="" width={60} height={60} loading="lazy" decoding="async" />
+                    ) : <span className="dlNewsThumb" data-news-thumb="fallback" aria-hidden="true" />}
+                    <a href={n.url} target="_blank" rel="noopener noreferrer nofollow">{n.title}</a>
+                    <Link className="dlPill" href={`/stock/${encodeURIComponent(n.symbol)}/news`} prefetch={false}>{n.symbol}</Link>
+                  </li>
                 ))}
               </ul>
               <p className="dlFine" data-fine-print="">Each company&apos;s newest headline from its news page{c.news.some((n) => n.source) ? ` (${[...new Set(c.news.map((n) => n.source).filter(Boolean))].join(", ")})` : ""}.</p>
@@ -361,6 +369,8 @@ export const LANDING_CSS = `
 .dlInsight{display:grid;grid-template-columns:140px minmax(0,1fr);gap:16px;align-items:center;}
 .dlInsightImg{display:block;width:140px;height:100px;object-fit:cover;border-radius:12px;background:linear-gradient(135deg,#13213f,#0f1624);}
 .dlNews li{align-items:flex-start;}
+.dlNews .dlNewsRow{display:grid;grid-template-columns:60px minmax(0,1fr) auto;gap:12px;align-items:center;}
+.dlNewsThumb{display:block;width:60px;height:60px;border-radius:10px;object-fit:cover;background:linear-gradient(135deg,#13213f,#0f1624);}
 @media(max-width:1100px){.dlRow3{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:860px){.dlRow2,.dlRow3{grid-template-columns:minmax(0,1fr);}.dlHub{grid-template-columns:minmax(0,1fr);}}
 @media(max-width:560px){.dlCx .dlColHead{min-height:0;}.dlCapexChart{grid-template-columns:minmax(0,1fr);}.dlCxNode{min-height:0;padding-top:0;flex-direction:row;gap:8px;}.dlCxLines{display:none;}.dlCxNodeLabel::before{content:"↓ ";}.dlCxNodeLabel::after{content:" ↓";}.dlTiles{grid-template-columns:minmax(0,1fr);}.dlWeeks{grid-template-columns:minmax(0,1fr);}.dlInsight{grid-template-columns:minmax(0,1fr);}.dlInsightImg{width:100%;height:140px;}.dlCard{padding:14px;}.dlH2{font-size:1.375rem;}}

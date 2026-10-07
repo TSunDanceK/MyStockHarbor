@@ -36,7 +36,8 @@ import { rsiWilder, lastNum } from "@/lib/indicators";
 import { trendWords } from "@/lib/spxPage";
 import { getSectorPerformanceTable } from "@/lib/server/sectorPanels";
 import { getAllBottleneckPosts, getBottleneckHub } from "@/lib/bottlenecks";
-import { readCapexShared, getInsightPageDataCached } from "@/lib/server/insightPage";
+import { artFor, readCapexShared, getInsightPageDataCached } from "@/lib/server/insightPage";
+import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { getCalendarForwardSections } from "@/lib/server/dueInputs";
 import { easternDate } from "@/lib/server/calendarDayState";
@@ -72,7 +73,8 @@ export type DashboardCards = {
   /** All 11 sectors, sorted by YTD; `spxYtd` is SPY's YTD, the reference line (#148 §6). */
   sectors: { rows: { name: string; slug: string; ytd: number | null }[]; leader: string | null; laggard: string | null; spxYtd: number | null } | null;
   insight: { slug: string; title: string; symbol: string; date: string; art: CardArt; movePct: number | null; outcome: string | null } | null;
-  news: { title: string; url: string; source: string; date: string | null; symbol: string }[] | null;
+  /** `thumb`: a small picture (#149 §2): the item's own image only where publisher images are allowed, else the library art. */
+  news: { title: string; url: string; source: string; date: string | null; symbol: string; thumb: string | null }[] | null;
 };
 
 export type CapexBar = { ticker: string; amount: string; value: number };
@@ -231,10 +233,19 @@ async function readNews(): Promise<DashboardCards["news"]> {
   const bases = await Promise.all(syms.map((sym) => getStockNewsBaseData(sym, { maxDetailedItems: 5 }).catch(() => null)));
   const items = bases.flatMap((b, i) => {
     const it = (b?.detailedNews ?? []).find((x) => x.title && /^https?:\/\//.test(x.link ?? ""));
-    return it ? [{ title: it.title, url: it.link as string, source: it.source ?? "", date: it.pubDate ?? null, symbol: syms[i] }] : [];
+    return it ? [{ title: it.title, url: it.link as string, source: it.source ?? "", date: it.pubDate ?? null, symbol: syms[i], image: it.image ?? null }] : [];
   });
   const time = (d: string | null) => { const t = d ? Date.parse(d) : NaN; return Number.isFinite(t) ? t : 0; };
-  const top = items.sort((a, b) => time(b.date) - time(a.date)).slice(0, NEWS_SHOWN);
+  // THE THUMBNAILS (#149 §2): computed here, from data already read (no fetch).
+  // Publisher images are off site-wide (rights), so the item's own picture is
+  // used only if that ever changes; otherwise the news pipeline's library art
+  // for the company and sector, as the insight hero chooses it.
+  const taken = { names: new Set<string>(), buckets: new Map<string, Set<number>>() };
+  const top = items.sort((a, b) => time(b.date) - time(a.date)).slice(0, NEWS_SHOWN).map(({ image, ...n }) => {
+    if (SHOW_PUBLISHER_IMAGES && image && /^https:\/\//.test(image)) return { ...n, thumb: image };
+    const art = artFor(n.symbol, n.title, `dash-news:${n.url}`, taken);
+    return { ...n, thumb: art.kind === "library" ? art.art.src : null };
+  });
   return top.length ? top : null;
 }
 
@@ -266,7 +277,7 @@ function readBottleneckSlugs(): Record<string, string> {
 }
 
 /** The landing, cached 15 minutes; never throws (an empty landing renders every empty state). */
-export const getDashboardLanding = unstable_cache(loadDashboardLanding, ["dashboard-landing-v3"], { revalidate: 900, tags: ["dashboard-landing"] });
+export const getDashboardLanding = unstable_cache(loadDashboardLanding, ["dashboard-landing-v4"], { revalidate: 900, tags: ["dashboard-landing"] });
 
 export const EMPTY_LANDING: DashboardLanding = {
   market: { mood: null, spx: null, trend: null, bestSector: null, mapped: null },

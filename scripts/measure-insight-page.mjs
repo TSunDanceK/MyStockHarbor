@@ -15,7 +15,10 @@
 //     image, dates and author, or its breadcrumb is not Insights › TICKER ›
 //     post; there is more than one h1; the level discussed is not on the rail's
 //     pole (or its marker); the filed tiles show without facts, or hide with them;
-//   - (PR 2) the reader vote's three buttons or its fine print are missing.
+//   - (PR 2) the reader vote's three buttons or its fine print are missing;
+//   - (#149 §3) a post with an update (AMZN) does not open its body with the
+//     "Update · {date}" box, then the chart and news, then "The original post ·
+//     {date}" over the short version; a post without one shows either.
 // With --shots DIR it saves 1280 and 390 px screenshots. A mutant (a 700 px
 // wide block) must be caught as sideways scroll.
 //
@@ -56,9 +59,9 @@ for (const slug of SLUGS) pages.push([slug, renderToStaticMarkup(await Page({ pa
 
 const CSS = fs.readFileSync("app/globals.css", "utf8").replace(/@import[^;]*;|@tailwind[^;]*;|@theme inline \{[^}]*\}/g, "");
 // Which posts have a level discussed, and which symbols have a fact set in the stub (AAPL only).
-const FLAGS = { amzn: { level: 1, facts: 0, drivers: 1 }, riot: { level: 1, facts: 0, drivers: 0 }, bbai: { level: 1, facts: 0, drivers: 0 }, fixture: { level: 1, facts: 1, drivers: 0 } };
-let flags = { level: 0, facts: 0, drivers: 0 };
-const doc = (body, root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>html{font-size:${root}px}body{margin:0}</style></head><body data-level="${flags.level}" data-facts="${flags.facts}" data-drivers="${flags.drivers}">${body}</body></html>`;
+const FLAGS = { amzn: { level: 1, facts: 0, drivers: 1, update: 1 }, riot: { level: 1, facts: 0, drivers: 0, update: 0 }, bbai: { level: 1, facts: 0, drivers: 0, update: 0 }, fixture: { level: 1, facts: 1, drivers: 0, update: 0 } };
+let flags = { level: 0, facts: 0, drivers: 0, update: 0 };
+const doc = (body, root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>html{font-size:${root}px}body{margin:0}</style></head><body data-level="${flags.level}" data-facts="${flags.facts}" data-drivers="${flags.drivers}" data-update="${flags.update}">${body}</body></html>`;
 
 function probe() {
   const vis = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
@@ -82,6 +85,14 @@ function probe() {
   // #146: the dated paragraph and its sources when the post has one, the old layout when not; never more than 3 headlines.
   if (document.body.dataset.drivers === "1" ? !q("[data-insight-drivers]") || !/^As of \d/.test(q("[data-insight-drivers-asof]")?.textContent ?? "") || !q('[data-insight-news] a[rel="nofollow noopener"]') : !!q("[data-insight-drivers]")) bad.push("the drivers paragraph shown / hidden wrongly");
   if (document.querySelectorAll("[data-insight-news] .inNews li").length > 3) bad.push("more than 3 headlines");
+  // #149 §3: the update box first, then the live cards, then the original post under its dated heading.
+  if (document.body.dataset.update === "1") {
+    const main = q(".inMain"), top = (s) => q(s)?.getBoundingClientRect().top ?? NaN;
+    const order = [top("[data-insight-update]"), top("[data-insight-chart]"), top("[data-insight-news]"), top("[data-insight-original]"), top("[data-insight-summary]")];
+    if (main?.firstElementChild !== q("[data-insight-update]") || !order.every((v, i) => i === 0 || v > order[i - 1])) bad.push("update box, live cards, original post: wrong order");
+    if (!/^Update · \d{1,2} [A-Z][a-z]{2} \d{4}$/.test(q("[data-insight-update] .inEyebrow")?.textContent ?? "")) bad.push("the update box has no dated label");
+    if (!/^The original post · \d{1,2} [A-Z][a-z]{2} \d{4}$/.test(q("[data-insight-original] > h2")?.textContent ?? "") || !q("[data-insight-original] [data-insight-summary]")) bad.push("the original post is not under its dated heading");
+  } else if (q("[data-insight-update], [data-insight-original]")) bad.push("an update box on a post without one");
   try {
     const ld = JSON.parse(q('script[type="application/ld+json"]')?.textContent ?? "{}")["@graph"] ?? [];
     const art = ld.find((x) => x["@type"] === "Article"), crumbs = ld.find((x) => x["@type"] === "BreadcrumbList");
@@ -92,7 +103,7 @@ function probe() {
   if (q("[data-insight-levels]") && !q('.klTick[data-discussed], [data-discussed-off]') && document.body.dataset.level === "1") bad.push("the level discussed is not on the pole");
   const tiles = q("[data-insight-earnings] .inTile"), none = q("[data-insight-no-facts]");
   if (document.body.dataset.facts === "1" ? !tiles || none : tiles || !none) bad.push("filed tiles shown / hidden wrongly for this symbol's facts");
-  for (const card of document.querySelectorAll(".inCard, .inStat, .inMoreCard, .inSince, .klCard")) {
+  for (const card of document.querySelectorAll(".inOriginal, .inCard, .inStat, .inMoreCard, .inSince, .klCard")) {
     const c = card.getBoundingClientRect();
     for (const el of card.querySelectorAll("*")) {
       if (!vis(el) || el.closest("svg") || el.closest("details:not([open])")) continue;

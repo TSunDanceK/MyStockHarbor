@@ -219,7 +219,8 @@ function sectorOf(symbol: string): { name: string; slug: string | null } | null 
   return { name: def?.shortName ?? label, slug: def?.slug ?? null };
 }
 
-function artFor(symbol: string, title: string, key: string, taken: { names: Set<string>; buckets: Map<string, Set<number>> }): CardArt {
+/** The news pipeline's library art for a symbol's item (the insight hero's, and the dashboard news thumbnails'). Pure. */
+export function artFor(symbol: string, title: string, key: string, taken: { names: Set<string>; buckets: Map<string, Set<number>> }): CardArt {
   const prof = sicProfileFor(symbol);
   const slug = getSectorByLabel(prof?.sector ?? null)?.slug ?? null;
   return planSymbolCardArt({
