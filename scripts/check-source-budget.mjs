@@ -6,7 +6,7 @@
 // passes, and logs one line naming the page, the source and the symbol; a fast
 // source keeps its value and logs nothing; a rejection resolves to the fallback.
 // Five sources raced together with one hung still give the other four values.
-// Wiring: each of /dashboard's five reads goes through the budget, the history
+// Wiring: each of /dashboard's six reads (the landing joined, #563 COWORK #134) goes through the budget, the history
 // seed reads the cache only when FMP_API_KEY is unset, and every after() in the
 // news store is bounded. Each rule gets a planted mutant.
 //
@@ -131,7 +131,7 @@ async function runtimeRules(L) {
   return fails;
 }
 
-const SOURCES = ["history", "quote", "benchmarks", "news", "earnings"];
+const SOURCES = ["history", "quote", "benchmarks", "news", "earnings", "landing"];
 function wiringRules(pageRaw, storeRaw) {
   const page = stripComments(pageRaw, { file: PAGE });
   const store = stripComments(storeRaw, { file: STORE });
@@ -152,7 +152,7 @@ function wiringRules(pageRaw, storeRaw) {
   }
   entries.push(body.slice(start));
   const code = entries.map((e) => e.trim()).filter(Boolean);
-  want("the dashboard awaits exactly five sources", code.length === 5);
+  want("the dashboard awaits exactly six sources", code.length === SOURCES.length);
   want("...each of them inside budget()", code.every((e) => /^budget\(/.test(e)));
   want("the budget is DASHBOARD_SOURCE_BUDGET_MS from lib/server/sourceBudget", /withBudget\("dashboard", source, symbol, work, fallback, DASHBOARD_SOURCE_BUDGET_MS\)/.test(page) && /from "@\/lib\/server\/sourceBudget"/.test(page));
   want("with no FMP key the history seed reads the cache only",
@@ -199,7 +199,8 @@ try {
   const WIRING_MUTANTS = [
     ["the quote read unbudgeted", PAGE, /budget\("quote", getInitialQuoteAndName\(symbol\), \{ quote: null, name: "" \}\)/, "getInitialQuoteAndName(symbol)"],
     ["the news read unbudgeted", PAGE, /budget\("news", getInitialNews\(symbol\), null\)/, "getInitialNews(symbol)"],
-    ["a sixth, unbudgeted source", PAGE, /budget\("earnings", getInitialEarningsSummary\(symbol\), null\),/, 'budget("earnings", getInitialEarningsSummary(symbol), null),\n      getInitialNews(symbol),'],
+    ["the landing read unbudgeted", PAGE, /budget\("landing", (getDashboardLanding\(\)\.catch\(\(\) => EMPTY_LANDING\)), EMPTY_LANDING\)/, "$1"],
+    ["a seventh, unbudgeted source", PAGE, /budget\("earnings", getInitialEarningsSummary\(symbol\), null\),/, 'budget("earnings", getInitialEarningsSummary(symbol), null),\n      getInitialNews(symbol),'],
     ["the budget constant swapped for a literal", PAGE, /work, fallback, DASHBOARD_SOURCE_BUDGET_MS\)/, "work, fallback, 300_000)"],
     ["the no-key short-circuit removed", PAGE, /process\.env\.FMP_API_KEY\s*\?\s*getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\s*:\s*getCachedDailyHistory\(symbol, "dashboard"\)/, 'getDailyHistory(symbol, { caller: "dashboard" })'],
     ["the store write left unbounded", STORE, /after\(\n\s*boundedDeferred\("news-store", key, (async \(\) => \{[\s\S]*?\n {4}\}), NEWS_DEFERRED_WRITE_BUDGET_MS\)\n {2}\);/, "after($1);"],

@@ -42,6 +42,84 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
   const { n } = d;
   const sym = n.symbol;
   const timeframe = n.timeframe === "w" ? "Weekly" : "Daily";
+  const shortCard = (
+    <Card eyebrow="The short version" attr="data-insight-summary">
+      <p className="inRead" data-insight-summary-text="">{n.summary}</p>
+      {d.difference ? <p className="inDiff" data-insight-difference="">{d.difference}</p> : null}
+      {html.why ? (
+        <details className="inTap"><summary>Why it mattered</summary><div className="inProse" dangerouslySetInnerHTML={{ __html: html.why }} /></details>
+      ) : null}
+    </Card>
+  );
+  const chartCard = (
+    d.chart ? (
+      <Card eyebrow="Did the level hold" title={d.chart.level ? `Did ${sym} hold its ${d.chart.level.name}?` : `${sym} since publication`}>
+        <InsightChart symbol={sym} {...d.chart} />
+        {thumb && thumb.length > 1 ? (
+          <figure className="inThumb">
+            <Spark closes={thumb} />
+            <figcaption className="inFine" data-fine-print="">Chart when published: the {thumb.length} sessions to {dayWords(n.date)}.</figcaption>
+          </figure>
+        ) : null}
+      </Card>
+    ) : null
+  );
+  // WHAT'S DRIVING IT NOW (#563 COWORK #138 §1, corrected by #146): the writer's dated,
+  // sourced paragraph first, then at most three headlines, smaller. Without a paragraph
+  // (the old posts), the news page's tone line and headlines, as before.
+  const newsCard = (
+    <Card eyebrow={`What's driving ${sym} now`} title={`${sym} news and catalysts`} attr="data-insight-news">
+      {n.drivers ? (
+        <>
+          <p className="inDriverAsOf" data-fine-print="" data-insight-drivers-asof="">As of {dayWords(n.drivers.asOf)}</p>
+          <p className="inRead inDrivers" data-insight-drivers="">{n.drivers.text}</p>
+          <p className="inDriverSources" data-fine-print="">
+            Sources:{" "}
+            {n.drivers.sources.map((src, i) => (
+              <span key={src.url}>{i ? ", " : ""}<a href={src.url} target="_blank" rel="nofollow noopener" title={src.title}>{src.publisher}</a></span>
+            ))}
+          </p>
+        </>
+      ) : d.news?.score ? (
+        <p className="inRead"><span className="inTone" data-tone={d.news.score.tone}>{d.news.score.label}</span> {d.news.score.reason}</p>
+      ) : null}
+      {d.news?.items.length ? (
+        <div className={n.drivers ? "inNewsSmall" : undefined} {...(n.drivers ? { "data-fine-print": "" } : {})}>
+          {n.drivers ? <div className="inEyebrow inNewsLabel">Latest headlines</div> : null}
+          <ul className="inNews">
+            {d.news.items.map((i) => (
+              <li key={i.link}>
+                <a href={i.link} target="_blank" rel="noopener noreferrer">{i.title}</a>
+                <span className="inNewsMeta">{[i.source, i.date ? newsDay(i.date) : null].filter(Boolean).join(" · ")}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : n.drivers ? null : <p className="inRead">No recent headlines.</p>}
+      <p className="inLinks"><Link href={`/stock/${sym}/news`}>All {sym} news →</Link></p>
+    </Card>
+  );
+  const whatCard = (
+    html.whatHappened ? (
+      <Card eyebrow="What happened">
+        <div className="inProse" dangerouslySetInnerHTML={{ __html: html.whatHappened }} />
+        {n.sources.length ? (
+          <ul className="inSources" aria-label="Sources">
+            {n.sources.map((s) => <li key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a>{s.publisher ? <span> · {s.publisher}</span> : null}</li>)}
+          </ul>
+        ) : null}
+        {n.bull || n.bear ? (
+          <div className="inScen" data-insight-scenarios="">
+            {n.bull ? <div className="inScenBox" data-tone="up"><div className="inEyebrow">If it goes well</div><p className="inRead">{n.bull}</p></div> : null}
+            {n.bear ? <div className="inScenBox" data-tone="down"><div className="inEyebrow">If it doesn&apos;t</div><p className="inRead">{n.bear}</p></div> : null}
+          </div>
+        ) : null}
+        {html.originalRest ? (
+          <details className="inTap"><summary>The original post, in full</summary><div className="inProse" dangerouslySetInnerHTML={{ __html: html.originalRest }} /></details>
+        ) : null}
+      </Card>
+    ) : null
+  );
   return (
     <main className="inPage">
       <div className="inWrap">
@@ -96,79 +174,30 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
         {/* 3. TWO COLUMNS */}
         <div className="inCols">
           <div className="inMain">
-            <Card eyebrow="The short version" attr="data-insight-summary">
-              <p className="inRead" data-insight-summary-text="">{n.summary}</p>
-              {d.difference ? <p className="inDiff" data-insight-difference="">{d.difference}</p> : null}
-              {html.why ? (
-                <details className="inTap"><summary>Why it mattered</summary><div className="inProse" dangerouslySetInnerHTML={{ __html: html.why }} /></details>
-              ) : null}
-            </Card>
-
-            {d.chart ? (
-              <Card eyebrow="Did the level hold" title={d.chart.level ? `Did ${sym} hold its ${d.chart.level.name}?` : `${sym} since publication`}>
-                <InsightChart symbol={sym} {...d.chart} />
-                {thumb && thumb.length > 1 ? (
-                  <figure className="inThumb">
-                    <Spark closes={thumb} />
-                    <figcaption className="inFine" data-fine-print="">Chart when published: the {thumb.length} sessions to {dayWords(n.date)}.</figcaption>
-                  </figure>
-                ) : null}
-              </Card>
-            ) : null}
-
-            {/* WHAT'S DRIVING IT NOW (#563 COWORK #138 §1, corrected by #146): the writer's dated,
-                sourced paragraph first, then at most three headlines, smaller. Without a paragraph
-                (the old posts), the news page's tone line and headlines, as before. */}
-            <Card eyebrow={`What's driving ${sym} now`} title={`${sym} news and catalysts`} attr="data-insight-news">
-              {n.drivers ? (
-                <>
-                  <p className="inDriverAsOf" data-fine-print="" data-insight-drivers-asof="">As of {dayWords(n.drivers.asOf)}</p>
-                  <p className="inRead inDrivers" data-insight-drivers="">{n.drivers.text}</p>
-                  <p className="inDriverSources" data-fine-print="">
-                    Sources:{" "}
-                    {n.drivers.sources.map((src, i) => (
-                      <span key={src.url}>{i ? ", " : ""}<a href={src.url} target="_blank" rel="nofollow noopener" title={src.title}>{src.publisher}</a></span>
-                    ))}
-                  </p>
-                </>
-              ) : d.news?.score ? (
-                <p className="inRead"><span className="inTone" data-tone={d.news.score.tone}>{d.news.score.label}</span> {d.news.score.reason}</p>
-              ) : null}
-              {d.news?.items.length ? (
-                <div className={n.drivers ? "inNewsSmall" : undefined} {...(n.drivers ? { "data-fine-print": "" } : {})}>
-                  {n.drivers ? <div className="inEyebrow inNewsLabel">Latest headlines</div> : null}
-                  <ul className="inNews">
-                    {d.news.items.map((i) => (
-                      <li key={i.link}>
-                        <a href={i.link} target="_blank" rel="noopener noreferrer">{i.title}</a>
-                        <span className="inNewsMeta">{[i.source, i.date ? newsDay(i.date) : null].filter(Boolean).join(" · ")}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : n.drivers ? null : <p className="inRead">No recent headlines.</p>}
-              <p className="inLinks"><Link href={`/stock/${sym}/news`}>All {sym} news →</Link></p>
-            </Card>
-
-            {html.whatHappened ? (
-              <Card eyebrow="What happened">
-                <div className="inProse" dangerouslySetInnerHTML={{ __html: html.whatHappened }} />
-                {n.sources.length ? (
-                  <ul className="inSources" aria-label="Sources">
-                    {n.sources.map((s) => <li key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a>{s.publisher ? <span> · {s.publisher}</span> : null}</li>)}
-                  </ul>
-                ) : null}
-                {n.bull || n.bear ? (
-                  <div className="inScen" data-insight-scenarios="">
-                    {n.bull ? <div className="inScenBox" data-tone="up"><div className="inEyebrow">If it goes well</div><p className="inRead">{n.bull}</p></div> : null}
-                    {n.bear ? <div className="inScenBox" data-tone="down"><div className="inEyebrow">If it doesn&apos;t</div><p className="inRead">{n.bear}</p></div> : null}
-                  </div>
-                ) : null}
-                {html.originalRest ? (
-                  <details className="inTap"><summary>The original post, in full</summary><div className="inProse" dangerouslySetInnerHTML={{ __html: html.originalRest }} /></details>
-                ) : null}
-              </Card>
-            ) : null}
+            {n.update ? (
+              <>
+                {/* UPDATE (#563 COWORK #149 §3): the writer's dated note first, then the live cards,
+                    then the post as published, under one heading. */}
+                <section className="inCard inUpdate" data-insight-update="">
+                  <div className="inEyebrow">Update · {dayWords(n.update.date)}</div>
+                  <p className="inRead" data-insight-update-text="">{n.update.text}</p>
+                </section>
+                {chartCard}
+                {newsCard}
+                <section className="inOriginal" data-insight-original="">
+                  <h2 className="inOriginalTitle">The original post · {dayWords(n.date)}</h2>
+                  {shortCard}
+                  {whatCard}
+                </section>
+              </>
+            ) : (
+              <>
+                {shortCard}
+                {chartCard}
+                {newsCard}
+                {whatCard}
+              </>
+            )}
 
             {/* YOUR READ (#563 COWORK #132/#133, PR 2): a reader poll per report window, never advice. */}
             <Card eyebrow="Your read" title={`Where do you think ${sym} goes into its next report?`} attr="data-insight-vote-card">
@@ -328,14 +357,18 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
           </>
         )}
         {flow.length ? (
-          <div className="inFlow" aria-label={m.mention.list === "spending" ? `${sym} to the largest build-out sellers` : `The largest spenders to ${sym}`}>
-            <span className="inFlowEnd">{m.mention.list === "spending" ? sym : "Spenders"}</span>
-            <span className="inFlowArrow" aria-hidden="true">→</span>
-            <ul className="inFlowList">
-              {flow.map((f) => (
-                <li key={f.ticker}><span className="inFlowSym">{f.ticker}</span><span className="inFlowBar" aria-hidden="true"><i style={{ width: `${Math.max(6, (100 * (f.value || 0)) / max)}%` }} /></span><span className="inFlowAmt">{f.amount}</span></li>
-              ))}
-            </ul>
+          <div className="inFlow" data-flow={m.mention.list} aria-label={m.mention.list === "spending" ? `${sym}'s capex, and separately the largest build-out sellers' own filed sales` : `The largest spenders' own capex, and separately ${sym}'s build-out sales`}>
+            {m.mention.list === "spending" ? <><span className="inFlowEnd">{sym}</span><span className="inFlowArrow" aria-hidden="true">→</span></> : null}
+            {/* THE ARROW POINTS AT THE GROUP'S HEADER, not at its first name (#563 COWORK #141 §1): each
+                figure is that company's own filing, never a payment from one to the other. */}
+            <div className="inFlowBox">
+              <p className="inFlowHead" data-flow-head="">{m.mention.list === "spending" ? "Top build-out receivers · their own filed sales" : "Top spenders · their own capex"}</p>
+              <ul className="inFlowList">
+                {flow.map((f) => (
+                  <li key={f.ticker}><span className="inFlowSym">{f.ticker}</span><span className="inFlowBar" aria-hidden="true"><i style={{ width: `${Math.max(6, (100 * (f.value || 0)) / max)}%` }} /></span><span className="inFlowAmt">{f.amount}</span></li>
+                ))}
+              </ul>
+            </div>
             {m.mention.list === "receiving" ? <><span className="inFlowArrow" aria-hidden="true">→</span><span className="inFlowEnd">{sym}</span></> : null}
           </div>
         ) : null}
@@ -398,10 +431,25 @@ function FaintChart({ closes, ref200 }: { closes: number[]; ref200: (number | nu
 }
 
 /** The snapshot's three tiles against the same quarter a year earlier, the P/E line under them. */
+const epsMoney = (v: number) => `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
+/**
+ * THE EPS TILE'S YEAR-AGO LINE (#563 COWORK #141 §2). The shared rule words
+ * only the loss cases ("loss narrowed from …"); a profit against a profit got
+ * a tint and no words, so AMZN's tile said nothing. When both quarters exist,
+ * say what the year-ago figure was.
+ */
+export function epsLine(now: number | null, ya: { label: string; eps: number | null } | null): Vs {
+  const vs = epsVsYearAgo(now, ya?.eps, epsMoney);
+  if (vs.words || now === null || !Number.isFinite(now) || ya?.eps == null || !Number.isFinite(ya.eps)) return vs;
+  const then = epsMoney(ya.eps), when = ya.label ? `, ${ya.label}` : " a year earlier";
+  const same = Math.round(now * 100) === Math.round(ya.eps * 100);
+  return { tone: vs.tone, words: same ? `level with ${then}${when}` : `${now > ya.eps ? "up" : "down"} from ${then}${when}` };
+}
+
 function EarningsTiles({ d }: { d: InsightPageData }) {
   const s = d.snapshot!, ya = s.yearAgo ?? null;
   const tiles: { label: string; value: string; vs: Vs }[] = [
-    { label: "EPS (diluted)", value: s.eps.value !== null ? `$${s.eps.value.toFixed(2)}` : "n/a", vs: epsVsYearAgo(s.eps.value, ya?.eps, (v) => `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`) },
+    { label: "EPS (diluted)", value: s.eps.value !== null ? `$${s.eps.value.toFixed(2)}` : "n/a", vs: epsLine(s.eps.value, ya) },
     { label: "Gross margin", value: s.margins.gross !== null ? `${s.margins.gross.toFixed(1)}%` : "n/a", vs: marginVsYearAgo(s.margins.gross, ya?.gross, ya?.label) },
     { label: "Operating margin", value: s.margins.operating !== null ? `${s.margins.operating.toFixed(1)}%` : "n/a", vs: marginVsYearAgo(s.margins.operating, ya?.operating, ya?.label) },
   ];
@@ -457,6 +505,11 @@ const CSS = `
 .inFineInline { font-size: var(--fs-fine); color: rgba(203,213,225,0.62); }
 .inCols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; margin-top: 16px; align-items: start; }
 .inMain, .inRail { display: grid; gap: 16px; min-width: 0; }
+.inUpdate { border-color: rgba(250,204,21,0.45); background: linear-gradient(135deg, rgba(250,204,21,0.08), rgba(255,255,255,0.02)); }
+.inUpdate .inEyebrow { color: rgba(253,224,71,0.9); }
+.inUpdate .inRead { margin: 8px 0 0; }
+.inOriginal { display: grid; gap: 16px; min-width: 0; padding-top: 8px; border-top: 1px solid rgba(148,163,184,0.22); }
+.inOriginalTitle { margin: 0; font-size: 1.25rem; line-height: 1.2; }
 .inCard, .inBlock { border: 1px solid rgba(148,163,184,0.22); border-radius: 18px; padding: 18px; background: linear-gradient(135deg, rgba(148,163,184,0.06), rgba(255,255,255,0.02)); min-width: 0; }
 .inBlock { padding: 0; border: 0; background: none; }
 .inCardTitle, .inH2 { margin: 6px 0 0; font-size: 1.25rem; line-height: 1.2; }
@@ -550,10 +603,12 @@ const CSS = `
 .inH3 { margin: 10px 0 0; font-size: var(--fs-read); font-weight: 800; }
 .inInline { font-size: 1.125rem; margin-left: 6px; }
 .inTight { margin-top: 6px; gap: 4px; }
-.inFlow { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-width: 0; }
-.inFlowEnd { font-size: var(--fs-label); font-weight: 900; color: #5fd4c7; white-space: nowrap; }
-.inFlowArrow { color: rgba(203,213,225,0.7); }
-.inFlowList { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; flex: 1; min-width: 0; }
+.inFlow { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; min-width: 0; }
+.inFlowBox { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid rgba(148,163,184,0.22); border-radius: 10px; }
+.inFlowHead { margin: 0 0 4px; font-size: var(--fs-read); line-height: 1.35; font-weight: 800; color: rgba(203,213,225,0.85); }
+.inFlowEnd { font-size: var(--fs-label); font-weight: 900; color: #5fd4c7; white-space: nowrap; margin-top: 7px; }
+.inFlowArrow { color: rgba(203,213,225,0.7); margin-top: 6px; }
+.inFlowList { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 0; }
 .inFlowList li { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto; gap: 6px; align-items: center; font-size: var(--fs-label); }
 .inFlowSym { font-weight: 800; }
 .inFlowBar { height: 6px; border-radius: 3px; background: rgba(148,163,184,0.15); overflow: hidden; }

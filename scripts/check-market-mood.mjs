@@ -25,6 +25,7 @@ const F = {
   lib: "lib/marketMood.ts",
   card: "app/markets/spx/MarketMoodCard.tsx",
   page: "app/markets/spx/page.tsx",
+  dash: "lib/server/dashboardCards.ts",
   write: "lib/server/marketMoodWrite.ts",
   read: "lib/server/marketMoodRead.ts",
   eod: "app/api/jobs/tiingo-eod/route.ts",
@@ -127,7 +128,9 @@ const RULES = {
   },
   "no route or JSON export serves the series; the page hands the card one day and 90 readings": ({ src, files }) =>
     files.filter((f) => /(^|\/)route\.ts$/.test(f) && /marketMoodRead|readMarketMood|TIINGO_MOOD_KEY/.test(read(f))).length === 0 &&
-    files.filter((f) => /marketMoodRead|readMarketMood/.test(read(f)) && f !== F.read).join() === F.page &&
+    // The dashboard's "Market right now" (#563 COWORK #134) is the second reader, through the same moodView.
+    files.filter((f) => /marketMoodRead|readMarketMood/.test(read(f)) && f !== F.read).sort().join() === [F.dash, F.page].sort().join() &&
+    /mood: moodView\(moodRaw\)/.test(read(F.dash)) && /readMarketMood\(\)\.catch\(\(\) => null\)/.test(read(F.dash)) &&
     files.filter((f) => /marketMoodWrite|writeMarketMood/.test(read(f)) && f !== F.write).join() === F.eod &&
     /const mood = moodView\(await readMarketMood\(\)\);/.test(src.pageCode) && /<MarketMoodCard view=\{mood\} credit=/.test(src.pageCode) &&
     !/\b(?:days|StoredMood)\b/.test(code(src.card, F.card).replace(/MoodDay/g, "")),

@@ -24,7 +24,11 @@
 //     of advice words; the card leads with the dated paragraph, its sources as
 //     nofollow publisher links, then at most three headlines, and falls back to
 //     the tone line without it; junk headlines are skipped with B's predicate
-//     (lib/server/news/junkTitle.ts, #818), never a copy of it.
+//     (lib/server/news/junkTitle.ts, #818), never a copy of it;
+//   - update (#149): the loader's validation on fixtures (missing, bad date,
+//     empty text); every post's `update` valid, free of advice words and dated
+//     as its `updated`; AMZN's text exactly as the owner wrote it; the box
+//     leads the body and the original sections sit under one dated heading.
 // A mutant each.
 //
 //   node scripts/check-insight-page.mjs
@@ -37,6 +41,8 @@ const VIEW = "lib/insightView.ts", SCREENS = "lib/insightScreens.ts", PAGE = "ap
 const CHART = "app/insights/[slug]/InsightChart.tsx", LOADER = "lib/server/insightPage.ts", TEMPLATE = "content/templates/insight-template.md";
 const FIXTURE = "content/insights-fixtures/fixture-aapl-new-format.md", AMZN = "content/insights/amzn-daily-ma200-buy-zone-july-2026.md";
 const read = (f) => fs.readFileSync(f, "utf8");
+// The owner's words for AMZN's update (#563 COWORK #149 §3), verbatim.
+const AMZN_UPDATE = "This post was written two days before Amazon's Q2 report on 30 July. That report has since come and gone: Amazon raised its 2026 capital-spending estimate to about $220bn, and AWS growth sped up again. The strip above shows how the price has moved since, and whether the 200-day held. The next test may be the Q3 report, expected around 29 October; \"What's driving AMZN now\" below has the details. The original post follows, unchanged.";
 
 let n = 0;
 async function load(src, name) {
@@ -128,6 +134,19 @@ const RULES = {
     /<KeyLevelsCard bars=\{d\.railBars\} discussed=\{d\.discussed\}/.test(page) && /discussed: level && lvNow !== null \? \{ label: SHORT\[level\], value: lvNow \} : null,/.test(loader) &&
     /\{d\.snapshot\?\.available \? <EarningsTiles d=\{d\} \/> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet\.<\/p>\}/.test(page) &&
     /: <p className="inRead">No recent headlines\.<\/p>\}/.test(page) && /getStockNewsBaseData\(sym, \{ maxDetailedItems: 5 \}\)/.test(loader) && !/LatestEarningsCard/.test(page),
+  "#141: the flow's arrow points at a header naming whose figures they are; the EPS tile gives its year-ago figure": ({ page }) => {
+    const heads = /\{m\.mention\.list === "spending" \? "Top build-out receivers · their own filed sales" : "Top spenders · their own capex"\}/.test(page) &&
+      /<div className="inFlowBox">\s*<p className="inFlowHead" data-flow-head="">/.test(page);
+    const fn = page.match(/const epsMoney = [^\n]*\n[\s\S]*?export function epsLine[\s\S]*?\n\}/)?.[0];
+    if (!heads || !fn || !/vs: epsLine\(s\.eps\.value, ya\)/.test(page)) return false;
+    const js = ts.transpileModule(`${read("lib/snapshotVsYearAgo.ts")}\n${fn.replace(/^export /m, "")}\nexports.epsLine = epsLine;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+    const mod = { exports: {} };
+    new Function("module", "exports", js)(mod, mod.exports);
+    const { epsLine } = mod.exports, ya = (eps) => ({ label: "Q2 FY2025", eps });
+    return epsLine(1.68, ya(1.26)).words === "up from $1.26, Q2 FY2025" && epsLine(1.0, ya(1.26)).words === "down from $1.26, Q2 FY2025" &&
+      epsLine(1.26, ya(1.26)).words === "level with $1.26, Q2 FY2025" && /loss narrowed from -\$0\.71/.test(epsLine(-0.2, ya(-0.71)).words ?? "") &&
+      epsLine(1.68, null).words !== "up from" && epsLine(null, ya(1.26)).words === null;
+  },
   "drivers: the loader rejects a malformed paragraph whole and keeps a good one": ({ V }) => {
     const src = (n) => Array.from({ length: n }, (_, i) => ({ title: `Article ${i}`, publisher: `Pub ${i}`, url: `https://example.com/a${i}` }));
     const ok = { asOf: "2026-10-07", text: "Amazon heads into its Q3 report.", sources: src(3) };
@@ -148,7 +167,7 @@ const RULES = {
     const withDrivers = files.map((f) => matter(read(f)).data).filter((d) => d.drivers !== undefined);
     return withDrivers.length >= 1 && withDrivers.every((d) => {
       const r = V.parseDrivers(d.drivers);
-      return r.drivers && !ADVICE.test(r.drivers.text) && !d.updated;
+      return r.drivers && !ADVICE.test(r.drivers.text) && (!d.updated || V.parseUpdate(d.update).update?.date === String(d.updated));
     });
   },
   "drivers: the card leads with the dated paragraph, nofollow sources, at most three headlines, the old layout without it": ({ page, loader, V }) =>
@@ -159,6 +178,39 @@ const RULES = {
     /\) : d\.news\?\.score \? \(/.test(page) && /Latest headlines/.test(page) &&
     /export const NEWS_SHOWN = 3;/.test(loader) && /junkReason\(i\.title\) === null\)\.slice\(0, NEWS_SHOWN\)/.test(loader) &&
     /import \{ junkReason \} from "@\/lib\/server\/news\/junkTitle";/.test(loader) && !/isJunkHeadline/.test(read(VIEW)),
+  "update: the loader rejects a malformed note whole and keeps a good one": ({ V }) => {
+    const ok = { date: "2026-10-07", text: "Since then, the report came out." };
+    const bad = (over) => V.parseUpdate({ ...ok, ...over });
+    return V.parseUpdate(ok).update?.text === ok.text && V.parseUpdate(ok).problems.length === 0 &&
+      V.parseUpdate({ ...ok, date: new Date("2026-10-07T00:00:00Z") }).update?.date === "2026-10-07" &&
+      V.parseUpdate(undefined).update === null && V.parseUpdate(undefined).problems.length === 0 &&
+      bad({ date: "7 Oct" }).update === null && bad({ date: "2026-02-30" }).update === null && bad({ text: "  " }).update === null &&
+      V.parseUpdate("a note").update === null && V.parseUpdate(["a"]).update === null &&
+      V.normaliseInsight("x", { title: "t", date: "2026-07-28", symbol: "amzn", update: ok }, "").update?.date === "2026-10-07" &&
+      V.normaliseInsight("x", { title: "t", date: "2026-07-28", symbol: "amzn", eventType: "level-test", summary: "s", update: ok }, "").update?.text === ok.text &&
+      V.normaliseInsight("x", { title: "t", date: "2026-07-28", symbol: "amzn", update: { ...ok, text: "" } }, "").update === null;
+  },
+  "update: every post's note validates, advises nothing and is dated as its 'updated'; AMZN's text as written": ({ V }) => {
+    const ADVICE = /\b(buy|buying|sell|selling|should|must|recommend\w*|buy zone|target)\b/i;
+    const files = [...fs.readdirSync("content/insights").map((f) => `content/insights/${f}`), ...fs.readdirSync("content/insights-fixtures").map((f) => `content/insights-fixtures/${f}`)].filter((f) => f.endsWith(".md"));
+    const withUpdate = files.map((f) => matter(read(f)).data).filter((d) => d.update !== undefined);
+    const amzn = V.parseUpdate(matter(read(AMZN)).data.update).update;
+    return withUpdate.length >= 1 && withUpdate.every((d) => {
+      const u = V.parseUpdate(d.update).update;
+      return u && !ADVICE.test(u.text) && String(d.updated) === u.date;
+    }) && amzn?.date === "2026-10-07" && amzn.text === AMZN_UPDATE;
+  },
+  "update: the box leads the body; the original sections under one dated heading; no update, the old order": ({ page }) => {
+    const withU = page.match(/\{n\.update \? \(([\s\S]*?)\) : \(([\s\S]*?)\)\}/);
+    if (!withU) return false;
+    const order = (block, names) => names.map((x) => block.indexOf(x)).every((v, i, a) => v >= 0 && (i === 0 || v > a[i - 1]));
+    const orig = withU[1].match(/<section className="inOriginal" data-insight-original="">([\s\S]*?)<\/section>/)?.[1] ?? "";
+    return order(withU[1], ["data-insight-update=", "{chartCard}", "{newsCard}", "data-insight-original="]) &&
+      /<div className="inEyebrow">Update · \{dayWords\(n\.update\.date\)\}<\/div>/.test(withU[1]) &&
+      /<p className="inRead" data-insight-update-text="">\{n\.update\.text\}<\/p>/.test(withU[1]) &&
+      /<h2 className="inOriginalTitle">The original post · \{dayWords\(n\.date\)\}<\/h2>/.test(orig) && order(orig, ["{shortCard}", "{whatCard}"]) &&
+      order(withU[2], ["{shortCard}", "{chartCard}", "{newsCard}", "{whatCard}"]) && (page.match(/\{shortCard\}/g) ?? []).length === 2;
+  },
   "the fixture is served off production only, noindex, and never listed": () => {
     const loader = stripComments(read(LOADER), { file: LOADER }), route = stripComments(read(ROUTE), { file: ROUTE });
     return /export const fixturesServed = \(\) => process\.env\.VERCEL_ENV !== "production";/.test(loader) && /fixturesServed\(\) && /.test(loader) &&
@@ -182,6 +234,9 @@ const MUTANTS = [
   ["drivers: the loader", "v", (s) => s.replace("if (list.length < 1 || list.length > DRIVERS_MAX_SOURCES)", "if (list.length > 99)")],
   ["drivers: the loader", "v", (s) => s.replace("if (!/^https:\\/\\/[^\\s/]+\\.[^\\s]+$/.test(src.url))", "if (!/^https?:\\/\\//.test(src.url))")],
   ["drivers: the loader", "v", (s) => s.replace("return problems.length ? { drivers: null, problems } :", "return false ? { drivers: null, problems } :")],
+  ["update: the loader", "v", (s) => s.replace('return problems.length ? { update: null, problems } :', 'return false ? { update: null, problems } :')],
+  ["update: the loader", "v", (s) => s.replace('...(text ? [] : ["update.text is empty"])', "")],
+  ["update: the loader", "v", (s) => s.replace("const update = parseUpdate(data.update).update;", "const update = null;")],
   ["the screens link", "s", (s) => s.replace('href: "/oversold-stocks-today"', 'href: "/oversold-today"')],
   ["no advice words", "v", (s) => s.replace('case "held": return { word: "Held", detail: "No daily close below it since", tone: "up" };', 'case "held": return { word: "Held", detail: "A level to buy while it holds", tone: "up" };')],
 ];
@@ -191,10 +246,16 @@ const SRC_MUTANTS = [
   ["SEO:", ROUTE, (s) => s.replace("dateModified: modifiedTime,", "dateModified: new Date().toISOString(),")],
   ["SEO:", ROUTE, (s) => s.replace('"@type": "Article",', '"@type": "BlogPosting",')],
   ["the rail:", PAGE, (s) => s.replace("<KeyLevelsCard bars={d.railBars} discussed={d.discussed}", "<KeyLevelsCard bars={d.railBars}")],
+  ["#141:", PAGE, (s) => s.replace('"Top build-out receivers · their own filed sales"', '"Build-out sellers"')],
+  ["#141:", PAGE, (s) => s.replace("vs: epsLine(s.eps.value, ya)", "vs: epsVsYearAgo(s.eps.value, ya?.eps, epsMoney)")],
+  ["#141:", PAGE, (s) => s.replace('`${now > ya.eps ? "up" : "down"} from ${then}${when}`', "null")],
   ["drivers: the card", PAGE, (s) => s.replace('rel="nofollow noopener"', 'rel="noopener"')],
   ["drivers: the card", PAGE, (s) => s.replace(") : d.news?.score ? (", ") : null}{d.news?.score ? (")],
   ["drivers: the card", LOADER, (s) => s.replace("export const NEWS_SHOWN = 3;", "export const NEWS_SHOWN = 5;")],
   ["drivers: the card", LOADER, (s) => s.replace("&& junkReason(i.title) === null)", ")")],
+  ["update: the box", PAGE, (s) => s.replace("The original post · {dayWords(n.date)}", "The original post")],
+  ["update: the box", PAGE, (s) => s.replace("{chartCard}\n                {newsCard}\n                <section", "<section")],
+  ["update: the box", PAGE, (s) => s.replace("{shortCard}\n                  {whatCard}\n                </section>", "</section>\n                {shortCard}\n                {whatCard}")],
   ["the rail:", PAGE, (s) => s.replace('{d.snapshot?.available ? <EarningsTiles d={d} /> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet.</p>}', "<EarningsTiles d={d} />")],
 ];
 const R = Object.keys(RULES);

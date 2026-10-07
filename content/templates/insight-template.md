@@ -60,6 +60,9 @@ drivers:                                                            # what's dri
     - title: "Headline of the article"
       publisher: "Publisher name"
       url: "https://..."
+# update:                                                           # optional: only when a dated note is added AFTER publish
+#   date: "YYYY-MM-DD"                                              #   the day of the note (set `updated` to the same day)
+#   text: "Two to five sentences: what has happened since the post, and where on the page to look."
 ---
 ```
 
@@ -73,6 +76,13 @@ drivers:                                                            # what's dri
   advice rules above apply. The page rejects a malformed `drivers` whole (no
   date, empty text, 0 or more than 5 sources, a non-https URL) and falls back
   to the headline layout.
+- **update** (#563 COWORK #149): optional, added later, never at publish. The
+  page shows it in a box headed "Update · {date}" at the top of the body,
+  then the live cards, then the post as published under one heading, "The
+  original post · {date}". The original text stays unchanged. Set `updated`
+  to the same day (it is a real text change, so it moves dateModified). The
+  advice rules above apply. The page rejects a malformed `update` whole (no
+  real yyyy-mm-dd date, or empty text) and shows the post without it.
 - **levels**, kinds only: `MA200` (200-day average), `MA50` (50-day),
   `WMA200` (200-week, weekly posts), `BBMID` (the 20-day average, the
   Bollinger midline). Leave it `[]` when the post is about an event with no
