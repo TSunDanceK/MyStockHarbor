@@ -3,6 +3,7 @@ import { recordSectorTone } from "@/lib/server/sectorTone";
 import { readOrRefreshSectorNews, readStoredSymbolNews } from "@/lib/server/newsStore";
 import { activeNewsProviders, newsProviderMode } from "@/lib/server/news";
 import { wireProvider } from "@/lib/server/news/wireProvider";
+import { isNotJunkNews } from "@/lib/server/news/junkTitle";
 import {
   attributedSymbols,
   composeFreeSectorPools,
@@ -442,7 +443,8 @@ async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBas
     // held in msh:sector-news:v1:<slug> leave the record on the first refresh
     // after deploy instead of occupying cap slots, invisibly, for days.
     // Under the fmp rollback the filter passes everything, as before.
-    dedupe: (items) => dedupeNews(items.filter(fromActive)),
+    // Junk headlines (news/junkTitle.ts, #553 COWORK #191) leave the stored set at its next refresh.
+    dedupe: (items) => dedupeNews(items.filter(fromActive).filter(isNotJunkNews)),
   });
   // AND FILTERED ON READ, for the up-to-an-hour a record is served from cache
   // before its first refresh under this code.
@@ -463,6 +465,9 @@ async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBas
     news = dedupeNews(mergeNewsPools([news, fresh]));
   }
 
+  // On read too, AFTER the FMP-rebuild test above: a junk item dropped here
+  // must not read as "the record held FMP items" and trigger that rebuild.
+  news = news.filter(isNotJunkNews);
   const rankedNews = rankSectorNews(news);
   const earningsNews = news.filter(isEarningsNewsItem);
 
