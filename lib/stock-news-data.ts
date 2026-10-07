@@ -3,6 +3,7 @@ import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
 import { fetchSymbolNewsWindow, feedMaxAgeDays, activeNewsProviders, newsProviderMode } from "@/lib/server/news";
 import { isFromActiveProvider } from "@/lib/server/news/provenance";
 import { isFilingChurn } from "@/lib/server/news/filingChurn";
+import { isNotJunkNews } from "@/lib/server/news/junkTitle";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import {
   cleanRssDescription,
@@ -396,7 +397,8 @@ async function fetchStoredSymbolNews(symbol: string, companyName: string): Promi
     // see lib/server/news/index.ts. In step 1 it is always the FMP adapter, and
     // the adapter is the code that used to sit inline here.
     fetchWindow: (from) => fetchSymbolNewsWindow(symbol, companyName, from),
-    dedupe: (list) => dedupeNews(list.filter(fromActive)),
+    // Junk headlines (news/junkTitle.ts, #553 COWORK #191) leave the stored set at its next refresh.
+    dedupe: (list) => dedupeNews(list.filter(fromActive).filter(isNotJunkNews)),
     // The earnings pin. Once an article qualifies it survives eviction until a
     // newer qualifying one replaces it, or 7 days pass -- which is the part
     // only persistence makes possible. Today an earnings article vanishes the
@@ -413,7 +415,8 @@ async function fetchStoredSymbolNews(symbol: string, companyName: string): Promi
     },
   });
 
-  return items.filter(fromActive);
+  // ...and on read, for a record served from cache before that refresh.
+  return items.filter(fromActive).filter(isNotJunkNews);
 }
 
 export function isVideoOrLowQualitySource(item: NewsItem) {
