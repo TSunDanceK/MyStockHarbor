@@ -63,6 +63,8 @@ export const WRITE_SITES = [
   { file: "lib/server/sectorSparks.ts", key: "SECTOR_SPARK_KEY", cls: "row" },
   // #553 COWORK #181: ~25 candidates of tickers and words, a few KB.
   { file: "lib/server/insightCandidates.ts", key: "INSIGHT_CANDIDATES_KEY", cls: "row" },
+  // #553 COWORK #173/#190: ~400 symbols and 50 short rows, a few tens of KB.
+  { file: "lib/server/marketDynamic.ts", key: "MARKET_DYNAMIC_KEY", cls: "row" },
   // The /upcoming-ipos SEC profiles, one SET of the whole map only when something changed (#553 COWORK #159).
   { file: "lib/server/ipoProfiles.ts", key: "IPO_PROFILES_KEY", cls: "listed", candidate: "IPO_PROFILES_KEY" },
   { file: "lib/server/tiingoUniverse.ts", key: "TIINGO_UNIVERSE_KEY", cls: "small" },
