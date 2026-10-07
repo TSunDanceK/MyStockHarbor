@@ -1402,6 +1402,8 @@ const TASKS = {
   // --opt-ins-only keeps every default key; use these two in its place.
   "write-fmp-purge-snapshots-only-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--opt-ins-only", "--insight-snapshots"], writes: true },
   "write-fmp-purge-snapshots-only": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--opt-ins-only", "--insight-snapshots"], writes: true },
+  // EXTRACT DRY RUN (#552 COWORK #192): companyfacts → the branch's extractor. No store.
+  "sec-extract-dryrun": { script: "scripts/sec-extract-dryrun.mjs", args: () => [], needsTypescript: true },
 };
 
 const argv = process.argv.slice(2);
