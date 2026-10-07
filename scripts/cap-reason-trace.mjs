@@ -70,6 +70,7 @@ for (const s of NAMED) {
   const why = F.secPickerWhy(row, price, figures, earnings, rec?.industry ?? null);
   const words = F.secPickerWords(why);
   const code = why.marketCap ?? null;
+  if (process.env.SHOW_REVENUE) console.log(`  ${s} revenue: shown ${figures.revenue === null ? "no" : "yes"} · why ${why.revenue ?? "–"} · row has m.revenue ${row.m?.revenue?.vals?.revenue != null} · incomplete ${row.m?.revenueIncomplete === true} · unit ${JSON.stringify(row.unit)}`);
   console.log(`${head} | "${field}" | ${figures.marketCap === null ? "no" : "yes"} | ${code ?? "–"} | ${words.marketCap ?? "–"} | ${code ? cellWhyWords(code) : "–"}${price === null ? " (no stored close)" : ""}`);
 }
 console.log(`\nRedis commands ${commands} (read-only)`);

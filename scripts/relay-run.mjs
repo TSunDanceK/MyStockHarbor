@@ -1415,6 +1415,7 @@ const TASKS = {
   "write-cap-reason-trace": { script: "scripts/cap-reason-trace.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-redis-bandwidth-reading": { script: "scripts/redis-bandwidth-reading.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-insight-factset-probe": { script: "scripts/insight-factset-probe.mjs", args: () => [], needsTypescript: true, writes: true },
+  "write-revenue-trace": { script: "scripts/cap-reason-trace.mjs", args: () => [], needsTypescript: true, writes: true, env: { NAMED: "OXY PSX NVDA JPM", SHOW_REVENUE: "1" } },
 };
 
 const argv = process.argv.slice(2);
