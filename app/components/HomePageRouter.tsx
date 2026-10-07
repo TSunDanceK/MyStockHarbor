@@ -1,5 +1,7 @@
 "use client";
-
+// RETIRED 7 OCT 2026 (#563 COWORK #149 §1): "/" no longer routes phones and
+// desktops apart; it renders /dashboard's page (the new landing) on every
+// device. Kept, unused, rather than deleted, as the owner asked.
 import { useEffect, useState } from "react";
 import DashboardClient from "./DashboardClient";
 import MobileHomePage from "./MobileHomePage";

@@ -42,6 +42,84 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
   const { n } = d;
   const sym = n.symbol;
   const timeframe = n.timeframe === "w" ? "Weekly" : "Daily";
+  const shortCard = (
+    <Card eyebrow="The short version" attr="data-insight-summary">
+      <p className="inRead" data-insight-summary-text="">{n.summary}</p>
+      {d.difference ? <p className="inDiff" data-insight-difference="">{d.difference}</p> : null}
+      {html.why ? (
+        <details className="inTap"><summary>Why it mattered</summary><div className="inProse" dangerouslySetInnerHTML={{ __html: html.why }} /></details>
+      ) : null}
+    </Card>
+  );
+  const chartCard = (
+    d.chart ? (
+      <Card eyebrow="Did the level hold" title={d.chart.level ? `Did ${sym} hold its ${d.chart.level.name}?` : `${sym} since publication`}>
+        <InsightChart symbol={sym} {...d.chart} />
+        {thumb && thumb.length > 1 ? (
+          <figure className="inThumb">
+            <Spark closes={thumb} />
+            <figcaption className="inFine" data-fine-print="">Chart when published: the {thumb.length} sessions to {dayWords(n.date)}.</figcaption>
+          </figure>
+        ) : null}
+      </Card>
+    ) : null
+  );
+  // WHAT'S DRIVING IT NOW (#563 COWORK #138 §1, corrected by #146): the writer's dated,
+  // sourced paragraph first, then at most three headlines, smaller. Without a paragraph
+  // (the old posts), the news page's tone line and headlines, as before.
+  const newsCard = (
+    <Card eyebrow={`What's driving ${sym} now`} title={`${sym} news and catalysts`} attr="data-insight-news">
+      {n.drivers ? (
+        <>
+          <p className="inDriverAsOf" data-fine-print="" data-insight-drivers-asof="">As of {dayWords(n.drivers.asOf)}</p>
+          <p className="inRead inDrivers" data-insight-drivers="">{n.drivers.text}</p>
+          <p className="inDriverSources" data-fine-print="">
+            Sources:{" "}
+            {n.drivers.sources.map((src, i) => (
+              <span key={src.url}>{i ? ", " : ""}<a href={src.url} target="_blank" rel="nofollow noopener" title={src.title}>{src.publisher}</a></span>
+            ))}
+          </p>
+        </>
+      ) : d.news?.score ? (
+        <p className="inRead"><span className="inTone" data-tone={d.news.score.tone}>{d.news.score.label}</span> {d.news.score.reason}</p>
+      ) : null}
+      {d.news?.items.length ? (
+        <div className={n.drivers ? "inNewsSmall" : undefined} {...(n.drivers ? { "data-fine-print": "" } : {})}>
+          {n.drivers ? <div className="inEyebrow inNewsLabel">Latest headlines</div> : null}
+          <ul className="inNews">
+            {d.news.items.map((i) => (
+              <li key={i.link}>
+                <a href={i.link} target="_blank" rel="noopener noreferrer">{i.title}</a>
+                <span className="inNewsMeta">{[i.source, i.date ? newsDay(i.date) : null].filter(Boolean).join(" · ")}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : n.drivers ? null : <p className="inRead">No recent headlines.</p>}
+      <p className="inLinks"><Link href={`/stock/${sym}/news`}>All {sym} news →</Link></p>
+    </Card>
+  );
+  const whatCard = (
+    html.whatHappened ? (
+      <Card eyebrow="What happened">
+        <div className="inProse" dangerouslySetInnerHTML={{ __html: html.whatHappened }} />
+        {n.sources.length ? (
+          <ul className="inSources" aria-label="Sources">
+            {n.sources.map((s) => <li key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a>{s.publisher ? <span> · {s.publisher}</span> : null}</li>)}
+          </ul>
+        ) : null}
+        {n.bull || n.bear ? (
+          <div className="inScen" data-insight-scenarios="">
+            {n.bull ? <div className="inScenBox" data-tone="up"><div className="inEyebrow">If it goes well</div><p className="inRead">{n.bull}</p></div> : null}
+            {n.bear ? <div className="inScenBox" data-tone="down"><div className="inEyebrow">If it doesn&apos;t</div><p className="inRead">{n.bear}</p></div> : null}
+          </div>
+        ) : null}
+        {html.originalRest ? (
+          <details className="inTap"><summary>The original post, in full</summary><div className="inProse" dangerouslySetInnerHTML={{ __html: html.originalRest }} /></details>
+        ) : null}
+      </Card>
+    ) : null
+  );
   return (
     <main className="inPage">
       <div className="inWrap">
@@ -96,79 +174,30 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
         {/* 3. TWO COLUMNS */}
         <div className="inCols">
           <div className="inMain">
-            <Card eyebrow="The short version" attr="data-insight-summary">
-              <p className="inRead" data-insight-summary-text="">{n.summary}</p>
-              {d.difference ? <p className="inDiff" data-insight-difference="">{d.difference}</p> : null}
-              {html.why ? (
-                <details className="inTap"><summary>Why it mattered</summary><div className="inProse" dangerouslySetInnerHTML={{ __html: html.why }} /></details>
-              ) : null}
-            </Card>
-
-            {d.chart ? (
-              <Card eyebrow="Did the level hold" title={d.chart.level ? `Did ${sym} hold its ${d.chart.level.name}?` : `${sym} since publication`}>
-                <InsightChart symbol={sym} {...d.chart} />
-                {thumb && thumb.length > 1 ? (
-                  <figure className="inThumb">
-                    <Spark closes={thumb} />
-                    <figcaption className="inFine" data-fine-print="">Chart when published: the {thumb.length} sessions to {dayWords(n.date)}.</figcaption>
-                  </figure>
-                ) : null}
-              </Card>
-            ) : null}
-
-            {/* WHAT'S DRIVING IT NOW (#563 COWORK #138 §1, corrected by #146): the writer's dated,
-                sourced paragraph first, then at most three headlines, smaller. Without a paragraph
-                (the old posts), the news page's tone line and headlines, as before. */}
-            <Card eyebrow={`What's driving ${sym} now`} title={`${sym} news and catalysts`} attr="data-insight-news">
-              {n.drivers ? (
-                <>
-                  <p className="inDriverAsOf" data-fine-print="" data-insight-drivers-asof="">As of {dayWords(n.drivers.asOf)}</p>
-                  <p className="inRead inDrivers" data-insight-drivers="">{n.drivers.text}</p>
-                  <p className="inDriverSources" data-fine-print="">
-                    Sources:{" "}
-                    {n.drivers.sources.map((src, i) => (
-                      <span key={src.url}>{i ? ", " : ""}<a href={src.url} target="_blank" rel="nofollow noopener" title={src.title}>{src.publisher}</a></span>
-                    ))}
-                  </p>
-                </>
-              ) : d.news?.score ? (
-                <p className="inRead"><span className="inTone" data-tone={d.news.score.tone}>{d.news.score.label}</span> {d.news.score.reason}</p>
-              ) : null}
-              {d.news?.items.length ? (
-                <div className={n.drivers ? "inNewsSmall" : undefined} {...(n.drivers ? { "data-fine-print": "" } : {})}>
-                  {n.drivers ? <div className="inEyebrow inNewsLabel">Latest headlines</div> : null}
-                  <ul className="inNews">
-                    {d.news.items.map((i) => (
-                      <li key={i.link}>
-                        <a href={i.link} target="_blank" rel="noopener noreferrer">{i.title}</a>
-                        <span className="inNewsMeta">{[i.source, i.date ? newsDay(i.date) : null].filter(Boolean).join(" · ")}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : n.drivers ? null : <p className="inRead">No recent headlines.</p>}
-              <p className="inLinks"><Link href={`/stock/${sym}/news`}>All {sym} news →</Link></p>
-            </Card>
-
-            {html.whatHappened ? (
-              <Card eyebrow="What happened">
-                <div className="inProse" dangerouslySetInnerHTML={{ __html: html.whatHappened }} />
-                {n.sources.length ? (
-                  <ul className="inSources" aria-label="Sources">
-                    {n.sources.map((s) => <li key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a>{s.publisher ? <span> · {s.publisher}</span> : null}</li>)}
-                  </ul>
-                ) : null}
-                {n.bull || n.bear ? (
-                  <div className="inScen" data-insight-scenarios="">
-                    {n.bull ? <div className="inScenBox" data-tone="up"><div className="inEyebrow">If it goes well</div><p className="inRead">{n.bull}</p></div> : null}
-                    {n.bear ? <div className="inScenBox" data-tone="down"><div className="inEyebrow">If it doesn&apos;t</div><p className="inRead">{n.bear}</p></div> : null}
-                  </div>
-                ) : null}
-                {html.originalRest ? (
-                  <details className="inTap"><summary>The original post, in full</summary><div className="inProse" dangerouslySetInnerHTML={{ __html: html.originalRest }} /></details>
-                ) : null}
-              </Card>
-            ) : null}
+            {n.update ? (
+              <>
+                {/* UPDATE (#563 COWORK #149 §3): the writer's dated note first, then the live cards,
+                    then the post as published, under one heading. */}
+                <section className="inCard inUpdate" data-insight-update="">
+                  <div className="inEyebrow">Update · {dayWords(n.update.date)}</div>
+                  <p className="inRead" data-insight-update-text="">{n.update.text}</p>
+                </section>
+                {chartCard}
+                {newsCard}
+                <section className="inOriginal" data-insight-original="">
+                  <h2 className="inOriginalTitle">The original post · {dayWords(n.date)}</h2>
+                  {shortCard}
+                  {whatCard}
+                </section>
+              </>
+            ) : (
+              <>
+                {shortCard}
+                {chartCard}
+                {newsCard}
+                {whatCard}
+              </>
+            )}
 
             {/* YOUR READ (#563 COWORK #132/#133, PR 2): a reader poll per report window, never advice. */}
             <Card eyebrow="Your read" title={`Where do you think ${sym} goes into its next report?`} attr="data-insight-vote-card">
@@ -476,6 +505,11 @@ const CSS = `
 .inFineInline { font-size: var(--fs-fine); color: rgba(203,213,225,0.62); }
 .inCols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; margin-top: 16px; align-items: start; }
 .inMain, .inRail { display: grid; gap: 16px; min-width: 0; }
+.inUpdate { border-color: rgba(250,204,21,0.45); background: linear-gradient(135deg, rgba(250,204,21,0.08), rgba(255,255,255,0.02)); }
+.inUpdate .inEyebrow { color: rgba(253,224,71,0.9); }
+.inUpdate .inRead { margin: 8px 0 0; }
+.inOriginal { display: grid; gap: 16px; min-width: 0; padding-top: 8px; border-top: 1px solid rgba(148,163,184,0.22); }
+.inOriginalTitle { margin: 0; font-size: 1.25rem; line-height: 1.2; }
 .inCard, .inBlock { border: 1px solid rgba(148,163,184,0.22); border-radius: 18px; padding: 18px; background: linear-gradient(135deg, rgba(148,163,184,0.06), rgba(255,255,255,0.02)); min-width: 0; }
 .inBlock { padding: 0; border: 0; background: none; }
 .inCardTitle, .inH2 { margin: 6px 0 0; font-size: 1.25rem; line-height: 1.2; }

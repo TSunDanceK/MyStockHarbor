@@ -1,5 +1,8 @@
 "use client";
-
+// RETIRED 7 OCT 2026 (#563 COWORK #149 §1): the mobile-only tile landing
+// ("Stock Analysis Tools, Stock Pickers & Market Insights", Quick Stock Search,
+// the Chart Dashboard / Bottlenecks tiles). Phones now get the same dashboard
+// landing as desktops at "/". Hidden (nothing imports it), not deleted.
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

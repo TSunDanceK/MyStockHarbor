@@ -9,7 +9,11 @@
 //   3. a Pickers screen links outside PICKER_ROUTES;
 //   4. the landing's words advise (buy, sell, should);
 //   5. the wiring breaks: the page's landing read, the analyser's #analyser
-//      anchor, the ?symbol= deep link's scroll, the hero search's scroll, the H1.
+//      anchor, the ?symbol= deep link's scroll, the hero search's scroll, the H1;
+//   6. (#149) a news item has no thumbnail (60 px, lazy, alt="") or fallback, or
+//      the thumbnails stop coming from the stored image / the art library; "/"
+//      stops serving this page on every device, or loses its own SEO, or
+//      /dashboard stops canonicalising to "/".
 // Each card's empty state, the market's, the screen links and the deep-link
 // scroll each get a planted mutant.
 //
@@ -33,6 +37,7 @@ const LANDING = "app/dashboard/DashboardLanding.tsx";
 const CLIENT = "app/components/DashboardClient.tsx";
 const PAGE = "app/dashboard/page.tsx";
 const CARDS_SRC = "lib/server/dashboardCards.ts";
+const ROOT = "app/page.tsx";
 const read = (p) => fs.readFileSync(p, "utf8");
 const CARDS = ["hub", "capex", "pickers", "earnings", "sectors", "insight", "news"];
 
@@ -118,6 +123,14 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
   want("the sectors chart has all 11 rows, green right / red left of 0, and the S&P reference line",
     rowsSeen === 11 && /data-spx-ref=""/.test(sc) && /S&amp;P 500 \(SPY\)/.test(sc) && bars.length === 11 &&
     bars.every((b) => (b[1] === "up" ? Number(b[2]) === 50 : Math.abs(Number(b[2]) + Number(b[3]) - 50) < 0.01)));
+  // #149 §2: a thumbnail left of every headline, the item's stored picture or the art library's, else the fallback block.
+  const newsRows = [...(cardHtml(full, "news") ?? "").matchAll(/<li class="dlNewsRow">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+  const thumbOk = (row, item) => item.thumb
+    ? new RegExp(`^<img (?=[^>]*class="dlNewsThumb")(?=[^>]*src="${item.thumb.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}")(?=[^>]*alt="")(?=[^>]*width="60")(?=[^>]*loading="lazy")[^>]*>`).test(row)
+    : /^<span class="dlNewsThumb" data-news-thumb="fallback" aria-hidden="true"><\/span>/.test(row);
+  want("every news item starts with its thumbnail (60 px, lazy, alt=\"\") or the fallback block, then the headline, then the chip",
+    newsRows.length === FULL_LANDING.cards.news.length && FULL_LANDING.cards.news.some((n) => !n.thumb) && FULL_LANDING.cards.news.some((n) => n.thumb) &&
+    newsRows.every((r, i) => thumbOk(r, FULL_LANDING.cards.news[i]) && /dlNewsThumb[\s\S]*<a href="https:[\s\S]*class="dlPill"/.test(r)));
   // 4. Describes, never advises.
   for (const [name, html] of [["the cards", full], ["the empty cards", empty], ["Market right now", mFull]]) {
     const hit = text(html).match(/\b(buy|sell|should|must|recommend)\b/i);
@@ -127,7 +140,7 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
 }
 
 /** The wiring, read as source. */
-function wiring(client, page, cardsSrc) {
+function wiring(client, page, cardsSrc, root = read(ROOT)) {
   const fails = [];
   const want = (label, ok) => { if (!ok) fails.push(label); };
   const c = stripComments(client, { file: CLIENT }), p = stripComments(page, { file: PAGE });
@@ -148,10 +161,20 @@ function wiring(client, page, cardsSrc) {
   // #142 §1: the S&P tile reads SPY's latest stored close, not the weekly file.
   want("the S&P tile reads SPY's latest stored close", /const eod = await readTiingoHistory\("SPY"\)/.test(d) && !/spx-weekly\.json/.test(d));
   // #142 §2: the hero line is the title; the canonical stays.
-  want("the title is the hero line, the canonical unchanged", /const DASHBOARD_TITLE = "Stock research from the filings, not the hype \| MyStockHarbor";/.test(p) && /title: DASHBOARD_TITLE,/.test(p) && /canonical: "https:\/\/www\.mystockharbor\.com\/dashboard"/.test(p));
+  want("the title is the hero line; /dashboard canonicalises to \"/\" (#149 §1)", /const DASHBOARD_TITLE = "Stock research from the filings, not the hype \| MyStockHarbor";/.test(p) && /title: DASHBOARD_TITLE,/.test(p) && /canonical: "https:\/\/www\.mystockharbor\.com\/",/.test(p));
+  // #149 §1: "/" renders this page on every device and keeps its own title, canonical and structured data.
+  const r = stripComments(root, { file: ROOT });
+  want("\"/\" renders the dashboard's page, with no phone-only branch", /import DashboardPage from "\.\/dashboard\/page";/.test(r) && /<DashboardPage searchParams=\{searchParams\} \/>/.test(r) &&
+    !/HomePageRouter|MobileHomePage|user-agent|headers\(\)/i.test(r));
+  want("\"/\" keeps its title, canonical and structured data", /title: "Stock Analysis Tools, Stock Pickers & Market Insights \| MyStockHarbor",/.test(r) && /canonical: "https:\/\/www\.mystockharbor\.com\/",/.test(r) &&
+    /type="application\/ld\+json"/.test(r) && /"@type": "WebSite"/.test(r) && /"@type": "WebApplication"/.test(r));
+  // #149 §2: thumbnails from what the news read already holds; no new fetch per render.
+  want("news thumbnails come from the stored image (where allowed) or the art library, no new read",
+    /if \(SHOW_PUBLISHER_IMAGES && image && \/\^https:\\\/\\\/\/\.test\(image\)\) return \{ \.\.\.n, thumb: image \};/.test(d) && /const art = artFor\(n\.symbol, n\.title, `dash-news:\$\{n\.url\}`, taken\);/.test(d) &&
+    !/\bfetch\(/.test(d));
   // #142 §3: every curated ETF has a name, and the analyser seeds it.
   want("every curated ETF has a name", ETFS.every((t) => typeof ETF_NAMES[t] === "string" && ETF_NAMES[t].length > 3) && /initialSymbolName \|\| ETF_NAMES\[defaultSymbol\.toUpperCase\(\)\]/.test(c));
-  want("the cards are cached with their sources (15 min)", /unstable_cache\(loadDashboardLanding, \["dashboard-landing-v3"\], \{ revalidate: 900/.test(stripComments(cardsSrc, { file: CARDS_SRC })));
+  want("the cards are cached with their sources (15 min)", /unstable_cache\(loadDashboardLanding, \["dashboard-landing-v4"\], \{ revalidate: 900/.test(stripComments(cardsSrc, { file: CARDS_SRC })));
   return fails;
 }
 
@@ -161,12 +184,15 @@ const real = rules(await loadLanding(landingSrc));
 check("the real landing passes every rule", real.length === 0, real.slice(0, 4).join("; "));
 
 console.log("\n5. The wiring");
-const clientSrc = read(CLIENT), pageSrc = read(PAGE), cardsSrc = read(CARDS_SRC);
+const clientSrc = read(CLIENT), pageSrc = read(PAGE), cardsSrc = read(CARDS_SRC), rootSrc = read(ROOT);
 const realWiring = wiring(clientSrc, pageSrc, cardsSrc);
 check("the real page, client and data module pass every wiring rule", realWiring.length === 0, realWiring.join("; "));
 
 console.log("\n6. Planted mutants");
 const LANDING_MUTANTS = [
+  ["a news thumbnail loses lazy loading", 'width={60} height={60} loading="lazy"', 'width={60} height={60}'],
+  ["a news item without a picture loses its fallback", '<span className="dlNewsThumb" data-news-thumb="fallback" aria-hidden="true" />', "null"],
+  ["the thumbnail gets alt text", 'src={n.thumb} alt=""', "src={n.thumb} alt={n.title}"],
   ...CARDS.filter((id) => id !== "hub").map((id) => [`the ${id} card loses its empty state`, `empty={c.${id} ? null : EMPTY.${id}}`, "empty={null}"]),
   ["the hub card loses its empty state", "empty={hub ? null : EMPTY.hub}", "empty={null}"],
   ["Market right now says nothing when empty", `{!m.mood && !tiles.length ? <p className="dlEmpty" data-card="market" data-empty="">{EMPTY.market}</p> : null}`, ""],
@@ -196,13 +222,17 @@ const WIRING_MUTANTS = [
   ["the ETF name seed dropped", CLIENT, /initialSymbolName \|\| ETF_NAMES\[defaultSymbol\.toUpperCase\(\)\] \|\| ""/, 'initialSymbolName'],
   ["the news card back on the market feed", CARDS_SRC, /getStockNewsBaseData\(sym, \{ maxDetailedItems: 5 \}\)/, "getGeneralMarketHeadlines()"],
   ["the S&P tile back on the weekly file", CARDS_SRC, /const eod = await readTiingoHistory\("SPY"\)/, 'const eod = await readWeekly("content/markets/spx-weekly.json")'],
+  ["/dashboard canonical back on itself", PAGE, /canonical: "https:\/\/www\.mystockharbor\.com\/",/, 'canonical: "https://www.mystockharbor.com/dashboard",'],
+  ["\"/\" back on the phone-only router", ROOT, /<DashboardPage searchParams=\{searchParams\} \/>/, "<HomePageRouter initialIsMobile={false} />"],
+  ["\"/\" loses its structured data", ROOT, /"@type": "WebApplication",/, '"@type": "Thing",'],
+  ["the thumbnails read the publisher picture regardless", CARDS_SRC, /if \(SHOW_PUBLISHER_IMAGES && image && /, "if (image && "],
   ["the landing read unbudgeted", PAGE, /budget\("landing", (getDashboardLanding\(\)\.catch\(\(\) => EMPTY_LANDING\)), EMPTY_LANDING\)/, "$1"],
 ];
 for (const [label, file, from, to] of WIRING_MUTANTS) {
-  const src = file === CLIENT ? clientSrc : file === PAGE ? pageSrc : cardsSrc;
+  const src = file === CLIENT ? clientSrc : file === PAGE ? pageSrc : file === ROOT ? rootSrc : cardsSrc;
   const m = src.replace(from, to);
   if (m === src) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
-  const fails = file === CLIENT ? wiring(m, pageSrc, cardsSrc) : file === PAGE ? wiring(clientSrc, m, cardsSrc) : wiring(clientSrc, pageSrc, m);
+  const fails = file === CLIENT ? wiring(m, pageSrc, cardsSrc) : file === PAGE ? wiring(clientSrc, m, cardsSrc) : file === ROOT ? wiring(clientSrc, pageSrc, cardsSrc, m) : wiring(clientSrc, pageSrc, m);
   check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no rule failed");
 }
 
