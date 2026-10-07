@@ -55,9 +55,9 @@ for (const slug of SLUGS) pages.push([slug, renderToStaticMarkup(await Page({ pa
 
 const CSS = fs.readFileSync("app/globals.css", "utf8").replace(/@import[^;]*;|@tailwind[^;]*;|@theme inline \{[^}]*\}/g, "");
 // Which posts have a level discussed, and which symbols have a fact set in the stub (AAPL only).
-const FLAGS = { amzn: { level: 1, facts: 0 }, riot: { level: 1, facts: 0 }, bbai: { level: 1, facts: 0 }, fixture: { level: 1, facts: 1 } };
-let flags = { level: 0, facts: 0 };
-const doc = (body, root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>html{font-size:${root}px}body{margin:0}</style></head><body data-level="${flags.level}" data-facts="${flags.facts}">${body}</body></html>`;
+const FLAGS = { amzn: { level: 1, facts: 0, drivers: 1 }, riot: { level: 1, facts: 0, drivers: 0 }, bbai: { level: 1, facts: 0, drivers: 0 }, fixture: { level: 1, facts: 1, drivers: 0 } };
+let flags = { level: 0, facts: 0, drivers: 0 };
+const doc = (body, root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>html{font-size:${root}px}body{margin:0}</style></head><body data-level="${flags.level}" data-facts="${flags.facts}" data-drivers="${flags.drivers}">${body}</body></html>`;
 
 function probe() {
   const vis = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
@@ -76,6 +76,9 @@ function probe() {
   // #138/#139: the news card; the Article JSON-LD (image, dateModified, a 3-step breadcrumb); the rail's
   // pole with the level discussed drawn (or its marker); filed tiles, or "not available yet" without facts.
   if (!q("[data-insight-news]")) bad.push("missing: news card");
+  // #146: the dated paragraph and its sources when the post has one, the old layout when not; never more than 3 headlines.
+  if (document.body.dataset.drivers === "1" ? !q("[data-insight-drivers]") || !/^As of \d/.test(q("[data-insight-drivers-asof]")?.textContent ?? "") || !q('[data-insight-news] a[rel="nofollow noopener"]') : !!q("[data-insight-drivers]")) bad.push("the drivers paragraph shown / hidden wrongly");
+  if (document.querySelectorAll("[data-insight-news] .inNews li").length > 3) bad.push("more than 3 headlines");
   try {
     const ld = JSON.parse(q('script[type="application/ld+json"]')?.textContent ?? "{}")["@graph"] ?? [];
     const art = ld.find((x) => x["@type"] === "Article"), crumbs = ld.find((x) => x["@type"] === "BreadcrumbList");
