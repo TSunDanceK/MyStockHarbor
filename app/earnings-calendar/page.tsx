@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { chartHref } from "@/lib/chartHref";
 import { after } from "next/server";
 import { permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -362,7 +363,7 @@ export default async function EarningsCalendarPage({
       <main className="earnCalMain">
         <div className="earnCalWrap">
           <div style={{ marginBottom: 20 }}>
-            <Link href="/" className="earnCalBack">← Back to Dashboard</Link>
+            <Link href={chartHref()} className="earnCalBack">← Back to Dashboard</Link>
           </div>
 
           <section className="earnCalIntroCard">

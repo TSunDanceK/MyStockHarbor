@@ -53,3 +53,55 @@ export function scrollMotion(): ScrollBehavior {
     return "instant";
   }
 }
+
+/** What ends the hold: the reader moving the page themselves. */
+const READER_INPUT = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+
+/**
+ * LAND ON THE ANALYSER AND STAY THERE WHILE THE PAGE SETTLES (#563 COWORK #152).
+ * One jump is not enough on a phone: arriving by client navigation, Next scrolls
+ * the new page to its top AFTER the page's own effects run, and the hero's
+ * images and fonts can still move the analyser down. So: jump now, then re-jump
+ * whenever the analyser has drifted from where the jump put it (on the next two
+ * frames, on any layout change, when fonts and the window load), for at most
+ * `settleMs`. The moment the reader scrolls, taps or types, it lets go and
+ * never re-scrolls. Always a jump ("instant"), never an animation. Returns the
+ * cleanup.
+ */
+export function holdOnAnalyser(get: () => HTMLElement | null, settleMs = 3000): () => void {
+  let done = false, target: number | null = null, raf1 = 0, raf2 = 0;
+  const jump = () => {
+    const el = get();
+    if (!el) return;
+    el.scrollIntoView({ behavior: "instant", block: "start" });
+    target = el.getBoundingClientRect().top;
+  };
+  const again = () => {
+    if (done) return;
+    const el = get();
+    if (!el) return;
+    if (target === null || Math.abs(el.getBoundingClientRect().top - target) > 2) jump();
+  };
+  const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(again);
+  const stop = () => {
+    if (done) return;
+    done = true;
+    for (const e of READER_INPUT) window.removeEventListener(e, stop, true);
+    window.removeEventListener("load", again);
+    window.removeEventListener("scroll", again);
+    ro?.disconnect();
+    cancelAnimationFrame(raf1);
+    cancelAnimationFrame(raf2);
+    window.clearTimeout(timer);
+  };
+  jump();
+  for (const e of READER_INPUT) window.addEventListener(e, stop, { capture: true, passive: true });
+  // A scroll the reader did not make (the router's, a layout shift) is undone.
+  window.addEventListener("scroll", again, { passive: true });
+  raf1 = requestAnimationFrame(() => { again(); raf2 = requestAnimationFrame(again); });
+  ro?.observe(document.body);
+  document.fonts?.ready.then(again).catch(() => {});
+  if (document.readyState !== "complete") window.addEventListener("load", again, { once: true });
+  const timer = window.setTimeout(stop, settleMs);
+  return stop;
+}

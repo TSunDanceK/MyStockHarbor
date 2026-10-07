@@ -11,9 +11,13 @@
 //      "Charting dashboard") is built by chartHref, never a plain "/" or
 //      "/dashboard"; a plain "/dashboard" literal lives only in the navigation
 //      files (header, footer, nav sections, sitemap, the retired phone page).
+//      (#152) Any other in-content "Dashboard" link is chart intent too, bar
+//      the listed "← Dashboard" back links on guide, legal and IPO pages.
 //   D. The landing: the bottom nav's "Chart" goes through chartHref and is lit
-//      on "/" and /dashboard; the analyser jump is a layout effect, "instant",
-//      on wantsAnalyser; the hero's own scroll respects reduced motion.
+//      on "/" and /dashboard; the analyser jump is a layout effect on
+//      wantsAnalyser that holds the analyser in view while the page settles
+//      (#152) and lets go on the reader's input; the hero's own scroll
+//      respects reduced motion.
 // A mutant each.
 //
 //   node scripts/check-chart-href.mjs
@@ -28,7 +32,11 @@ register("./lib/tsx-render-hooks.mjs", import.meta.url);
 const HELPER = "lib/chartHref.ts", NAV = "app/components/StockPagesBottomNav.tsx", CLIENT = "app/components/DashboardClient.tsx";
 const BUILDERS = ["lib/server/pickersBuilder.ts", "lib/server/playsBuilder.ts", "lib/server/bullFlagsBuilder.ts", "lib/server/descendingTrianglesBuilder.ts"];
 // Navigation to the page itself, not chart intent: these may say "/dashboard".
-const PLAIN_OK = new Set(["app/components/SiteHeader.tsx", "app/layout.tsx", "lib/navSections.ts", "app/sitemap.ts", "app/stocks/page.tsx", "app/components/MobileHomePage.tsx", "app/components/HomePageRouter.tsx", "app/dashboard/page.tsx", HELPER]);
+const PLAIN_OK = new Set(["app/components/SiteHeader.tsx", "app/layout.tsx", "lib/navSections.ts", "app/sitemap.ts", "app/components/MobileHomePage.tsx", "app/components/HomePageRouter.tsx", "app/dashboard/page.tsx", HELPER]);
+// "← Dashboard" back links that go to the landing itself (#152: "plain-landing
+// links"): guide, legal and IPO pages, none about one stock. Every other
+// "Dashboard"-labelled link in page content is chart intent.
+const PLAIN_LANDING = new Set(["affiliate-disclosure", "bearish-divergence-explained", "best-charting-platforms", "best-indicators-for-swing-trading", "bullish-divergence-explained", "contact", "how-to-analyse-stocks", "how-to-find-buy-the-dip-stocks", "how-to-scan-stocks", "privacy-policy", "risk-disclaimer", "stock-screener-for-breakouts", "stock-screener-for-oversold-stocks", "stocks-down-20-percent", "stocks-ready-to-break-out", "upcoming-ipos", "what-is-vwap-indicator"].map((r) => `app/${r}/page.tsx`));
 const read = (f) => fs.readFileSync(f, "utf8");
 
 const files = [];
@@ -76,6 +84,8 @@ function scanRules(over = {}) {
       const text = (after.match(/>([\s\S]*?)<\/(?:Link|a)>/)?.[1] ?? "").replace(/<[^>]+>|\{[^}]*\}/g, " ").replace(/\s+/g, " ").trim();
       const label = m[0].startsWith("href:") ? (after.match(/(?:label|title):\s*"([^"]+)"/)?.[1] ?? "") : text;
       if (INTENT.test(label)) fails.push(`${f}: "${label.slice(0, 40)}" links to a plain "${m[1]}", not chartHref`);
+      // #152: an in-content "Dashboard" link means "show me the chart".
+      else if (/\bDashboard\b/i.test(label) && !PLAIN_OK.has(f) && !PLAIN_LANDING.has(f)) fails.push(`${f}: an in-content "${label.slice(0, 30)}" link to a plain "${m[1]}", not chartHref`);
       if (m[1] === "/dashboard" && !PLAIN_OK.has(f)) fails.push(`${f}: a plain "/dashboard" outside the navigation files`);
     }
   }
@@ -93,8 +103,13 @@ function landingRules(over = {}) {
   const nav = stripComments(over[NAV] ?? read(NAV), { file: NAV }), c = stripComments(over[CLIENT] ?? read(CLIENT), { file: CLIENT });
   want("the bottom nav's Chart goes through chartHref", /\{ key: "chart", label: "Chart", href: chartHref\(symbol \|\| FALLBACK_SYMBOL\)/.test(nav));
   want("the bottom nav's Chart is lit on \"/\" and /dashboard", /const isDashboard = pathname === "\/" \|\| pathname\.startsWith\("\/dashboard"\);/.test(nav) && /const active: NavKey = isDashboard\s*\?\s*"chart"/.test(nav));
-  want("the analyser jump is a layout effect on wantsAnalyser, instant",
-    /useLayoutEffect\(\(\) => \{\s*if \(!landing \|\| !wantsAnalyser\(window\.location\.hash, deepSymbol\)\) return;\s*analyserRef\.current\?\.scrollIntoView\(\{ behavior: "instant", block: "start" \}\);/.test(c));
+  want("the analyser jump is a layout effect on wantsAnalyser that holds while the page settles",
+    /useLayoutEffect\(\(\) => \{\s*if \(!landing \|\| !wantsAnalyser\(window\.location\.hash, deepSymbol\)\) return;\s*return holdOnAnalyser\(\(\) => analyserRef\.current\);/.test(c));
+  const h = stripComments(over[HELPER] ?? read(HELPER), { file: HELPER });
+  want("the hold: instant jumps, re-jumps on drift, lets go on the reader's input, ends",
+    /el\.scrollIntoView\(\{ behavior: "instant", block: "start" \}\)/.test(h) && /Math\.abs\(el\.getBoundingClientRect\(\)\.top - target\) > 2\) jump\(\)/.test(h) &&
+    /for \(const e of READER_INPUT\) window\.addEventListener\(e, stop,/.test(h) && /const READER_INPUT = \["wheel", "touchstart", "keydown", "pointerdown"\]/.test(h) && /window\.setTimeout\(stop, settleMs\)/.test(h) &&
+    /requestAnimationFrame\(\(\) => \{ again\(\); raf2 = requestAnimationFrame\(again\); \}\)/.test(h));
   want("no smooth scroll that ignores reduced motion", !/behavior: "smooth"/.test(c) && /analyserRef\.current\?\.scrollIntoView\(\{ behavior: scrollMotion\(\), block: "start" \}\)/.test(c));
   return fails;
 }
@@ -133,7 +148,12 @@ const SRC_MUTANTS = [
   ["a plays builder back on /?symbol=", "lib/server/playsBuilder.ts", '  return chartHref(symbol, { tf: timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe });', "  return `/?symbol=${symbol}`;", scanRules],
   ["the bottom nav's Chart hand-built", NAV, "href: chartHref(symbol || FALLBACK_SYMBOL)", "href: `/dashboard?symbol=${encoded}`", (o) => [...scanRules(o), ...landingRules(o)]],
   ["the bottom nav unlit on \"/\"", NAV, 'pathname === "/" || pathname.startsWith("/dashboard")', 'pathname.startsWith("/dashboard")', landingRules],
-  ["the jump after paint, animated", CLIENT, 'useLayoutEffect(() => {\n    if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;\n    analyserRef.current?.scrollIntoView({ behavior: "instant", block: "start" });', 'useEffect(() => {\n    if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;\n    analyserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });', landingRules],
+  ["the jump after paint", CLIENT, "useLayoutEffect(() => {\n    if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;\n    return holdOnAnalyser(", "useEffect(() => {\n    if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;\n    return holdOnAnalyser(", landingRules],
+  ["one jump, no hold (the #151 bug)", CLIENT, "return holdOnAnalyser(() => analyserRef.current);", 'analyserRef.current?.scrollIntoView({ behavior: "instant", block: "start" });', landingRules],
+  ["the hold never lets go of the reader", HELPER, "for (const e of READER_INPUT) window.addEventListener(e, stop, { capture: true, passive: true });", "", landingRules],
+  ["the stock page's Dashboard button on a plain /dashboard", "app/stock/[symbol]/StockSymbolPageClient.tsx", "<Link href={chartHref(symbol)} style={chartLinkStyle(\"blue\")}>Dashboard</Link>", "<Link href=\"/dashboard\" style={chartLinkStyle(\"blue\")}>Dashboard</Link>", scanRules],
+  ["the earnings calendar's back link on a plain /", "app/earnings-calendar/page.tsx", '<Link href={chartHref()} className="earnCalBack">', '<Link href="/" className="earnCalBack">', scanRules],
+  ["the headlines back link on a plain /", "app/headlines/page.tsx", "href={chartHref()}", 'href="/"', scanRules],
   ["#analyser ignored by the landing", CLIENT, "if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;", "if (!landing || !cleanSymbol(deepSymbol)) return;", landingRules],
   ["the hero scroll ignores reduced motion", CLIENT, "scrollIntoView({ behavior: scrollMotion(), block: \"start\" }));", "scrollIntoView({ behavior: \"smooth\", block: \"start\" }));", landingRules],
 ];
