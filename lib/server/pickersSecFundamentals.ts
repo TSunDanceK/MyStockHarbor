@@ -54,6 +54,7 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { readFactSet } from "./secFactStore";
 import { valueOf, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
+import { isConsecutive } from "./secEarningsView";
 import {
   marketCap,
   multipleInputs,
@@ -72,6 +73,7 @@ import {
 import { enterpriseValueOf, type Estimate } from "./secEstimates";
 import { isBankOrInsurer, type CellWhyCode, type CellWhyColumn } from "../pickerCellWhy";
 import { secGrowthFacts, type SecGrowthFacts } from "./pickersSecEarningsGrowth";
+import { splitAdjusted } from "./secSplitAdjust";
 
 export const PICKERS_SEC_KEY = "msh:pickers:sec-fundamentals:v1";
 /**
@@ -166,6 +168,16 @@ export type SecPickerRow = {
    * written before it existed is simply not a member until the job rewrites it.
    */
   growth?: SecGrowthFacts | null;
+  /**
+   * What the Div ($) cell carries besides its figure (#553 COWORK #184 item 1),
+   * absent when neither applies (and on a row written before it existed):
+   *   cut      the latest quarter, annualised, is the figure shown; `ttm` is the
+   *            trailing total it sits below
+   *   special  a special dividend left out of the figure, yield and growth
+   *   ifrs     an IFRS-only filer with no dividend figure: IFRS publishes no
+   *            per-share dividend tag (A's secDividend gate), so "–" is by design
+   */
+  div?: { cut?: { ttm: number }; special?: number; ifrs?: true };
 };
 
 /** A payout ratio (PERCENT) whose dividend and EPS cover the same period. */
@@ -190,9 +202,12 @@ export type PayoutBasis = {
  */
 export function samePeriodPayout(set: StoredFactSet, eps: EpsBasis | null): PayoutBasis | null {
   if (eps && eps.basis === "four-quarters" && eps.val > 0) {
-    const dps = twelveMonthsOf(set, ["dividendsDeclaredPerShare"]);
-    if (dps && dps.basis === "four-quarters" && dps.periodEnd === eps.periodEnd) {
-      return { val: (dps.vals.dividendsDeclaredPerShare / eps.val) * 100, basis: "four-quarters", periodEnd: eps.periodEnd };
+    // THE REGULAR DIVIDEND OVER FOUR QUARTERS (#553 COWORK #184 item 1): a Q4
+    // stated only inside the 10-K is derived (NSC read "–" beside a $11.72
+    // EPS), and a special dividend is left out (PGR).
+    const read = dividendRead(set);
+    if (read.four && read.four.periodEnd === eps.periodEnd) {
+      return { val: (read.four.regular / eps.val) * 100, basis: "four-quarters", periodEnd: eps.periodEnd };
     }
   }
   const y = set.years[0];
@@ -286,12 +301,114 @@ function fourQuartersFrom(set: StoredFactSet, key: string, offset: number): numb
   return (parts as number[]).reduce((a, b) => a + b, 0);
 }
 
+// ── THE DIVIDEND, READ ONCE (#553 COWORK #184 item 1, 2026-10-07) ──────────
+// Read-only census, relay run 37549087272, over 437 payers:
+//   - 88 state Q4's dividend only inside the fiscal year (NSC: Q4 "–", FY
+//     $5.40), so no four quarters were on file and payout fell to the fiscal
+//     year, then was withheld beside a TTM EPS. Q4 is now derived: the fiscal
+//     year less its first three quarters, when all four are on file.
+//   - a special dividend (PGR's Q4 $13.60 beside $0.10 quarters) read as
+//     regular: +184% growth and a 6.55% yield. A quarter over SPECIAL_MULTIPLE
+//     times the largest of the other three is a special; their median stands
+//     in for its regular part, the rest is left out of figure, yield, growth.
+//   - a cut (FMC $0.58 to $0.08, LYB $1.37 to $0.69) kept the trailing total:
+//     FMC read 27% yield. When the latest regular quarter is under CUT_SHARE of
+//     the three before (their median), Div ($) is the latest quarter x4, marked.
+// The split basis (BKNG, 25:1) is A's splitAdjusted, applied to the whole set
+// in buildSecPickerRow before any of this.
+
 /**
- * Dividend growth, percent: the newest TTM against the TTM before it, else the
- * newest fiscal year against the one before. Null when either side is missing
- * or the older one is not positive -- growth from nothing is not a percentage.
+ * A quarter over this multiple of the largest other quarter of the four is a
+ * special dividend. 4, not 3: FMC's Q4 as stored ($1.74) is exactly 3x its
+ * old $0.58 rate, while the specials in the census sit well clear (PGR 136x,
+ * CNA about 4.5x).
+ */
+export const SPECIAL_MULTIPLE = 4;
+/** The latest regular quarter under this share of the three before it is a cut. */
+export const CUT_SHARE = 0.9;
+
+const median = (xs: number[]) => {
+  const a = [...xs].sort((x, y) => x - y);
+  return a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+};
+
+/**
+ * Declared DPS per stored quarter, newest first, in the reporting currency,
+ * with a Q4 the filer states only inside the 10-K derived as the fiscal year
+ * less its Q1-Q3. Null where neither is on file.
+ */
+export function quarterlyDps(set: StoredFactSet): (number | null)[] {
+  return set.quarters.map((q) => {
+    const own = valueOf(home(set, q), "dividendsDeclaredPerShare");
+    if (own !== null || q.fp !== "Q4" || q.fy == null) return own;
+    const y = set.years.find((x) => x.e === q.e);
+    const yDps = y ? valueOf(home(set, y), "dividendsDeclaredPerShare") : null;
+    if (yDps === null) return null;
+    const parts = ["Q1", "Q2", "Q3"].map((fp) => {
+      const p = set.quarters.find((x) => x.fy === q.fy && x.fp === fp);
+      return p ? valueOf(home(set, p), "dividendsDeclaredPerShare") : null;
+    });
+    if (parts.some((v) => v === null)) return null;
+    const derived = yDps - (parts as number[]).reduce((a, b) => a + b, 0);
+    return derived >= 0 ? Math.round(derived * 1e6) / 1e6 : null;
+  });
+}
+
+/** Four consecutive quarters of DPS from `offset`, split into regular and special. */
+function fourDps(set: StoredFactSet, dps: (number | null)[], offset: number): { regular: number; special: number; quarters: number[]; periodEnd: string } | null {
+  const four = set.quarters.slice(offset, offset + 4);
+  if (four.length < 4 || !four.every((q, i) => i === 0 || isConsecutive(four[i - 1], q))) return null;
+  const vals = dps.slice(offset, offset + 4);
+  if (vals.some((v) => v === null)) return null;
+  const v = vals as number[];
+  // AGAINST THE LARGEST OF THE OTHER THREE, not the median of all four: after
+  // a cut (FMC $0.58 -> $0.08) the median falls and an ordinary old quarter
+  // would read as a special. Its regular part is the others' median.
+  let special = 0;
+  const regular = v.map((x, i) => {
+    const others = v.filter((_, j) => j !== i);
+    const top = Math.max(...others);
+    if (top > 0 && x > SPECIAL_MULTIPLE * top) { const m = median(others); special += x - m; return m; }
+    return x;
+  });
+  return { regular: regular.reduce((a, b) => a + b, 0), special, quarters: regular, periodEnd: four[0].e };
+}
+
+export type DividendRead = {
+  /** Four quarters on file: the regular total, the special left out, the period. */
+  four: { regular: number; special: number; periodEnd: string } | null;
+  /** The latest regular quarter is a cut: what Div ($) shows, and the trailing total. */
+  cut: { annualised: number; ttm: number } | null;
+  /** Regular growth over the four quarters before, percent, or null. */
+  growth: number | null;
+};
+
+/** Pure. The figures behind Div ($), Div Growth and Payout. */
+export function dividendRead(set: StoredFactSet): DividendRead {
+  const dps = quarterlyDps(set);
+  const now = fourDps(set, dps, 0);
+  const prior = fourDps(set, dps, 4);
+  let cut: DividendRead["cut"] = null;
+  if (now && now.quarters[0] > 0) {
+    const before = median(now.quarters.slice(1));
+    if (before > 0 && now.quarters[0] < CUT_SHARE * before) cut = { annualised: now.quarters[0] * 4, ttm: now.regular };
+  }
+  return {
+    four: now ? { regular: now.regular, special: now.special, periodEnd: now.periodEnd } : null,
+    cut,
+    growth: now && prior && prior.regular > 0 ? ((now.regular - prior.regular) / prior.regular) * 100 : null,
+  };
+}
+
+/**
+ * Dividend growth, percent: the newest regular four quarters against the four
+ * before (dividendRead), else the newest fiscal year against the one before.
+ * Null when either side is missing or the older one is not positive -- growth
+ * from nothing is not a percentage.
  */
 function dividendGrowth(set: StoredFactSet): number | null {
+  const read = dividendRead(set);
+  if (read.growth !== null) return read.growth;
   const now = fourQuartersFrom(set, "dividendsDeclaredPerShare", 0);
   const prior = fourQuartersFrom(set, "dividendsDeclaredPerShare", 4);
   if (now !== null && prior !== null && prior > 0) return ((now - prior) / prior) * 100;
@@ -302,11 +419,15 @@ function dividendGrowth(set: StoredFactSet): number | null {
 
 /** WRITE half. Pure. */
 export function buildSecPickerRow(
-  set: StoredFactSet,
+  filed: StoredFactSet,
   today: string,
   filer: FilerFacts,
   nowMs: number
 ): SecPickerRow {
+  // PER-SHARE FIGURES ON TODAY'S SHARE BASIS (#553 COWORK #184 item 1): A's
+  // splitAdjusted, the same the stock page applies. BKNG (25:1) read $9.64 a
+  // share and +2,437% growth from pre-split dividends. Idempotent (stamped).
+  const set = splitAdjusted(filed);
   const inputs = valuationInputs(set, today, filer);
   const unit = unitOf(set);
   if (!moneyIsUsd(unit)) {
@@ -334,6 +455,16 @@ export function buildSecPickerRow(
   const ni = twelveMonthsOf(set, ["netIncome"]);
   const cf = twelveMonthsOf(set, ["operatingCashFlow", "capex"]);
   const dps = twelveMonthsOf(set, ["dividendsDeclaredPerShare"]);
+  const read = dividendRead(set);
+  // Div ($): a cut shows the latest quarter annualised; else the regular four
+  // quarters (Q4 derived, specials out); else twelveMonthsOf's figure as before.
+  const divPerShare = read.cut ? read.cut.annualised : read.four ? read.four.regular : dps ? dps.vals.dividendsDeclaredPerShare : null;
+  const tx = Array.isArray(set.tx) ? set.tx : [];
+  const div: NonNullable<SecPickerRow["div"]> = {
+    ...(divPerShare === null && tx.includes("ifrs-full") && !tx.includes("us-gaap") ? { ifrs: true as const } : {}),
+    ...(read.cut ? { cut: { ttm: read.cut.ttm } } : {}),
+    ...(read.four && read.four.special > 0 ? { special: Math.round(read.four.special * 1e4) / 1e4 } : {}),
+  };
   return {
     v: 1,
     at: nowMs,
@@ -345,11 +476,12 @@ export function buildSecPickerRow(
     // capex is stored as the positive payment (PaymentsToAcquire...); abs() so a
     // filer that tags it negative cannot turn FCF into OCF + capex.
     freeCashFlow: cf ? cf.vals.operatingCashFlow - Math.abs(cf.vals.capex) : null,
-    divPerShare: dps ? dps.vals.dividendsDeclaredPerShare : null,
+    divPerShare,
     divGrowth: dividendGrowth(set),
     eps: inputs.eps,
     payout: samePeriodPayout(set, inputs.eps),
     growth: secGrowthFacts(set, today, filer, inputs.refusals),
+    ...(Object.keys(div).length ? { div } : {}),
   };
 }
 
@@ -534,8 +666,9 @@ export function secPickerWhy(
   set("opinc", figures.operatingIncome, money(() => "noOpi"));
   set("netinc", figures.netIncome, money(() => "noNi"));
   set("fcf", figures.freeCashFlow, money(() => "noFcf"));
-  set("dps", figures.divPerShare, money(() => "noDiv"));
-  set("dyield", figures.divYield, money(() => (row.divPerShare === null ? "noDiv" : "noPx")));
+  const noDiv = (): CellWhyCode => (row.div?.ifrs ? "divIfrs" : "noDiv");
+  set("dps", figures.divPerShare, money(noDiv));
+  set("dyield", figures.divYield, money(() => (row.divPerShare === null ? noDiv() : "noPx")));
   set("dgrowth", figures.divGrowth, money(() => "noDg"));
 
   // P/E, EPS and Payout only where the page applies them (a row written before
@@ -545,8 +678,10 @@ export function secPickerWhy(
     set("pe", earnings.peRatio, money(() => why(peRatio(inputs, price)) ?? (priced ? "noEps" : "noPx")));
     set("eps", earnings.epsTtm, money(() =>
       ads ? "adsE" : refusals.includes("eps-period-is-stale") ? "epsOld" : "noEps"));
+    // "Loss" (#553 COWORK #184 item 1): no payout ratio on a loss, said in a word.
+    const loss = !ads && row.eps != null && row.eps.val <= 0;
     set("payout", earnings.payoutRatio, money(() =>
-      ads ? "adsE" : earnings.payoutBasis === PAYOUT_PERIODS_DIFFER ? "payMix" : "noPay"));
+      ads ? "adsE" : loss ? "payLoss" : earnings.payoutBasis === PAYOUT_PERIODS_DIFFER ? "payMix" : "noPay"));
   }
   return out;
 }
@@ -558,9 +693,14 @@ export function secPickerWhy(
  * (EPS near zero, an incomplete revenue line, book equity under 1% of market
  * value), "Neg." (equity not positive).
  */
-export const REFUSAL_WORD_BY_CODE: Partial<Record<CellWhyCode, string>> = Object.fromEntries(
-  (Object.keys(REFUSAL_CELL_WORD) as ValuationRefusal[]).map((r) => [WHY_FOR_REFUSAL[r], REFUSAL_CELL_WORD[r] as string])
-);
+export const REFUSAL_WORD_BY_CODE: Partial<Record<CellWhyCode, string>> = {
+  ...Object.fromEntries(
+    (Object.keys(REFUSAL_CELL_WORD) as ValuationRefusal[]).map((r) => [WHY_FOR_REFUSAL[r], REFUSAL_CELL_WORD[r] as string])
+  ),
+  // PAYOUT ON A LOSS (#553 COWORK #184 item 1): KHC, LYB, WTRG and MAA read
+  // "–". A's word for EPS that isn't positive, so it reads as P/E does.
+  payLoss: REFUSAL_CELL_WORD["eps-is-zero-or-negative"] as string,
+};
 
 /**
  * WHERE A's WORDS APPLY: the valuation multiples, and in each only the codes
@@ -574,6 +714,7 @@ export const REFUSAL_WORD_CODES: Readonly<Partial<Record<CellWhyColumn, readonly
   pe: ["epsNeg", "eps0"],
   ps: ["revInc"],
   pb: ["eqNeg", "eqSmall"],
+  payout: ["payLoss"],
 };
 
 /**

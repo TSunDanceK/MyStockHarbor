@@ -53,6 +53,9 @@ export const CELL_WHY_WORDS = {
   noDg: "Not enough dividend history on file to compare",
   payMix: "Not shown: the earnings and dividend periods on file differ",
   noPay: "No dividend and earnings on file for the same period",
+  // #553 COWORK #184 item 1 (2026-10-07).
+  payLoss: "Earnings per share over the period were not positive, so there is no payout ratio",
+  divIfrs: "This company reports under IFRS, whose filings carry no per-share dividend figure, so none is shown",
   fx: "The filing is in a currency that couldn't be converted to US dollars",
   noPx: "No current price for this stock",
   noCap: "Market value can't be calculated from the latest filing",
@@ -131,7 +134,9 @@ export const CELL_WHY_TABLE_NOTE_BY_TAB: Record<PickerNoteTab, string> = {
     `${OWNER_LEAD}; 'Loss', 'Neg.', 'Not meaningful' or 'n/a' means a ratio isn't meaningful ` +
     "(a loss, negative free cash flow or equity, earnings near zero, an incomplete revenue line, or equity that is very small next to market value) " +
     "or doesn't apply (banks and insurers, or a listing that isn't a common share).",
-  dividends: `${OWNER_LEAD}.`,
+  // HIDDEN, NOT DELETED (2026-10-07, #553 COWORK #184 item 1): Payout can now
+  // read "Loss", so the line names it. Was: `${OWNER_LEAD}.`
+  dividends: `${OWNER_LEAD}; 'Loss' means earnings per share weren't positive, so there's no payout ratio.`,
   financials: `${OWNER_LEAD}.`,
   analysts: "Analyst figures aren't from company filings; '–' means a figure isn't available.",
 };
@@ -256,4 +261,24 @@ export function isBankOrInsurer(industry: string | null | undefined): boolean {
   if (/^Banks\b/.test(s)) return true;
   if (/^Insurance - (Life|Property & Casualty|Reinsurance|Specialty|Diversified)$/.test(s)) return true;
   return s === "Insurance Carriers, NEC";
+}
+
+/**
+ * THE DIV ($) CELL'S MARK (#553 COWORK #184 item 1, 2026-10-07): "cut" when
+ * the figure is the latest quarter annualised because it sits below the
+ * trailing total, "+ special" when a special dividend was left out of the
+ * figure, the yield and the growth. Null when neither applies.
+ */
+export function dividendMark(e: { divCut?: { ttm: number }; divSpecial?: number }): { tag: string; tip: string } | null {
+  const parts: string[] = [];
+  let tag = "";
+  if (e.divCut && Number.isFinite(e.divCut.ttm)) {
+    tag = "cut";
+    parts.push(`The latest quarterly dividend, annualised. It is below the last four quarters' total of $${e.divCut.ttm.toFixed(2)}, which suggests the dividend was cut; yield uses this figure.`);
+  }
+  if (typeof e.divSpecial === "number" && e.divSpecial > 0) {
+    tag = tag ? `${tag} · + special` : "+ special";
+    parts.push(`+ special $${e.divSpecial.toFixed(2)}: a special dividend in the last four quarters, left out of this figure, the yield and the growth.`);
+  }
+  return parts.length ? { tag, tip: parts.join(" ") } : null;
 }

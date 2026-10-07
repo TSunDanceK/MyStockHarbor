@@ -63,6 +63,11 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["dailyMa200Proximity"],
   sectionIncludes: ["daily ma200"],
+  // THE ORDER IN WORDS (#553 COWORK #184 item 4): the list was in this score's
+  // order while the sort control read "Market Cap (high to low)". A composite,
+  // named as one: the score's parts are computeMa200Candidate's, plus
+  // pickersBuilder's dynamicBoost (today's movers and most-searched names).
+  rankedBy: { label: "200-day setup score (closeness to the line, time spent above it, its slope and liquidity, with a lift for today's most active and most searched names), best first", short: "setup score" },
   maxItems: 36,
 };
 
