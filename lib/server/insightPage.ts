@@ -55,7 +55,7 @@ import { toSpendingInput } from "@/lib/server/capexSpendingJob";
 import { confluence } from "@/lib/ta/confluence";
 import type { KeyBar } from "@/lib/ta/keyLevels";
 import {
-  dayWords, differenceNote, indexOnOrBefore, levelSeries, normaliseInsight, setupLabel, sinceView, LEVEL_NAME,
+  dayWords, differenceNote, indexOnOrBefore, isJunkHeadline, levelSeries, normaliseInsight, setupLabel, sinceView, LEVEL_NAME,
   type EodBar, type NormalisedInsight, type SetupLabel, type SinceView,
 } from "@/lib/insightView";
 import { SCREEN_ROUTES, screenFor, type ScreenFlag } from "@/lib/insightScreens";
@@ -168,6 +168,8 @@ export type MoreCard =
   | { kind: "calendar"; href: string }
   | { kind: "spx"; href: string };
 
+/** The headlines the news card shows under the drivers paragraph, at most (#146). */
+export const NEWS_SHOWN = 3;
 /** "What's driving {TICKER} now" (#563 COWORK #138 §1): the news page's own items and score. */
 export type InsightNews = {
   items: { title: string; link: string; source: string | null; date: string | null }[];
@@ -355,7 +357,8 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
 
   // WHAT'S DRIVING IT NOW: the news page's lead items (newest, deduped, on topic) and its score.
   const news: InsightNews | null = newsBase ? {
-    items: (newsBase.detailedNews ?? []).slice(0, 5).filter((i) => i.title && /^https?:\/\//.test(i.link ?? "")).map((i) => ({ title: i.title, link: i.link, source: i.source ?? null, date: i.pubDate ?? null })),
+    // AT MOST THREE, AND NO FILING NOTICES OR QUOTE PAGES (#563 COWORK #146 §2/§5).
+    items: (newsBase.detailedNews ?? []).filter((i) => i.title && /^https?:\/\//.test(i.link ?? "") && !isJunkHeadline(i.title)).slice(0, NEWS_SHOWN).map((i) => ({ title: i.title, link: i.link, source: i.source ?? null, date: i.pubDate ?? null })),
     score: newsBase.newsScore?.available ? { label: newsBase.newsScore.label, tone: newsBase.newsScore.tone, reason: newsBase.newsScore.reason } : null,
   } : null;
   const SHORT: Record<string, string> = { MA50: "50-day", MA200: "200-day", WMA200: "200-week", BBMID: "20-day" };
@@ -383,6 +386,6 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
 /** The page's data, cached per post for 6 hours (the reads above, at most four times a day a post). */
 export const getInsightPageDataCached = unstable_cache(
   (slug: string) => getInsightPageData(slug),
-  ["insight-page-data-v2"],
+  ["insight-page-data-v4"],
   { revalidate: 21600, tags: ["insight-page-data"] },
 );

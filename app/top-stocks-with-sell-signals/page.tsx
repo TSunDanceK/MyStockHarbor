@@ -62,7 +62,8 @@ const config: PickerResultConfig = {
   title: "Top Stocks With Sell Signals",
   description: "Browse stocks currently showing multiple bearish technical conditions from the live MyStockHarbor picker feed.",
   explainerTitle: "How to use sell signal stocks",
-  explainerBody: "Sell signals can flag pullback risk, weak trends or possible short-side pressure. They are best used with the chart, because oversold names can still bounce even while the broader structure is weak.",
+  // The listing rule (#553 COWORK #186 ruling 3), stated where it is used.
+  explainerBody: "A stock is listed when it meets two or more of the five bearish conditions, at least one of them overbought or a bearish divergence: trading below a moving average alone is not enough. Sell signals can flag pullback risk, weak trends or possible short-side pressure. They are best used with the chart, because oversold names can still bounce even while the broader structure is weak.",
   emptyText: "No sell signal stocks are currently available from the live picker feed.",
   tone: "red",
   kind: "sellSignals",

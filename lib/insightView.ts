@@ -40,6 +40,53 @@ export type InsightSource = { title: string; url: string; publisher: string | nu
 
 export type InsightFormat = "v2" | "v1";
 
+/**
+ * "WHAT'S DRIVING {TICKER} NOW" (#563 COWORK #146): one researched paragraph,
+ * written at publish and dated, with its sources. Optional on both formats;
+ * never refreshed on a schedule (owner ruling), and it does not move the
+ * page's dateModified (only `updated` does).
+ */
+export type InsightDrivers = { asOf: string; text: string; sources: { title: string; publisher: string; url: string }[] };
+/** At most this many sources under the paragraph. */
+export const DRIVERS_MAX_SOURCES = 5;
+
+/**
+ * The loader's validation: absent is fine (null, no problems); present must be
+ * a dated (yyyy-mm-dd, a real day) non-empty paragraph with 1–5 sources, each
+ * with a title, a publisher and an https URL. Anything else is rejected whole,
+ * with the reasons, and the card falls back to the headline layout.
+ */
+export function parseDrivers(raw: unknown): { drivers: InsightDrivers | null; problems: string[] } {
+  if (raw === undefined || raw === null) return { drivers: null, problems: [] };
+  if (typeof raw !== "object" || Array.isArray(raw)) return { drivers: null, problems: ["drivers is not a mapping"] };
+  const o = raw as Record<string, unknown>;
+  const problems: string[] = [];
+  const asOf = o.asOf instanceof Date ? o.asOf.toISOString().slice(0, 10) : str(o.asOf);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf) || Number.isNaN(Date.parse(`${asOf}T00:00:00Z`)) || new Date(`${asOf}T00:00:00Z`).toISOString().slice(0, 10) !== asOf) problems.push("drivers.asOf is not a yyyy-mm-dd date");
+  const text = str(o.text).replace(/\s+/g, " ");
+  if (!text) problems.push("drivers.text is empty");
+  const list = Array.isArray(o.sources) ? o.sources : [];
+  if (list.length < 1 || list.length > DRIVERS_MAX_SOURCES) problems.push(`drivers.sources has ${list.length} entries (1–${DRIVERS_MAX_SOURCES})`);
+  const sources = list.map((s, i) => {
+    const r = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
+    const src = { title: str(r.title), publisher: str(r.publisher), url: str(r.url) };
+    if (!src.title || !src.publisher) problems.push(`drivers.sources[${i}] needs a title and a publisher`);
+    if (!/^https:\/\/[^\s/]+\.[^\s]+$/.test(src.url)) problems.push(`drivers.sources[${i}].url is not an https URL`);
+    return src;
+  });
+  return problems.length ? { drivers: null, problems } : { drivers: { asOf, text, sources }, problems: [] };
+}
+
+/**
+ * HEADLINES THE NEWS CARD SKIPS (#563 COWORK #146 §5), until B's ingest filter
+ * (#814) lands; then this imports B's predicate instead. Filing notices, quote
+ * pages and foreign listings are not news about the company.
+ */
+export function isJunkHeadline(title: string): boolean {
+  return /^form\s*(?:4|3|5|144)\b/i.test(title) || /historical (?:stock )?prices?(?: and data)?/i.test(title) ||
+    /\bstock (?:price|quote)s?(?: today)?\s*(?:[-|:]|$)/i.test(title) || /\b[A-Z0-9]{1,6}\.BK\b/.test(title);
+}
+
 export type NormalisedInsight = {
   format: InsightFormat;
   slug: string;
@@ -65,6 +112,8 @@ export type NormalisedInsight = {
   originalRest: string | null;
   /** Where an old post placed the price against its level, in its own words ("above" / "below"), else null. */
   claimedSide: "above" | "below" | null;
+  /** The dated "what's driving it now" paragraph, when the post has a valid one (#146). */
+  drivers: InsightDrivers | null;
 };
 
 // ── FRONTMATTER → ONE SHAPE ─────────────────────────────────────────────────
@@ -123,6 +172,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
   const secs = sections(body);
   const find = (re: RegExp) => secs.find((s) => re.test(s.heading));
   const whatHappened = find(/^what happened$/i)?.body || null;
+  const drivers = parseDrivers(data.drivers).drivers;
 
   if (data.eventType !== undefined || data.summary !== undefined) {
     // THE NEW SHAPE. No price fields are read even if present.
@@ -133,7 +183,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
     return {
       format: "v2", slug, title: str(data.title), date, updated: str(data.updated) || null, symbol, timeframe, eventType: str(data.eventType) || null, levels,
       summary: str(data.summary), why: str(data.why) || find(/^why it matter/i)?.body || null, whatHappened, sources,
-      bull: str(data.bull) || null, bear: str(data.bear) || null, originalRest: null, claimedSide: null,
+      bull: str(data.bull) || null, bear: str(data.bear) || null, originalRest: null, claimedSide: null, drivers,
     };
   }
 
@@ -149,7 +199,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
     format: "v1", slug, title: str(data.title), date, updated: str(data.updated) || null, symbol, timeframe, eventType: null, levels,
     summary, why: find(/^why it matters$/i)?.body || null, whatHappened, sources: [],
     bull: SCENARIO("Bullish", scen), bear: SCENARIO("Bearish", scen), originalRest: rest || null,
-    claimedSide: claimedSideOf(`${str(data.excerpt)} ${str(data.overallBreakdown)}`, levels[0]),
+    claimedSide: claimedSideOf(`${str(data.excerpt)} ${str(data.overallBreakdown)}`, levels[0]), drivers,
   };
 }
 

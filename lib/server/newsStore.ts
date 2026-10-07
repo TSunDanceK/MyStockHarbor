@@ -48,6 +48,7 @@ import {
   selectEarningsPin,
   type NewsMergeItem,
 } from "./newsMerge";
+import { isNotJunkNews } from "./news/junkTitle";
 
 // PAGE_READ_CACHE, because this client is on a PRERENDERED route's read path.
 //
@@ -242,7 +243,12 @@ async function readOrRefresh<T extends NewsMergeItem>(
   const endRead = beginTiming("news", `redisRead ${key}`);
   const stored = await readStored<T>(key);
   endRead();
-  const storedItems = stored?.items ?? [];
+  // NOT NEWS (#553 COWORK #191, news/junkTitle.ts): filing notices copied by
+  // aggregators, quote pages, foreign-listing pages. Dropped from what is held
+  // (so a stored record clears at its next refresh, and reads clean before it)
+  // and from what is fetched, here because every symbol and sector record is
+  // read and refreshed through this one function.
+  const storedItems = (stored?.items ?? []).filter(isNotJunkNews);
 
   if (stored && nowMs - stored.fetchedAt < NEWS_REFRESH_SECONDS * 1000) {
     // THE CHEAP PATH, and the one that should dominate. A render inside the
@@ -263,7 +269,7 @@ async function readOrRefresh<T extends NewsMergeItem>(
 
   let fetched: T[] = [];
   try {
-    fetched = await deps.fetchWindow(from);
+    fetched = (await deps.fetchWindow(from)).filter(isNotJunkNews);
   } catch {
     // Serve what we have. An upstream failure must not empty a populated store.
     endTotal();
@@ -364,7 +370,8 @@ export async function readStoredSymbolNews<T>(symbols: string[]): Promise<Map<st
     const entries = await redis.mget<(StoredNews<T> | null)[]>(...upper.map(symbolKey));
     entries.forEach((entry, i) => {
       if (entry && typeof entry === "object" && Array.isArray(entry.items) && entry.items.length) {
-        out.set(upper[i], entry.items);
+        // The sector feed reads constituents' records directly: the same rule.
+        out.set(upper[i], (entry.items as (T & NewsMergeItem)[]).filter(isNotJunkNews));
       }
     });
   } catch {

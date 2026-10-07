@@ -116,21 +116,37 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
               </Card>
             ) : null}
 
-            {/* WHAT'S DRIVING IT NOW (#563 COWORK #138 §1): the news page's own items and score; no new AI call. */}
+            {/* WHAT'S DRIVING IT NOW (#563 COWORK #138 §1, corrected by #146): the writer's dated,
+                sourced paragraph first, then at most three headlines, smaller. Without a paragraph
+                (the old posts), the news page's tone line and headlines, as before. */}
             <Card eyebrow={`What's driving ${sym} now`} title={`${sym} news and catalysts`} attr="data-insight-news">
-              {d.news?.score ? (
+              {n.drivers ? (
+                <>
+                  <p className="inDriverAsOf" data-fine-print="" data-insight-drivers-asof="">As of {dayWords(n.drivers.asOf)}</p>
+                  <p className="inRead inDrivers" data-insight-drivers="">{n.drivers.text}</p>
+                  <p className="inDriverSources" data-fine-print="">
+                    Sources:{" "}
+                    {n.drivers.sources.map((src, i) => (
+                      <span key={src.url}>{i ? ", " : ""}<a href={src.url} target="_blank" rel="nofollow noopener" title={src.title}>{src.publisher}</a></span>
+                    ))}
+                  </p>
+                </>
+              ) : d.news?.score ? (
                 <p className="inRead"><span className="inTone" data-tone={d.news.score.tone}>{d.news.score.label}</span> {d.news.score.reason}</p>
               ) : null}
               {d.news?.items.length ? (
-                <ul className="inNews">
-                  {d.news.items.map((i) => (
-                    <li key={i.link}>
-                      <a href={i.link} target="_blank" rel="noopener noreferrer">{i.title}</a>
-                      <span className="inNewsMeta">{[i.source, i.date ? newsDay(i.date) : null].filter(Boolean).join(" · ")}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="inRead">No recent headlines.</p>}
+                <div className={n.drivers ? "inNewsSmall" : undefined} {...(n.drivers ? { "data-fine-print": "" } : {})}>
+                  {n.drivers ? <div className="inEyebrow inNewsLabel">Latest headlines</div> : null}
+                  <ul className="inNews">
+                    {d.news.items.map((i) => (
+                      <li key={i.link}>
+                        <a href={i.link} target="_blank" rel="noopener noreferrer">{i.title}</a>
+                        <span className="inNewsMeta">{[i.source, i.date ? newsDay(i.date) : null].filter(Boolean).join(" · ")}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : n.drivers ? null : <p className="inRead">No recent headlines.</p>}
               <p className="inLinks"><Link href={`/stock/${sym}/news`}>All {sym} news →</Link></p>
             </Card>
 
@@ -515,6 +531,14 @@ const CSS = `
 .inNews a { font-size: var(--fs-read); line-height: 1.45; color: #e2e8f0; font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
 .inNews a:hover { text-decoration: underline; }
 .inNewsMeta { display: block; margin-top: 2px; font-size: var(--fs-label); color: rgba(203,213,225,0.7); }
+.inDriverAsOf { margin: 2px 0 0; font-size: var(--fs-fine); font-weight: 700; color: rgba(203,213,225,0.75); }
+.inDrivers { margin: 6px 0 0; }
+.inDriverSources { margin: 8px 0 0; font-size: var(--fs-fine); color: rgba(203,213,225,0.75); }
+.inDriverSources a { color: inherit; }
+.inNewsSmall { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(148,163,184,0.16); }
+.inNewsSmall .inNews { margin-top: 6px; gap: 8px; }
+.inNewsSmall .inNews a { font-size: var(--fs-label); font-weight: 700; }
+.inNewsLabel { margin: 0; }
 .inRailPole { min-width: 0; }
 .inTiles { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 10px; }
 .inTile { border: 1px solid rgba(148,163,184,0.2); border-radius: 12px; padding: 10px 12px; min-width: 0; }
