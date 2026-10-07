@@ -4,7 +4,8 @@
 //   1. events: a 5% gap, a 52-week closing high, a 200-day test, a volume
 //      spike, results just reported / expected this week; none on a quiet day
 //   2. ranked by size x event strength; only the top INSIGHT_UNIVERSE by cap
-//   3. #188: no fact set, or no filed period, is left out (and recorded)
+//   3. #188: no fact set, or a stale filed period, is left out (and recorded);
+//      no twelve months of EPS is not by itself "no filed period" (#553 COWORK #195)
 //   4. the read path drops a ticker posted within 30 days, keeps one at 30
 //   5. buzz: the most-searched name of $10bn+ with an event
 //   6. THE GUARD: the real value is clean; a number, a dollar figure or a
@@ -84,13 +85,22 @@ function selectRules(C) {
   const prev = q[q.length - 2][4];
   const gap = withLast(q, (b) => { b[1] = prev * 1.06; b[2] = prev * 1.07; b[3] = prev * 1.05; b[4] = prev * 1.06; });
   const vol = withLast(q, (b) => { b[5] = 2.5e6; });
-  const bars = new Map([["MEGA", vol], ["BIG", gap], ["SMALL", gap], ["NOFACT", gap], ["NOEPS", gap], ["ADSEPS", gap], ["QUIET", q], ["BRK-B", gap], ["GOOG", gap]]);
+  const bars = new Map([["MEGA", vol], ["BIG", gap], ["SMALL", gap], ["NOFACT", gap], ["UMC", gap], ["CRWD", gap], ["C", gap], ["KB", gap], ["FERG", gap], ["CRWV", gap], ["ADSEPS", gap], ["QUIET", q], ["BRK-B", gap], ["GOOG", gap]]);
   const close = gap[gap.length - 1][4];
   const secRows = {
     MEGA: row(3e10 / close * 100), // ~3tn at vol's close, the weakest event
     BIG: row(1e9),                 // ~$106bn, the strongest event
     SMALL: row(1e7),               // ~$1bn
-    NOEPS: row(1e9, false),
+    // #553 COWORK #195 (CODE-A #204 §2): the six #814's first rule left out.
+    // Five carry no twelve months of EPS but DO have a filed period (C and
+    // CRWV a Q2 FY2026; FERG's EPS line and KB's won currency are the
+    // refusals): ranked. UMC's newest period is stale: left out, recorded.
+    CRWD: row(1e8, false),
+    C: row(1e8, false),
+    KB: row(1e8, false),
+    FERG: row(1e8, false),
+    CRWV: row(1e8, false),
+    UMC: row(1e8, false, ["eps-period-is-stale"]),
     ADSEPS: row(1e7, false, ["ads-ratio-makes-eps-incomparable"]), // EPS refused, period on file
     GOOG: row(1e9),
     QUIET: row(5e9),
@@ -98,10 +108,12 @@ function selectRules(C) {
   };
   const value = C.selectInsightCandidates({ asOf: ASOF, bars, secRows, reportDates: new Map(), demand: [{ symbol: "SMALL", score: 99 }, { symbol: "BIG", score: 50 }] }, "t");
   const syms = value.ranked.map((c) => c.symbol);
+  const main = syms.filter((x) => ["BRK-B", "BIG", "MEGA", "SMALL"].includes(x));
   want("a quiet stock is not a candidate", !syms.includes("QUIET"));
-  want("size x strength: a $100bn gap outranks a $3tn volume spike; the dotted field ranks dashed", syms.filter((x) => x !== "ADSEPS").join() === "BRK-B,BIG,MEGA,SMALL" || syms.filter((x) => x !== "ADSEPS").join() === "BIG,BRK-B,MEGA,SMALL", syms.join());
+  want("size x strength: a $100bn gap outranks a $3tn volume spike; the dotted field ranks dashed", main.join() === "BRK-B,BIG,MEGA,SMALL" || main.join() === "BIG,BRK-B,MEGA,SMALL", syms.join());
   want("#188: no fact set is not ranked (it has no row, so no cap either)", !syms.includes("NOFACT"));
-  want("#188: no filed period is left out, recorded", !syms.includes("NOEPS") && value.excluded.some((e) => e.symbol === "NOEPS" && e.why === "no-filed-period"), JSON.stringify(value.excluded));
+  want("#188: no twelve months of EPS is not no filed period: CRWD, C, KB, FERG and CRWV are ranked", ["CRWD", "C", "KB", "FERG", "CRWV"].every((x) => syms.includes(x)), syms.join());
+  want("#188: a stale filed period (UMC) is left out, recorded", !syms.includes("UMC") && value.excluded.some((e) => e.symbol === "UMC" && e.why === "filed-period-stale") && value.excluded.length === 1, JSON.stringify(value.excluded));
   want("#188: an EPS refused for another reason (ADS) still has its period: ranked", syms.includes("ADSEPS"));
   want("a second share class is not a second candidate", !syms.includes("GOOG"));
   want("the cap bucket", value.ranked.find((c) => c.symbol === "MEGA")?.capBucket === "mega" && value.ranked.find((c) => c.symbol === "SMALL")?.capBucket === "mid");
@@ -192,7 +204,9 @@ try {
     ["ranked by size alone", "return size * (top + 0.25 * rest.reduce((a, b) => a + b, 0));", "return size;", (C) => selectRules(C).fails],
     ["#188 dropped", "    if (why) { excluded.push({ symbol, why }); continue; }\n", "", (C) => selectRules(C).fails],
     ["the whole universe, not the top by cap", "const top = all.slice(0, INSIGHT_UNIVERSE);", "const top = all;", (C) => selectRules(C).fails],
-    ["#188 on any EPS refusal", "return r.includes(\"no-twelve-month-eps\") || r.includes(\"eps-period-is-stale\") ? \"no-filed-period\" : null;", "return \"no-filed-period\";", (C) => selectRules(C).fails],
+    ["#188 on no-twelve-month-eps again (#814's first rule)", "return row.inputs.refusals.includes(\"eps-period-is-stale\") ? \"filed-period-stale\" : null;", "return row.inputs.refusals.includes(\"eps-period-is-stale\") || row.inputs.refusals.includes(\"no-twelve-month-eps\") ? \"filed-period-stale\" : null;", (C) => selectRules(C).fails],
+    ["#188 on any EPS refusal", "return row.inputs.refusals.includes(\"eps-period-is-stale\") ? \"filed-period-stale\" : null;", "return \"filed-period-stale\";", (C) => selectRules(C).fails],
+    ["a stale period let through", "return row.inputs.refusals.includes(\"eps-period-is-stale\") ? \"filed-period-stale\" : null;", "return null;", (C) => selectRules(C).fails],
     ["second classes kept", "|| SECONDARY_CLASS.has(symbol)) continue;", ") continue;", (C) => selectRules(C).fails],
     ["buzz under $10bn", "if (!hit || hit.cap < BUZZ_MIN_CAP || filedOk(hit.row)) continue;", "if (!hit || filedOk(hit.row)) continue;", (C) => selectRules(C).fails],
     ["repeats within 60 days", "return d !== undefined && daysBetween(d, value.asOf) < INSIGHT_REPEAT_DAYS;", "return d !== undefined && daysBetween(d, value.asOf) < 60;", (C) => readRules(C, selectRules(C).value)],
