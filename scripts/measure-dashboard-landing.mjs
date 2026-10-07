@@ -124,7 +124,12 @@ for (const [name, body] of runs) {
       const bad = await page.evaluate(probe, CARDS);
       if (bad.length) failures++;
       console.log(`${name} ${width}px @ ${root}px: ${bad.length ? `FAIL ${bad.join("; ")}` : "OK"}`);
-      if (SHOTS && root === 16 && (width === 1280 || width === 390)) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, `dashboard-${name}-${width}.png`), fullPage: true }); }
+      if (SHOTS && root === 16 && (width === 1280 || width === 390)) {
+        // Lazy logos load only once scrolled near: walk the page first, as a reader would.
+        await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 400) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 40)); } scrollTo(0, 0); });
+        await page.waitForLoadState("networkidle").catch(() => {});
+        fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, `dashboard-${name}-${width}.png`), fullPage: true });
+      }
       await page.close();
     }
   }

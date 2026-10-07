@@ -11,9 +11,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import MarketMoodCard from "@/app/markets/spx/MarketMoodCard";
-import { formatHeatPct, heatScale, tileShade } from "@/lib/sectorHeatmap";
+import TickerLogo from "@/app/components/TickerLogo";
+import { formatHeatPct } from "@/lib/sectorHeatmap";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
-import type { DashboardCards, DashboardMarket } from "@/lib/server/dashboardCards";
+import type { CapexBar, DashboardCards, DashboardMarket } from "@/lib/server/dashboardCards";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const day = (d: string) => { const [y, m, dd] = d.slice(0, 10).split("-").map(Number); return y && m && dd ? `${dd} ${MONTHS[m - 1]} ${y}` : d; };
@@ -92,8 +93,86 @@ function HubWeb({ top }: { top: { ticker: string; count: number }[] }) {
   );
 }
 
+/**
+ * FOLLOW THE MONEY AS A CHART (#563 COWORK #148 §3), in the capex page's purple
+ * (its .spFill bar: #a78bfa on the rgba(255,255,255,0.06) track). Spenders'
+ * own capex on the left, receivers' own filed sales on the right, each side on
+ * its own scale. Every connector runs between ONE company and the "build-out"
+ * node: there is no line from a company to another company, because there is
+ * no estimated company→company flow (#563 rules). Server-drawn, no client code.
+ */
+function CapexFlow({ spenders, receivers }: { spenders: CapexBar[]; receivers: CapexBar[] }) {
+  const side = (rows: CapexBar[], head: string, key: string) => {
+    const max = Math.max(1, ...rows.map((r) => r.value));
+    return (
+      <div className="dlCx" data-side={key}>
+        <p className="dlColHead">{head}</p>
+        <ul className="dlCxList">
+          {rows.map((r) => (
+            <li key={r.ticker} className="dlCxRow">
+              <TickerLogo symbol={r.ticker} size={22} radius={6} alt="" />
+              <Link href={`/stock/${encodeURIComponent(r.ticker)}`} prefetch={false} className="dlTk">{r.ticker}</Link>
+              <span className="dlCxTrack"><i className="dlCxFill" style={{ width: `${Math.max(4, (r.value / max) * 100)}%` }} /></span>
+              <span className="dlCxAmt">{r.amount}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+  // Row centres on a 0–120 box: the node is the middle; every line has one end on it.
+  const ys = (n: number) => Array.from({ length: n }, (_, i) => ((i + 0.5) * 120) / Math.max(n, 1));
+  return (
+    <div className="dlCapexChart" data-capex-chart="">
+      {side(spenders, "Top spenders · their own capex", "spend")}
+      <div className="dlCxNode">
+        <svg viewBox="0 0 80 120" preserveAspectRatio="none" className="dlCxLines" aria-hidden="true" focusable="false">
+          {ys(spenders.length).map((y) => <line key={`in${y}`} data-into-node="" x1={0} y1={y} x2={40} y2={60} stroke="rgba(167,139,250,0.55)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
+          {ys(receivers.length).map((y) => <line key={`out${y}`} data-from-node="" x1={40} y1={60} x2={80} y2={y} stroke="rgba(167,139,250,0.55)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
+          <circle cx={40} cy={60} r={7} fill="#a78bfa" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <span className="dlCxNodeLabel" data-node="">the build-out</span>
+      </div>
+      {side(receivers, "Top build-out receivers · their own filed sales", "receive")}
+    </div>
+  );
+}
+
+/**
+ * SECTORS YTD AS A MEASUREMENT (#563 COWORK #148 §6): one diverging bar per
+ * sector on a shared axis, 0 marked, green to the right and red to the left,
+ * the value at the bar's end, and the S&P 500's YTD (SPY) as a reference line.
+ */
+function SectorBars({ rows, spx }: { rows: { name: string; slug: string; ytd: number | null }[]; spx: number | null }) {
+  const vals = [...rows.map((r) => r.ytd), spx].filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const span = Math.max(1, ...vals.map(Math.abs)) * 1.05;
+  // The axis runs −span … +span across the track; 0 sits at 50%.
+  const at = (v: number) => 50 + (v / span) * 50;
+  return (
+    <div className="dlSecChart" data-sector-chart="">
+      <ul className="dlSecList">
+        {rows.map((r) => {
+          const v = typeof r.ytd === "number" && Number.isFinite(r.ytd) ? r.ytd : null;
+          const up = (v ?? 0) >= 0;
+          return (
+            <li key={r.slug} className="dlSecRow" data-sector-row={r.slug}>
+              <Link href={`/sector/${r.slug}`} prefetch={false} className="dlSecName">{r.name}</Link>
+              <span className="dlSecTrack">
+                <i className="dlSecZero" aria-hidden="true" />
+                {spx !== null ? <i className="dlSecRef" data-spx-ref="" style={{ left: `${at(spx)}%` }} aria-hidden="true" /> : null}
+                {v !== null ? <i className="dlSecBar" data-tone={up ? "up" : "down"} style={up ? { left: "50%", width: `${at(v) - 50}%` } : { left: `${at(v)}%`, width: `${50 - at(v)}%` }} /> : null}
+              </span>
+              <span className="dlSecVal" data-tone={v === null ? "none" : up ? "up" : "down"}>{v === null ? "n/a" : formatHeatPct(v)}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {spx !== null ? <p className="dlFine" data-fine-print=""><i className="dlSecKey" aria-hidden="true" /> S&amp;P 500 (SPY) {formatHeatPct(spx)} this year: bars past the line beat the market.</p> : null}
+    </div>
+  );
+}
+
 export function LandingCards({ c }: { c: DashboardCards }) {
-  const scale = c.sectors ? heatScale(c.sectors.tiles.map((t) => t.ytd)) : 1;
   const hub = c.hub;
   return (
     <section className="dlCards" aria-labelledby="dlCardsTitle">
@@ -122,17 +201,7 @@ export function LandingCards({ c }: { c: DashboardCards }) {
         <Card id="capex" eyebrow="Follow the money · AI capex" tone="#c4b5fd" title={c.capex?.lead ? `${c.capex.lead.amount} out of ${c.capex.lead.ticker}. Where does it land?` : "Where the build-out money lands"} more={{ href: "/bottlenecks/capex", label: "See the full capex picture" }} empty={c.capex ? null : EMPTY.capex}>
           {c.capex ? (
             <>
-              <div className="dlFlow">
-                <div>
-                  <p className="dlColHead">Top spenders · their own capex</p>
-                  <ul className="dlList">{c.capex.spenders.map((s) => <li key={s.ticker}><span className="dlTk">{s.ticker}</span><span>{s.amount}</span></li>)}</ul>
-                </div>
-                <span className="dlArrow" aria-hidden="true">→</span>
-                <div>
-                  <p className="dlColHead">Top build-out receivers · their own filed sales</p>
-                  <ul className="dlList">{c.capex.receivers.map((s) => <li key={s.ticker}><span className="dlTk">{s.ticker}</span><span>{s.amount}</span></li>)}</ul>
-                </div>
-              </div>
+              <CapexFlow spenders={c.capex.spenders} receivers={c.capex.receivers} />
               <p className="dlFine" data-fine-print="">From each company&apos;s filings. These are what suppliers sold, not a record of who paid them.</p>
             </>
           ) : null}
@@ -140,12 +209,18 @@ export function LandingCards({ c }: { c: DashboardCards }) {
       </div>
 
       <div className="dlRow dlRow3">
-        <Card id="pickers" eyebrow="Pickers · today's screens" tone="#4ade80" title="Today's screens, honest counts" more={{ href: "/pickers", label: "Build your own screen" }} empty={c.pickers ? null : EMPTY.pickers}>
+        <Card id="pickers" eyebrow="Pickers · today's screens" tone="#4ade80" title="Today's screens, honest counts" more={{ href: "/stock-screener", label: "Build your own screen" }} empty={c.pickers ? null : EMPTY.pickers}>
           {c.pickers ? (
             <>
               <ul className="dlList">
                 {c.pickers.screens.map((s) => (
-                  <li key={s.href}><Link href={s.href} prefetch={false}>{s.label}</Link><span className="dlPill">{s.count > 0 ? s.count : "none today"}</span></li>
+                  <li key={s.href} className="dlScreen">
+                    <Link href={s.href} prefetch={false}>{s.label}</Link>
+                    <span className="dlScreenRight">
+                      {s.peek.length ? <span className="dlPeek" data-peek="" aria-hidden="true">{s.peek.map((t) => <TickerLogo key={t} symbol={t} size={20} radius={5} alt="" />)}</span> : null}
+                      <span className="dlPill">{s.count > 0 ? s.count : "none today"}</span>
+                    </span>
+                  </li>
                 ))}
               </ul>
               <p className="dlFine" data-fine-print="">Out of {c.pickers.universe.toLocaleString("en-US")} stocks. A screen that finds nothing says &quot;none today&quot;.</p>
@@ -153,7 +228,7 @@ export function LandingCards({ c }: { c: DashboardCards }) {
           ) : null}
         </Card>
 
-        <Card id="earnings" eyebrow="Earnings · next 3 weeks" tone="#38bdf8" title="Who is estimated to report next" more={{ href: "/earnings-calendar", label: "Open the calendar" }} empty={c.earnings ? null : EMPTY.earnings}>
+        <Card id="earnings" eyebrow="Earnings · the next two weeks" tone="#38bdf8" title="Who is estimated to report next" more={{ href: "/earnings-calendar", label: "Open the calendar" }} empty={c.earnings ? null : EMPTY.earnings}>
           {c.earnings ? (
             <>
               <div className="dlWeeks">
@@ -161,7 +236,7 @@ export function LandingCards({ c }: { c: DashboardCards }) {
                   <div key={w.range} className="dlWeek">
                     <p className="dlWeekHead">{w.range}</p>
                     <p className="dlFine" data-fine-print="">{w.count === 1 ? "1 company" : `${w.count} companies`}</p>
-                    <div className="dlChips">{w.top.map((s) => <Link key={s} href={`/stock/${encodeURIComponent(s)}/earnings`} prefetch={false} className="dlChip">{s}</Link>)}</div>
+                    <div className="dlChips">{w.top.map((s) => <Link key={s} href={`/stock/${encodeURIComponent(s)}/earnings`} prefetch={false} className="dlChip dlLogoChip" data-logo-chip=""><TickerLogo symbol={s} size={18} radius={4} alt="" /><span>{s}</span></Link>)}</div>
                   </div>
                 ))}
               </div>
@@ -173,14 +248,7 @@ export function LandingCards({ c }: { c: DashboardCards }) {
         <Card id="sectors" eyebrow="Sectors · year to date" tone="#facc15" title={c.sectors?.leader && c.sectors.laggard ? `${c.sectors.leader} leads, ${c.sectors.laggard} lags` : "Sectors this year"} more={{ href: "/sector", label: "All 11 sectors" }} empty={c.sectors ? null : EMPTY.sectors}>
           {c.sectors ? (
             <>
-              <div className="dlSectors">
-                {c.sectors.tiles.map((t) => (
-                  <Link key={t.slug} href={`/sector/${t.slug}`} prefetch={false} className="dlSector" style={{ background: tileShade(t.ytd, scale).background }}>
-                    <span className="dlSectorName">{t.name}</span>
-                    <span className="dlSectorPct">{formatHeatPct(t.ytd)}</span>
-                  </Link>
-                ))}
-              </div>
+              <SectorBars rows={c.sectors.rows} spx={c.sectors.spxYtd} />
               <p className="dlFine" data-fine-print="">Cap-weighted across each sector&apos;s tracked stocks. {credit}</p>
             </>
           ) : null}
@@ -254,23 +322,46 @@ export const LANDING_CSS = `
 .dlPill{flex:0 0 auto;padding:2px 9px;border-radius:999px;background:#1a2336;color:#cbd5e1;font-size:var(--fs-label);font-weight:800;white-space:nowrap;}
 .dlHub{display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:16px;align-items:start;}
 .dlWeb{width:100%;height:auto;max-width:300px;}
-.dlFlow{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:center;}
 .dlColHead{margin:0 0 4px;font-size:var(--fs-read);line-height:1.35;color:#8a97ad;font-weight:700;}
 .dlTk{font-weight:800;}
-.dlArrow{color:#5FD4C7;font-size:1.5rem;font-weight:800;}
-.dlWeeks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+.dlWeeks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.dlLogoChip{display:inline-flex;align-items:center;gap:5px;}
+.dlScreen{flex-wrap:nowrap;}
+.dlScreenRight{display:inline-flex;align-items:center;gap:8px;flex:0 0 auto;}
+.dlPeek{display:inline-flex;gap:3px;}
+.dlCapexChart{display:grid;grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr);gap:8px;align-items:stretch;}
+.dlCx{min-width:0;}
+.dlCx .dlColHead{min-height:2.7em;}
+.dlCxList{list-style:none;margin:0;padding:0;display:grid;gap:8px;}
+.dlCxRow{display:grid;grid-template-columns:22px auto minmax(24px,1fr) auto;gap:6px;align-items:center;font-size:var(--fs-label);}
+.dlCxRow .dlTk{color:#f8fafc;text-decoration:none;font-weight:900;}
+.dlCxTrack{display:block;height:12px;border-radius:4px;background:rgba(255,255,255,0.06);overflow:hidden;}
+.dlCxFill{display:block;height:12px;border-radius:4px;background:#a78bfa;}
+.dlCxAmt{font-weight:900;white-space:nowrap;}
+.dlCxNode{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:110px;padding-top:22px;}
+.dlCxLines{width:100%;height:100%;min-height:96px;flex:1;}
+.dlCxNodeLabel{font-size:var(--fs-label);font-weight:800;color:#c4b5fd;text-align:center;line-height:1.2;}
+.dlSecList{list-style:none;margin:0;padding:0;display:grid;gap:5px;}
+.dlSecRow{display:grid;grid-template-columns:minmax(0,9em) minmax(0,1fr) 4.4em;gap:8px;align-items:center;font-size:var(--fs-label);}
+.dlSecName{color:#e2e8f0;text-decoration:none;font-weight:700;line-height:1.15;overflow-wrap:anywhere;}
+.dlSecTrack{position:relative;display:block;height:12px;}
+.dlSecZero{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:rgba(148,163,184,0.55);}
+.dlSecRef{position:absolute;top:-3px;bottom:-3px;width:0;border-left:2px dashed #93c5fd;z-index:1;}
+.dlSecBar{position:absolute;top:1px;height:10px;border-radius:2px;}
+.dlSecBar[data-tone="up"]{background:#22c55e;}
+.dlSecBar[data-tone="down"]{background:#ef4444;}
+.dlSecVal{font-weight:800;text-align:right;white-space:nowrap;}
+.dlSecVal[data-tone="up"]{color:#86efac;}
+.dlSecVal[data-tone="down"]{color:#fca5a5;}
+.dlSecKey{display:inline-block;width:0;height:10px;border-left:2px dashed #93c5fd;margin-right:4px;vertical-align:middle;}
 .dlWeek{padding:10px;border:1px solid #1a2336;border-radius:12px;background:#0f1624;min-width:0;}
 .dlWeekHead{margin:0;font-size:var(--fs-label);font-weight:800;}
 .dlChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .dlChip{padding:3px 8px;border-radius:8px;background:#141b2b;border:1px solid #222c40;color:#eaf0fa;font-size:var(--fs-label);font-weight:800;text-decoration:none;}
-.dlSectors{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;}
-.dlSector{display:grid;gap:2px;padding:8px;border-radius:10px;color:#fff;text-decoration:none;min-width:0;}
-.dlSectorName{font-size:var(--fs-label);font-weight:700;line-height:1.25;}
-.dlSectorPct{font-size:var(--fs-label);font-weight:800;}
 .dlInsight{display:grid;grid-template-columns:140px minmax(0,1fr);gap:16px;align-items:center;}
 .dlInsightImg{display:block;width:140px;height:100px;object-fit:cover;border-radius:12px;background:linear-gradient(135deg,#13213f,#0f1624);}
 .dlNews li{align-items:flex-start;}
 @media(max-width:1100px){.dlRow3{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:860px){.dlRow2,.dlRow3{grid-template-columns:minmax(0,1fr);}.dlHub{grid-template-columns:minmax(0,1fr);}}
-@media(max-width:560px){.dlFlow{grid-template-columns:minmax(0,1fr);}.dlArrow{transform:rotate(90deg);justify-self:center;}.dlTiles{grid-template-columns:minmax(0,1fr);}.dlWeeks{grid-template-columns:minmax(0,1fr);}.dlSectors{grid-template-columns:repeat(2,minmax(0,1fr));}.dlInsight{grid-template-columns:minmax(0,1fr);}.dlInsightImg{width:100%;height:140px;}.dlCard{padding:14px;}.dlH2{font-size:1.375rem;}}
+@media(max-width:560px){.dlCx .dlColHead{min-height:0;}.dlCapexChart{grid-template-columns:minmax(0,1fr);}.dlCxNode{min-height:0;padding-top:0;flex-direction:row;gap:8px;}.dlCxLines{display:none;}.dlCxNodeLabel::before{content:"↓ ";}.dlCxNodeLabel::after{content:" ↓";}.dlTiles{grid-template-columns:minmax(0,1fr);}.dlWeeks{grid-template-columns:minmax(0,1fr);}.dlInsight{grid-template-columns:minmax(0,1fr);}.dlInsightImg{width:100%;height:140px;}.dlCard{padding:14px;}.dlH2{font-size:1.375rem;}}
 `;

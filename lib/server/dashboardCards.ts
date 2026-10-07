@@ -63,13 +63,19 @@ export type DashboardMarket = {
 
 export type DashboardCards = {
   hub: { mapped: number; top: { ticker: string; name: string; count: number }[] } | null;
-  capex: { spenders: { ticker: string; amount: string }[]; receivers: { ticker: string; amount: string }[]; lead: { ticker: string; amount: string } | null } | null;
-  pickers: { screens: { label: string; href: string; count: number }[]; universe: number } | null;
+  /** Each side's own filed figure; `value` sizes that side's bars only (#148 §3). */
+  capex: { spenders: CapexBar[]; receivers: CapexBar[]; lead: { ticker: string; amount: string } | null } | null;
+  /** `peek`: up to 3 members, largest first by preset rank, for the logos (#148 §4). */
+  pickers: { screens: { label: string; href: string; count: number; peek: string[] }[]; universe: number } | null;
+  /** Two week-windows: this week or next, then the one after (#148 §5). */
   earnings: { windows: { label: string; range: string; count: number; top: string[] }[] } | null;
-  sectors: { tiles: { name: string; slug: string; ytd: number | null }[]; leader: string | null; laggard: string | null } | null;
+  /** All 11 sectors, sorted by YTD; `spxYtd` is SPY's YTD, the reference line (#148 §6). */
+  sectors: { rows: { name: string; slug: string; ytd: number | null }[]; leader: string | null; laggard: string | null; spxYtd: number | null } | null;
   insight: { slug: string; title: string; symbol: string; date: string; art: CardArt; movePct: number | null; outcome: string | null } | null;
   news: { title: string; url: string; source: string; date: string | null; symbol: string }[] | null;
 };
+
+export type CapexBar = { ticker: string; amount: string; value: number };
 
 export type DashboardLanding = {
   market: DashboardMarket;
@@ -92,6 +98,10 @@ export const DASHBOARD_SCREENS = [
 ] as const;
 
 // ── PICKERS (6 h) ───────────────────────────────────────────────────────────
+// The records carry no market cap, so the logo peek orders members by their
+// place in the preset universe (the largest names, in size order), then A–Z.
+const PRESET_RANK = new Map(PRESET_UNIVERSE.map((s, i) => [s, i]));
+const bySize = (a: string, b: string) => (PRESET_RANK.get(a) ?? 1e6) - (PRESET_RANK.get(b) ?? 1e6) || (a < b ? -1 : a > b ? 1 : 0);
 const readScreenCounts = unstable_cache(
   async (): Promise<DashboardCards["pickers"]> => {
     try {
@@ -100,13 +110,16 @@ const readScreenCounts = unstable_cache(
       if (!recs.length) return null;
       return {
         universe: recs.length,
-        screens: DASHBOARD_SCREENS.map((s) => ({ label: s.label, href: s.href, count: recs.filter((r) => r[s.flag] === true).length })),
+        screens: DASHBOARD_SCREENS.map((s) => {
+          const members = recs.filter((r) => r[s.flag] === true).map((r) => String(r.symbol ?? "").toUpperCase()).filter(Boolean);
+          return { label: s.label, href: s.href, count: members.length, peek: [...members].sort(bySize).slice(0, 3) };
+        }),
       };
     } catch {
       return null;
     }
   },
-  ["dashboard-screen-counts-v1"],
+  ["dashboard-screen-counts-v2"],
   { revalidate: 21600, tags: ["dashboard-screen-counts"] },
 );
 
@@ -116,17 +129,31 @@ const readScreenCounts = unstable_cache(
  * SPY's latest close and the /markets/spx "Trend score" (its close against
  * its 50/200-day averages and RSI 14), from one read of its stored bars.
  */
-async function readSpy(): Promise<{ spx: DashboardMarket["spx"]; trend: DashboardMarket["trend"] }> {
+async function readSpy(): Promise<{ spx: DashboardMarket["spx"]; trend: DashboardMarket["trend"]; ytd: number | null }> {
   const eod = await readTiingoHistory("SPY").catch(() => null);
   const bars = (eod?.bars ?? []).filter((b) => Number.isFinite(b[4]) && b[4] > 0);
-  if (!bars.length) return { spx: null, trend: null };
+  if (!bars.length) return { spx: null, trend: null, ytd: null };
   const closes = bars.map((b) => b[4]);
   const last = closes[closes.length - 1], high = Math.max(...closes);
   const spx = { close: last, date: bars[bars.length - 1][0], fromHighPct: (last / high - 1) * 100, since: bars[0][0] };
-  if (closes.length < 200) return { spx, trend: null };
+  const ytd = spyYtd(bars);
+  if (closes.length < 200) return { spx, trend: null, ytd };
   const avg = (n: number) => closes.slice(-n).reduce((a, b) => a + b, 0) / n;
   const t = buildMarketMoodScore({ lastClose: last, ma50: avg(50), ma200: avg(200), rsi: lastNum(rsiWilder(closes, 14)) });
-  return { spx, trend: t ? { score: t.score, words: trendWords(t.score) } : null };
+  return { spx, trend: t ? { score: t.score, words: trendWords(t.score) } : null, ytd };
+}
+
+/**
+ * SPY'S YEAR TO DATE (#148 §6, the sectors chart's reference line): the latest
+ * close against the last close of the previous calendar year, as the sector
+ * table's own YTD is measured. Null without a bar in the previous year.
+ */
+export function spyYtd(bars: readonly (readonly [string, number, number, number, number, number])[]): number | null {
+  if (!bars.length) return null;
+  const year = bars[bars.length - 1][0].slice(0, 4);
+  let base: number | null = null;
+  for (const b of bars) { if (b[0].slice(0, 4) < year) base = b[4]; else break; }
+  return base ? (bars[bars.length - 1][4] / base - 1) * 100 : null;
 }
 
 function readHub(): DashboardCards["hub"] {
@@ -142,8 +169,8 @@ function readHub(): DashboardCards["hub"] {
 async function readCapex(): Promise<DashboardCards["capex"]> {
   const c = await readCapexShared().catch(() => null);
   if (!c || (!c.topSpenders.length && !c.topReceivers.length)) return null;
-  const pick = (x: { ticker: string; amount: string }) => ({ ticker: x.ticker, amount: x.amount });
-  return { spenders: c.topSpenders.map(pick), receivers: c.topReceivers.map(pick), lead: c.topSpenders[0] ? pick(c.topSpenders[0]) : null };
+  const bar = (x: { ticker: string; amount: string; value: number }): CapexBar => ({ ticker: x.ticker, amount: x.amount, value: Number.isFinite(x.value) ? x.value : 0 });
+  return { spenders: c.topSpenders.map(bar), receivers: c.topReceivers.map(bar), lead: c.topSpenders[0] ? { ticker: c.topSpenders[0].ticker, amount: c.topSpenders[0].amount } : null };
 }
 
 /** The calendar's "Coming up" windows after this week: count and the three largest names. */
@@ -155,7 +182,9 @@ async function readEarnings(): Promise<DashboardCards["earnings"]> {
   const pool = rows.length ? await readPricePoolBulk(rows.map((r) => r.symbol)).catch(() => new Map()) : new Map();
   const cikOf = (s: string) => registrantFor(s)?.cik ?? null;
   const list = onePerCompany(rows.map((r) => ({ symbol: r.symbol, estimatedOn: addDays(today, r.daysAway), cap: pool.get(r.symbol)?.marketCap ?? null })), cikOf);
-  const windows = comingUpColumns(list, today).filter((c) => !c.isThisWeek).slice(0, 3)
+  // TWO WINDOWS (#148 §5): this week (when anything is estimated in it, else
+  // comingUpColumns starts at next week), then the one after.
+  const windows = comingUpColumns(list, today).slice(0, 2)
     .map((c) => ({ label: c.label, range: c.range, count: c.items.length, top: c.items.slice(0, 3).map((i) => i.symbol) }));
   return windows.length ? { windows } : null;
 }
@@ -165,9 +194,10 @@ async function readSectors(): Promise<{ cards: DashboardCards["sectors"]; best: 
   const rows = table?.rows ?? [];
   if (!rows.length) return { cards: null, best: null };
   const ranked = rows.filter((r) => typeof r.ytd === "number").sort((a, b) => (b.ytd as number) - (a.ytd as number));
-  const tiles = (ranked.length ? ranked : rows).slice(0, 8).map((r) => ({ name: r.name, slug: r.slug, ytd: r.ytd }));
+  // ALL ELEVEN, SORTED (#148 §6); a sector without a YTD figure sits last.
+  const sorted = [...ranked, ...rows.filter((r) => typeof r.ytd !== "number")].map((r) => ({ name: r.name, slug: r.slug, ytd: r.ytd }));
   const best = ranked[0] ? { name: ranked[0].name, slug: ranked[0].slug, ytd: ranked[0].ytd as number } : null;
-  return { cards: { tiles, leader: ranked[0]?.name ?? null, laggard: ranked.length > 1 ? ranked[ranked.length - 1].name : null }, best };
+  return { cards: { rows: sorted, leader: ranked[0]?.name ?? null, laggard: ranked.length > 1 ? ranked[ranked.length - 1].name : null, spxYtd: null }, best };
 }
 
 /** The newest post, with its own page's "since published" result. */
@@ -212,7 +242,7 @@ async function loadDashboardLanding(): Promise<DashboardLanding> {
   const hub = readHub();
   const [moodRaw, spy, sectors, capex, pickers, earnings, insight, news] = await Promise.all([
     readMarketMood().catch(() => null),
-    readSpy().catch(() => ({ spx: null, trend: null })),
+    readSpy().catch(() => ({ spx: null, trend: null, ytd: null })),
     readSectors().catch(() => ({ cards: null, best: null })),
     readCapex().catch(() => null),
     readScreenCounts().catch(() => null),
@@ -222,7 +252,7 @@ async function loadDashboardLanding(): Promise<DashboardLanding> {
   ]);
   return {
     market: { mood: moodView(moodRaw), spx: spy.spx, trend: spy.trend, bestSector: sectors.best, mapped: hub?.mapped ?? null },
-    cards: { hub, capex, pickers, earnings, sectors: sectors.cards, insight, news },
+    cards: { hub, capex, pickers, earnings, sectors: sectors.cards ? { ...sectors.cards, spxYtd: spy.ytd } : null, insight, news },
     bottlenecks: readBottleneckSlugs(),
   };
 }
@@ -236,7 +266,7 @@ function readBottleneckSlugs(): Record<string, string> {
 }
 
 /** The landing, cached 15 minutes; never throws (an empty landing renders every empty state). */
-export const getDashboardLanding = unstable_cache(loadDashboardLanding, ["dashboard-landing-v2"], { revalidate: 900, tags: ["dashboard-landing"] });
+export const getDashboardLanding = unstable_cache(loadDashboardLanding, ["dashboard-landing-v3"], { revalidate: 900, tags: ["dashboard-landing"] });
 
 export const EMPTY_LANDING: DashboardLanding = {
   market: { mood: null, spx: null, trend: null, bestSector: null, mapped: null },

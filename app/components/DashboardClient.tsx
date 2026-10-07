@@ -76,21 +76,17 @@ const ANALYSER_TABS: { key: AnalyserTab; label: string }[] = [
 ];
 /** The landing's hero and analyser styles (the server cards bring their own, LANDING_CSS). */
 const LANDING_CLIENT_CSS = `
-.dlHero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;padding:20px 0 16px;align-items:start;}
-.dlHeroLeft{padding:26px;border:1px solid #1f2b44;border-radius:20px;background:linear-gradient(160deg,rgba(37,99,235,0.16),rgba(13,20,34,0.96) 55%,rgba(16,185,129,0.08));min-width:0;}
+.dlHero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;padding:20px 0 16px;align-items:stretch;}
+.dlHeroLeft{display:flex;flex-direction:column;justify-content:center;padding:26px;border:1px solid #1f2b44;border-radius:20px;background:linear-gradient(160deg,rgba(37,99,235,0.16),rgba(13,20,34,0.96) 55%,rgba(16,185,129,0.08));min-width:0;}
 .dlH1{margin:8px 0 0;font-size:2.75rem;line-height:1.08;font-weight:800;letter-spacing:-0.02em;}
 .dlLead{margin:14px 0 0;font-size:1.0625rem;line-height:1.6;color:#cbd5e1;max-width:620px;}
-.dlSearch{margin-top:18px;height:56px;}
+.dlSearch{margin-top:18px;height:56px;flex:0 0 auto;}
 .dlSearch input{font-size:1rem;min-width:0;}
 .dlSearch .msh-go{height:40px;padding:0 18px;font-size:var(--fs-read);}
 .dlTry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;}
 .dlTryLabel{font-size:var(--fs-label);color:#8a97ad;}
 .dlTryChip{padding:6px 12px;border-radius:999px;border:1px solid #222c40;background:#0f1624;color:#eaf0fa;font-weight:800;font-size:var(--fs-label);cursor:pointer;text-decoration:none;}
 .dlTryChip:hover{border-color:#27406f;}
-.dlPoints{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:18px;}
-.dlPoint{padding:14px;border:1px solid #222c40;border-radius:14px;background:rgba(15,22,36,0.7);min-width:0;}
-.dlPointTitle{margin:0;font-size:var(--fs-read);font-weight:800;}
-.dlPointText{margin:6px 0 0;font-size:var(--fs-read);line-height:1.55;color:#94a3b8;}
 .dlAnalyser{scroll-margin-top:16px;margin:26px 0 14px;}
 .dlAnalyserHead{display:grid;gap:10px;}
 .dlAnalyserTitleRow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;}
@@ -103,7 +99,6 @@ const LANDING_CLIENT_CSS = `
 .dlTab{padding:8px 14px;border-radius:10px;border:1px solid #222c40;background:#0f1624;color:#cbd5e1;font-weight:800;font-size:var(--fs-label);cursor:pointer;}
 .dlTab[aria-selected="true"]{border-color:#2f6bff;background:#13213f;color:#fff;}
 @media(max-width:960px){.dlHero{grid-template-columns:minmax(0,1fr);}}
-@media(max-width:768px){.dlPoints{grid-template-columns:minmax(0,1fr);}}
 @media(max-width:560px){.dlSearch{padding:0 8px;gap:6px;}.dlSearch .msh-go{padding:0 12px;}.dlHeroLeft{padding:18px;}.dlH1{font-size:2rem;}.dlVerdict{font-size:var(--fs-read);}}
 `;
 /** The landing's Try chips (the brief's four). */
@@ -1441,13 +1436,14 @@ export default function DashboardClient({
   // The hero's search is the header search's markup and handlers (one
   // `query`, one result list), so its routing is unchanged; a pick then
   // scrolls down to the analyser.
+  //
+  // CALLED AS A FUNCTION, NEVER MOUNTED AS <LandingHero /> (#563 COWORK #148
+  // §1). It is declared inside this component, so as a JSX element it would be
+  // a NEW component type on every render: each keystroke (setQuery) remounted
+  // the input and threw the focus out. Called directly, its elements are part
+  // of this component's own tree and the input keeps its identity.
+  // scripts/measure-dashboard-search.mjs types into it key by key.
   function LandingHero() {
-    const mapped = landing?.mapped;
-    const points = [
-      { title: "As filed", text: "EPS, margins and cash flow straight from 10-Qs, each one linked to its filing." },
-      { title: "Who depends on who", text: mapped ? `Supplier and customer maps for ${mapped} stocks.` : "Supplier and customer maps, stock by stock." },
-      { title: "Explained, not advised", text: "Plain-English reads of every chart, with no buy or sell calls." },
-    ];
     return (
       <div className="dlHeroLeft">
         <p className="dlEyebrow" style={{ color: "#93c5fd" }}>MyStockHarbor</p>
@@ -1463,9 +1459,6 @@ export default function DashboardClient({
           <span className="dlTryLabel">Try:</span>
           {TRY_SYMBOLS.map((t) => <button key={t} type="button" className="dlTryChip" onClick={() => pickFromHero(t)}>{t}</button>)}
           <Link href="/pickers" className="dlTryChip" prefetch={false}>Scan for ideas →</Link>
-        </div>
-        <div className="dlPoints">
-          {points.map((p) => <div key={p.title} className="dlPoint"><h2 className="dlPointTitle">{p.title}</h2><p className="dlPointText">{p.text}</p></div>)}
         </div>
       </div>
     );
@@ -1587,7 +1580,7 @@ export default function DashboardClient({
       <div className="msh-wrap">
         {landing ? (
           <div className="dlHero" data-landing="">
-            <LandingHero />
+            {LandingHero()}
             {landing.market}
           </div>
         ) : null}
@@ -1618,7 +1611,7 @@ export default function DashboardClient({
 
         {landing ? landing.cards : null}
 
-        {landing ? <section id="analyser" ref={analyserRef} className="dlAnalyser" aria-label={`${symbol} at a glance`}><AnalyserHead /></section> : null}
+        {landing ? <section id="analyser" ref={analyserRef} className="dlAnalyser" aria-label={`${symbol} at a glance`}>{AnalyserHead()}</section> : null}
 
         {err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null}
 
