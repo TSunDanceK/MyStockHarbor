@@ -53,12 +53,26 @@ sources:
     publisher: "Publisher name"
 bull: "One line: what may happen if it goes well (may / might)."
 bear: "One line: what might happen if it doesn't (may / might)."
+drivers:                                                            # what's driving it NOW: researched at publish, dated
+  asOf: "YYYY-MM-DD"                                                #   the day the paragraph was researched
+  text: "One paragraph, 90–160 words: the catalysts, the dates coming up and anything in the world that bears on the company and its price."
+  sources:                                                          #   1–5 entries, full https:// URLs
+    - title: "Headline of the article"
+      publisher: "Publisher name"
+      url: "https://..."
 ---
 ```
 
 - **eventType**, one of: `earnings` (this week or just reported),
   `level-test` (a key level or the 200-day), `trend-flip`, `52w-high`,
   `52w-low`, `gap` (5% or more), `retail-buzz` (the weekly slot).
+- **drivers** (#563 COWORK #146): the card "What's driving {TICKER} now" leads
+  with this paragraph, dated "as of {asOf}", then its sources, then at most
+  three headlines. Written once at publish from 2–5 web sources; never
+  refreshed on a schedule. No Tiingo data in the research or the text, and the
+  advice rules above apply. The page rejects a malformed `drivers` whole (no
+  date, empty text, 0 or more than 5 sources, a non-https URL) and falls back
+  to the headline layout.
 - **levels**, kinds only: `MA200` (200-day average), `MA50` (50-day),
   `WMA200` (200-week, weekly posts), `BBMID` (the 20-day average, the
   Bollinger midline). Leave it `[]` when the post is about an event with no

@@ -10,6 +10,19 @@ overallBreakdown: "AMZN is testing its 200-day moving average from above after a
 latestNews: "Alphabet and Tesla both raised 2026 capital spending plans this week, and the market is pricing in the risk that Amazon raises its own AI capex guidance when it reports July 30."
 latestEarnings: "Amazon's trailing free cash flow fell to $1.2 billion from $25.9 billion a year earlier due to infrastructure spending, though AWS grew revenue 28% year-over-year last quarter, its fastest pace in 15 quarters."
 investorUsefulInfo: "Watch the 200-day moving average as the line in the sand into earnings, and watch AWS growth and capex guidance in the July 30 report for confirmation either way."
+drivers:
+  asOf: "2026-10-07"
+  text: "Amazon heads into its Q3 report, expected around 29 October, with the market focused on one question: is the AI build-out paying back? At its Q2 results on 30 July it raised its 2026 capital-spending estimate to about $220bn. AWS revenue grew about 37% on the year, the fifth quarter in a row of faster growth, and made $16.6bn of the group's $27.5bn operating income. The spending has a cost: trailing free cash flow has turned negative, which may help explain why the stock has lagged the S&P 500 over the past year. Prime Big Deal Days run 6–7 October, but those sales land in Q4, and this year's summer Prime Day moved from Q3 into Q2, so Q3 retail growth may look softer than the trend. Alphabet and Microsoft report around 27 October, and their cloud and capex numbers may set the tone first."
+  sources:
+    - title: "The dates that matter most for Amazon stock"
+      publisher: "Trefis"
+      url: "https://www.trefis.com/stock/amzn/articles/617445/the-dates-that-matter-most-for-amazon-stock/2026-10-02"
+    - title: "Should you buy Amazon stock in October?"
+      publisher: "The Motley Fool"
+      url: "https://www.fool.com/investing/2026/10/02/should-you-buy-amazon-stock-amzn-in-october/"
+    - title: "Amazon stock forecast October 2026"
+      publisher: "Techi"
+      url: "https://www.techi.com/amazon-stock-forecast-october-2026-prime-day-calendar/"
 ---
 
 ## What happened
