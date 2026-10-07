@@ -1408,6 +1408,8 @@ const TASKS = {
   "write-insight-candidates-dry-run": { script: "scripts/insight-candidates-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY (Relay B, #553 COWORK #173/#190): the nightly market state built dry from eod-last, against the old key.
   "write-market-dynamic-dry-run": { script: "scripts/market-dynamic-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #191 item 1): stored news, junk headlines by day.
+  "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
