@@ -61,6 +61,8 @@ export const WRITE_SITES = [
   { file: "lib/server/marketMoodWrite.ts", key: "TIINGO_MOOD_KEY", cls: "row" },
   // The /sector cards' 3-month lines: 11 x 64 percentages (~6 KB), once a complete night (#553 COWORK #167).
   { file: "lib/server/sectorSparks.ts", key: "SECTOR_SPARK_KEY", cls: "row" },
+  // #553 COWORK #173/#190: ~400 symbols and 50 short rows, a few tens of KB.
+  { file: "lib/server/marketDynamic.ts", key: "MARKET_DYNAMIC_KEY", cls: "row" },
   // The /upcoming-ipos SEC profiles, one SET of the whole map only when something changed (#553 COWORK #159).
   { file: "lib/server/ipoProfiles.ts", key: "IPO_PROFILES_KEY", cls: "listed", candidate: "IPO_PROFILES_KEY" },
   { file: "lib/server/tiingoUniverse.ts", key: "TIINGO_UNIVERSE_KEY", cls: "small" },
