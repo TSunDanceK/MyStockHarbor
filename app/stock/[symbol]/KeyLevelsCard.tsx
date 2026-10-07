@@ -22,7 +22,7 @@
 "use client";
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { keyLevels, priceWords, type KeyBar } from "@/lib/ta/keyLevels";
-import { LABEL_LINE_REM, POLE_KEY, TAG_NOTE, keyLevelPole, poleListWords, poleNumber, type Pole, type PoleSide } from "@/lib/ta/keyLevelPole";
+import { LABEL_LINE_REM, POLE_KEY, TAG_NOTE, keyLevelPole, poleListWords, poleNumber, type DiscussedLevel, type Pole, type PoleSide } from "@/lib/ta/keyLevelPole";
 import { FlowPanel, NoteButton, useIsPhone, useTapNote } from "./TapNote";
 
 export const KEY_LEVELS_NOTE =
@@ -30,6 +30,8 @@ export const KEY_LEVELS_NOTE =
   "taken from daily prices. They describe where the price has been, not where it will go.";
 
 /** Green above the last price, red below, muted level with it. Never a call. */
+/** The insight page's "level discussed" (#563 COWORK #139): gold, as on its levels list and chart. */
+export const DISCUSSED_COLOUR = "#eab308";
 export const SIDE_COLOUR: Record<PoleSide, string> = { up: "#22c55e", down: "#ef4444", at: "rgba(203,213,225,0.8)" };
 
 const C = {
@@ -84,10 +86,10 @@ export function PoleSvg({ pole, fill = false }: { pole: Pole; fill?: boolean }) 
             </g>
           );
         }
-        const c = SIDE_COLOUR[r.side];
+        const c = r.discussed ? DISCUSSED_COLOUR : SIDE_COLOUR[r.side];
         // Every level keeps its own tick at its true height; a crowded label's ticks all lead to it.
         return (
-          <g key={i} className="klTick" data-side={r.side}>
+          <g key={i} className="klTick" data-side={r.side} data-discussed={r.discussed ? "" : undefined}>
             {r.members.map((m, j) => {
               const my = m.y * U;
               return (
@@ -109,7 +111,7 @@ export function PoleSvg({ pole, fill = false }: { pole: Pole; fill?: boolean }) 
 function PoleLabel({ r, fillOf }: { r: Pole["rows"][number]; /** Filling: the pole's own height, in rem. */ fillOf?: number }) {
   const at = fillOf ? `calc(100% * ${(r.ly / fillOf).toFixed(5)} - ${LABEL_LINE_REM / 2}rem)` : `calc(${r.ly}rem - ${LABEL_LINE_REM / 2}rem)`;
   return (
-    <div className="klLabel" data-label={r.label} data-last={r.last ? "1" : undefined} data-side={r.side}
+    <div className="klLabel" data-label={r.label} data-last={r.last ? "1" : undefined} data-side={r.side} data-discussed={r.discussed ? "" : undefined}
       style={{ position: "absolute", left: 0, right: 0, top: at, display: "grid", gridTemplateColumns: `${NAME_COL} ${POLE_COL_REM}rem minmax(0, 1fr)`, alignItems: "start", fontSize: "var(--fs-label)", lineHeight: 1.25 }}>
       {/* NEVER WRAPPING (#123): each short name on one line, its period tags small and muted; a label of two names stacks them. */}
       <span className="klName" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", color: C.value, paddingRight: 2, minWidth: 0 }}>
@@ -124,7 +126,7 @@ function PoleLabel({ r, fillOf }: { r: Pole["rows"][number]; /** Filling: the po
         </span>
       ) : (
         <span className="klValue" style={{ display: "flex", columnGap: "0.5em", paddingLeft: 2, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-          <span style={{ color: SIDE_COLOUR[r.side], fontWeight: 700, whiteSpace: "nowrap" }}>{r.valueText}</span>
+          <span style={{ color: r.discussed ? DISCUSSED_COLOUR : SIDE_COLOUR[r.side], fontWeight: 700, whiteSpace: "nowrap" }}>{r.valueText}</span>
           {r.dist ? <span className="klDist" style={{ color: C.muted, fontSize: "var(--fs-fine)", whiteSpace: "nowrap" }}>{r.dist}</span> : null}
         </span>
       )}
@@ -138,6 +140,7 @@ export default function KeyLevelsCard({
   nowMs,
   credit,
   fill = false,
+  discussed = null,
 }: {
   bars: readonly KeyBar[];
   /** The page's last price; the latest close stands in when there is none. */
@@ -152,6 +155,8 @@ export default function KeyLevelsCard({
   credit?: ReactNode;
   /** The SPX page (#563 COWORK #129): the pole takes the card's spare height, which that page's CSS gives it. */
   fill?: boolean;
+  /** An insight post's level discussed (#563 COWORK #139): its own gold tick, or a marker past the pole's end. */
+  discussed?: DiscussedLevel | null;
 }) {
   const k = keyLevels(bars, { nowMs });
   const hasPrice = typeof lastPrice === "number" && Number.isFinite(lastPrice) && lastPrice > 0;
@@ -178,7 +183,7 @@ export default function KeyLevelsCard({
     ro?.observe(el);
     return () => ro?.disconnect();
   }, []);
-  const pole = keyLevelPole(k, last, undefined, heights);
+  const pole = keyLevelPole(k, last, undefined, heights, discussed);
   return (
     <section className="klCard" style={cardStyle}>
       {/* "DAY · WEEK · MONTH" (#563 COWORK #77): not "Price levels", which names the main column's ladder. */}
@@ -221,6 +226,11 @@ export default function KeyLevelsCard({
           {/* The same levels in words, in price order, for screen readers (the pole above is aria-hidden). */}
           <ul className="klList" style={srOnly}>{poleListWords(pole).map((t) => <li key={t}>{t}</li>)}</ul>
           {/* The key: a legend at --fs-label as #115 rules, tagged as fine print (not reading text). */}
+          {pole.offPole ? (
+            <p className="klOffPole" data-discussed-off="" style={{ margin: "8px 0 0", fontSize: "var(--fs-label)", fontWeight: 700, color: DISCUSSED_COLOUR, fontVariantNumeric: "tabular-nums" }}>
+              {pole.offPole.above ? "↑" : "↓"} {pole.offPole.label} ${poleNumber(pole.offPole.value)} ({pole.offPole.dist})
+            </p>
+          ) : null}
           <p className="klKey" data-fine-print style={{ margin: "10px 0 0", fontSize: "var(--fs-label)", lineHeight: 1.45, color: C.muted }}>
             <strong style={{ color: SIDE_COLOUR.up }}>Green</strong>{POLE_KEY.slice("Green".length, POLE_KEY.indexOf("red"))}<strong style={{ color: SIDE_COLOUR.down }}>red</strong>{POLE_KEY.slice(POLE_KEY.indexOf("red") + 3)}
           </p>

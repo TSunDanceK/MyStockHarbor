@@ -45,9 +45,10 @@ const STUBS = {
     "export const readTiingoHistory = (...a) => globalThis.__insStub.readTiingoHistory(...a);\n" +
     "export const readTiingoPool = () => { globalThis.__insStub.calls.pool++; return Promise.resolve(null); };",
 };
-// The client (InsightPostClient.tsx -> PriceChart.tsx, ShareButton.tsx,
-// TradingViewChartEmbed.tsx) is rendered for real (section 8): .tsx is
-// transpiled here with the repo's TypeScript, and next/link is an <a>.
+// THE PAGE WAS REBUILT (#563 COWORK #132/#133, CODE-C): it no longer sends the
+// snapshot to a client component. It reads the snapshot's closes for the "Chart
+// when published" thumbnail and credits Tiingo on the "Since" strip, so the
+// page rules below pin that; the module's rules and contract are unchanged.
 const HOOKS = `
 import { createRequire } from "node:module";
 import fs from "node:fs";
@@ -85,6 +86,7 @@ register(`data:text/javascript,${encodeURIComponent(HOOKS)}`);
 const ROOT = process.cwd();
 const MODULE = "lib/insightSnapshots.ts";
 const PAGE = "app/insights/[slug]/page.tsx";
+const VIEW = "app/insights/[slug]/InsightPage.tsx";
 const raw = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
 let failures = 0;
@@ -252,15 +254,15 @@ async function behaviour(M) {
 }
 
 /** The static rules over the page and module sources. Returns failure labels. */
-function statics(pageSrc, modSrc) {
+function statics(pageSrc, modSrc, viewSrc = VIEW_SRC) {
   const fails = [];
   const want = (label, ok) => { if (!ok) fails.push(label); };
   const page = stripComments(pageSrc, { file: PAGE });
   const mod = stripComments(modSrc, { file: MODULE });
-  const block = (page.match(/\{snapshot\?\.source === "tiingo" && snapshot\.priceLabel \? \([\s\S]*?\) : null\}/) ?? [""])[0];
-  want("page: the credit block is gated on a Tiingo snapshot", block.length > 0);
-  want("page: shows pickSurfacePrice's label", /\{snapshot\.priceLabel\}/.test(block));
-  want("page: the credit is linked to TIINGO_URL", /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(block));
+  const view = stripComments(viewSrc, { file: VIEW });
+  want("page: the snapshot reaches the page as closes only (the thumbnail), never whole",
+    /snapshot\?\.chartPoints\?\.length \? snapshot\.chartPoints\.slice\(-120\)\.map\(\(p\) => p\.close\) : null/.test(page) && !/snapshot=\{|\.\.\.snapshot/.test(page));
+  want("page: the Tiingo credit is linked to TIINGO_URL", /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(view));
   want("module: gated on the CHARTS surface", /priceProviderFor\("CHARTS", deps\.env\) === "tiingo"/.test(mod));
   want("module: bars come from the Data Cache reader", /readBars: async \(s\) => \(await readTiingoHistory\(s\)\)\?\.bars/.test(mod));
   want("module: no Tiingo adapter import", !/marketData\/tiingo["']/.test(mod));
@@ -280,6 +282,7 @@ async function load(src) {
 
 const MOD_SRC = raw(MODULE);
 const PAGE_SRC = raw(PAGE);
+const VIEW_SRC = raw(VIEW);
 
 console.log("\n=== 1-5. The module, behaviour (real code, stubbed I/O) ===\n");
 const real = await behaviour(await load(MOD_SRC));
@@ -308,13 +311,14 @@ for (const [name, from, to] of MOD_MUTANTS) {
   check(`mutant caught: ${name}`, fails.length > 0, fails.slice(0, 2).join("; "));
 }
 const PAGE_MUTANTS = [
-  ["credit unlinked", "<a href={TIINGO_URL} target=\"_blank\" rel=\"noopener noreferrer\" style={{ color: \"inherit\" }}>{TIINGO_CREDIT}</a>", "{TIINGO_CREDIT}"],
-  ["label not shown", "Snapshot price: {snapshot.priceLabel} ·", "Snapshot price ·"],
-  ["credit block removed", '{snapshot?.source === "tiingo" && snapshot.priceLabel ? (', "{false ? ("],
+  ["view", "credit unlinked", '<a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a>', "{TIINGO_CREDIT}"],
+  ["page", "the snapshot sent whole", "snapshot?.chartPoints?.length ? snapshot.chartPoints.slice(-120).map((p) => p.close) : null", "snapshot?.chartPoints?.length ? { ...snapshot } : null"],
 ];
-for (const [name, from, to] of PAGE_MUTANTS) {
-  if (!PAGE_SRC.includes(from)) { check(`mutant "${name}" applies`, false, "anchor not found"); continue; }
-  const fails = statics(PAGE_SRC.replace(from, to), MOD_SRC);
+for (const [where, name, from, to] of PAGE_MUTANTS) {
+  const src = where === "view" ? VIEW_SRC : PAGE_SRC;
+  if (!src.includes(from)) { check(`mutant "${name}" applies`, false, "anchor not found"); continue; }
+  // Every occurrence: the rebuilt page credits Tiingo in more than one place (the strip and the rail).
+  const fails = where === "view" ? statics(PAGE_SRC, MOD_SRC, src.split(from).join(to)) : statics(src.split(from).join(to), MOD_SRC);
   check(`mutant caught: ${name}`, fails.length > 0, fails.join("; "));
 }
 const STATIC_MOD_MUTANTS = [
@@ -327,126 +331,38 @@ for (const [name, from, to] of STATIC_MOD_MUTANTS) {
   check(`mutant caught: ${name}`, fails.length > 0, fails.join("; "));
 }
 
-// ── 8. What the client is sent, and its as-of label (#553 COWORK #103) ──
-//   a. Rendered for real (InsightPostClient -> PriceChart), per indicator and
-//      timeframe: full points and trimChartPointsForClient's points give the
-//      SAME markup -- so nothing dropped is read.
-//   b. On the Tiingo path the prop carries only the fields read: date + close,
-//      plus high/low for Stochastic/ATR, plus volume for VWMA/Volume.
-//   c. The page passes the trimmed points; the client draws no candles.
-//   d. A Tiingo snapshot has no snapshotTime: "Last price" reads its
-//      priceLabel, no "undefined"/"Invalid Date"/"NaN", and the snapshot date
-//      is the bar's calendar date even in a zone west of UTC.
-console.log("\n=== 8. Client prop and as-of label (real render) ===\n");
-const CLIENT = "app/insights/[slug]/InsightPostClient.tsx";
-const CLIENT_SRC = raw(CLIENT);
-const React = (await import("react")).default;
-const { renderToStaticMarkup } = await import("react-dom/server");
-
-async function loadClient(src) {
-  // A real path under the repo, so the transpiled module's bare "react" resolves.
-  const f = path.join(ROOT, "scripts", `.ins-client-${process.pid}-${n++}.tsx`);
-  fs.writeFileSync(f, src);
-  try { return (await import(pathToFileURL(f).href)).default; } finally { fs.rmSync(f, { force: true }); }
-}
-const postFor = (chartIndicators, timeframe = "d") => ({
-  slug: "acme-sep-29-2026", title: "Acme setup", date: "2026-09-29", excerpt: "Acme excerpt.", symbol: "ACME",
-  timeframe, chartBars: timeframe === "w" ? 150 : 250, chartIndicators,
-  overallBreakdown: "", latestNews: "", latestEarnings: "", investorUsefulInfo: "", contentHtml: "<p>Body.</p>",
-});
+// ── 8. What a client is sent (#553 COWORK #103): the module's trim ─────────
+//   trimChartPointsForClient keeps only the fields an indicator reads: date +
+//   close, plus high/low for Stochastic/ATR, plus volume for VWMA/Volume. The
+//   rebuilt page (#563 COWORK #132) sends no snapshot to a client at all; the
+//   trim stays the module's contract for any caller that does.
+console.log("\n=== 8. The module's trim ===\n");
 const INDICATOR_SETS = [[], ["MA50", "MA200"], ["MA200"], ["EMA20"], ["Bollinger(20,2)"], ["RSI(14)"], ["MACD(12,26,9)"],
   ["Stochastic(14,3)"], ["ATR(14)"], ["VWMA(20)"], ["Volume"], ["MA200", "Volume"], ["VWMA(20)", "ATR(14)"]];
 const fieldsFor = (inds) => ["date", "close",
   ...(inds.some((i) => i === "Stochastic(14,3)" || i === "ATR(14)") ? ["high", "low"] : []),
   ...(inds.some((i) => i === "VWMA(20)" || i === "Volume") ? ["volume"] : [])].sort().join(",");
-
-async function clientRules(M, Client, pageSrc, clientSrc) {
+function trimRules(M) {
   const fails = [];
-  const want = (label, ok) => { if (!ok) fails.push(label); };
-  const html = (post, snapshot) => { try { return renderToStaticMarkup(React.createElement(Client, { post, snapshot })); } catch (e) { return `__threw ${e}`; } };
   const tiingo = M.hydrateTiingoSnapshot(M.buildTiingoRecord("ACME", BARS, "Acme Corp"), BARS, Date.UTC(2026, 9, 3));
-  const fmpEra = { symbol: "ACME", companyName: "Acme Corp", snapshotDate: "2026-09-29", snapshotTime: "15:59", price: 123.45, trend: "Uptrend",
-    chartPoints: FMP_HISTORY.slice(-2000) };
-  want("fixture: the Tiingo snapshot hydrates with no snapshotTime", tiingo?.source === "tiingo" && tiingo.snapshotTime === undefined);
-  if (!tiingo) return fails;
-
-  // a + b
+  if (!tiingo) return ["fixture: the Tiingo snapshot hydrates"];
   for (const inds of INDICATOR_SETS) {
     const trimmed = M.trimChartPointsForClient(tiingo.chartPoints, inds);
-    want(`tiingo ${inds.join("+") || "default"}: only the fields read are sent (${fieldsFor(inds)})`,
-      trimmed.length === tiingo.chartPoints.length && trimmed.every((p) => Object.keys(p).sort().join(",") === fieldsFor(inds)));
-    for (const tf of ["d", "w"]) {
-      for (const [name, snap] of [["tiingo", tiingo], ["fmp-era", fmpEra]]) {
-        const full = html(postFor(inds, tf), snap);
-        const cut = html(postFor(inds, tf), { ...snap, chartPoints: M.trimChartPointsForClient(snap.chartPoints, inds) });
-        want(`${name} ${tf} ${inds.join("+") || "default"}: trimmed points render identically`,
-          !full.startsWith("__threw") && full.includes("<svg") && full === cut);
-      }
-    }
-  }
-  // c
-  const page = stripComments(pageSrc, { file: PAGE });
-  const client = stripComments(clientSrc, { file: CLIENT });
-  want("page: the client is sent trimChartPointsForClient's points",
-    page.includes("{ ...snapshot, chartPoints: trimChartPointsForClient(snapshot.chartPoints, post.chartIndicators) }") &&
-      !/snapshot=\{snapshot\}/.test(page));
-  want("client: no chartType passed (candle reads of high/low never run)", !/chartType=/.test(client));
-
-  // d
-  const prevTZ = process.env.TZ;
-  process.env.TZ = "America/Los_Angeles";
-  try {
-    for (const [name, snap, lastPriceText] of [
-      // en-GB's short September is "Sep" or "Sept" depending on the ICU build.
-      ["tiingo", { ...tiingo, chartPoints: M.trimChartPointsForClient(tiingo.chartPoints, []) }, /^close, 29 Sep 2026$/],
-      ["fmp-era", fmpEra, /^29 Sept? 2026$/],
-    ]) {
-      const out = html(postFor([]), snap);
-      const card = out.match(/Last price<\/div><strong>([^<]*)<\/strong><span>([^<]*)<\/span>/);
-      want(`${name}: "Last price" reads ${lastPriceText}`, lastPriceText.test(card?.[2] ?? "") && card?.[1] === `$${snap.price.toFixed(2)}`);
-      want(`${name}: no undefined / Invalid Date / NaN in the page`, !/undefined|Invalid Date|NaN/.test(out));
-      want(`${name}: snapshot date is the bar's date west of UTC`, /Snapshot date: 29 Sept? 2026</.test(out));
-    }
-  } finally {
-    if (prevTZ === undefined) delete process.env.TZ; else process.env.TZ = prevTZ;
+    if (!(trimmed.length === tiingo.chartPoints.length && trimmed.every((p) => Object.keys(p).sort().join(",") === fieldsFor(inds)))) fails.push(`tiingo ${inds.join("+") || "default"}: only ${fieldsFor(inds)}`);
   }
   return fails;
 }
-
 const realMod = await load(MOD_SRC);
-const realClient = await loadClient(CLIENT_SRC);
-const cr = await clientRules(realMod, realClient, PAGE_SRC, CLIENT_SRC);
-check("every client rule holds", cr.length === 0, cr.slice(0, 4).join("; "));
-{
-  const t = realMod.hydrateTiingoSnapshot(realMod.buildTiingoRecord("ACME", BARS, "Acme Corp"), BARS, Date.UTC(2026, 9, 3));
-  const full = JSON.stringify(t.chartPoints);
-  const cut = JSON.stringify(realMod.trimChartPointsForClient(t.chartPoints, []));
-  // The RSC payload carries the props as a JSON string inside a script, so quotes are escaped once more.
-  const esc = (x) => JSON.stringify(x).length - 2;
-  console.log(`  info  ${t.chartPoints.length} points, default indicators: ${full.length} -> ${cut.length} bytes JSON (${esc(full)} -> ${esc(cut)} as RSC-escaped), saves ${esc(full) - esc(cut)}`);
-}
-
-const CLIENT_MUTANTS = [
-  ["client", "Last price shows the bare date, not priceLabel", "const lastPriceAsOfText = snapshot?.priceLabel\n    ? snapshot.priceLabel\n", "const lastPriceAsOfText = false\n    ? snapshot.priceLabel\n"],
-  ["client", "date + snapshotTime joined when there is no snapshotTime", "const lastPriceAsOfText = snapshot?.priceLabel\n    ? snapshot.priceLabel\n", "const lastPriceAsOfText = snapshot?.priceLabel\n    ? `${snapshot.snapshotDate} ${snapshot.snapshotTime}`\n"],
-  ["client", "dates formatted in the viewer's zone", '    timeZone: "UTC",\n', ""],
-  ["client", "candles drawn (reads high/low)", "                      hideSourceToggle\n", "                      hideSourceToggle\n                      chartType=\"candles\"\n"],
-  ["module", "every field sent", "const out: InsightSnapshotPoint = { date: p.date, close: p.close };", "const out: InsightSnapshotPoint = { ...p };"],
-  ["module", "the Volume panel loses volume", 'new Set(["VWMA(20)", "Volume"])', 'new Set(["VWMA(20)"])'],
-  ["module", "ATR loses high/low", 'new Set(["Stochastic(14,3)", "ATR(14)"])', 'new Set(["Stochastic(14,3)"])'],
-  ["page", "the page sends the untrimmed points", "{ ...snapshot, chartPoints: trimChartPointsForClient(snapshot.chartPoints, post.chartIndicators) }", "snapshot"],
+const tr = trimRules(realMod);
+check("every trim rule holds", tr.length === 0, tr.slice(0, 4).join("; "));
+const TRIM_MUTANTS = [
+  ["every field sent", "const out: InsightSnapshotPoint = { date: p.date, close: p.close };", "const out: InsightSnapshotPoint = { ...p };"],
+  ["the Volume panel loses volume", 'new Set(["VWMA(20)", "Volume"])', 'new Set(["VWMA(20)"])'],
+  ["ATR loses high/low", 'new Set(["Stochastic(14,3)", "ATR(14)"])', 'new Set(["Stochastic(14,3)"])'],
 ];
-for (const [where, name, from, to] of CLIENT_MUTANTS) {
-  const src = where === "client" ? CLIENT_SRC : where === "module" ? MOD_SRC : PAGE_SRC;
-  if (!src.includes(from)) { check(`mutant "${name}" applies`, false, "anchor not found"); continue; }
-  const mutated = src.replace(from, to);
-  const fails = await clientRules(
-    where === "module" ? await load(mutated) : realMod,
-    where === "client" ? await loadClient(mutated) : realClient,
-    where === "page" ? mutated : PAGE_SRC,
-    where === "client" ? mutated : CLIENT_SRC,
-  );
-  check(`mutant caught: ${name}`, fails.length > 0, fails.slice(0, 2).join("; "));
+for (const [name, from, to] of TRIM_MUTANTS) {
+  if (!MOD_SRC.includes(from)) { check(`mutant "${name}" applies`, false, "anchor not found"); continue; }
+  check(`mutant caught: ${name}`, trimRules(await load(MOD_SRC.replace(from, to))).length > 0);
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });

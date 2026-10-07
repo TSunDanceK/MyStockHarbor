@@ -16,3 +16,5 @@ export async function getSectorPerformanceTable() {
   };
 }
 export function sessionDateLabel() { return "2 Oct"; }
+// The insight page's sector card (#563 COWORK #133) reads one row.
+export async function getSectorPerformanceRow(slug) { return (await getSectorPerformanceTable()).rows.find((r) => r.slug === slug) ?? null; }

@@ -103,7 +103,18 @@ export type PoleLevel = {
   ly: number;
   /** True for the last price's row (the pill). */
   last?: boolean;
+  /** True for the insight page's "level discussed" (#563 COWORK #139): its own row, drawn gold, never merged. */
+  discussed?: boolean;
 };
+
+/** A post's level discussed (#563 COWORK #139): "200-day" at its value today. */
+export type DiscussedLevel = { label: string; value: number };
+/**
+ * How far past the pole's own range (as a share of that range) the level
+ * discussed may sit and still get a tick; beyond it, the pole stays to scale
+ * and the level is a marker at its end ("↓ 200-day $241.51 (−3.9%)").
+ */
+export const DISCUSSED_REACH = 0.5;
 
 export type Pole = {
   /** The pole's height in rem. */
@@ -121,6 +132,8 @@ export type Pole = {
   /** The names behind a short label, for the fine print: "All levels = 11.24: Day open, …", or null. */
   merged: string | null;
   last: number;
+  /** The level discussed when it lies past DISCUSSED_REACH: the marker at the pole's end. Null otherwise. */
+  offPole: { label: string; value: number; dist: string; above: boolean } | null;
 };
 
 /** A price on the pole as the owner's mock-up prints it, without the dollar sign: "336.19" (priceWords' precision). */
@@ -191,7 +204,7 @@ export function poleLevels(k: KeyLevels): { list: { name: string; value: number 
  * label that wrapped push the next one down by its own height, and only it.
  * Null without levels or a price.
  */
-export function keyLevelPole(k: KeyLevels, last: number | null | undefined, gap = LABEL_GAP_REM, heights?: Readonly<Record<string, number>>): Pole | null {
+export function keyLevelPole(k: KeyLevels, last: number | null | undefined, gap = LABEL_GAP_REM, heights?: Readonly<Record<string, number>>, discussed?: DiscussedLevel | null): Pole | null {
   if (!k.asOf || !fin(last) || last <= 0) return null;
   const { list, skipped } = poleLevels(k);
   // MERGE: one label per price (2 dp). A level equal to the last price keeps its own label, muted.
@@ -219,16 +232,26 @@ export function keyLevelPole(k: KeyLevels, last: number | null | undefined, gap 
   const monLo = monthOk ? month.levels.low.value : dayLo, monHi = monthOk ? month.levels.high.value : dayHi;
   const all = [last, ...merged.map((m) => m.value), ...[dayLo, dayHi, monLo, monHi].filter(fin)];
   let lo = Math.min(...all), hi = Math.max(...all);
+  // THE LEVEL DISCUSSED: on the pole when it is near its range, else a marker at the end.
+  const base = hi - lo || last * 0.01;
+  const dIn = !!discussed && fin(discussed.value) && discussed.value > 0 && discussed.value >= lo - base * DISCUSSED_REACH && discussed.value <= hi + base * DISCUSSED_REACH;
+  if (dIn) { lo = Math.min(lo, discussed!.value); hi = Math.max(hi, discussed!.value); }
+  const offPole = discussed && !dIn && fin(discussed.value) && discussed.value > 0
+    ? { label: discussed.label, value: discussed.value, dist: distWords(discussed.value, last), above: discussed.value > last } : null;
   const span = hi - lo || last * 0.01;
   lo -= span * PAD_FRACTION; hi += span * PAD_FRACTION;
   const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-  type Row0 = { names: string[]; value: number; last: boolean; members: { names: string[]; value: number }[] };
-  const rows0: Row0[] = [...groups.map((g) => ({ names: g.names, value: mean(g.members.map((m) => m.value)), last: false, members: g.members })), { names: ["Last price"], value: last, last: true, members: [] }]
-    .sort((a, b) => b.value - a.value || (a.last ? -1 : 1));
+  type Row0 = { names: string[]; value: number; last: boolean; members: { names: string[]; value: number }[]; discussed?: boolean };
+  const rows0: Row0[] = [
+    ...groups.map((g) => ({ names: g.names, value: mean(g.members.map((m) => m.value)), last: false, members: g.members })),
+    { names: ["Last price"], value: last, last: true, members: [] },
+    ...(dIn ? [{ names: [discussed!.label], value: discussed!.value, last: false, members: [{ names: [discussed!.label], value: discussed!.value }], discussed: true }] : []),
+  ].sort((a, b) => b.value - a.value || (a.last ? -1 : 1));
   const all1 = merged.length === 1;
-  const partsOf = (r: Row0) => (r.last ? [] : shortParts(r.names));
+  const partsOf = (r: Row0) => (r.last ? [] : r.discussed ? [{ name: r.names[0], tags: [] }] : shortParts(r.names));
   const labelOf = (r: Row0) => {
     if (r.last) return "Last price";
+    if (r.discussed) return r.names[0];
     const parts = partsOf(r);
     return parts.length > MERGE_PARTS_MAX ? (all1 ? "All levels" : `${r.names.length} levels`) : partsWords(parts);
   };
@@ -246,13 +269,13 @@ export function keyLevelPole(k: KeyLevels, last: number | null | undefined, gap 
       valueText: crowded && !samePrice(Math.min(...vals), Math.max(...vals)) ? `~${poleNumber(r.value)}` : poleNumber(r.value),
       members: r.members.map((m) => ({ names: m.names, value: m.value, y: y(m.value) })),
       side: r.last ? "at" : samePrice(r.value, last) ? "at" : r.value > last ? "up" : "down",
-      dist: distWords(r.value, last), y: y(r.value), ly: ys[i], ...(r.last ? { last: true } : {}),
+      dist: distWords(r.value, last), y: y(r.value), ly: ys[i], ...(r.last ? { last: true } : {}), ...(r.discussed ? { discussed: true } : {}),
     };
   });
   const band = (a: number | null | undefined, b: number | null | undefined) => (fin(a) && fin(b) ? { top: y(Math.max(a, b)), bottom: y(Math.min(a, b)) } : null);
   const short = rows.filter((r) => !r.last && /levels$/.test(r.label));
   const mergedWords = short.length ? short.map((r) => `${r.label} = ${poleNumber(r.value)}: ${r.names.join(", ")}`).join(" · ") : null;
-  return { height, lo, hi, rows, month: band(monLo, monHi), day: band(dayLo, dayHi), skipped, merged: mergedWords, last };
+  return { height, lo, hi, rows, month: band(monLo, monHi), day: band(dayLo, dayHi), skipped, merged: mergedWords, last, offPole };
 }
 
 /** The card's levels and pole in one call, from the bars it already holds. */
