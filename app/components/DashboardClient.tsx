@@ -11,6 +11,7 @@ import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
 import TickerLogo from "@/app/components/TickerLogo";
+import { ETF_NAMES } from "@/lib/etfNames";
 import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
 import ConfluenceCard from "@/app/stock/[symbol]/ConfluenceCard";
 import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
@@ -336,6 +337,8 @@ function buildStretchScore(a: { lastClose: number | null; rsi14: number | null; 
 
 const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "AAPL", name: "Apple Inc." }, { symbol: "ABBV", name: "AbbVie Inc." }, { symbol: "ABT", name: "Abbott Laboratories" }, { symbol: "ADBE", name: "Adobe Inc." }, { symbol: "AMZN", name: "Amazon.com Inc." }, { symbol: "AVGO", name: "Broadcom Inc." }, { symbol: "BAC", name: "Bank of America" }, { symbol: "BRK.B", name: "Berkshire Hathaway B" }, { symbol: "COST", name: "Costco Wholesale" }, { symbol: "CRM", name: "Salesforce Inc." }, { symbol: "CSCO", name: "Cisco Systems" }, { symbol: "CVX", name: "Chevron Corp." }, { symbol: "DIS", name: "Walt Disney Co." }, { symbol: "GOOGL", name: "Alphabet Inc. Class A" }, { symbol: "HD", name: "Home Depot" }, { symbol: "INTC", name: "Intel Corp." }, { symbol: "JNJ", name: "Johnson & Johnson" }, { symbol: "JPM", name: "JPMorgan Chase" }, { symbol: "KO", name: "Coca-Cola Co." }, { symbol: "LLY", name: "Eli Lilly & Co." }, { symbol: "MA", name: "Mastercard Inc." }, { symbol: "MCD", name: "McDonald's Corp." }, { symbol: "META", name: "Meta Platforms" }, { symbol: "MRK", name: "Merck & Co." }, { symbol: "MSFT", name: "Microsoft Corp." }, { symbol: "NFLX", name: "Netflix Inc." }, { symbol: "NVDA", name: "NVIDIA Corp." }, { symbol: "ORCL", name: "Oracle Corp." }, { symbol: "PEP", name: "PepsiCo Inc." }, { symbol: "PG", name: "Procter & Gamble" }, { symbol: "PYPL", name: "PayPal Holdings" }, { symbol: "QCOM", name: "Qualcomm Inc." }, { symbol: "SBUX", name: "Starbucks Corp." }, { symbol: "T", name: "AT&T Inc." }, { symbol: "TGT", name: "Target Corp." }, { symbol: "TSLA", name: "Tesla Inc." }, { symbol: "TXN", name: "Texas Instruments" }, { symbol: "UNH", name: "UnitedHealth Group" }, { symbol: "V", name: "Visa Inc." }, { symbol: "VZ", name: "Verizon Communications" }, { symbol: "WFC", name: "Wells Fargo" }, { symbol: "WMT", name: "Walmart Inc." }, { symbol: "XOM", name: "Exxon Mobil Corp." },
+  // The curated ETFs' names (#563 COWORK #142 §3): a fund's quote carries none.
+  ...Object.entries(ETF_NAMES).map(([symbol, name]) => ({ symbol, name })),
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
 const CRYPTO_PRESETS: { symbol: string; name: string }[] = [
@@ -499,7 +502,7 @@ export default function DashboardClient({
   // pre-existing client-fetch-on-mount behaviour for that symbol below --
   // no regression, the seed is simply unused in that case.
   const seedMatchesSymbol = symbol === defaultSymbol;
-  const [symbolName, setSymbolName] = useState(() => (seedMatchesSymbol ? initialSymbolName : ""));
+  const [symbolName, setSymbolName] = useState(() => (seedMatchesSymbol ? initialSymbolName || ETF_NAMES[defaultSymbol.toUpperCase()] || "" : ""));
   const [activeTimeframe, setActiveTimeframe] = useState("D");
   const [visibleBars, setVisibleBars] = useState(75);
   const [windowOffset, setWindowOffset] = useState(0);
@@ -1099,7 +1102,7 @@ export default function DashboardClient({
     const tc = toneToColor(trendToneFromScore(trendScore), true), sc = toneToColor(compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0, stretchScore.ran).tone, true);
     return (<SectionCard title={`${symbol} Overview`} allowOverflow right={assetType === "stock" ? <Link href={`/stock/${encodeURIComponent(symbol)}`} style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>Company Overview →</Link> : null}>
       <div style={{ display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || "Name unavailable"}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || (landing ? "" : "Name unavailable")}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 10 }}>
           {/* Both scores now carry `known`. Stretch reports out of the number of
               checks that actually ran, not out of six, and the tone tag it feeds is

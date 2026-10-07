@@ -47,7 +47,7 @@ function Card({ id, eyebrow, tone, title, children, more, empty }: { id: string;
 
 export function MarketNow({ m }: { m: DashboardMarket }) {
   const tiles: { href: string; label: string; value: string; sub: string; tone?: string }[] = [];
-  if (m.spx) tiles.push({ href: "/markets/spx", label: "S&P 500", value: m.spx.close.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), sub: `${signed(m.spx.fromRecordPct)} from the record` });
+  if (m.spx) tiles.push({ href: "/markets/spx", label: "S&P 500 (SPY)", value: `$${m.spx.close.toFixed(2)}`, sub: Math.abs(m.spx.fromHighPct) < 0.05 ? "at its highest close on file" : `${signed(m.spx.fromHighPct)} from its highest close` });
   if (m.trend) tiles.push({ href: "/markets/spx", label: "Trend score", value: `${m.trend.score}/100`, sub: m.trend.words, tone: m.trend.score >= 56 ? "#86efac" : m.trend.score <= 44 ? "#fca5a5" : "#fde68a" });
   if (m.bestSector) tiles.push({ href: `/sector/${m.bestSector.slug}`, label: "Best sector YTD", value: m.bestSector.name, sub: signed(m.bestSector.ytd, 2), tone: m.bestSector.ytd >= 0 ? "#86efac" : "#fca5a5" });
   return (
@@ -66,7 +66,7 @@ export function MarketNow({ m }: { m: DashboardMarket }) {
         </div>
       ) : null}
       {!m.mood && !tiles.length ? <p className="dlEmpty" data-card="market" data-empty="">{EMPTY.market}</p> : null}
-      {m.spx ? <p className="dlFine" data-fine-print="">S&amp;P 500 close as of {day(m.spx.asOf)}. Trend score from SPY&apos;s daily closes. {credit}</p> : null}
+      {m.spx ? <p className="dlFine" data-fine-print="">SPY, the ETF that tracks the S&amp;P 500: close on {day(m.spx.date)}, against its highest close since {day(m.spx.since)}. Trend score from the same daily closes. {credit}</p> : null}
     </div>
   );
 }
@@ -124,12 +124,12 @@ export function LandingCards({ c }: { c: DashboardCards }) {
             <>
               <div className="dlFlow">
                 <div>
-                  <p className="dlColHead">Spending most</p>
+                  <p className="dlColHead">Top spenders · their own capex</p>
                   <ul className="dlList">{c.capex.spenders.map((s) => <li key={s.ticker}><span className="dlTk">{s.ticker}</span><span>{s.amount}</span></li>)}</ul>
                 </div>
                 <span className="dlArrow" aria-hidden="true">→</span>
                 <div>
-                  <p className="dlColHead">Build-out sales</p>
+                  <p className="dlColHead">Top build-out receivers · their own filed sales</p>
                   <ul className="dlList">{c.capex.receivers.map((s) => <li key={s.ticker}><span className="dlTk">{s.ticker}</span><span>{s.amount}</span></li>)}</ul>
                 </div>
               </div>
@@ -205,13 +205,16 @@ export function LandingCards({ c }: { c: DashboardCards }) {
           ) : null}
         </Card>
 
-        <Card id="news" eyebrow="Market headlines" tone="#f472b6" more={{ href: "/headlines", label: "All headlines" }} empty={c.news ? null : EMPTY.news}>
+        <Card id="news" eyebrow="News · the largest companies" tone="#f472b6" more={{ href: "/headlines", label: "All headlines" }} empty={c.news ? null : EMPTY.news}>
           {c.news ? (
-            <ul className="dlList dlNews">
-              {c.news.map((n) => (
-                <li key={n.url}><a href={n.url} target="_blank" rel="noopener noreferrer nofollow">{n.title}</a><span className="dlPill">{n.source}</span></li>
-              ))}
-            </ul>
+            <>
+              <ul className="dlList dlNews">
+                {c.news.map((n) => (
+                  <li key={n.url}><a href={n.url} target="_blank" rel="noopener noreferrer nofollow">{n.title}</a><Link className="dlPill" href={`/stock/${encodeURIComponent(n.symbol)}/news`} prefetch={false}>{n.symbol}</Link></li>
+                ))}
+              </ul>
+              <p className="dlFine" data-fine-print="">Each company&apos;s newest headline from its news page{c.news.some((n) => n.source) ? ` (${[...new Set(c.news.map((n) => n.source).filter(Boolean))].join(", ")})` : ""}.</p>
+            </>
           ) : null}
         </Card>
       </div>
@@ -252,7 +255,7 @@ export const LANDING_CSS = `
 .dlHub{display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:16px;align-items:start;}
 .dlWeb{width:100%;height:auto;max-width:300px;}
 .dlFlow{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:center;}
-.dlColHead{margin:0 0 4px;font-size:var(--fs-label);color:#8a97ad;font-weight:700;}
+.dlColHead{margin:0 0 4px;font-size:var(--fs-read);line-height:1.35;color:#8a97ad;font-weight:700;}
 .dlTk{font-weight:800;}
 .dlArrow{color:#5FD4C7;font-size:1.5rem;font-weight:800;}
 .dlWeeks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}

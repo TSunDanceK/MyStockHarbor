@@ -1,0 +1,38 @@
+// THE CURATED ETFS' NAMES (#563 COWORK #142 §3): the dashboard's analyser read
+// "SPY · Name unavailable", because the quote carries no name for a fund. One
+// name per ticker in lib/curatedSymbols.ts `etfs`; scripts/check-dashboard-landing.mjs
+// holds the two lists together.
+export const ETF_NAMES: Readonly<Record<string, string>> = {
+  SPY: "SPDR S&P 500 ETF Trust",
+  QQQ: "Invesco QQQ Trust",
+  DIA: "SPDR Dow Jones Industrial Average ETF Trust",
+  IWM: "iShares Russell 2000 ETF",
+  VTI: "Vanguard Total Stock Market ETF",
+  VOO: "Vanguard S&P 500 ETF",
+  ARKK: "ARK Innovation ETF",
+  XLF: "Financial Select Sector SPDR Fund",
+  XLE: "Energy Select Sector SPDR Fund",
+  XLK: "Technology Select Sector SPDR Fund",
+  XLP: "Consumer Staples Select Sector SPDR Fund",
+  XLY: "Consumer Discretionary Select Sector SPDR Fund",
+  XLV: "Health Care Select Sector SPDR Fund",
+  XLRE: "Real Estate Select Sector SPDR Fund",
+  XLI: "Industrial Select Sector SPDR Fund",
+  XLC: "Communication Services Select Sector SPDR Fund",
+  XLB: "Materials Select Sector SPDR Fund",
+  XLU: "Utilities Select Sector SPDR Fund",
+  SMH: "VanEck Semiconductor ETF",
+  SOXX: "iShares Semiconductor ETF",
+  IBIT: "iShares Bitcoin Trust ETF",
+  HODL: "VanEck Bitcoin ETF",
+  ARKW: "ARK Next Generation Internet ETF",
+  VUG: "Vanguard Growth ETF",
+  SCHD: "Schwab U.S. Dividend Equity ETF",
+  DGRO: "iShares Core Dividend Growth ETF",
+  JEPI: "JPMorgan Equity Premium Income ETF",
+  JEPQ: "JPMorgan Nasdaq Equity Premium Income ETF",
+  GLD: "SPDR Gold Shares",
+  SLV: "iShares Silver Trust",
+  TLT: "iShares 20+ Year Treasury Bond ETF",
+  HYG: "iShares iBoxx $ High Yield Corporate Bond ETF",
+};

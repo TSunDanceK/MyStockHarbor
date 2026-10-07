@@ -11,7 +11,7 @@ export const EMPTY_LANDING = {
 export const FULL_LANDING = {
   market: {
     mood: { day: { d: "2026-10-05", r: 44, n: 6, s: { momentum: 40, strength: 38, breadth: 47, volatility: 52, safeHaven: 41, junk: 46 } }, label: "Fear", spark },
-    spx: { close: 7722.72, fromRecordPct: -1.04, asOf: "2026-10-02" },
+    spx: { close: 669.21, date: "2026-10-06", fromHighPct: -1.04, since: "2021-06-01" },
     trend: { score: 85, words: "Strong uptrend" },
     bestSector: { name: "Technology", slug: "technology", ytd: 55.43 },
     mapped: 109,
@@ -23,7 +23,7 @@ export const FULL_LANDING = {
     earnings: { windows: [{ label: "Next week", range: "12–18 Oct", count: 12, top: ["JPM", "BAC", "WFC"] }, { label: "Week of 19 Oct", range: "19–25 Oct", count: 28, top: ["GOOGL", "TSLA", "INTC"] }, { label: "Week of 26 Oct", range: "26 Oct–1 Nov", count: 32, top: ["AAPL", "MSFT", "AMZN"] }] },
     sectors: { leader: "Technology", laggard: "Consumer Cyclical", tiles: [["Technology", "technology", 55.4], ["Energy", "energy", 42.3], ["Industrials", "industrials", 34.4], ["Basic Materials", "basic-materials", 22.0], ["Communication Services", "communication-services", 8.6], ["Healthcare", "healthcare", 7.5], ["Utilities", "utilities", -0.2], ["Consumer Cyclical", "consumer-cyclical", -2.6]].map(([name, slug, ytd]) => ({ name, slug, ytd })) },
     insight: { slug: "amzn-daily-ma200-buy-zone-july-2026", title: "Amazon back above its 200-day after Q2", symbol: "AMZN", date: "2026-07-28", art: { kind: "none" }, movePct: 11.7, outcome: "held the 200-day average" },
-    news: [{ title: "Alphabet lifts its 2026 capex plan as cloud demand outruns supply", url: "https://example.com/1", source: "CNBC", date: "2026-10-05" }, { title: "September jobs report misses forecasts", url: "https://example.com/2", source: "MarketWatch", date: "2026-10-03" }, { title: "Chip supplier guides higher on data-centre orders", url: "https://example.com/3", source: "GlobeNewswire", date: "2026-10-02" }],
+    news: [{ title: "Alphabet lifts its 2026 capex plan as cloud demand outruns supply", url: "https://example.com/1", source: "CNBC", date: "2026-10-05", symbol: "GOOGL" }, { title: "Apple supplier orders point to steady iPhone demand", url: "https://example.com/2", source: "MarketWatch", date: "2026-10-03", symbol: "AAPL" }, { title: "Chip supplier guides higher on data-centre orders", url: "https://example.com/3", source: "GlobeNewswire", date: "2026-10-02", symbol: "NVDA" }],
   },
   bottlenecks: { AAPL: "aapl", TSLA: "tsla", SPY: "spy" },
 };

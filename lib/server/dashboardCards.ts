@@ -6,15 +6,19 @@
 // data. Each card is read through the same reader its own page uses:
 //
 //   Market Mood         readMarketMood            Data Cache 24 h (the /markets/spx card)
-//   S&P close, record   content/markets/spx-weekly.json   a file, 0 commands
-//   Trend score         readTiingoHistory("SPY")  Data Cache 24 h (the /markets/spx tile)
+//   S&P (SPY) close     readTiingoHistory("SPY")  Data Cache 24 h: the latest close and its
+//   Trend score                                   distance from the highest close on file; the
+//                                                 /markets/spx Trend score, from the same bars
+//                       (#563 COWORK #142 §1: the weekly file's index close lagged by days)
 //   Sectors YTD, best   getSectorPerformanceTable 1 GET (the /sector table, 15 min key)
 //   Bottlenecks         getBottleneckHub          content files, 0 commands
 //   Follow the money    readCapexShared           2 GETs, Data Cache 1 h (shared with the insight pages)
 //   Pickers             getPickersData            ~3 commands, Data Cache 6 h (below)
 //   Earnings            getCalendarForwardSections  2 commands + 1 HMGET for the caps (the calendar's)
 //   Insight of the day  getInsightPageDataCached  Data Cache 6 h (shared with the post's own page)
-//   Headlines           getGeneralMarketHeadlines Data Cache 30 min (the /headlines feed, no Redis)
+//   News                getStockNewsBaseData × 5  the news page's own cached read for the five
+//                       largest preset names (#563 COWORK #142 §4: the market feed carried
+//                       off-universe press releases); ~2 commands each while warm
 //
 // THE WHOLE RESULT IS CACHED FOR 15 MINUTES (getDashboardCards), the shortest
 // of its sources' windows (the sector table). A warm render reads it from the
@@ -23,8 +27,6 @@
 //
 // Every card degrades to null on its own: a missing store hides that card's
 // figures behind its empty state, never the page. Nothing here writes.
-import fs from "node:fs";
-import path from "node:path";
 import { unstable_cache } from "next/cache";
 import { readMarketMood } from "@/lib/server/marketMoodRead";
 import { moodView } from "@/lib/marketMood";
@@ -32,7 +34,6 @@ import { readTiingoHistory } from "@/lib/server/marketData/read";
 import { buildMarketMoodScore } from "@/lib/market-mood";
 import { rsiWilder, lastNum } from "@/lib/indicators";
 import { trendWords } from "@/lib/spxPage";
-import { parseSpxWeekly } from "@/lib/spxWeekly";
 import { getSectorPerformanceTable } from "@/lib/server/sectorPanels";
 import { getAllBottleneckPosts, getBottleneckHub } from "@/lib/bottlenecks";
 import { readCapexShared, getInsightPageDataCached } from "@/lib/server/insightPage";
@@ -43,7 +44,8 @@ import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { registrantFor } from "@/lib/server/stockProfile";
 import { addDays, comingUpColumns, onePerCompany } from "@/lib/server/earningsWeek";
 import { getAllPosts } from "@/lib/blog";
-import { getGeneralMarketHeadlines } from "@/lib/general-market-news";
+import { getStockNewsBaseData } from "@/lib/stock-news-data";
+import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
 import { outcomeWords } from "@/lib/insightView";
 import type { CardArt } from "@/lib/server/news/art";
 import type { MoodCardView } from "@/app/markets/spx/MarketMoodCard";
@@ -51,7 +53,8 @@ import type { MoodCardView } from "@/app/markets/spx/MarketMoodCard";
 export type DashboardMarket = {
   mood: MoodCardView | null;
   /** The weekly file's index close and its distance from the record close. */
-  spx: { close: number; fromRecordPct: number; asOf: string } | null;
+  /** SPY's latest stored close, its date, and its distance from the highest close on file (since `since`). */
+  spx: { close: number; date: string; fromHighPct: number; since: string } | null;
   trend: { score: number; words: string } | null;
   bestSector: { name: string; slug: string; ytd: number } | null;
   /** Stock pages on Bottlenecks, for the hero's "Who depends on who". */
@@ -65,7 +68,7 @@ export type DashboardCards = {
   earnings: { windows: { label: string; range: string; count: number; top: string[] }[] } | null;
   sectors: { tiles: { name: string; slug: string; ytd: number | null }[]; leader: string | null; laggard: string | null } | null;
   insight: { slug: string; title: string; symbol: string; date: string; art: CardArt; movePct: number | null; outcome: string | null } | null;
-  news: { title: string; url: string; source: string; date: string | null }[] | null;
+  news: { title: string; url: string; source: string; date: string | null; symbol: string }[] | null;
 };
 
 export type DashboardLanding = {
@@ -109,24 +112,21 @@ const readScreenCounts = unstable_cache(
 
 // ── THE PARTS (each null on its own failure) ────────────────────────────────
 
-function readSpxWeekly(): DashboardMarket["spx"] {
-  try {
-    const r = parseSpxWeekly(JSON.parse(fs.readFileSync(path.join(process.cwd(), "content/markets/spx-weekly.json"), "utf8")));
-    if (!r.ok) return null;
-    return { close: r.data.indexClose, fromRecordPct: (r.data.indexClose / r.data.ath.level - 1) * 100, asOf: r.data.asOf };
-  } catch {
-    return null;
-  }
-}
-
-/** The /markets/spx "Trend score": SPY's close against its 50/200-day averages and RSI (14). */
-async function readTrend(): Promise<DashboardMarket["trend"]> {
+/**
+ * SPY's latest close and the /markets/spx "Trend score" (its close against
+ * its 50/200-day averages and RSI 14), from one read of its stored bars.
+ */
+async function readSpy(): Promise<{ spx: DashboardMarket["spx"]; trend: DashboardMarket["trend"] }> {
   const eod = await readTiingoHistory("SPY").catch(() => null);
-  const closes = (eod?.bars ?? []).map((b) => b[4]).filter((c) => Number.isFinite(c) && c > 0);
-  if (closes.length < 200) return null;
+  const bars = (eod?.bars ?? []).filter((b) => Number.isFinite(b[4]) && b[4] > 0);
+  if (!bars.length) return { spx: null, trend: null };
+  const closes = bars.map((b) => b[4]);
+  const last = closes[closes.length - 1], high = Math.max(...closes);
+  const spx = { close: last, date: bars[bars.length - 1][0], fromHighPct: (last / high - 1) * 100, since: bars[0][0] };
+  if (closes.length < 200) return { spx, trend: null };
   const avg = (n: number) => closes.slice(-n).reduce((a, b) => a + b, 0) / n;
-  const t = buildMarketMoodScore({ lastClose: closes[closes.length - 1], ma50: avg(50), ma200: avg(200), rsi: lastNum(rsiWilder(closes, 14)) });
-  return t ? { score: t.score, words: trendWords(t.score) } : null;
+  const t = buildMarketMoodScore({ lastClose: last, ma50: avg(50), ma200: avg(200), rsi: lastNum(rsiWilder(closes, 14)) });
+  return { spx, trend: t ? { score: t.score, words: trendWords(t.score) } : null };
 }
 
 function readHub(): DashboardCards["hub"] {
@@ -187,17 +187,32 @@ async function readInsight(): Promise<DashboardCards["insight"]> {
   };
 }
 
+/** How many of the largest preset names the news card reads, and shows. */
+export const NEWS_SYMBOLS = 5, NEWS_SHOWN = 3;
+/**
+ * THE LARGEST COMPANIES' LATEST NEWS (#563 COWORK #142 §4). The market feed
+ * carries no symbol, so it could not be limited to the analysis universe; the
+ * card reads each of the five largest preset names' own news (the news page's
+ * cached read, same options as the insight page), takes each one's newest
+ * on-topic item, and shows the three newest with their ticker.
+ */
 async function readNews(): Promise<DashboardCards["news"]> {
-  const h = await getGeneralMarketHeadlines().catch(() => []);
-  const top = h.filter((x) => x.title && x.url).slice(0, 3).map((x) => ({ title: x.title, url: x.url, source: x.source, date: x.publishedDate }));
+  const syms = PRESET_UNIVERSE.slice(0, NEWS_SYMBOLS);
+  const bases = await Promise.all(syms.map((sym) => getStockNewsBaseData(sym, { maxDetailedItems: 5 }).catch(() => null)));
+  const items = bases.flatMap((b, i) => {
+    const it = (b?.detailedNews ?? []).find((x) => x.title && /^https?:\/\//.test(x.link ?? ""));
+    return it ? [{ title: it.title, url: it.link as string, source: it.source ?? "", date: it.pubDate ?? null, symbol: syms[i] }] : [];
+  });
+  const time = (d: string | null) => { const t = d ? Date.parse(d) : NaN; return Number.isFinite(t) ? t : 0; };
+  const top = items.sort((a, b) => time(b.date) - time(a.date)).slice(0, NEWS_SHOWN);
   return top.length ? top : null;
 }
 
 async function loadDashboardLanding(): Promise<DashboardLanding> {
   const hub = readHub();
-  const [moodRaw, trend, sectors, capex, pickers, earnings, insight, news] = await Promise.all([
+  const [moodRaw, spy, sectors, capex, pickers, earnings, insight, news] = await Promise.all([
     readMarketMood().catch(() => null),
-    readTrend().catch(() => null),
+    readSpy().catch(() => ({ spx: null, trend: null })),
     readSectors().catch(() => ({ cards: null, best: null })),
     readCapex().catch(() => null),
     readScreenCounts().catch(() => null),
@@ -206,7 +221,7 @@ async function loadDashboardLanding(): Promise<DashboardLanding> {
     readNews().catch(() => null),
   ]);
   return {
-    market: { mood: moodView(moodRaw), spx: readSpxWeekly(), trend, bestSector: sectors.best, mapped: hub?.mapped ?? null },
+    market: { mood: moodView(moodRaw), spx: spy.spx, trend: spy.trend, bestSector: sectors.best, mapped: hub?.mapped ?? null },
     cards: { hub, capex, pickers, earnings, sectors: sectors.cards, insight, news },
     bottlenecks: readBottleneckSlugs(),
   };
@@ -221,7 +236,7 @@ function readBottleneckSlugs(): Record<string, string> {
 }
 
 /** The landing, cached 15 minutes; never throws (an empty landing renders every empty state). */
-export const getDashboardLanding = unstable_cache(loadDashboardLanding, ["dashboard-landing-v1"], { revalidate: 900, tags: ["dashboard-landing"] });
+export const getDashboardLanding = unstable_cache(loadDashboardLanding, ["dashboard-landing-v2"], { revalidate: 900, tags: ["dashboard-landing"] });
 
 export const EMPTY_LANDING: DashboardLanding = {
   market: { mood: null, spx: null, trend: null, bestSector: null, mapped: null },

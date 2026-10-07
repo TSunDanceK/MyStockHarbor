@@ -121,6 +121,19 @@ const RULES = {
     /<KeyLevelsCard bars=\{d\.railBars\} discussed=\{d\.discussed\}/.test(page) && /discussed: level && lvNow !== null \? \{ label: SHORT\[level\], value: lvNow \} : null,/.test(loader) &&
     /\{d\.snapshot\?\.available \? <EarningsTiles d=\{d\} \/> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet\.<\/p>\}/.test(page) &&
     /: <p className="inRead">No recent headlines\.<\/p>\}/.test(page) && /getStockNewsBaseData\(sym, \{ maxDetailedItems: 5 \}\)/.test(loader) && !/LatestEarningsCard/.test(page),
+  "#141: the flow's arrow points at a header naming whose figures they are; the EPS tile gives its year-ago figure": ({ page }) => {
+    const heads = /\{m\.mention\.list === "spending" \? "Top build-out receivers · their own filed sales" : "Top spenders · their own capex"\}/.test(page) &&
+      /<div className="inFlowBox">\s*<p className="inFlowHead" data-flow-head="">/.test(page);
+    const fn = page.match(/const epsMoney = [^\n]*\n[\s\S]*?export function epsLine[\s\S]*?\n\}/)?.[0];
+    if (!heads || !fn || !/vs: epsLine\(s\.eps\.value, ya\)/.test(page)) return false;
+    const js = ts.transpileModule(`${read("lib/snapshotVsYearAgo.ts")}\n${fn.replace(/^export /m, "")}\nexports.epsLine = epsLine;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+    const mod = { exports: {} };
+    new Function("module", "exports", js)(mod, mod.exports);
+    const { epsLine } = mod.exports, ya = (eps) => ({ label: "Q2 FY2025", eps });
+    return epsLine(1.68, ya(1.26)).words === "up from $1.26, Q2 FY2025" && epsLine(1.0, ya(1.26)).words === "down from $1.26, Q2 FY2025" &&
+      epsLine(1.26, ya(1.26)).words === "level with $1.26, Q2 FY2025" && /loss narrowed from -\$0\.71/.test(epsLine(-0.2, ya(-0.71)).words ?? "") &&
+      epsLine(1.68, null).words !== "up from" && epsLine(null, ya(1.26)).words === null;
+  },
   "the fixture is served off production only, noindex, and never listed": () => {
     const loader = stripComments(read(LOADER), { file: LOADER }), route = stripComments(read(ROUTE), { file: ROUTE });
     return /export const fixturesServed = \(\) => process\.env\.VERCEL_ENV !== "production";/.test(loader) && /fixturesServed\(\) && /.test(loader) &&
@@ -150,6 +163,9 @@ const SRC_MUTANTS = [
   ["SEO:", ROUTE, (s) => s.replace("dateModified: modifiedTime,", "dateModified: new Date().toISOString(),")],
   ["SEO:", ROUTE, (s) => s.replace('"@type": "Article",', '"@type": "BlogPosting",')],
   ["the rail:", PAGE, (s) => s.replace("<KeyLevelsCard bars={d.railBars} discussed={d.discussed}", "<KeyLevelsCard bars={d.railBars}")],
+  ["#141:", PAGE, (s) => s.replace('"Top build-out receivers · their own filed sales"', '"Build-out sellers"')],
+  ["#141:", PAGE, (s) => s.replace("vs: epsLine(s.eps.value, ya)", "vs: epsVsYearAgo(s.eps.value, ya?.eps, epsMoney)")],
+  ["#141:", PAGE, (s) => s.replace('`${now > ya.eps ? "up" : "down"} from ${then}${when}`', "null")],
   ["the rail:", PAGE, (s) => s.replace('{d.snapshot?.available ? <EarningsTiles d={d} /> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet.</p>}', "<EarningsTiles d={d} />")],
 ];
 const R = Object.keys(RULES);
