@@ -149,7 +149,9 @@ export default function BottleneckView({ post, name, data: d, supplierMeter, cus
         {post.watch.length ? (
           <section className="bnCard" data-watch="">
             <h2 className="bnH3">What could change this map</h2>
-            <ul className="bnBullets">{post.watch.map((w) => <li key={w}>{w}</li>)}</ul>
+            {/* A bullet written "Label: text" shows its label in bold (#563 COWORK #159). */}
+            <ul className="bnBullets">{post.watch.map((w) => { const m = w.match(/^([^:]{1,24}):\s+(.+)$/); return <li key={w}>{m ? <><strong>{m[1]}:</strong> {m[2]}</> : w}</li>; })}</ul>
+            <p className="bnFine" data-fine-print="">Drawn from risk factors in {name}&apos;s own filings. Not a forecast.</p>
           </section>
         ) : null}
         <section className="bnCard" data-partners="">

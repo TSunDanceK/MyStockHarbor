@@ -29,9 +29,9 @@ disclaimer: >
   without a proper, reliably tradable ticker on this site are shown without
   stock/earnings links. This is not financial advice.
 watch:
-  - "If a future 10-K names a second source for the semiconductor and battery parts now single-sourced, the supplier concentration shown here may ease."
-  - "A move of Axon Evidence onto a second cloud alongside Microsoft Azure might lower Microsoft's share of this map."
-  - "Should a single agency ever pass 10% of net sales, Axon would have to disclose it, and the customer meter could rise."
+  - "Chip supply: a named second source in a future 10-K may lower the top risk."
+  - "Cloud: a wider AWS roll-out might reduce reliance on Azure."
+  - "Budgets: US city and state budget seasons may shift order timing."
 supplyChain:
   - name: Single-source semiconductor & battery-component suppliers
     ticker: null

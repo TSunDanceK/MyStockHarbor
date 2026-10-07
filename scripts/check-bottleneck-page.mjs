@@ -95,6 +95,8 @@ function rules(R, V) {
   want("the watch card shows with bullets", /data-watch=""/.test(html) && html.includes("If a second foundry is named, this may ease."));
   const html2 = renderToStaticMarkup(React.createElement(V.default, { post: { ...POST, watch: [] }, name: "Fixture", data: DATA, supplierMeter: R.supplierMeter([40, 20]), customerMeter: R.customerMeter([60], ""), faq: [], listed: ["FIXT"] }));
   want("the watch card hides without bullets", !/data-watch=""/.test(html2));
+  const html3 = renderToStaticMarkup(React.createElement(V.default, { post: { ...POST, watch: ["Chip supply: a second source may ease this."] }, name: "Fixture", data: DATA, supplierMeter: R.supplierMeter([40, 20]), customerMeter: R.customerMeter([60], ""), faq: [], listed: ["FIXT"] }));
+  want("a \"Label: text\" watch bullet shows its label in bold, with the not-a-forecast fine line (COWORK #159)", html3.includes("<strong>Chip supply:</strong> a second source may ease this.") && html3.includes("Not a forecast."));
   want("the filings card hides without filed figures", !/data-filed=""/.test(html));
   // 5 (page). The map's boxes.
   const wide = html.match(/<svg class="bnMapWide"[\s\S]*?<\/svg>/)?.[0] ?? "";
