@@ -7,9 +7,9 @@ export const runtime = "nodejs";
 
 type Props = { params: Promise<{ symbol: string }> };
 
-// THE ANALYSER'S "FILED EARNINGS" CHART (#563 COWORK #154 §6): the newest 8
-// filed quarters' diluted EPS and operating margin for one symbol. BotID-guarded
-// (instrumentation-client.ts lists the path).
+// THE ANALYSER'S "FILED EARNINGS" TAB (#563 COWORK #160): the stock page's
+// Earnings snapshot for one symbol. BotID-guarded (instrumentation-client.ts
+// lists the path).
 //
 // CACHEABLE BECAUSE IT CAN TELL "NONE" FROM "BROKEN" (the precondition
 // /api/stock-earnings' comment sets): "no figures for this symbol" is a 200 with

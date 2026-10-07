@@ -215,9 +215,9 @@ function wiring(client, page, cardsSrc, root = read(ROOT)) {
     /aria-label=\{t\.label\} data-tab=\{t\.key\} className="dlTab"/.test(c) && /<span className="dlTabFull">\{t\.label\}<\/span><span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/.test(c) &&
     /short: "Chart"[\s\S]*short: "Levels"[\s\S]*short: "Zones"[\s\S]*short: "Earnings"[\s\S]*short: "News"/.test(c) &&
     /@media\(max-width:480px\)\{\.dlTabs\{flex-wrap:nowrap;overflow-x:auto;[^}]*\}[\s\S]*\.dlTab\{[^}]*flex-direction:column;[^}]*\}[\s\S]*\.dlTabFull\{display:none;\}\.dlTabShort\{display:inline;\}\}/.test(c));
-  // #154 §6: the Filed earnings tab is the chart, its empty state the brief's words.
+  // #160 (replacing #154 §6): the Filed earnings tab is the stock page's snapshot card; its empty state the brief's words.
   want("the Filed earnings tab's card is called, not mounted (a mount remounts and refetches the chart each render)", /else if \(tab === "earnings"\) body = SectionCard\(\{/.test(c));
-  want("the Filed earnings tab draws the filed chart, with the brief's empty state", /<FiledEarningsChart symbol=\{symbol\} verdict=/.test(c) && /Filed figures not available for \{symbol\}\./.test(c) && !/The latest filed quarter reads/.test(c));
+  want("the Filed earnings tab draws the stock page's snapshot, with the brief's empty state", /<FiledEarningsChart symbol=\{symbol\} \/>/.test(c) && /Filed figures not available for \{symbol\}\./.test(c) && !/The latest filed quarter reads/.test(c));
   return fails;
 }
 
@@ -298,27 +298,32 @@ for (const [label, file, from, to] of WIRING_MUTANTS) {
   check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no rule failed");
 }
 
-// 7. THE FILED EARNINGS TAB (#563 COWORK #154 §6): the reader is A's, cut down; the chart
-// draws what it is given. Rules on the data module and route as source, the bars rendered.
+// 7. THE FILED EARNINGS TAB (#563 COWORK #160, replacing #154 §6's custom chart):
+// the stock page's Earnings snapshot, rendered unchanged. Rules on the reader and
+// route as source; the tab's body rendered against A's card rendered directly.
 console.log("\n7. The Filed earnings tab");
 const FE_DATA = "lib/server/dashboardEarnings.ts", FE_ROUTE = "app/api/dashboard-earnings/[symbol]/route.ts", FE_CHART = "app/dashboard/FiledEarningsChart.tsx";
-const fePeriods = Array.from({ length: 8 }, (_, i) => ({ label: `Q${(i % 4) + 1} FY${2025 + Math.floor(i / 4)}`, short: `Q${(i % 4) + 1} '${25 + Math.floor(i / 4)}`, eps: i === 2 ? -0.4 : 1 + i * 0.1, epsText: `$${(1 + i * 0.1).toFixed(2)}`, opPct: i === 5 ? null : 20 + i, opText: i === 5 ? null : `${20 + i}.0%` }));
-function earningsTab(dataSrc, routeSrc, chartMod) {
+const SNAP = JSON.parse(read("scripts/fixtures/measure-earnings-snapshot-AAPL.json"));
+const { default: Card } = await import("../app/components/LatestEarningsCard.tsx");
+function earningsTab(dataSrc, routeSrc, chartSrc, chartMod) {
   const fails = [], want = (l, ok) => { if (!ok) fails.push(l); };
-  const dsrc = stripComments(dataSrc, { file: FE_DATA }), rsrc = stripComments(routeSrc, { file: FE_ROUTE });
-  want("the reader imports A's fact set, view and margin rule (not copies)", /import \{ cikForSymbol, resolveFactSetForRender \} from "@\/lib\/server\/secColdFetch";/.test(dsrc) && /import \{ buildSecEarningsView \} from "@\/lib\/server\/secEarningsView";/.test(dsrc) && /import \{ buildGrowthVisuals \} from "@\/lib\/growthVisuals";/.test(dsrc) && !/function splitAdjusted|readFactSet\(/.test(dsrc));
-  want("the newest 8 filed quarters with a filed diluted EPS, oldest first", /export const FILED_PERIODS = 8;/.test(dsrc) &&
-    /\.filter\(\(p\) => typeof p\.epsDiluted\.val === "number" && Number\.isFinite\(p\.epsDiluted\.val\)\)\s*\.slice\(0, FILED_PERIODS\)\s*\.reverse\(\)/.test(dsrc));
-  want("not-yet-read (or an unreadable store) is never cached; the cache is an hour per symbol", /if \(cold\.status === "pending"\) throw new NotSettled\(\);/.test(dsrc) && /unstable_cache\(loadDashboardEarnings, \["dashboard-earnings-v1"\], \{ revalidate: 3600/.test(dsrc));
+  const dsrc = stripComments(dataSrc, { file: FE_DATA }), rsrc = stripComments(routeSrc, { file: FE_ROUTE }), csrc = stripComments(chartSrc, { file: FE_CHART });
+  want("the reader is the stock page's snapshot, unchanged (no second reading of the filings)", /import \{ getSecEarningsSnapshot \} from "@\/lib\/server\/secEarningsSnapshot";/.test(dsrc) &&
+    /const snapshot = await getSecEarningsSnapshot\(symbol\);/.test(dsrc) && /return snapshot;/.test(dsrc) && !/buildSecEarningsView|buildGrowthVisuals|readFactSet\(|FILED_PERIODS/.test(dsrc));
+  want("not-yet-read (or an unreadable store) is never cached; the cache is an hour per symbol", /if \(snapshot\.awaitingRead\) throw new NotSettled\(\);/.test(dsrc) && /unstable_cache\(loadDashboardEarnings, \["dashboard-earnings-snapshot-v1"\], \{ revalidate: 3600/.test(dsrc));
   want("the route: BotID first, the CDN window only on a settled answer, no-store otherwise", /if \(await isUnwantedBot\(\)\)/.test(rsrc) && /"Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400"/.test(rsrc) &&
     /if \(e instanceof NotSettled\) return NextResponse\.json\(\{ symbol: cleanSymbol\(symbol\), available: false \}, \{ headers: \{ "Cache-Control": "no-store" \} \}\);/.test(rsrc) && /status: 503, headers: \{ "Cache-Control": "no-store" \}/.test(rsrc) &&
     /\{ path: "\/api\/dashboard-earnings\/\*", method: "GET" \}/.test(read("instrumentation-client.ts")));
-  let html = "";
-  try { html = renderToStaticMarkup(React.createElement(chartMod.FiledBars, { periods: fePeriods })); } catch (e) { return [...fails, `the chart renders (${String(e.message).slice(0, 60)})`]; }
-  const bars = [...html.matchAll(/<rect [^>]*data-eps-bar="(latest)?"/g)];
-  want("8 EPS bars, the latest (and only the latest) highlighted, a negative one below zero", bars.length === 8 && bars.filter((b) => b[1]).length === 1 && bars[7][1] === "latest" && /fill="rgba\(239,68,68,0\.55\)"/.test(html));
-  want("the operating margin line skips a quarter with no margin", /<polyline points="([^"]+)"[^>]*data-op-line=""/.test(html) && html.match(/<polyline points="([^"]+)"/)[1].trim().split(" ").length === 7);
-  want("the chart labels each quarter, and the latest EPS", (html.match(/<text /g) ?? []).length === 9 && html.includes(fePeriods[7].epsText));
+  want("the card is A's LatestEarningsCard, imported, not copied (no chart of the tab's own)", /import LatestEarningsCard from "@\/app\/components\/LatestEarningsCard";/.test(csrc) && !/<svg|<rect |<polyline/.test(csrc));
+  const body = (props) => { try { return renderToStaticMarkup(React.createElement(chartMod.FiledEarningsBody, props)); } catch (e) { return `THREW ${e.message}`; } };
+  const direct = renderToStaticMarkup(React.createElement(Card, { snapshot: SNAP, symbol: "AAPL", hasFiledEarnings: true }));
+  want("with a snapshot, the tab is exactly the stock page's card (same markup)", body({ symbol: "AAPL", data: SNAP, failed: false, hasFiledEarnings: true }) === `<div class="fe" data-filed-earnings="snapshot">${direct}</div>` && /snapshotMetricsWrap/.test(direct));
+  const unfiled = renderToStaticMarkup(React.createElement(Card, { snapshot: SNAP, symbol: "AAPL", hasFiledEarnings: false }));
+  want("the card's earnings link follows hasFiledEarnings (#552 COWORK #197)", unfiled !== direct && body({ symbol: "AAPL", data: SNAP, failed: false, hasFiledEarnings: false }) === `<div class="fe" data-filed-earnings="snapshot">${unfiled}</div>`);
+  const spy = body({ symbol: "SPY", data: { symbol: "SPY", available: false }, failed: false, hasFiledEarnings: false });
+  want("a fund (no snapshot) keeps the empty state, with no card and no earnings link", spy.includes("Filed figures not available for SPY.") && !/snapshotMetricsWrap|\/earnings"/.test(spy));
+  want("a failed fetch is the empty state; no answer yet is loading", body({ symbol: "MSFT", data: null, failed: true, hasFiledEarnings: true }).includes("Filed figures not available for MSFT.") &&
+    body({ symbol: "MSFT", data: null, failed: false, hasFiledEarnings: true }).includes("Loading the filed figures"));
   return fails;
 }
 const feData = read(FE_DATA), feRoute = read(FE_ROUTE), feChartSrc = read(FE_CHART);
@@ -327,20 +332,20 @@ async function loadChart(src) {
   fs.writeFileSync(file, src);
   try { return await import(pathToFileURL(path.resolve(file)).href); } finally { fs.rmSync(file, { force: true }); }
 }
-const feReal = earningsTab(feData, feRoute, await loadChart(feChartSrc));
-check("the reader, the route and the chart pass every rule", feReal.length === 0, feReal.join("; "));
+const feReal = earningsTab(feData, feRoute, feChartSrc, await loadChart(feChartSrc));
+check("the reader, the route and the tab pass every rule", feReal.length === 0, feReal.join("; "));
 for (const [label, file, from, to] of [
-  ["12 quarters instead of 8", FE_DATA, "export const FILED_PERIODS = 8;", "export const FILED_PERIODS = 12;"],
-  ["a quarter with no filed EPS drawn", FE_DATA, '.filter((p) => typeof p.epsDiluted.val === "number" && Number.isFinite(p.epsDiluted.val))', ""],
-  ["not-yet-read cached as none", FE_DATA, 'if (cold.status === "pending") throw new NotSettled();', ""],
+  ["a second reader (the old cut-down view)", FE_DATA, "const snapshot = await getSecEarningsSnapshot(symbol);", "const snapshot = await getSecEarningsSnapshot(symbol); buildSecEarningsView;"],
+  ["not-yet-read cached as none", FE_DATA, "if (snapshot.awaitingRead) throw new NotSettled();", ""],
   ["a failed read pinned to the CDN", FE_ROUTE, 'return NextResponse.json({ error: "unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });', 'return NextResponse.json({ error: "unavailable" }, { status: 503, headers: { "Cache-Control": "public, s-maxage=3600" } });'],
-  ["the oldest bar highlighted", FE_CHART, 'data-eps-bar={i === last ? "latest" : ""}', 'data-eps-bar={i === 0 ? "latest" : ""}'],
-  ["the margin line drawn through a missing quarter", FE_CHART, "pts.filter(Boolean).join(\" \")", "periods.map((p, i) => `${left + slot * (i + 0.5)},${oy(p.opPct ?? 0)}`).join(\" \")"],
+  ["the card copied, not imported", FE_CHART, 'import LatestEarningsCard from "@/app/components/LatestEarningsCard";', 'const LatestEarningsCard = ({ snapshot }: { snapshot: { symbol: string }; symbol: string; hasFiledEarnings: boolean }) => <section className="snapshotMetricsWrap">{snapshot.symbol}</section>;'],
+  ["the card's earnings link forced on", FE_CHART, "<LatestEarningsCard snapshot={data} symbol={symbol} hasFiledEarnings={p.hasFiledEarnings} />", "<LatestEarningsCard snapshot={data} symbol={symbol} hasFiledEarnings />"],
+  ["a fund handed to the card", FE_CHART, "if (!data?.available) {", "if (!data) {"],
 ]) {
   const src = file === FE_DATA ? feData : file === FE_ROUTE ? feRoute : feChartSrc;
   if (!src.includes(from)) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
   const m = src.replace(from, to);
-  const fails = file === FE_CHART ? earningsTab(feData, feRoute, await loadChart(m)) : file === FE_DATA ? earningsTab(m, feRoute, await loadChart(feChartSrc)) : earningsTab(feData, m, await loadChart(feChartSrc));
+  const fails = file === FE_CHART ? earningsTab(feData, feRoute, m, await loadChart(m)) : file === FE_DATA ? earningsTab(m, feRoute, feChartSrc, await loadChart(feChartSrc)) : earningsTab(feData, m, feChartSrc, await loadChart(feChartSrc));
   check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no rule failed");
 }
 

@@ -1525,14 +1525,14 @@ export default function DashboardClient({
     if (tab === "chart") body = <PriceChartPanel />;
     else if (tab === "levels") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <KeyLevelsCard bars={dailyKeyBars} lastPrice={lastClose} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
     else if (tab === "zones") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <ConfluenceCard bars={dailyKeyBars} lastPrice={lastClose} ma50={typeof lastMA50 === "number" ? lastMA50 : null} ma200={typeof lastMA200 === "number" ? lastMA200 : null} macro={macroSupport ? { lower: macroSupport.lower, upper: macroSupport.upper } : null} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
-    // A REAL CHART (#563 COWORK #154 §6): the newest 8 filed quarters' EPS and
-    // operating margin, fetched only while this tab is open.
+    // THE STOCK PAGE'S EARNINGS SNAPSHOT (#563 COWORK #160, replacing #154 §6's
+    // custom chart), fetched only while this tab is open.
     // SectionCard is declared in this render, so it is CALLED, not mounted: mounted,
     // it is a new component type each render and the chart would remount and refetch.
     else if (tab === "earnings") body = SectionCard({
       title: `${symbol} filed earnings`,
       children: assetType !== "stock" ? <p className="dlEmpty" data-filed-empty="">Filed figures not available for {symbol}.</p>
-        : <FiledEarningsChart symbol={symbol} verdict={earningsSummary?.hasStructuredData ? earningsSummary.toneLabel ?? null : null} tone={earningsSummary?.hasStructuredData ? earningsSummary.tone ?? null : null} />,
+        : <FiledEarningsChart symbol={symbol} />,
     });
     else body = <NewsPanel />;
     return (

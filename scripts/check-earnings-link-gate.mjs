@@ -100,7 +100,7 @@ const MUTANTS = [
   ["app/components/PickerResultsGrid.tsx", "the picker row's Earnings button", "{isEarnings && hasFiledEarnings(entry.symbol) ? (", "{isEarnings ? ("],
   ["app/insights/[slug]/InsightPage.tsx", "the insight page's end links", "{hasFiledEarnings ? <Link href={`/stock/${sym}/earnings`}>Earnings</Link> : null}", "<Link href={`/stock/${sym}/earnings`}>Earnings</Link>"],
   ["app/components/StockPagesBottomNav.tsx", "the stock page's Earnings tab", "...(hasFiledEarnings(symbol || FALLBACK_SYMBOL)", "...(true"],
-  ["app/dashboard/FiledEarningsChart.tsx", "the dashboard's filed-earnings tab link", "{hasFiledEarnings(symbol) ? <Link", "{true ? <Link"],
+  ["app/dashboard/FiledEarningsChart.tsx", "the dashboard's filed-earnings tab link (a prop since #563 COWORK #160)", "{p.hasFiledEarnings ? <Link", "{true ? <Link"],
   ["app/stock/[symbol]/news/page.tsx", "the news page's earnings card (via LatestEarningsCard)", "hasFiledEarnings={await hasFiledEarnings(upper)}", "hasFiledEarnings={true}"],
   ["app/bottlenecks/[ticker]/BottleneckView.tsx", "the bottleneck page's partner-row Earnings → (#563 COWORK #158)", "{hasFiledEarnings ? <Link href={`/stock/${encodeURIComponent(t)}/earnings`}", "{true ? <Link href={`/stock/${encodeURIComponent(t)}/earnings`}"],
 ];
