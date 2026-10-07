@@ -27,7 +27,7 @@ globalThis.fetch = async (input, init) => {
 const redis = (await import("@upstash/redis")).Redis.fromEnv();
 const { SEC_FACTS_INDEX_KEY } = await import("../lib/server/secManifest.ts");
 const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);
-const NAMED = (process.env.NAMED || "CRWD C KB FERG CRWV UMC NVDA JPM").split(/\s+/);
+const NAMED = (process.env.NAMED || "CRWD C KB FERG CRWV UMC NVDA JPM OXY PSX").split(/\s+/);
 const rows = await redis.hmget("msh:pickers:sec-fundamentals:v1", ...NAMED);
 for (const s of NAMED) {
   const inIndex = await redis.sismember(SEC_FACTS_INDEX_KEY, s);
@@ -36,6 +36,6 @@ for (const s of NAMED) {
   const g = r.growth;
   const growth = g == null ? "absent" : g.ok ? `${g.label} (end ${g.periodEnd}, filed ${g.filed})` : `refused ${g.why}`;
   const eps = r.eps == null ? (("eps" in r) ? "null" : "absent") : `${r.eps.basis} to ${r.eps.periodEnd}`;
-  console.log(`${s}: index ${inIndex ? "yes" : "no"} · refusals [${(r.inputs?.refusals ?? []).join(", ")}] · eps ${eps} · growth ${growth} · built ${new Date(r.at).toISOString().slice(0, 10)}`);
+  console.log(`${s}: index ${inIndex ? "yes" : "no"} · refusals [${(r.inputs?.refusals ?? []).join(", ")}] · eps ${eps} · growth ${growth} · revenue ${r.m?.revenue?.vals?.revenue != null ? "on row" : "none"}, revenueIncomplete ${r.m?.revenueIncomplete === true} · unit ${r.unit?.reporting}${r.unit?.converted ? " (converted)" : ""} · built ${new Date(r.at).toISOString().slice(0, 10)}`);
 }
 console.log(`\nRedis commands ${commands} (read-only)`);
