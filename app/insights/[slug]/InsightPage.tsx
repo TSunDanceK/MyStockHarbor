@@ -39,7 +39,8 @@ const tone = (v: number | null | undefined) => (v === null || v === undefined ||
 export const INSIGHT_FINE_PRINT =
   "Descriptive analysis of public information, not investment advice. The post's text is as published on its date; prices, levels and figures on this page update daily. Filed figures: SEC EDGAR.";
 
-export default function InsightPage({ d, html, thumb }: { d: InsightPageData; html: InsightHtml; thumb: number[] | null }) {
+// hasFiledEarnings: the route's hasFiledEarnings(symbol) (#552 COWORK #197); the earnings links render only when true.
+export default function InsightPage({ d, html, thumb, hasFiledEarnings = false }: { d: InsightPageData; html: InsightHtml; thumb: number[] | null; hasFiledEarnings: boolean }) {
   const { n } = d;
   const sym = n.symbol;
   const timeframe = n.timeframe === "w" ? "Weekly" : "Daily";
@@ -219,7 +220,7 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
             {/* LATEST EARNINGS, COMPACT (#563 COWORK #138 §3): the three tiles vs a year ago, the P/E line, the link. */}
             <Card eyebrow="From the filings" title={`${sym} latest earnings`} attr="data-insight-earnings">
               {d.snapshot?.available ? <EarningsTiles d={d} /> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet.</p>}
-              <p className="inLinks"><Link href={`/stock/${sym}/earnings`}>Full earnings →</Link></p>
+              {hasFiledEarnings ? <p className="inLinks"><Link href={`/stock/${sym}/earnings`}>Full earnings →</Link></p> : null}
             </Card>
             {d.screens && d.screens.length ? (
               <section className="inCard inScreens">
@@ -274,7 +275,7 @@ export default function InsightPage({ d, html, thumb }: { d: InsightPageData; ht
           <div className="inEndRow">
             <Link href={`/stock/${sym}`}>{sym} stock page</Link>
             <Link href={`/stock/${sym}/news`}>News</Link>
-            <Link href={`/stock/${sym}/earnings`}>Earnings</Link>
+            {hasFiledEarnings ? <Link href={`/stock/${sym}/earnings`}>Earnings</Link> : null}
             <a href="/platforms" className="inTrade">Trade {sym} →</a>
           </div>
         </nav>

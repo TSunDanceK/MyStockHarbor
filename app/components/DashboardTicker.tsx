@@ -4,6 +4,7 @@ import { getBuySignalCount } from "@/lib/signalCounts";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import TickerLogo from "@/app/components/TickerLogo";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 // Live "sports ticker"-style scrolling feed for the dashboard, sitting
 // between the discovery strip and the stock overview/chart panels. Pulls
@@ -118,7 +119,8 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
-function buildItems(data: PickersPayload | null): TickerItem[] {
+// hasFiledEarnings (#552 COWORK #197): an earnings item only for a symbol with a filed SEC set.
+function buildItems(data: PickersPayload | null, hasFiledEarnings: (symbol: string) => boolean): TickerItem[] {
   if (!data) return [];
   const items: TickerItem[] = [];
   const sections = data.sections ?? [];
@@ -143,6 +145,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
 
   const earningsGrowth = (data.tickerFeed?.earningsGrowth ?? []).slice(0, 3);
   earningsGrowth.forEach((item) => {
+    if (!hasFiledEarnings(item.symbol)) return;
     const growthPct = item.epsGrowthPct ?? item.revenueGrowthPct;
     const isRecent =
       !!item.releaseDate &&
@@ -322,6 +325,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
   findSection(sections, "Stocks With Positive Last Earnings")
     .slice(0, 2)
     .forEach((item) => {
+      if (!hasFiledEarnings(item.symbol)) return;
       items.push({
         id: `posearnings-${item.symbol}`,
         // Was "... beat on its last earnings report" until 2026-09-27 (#553
@@ -341,6 +345,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
 // page (step 5, #553 COWORK #92/#98) and shown under the ticker whenever its
 // movers are Tiingo's (they then carry a "Last close" label).
 export default function DashboardTicker({ credit = null }: { credit?: ReactNode } = {}) {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const [data, setData] = useState<PickersPayload | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
 
@@ -370,7 +375,7 @@ export default function DashboardTicker({ credit = null }: { credit?: ReactNode 
     return () => mq.removeEventListener?.("change", onChange);
   }, []);
 
-  const items = useMemo(() => buildItems(data), [data]);
+  const items = useMemo(() => buildItems(data, hasFiledEarnings), [data, hasFiledEarnings]);
 
   if (items.length === 0) return null;
 

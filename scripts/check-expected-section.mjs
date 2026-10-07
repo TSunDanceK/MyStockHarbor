@@ -210,7 +210,7 @@ const visible = (markup) => markup
   .replace(/&quot;/g, '"').replace(/&mdash;/g, "—").replace(/&ldquo;|&rdquo;/g, '"')
   .replace(/\s+/g, " ").trim();
 const render = (state) => {
-  const markup = renderToStaticMarkup(React.createElement(C.default, { expected: state, due: { kind: "none-outstanding", coverage: 1 }, today: TODAY }));
+  const markup = renderToStaticMarkup(React.createElement(C.default, { expected: state, due: { kind: "none-outstanding", coverage: 1 }, today: TODAY, hasFiledEarnings: () => true }));
   return { markup, text: visible(markup) };
 };
 const ROW = {

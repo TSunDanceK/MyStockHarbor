@@ -111,8 +111,8 @@ console.log("\n4. what Google is sent");
   check("/stock/X and /stock/X/earnings both drop an awaiting symbol",
     // Each through its page's own predicate since #553 COWORK #143 (lib/stockPageRobots.ts).
     /stockSymbols\.filter\(renderable\)/.test(sm) && /!etfSymbols\.has\(symbol\) && earningsRenderable\(symbol\)/.test(sm) &&
-    /stockPageIndexable\(\{ hasData: hasData\(symbol\), awaitingSecRead: awaiting\(symbol\) \}\)/.test(sm) &&
-    /earningsPageIndexable\(\{ hasCik: cikForSymbol\(symbol\) !== null, awaitingSecRead: awaiting\(symbol\) \}\)/.test(sm));
+    /stockPageIndexable\(\{ hasData: hasData\(symbol\), awaitingSecRead: awaiting\(symbol\)(?:, filed: [^}]+)? \}\)/.test(sm) &&
+    /earningsPageIndexable\(\{ hasCik: cikForSymbol\(symbol\) !== null, awaitingSecRead: awaiting\(symbol\)(?:, filed: [^}]+)? \}\)/.test(sm));
   check("an unanswerable read keeps everything (null → nothing dropped)", /const awaiting = \(symbol: string\) => Boolean\(sec\?\.awaiting\.has\(symbol\)\);/.test(sm) && /eodLast === null \|\| /.test(sm));
   check("/earnings lastmod is when the figures changed, never a re-read time", /sec\?\.changedAt\.get\(symbol\)/.test(sm) && !/verifiedAt|manifest/i.test(sm));
   const store = readCodeOnly("lib/server/secFactStore.ts");
@@ -132,7 +132,7 @@ console.log("\n4. what Google is sent");
   const idx = readCodeOnly("app/api/jobs/sec-daily-index/route.ts");
   check("the daily index seeds every curated symbol", /\.\.\.PRESET_UNIVERSE, \.\.\.priorityStocks, \.\.\.uniqueEtfs,/.test(idx));
   const earn = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
-  check("a no-CIK earnings page (LAZR) is noindex, unless it is a fund the site lists (#552 COWORK #155)", /index: earningsPageIndexable\(\{ hasCik: cikForSymbol\(clean\) !== null \|\| isSiteFund\(clean\), awaitingSecRead: await awaitingSecRead\(clean\) \}\)/.test(earn));
+  check("a no-CIK earnings page (LAZR) is noindex, unless it is a fund the site lists (#552 COWORK #155)", /index: earningsPageIndexable\(\{ hasCik: cikForSymbol\(clean\) !== null \|\| isSiteFund\(clean\), awaitingSecRead: await awaitingSecRead\(clean\)(?:, filed: [^}]+)? \}\)/.test(earn));
 }
 
 if (failures) {

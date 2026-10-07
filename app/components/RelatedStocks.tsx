@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 
 import { uniqueEtfs } from "@/lib/curatedSymbols";
+import { filedEarningsGate } from "@/lib/server/filedEarnings";
 
 // getRelatedSymbols() draws from uniqueEtfs as well as the equity lists, so
 // this module renders funds alongside companies. A fund does not report
@@ -46,7 +47,7 @@ const ETF_SYMBOLS = new Set(uniqueEtfs.map((sym) => sym.toUpperCase()));
 // in it now finds subpages, not just siblings.
 // See claude/seo-recovery-plan-2026-08-15.md (Phase 2.3).
 
-export default function RelatedStocks({
+export default async function RelatedStocks({
   currentSymbol,
   symbols,
 }: {
@@ -55,6 +56,8 @@ export default function RelatedStocks({
 }) {
   const upperCurrent = currentSymbol.toUpperCase();
   const others = symbols.filter((sym) => sym.toUpperCase() !== upperCurrent);
+  // #552 COWORK #197: an earnings link only for a symbol with a filed set (one cached read).
+  const hasFiledEarnings = await filedEarningsGate();
   if (others.length === 0) return null;
 
   // ── PREFETCH OFF, MEASURED ───────────────────────────────────────────────
@@ -102,7 +105,7 @@ export default function RelatedStocks({
                   <Link href={`/stock/${encoded}/news`} prefetch={false} style={subLinkStyle}>
                     News
                   </Link>
-                  {isEtf ? null : (
+                  {isEtf || !hasFiledEarnings(sym) ? null : (
                     <>
                       <span aria-hidden="true" style={dotStyle}>
                         &middot;

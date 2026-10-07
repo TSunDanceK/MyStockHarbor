@@ -11,7 +11,7 @@
 // the I/O and nothing else.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
-import { SEC_FACTS_INDEX_KEY, SEC_FACTS_PREFIX, dotDashSpellings } from "./secManifest";
+import { SEC_FACTS_EMPTY_KEY, SEC_FACTS_INDEX_KEY, SEC_FACTS_PREFIX, dotDashSpellings } from "./secManifest";
 import { secFieldsHash } from "./secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import type { StoredFactSet } from "./secFactCodec";
@@ -128,6 +128,11 @@ export async function factSetPresence(
  */
 export const SEC_FIGURES_CHANGED_KEY = "msh:sec:figures-changed:v1";
 
+/** At least one filed quarter or year: what "has filed earnings" means (#552 COWORK #197). */
+export function factSetHasFiledPeriod(set: Pick<StoredFactSet, "quarters" | "years">): boolean {
+  return (Array.isArray(set.quarters) && set.quarters.length > 0) || (Array.isArray(set.years) && set.years.length > 0);
+}
+
 export async function writeFactSet(set: StoredFactSet): Promise<boolean> {
   if (!redis) return false;
   // A PREVIEW RENDERS FROM THE SET IT HOLDS AND KEEPS NOTHING. See secWriteGate.
@@ -141,6 +146,15 @@ export async function writeFactSet(set: StoredFactSet): Promise<boolean> {
       await redis.sadd(SEC_FACTS_INDEX_KEY, set.symbol.toUpperCase());
     } catch (err) {
       console.error("[sec-facts] index add failed", set.symbol, err);
+    }
+    // AND WHETHER IT HOLDS A FILED PERIOD (#552 COWORK #197): the earnings-link
+    // rule is index less SEC_FACTS_EMPTY_KEY. Reported, not fatal, like the SADD.
+    try {
+      const sym = set.symbol.toUpperCase();
+      if (factSetHasFiledPeriod(set)) await redis.srem(SEC_FACTS_EMPTY_KEY, sym);
+      else await redis.sadd(SEC_FACTS_EMPTY_KEY, sym);
+    } catch (err) {
+      console.error("[sec-facts] empty-set update failed", set.symbol, err);
     }
     try {
       await redis.hset(SEC_FIGURES_CHANGED_KEY, { [set.symbol.toUpperCase()]: Date.now() });

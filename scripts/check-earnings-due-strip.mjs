@@ -59,7 +59,7 @@ const visibleText = (markup) =>
 
 /** The card with this due state (and no estimates), and its due group alone. */
 const render = (state) => {
-  const markup = renderToStaticMarkup(React.createElement(C.default, { due: state, expected: { kind: "none" }, today: "2026-09-22" }));
+  const markup = renderToStaticMarkup(React.createElement(C.default, { due: state, expected: { kind: "none" }, today: "2026-09-22", hasFiledEarnings: () => true }));
   // THE DUE PART OF "THIS WEEK": its heading and its rows, up to the estimates.
   const group = (markup.match(/<p class="cuSub" data-group="due">[\s\S]*?<\/ul>/) ?? [""])[0];
   const unavailable = (markup.match(/<p class="cuLine" data-due-unavailable="">[\s\S]*?<\/p>/) ?? [""])[0];

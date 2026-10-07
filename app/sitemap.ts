@@ -9,6 +9,8 @@ import { NOINDEX_PICKER_PAGES } from "@/lib/noindexPickerPages";
 import { cikForSymbol, sitemapSecState } from "@/lib/server/secColdFetch";
 import { readTiingoEodLast } from "@/lib/server/marketData/read";
 import { earningsPageIndexable, stockPageIndexable } from "@/lib/stockPageRobots";
+import { filedEarningsSet } from "@/lib/server/filedEarnings";
+import { hasFiledEarningsIn } from "@/lib/filedEarningsLinks";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 
 // REGENERATED AT MOST DAILY (#535 COWORK #21): the stock entries below depend
@@ -306,15 +308,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // entry both come from lib/stockPageRobots.ts, so a URL is never listed while
   // its page says noindex. hasData here is "the symbol has stored daily bars"
   // (eod-last, one Data Cache read); unreadable (null) keeps everything, as above.
-  const [sec, eodLast] = await Promise.all([
+  const [sec, eodLast, filedSet] = await Promise.all([
     sitemapSecState(stockSymbols),
     readTiingoEodLast().catch(() => null),
+    filedEarningsSet(),
   ]);
   const awaiting = (symbol: string) => Boolean(sec?.awaiting.has(symbol));
   const hasData = (symbol: string) => eodLast === null || Boolean(eodLast[toDashed(symbol)]);
   const renderable = (symbol: string) => stockPageIndexable({ hasData: hasData(symbol), awaitingSecRead: awaiting(symbol) });
+  // AND A FILED SET (#552 COWORK #197): an earnings URL with no filed period
+  // is noindex, so it is not listed. Unreadable (null) keeps everything, as above.
   const earningsRenderable = (symbol: string) =>
-    earningsPageIndexable({ hasCik: cikForSymbol(symbol) !== null, awaitingSecRead: awaiting(symbol) });
+    earningsPageIndexable({ hasCik: cikForSymbol(symbol) !== null, awaitingSecRead: awaiting(symbol), filed: filedSet ? hasFiledEarningsIn(filedSet, symbol) : null });
   // lastmod only where a truthful one exists: when the stored figures last
   // changed (stamped by writeFactSet, which runs only on a change). Never a
   // re-read time, which moves daily; absent stays absent.

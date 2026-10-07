@@ -9,6 +9,7 @@ import { FILTER_DEFS, toneDotColor, type FilterKey } from "@/lib/pickerFilters";
 import PickerTickerSearch from "@/app/components/PickerTickerSearch";
 import TickerLogo from "@/app/components/TickerLogo";
 import { utcDay, utcStamp } from "@/lib/utcDate";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -93,12 +94,13 @@ function buildDashboardHref(rawHref: string, symbol: string, extraParams?: Recor
 // picks, the macro zone pre-drawn for support/resistance picks, the
 // triggering indicator auto-selected for oversold/overbought picks, and
 // both trend MAs for trend-score picks.
-function buildPickHref(sectionTitle: string, item: PickerItem): string {
+function buildPickHref(sectionTitle: string, item: PickerItem, hasFiledEarnings: (symbol: string) => boolean): string {
   const symbol = String(item.symbol ?? "").trim().toUpperCase();
   const title = sectionTitle.toLowerCase();
   const rawHref = item.dashboardHref ?? "";
 
-  if (title.includes("earnings")) {
+  // #552 COWORK #197: the earnings page only with a filed SEC set; otherwise the chart, below.
+  if (title.includes("earnings") && hasFiledEarnings(symbol)) {
     return `/stock/${encodeURIComponent(symbol)}/earnings`;
   }
 
@@ -444,6 +446,7 @@ function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?
 type InsightSummary = { slug: string; title: string; date: string; symbol: string | null };
 
 export default function PickersClient({ latestInsights = [], initialPickersPayload }: { latestInsights?: InsightSummary[]; initialPickersPayload?: PickersPayload }) {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const SHOW_FORCE_FETCH_BUTTON = false;
 
   // Server-rendered seed data (fetched in app/pickers/page.tsx) lets the real
@@ -1122,7 +1125,7 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
                         <div>
                           {visibleItems.map((it) => {
                             const rowKey = `${sec.title}::${it.symbol}`;
-                            const href = buildPickHref(sec.title, it);
+                            const href = buildPickHref(sec.title, it, hasFiledEarnings);
                             const linkLabel = isEarnings ? "Earnings →" : "Chart ↗";
                             return (
                               <div

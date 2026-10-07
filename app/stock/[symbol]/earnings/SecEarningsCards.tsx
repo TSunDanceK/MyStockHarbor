@@ -1899,7 +1899,8 @@ export const NOT_SHOWN_WORDS = {
   security: "SEC filing figures aren't shown for this security. Its filings describe the issuer, not this security.",
 } as const;
 
-export function SecNotShownCard({ symbol, kind, primary }: { symbol: string; kind: "fund" | "security"; primary: string | null }) {
+// hasFiledEarnings (#552 COWORK #197): the issuer is linked to its earnings page only with a filed SEC set; otherwise named, unlinked.
+export function SecNotShownCard({ symbol, kind, primary, hasFiledEarnings = () => false }: { symbol: string; kind: "fund" | "security"; primary: string | null; hasFiledEarnings?: (symbol: string) => boolean }) {
   return (
     <section className="card" data-sec-not-shown={kind}>
       <div className="eyebrow">{kind === "fund" ? "Fund or trust" : "Not this security"}</div>
@@ -1907,7 +1908,7 @@ export function SecNotShownCard({ symbol, kind, primary }: { symbol: string; kin
       <p>{NOT_SHOWN_WORDS[kind]}</p>
       {kind === "security" && primary ? (
         <p>
-          For the issuer&apos;s own results, see <a href={`/stock/${primary}/earnings`}>{primary}</a>.
+          For the issuer&apos;s own results, see {hasFiledEarnings(primary) ? <a href={`/stock/${primary}/earnings`}>{primary}</a> : <strong>{primary}</strong>}.
         </p>
       ) : null}
       <p style={{ marginBottom: 0 }}>
@@ -1921,10 +1922,13 @@ export function SecNotIssuerEquityCard({
   symbol,
   reason,
   siblings,
+  hasFiledEarnings = () => false,
 }: {
   symbol: string;
   reason: "derivative-of-issuer" | "unverifiable";
   siblings: string[];
+  /** #552 COWORK #197: the parent is linked to its earnings page only with a filed SEC set. */
+  hasFiledEarnings?: (symbol: string) => boolean;
 }) {
   // The likeliest parent is the shortest sibling with no class/series suffix:
   // BAC among BAC-PB, BML-PG, MER-PK. A heuristic for a LINK, never for the
@@ -1954,7 +1958,7 @@ export function SecNotIssuerEquityCard({
           they may not belong to.
         </p>
       )}
-      {parent ? (
+      {parent && hasFiledEarnings(parent) ? (
         <p style={{ marginBottom: 0 }}>
           For the company&apos;s own results, see{" "}
           <Link href={`/stock/${parent}/earnings`}>{parent}</Link>.

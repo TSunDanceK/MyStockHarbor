@@ -22,6 +22,7 @@ import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { DASHBOARD_SOURCE_BUDGET_MS, withBudget } from "@/lib/server/sourceBudget";
 import { EMPTY_LANDING, getDashboardLanding } from "@/lib/server/dashboardCards";
 import { LANDING_CSS, LandingCards, MarketNow } from "./DashboardLanding";
+import { filedEarningsGate } from "@/lib/server/filedEarnings";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -259,7 +260,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           pageToken={mintQuoteToken()}
           landing={{
             market: <MarketNow m={landing.market} />,
-            cards: <LandingCards c={landing.cards} />,
+            cards: <LandingCards c={landing.cards} hasFiledEarnings={await filedEarningsGate()} />,
             mapped: landing.market.mapped,
             bottlenecks: landing.bottlenecks,
             css: LANDING_CSS,

@@ -10,6 +10,7 @@ import { SECTORS, sectorNewsPath } from "@/lib/sectors";
 import { rememberSymbol, SYMBOL_STORAGE_KEY } from "@/lib/symbol";
 import { readStored } from "@/lib/browserStorage";
 import { positiveLastEarningsHidden } from "@/lib/positiveLastEarnings";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 type StockNavKind = "earnings" | "analysis" | "news";
 
@@ -741,6 +742,9 @@ export default function SiteHeader({
   const router = useRouter();
   const activePathname = normalisePathname(pathname);
   const lastSymbol = useLastStockSymbol(pathname);
+  // #552 COWORK #197: "Company Earnings" only when the last symbol has a filed SEC set.
+  const { hasFiledEarnings } = useFiledEarnings();
+  const earningsLinked = hasFiledEarnings(lastSymbol);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // The mobile overlay is a one-way navigation surface -- once a route
@@ -1183,13 +1187,13 @@ export default function SiteHeader({
         label: "Earnings",
         isActive: (path) => /^\/stock\/[^/]+\/earnings$/.test(path) || path === "/earnings-calendar",
         entries: [
-          {
-            kind: "link",
+          ...(earningsLinked ? [{
+            kind: "link" as const,
             label: "Company Earnings",
             href: stockHref(lastSymbol, "earnings"),
-            stockNav: "earnings",
-            isActive: (path) => /^\/stock\/[^/]+\/earnings$/.test(path),
-          },
+            stockNav: "earnings" as const,
+            isActive: (path: string) => /^\/stock\/[^/]+\/earnings$/.test(path),
+          }] : []),
           {
             kind: "link",
             label: "Earnings Calendar",
@@ -1290,7 +1294,7 @@ export default function SiteHeader({
         isActive: (path) => path === "/learn" || path.startsWith("/learn/"),
       },
     ],
-    [lastSymbol, latestVideoId]
+    [lastSymbol, latestVideoId, earningsLinked]
   );
 
   return (
@@ -1825,9 +1829,11 @@ export default function SiteHeader({
                   item={item}
                   active={active}
                   lastSymbol={lastSymbol}
-                  onNavigate={(stockNav) =>
-                    router.push(stockHref(currentCachedSymbol(), stockNav))
-                  }
+                  onNavigate={(stockNav) => {
+                    // The cached symbol can have moved on since the menu was built: no filed set, no earnings page.
+                    const sym = currentCachedSymbol();
+                    router.push(stockHref(sym, stockNav === "earnings" && !hasFiledEarnings(sym) ? "analysis" : stockNav));
+                  }}
                 />
               );
             }

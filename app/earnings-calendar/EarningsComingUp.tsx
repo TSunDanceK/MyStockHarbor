@@ -34,29 +34,39 @@ export const VISIBLE_PER_COLUMN = 8;
 export type ComingUpFacts = Record<string, { company: string; cap: number | null; cik?: string | null }>;
 type Row = { symbol: string; company: string; cap: number | null; due: boolean; also: string[] };
 
-function RowItem({ r }: { r: Row }) {
+type Gate = (symbol: string) => boolean;
+
+function RowItem({ r, hasFiledEarnings }: { r: Row; hasFiledEarnings: Gate }) {
+  const body = (
+    <>
+      <TickerLogo symbol={r.symbol} name={r.company} size={20} radius={6} alt="" />
+      <span className="cuSym">{r.symbol}</span>
+      <span className="cuName">{r.company}</span>
+      {r.also.length ? <span className="cuAlso" data-also="">also {r.also.join(", ")}</span> : null}
+    </>
+  );
+  // #552 COWORK #197: the row links to earnings only with a filed set; otherwise the same row, unlinked.
   return (
     <li className="cuRow" data-row={r.symbol} data-due={r.due ? "" : undefined}>
-      <Link href={`/stock/${encodeURIComponent(r.symbol)}/earnings`} prefetch={false} className="cuRowLink">
-        <TickerLogo symbol={r.symbol} name={r.company} size={20} radius={6} alt="" />
-        <span className="cuSym">{r.symbol}</span>
-        <span className="cuName">{r.company}</span>
-        {r.also.length ? <span className="cuAlso" data-also="">also {r.also.join(", ")}</span> : null}
-      </Link>
+      {hasFiledEarnings(r.symbol) ? (
+        <Link href={`/stock/${encodeURIComponent(r.symbol)}/earnings`} prefetch={false} className="cuRowLink">{body}</Link>
+      ) : (
+        <span className="cuRowLink">{body}</span>
+      )}
     </li>
   );
 }
 
 /** The column's rows, the due ones first under their heading; the first VISIBLE_PER_COLUMN shown. */
-function ColumnRows({ due, rows }: { due: Row[]; rows: Row[] }) {
+function ColumnRows({ due, rows, hasFiledEarnings }: { due: Row[]; rows: Row[]; hasFiledEarnings: Gate }) {
   const all = [...due, ...rows];
   const shown = all.slice(0, VISIBLE_PER_COLUMN), more = all.slice(VISIBLE_PER_COLUMN);
   const list = (items: Row[], first: boolean) => {
     const d = items.filter((r) => r.due), e = items.filter((r) => !r.due);
     return (
       <>
-        {d.length ? <>{first ? <p className="cuSub" data-group="due">{DUE_GROUP_HEADING}</p> : null}<ul className="cuList">{d.map((r) => <RowItem key={r.symbol} r={r} />)}</ul></> : null}
-        {e.length ? <ul className={`cuList${d.length ? " cuAfterDue" : ""}`}>{e.map((r) => <RowItem key={r.symbol} r={r} />)}</ul> : null}
+        {d.length ? <>{first ? <p className="cuSub" data-group="due">{DUE_GROUP_HEADING}</p> : null}<ul className="cuList">{d.map((r) => <RowItem key={r.symbol} r={r} hasFiledEarnings={hasFiledEarnings} />)}</ul></> : null}
+        {e.length ? <ul className={`cuList${d.length ? " cuAfterDue" : ""}`}>{e.map((r) => <RowItem key={r.symbol} r={r} hasFiledEarnings={hasFiledEarnings} />)}</ul> : null}
       </>
     );
   };
@@ -73,8 +83,10 @@ function ColumnRows({ due, rows }: { due: Row[]; rows: Row[] }) {
   );
 }
 
-export default function EarningsComingUp({ expected, due, today, facts = {} }: {
+export default function EarningsComingUp({ expected, due, today, facts = {}, hasFiledEarnings = () => false }: {
   expected: ExpectedSectionState; due: DueStripState; today: string; facts?: ComingUpFacts;
+  /** The page's filedEarningsGate() (#552 COWORK #197). Absent: no row links. */
+  hasFiledEarnings: Gate;
 }) {
   const fact = (s: string) => ({ company: facts[s]?.company ?? "", cap: facts[s]?.cap ?? null });
   const cikOf = (s: string) => facts[s]?.cik ?? null;
@@ -125,7 +137,7 @@ export default function EarningsComingUp({ expected, due, today, facts = {} }: {
                   <h3 id={`cu-${c.key}`} className="cuColLabel">{c.label}</h3>
                   <div className="cuColMeta"><span className="cuRange">{c.range}</span> · <span data-count={n}>{n} {n === 1 ? "company" : "companies"}</span></div>
                 </div>
-                {n ? <ColumnRows due={colDue} rows={c.items.map((r) => ({ symbol: r.symbol, company: r.company, cap: r.cap, due: false, also: r.also }))} />
+                {n ? <ColumnRows hasFiledEarnings={hasFiledEarnings} due={colDue} rows={c.items.map((r) => ({ symbol: r.symbol, company: r.company, cap: r.cap, due: false, also: r.also }))} />
                   : <p className="cuEmpty">{EMPTY_COLUMN}</p>}
               </div>
             );

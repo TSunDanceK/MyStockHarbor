@@ -27,6 +27,7 @@ import { fillWeekFigures, readWeekFigures } from "@/lib/server/earningsWeekStore
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsWeek, { type WeekDay, type WeekRow } from "./EarningsWeek";
 import EarningsComingUp, { type ComingUpFacts } from "./EarningsComingUp";
+import { filedEarningsGate } from "@/lib/server/filedEarnings";
 import { getCalendarForwardSections, type CalendarForwardSections } from "@/lib/server/dueInputs";
 
 // ── "EARNINGS THIS WEEK" (#552 COWORK #170, owner pick) ────────────────────
@@ -312,6 +313,8 @@ export default async function EarningsCalendarPage({
   });
 
   const selectedView = weekDaysView.find((d) => d.date === initial);
+  // #552 COWORK #197: a row links to /stock/SYM/earnings only with a filed set (one cached read).
+  const hasFiledEarnings = await filedEarningsGate();
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -340,7 +343,7 @@ export default async function EarningsCalendarPage({
                   "@type": "ListItem",
                   position: index + 1,
                   name: `${r.company} (${r.symbol})`,
-                  url: `https://www.mystockharbor.com/stock/${encodeURIComponent(r.symbol)}/earnings`,
+                  ...(hasFiledEarnings(r.symbol) ? { url: `https://www.mystockharbor.com/stock/${encodeURIComponent(r.symbol)}/earnings` } : {}),
                 })),
               },
             }
@@ -379,6 +382,7 @@ export default async function EarningsCalendarPage({
           <EarningsWeek
             days={weekDaysView}
             initial={initial}
+            filedSymbols={weekDaysView.flatMap((d) => d.rows.map((r) => r.symbol)).filter(hasFiledEarnings)}
             // AN INTERNAL CONTROL (#552 COWORK #174): off on production; a
             // preview keeps it for the owner. The route behind it stays keyed.
             backfill={!isProductionDeployment()}
@@ -391,7 +395,7 @@ export default async function EarningsCalendarPage({
               window that ends today, so every row read "Today" under a "Next up"
               heading. "Who reports soon" is this card: measured, and marked as
               an estimate. */}
-          <EarningsComingUp expected={forward.expected} due={forward.due} today={today} facts={comingUpFacts} />
+          <EarningsComingUp expected={forward.expected} due={forward.due} today={today} facts={comingUpFacts} hasFiledEarnings={hasFiledEarnings} />
 
           {/* FINE PRINT: the source of the list, and of "Shares since". */}
           <p className="earnCalFine" data-fine-print="">

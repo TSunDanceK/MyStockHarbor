@@ -181,9 +181,12 @@ export default function LatestEarningsCard({
   snapshot,
   symbol,
   pageToken = "",
+  hasFiledEarnings,
 }: {
   snapshot: SecEarningsSnapshot;
   symbol: string;
+  /** hasFiledEarnings(symbol), decided by the caller (#552 COWORK #197): no filed set, no link. */
+  hasFiledEarnings: boolean;
   /** The page's signed token; the human-gated cold fill requires it. */
   pageToken?: string;
 }) {
@@ -389,12 +392,14 @@ export default function LatestEarningsCard({
             <div style={earningsFootnoteStyle}>{snapshot.currencyNote}</div>
           ) : null}
 
-          <Link
-            href={`/stock/${encodeURIComponent(symbol)}/earnings`}
-            style={fullReportLinkStyle}
-          >
-            See full report →
-          </Link>
+          {hasFiledEarnings ? (
+            <Link
+              href={`/stock/${encodeURIComponent(symbol)}/earnings`}
+              style={fullReportLinkStyle}
+            >
+              See full report →
+            </Link>
+          ) : null}
         </>
       )}
       {/* BEHIND A TAP, NOT FINE PRINT (#552 COWORK #157 §2, the owner's standing

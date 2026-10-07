@@ -6,6 +6,7 @@ import Link from "next/link";
 import TickerLogo from "@/app/components/TickerLogo";
 import { activeRowStyle } from "@/lib/listboxNav";
 import { useListboxNav } from "@/app/components/useListboxNav";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 type SymbolResult = { symbol: string; name: string; exchange: string };
 
@@ -45,6 +46,7 @@ const unreachable = (symbol: string): Outlook => ({
 });
 
 export default function EarningsTickerSearch() {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SymbolResult[]>([]);
@@ -282,6 +284,7 @@ export default function EarningsTickerSearch() {
             </ul>
           ) : null}
           <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {hasFiledEarnings(info.symbol) ? (
             <Link
               href={`/stock/${encodeURIComponent(info.symbol)}/earnings`}
               style={{
@@ -297,6 +300,7 @@ export default function EarningsTickerSearch() {
             >
               View Earnings Page →
             </Link>
+            ) : null}
             <Link
               href={chartHref(info.symbol)}
               style={{

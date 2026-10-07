@@ -73,8 +73,8 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
   const want = (label, ok) => { if (!ok) fails.push(label); };
   let full = "", empty = "", mFull = "", mEmpty = "";
   try {
-    full = renderToStaticMarkup(React.createElement(mod.LandingCards, { c: FULL_LANDING.cards }));
-    empty = renderToStaticMarkup(React.createElement(mod.LandingCards, { c: EMPTY_LANDING.cards }));
+    full = renderToStaticMarkup(React.createElement(mod.LandingCards, { c: FULL_LANDING.cards, hasFiledEarnings: () => true }));
+    empty = renderToStaticMarkup(React.createElement(mod.LandingCards, { c: EMPTY_LANDING.cards, hasFiledEarnings: () => true }));
     mFull = renderToStaticMarkup(React.createElement(mod.MarketNow, { m: FULL_LANDING.market }));
     mEmpty = renderToStaticMarkup(React.createElement(mod.MarketNow, { m: EMPTY_LANDING.market }));
   } catch (e) {
@@ -177,7 +177,7 @@ function wiring(client, page, cardsSrc, root = read(ROOT)) {
   const want = (label, ok) => { if (!ok) fails.push(label); };
   const c = stripComments(client, { file: CLIENT }), p = stripComments(page, { file: PAGE });
   want("the page reads the landing through the budget", /budget\("landing", getDashboardLanding\(\)/.test(p));
-  want("the page hands the landing to the client", /landing=\{\{\s*market: <MarketNow m=\{landing\.market\} \/>,\s*cards: <LandingCards c=\{landing\.cards\} \/>/.test(p));
+  want("the page hands the landing to the client", /landing=\{\{\s*market: <MarketNow m=\{landing\.market\} \/>,\s*cards: <LandingCards c=\{landing\.cards\}(?: hasFiledEarnings=\{await filedEarningsGate\(\)\})? \/>/.test(p));
   want("the analyser carries the #analyser anchor", /<section id="analyser" ref=\{analyserRef\}/.test(c));
   want("a ?symbol= or #analyser deep link scrolls to the analyser", /if \(!landing \|\| !wantsAnalyser\(window\.location\.hash, deepSymbol\)\) return;\s*return holdOnAnalyser\(\(\) => analyserRef\.current\);/.test(c) && /const deepSymbol = searchParams\.get\("symbol"\)/.test(c));
   want("a hero pick routes through chooseSymbol, then scrolls to the analyser", /function pickFromHero\([^)]*\) \{\s*chooseSymbol\(sym, name, "stock"\);[\s\S]{0,120}analyserRef\.current\?\.scrollIntoView/.test(c));

@@ -11,6 +11,7 @@
 //   - a symbol with no CIK: no /stock/X/earnings (that page is noindex);
 //   - a dotted symbol's bars found under its dashed key (BRK.B -> BRK-B);
 //   - either read unanswerable (null): nothing dropped, as before;
+//   - a symbol off the filed list (#552 COWORK #197): no /stock/X/earnings;
 // plus the predicates themselves. Each rule gets a planted mutant.
 //
 //   node scripts/check-sitemap-robots.mjs
@@ -51,6 +52,11 @@ export async function readTiingoEodLast() {
   return out;
 }
 `);
+// #552 COWORK #197: the filed list. F.filed absent = unreadable (null).
+const filedStub = write(`scripts/.check-sitemap-filed-${tag}.mjs`, `
+const F = JSON.parse(process.env.FIX);
+export async function filedEarningsSet() { return F.filed ? new Set(F.filed) : null; }
+`);
 const child = write(`scripts/.check-sitemap-child-${tag}.mjs`, `
 import { register } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -61,7 +67,7 @@ process.stdout.write(JSON.stringify(entries.map((e) => e.url)));
 `);
 
 function urls(sitemapFile, robotsFile, fix) {
-  const stubs = { "@/lib/server/secColdFetch": secStub, "@/lib/server/marketData/read": readStub };
+  const stubs = { "@/lib/server/secColdFetch": secStub, "@/lib/server/marketData/read": readStub, "@/lib/server/filedEarnings": filedStub };
   if (robotsFile) stubs["@/lib/stockPageRobots"] = robotsFile;
   const out = execFileSync(process.execPath, [child], {
     cwd: ROOT,
@@ -85,6 +91,11 @@ async function rules(sitemapFile, robotsFile) {
   want("an ordinary symbol keeps both", s.has(U("/stock/NVDA")) && s.has(U("/stock/NVDA/earnings")));
   want("a dotted symbol's bars are found under the dashed key (BRK.B)", s.has(U("/stock/BRK.B")));
   want("/news is unaffected (that page is always index)", s.has(U("/stock/AAPL/news")) && s.has(U("/stock/MSFT/news")));
+  // #552 COWORK #197: a symbol off the filed list has no /earnings URL, and keeps /stock/X.
+  const { priorityStocks } = await import(pathToFileURL(path.join(ROOT, "lib/curatedSymbols.ts")).href);
+  const withFiled = urls(sitemapFile, robotsFile, { filed: priorityStocks.filter((x) => x !== "AMD") });
+  want("a symbol with no filed set has no /stock/X/earnings, and keeps /stock/X (#552 COWORK #197)",
+    !withFiled.has(U("/stock/AMD/earnings")) && withFiled.has(U("/stock/AMD")) && withFiled.has(U("/stock/NVDA/earnings")));
   const blind = urls(sitemapFile, robotsFile, { ...fix, secNull: true, eodNull: true });
   want("either read unanswerable (null) drops nothing", blind.has(U("/stock/AAPL")) && blind.has(U("/stock/MSFT")) && blind.has(U("/stock/AAPL/earnings")));
   const R = await import(pathToFileURL(robotsFile ?? path.join(ROOT, ROBOTS)).href);
@@ -107,9 +118,10 @@ try {
     ["sitemap", "the sitemap ignores stored bars (the old rule)", /const hasData = \(symbol: string\) => eodLast === null \|\| Boolean\(eodLast\[toDashed\(symbol\)\]\);/, "const hasData = (_symbol: string) => true;"],
     ["sitemap", "bars looked up by the dotted spelling", /eodLast\[toDashed\(symbol\)\]/, "eodLast[symbol]"],
     ["sitemap", "a null eod-last drops everything", /eodLast === null \|\| /, ""],
+    ["sitemap", "the earnings entries ignore the filed list (#552 COWORK #197)", /filed: filedSet \? hasFiledEarningsIn\(filedSet, symbol\) : null/, "filed: null"],
     ["sitemap", "the earnings entries use the stock page's rule", /!etfSymbols\.has\(symbol\) && earningsRenderable\(symbol\)/, "!etfSymbols.has(symbol) && renderable(symbol)"],
     ["robots", "the stock predicate forgets the SEC read", /return i\.hasData && !i\.awaitingSecRead;/, "return i.hasData;"],
-    ["robots", "the earnings predicate forgets the CIK", /return i\.hasCik && !i\.awaitingSecRead;/, "return !i.awaitingSecRead;"],
+    ["robots", "the earnings predicate forgets the CIK", /return i\.hasCik && !i\.awaitingSecRead/, "return !i.awaitingSecRead"],
   ];
   for (const [which, label, from, to] of MUTANTS) {
     const base = which === "sitemap" ? sm : rb;
