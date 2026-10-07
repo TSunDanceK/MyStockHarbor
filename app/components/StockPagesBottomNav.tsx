@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { rememberSymbol } from "@/lib/symbol";
 import { chartHref } from "@/lib/chartHref";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 /**
  * Bottom nav across the four symbol-scoped pages: the chart (/dashboard),
@@ -104,6 +105,7 @@ function EarningsIcon() {
 }
 
 export default function StockPagesBottomNav() {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const pathname = usePathname() ?? "";
 
   // On a /stock/... route the ticker is in the URL, so it is known during the
@@ -175,7 +177,10 @@ export default function StockPagesBottomNav() {
     { key: "chart", label: "Chart", href: chartHref(symbol || FALLBACK_SYMBOL), icon: <ChartIcon /> },
     { key: "analysis", label: "Analysis", href: `/stock/${encoded}`, icon: <AnalysisIcon /> },
     { key: "news", label: "News", href: `/stock/${encoded}/news`, icon: <NewsIcon /> },
-    { key: "earnings", label: "Earnings", href: `/stock/${encoded}/earnings`, icon: <EarningsIcon /> },
+    // #552 COWORK #197: the Earnings tab only when this symbol has a filed SEC set.
+    ...(hasFiledEarnings(symbol || FALLBACK_SYMBOL)
+      ? [{ key: "earnings" as const, label: "Earnings", href: `/stock/${encoded}/earnings`, icon: <EarningsIcon /> }]
+      : []),
   ];
 
   return (

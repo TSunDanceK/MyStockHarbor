@@ -117,7 +117,7 @@ function gridRules(src) {
   want("a Stretch (z20) column, from the row's stored closes", /label: "Stretch \(z20\)"/.test(src) && /const stretch = latestStretch\(pts\.map\(\(p\) => p\.close\)/.test(src));
   want("only on the oversold/overbought pages", /const stretchPage = \/oversold\|overbought\/i\.test\(configHref\);/.test(src) &&
     /if \(stretchPage\) sets\.general\.splice\(sets\.general\.indexOf\(change\) \+ 1, 0, stretch\);/.test(src));
-  want("the column set follows the page", /\}, \[isEarnings, displayTone, configHref\]\);/.test(src));
+  want("the column set follows the page", /\}, \[isEarnings, displayTone, configHref(?:, hasFiledEarnings)?\]\);/.test(src));
   want("an empty cell says why", /stretch: "Not enough price history for a 20-day average"/.test(src));
   return fails;
 }
@@ -173,7 +173,7 @@ try {
   const GRID_MUTANTS = [
     ["the column on every picker page", /const stretchPage = \/oversold\|overbought\/i\.test\(configHref\);/, "const stretchPage = true;"],
     ["the column from the live pool price", /const stretch = latestStretch\(pts\.map\(\(p\) => p\.close\)/, "const stretch = latestStretch([price ?? 0]"],
-    ["the column set stuck on the first page", /\}, \[isEarnings, displayTone, configHref\]\);/, "}, [isEarnings, displayTone]);"],
+    ["the column set stuck on the first page", /\}, \[isEarnings, displayTone, configHref(?:, hasFiledEarnings)?\]\);/, "}, [isEarnings, displayTone]);"],
   ];
   for (const [label, from, to] of GRID_MUTANTS) {
     const m = GRID_SRC.replace(from, to);

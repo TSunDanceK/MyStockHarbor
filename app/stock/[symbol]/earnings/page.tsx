@@ -55,6 +55,7 @@ import { adsRatioFor } from "@/lib/server/secAdsMap";
 import { nonEquityListingOf, citedCoverFor } from "@/lib/server/secPrimaryListing";
 import NextReportCard from "./NextReportCard";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
+import { filedEarningsGate, filedEarningsKnown } from "@/lib/server/filedEarnings";
 import { NO_PRICE_HISTORY_NOTE, reactionBarLabels } from "@/lib/server/secReportDates";
 import { PriceReactionCard, type DriftQuarter, type SingleBarPoint } from "./ReactionCharts";
 
@@ -607,7 +608,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       // A FUND THE SITE LISTS IS INDEXED WITH OR WITHOUT ITS OWN CIK (#552
       // COWORK #155): VUG takes the same fund card as SPY, so the same rule.
       // Through the shared predicate (lib/stockPageRobots.ts), as the sitemap is.
-      index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null || isSiteFund(clean), awaitingSecRead: await awaitingSecRead(clean) }),
+      //
+      // AND NOINDEX WITHOUT A FILED SET (#552 COWORK #197): the page keeps its
+      // "not available" state for a symbol with no filed period, but is not
+      // offered for indexing -- the same rule that drops its earnings links.
+      // Unknown (the list unreadable) leaves this input out of the decision, and
+      // so does a listed fund: it shows the fund card, not "not available", and
+      // stays indexed per COWORK #155 (its earnings links still go: no filed set).
+      index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null || isSiteFund(clean), awaitingSecRead: await awaitingSecRead(clean), filed: isSiteFund(clean) ? null : await filedEarningsKnown(clean) }),
       follow: true,
     },
     alternates: { canonical: `https://www.mystockharbor.com/stock/${clean}/earnings` },
@@ -620,6 +628,8 @@ export default async function StockEarningsPage({ params }: Props) {
   const { symbol } = await params;
   const clean = cleanSymbol(symbol);
   const data = await getEarningsData(clean);
+  // #552 COWORK #197: an issuer/parent is linked to its earnings page only with a filed set.
+  const hasFiledEarnings = await filedEarningsGate();
 
   // THE CIK GATE IS NO LONGER A 404 — see SecNoRegistrantCard.
   //
@@ -1125,13 +1135,14 @@ export default async function StockEarningsPage({ params }: Props) {
                 <SecNoRegistrantCard symbol={clean} />
               ) :
                data.cold.status === "not-shown" ? (
-                <SecNotShownCard symbol={clean} kind={data.cold.kind} primary={data.cold.primary} />
+                <SecNotShownCard symbol={clean} kind={data.cold.kind} primary={data.cold.primary} hasFiledEarnings={hasFiledEarnings} />
               ) :
                data.cold.status === "not-issuer-equity" ? (
                 <SecNotIssuerEquityCard
                   symbol={clean}
                   reason={data.cold.reason}
                   siblings={data.cold.siblings}
+                  hasFiledEarnings={hasFiledEarnings}
                 />
               ) :
                data.cold.status === "no-xbrl" ? (

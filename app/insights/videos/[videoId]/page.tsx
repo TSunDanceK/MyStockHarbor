@@ -17,6 +17,7 @@ import VideoPageClient from "./VideoPageClient";
 import DatasheetViewer from "./DatasheetViewer";
 import PageShareBar from "@/app/components/PageShareBar";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
+import { hasFiledEarnings } from "@/lib/server/filedEarnings";
 
 // Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
 // makes every crawl a full serverless render Google can never cheaply
@@ -345,9 +346,12 @@ export default async function VideoPage({ params }: Props) {
                   <Link href={`/stock/${encodeURIComponent(ticker)}`} style={exploreLinkStyle("blue")}>
                     {ticker} stock page →
                   </Link>
-                  <Link href={`/stock/${encodeURIComponent(ticker)}/earnings`} style={exploreLinkStyle("gold")}>
-                    {ticker} earnings →
-                  </Link>
+                  {/* #552 COWORK #197: only with a filed SEC set. */}
+                  {(await hasFiledEarnings(ticker)) ? (
+                    <Link href={`/stock/${encodeURIComponent(ticker)}/earnings`} style={exploreLinkStyle("gold")}>
+                      {ticker} earnings →
+                    </Link>
+                  ) : null}
                   <Link href={`/stock/${encodeURIComponent(ticker)}/news`} style={exploreLinkStyle("green")}>
                     {ticker} news →
                   </Link>

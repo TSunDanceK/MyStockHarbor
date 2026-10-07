@@ -830,6 +830,9 @@ console.log("\n7i. the meta description describes the page, not the price chart"
         unexport(grabFunction(readCodeOnly("lib/stockPageRobots.ts"), "earningsPageIndexable")),
         // NOT YET READ (#535 COWORK #13): "COLDX" has a CIK and no stored set.
         'const awaitingSecRead = async (s) => String(s).toUpperCase() === "COLDX";',
+        // NO FILED SET (#552 COWORK #197): "NOSET" (and the fund) are off the
+        // filed list; "BLIPX" is a list that could not be read (null).
+        'const filedEarningsKnown = async (s) => { const u = String(s).toUpperCase(); return u === "BLIPX" ? null : !["NOSET", "NOCIKFUND"].includes(u); };',
         grabFunction(src, "generateMetadata"),
       ].join("\n") + "\nexport { generateMetadata };"
     );
@@ -858,6 +861,19 @@ console.log("\n7i. the meta description describes the page, not the price chart"
     const cold = await runMeta(pageRaw, labels[0], "COLDX");
     check("a cold symbol not yet read is noindex (#535 COWORK #13)",
       cold.robots?.index === false && cold.robots?.follow === true, JSON.stringify(cold.robots));
+    // #552 COWORK #197: a symbol with a CIK but no filed set keeps its page and is noindex.
+    const noSet = await runMeta(pageRaw, labels[0], "NOSET");
+    check("a symbol with no filed set is noindex, still follow (#552 COWORK #197)",
+      noSet.robots?.index === false && noSet.robots?.follow === true, JSON.stringify(noSet.robots));
+    const blip = await runMeta(pageRaw, labels[0], "BLIPX");
+    check("…an unreadable filed list (null) leaves the page indexable", blip.robots?.index === true, JSON.stringify(blip.robots));
+    const FILED_IN = ", filed: isSiteFund(clean) ? null : await filedEarningsKnown(clean)";
+    const mutSrc = pageRaw.replace(FILED_IN, "");
+    check("MUTATION: the filed input dropped → the no-set page indexable again (caught)",
+      mutSrc !== pageRaw && (await runMeta(mutSrc, labels[0], "NOSET")).robots?.index === true);
+    const fundMut = pageRaw.replace(FILED_IN, ", filed: await filedEarningsKnown(clean)");
+    check("MUTATION: the fund bypass dropped → the listed fund goes noindex (caught; COWORK #155 holds)",
+      fundMut !== pageRaw && (await runMeta(fundMut, labels[0], "NOCIKFUND")).robots?.index === false);
   }
 
   const metaSrc = grabFunction(pageRaw, "generateMetadata");
@@ -953,6 +969,7 @@ console.log("\n7i. the meta description describes the page, not the price chart"
       'const isSiteFund = () => false;',
       unexport(grabFunction(readCodeOnly("lib/stockPageRobots.ts"), "earningsPageIndexable")),
       'const awaitingSecRead = async () => false;',
+      'const filedEarningsKnown = async () => true;',
       restoreLeak(metaSrc),
     ].join("\n") + "\nexport { generateMetadata };"
   );

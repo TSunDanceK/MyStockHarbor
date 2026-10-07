@@ -17,9 +17,11 @@ function severityForPct(pct: number): { label: string; color: string } {
 function CompanyRow({
   company,
   color,
+  hasFiledEarnings,
 }: {
   company: BottleneckCompany;
   color: string;
+  hasFiledEarnings: (ticker: string) => boolean;
 }) {
   const severity = severityForPct(company.pct);
 
@@ -140,12 +142,15 @@ function CompanyRow({
           >
             Stock analysis →
           </Link>
-          <Link
-            href={`/stock/${encodeURIComponent(company.ticker)}/earnings`}
-            className="bnActionBtn bnActionBtn--blue"
-          >
-            Earnings →
-          </Link>
+          {/* #552 COWORK #197: only with a filed SEC set; otherwise left out, not disabled. */}
+          {hasFiledEarnings(company.ticker) ? (
+            <Link
+              href={`/stock/${encodeURIComponent(company.ticker)}/earnings`}
+              className="bnActionBtn bnActionBtn--blue"
+            >
+              Earnings →
+            </Link>
+          ) : null}
           <Link
             href={chartHref(company.ticker)}
             className="bnActionBtn bnActionBtn--blue"
@@ -170,11 +175,13 @@ function ChartBlock({
   companies,
   className,
   idPrefix,
+  hasFiledEarnings,
 }: {
   heading: string;
   description: string;
   companies: BottleneckCompany[];
   className?: string;
+  hasFiledEarnings: (ticker: string) => boolean;
   // Passed straight through to BottleneckPieChart so this chart's glow
   // filter id never collides with the other ChartBlock's on the same page
   // (supply-chain + customer-concentration both render one each).
@@ -219,6 +226,7 @@ function ChartBlock({
             key={`${company.ticker ?? company.name}-${index}`}
             company={company}
             color={NEON_PALETTE[index % NEON_PALETTE.length]}
+            hasFiledEarnings={hasFiledEarnings}
           />
         ))}
       </div>
@@ -226,7 +234,13 @@ function ChartBlock({
   );
 }
 
-export default function BottleneckShockView({ post }: { post: BottleneckPost }) {
+export default function BottleneckShockView({ post, filedTickers = [] }: {
+  post: BottleneckPost;
+  /** The post's tickers that pass hasFiledEarnings, decided on the server (#552 COWORK #197). */
+  filedTickers?: string[];
+}) {
+  const filed = new Set(filedTickers);
+  const hasFiledEarnings = (ticker: string) => filed.has(ticker);
   // Mobile-only: which single chart panel is showing. Desktop always shows
   // both side by side and ignores this - the toggle itself is hidden above
   // 860px via CSS (see .bottleneckMobileToggle in page.tsx's <style> block),
@@ -347,6 +361,7 @@ export default function BottleneckShockView({ post }: { post: BottleneckPost }) 
           companies={post.supplyChain}
           className={mobilePanel === "customers" ? "bottleneckMobileHidden" : undefined}
           idPrefix="supply"
+          hasFiledEarnings={hasFiledEarnings}
         />
 
         <ChartBlock
@@ -355,6 +370,7 @@ export default function BottleneckShockView({ post }: { post: BottleneckPost }) 
           companies={post.customers}
           className={mobilePanel === "supply" ? "bottleneckMobileHidden" : undefined}
           idPrefix="customers"
+          hasFiledEarnings={hasFiledEarnings}
         />
       </div>
     </>

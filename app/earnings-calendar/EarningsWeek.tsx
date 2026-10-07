@@ -42,15 +42,19 @@ export type WeekDay = {
 const signedPct = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}%`;
 const toneOf = (v: number | null) => (v === null ? undefined : v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#cbd5e1");
 
-export default function EarningsWeek({ days, initial, credit = null, backfill = false }: {
+export default function EarningsWeek({ days, initial, credit = null, backfill = false, filedSymbols = [] }: {
   days: WeekDay[];
   initial: string;
+  /** The rows' symbols that pass the page's hasFiledEarnings (#552 COWORK #197); only these link to earnings. */
+  filedSymbols?: string[];
   /** The owner's "Backfill this date" control: off on production (#552 COWORK #174), on a preview only. */
   backfill?: boolean;
   /** The "Shares since" closes' source, as the page's linked credit; null when they are not Tiingo's. */
   credit?: React.ReactNode;
 }) {
   const [selected, setSelected] = useState(initial);
+  const filed = new Set(filedSymbols);
+  const hasFiledEarnings = (symbol: string) => filed.has(symbol);
   const day = days.find((d) => d.date === selected) ?? days[days.length - 1];
   return (
     <section className="ewCard" aria-labelledby="ewHeading">
@@ -90,7 +94,7 @@ export default function EarningsWeek({ days, initial, credit = null, backfill = 
             <div key={r.symbol} className="ewRow" role="row" data-row={r.symbol}>
               <span role="cell" className="ewCo">
                 <TickerLogo symbol={r.symbol} name={r.company} size={22} radius={6} alt="" />
-                <Link href={`/stock/${encodeURIComponent(r.symbol)}/earnings`} prefetch={false} className="ewSym">{r.symbol}</Link>
+                {hasFiledEarnings(r.symbol) ? <Link href={`/stock/${encodeURIComponent(r.symbol)}/earnings`} prefetch={false} className="ewSym">{r.symbol}</Link> : <span className="ewSym">{r.symbol}</span>}
                 <span className="ewName">{r.company}</span>
               </span>
               <span role="cell" className="ewNum" data-revenue="">

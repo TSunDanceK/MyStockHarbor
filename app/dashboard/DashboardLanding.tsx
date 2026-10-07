@@ -187,7 +187,9 @@ function SectorBars({ rows, spx }: { rows: { name: string; slug: string; ytd: nu
   );
 }
 
-export function LandingCards({ c }: { c: DashboardCards }) {
+// hasFiledEarnings: the page's filedEarningsGate() (#552 COWORK #197) -- a chip
+// links to earnings only with a filed set; otherwise it is plain text.
+export function LandingCards({ c, hasFiledEarnings }: { c: DashboardCards; hasFiledEarnings: (symbol: string) => boolean }) {
   const hub = c.hub;
   return (
     <section className="dlCards" aria-labelledby="dlCardsTitle">
@@ -256,11 +258,19 @@ export function LandingCards({ c }: { c: DashboardCards }) {
                     <ul className="dlList dlEarnList">
                       {w.top.map((e) => (
                         <li key={e.symbol} className="dlEarnRow" data-earn-row="">
-                          <Link href={`/stock/${encodeURIComponent(e.symbol)}/earnings`} prefetch={false} className="dlEarnName" title={e.name}>
-                            <TickerLogo symbol={e.symbol} size={20} radius={5} alt="" />
-                            <strong>{e.symbol}</strong>
-                            <span className="dlEarnCo">{e.name}</span>
-                          </Link>
+                          {hasFiledEarnings(e.symbol) ? (
+                            <Link href={`/stock/${encodeURIComponent(e.symbol)}/earnings`} prefetch={false} className="dlEarnName" title={e.name}>
+                              <TickerLogo symbol={e.symbol} size={20} radius={5} alt="" />
+                              <strong>{e.symbol}</strong>
+                              <span className="dlEarnCo">{e.name}</span>
+                            </Link>
+                          ) : (
+                            <span className="dlEarnName" title={e.name}>
+                              <TickerLogo symbol={e.symbol} size={20} radius={5} alt="" />
+                              <strong>{e.symbol}</strong>
+                              <span className="dlEarnCo">{e.name}</span>
+                            </span>
+                          )}
                           <span className="dlEarnDay">{e.day} <em>Estimated</em></span>
                         </li>
                       ))}

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAllBottleneckPosts, getBottleneckBySlug } from "@/lib/bottlenecks";
 import BottleneckShockView from "@/app/components/BottleneckShockView";
+import { filedEarningsGate } from "@/lib/server/filedEarnings";
 
 type Props = {
   params: Promise<{ ticker: string }>;
@@ -273,7 +274,14 @@ export default async function BottleneckPage({ params }: Props) {
             </Link>
           </div>
 
-          <BottleneckShockView post={post} />
+          {/* #552 COWORK #197: a card's "Earnings →" only for a ticker with a filed SEC set. */}
+          <BottleneckShockView
+            post={post}
+            filedTickers={[...post.supplyChain, ...post.customers]
+              .map((c) => c.ticker)
+              .filter((t): t is string => Boolean(t))
+              .filter(await filedEarningsGate())}
+          />
 
           <p
             style={{

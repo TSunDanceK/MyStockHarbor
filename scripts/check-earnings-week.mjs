@@ -147,7 +147,8 @@ const ROWS = [
   { symbol: "NEWCO", company: "Newco Holdings", revenue: "$11.7M", revenueYoY: null, eps: "−$0.12", since: null },
 ];
 const days = W0.weekDays(TODAY).map((d) => day(d, d === "2026-10-01" ? ROWS : []));
-const html = renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-01" }));
+// filedSymbols: the page's hasFiledEarnings over the rows (#552 COWORK #197); NEWCO has no filed set.
+const html = renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-01", filedSymbols: ["AAPL"] }));
 const pressed = [...html.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*data-week-day="([^"]+)"/g)];
 check("seven tiles, each a button with aria-pressed, the selected one pressed",
   pressed.length === 7 && pressed.filter((p) => p[1] === "true").map((p) => p[2]).join() === "2026-10-01");
@@ -158,6 +159,7 @@ check("revenue with YoY, signed and inked", /\$94\.04B<span class="ewYoY" data-y
 check("no comparable quarter: the YoY reads '—'", /\$11\.7M<span class="ewYoY" data-yoy="">—</.test(html));
 check("no close: 'Shares since' reads '—'", /data-row="NEWCO"[\s\S]*?data-since="">—</.test(html));
 check("each ticker links to its earnings page", html.includes('href="/stock/AAPL/earnings"'));
+check("…but a ticker with no filed set is unlinked (#552 COWORK #197)", /data-row="NEWCO"[\s\S]*?<span class="ewSym">NEWCO<\/span>/.test(html) && !html.includes('href="/stock/NEWCO/earnings"'));
 check("logos carry alt=\"\" (the ticker names the company)", /<img[^>]*alt=""/.test(html) && !/alt="AAPL logo"/.test(html));
 check("no Backfill control unless the page turns it on (it is off on production)",
   !/Backfill/.test(visible(html)) && /Backfill this date/.test(visible(renderToStaticMarkup(React.createElement(Week, { days, initial: "2026-10-01", backfill: true })))));
@@ -213,6 +215,8 @@ const facts = (syms) => Object.fromEntries(syms.map((sy) => [sy, { company: `${s
 const many = Array.from({ length: 11 }, (_, i) => `T${String(i).padStart(2, "0")}`);
 const cuProps = {
   today: TODAY,
+  // #552 COWORK #197: JPM stands in for a symbol with no filed set.
+  hasFiledEarnings: (s) => s !== "JPM",
   expected: { kind: "listed", considered: 50, rows: [exp("UNH", 10), exp("JPM", 2), exp("NFLX", 26), ...many.map((sy) => exp(sy, 9))] },
   due: { kind: "listed", coverage: 1, entries: [{ symbol: "MU", periodEnd: "2026-08-27", dueFrom: "2026-09-15", expectedOn: "2026-09-19", daysOutstanding: 39 }] },
   facts: facts(["UNH", "JPM", "NFLX", "MU", ...many]),
@@ -257,6 +261,8 @@ check("the coverage sentence is back inside the tap, with the live counts",
 }
 check("each row: logo, ticker, name, linked to its earnings page",
   /<li class="cuRow" data-row="UNH"><a href="\/stock\/UNH\/earnings" class="cuRowLink">[\s\S]*?<span class="cuSym">UNH<\/span><span class="cuName">UNH Inc\.<\/span><\/a><\/li>/.test(cu));
+check("…and a row with no filed set is the same row, unlinked (#552 COWORK #197)",
+  /<li class="cuRow" data-row="JPM"><span class="cuRowLink">[\s\S]*?<span class="cuSym">JPM<\/span>/.test(cu) && !cu.includes('href="/stock/JPM/earnings"'));
 check("an empty week says so", /<p class="cuEmpty">None estimated\.<\/p>/.test(colOf("w2")));
 check("4 / 2 / 1 columns at desktop / ≤900px / ≤560px",
   /\.cuGrid \{ display: grid; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/.test(cu) &&

@@ -94,7 +94,9 @@ for (const [name, rule] of Object.entries(RULES)) {
 console.log("\n4. the words and the page");
 const M = await loadCards();
 const fund = visibleText(html(React.createElement(M.SecNotShownCard, { symbol: "SPY", kind: "fund", primary: null })));
-const sec = html(React.createElement(M.SecNotShownCard, { symbol: "SOMN", kind: "security", primary: "SO" }));
+const sec = html(React.createElement(M.SecNotShownCard, { symbol: "SOMN", kind: "security", primary: "SO", hasFiledEarnings: () => true }));
+// #552 COWORK #197: an issuer with no filed set is named, not linked to an earnings page.
+const secNoSet = html(React.createElement(M.SecNotShownCard, { symbol: "SOMN", kind: "security", primary: "SO", hasFiledEarnings: () => false }));
 const WORDS = {
   fund: "SEC filing figures aren't shown for funds and trusts. Their filings describe the fund, not a company's earnings.",
   security: "SEC filing figures aren't shown for this security. Its filings describe the issuer, not this security.",
@@ -103,16 +105,18 @@ check("the fund card says what it is, in the ruled words, and links to the stock
   fund.includes("SPY is a fund or trust") && fund.includes(WORDS.fund) && /stock page/.test(fund) && !/not yet read|being prepared/i.test(fund));
 check("the security card's words, and a link to the issuer's results",
   visibleText(sec).includes(WORDS.security) && /href="\/stock\/SO\/earnings"/.test(sec));
+check("…and no earnings link when the issuer has no filed set (#552 COWORK #197)",
+  visibleText(secNoSet).includes("see SO") && !/\/earnings"/.test(secNoSet));
 const score = readCodeOnly("lib/server/secEarningsScore.ts");
 check("the stock page's tile says the same (the scorer's sentence equals the card's)",
   score.includes(`"${WORDS.fund}"`) && score.includes(`"${WORDS.security}"`) && /if \(cold\.status === "not-shown"\)/.test(score));
 const page = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
 check("the earnings page draws the card for not-shown, ahead of the derivative card",
-  /data\.cold\.status === "not-shown" \? \(\s*<SecNotShownCard symbol=\{clean\} kind=\{data\.cold\.kind\} primary=\{data\.cold\.primary\} \/>/.test(page)
+  /data\.cold\.status === "not-shown" \? \(\s*<SecNotShownCard symbol=\{clean\} kind=\{data\.cold\.kind\} primary=\{data\.cold\.primary\}(?: hasFiledEarnings=\{hasFiledEarnings\})? \/>/.test(page)
   && page.indexOf('data.cold.status === "not-shown"') < page.indexOf('data.cold.status === "not-issuer-equity"'));
-const ROBOTS = "index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null || isSiteFund(clean), awaitingSecRead: await awaitingSecRead(clean) }),";
+const ROBOTS = "index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null || isSiteFund(clean), awaitingSecRead: await awaitingSecRead(clean), filed: isSiteFund(clean) ? null : await filedEarningsKnown(clean) }),";
 check("a fund the site lists is indexed with or without its own CIK (VUG as SPY; #552 COWORK #155)", page.includes(ROBOTS));
-check("MUTATION: the CIK-only index rule back → caught", !page.replace(ROBOTS, "index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null, awaitingSecRead: await awaitingSecRead(clean) }),").includes(ROBOTS));
+check("MUTATION: the CIK-only index rule back → caught", !page.replace(ROBOTS, "index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null, awaitingSecRead: await awaitingSecRead(clean), filed: isSiteFund(clean) ? null : await filedEarningsKnown(clean) }),").includes(ROBOTS));
 
 console.log("\n5. the tidy-ups (#552 COWORK #152)");
 // The phone-order wrapper (#552 COWORK #166) is part of the guarded expression.

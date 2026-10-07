@@ -7,6 +7,7 @@ import html from "remark-html";
 import { submitInsightToIndexNowOnce } from "@/lib/indexnowAuto";
 import { getInsightPageDataCached, isInsightFixture, readInsightSource } from "@/lib/server/insightPage";
 import InsightPage from "./InsightPage";
+import { hasFiledEarnings } from "@/lib/server/filedEarnings";
 
 // Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
 // forced a full serverless render of a frozen article on every single crawl.
@@ -333,7 +334,7 @@ export default async function InsightPostPage({ params }: Props) {
         }}
       />
 
-      <InsightPage d={data} html={{ whatHappened, why, originalRest }} thumb={thumb} />
+      <InsightPage d={data} html={{ whatHappened, why, originalRest }} thumb={thumb} hasFiledEarnings={await hasFiledEarnings(data.n.symbol)} />
     </>
   );
 }

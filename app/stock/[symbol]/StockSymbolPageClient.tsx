@@ -12,6 +12,7 @@ import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
 import { DayCandle, DayRange, PeLine, PriceChange, PriceSpark, RsiPane, TrendSpark, VolumeBars } from "./HeaderStripParts";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 import ConfluenceCard from "./ConfluenceCard";
 import KeyLevelsCard from "./KeyLevelsCard";
 import PerformanceCard from "./PerformanceCard";
@@ -741,6 +742,7 @@ function sideCardBodyStyle(): React.CSSProperties {
 }
 
 export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, performance, strength, renderedAt }: StockSymbolPageClientProps) {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   // THE STRENGTH BADGE (#563 COWORK #105): two copies, one shown (left of Share; under the ticker on a phone).
   const strengthTop = useStrengthNote();
   const strengthUnder = useStrengthNote();
@@ -1159,7 +1161,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               {/* Earnings snapshot — sidebar */}
               {/* A'S CARD (#563 COWORK #100): its type sizes are A's PR (#552 COWORK #153); the reading-size measure reports it, report-only. */}
               <div className="sp-slot sp-earnings" data-reading-owner="a">
-                <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} />
+                <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} hasFiledEarnings={hasFiledEarnings(symbol)} />
               </div>
 
             </aside>

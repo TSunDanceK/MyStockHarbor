@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { DashboardEarnings, FiledPeriod } from "@/lib/filedEarnings";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 type Tone = "green" | "yellow" | "red" | null;
 const TONE_BG: Record<string, string> = { green: "rgba(34,197,94,0.16)", yellow: "rgba(245,158,11,0.16)", red: "rgba(239,68,68,0.16)" };
@@ -53,6 +54,7 @@ export function FiledBars({ periods }: { periods: FiledPeriod[] }) {
 const SEEN = new Map<string, DashboardEarnings>();
 
 export default function FiledEarningsChart({ symbol, verdict, tone }: { symbol: string; verdict: string | null; tone: Tone }) {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   // Answers by symbol; state is only set when a fetch settles, never in the effect body.
   const [, setTick] = useState(0);
   const [failedFor, setFailedFor] = useState<string | null>(null);
@@ -88,7 +90,7 @@ export default function FiledEarningsChart({ symbol, verdict, tone }: { symbol: 
             </p>
           </>
         )}
-      <Link className="dlMore" href={`/stock/${encodeURIComponent(symbol)}/earnings`} prefetch={false}>Full earnings →</Link>
+      {hasFiledEarnings(symbol) ? <Link className="dlMore" href={`/stock/${encodeURIComponent(symbol)}/earnings`} prefetch={false}>Full earnings →</Link> : null}
       <p className="dlFine" data-fine-print="">Filings from SEC EDGAR · per-share figures on today&apos;s share basis</p>
     </div>
   );

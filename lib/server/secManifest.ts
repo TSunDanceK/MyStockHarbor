@@ -601,6 +601,16 @@ export const SEC_FACTS_PREFIX = "msh:sec:facts:v1";
  */
 export const SEC_FACTS_INDEX_KEY = "msh:sec:facts:index:v1";
 
+/**
+ * INDEXED FACT SETS STORED WITH NO FILED PERIOD (#552 COWORK #197): 0 quarters
+ * and 0 years -- the empty answer (SKHY, 2026-10-07: 26 of 1,732). writeFactSet
+ * SADDs on an empty write and SREMs on any write with a period, so
+ * lib/server/filedEarnings can link /stock/SYM/earnings only for index less
+ * this. A symbol discarded or evicted leaves the index, so a member left here
+ * only ever subtracts; it is not in PER_SYMBOL_SETS for that reason.
+ */
+export const SEC_FACTS_EMPTY_KEY = "msh:sec:facts:empty:v1";
+
 export async function readFactSetIndex(): Promise<{ symbols: string[]; commands: number; failed: boolean }> {
   if (!redis) return { symbols: [], commands: 0, failed: false };
   try {

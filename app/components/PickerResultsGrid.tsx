@@ -15,6 +15,7 @@ import { perfAsOfLabel, perfWhyText, type PerfKey } from "@/lib/pickerPerf";
 import { EstimateCell, PickerEstimateKey, estimateMarksShown } from "@/app/components/PickerEstimateMarks";
 import { fmtZ, latestStretch } from "@/lib/stretch";
 import { compareEpsGrowth, epsGrowthText, epsGrowthTip } from "@/lib/epsGrowthView";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -847,6 +848,7 @@ export default function PickerResultsGrid({
   // the way back to it once one is.
   ranking?: { label: string; short: string } | null;
 }) {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const { predicates, selectedFilters, setMatchCount, setConditionCounts, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   // A page configured to open on a hidden tab opens on General instead.
@@ -893,8 +895,9 @@ export default function PickerResultsGrid({
   // is showing fields that no longer exist on Financials.
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
 
+  // #552 COWORK #197: on an earnings page a row opens the earnings view only with a filed SEC set; otherwise its chart.
   const cardHrefFor = (entry: ResultEntry) =>
-    isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
+    isEarnings && hasFiledEarnings(entry.symbol) ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
 
   // Every entry is stamped with the PAGE's tone server-side (see buildEntries in
   // PickerResultPage.tsx), which is correct right up until the visitor filters
@@ -930,7 +933,7 @@ export default function PickerResultsGrid({
       sortType: "str",
       get: (e) => e.symbol ?? "",
       cell: (e) => {
-        const href = isEarnings ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : e.chartHref;
+        const href = isEarnings && hasFiledEarnings(e.symbol) ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : e.chartHref;
         return (
           <a href={href} className="listSym" onClick={(ev) => ev.stopPropagation()}>
             <span className="dot" style={{ background: toneColour(displayTone ?? e.tone) }} aria-hidden="true" />
@@ -1129,7 +1132,7 @@ export default function PickerResultsGrid({
     return sets;
     // displayTone is a real dependency: the symbol cell renders the dot, so
     // without it the table keeps the tone it was first built with.
-  }, [isEarnings, displayTone, configHref]);
+  }, [isEarnings, displayTone, configHref, hasFiledEarnings]);
 
   const activeColumns = columnSets[activeTab];
 
@@ -1604,7 +1607,7 @@ export default function PickerResultsGrid({
                           earnings view, so that destination leads here rather
                           than disappearing with the link. */}
                       <div className="mRowActions">
-                        {isEarnings ? (
+                        {isEarnings && hasFiledEarnings(entry.symbol) ? (
                           <Link href={`${entry.stockHref}/earnings`} className="mRowAction">Earnings</Link>
                         ) : null}
                         <Link href={entry.chartHref} className="mRowAction">Chart</Link>

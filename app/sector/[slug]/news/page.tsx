@@ -38,6 +38,7 @@ import { withGenericFallback } from "@/lib/server/news/artTags";
 import { newsAttribution, hasPublisherExcerpt } from "@/lib/news-attribution";
 import NewsCardArt from "@/app/components/NewsCardArt";
 import SectorSpark from "@/app/sector/SectorSpark";
+import { filedEarningsGate } from "@/lib/server/filedEarnings";
 
 export const runtime = "nodejs";
 
@@ -878,7 +879,7 @@ function MostMentionedCard({
   );
 }
 
-function SectorEarningsCard({
+async function SectorEarningsCard({
   entries,
   sectorName,
   label,
@@ -887,6 +888,8 @@ function SectorEarningsCard({
   sectorName: string;
   label: string;
 }) {
+  // #552 COWORK #197: a row links to earnings only with a filed SEC set; otherwise the same row, unlinked.
+  const hasFiledEarnings = await filedEarningsGate();
   return (
     <section style={sidebarCardStyle}>
       <div style={sectionEyebrowStyle}>Next seven days</div>
@@ -896,7 +899,7 @@ function SectorEarningsCard({
       {entries.length ? (
         <>
           <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-            {entries.slice(0, 6).map((entry) => (
+            {entries.slice(0, 6).map((entry) => hasFiledEarnings(entry.symbol) ? (
               <Link
                 key={entry.symbol}
                 href={`/stock/${encodeURIComponent(entry.symbol)}/earnings`}
@@ -905,6 +908,11 @@ function SectorEarningsCard({
                 <span style={listRowSymbolStyle}>{entry.symbol}</span>
                 <span style={listRowValueStyle}>{formatDate(entry.date)}</span>
               </Link>
+            ) : (
+              <div key={entry.symbol} style={listRowStyle}>
+                <span style={listRowSymbolStyle}>{entry.symbol}</span>
+                <span style={listRowValueStyle}>{formatDate(entry.date)}</span>
+              </div>
             ))}
           </div>
           <div style={sourceFooterStyle}>
