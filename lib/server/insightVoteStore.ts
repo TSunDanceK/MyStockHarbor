@@ -16,19 +16,19 @@
 // production writes under VOTE_PREVIEW_PREFIX and never touches the real tallies.
 import { Redis } from "@upstash/redis";
 import { isProductionDeployment } from "./deployTarget";
-import { PAGE_READ_CACHE, PAGE_TIMEOUT_OPTS } from "./redisCacheMode";
-import { EMPTY_TALLY, isVoteChoice, type VoteChoice, type VoteTally } from "@/lib/insightVote";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { EMPTY_TALLY, isVoteChoice, type VoteTally } from "@/lib/insightVote";
 
 export const VOTE_PREFIX = "msh:insights:vote:v1:";
 export const VOTE_PREVIEW_PREFIX = "msh:insights:vote:preview:v1:";
 /** A window lasts about a quarter; a closed one is read for one more window, then left to expire. */
 export const VOTE_TTL_SECONDS = 400 * 24 * 60 * 60;
 
+// THE PAGE'S READ ONLY. The vote and the live tally use a no-store client in
+// ./insightVoteWrite.ts, which only the route imports, so no page can reach it.
 const configured = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 /** The page's read of a CLOSED window (stable until the next report): the prerender-safe cache mode. */
 const pageRedis = configured ? Redis.fromEnv(PAGE_READ_CACHE) : null;
-/** The route's vote and live tally: no-store, so a count is never served from a cache. */
-const routeRedis = configured ? Redis.fromEnv(PAGE_TIMEOUT_OPTS) : null;
 
 export const voteKey = (slug: string, windowId: string, production = isProductionDeployment()) =>
   `${production ? VOTE_PREFIX : VOTE_PREVIEW_PREFIX}${slug}:${windowId}`;
@@ -44,35 +44,13 @@ export function toTally(raw: unknown): VoteTally {
   return t;
 }
 
-/**
- * One window's tally; null when the store can't be read (never a made-up zero).
- * `live` is the route's read (no-store); the page reads a closed window through the cache.
- */
-export async function readVoteTally(slug: string, windowId: string, live = false): Promise<VoteTally | null> {
-  const redis = live ? routeRedis : pageRedis;
-  if (!redis) return null;
+/** A CLOSED window's tally, for the page; null when the store can't be read (never a made-up zero). */
+export async function readVoteTally(slug: string, windowId: string): Promise<VoteTally | null> {
+  if (!pageRedis) return null;
   try {
-    return toTally(await redis.hgetall(voteKey(slug, windowId)));
+    return toTally(await pageRedis.hgetall(voteKey(slug, windowId)));
   } catch (err) {
     console.error("[insight-vote] read failed", slug, windowId, err);
-    return null;
-  }
-}
-
-/** Count one vote and return the window's tally after it; null when the store can't be written. */
-export async function castVote(slug: string, windowId: string, choice: VoteChoice): Promise<VoteTally | null> {
-  const redis = routeRedis;
-  if (!redis) return null;
-  const key = voteKey(slug, windowId);
-  try {
-    const p = redis.pipeline();
-    p.hincrby(key, choice, 1);
-    p.expire(key, VOTE_TTL_SECONDS);
-    p.hgetall(key);
-    const out = (await p.exec()) as unknown[];
-    return toTally(out[2]);
-  } catch (err) {
-    console.error("[insight-vote] write failed", slug, windowId, err);
     return null;
   }
 }

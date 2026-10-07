@@ -22,7 +22,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import { stripComments } from "./lib/source-code.mjs";
 
-const VOTE = "lib/insightVote.ts", STORE = "lib/server/insightVoteStore.ts", ROUTE = "app/api/insights/vote/route.ts";
+const VOTE = "lib/insightVote.ts", STORE = "lib/server/insightVoteWrite.ts", KEYS = "lib/server/insightVoteStore.ts", ROUTE = "app/api/insights/vote/route.ts";
 const CLIENT = "app/insights/[slug]/InsightVote.tsx", PAGE = "app/insights/[slug]/InsightPage.tsx", LOADER = "lib/server/insightPage.ts";
 const BOT = "instrumentation-client.ts";
 const read = (f) => fs.readFileSync(f, "utf8");
@@ -67,9 +67,10 @@ const RULES = {
     /const dates = await readReportDatesChecked\(sym\);/.test(route) && /const windowId = voteWindows\(announcedDates\(dates\.rec\), new Date\(\)\.toISOString\(\)\.slice\(0, 10\)\)\.current\.id;/.test(route) &&
     !/body\.window/.test(route) && /if \(prior\?\.window === windowId\) \{[\s\S]{0,200}status: 409/.test(route) &&
     /if \(!VOTE_SLUG_RE\.test\(slug\)\) return null;/.test(route),
-  "the store: previews write their own keys; only the three counters, one round trip": ({ store }) =>
-    /`\$\{production \? VOTE_PREFIX : VOTE_PREVIEW_PREFIX\}\$\{slug\}:\$\{windowId\}`/.test(store) && /production = isProductionDeployment\(\)/.test(store) &&
-    /VOTE_PREFIX = "msh:insights:vote:v1:"/.test(store) && /VOTE_PREVIEW_PREFIX = "msh:insights:vote:preview:v1:"/.test(store) &&
+  "the store: previews write their own keys; only the three counters, one round trip": ({ store, keys }) =>
+    /`\$\{production \? VOTE_PREFIX : VOTE_PREVIEW_PREFIX\}\$\{slug\}:\$\{windowId\}`/.test(keys) && /production = isProductionDeployment\(\)/.test(keys) &&
+    /VOTE_PREFIX = "msh:insights:vote:v1:"/.test(keys) && /VOTE_PREVIEW_PREFIX = "msh:insights:vote:preview:v1:"/.test(keys) &&
+    !/PAGE_TIMEOUT_OPTS/.test(keys) && !/\.(?:hincrby|pipeline)\(/.test(keys) &&
     /p\.hincrby\(key, choice, 1\);\s*p\.expire\(key, VOTE_TTL_SECONDS\);\s*p\.hgetall\(key\);/.test(store) &&
     (store.match(/\.(?:set|hset|hincrby|incr|lpush|sadd|zadd)\(/g) ?? []).length === 1,
   "the page: no tally at render, one report-dates read, the poll's fine print": ({ page, loader, client }) =>
@@ -91,14 +92,14 @@ const MUTANTS = [
   ["the route:", ROUTE, (s) => s.replace("if (prior?.window === windowId) {", "if (false) {")],
   ["the route:", ROUTE, (s) => s.replace("const windowId = voteWindows(", "const windowId = String(body.window) || voteWindows(")],
   ["the route:", BOT, (s) => s.replace('    { path: "/api/insights/vote", method: "POST" },\n', "")],
-  ["the store:", STORE, (s) => s.replace("`${production ? VOTE_PREFIX : VOTE_PREVIEW_PREFIX}${slug}:${windowId}`", "`${VOTE_PREFIX}${slug}:${windowId}`")],
+  ["the store:", KEYS, (s) => s.replace("`${production ? VOTE_PREFIX : VOTE_PREVIEW_PREFIX}${slug}:${windowId}`", "`${VOTE_PREFIX}${slug}:${windowId}`")],
   ["the store:", STORE, (s) => s.replace("p.hgetall(key);", "p.hgetall(key);\n    p.hset(`${key}:ip`, { ip: 1 });")],
   ["the page:", PAGE, (s) => s.replace("<InsightVote slug={n.slug} window={d.vote.window} />", "<InsightVote slug={n.slug} window={d.vote.window} tally={d.vote.tally} />")],
   ["the page:", LOADER, (s) => s.replace("const outlook = outlookFromRead(sym, dates, today);", "const outlook = await getSymbolOutlook(sym, today);")],
 ];
 
 const srcs = (over = {}) => ({
-  route: code(ROUTE, over[ROUTE]), store: code(STORE, over[STORE]), page: code(PAGE, over[PAGE]),
+  route: code(ROUTE, over[ROUTE]), store: code(STORE, over[STORE]), keys: code(KEYS, over[KEYS]), page: code(PAGE, over[PAGE]),
   loader: code(LOADER, over[LOADER]), client: code(CLIENT, over[CLIENT]), bot: code(BOT, over[BOT]),
 });
 const run = (rule, m) => { try { return !!rule(m); } catch (e) { if (process.env.DEBUG) console.log(e); return false; } };

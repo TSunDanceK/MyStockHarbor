@@ -16,7 +16,8 @@ import { cookies } from "next/headers";
 import { isUnwantedBot } from "@/lib/botid-guard";
 import { readInsightSource } from "@/lib/server/insightPage";
 import { readReportDatesChecked } from "@/lib/server/secReportDatesStore";
-import { announcedDates, castVote, readVoteTally } from "@/lib/server/insightVoteStore";
+import { announcedDates } from "@/lib/server/insightVoteStore";
+import { castVote, readLiveTally } from "@/lib/server/insightVoteWrite";
 import {
   VOTE_COOKIE_MAX_AGE, VOTE_SLUG_RE, isVoteChoice, isVoteWindow, parseVoteCookie, voteCookieName, voteWindows,
 } from "@/lib/insightVote";
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const slug = url.searchParams.get("slug") ?? "", windowId = url.searchParams.get("window") ?? "";
   if (!symbolOf(slug) || !isVoteWindow(windowId)) return bad("unknown post or window");
-  const tally = await readVoteTally(slug, windowId, true);
+  const tally = await readLiveTally(slug, windowId);
   if (!tally) return NextResponse.json({ error: "Votes are unavailable just now." }, { status: 503 });
   return NextResponse.json({ window: windowId, tally }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
   const jar = await cookies();
   const prior = parseVoteCookie(jar.get(voteCookieName(slug))?.value);
   if (prior?.window === windowId) {
-    const tally = await readVoteTally(slug, windowId, true);
+    const tally = await readLiveTally(slug, windowId);
     return NextResponse.json({ window: windowId, tally, choice: prior.choice, already: true }, { status: 409 });
   }
 
