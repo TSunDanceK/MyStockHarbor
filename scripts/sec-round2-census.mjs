@@ -41,14 +41,16 @@ async function sec(url) {
   return { ok: true, body: await res.json() };
 }
 const manifest = await new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN }).get(MANIFEST_KEY);
+const ONLY = new Set((process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean).map((x) => x.toUpperCase()));
 const byCik = new Map();
 for (const [sym, e] of Object.entries(manifest?.symbols ?? {})) {
   if (!e?.cik) continue;
+  if (ONLY.size && !ONLY.has(sym.toUpperCase())) continue;
   const list = byCik.get(e.cik) ?? []; list.push(sym); byCik.set(e.cik, list);
 }
 console.log(`manifest CIKs: ${byCik.size}`);
 const STD = SEC_FIELD_INDEX.shortTermDebt, LTD = SEC_FIELD_INDEX.longTermDebt;
-const rev = [], slip = [], debt = [], errs = [];
+const rev = [], floor = [], slip = [], debt = [], errs = [];
 let n = 0, slipPeriods = 0;
 for (const [cik, syms] of byCik) {
   const label = syms.sort().join("/");
@@ -57,7 +59,8 @@ for (const [cik, syms] of byCik) {
   let x; try { x = extractCompanyFacts(syms[0], r.body); } catch (e) { errs.push(`${label}:threw`); continue; }
   n++;
   for (const note of x.notes ?? []) {
-    if (note.startsWith("revenue: Revenues")) rev.push(`${label} — ${note.slice(9)}`);
+    if (note.startsWith("revenue: Revenues") && note.includes("(floor)")) floor.push(`${label} — ${note.slice(9)}`);
+    else if (note.startsWith("revenue: Revenues")) rev.push(`${label} — ${note.slice(9)}`);
   }
   const s = (x.notes ?? []).filter((t) => / rescaled x/.test(t));
   if (s.length) {
@@ -72,6 +75,7 @@ for (const [cik, syms] of byCik) {
 }
 console.log(`\nread ${n} · errors ${errs.length}${errs.length ? `: ${errs.slice(0, 20).join(" ")}` : ""}`);
 console.log(`\nREV (ruling A) flips: ${rev.length}`); rev.forEach((l) => console.log("  " + l));
+console.log(`\nFLOOR kept the contract line: ${floor.length}`); floor.forEach((l) => console.log("  " + l));
 console.log(`\nSLIP rescaled: ${slip.length} filers, ${slipPeriods} periods`); slip.forEach((l) => console.log("  " + l));
 console.log(`\nDEBT short-only on the newest instant (Total withheld, Short-term shown): ${debt.length}`); debt.forEach((l) => console.log("  " + l));
 console.log(`\nStore commands: ${JSON.stringify(counts)}`);
