@@ -58,6 +58,7 @@ import {
   type FilerFacts,
   type ValuationRefusal,
 } from "./secValuation";
+import { epsGrowthView, type EpsGrowthView } from "../epsGrowthView";
 
 /** Diluted EPS must be up at least this much, percent, on the year-ago period. */
 export const SEC_GROWTH_MIN_EPS_YOY = 15;
@@ -193,6 +194,8 @@ export type SecGrowthCandidate = {
   epsGrowthPct: number;
   revenueGrowthPct: number;
   releaseDate: string | null;
+  /** The page's column and order (#553 COWORK #186 ruling 1; lib/epsGrowthView.ts). */
+  view: EpsGrowthView;
 };
 
 const lin = (v: number, min: number, max: number) => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
@@ -236,6 +239,7 @@ export function secStrongEarningsGrowth(
     epsGrowthPct,
     revenueGrowthPct,
     releaseDate: g.filed,
+    view: epsGrowthView(g, epsGrowthPct),
   };
 }
 

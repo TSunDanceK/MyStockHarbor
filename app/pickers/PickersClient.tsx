@@ -1,6 +1,7 @@
 "use client";
 
 import { getBuySignalCount } from "@/lib/signalCounts";
+import { qualifiesBuySignal, qualifiesSellSignal } from "@/lib/pickerScreenRules";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FILTER_DEFS, toneDotColor, type FilterKey } from "@/lib/pickerFilters";
@@ -629,7 +630,7 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
         symbol: String(record.symbol ?? "").trim().toUpperCase(),
         buyCount: getBuySignalCount(record),
       }))
-      .filter((item) => item.symbol && item.buyCount > 0)
+      .filter((item) => item.symbol && qualifiesBuySignal(item.buyCount))
       .sort((a, b) => b.buyCount !== a.buyCount ? b.buyCount - a.buyCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
       .map((item) => item.symbol);
@@ -638,8 +639,9 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
       .map((record) => ({
         symbol: String(record.symbol ?? "").trim().toUpperCase(),
         sellCount: getSellSignalCount(record),
+        qualifies: qualifiesSellSignal(record, getSellSignalCount(record)),
       }))
-      .filter((item) => item.symbol && item.sellCount > 0)
+      .filter((item) => item.symbol && item.qualifies)
       .sort((a, b) => b.sellCount !== a.sellCount ? b.sellCount - a.sellCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
       .map((item) => item.symbol);
@@ -744,7 +746,7 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
   const topBuySection = useMemo<PickerSection | null>(() => {
     const items = safeSignalRecords
       .map((r) => ({ symbol: r.symbol, buyCount: getBuySignalCount(r), dashboardHref: toChartHref(r.dashboardHref ?? "", r.symbol) }))
-      .filter((i) => i.buyCount > 0)
+      .filter((i) => qualifiesBuySignal(i.buyCount))
       .sort((a, b) => b.buyCount !== a.buyCount ? b.buyCount - a.buyCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
       .map((i) => ({ symbol: i.symbol, note: `${i.buyCount} buy signal${i.buyCount === 1 ? "" : "s"}`, tone: "green" as PickerTone, dashboardHref: i.dashboardHref }));
@@ -754,8 +756,8 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
 
   const topSellSection = useMemo<PickerSection | null>(() => {
     const items = safeSignalRecords
-      .map((r) => ({ symbol: r.symbol, sellCount: getSellSignalCount(r), dashboardHref: toChartHref(r.dashboardHref ?? "", r.symbol) }))
-      .filter((i) => i.sellCount > 0)
+      .map((r) => ({ symbol: r.symbol, sellCount: getSellSignalCount(r), qualifies: qualifiesSellSignal(r, getSellSignalCount(r)), dashboardHref: toChartHref(r.dashboardHref ?? "", r.symbol) }))
+      .filter((i) => i.qualifies)
       .sort((a, b) => b.sellCount !== a.sellCount ? b.sellCount - a.sellCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
       .map((i) => ({ symbol: i.symbol, note: `${i.sellCount} sell signal${i.sellCount === 1 ? "" : "s"}`, tone: "red" as PickerTone, dashboardHref: i.dashboardHref }));

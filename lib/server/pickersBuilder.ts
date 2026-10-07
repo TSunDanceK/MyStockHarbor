@@ -51,6 +51,8 @@ import { isPriceExcluded } from "../priceExcluded.mjs";
 import { POSITIVE_LAST_EARNINGS_ENABLED } from "../positiveLastEarnings";
 import { moneyIsUsd, pickersFundamentalsSource, readSecPickerRows, type SecPickerRow } from "./pickersSecFundamentals";
 import { SEC_GROWTH_COPY, secStrongEarningsGrowth } from "./pickersSecEarningsGrowth";
+import { trueRangeSpike } from "../pickerScreenRules";
+import { compareEpsGrowth, type EpsGrowthView } from "../epsGrowthView";
 import {
   readPickerChartsBulk,
   writePickerChartsBulk,
@@ -141,6 +143,8 @@ type PickerItem = {
   epsGrowthPct?: number | null;
   revenueGrowthPct?: number | null;
   releaseDate?: string | null;
+  /** The Earnings Growth page's column and order (#553 COWORK #186 ruling 1). */
+  epsGrowth?: EpsGrowthView;
   /**
    * Trend Helper (Slow) for the drawn window only, joined by date in
    * PickerResultPage. NOT the enriched chartPoints array: those would duplicate
@@ -618,6 +622,15 @@ function avg(values: number[]) {
 function pctChange(from: number, to: number) {
   if (!Number.isFinite(from) || !Number.isFinite(to) || from === 0) return 0;
   return ((to - from) / from) * 100;
+}
+
+/** The weekly trend-flip cards' candle count (#553 COWORK #186 ruling 6). */
+const WEEKLY_FLIP_CANDLES = 64;
+
+/** A candle with nothing but its date and OHLC, rounded as buildPickerChartPoints rounds. */
+function slimCandle(p: { date: string; open?: number; high?: number; low?: number; close: number }): PickerChartPoint {
+  const r = (v: number | undefined) => (typeof v === "number" && Number.isFinite(v) ? Number(v.toFixed(2)) : undefined);
+  return { date: p.date.slice(0, 10), open: r(p.open), high: r(p.high), low: r(p.low), close: Number(p.close.toFixed(2)) };
 }
 
 function buildPickerChartPoints(points: Point[], bars = 72): PickerChartPoint[] {
@@ -1760,6 +1773,8 @@ function atr(points: Point[], period = 14): (number | null)[] {
 
 type AggregatedPoint = {
   date: string;
+  /** The period's first open (#553 COWORK #186 ruling 6: the weekly flip candles). */
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -1803,6 +1818,7 @@ function aggregatePoints(points: Point[], interval: "w" | "m"): AggregatedPoint[
       currentKey = key;
       current = {
         date: point.date,
+        open: point.open,
         close: point.close,
         high: point.high,
         low: point.low,
@@ -2775,6 +2791,10 @@ function computeAthPullback(points: Point[]): AthPullbackCandidate | null {
 
   const drawdownPct = ((allTimeHigh - lastClose) / allTimeHigh) * 100;
   if (drawdownPct < 20) return null;
+  // AND ABOVE MA200 (#553 COWORK #186 ruling 5): a pullback in an uptrend, not
+  // a stock in a downtrend that also happens to be off its high.
+  const ma200Gate = lastNum(movingAverage(closes, 200));
+  if (typeof ma200Gate !== "number" || !(lastClose > ma200Gate)) return null;
 
   const adv = averageDollarVolume(points, 20);
   const advScore = liquidityScore(points);
@@ -3058,6 +3078,12 @@ type TrendFlipResult = {
    * that already has a documented timeout cliff.
    */
   dailyTrend?: { dates: string[]; line: Array<number | null>; state: number[] };
+  /**
+   * The same over the CLOSED weekly series, aligned to it, when a weekly flip
+   * qualified (#553 COWORK #186 ruling 6): the weekly cards draw weekly candles
+   * with this line, so the colour change is the flip week.
+   */
+  weeklyTrend?: { dates: string[]; line: Array<number | null>; state: number[] };
 };
 
 // Bars 0, 1, 2, 3 inclusive -- "flipped on the latest bar, or in the three
@@ -3164,8 +3190,24 @@ function computeTrendFlips(pts: Point[], now = new Date()): TrendFlipResult {
       })()
     : undefined;
 
+  // THE WEEKLY LINE (#553 COWORK #186 ruling 6): one more HMA pass, only for a
+  // symbol whose weekly flip qualified, on the same closed weeks the flip was
+  // measured on.
+  const weeklyQualifies = qualifies(weeklyFlip, 1) || qualifies(weeklyFlip, -1);
+  const weeklyTrend = weeklyQualifies
+    ? (() => {
+        const series = computeTrendHelper(weekly.map((b) => b.close), trendLen, confirmBars);
+        return {
+          dates: weekly.map((b) => b.date.slice(0, 10)),
+          line: series.line,
+          state: series.state as number[],
+        };
+      })()
+    : undefined;
+
   return {
     dailyTrend,
+    weeklyTrend,
     trendFlipBullish: qualifies(dailyFlip, 1),
     trendFlipBearish: qualifies(dailyFlip, -1),
     trendFlipBullishWeekly: qualifies(weeklyFlip, 1),
@@ -3630,6 +3672,7 @@ async function buildPickersPayload(
               epsGrowthPct: strongEarningsGrowthCandidate.epsGrowthPct,
               revenueGrowthPct: strongEarningsGrowthCandidate.revenueGrowthPct,
               releaseDate: strongEarningsGrowthCandidate.releaseDate,
+              epsGrowth: earningsGrowthFromSec ? (strongEarningsGrowthCandidate as { view?: EpsGrowthView }).view : undefined,
             });
           }
 
@@ -3834,11 +3877,29 @@ async function buildPickersPayload(
           // enriched chartPoints array instead is what the first attempt did,
           // and takeTop discarded it: section chartPoints are stripped because
           // they duplicate signalRecords, so the line has to ride separately.
-          // The weekly sections get nothing: their flip is weekly and this line
-          // is daily, so it would contradict the date printed in the same row.
+          // The weekly sections never take this daily line: their flip is weekly,
+          // so it would contradict the date printed in the same row.
           const dailyTrendSeries = trendFlips.dailyTrend
             ? trendTailForPoints(chartPoints, trendFlips.dailyTrend)
             : undefined;
+          // THE WEEKLY CARDS (#553 COWORK #186 ruling 6): the last 64 CLOSED
+          // weekly candles (the week in progress is not drawn: the flip is
+          // measured on closed weeks only) with the weekly line over them, so
+          // the colour changes on the flip week. Slim points -- date and OHLC
+          // only -- because these ride in the payload (keepChartPoints).
+          const weeklyFlipPoints = trendFlips.weeklyTrend
+            ? (() => {
+                const closedWeeks = new Set(trendFlips.weeklyTrend.dates);
+                return aggregatePoints(pts, "w")
+                  .filter((p) => closedWeeks.has(p.date.slice(0, 10)))
+                  .slice(-WEEKLY_FLIP_CANDLES)
+                  .map((p) => slimCandle(p));
+              })()
+            : undefined;
+          const weeklyTrendSeries =
+            weeklyFlipPoints && trendFlips.weeklyTrend
+              ? trendTailForPoints(weeklyFlipPoints, trendFlips.weeklyTrend, WEEKLY_FLIP_CANDLES)
+              : undefined;
 
           // The four flip sections. RANKED BY RECENCY ALONE: `_score` is the
           // negated bar count and NOTHING else -- no liquidity term and, in
@@ -3878,8 +3939,8 @@ async function buildPickersPayload(
               : "";
             target.push({
               symbol,
-              chartPoints,
-              trendSeries: weekly ? undefined : dailyTrendSeries,
+              chartPoints: weekly && weeklyFlipPoints?.length ? weeklyFlipPoints : chartPoints,
+              trendSeries: weekly ? weeklyTrendSeries : dailyTrendSeries,
               tone: direction === "Bullish" ? "green" : "red",
               note: dateLabel
                 ? `${direction} Trend Helper flip • ${dateLabel} • ${age}`
@@ -4070,15 +4131,12 @@ async function buildPickersPayload(
           );
 
           const volSma20Arr = smaNullable(volumeArr, 20);
-          const atrSma20Arr = smaNullable(atrArr, 20);
 
           const lastClose = closes.length ? closes[closes.length - 1] : null;
           const lastMA50 = lastNum(ma50Arr);
           const lastMA200 = lastNum(ma200Arr);
           const lastVol = lastNum(volumeArr);
           const lastVolSma20 = lastNum(volSma20Arr);
-          const lastAtr = lastNum(atrArr);
-          const lastAtrSma20 = lastNum(atrSma20Arr);
 
           const oversold = !!oversoldCandidate;
           const overbought = !!overboughtCandidate;
@@ -4091,11 +4149,10 @@ async function buildPickersPayload(
             lastVolSma20 > 0 &&
             lastVol >= lastVolSma20 * 1.8;
 
-          const atrSpike =
-            typeof lastAtr === "number" &&
-            typeof lastAtrSma20 === "number" &&
-            lastAtrSma20 > 0 &&
-            lastAtr >= lastAtrSma20 * 1.5;
+          // ALTERNATIVE B (#553 COWORK #186 ruling 4): today's true range >= 2x
+          // the prior ATR(14). The old rule (ATR14 >= 1.5x its 20-day mean)
+          // flagged nothing on 45 of 60 sessions.
+          const atrSpike = trueRangeSpike(pts, atrArr);
 
           const aboveMA50 =
             typeof lastClose === "number" &&
@@ -4242,7 +4299,7 @@ async function buildPickersPayload(
     const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
     return sorted
       .slice(0, n)
-      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, supportResistanceZone, chartFocus, dominantIndicator, firedIndicators, trendSeries, _score, score }) => ({
+      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, supportResistanceZone, chartFocus, dominantIndicator, firedIndicators, trendSeries, epsGrowth, _score, score }) => ({
         symbol,
         note,
         tone,
@@ -4259,6 +4316,7 @@ async function buildPickersPayload(
         // these two lists is dropped with no error and no type complaint -- the
         // Trend Helper line shipped that way once and rendered nothing.
         trendSeries,
+        epsGrowth,
         score: typeof score === "number" ? score : typeof _score === "number" ? Math.round(_score) : undefined,
       }));
   };
@@ -4288,6 +4346,18 @@ async function buildPickersPayload(
   // in COMPLETION order, which is not deterministic. Pre-sorting by symbol
   // makes a tie resolve alphabetically and the same input produce the same
   // page twice running.
+  // THE EARNINGS GROWTH ORDER (#553 COWORK #186 ruling 1): EPS growth %,
+  // highest first, then the small-base group by $ change (lib/epsGrowthView).
+  // Written into _score as a rank so takeTop keeps it; `score` stays the
+  // rounded % the section has always shipped.
+  if (earningsGrowthFromSec) {
+    strongEarningsGrowth.sort(compareEpsGrowth);
+    strongEarningsGrowth.forEach((item, i) => {
+      item.score = typeof item.epsGrowthPct === "number" ? Math.round(item.epsGrowthPct) : undefined;
+      item._score = strongEarningsGrowth.length - i;
+    });
+  }
+
   for (const bucket of [
     trendFlipBullishDaily,
     trendFlipBearishDaily,
@@ -4339,7 +4409,10 @@ async function buildPickersPayload(
       description:
         "Stocks trading close to their Daily MA200, with ranking favouring constructive MA200 behaviour over messy long-term weakness.",
       source: dailyMa200Proximity,
-      take: 20,
+      // EVERY CANDIDATE (#553 COWORK #184 item 4): the page names this order
+      // ("Ranked by 200-day setup score"), so every row it lists must be in it,
+      // not the first 20 and then the conditions-met score.
+      take: Math.max(20, dailyMa200Proximity.length),
     }),
     buildSection({
       title: "Weekly MA200 Proximity",
@@ -4386,6 +4459,9 @@ async function buildPickersPayload(
         "Stocks whose Trend Helper (Slow) state has confirmed a flip to bullish within the last four closed weeks, most recent first.",
       source: trendFlipBullishWeekly,
       take: Math.max(40, trendFlipBullishWeekly.length),
+      // The weekly candles ride with the item (#553 COWORK #186 ruling 6):
+      // signalRecords carries daily points only.
+      keepChartPoints: true,
     }),
     buildSection({
       title: "Bearish Trend Flip Stocks (Weekly)",
@@ -4393,6 +4469,9 @@ async function buildPickersPayload(
         "Stocks whose Trend Helper (Slow) state has confirmed a flip to bearish within the last four closed weeks, most recent first.",
       source: trendFlipBearishWeekly,
       take: Math.max(40, trendFlipBearishWeekly.length),
+      // The weekly candles ride with the item (#553 COWORK #186 ruling 6):
+      // signalRecords carries daily points only.
+      keepChartPoints: true,
     }),
     buildSection({
       title: "Macro Support and Resistance Stocks",

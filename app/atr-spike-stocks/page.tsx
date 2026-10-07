@@ -29,11 +29,11 @@ export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "ATR Spike Stocks | MyStockHarbor",
-  description: "Stocks currently showing an ATR spike — a jump in average true range signalling a sharp rise in volatility.",
+  description: "Stocks whose latest daily range was at least twice their 14-day average true range: a sharp jump in volatility.",
   alternates: { canonical: "https://www.mystockharbor.com/atr-spike-stocks" },
   openGraph: {
     title: "ATR Spike Stocks | MyStockHarbor",
-    description: "Stocks currently showing an ATR spike — a jump in average true range signalling a sharp rise in volatility.",
+    description: "Stocks whose latest daily range was at least twice their 14-day average true range: a sharp jump in volatility.",
     url: "https://www.mystockharbor.com/atr-spike-stocks",
     siteName: "MyStockHarbor",
     type: "website",
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "ATR Spike Stocks | MyStockHarbor",
-    description: "Stocks currently showing an ATR spike — a jump in average true range signalling a sharp rise in volatility.",
+    description: "Stocks whose latest daily range was at least twice their 14-day average true range: a sharp jump in volatility.",
   },
 };
 
@@ -49,9 +49,10 @@ const config: PickerResultConfig = {
   href: "/atr-spike-stocks",
   eyebrow: "ATR SPIKE SCREENER",
   title: "ATR Spike Stocks",
-  description: "Stocks currently showing an ATR spike — a jump in average true range signalling a sharp rise in volatility.",
+  description: "Stocks whose latest daily range was at least twice their 14-day average true range: a sharp jump in volatility.",
   explainerTitle: "How to use ATR spikes",
-  explainerBody: "A rising ATR means bigger daily ranges and more volatility — useful for spotting names on the move and for sizing positions and stops. Higher volatility cuts both ways, so manage risk accordingly.",
+  // Alternative B (#553 COWORK #186 ruling 4): the copy says what the rule does.
+  explainerBody: "A stock is listed when its latest true range (high to low, including any gap from the prior close) is at least twice its 14-day ATR as of the session before. A rising ATR means bigger daily ranges and more volatility — useful for spotting names on the move and for sizing positions and stops. Higher volatility cuts both ways, so manage risk accordingly.",
   emptyText: "No stocks are currently flagged with an ATR spike in the live feed.",
   tone: "orange",
   kind: "preset",
