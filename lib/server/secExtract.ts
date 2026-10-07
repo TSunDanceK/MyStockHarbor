@@ -30,6 +30,9 @@ import {
   instantFields,
   revenueLineIncompleteValues,
   REVENUE_FALLBACK_CHAIN,
+  REVENUE_TOTAL_OVER_CONTRACT,
+  SHARE_UNIT_SLIP_FACTORS,
+  SHARE_UNIT_SLIP_TOLERANCE,
   secFieldsHash,
   SELLING_TAGS,
   SUMMED_SGA_TAG,
@@ -1093,6 +1096,31 @@ type ExtractOpts = {
 };
 
 /**
+ * THE UNIT-SLIP FACTOR, OR NULL (#552 COWORK #192): the power of ten that
+ * makes net income ÷ (EPS × shares) ~1, when it is within
+ * SHARE_UNIT_SLIP_TOLERANCE of one of SHARE_UNIT_SLIP_FACTORS. Anything else
+ * -- an ADS ratio, a preferred-dividend gap, a mismatched period -- is null.
+ */
+export function unitSlipFactor(netIncome: number, eps: number, shares: number): number | null {
+  if (!Number.isFinite(netIncome) || !Number.isFinite(eps) || !Number.isFinite(shares) || eps === 0 || shares <= 0) return null;
+  const u = netIncome / (eps * shares);
+  for (const f of SHARE_UNIT_SLIP_FACTORS) if (Math.abs(u / f - 1) <= SHARE_UNIT_SLIP_TOLERANCE) return f;
+  return null;
+}
+
+/** The contract-revenue tag the total-over-contract rule compares against. */
+const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
+
+/**
+ * DOES THE FILER TAG EXCISE AT ALL (#552 COWORK #192 ruling A)? Any us-gaap
+ * concept naming excise -- the filers whose `Revenues` is gross of excise or
+ * carries other income, which the total-over-contract rule must not reach.
+ */
+export function filerTagsExcise(facts: CompanyFacts): boolean {
+  return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k));
+}
+
+/**
  * THE EXTRACTION, WITH rankPerPeriod FILL-BACK (#552 COWORK #58, JD).
  *
  * A rankPerPeriod field (a total ahead of its component) resolves each period
@@ -1367,6 +1395,36 @@ function extractCompanyFactsWith(
         notes.push(`revenue ${end}: tagged line ${rev} is below ${op != null ? "operating" : "pre-tax"} income ${bar}; ${fb.tag} ${fb.val} used`);
       }
     }
+
+    // ── THE FILER'S TOTAL OVER ITS CONTRACT LINE (#552 COWORK #192 ruling A) ──
+    // AFRM's contract revenue ($1.11B FY2025) is one line of a $3.22B total,
+    // complete by the predicate above (no income exceeds it), so the page
+    // showed the sub-line. Where the filer's NEWEST period carries both and
+    // `Revenues` is more than REVENUE_TOTAL_OVER_CONTRACT larger, `Revenues`
+    // becomes the filer's ONE revenue concept: every period takes it, and a
+    // period without it reads Not reported rather than mixing measures.
+    // EXCISE-TAGGED FILERS ARE EXCLUDED: their `Revenues` carries other income
+    // or derivative gains (COP, CEG, MELI in the #198 census). This knowingly
+    // supersedes #535 COWORK #12 ruling A for this case only.
+    if (!filerTagsExcise(facts)) {
+      const newest = [...quarterCells.keys(), ...yearCells.keys()].sort().at(-1);
+      const cellsAt = (end: string | undefined) => (end ? quarterCells.get(end) ?? yearCells.get(end) : undefined);
+      const fbAt = (end: string | undefined) => (end ? fbQuarter.get(end) ?? fbYear.get(end) : undefined);
+      const rev = cellsAt(newest)?.get("revenue");
+      const fb = fbAt(newest)?.get("revenue");
+      if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
+          fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT) {
+        let moved = 0, refused = 0;
+        for (const [cells, fbCells] of [[quarterCells, fbQuarter], [yearCells, fbYear]] as const) {
+          for (const [end, m] of cells) {
+            const total = fbCells.get(end)?.get("revenue");
+            if (total && total.tag === "Revenues" && total.val != null) { m.set("revenue", total); moved++; }
+            else if (m.has("revenue")) { m.delete("revenue"); refused++; }
+          }
+        }
+        notes.push(`revenue: Revenues ${fb.val} exceeds the contract line ${rev.val} by more than ${Math.round((REVENUE_TOTAL_OVER_CONTRACT - 1) * 100)}% on ${newest}; Revenues used for ${moved} period(s), ${refused} without it left unreported`);
+      }
+    }
   }
 
   // ── durations that do NOT add: as filed, or not at all ─────────────────────
@@ -1392,6 +1450,30 @@ function extractCompanyFactsWith(
         val: best.row.val!, tag: best.tag, ns: best.ns, unit: best.unit, derived: "as-filed",
         covers: [best.row.start, best.row.end],
       });
+    }
+  }
+
+  // ── SHARE COUNTS ON A UNIT SLIP (#552 COWORK #192; CODE-A #199 §1) ───────
+  // 45 filers store some periods' weighted shares in thousands or millions
+  // (MCD, NMR, BBVA, NVMI …): net income ÷ (EPS × shares) comes out ~1,000 or
+  // ~1/1,000,000 instead of ~1. The filer's OWN three figures for the period
+  // prove the factor, so the count is rescaled only where that arithmetic
+  // lands within SHARE_UNIT_SLIP_TOLERANCE of a power in SHARE_UNIT_SLIP_FACTORS
+  // -- against an AS-FILED EPS only, never one this file computed. A period
+  // whose proof fails is left exactly as filed. Runs BEFORE the ratio
+  // fallback, so no EPS is ever computed from a slipped count.
+  for (const cells of [quarterCells, yearCells]) {
+    for (const [end, m] of cells) {
+      const ni = m.get("netIncome")?.val ?? null;
+      if (ni === null || ni === 0) continue;
+      for (const [shareKey, epsKey] of [["sharesBasic", "epsBasic"], ["sharesDiluted", "epsDiluted"]] as const) {
+        const sh = m.get(shareKey), eps = m.get(epsKey);
+        if (!sh || sh.val == null || sh.val <= 0 || !eps || eps.val == null || eps.val === 0 || eps.derived !== "as-filed") continue;
+        const f = unitSlipFactor(ni, eps.val, sh.val);
+        if (f === null) continue;
+        m.set(shareKey, { ...sh, val: sh.val * f });
+        notes.push(`${shareKey} ${end}: ${sh.val} rescaled x${f} (net income ${ni} / (EPS ${eps.val} x shares) = ${(ni / (eps.val * sh.val)).toPrecision(4)})`);
+      }
     }
   }
 
