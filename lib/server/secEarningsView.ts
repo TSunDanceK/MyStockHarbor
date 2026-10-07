@@ -11,6 +11,7 @@ import {
 import { storedInReportingCurrency } from "./secCurrency";
 import { SEC_FIELDS, revenueLineIncompleteValues, type Statement } from "./secFields";
 import type { AnnualForm } from "./annualOnly";
+import { splitAdjusted, type SplitAdjustment } from "./secSplitAdjust";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 
@@ -819,6 +820,12 @@ export type SecEarningsView = {
     net: number | null;
     /** TRUE when revenueLineIncomplete: the three margins are refused, by name. */
     marginsRefused: boolean;
+    /**
+     * The operating margin against the same period a year earlier, in
+     * percentage points. Null when either margin is absent or refused, or no
+     * year-earlier period is on file. Optional: hand-built views omit it.
+     */
+    operatingYoYpp?: number | null;
   }[];
   /**
    * THE ANCHOR'S OWN KIND: "quarter" normally, "year" for a filer that
@@ -847,6 +854,12 @@ export type SecEarningsView = {
    * from this; cards that describe THE LATEST PERIOD take them from `basis`.
    */
   tableBasis: PeriodBasis;
+  /**
+   * The proven splits this view's per-share figures were moved through, and
+   * the periods moved (#552 COWORK #187 §1). Null when nothing moved. Optional:
+   * hand-built views omit it.
+   */
+  splitAdjustment?: SplitAdjustment | null;
   /**
    * Up to five fiscal years, oldest first. Rendered on EVERY stock as its own
    * card, and it is the only growth table an annual-only filer has.
@@ -1212,6 +1225,9 @@ export function buildSecEarningsView(
     cik?: string | null;
   } = {},
 ): SecEarningsView | null {
+  // PER-SHARE FIGURES ON TODAY'S SHARE BASIS (#552 COWORK #187 §1): a split the
+  // filer proved moves the old-basis periods' EPS and DPS. See secSplitAdjust.
+  set = splitAdjusted(set);
   const annualFiler = opts.annualForm ?? null;
   // ── A SET THAT IS NOT IN DOLLARS DOES NOT RENDER ─────────────────────────
   //
@@ -1388,7 +1404,7 @@ export function buildSecEarningsView(
   const rows = measured.filter((r) => hasSomething(r) && hasComparator(r)).slice(0, renderLimit);
   const shown = rows.map((r) => r.p);
 
-  const margins = rows.map(({ p, gross, operating, net, marginsRefused }, i) => ({
+  const margins = rows.map(({ p, prior, gross, operating, net, marginsRefused }, i) => ({
     label: periodLabel(p),
     // TRUE when the row OLDER than this one is not the immediately preceding
     // fiscal quarter. `shown` is newest-first, so the older neighbour is i + 1.
@@ -1402,6 +1418,13 @@ export function buildSecEarningsView(
     // filing is absent from the store or present with nothing in it.
     gapAfter: annualOnly ? false : shown[i + 1] ? !isConsecutive(p, shown[i + 1]) : false,
     gross, operating, net, marginsRefused,
+    // THE MARGIN'S OWN YEAR-ON-YEAR MOVE, in points (#552 COWORK #187 §2): the
+    // trend card counts the periods that actually widened or narrowed, so it
+    // needs each period against its year-earlier one, not the window's median.
+    operatingYoYpp: (() => {
+      const before = prior ? marginsOf(prior).operating : null;
+      return operating !== null && before !== null ? operating - before : null;
+    })(),
   })).reverse();
 
   const growth = rows.map(({ p, prior, revenueYoY, epsYoY }) => ({
@@ -1490,9 +1513,12 @@ export function buildSecEarningsView(
       end: p.e,
       comparedWith: prior ? periodLabel(prior) : null,
       revenue: view(p, "revenue", "Revenue"),
-      revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
+      // IN THE REPORTING CURRENCY, like the quarterly rows (#552 COWORK #187
+      // §2, SONY: this table read -2.6% on USD-converted years while the trend
+      // card read -3.7% in yen -- the gap was the currency move). See `home`.
+      revenueYoY: yoy(valueOf(home(p), "revenue"), valueOf(home(prior), "revenue")),
       epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
-      epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
+      epsYoY: yoy(valueOf(home(p), "epsDiluted"), valueOf(home(prior), "epsDiluted")),
       ...marginsOf(p),
       netIncome: view(p, "netIncome", "Net income"),
     };
@@ -1835,6 +1861,7 @@ export function buildSecEarningsView(
     ttmNetIncome: ttm(q, "netIncome"),
     coverShares: set.cover,
     asOf: set.at,
+    splitAdjustment: (set as { spa?: SplitAdjustment }).spa ?? null,
   };
 }
 

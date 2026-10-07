@@ -7,12 +7,16 @@
 //   - tiles are sized by tracked cap only when every sector's caps cover at
 //     least 80% of its constituents, otherwise by companies tracked;
 //   - the treemap tiles the box: areas in proportion, inside, no overlap;
-//   - a negative sector is red, a positive green, a missing one slate; the
-//     shade is capped at the second-largest move; white text stays readable;
+//   - a negative sector is red, a positive green, a missing one or one within
+//     +/-0.5% slate; the shade is capped at the second-largest move and stays
+//     MUTED (saturation <= 45%, lightness <= 25%, #553 COWORK #180); white text
+//     stays readable;
 //   - every tile is a real link with its full text (name, return, N companies)
 //     to that sector's page; the server HTML carries the default period.
 // Source: the page passes the cards' rows, the credit and the sizing words;
-// the treemap applies only above 640 px and the phone grid is 2 columns.
+// the treemap applies only above 640 px, in a 4:1 box (about half the old
+// height, COWORK #180), and the phone grid is 3 compact columns; a small tile
+// drops its count before its name shortens, and never its %.
 // Every rule has a planted mutant.
 //
 //   node scripts/check-sector-heatmap.mjs
@@ -84,6 +88,10 @@ function libRules(L) {
   want("negative is red, positive green, missing slate", L.tileShade(-2, 4).tone === "down" && /hsl\(0,/.test(L.tileShade(-2, 4).background) && L.tileShade(2, 4).tone === "up" && L.tileShade(null, 4).tone === "flat");
   const light = (s) => Number(/(\d+(?:\.\d+)?)%\)$/.exec(s.background)[1]);
   want("intensity follows the move, capped at the scale", light(L.tileShade(1, 4)) < light(L.tileShade(3, 4)) && light(L.tileShade(20, 4)) === light(L.tileShade(4, 4)) && light(L.tileShade(20, 4)) <= 30);
+  const sat = (s) => Number(/,\s*(\d+(?:\.\d+)?)%,/.exec(s.background)[1]);
+  want("muted: saturation <= 45% and lightness <= 25% even at full scale (COWORK #180)", sat(L.tileShade(20, 4)) <= 45 && sat(L.tileShade(-20, 4)) <= 45 && light(L.tileShade(20, 4)) <= 25 && light(L.tileShade(-20, 4)) <= 25);
+  want("a move within +/-0.5% reads flat (slate), 0.5% and over is coloured", L.tileShade(0.4, 4).tone === "flat" && L.tileShade(-0.49, 4).tone === "flat" && L.tileShade(0.5, 4).tone === "up" && L.tileShade(-0.5, 4).tone === "down");
+  want("short names for the long ones; the rest keep their own", L.heatShortName("Communication Services") === "Comm. Services" && L.heatShortName("Energy") === "Energy");
   return fails;
 }
 
@@ -100,6 +108,7 @@ async function renderRules(L, Map) {
   want("one real link per sector", links.length === 11);
   want("each tile links to its sector page", tiles.every((t) => html.includes(`href="${t.href}"`)));
   want("each tile carries its full text: name, return, N companies", tiles.every((t) => links.some((m) => m[1].includes(`>${t.name.replace("&", "&amp;")}<`) && m[1].includes(`>${t.companies} companies<`))));
+  want("a long name carries its short form beside the full one (the full stays in the link)", /<span class="heatNameFull">Communication Services<\/span><span class="heatNameShort" aria-hidden="true">Comm\. Services<\/span>/.test(html));
   want("the server HTML shows the default period (year to date)", links.some((m) => m[1].includes(">-12.40%<")) && !links.some((m) => m[1].includes(">-4.50%<")));
   want("a sector with no figure reads as a dash, not 0", links.some((m) => /Energy[\s\S]*>—</.test(m[1])));
   want("the negative sector is shaded red", /class="heatTile down"[^>]*>[\s\S]*?Consumer Discretionary/.test(html));
@@ -114,11 +123,12 @@ function sourceRules(mapRaw, pageRaw) {
   const m = stripComments(mapRaw, { file: MAP });
   const p = stripComments(pageRaw, { file: PAGE });
   want("the treemap applies only above 640 px", /@media \(min-width: 641px\) \{[\s\S]*?\.heatTile \{\s*position: absolute;/.test(m));
-  want("phones get a 2-column grid", /\.heatBox \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/.test(m));
+  want("phones get a compact 3-column grid (COWORK #180: no taller than a screen-third)", /\.heatBox \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/.test(m) && /\.heatTile \{[^}]*min-height: 52px;/.test(m));
+  want("a small tile drops its count first, then shortens its name; the % is never hidden", /@container \(max-height: 74px\) \{ \.heatCount \{ display: none; \} \}/.test(m) && /@container \(max-width: 150px\) \{[^}]*\.heatCount \{ display: none; \}[\s\S]*?\.heatNameShort \{ display: inline; \}/.test(m) && !/\.heatValue \{[^}]*display: none/.test(m));
   want("names never break mid-word", /\.heatName \{[^}]*word-break: normal;[^}]*hyphens: none;/.test(m));
   want("the toggle swaps the shown figure only", /const value = tile\[period\];/.test(m) && /useState<HeatPeriod>\(HEAT_DEFAULT_PERIOD\)/.test(m));
   want("the page feeds the cards' own rows (no recomputing)", /day: row\?\.day \?\? null,\s*month: row\?\.month \?\? null,\s*ytd: row\?\.ytd \?\? null,\s*capSum: row\?\.capSum/.test(p));
-  want("the treemap is laid out in the box's own 2:1 shape", /squarify\(tiles\.map\(\(t\) => t\.weight\), 200, 100\)\.map\(\(r\) => \(\{ x: r\.x \/ 2, y: r\.y, w: r\.w \/ 2, h: r\.h \}\)\)/.test(p) && /aspect-ratio: 2 \/ 1;/.test(m));
+  want("the treemap is laid out in the box's own 4:1 shape (about half the old height)", /squarify\(tiles\.map\(\(t\) => t\.weight\), 400, 100\)\.map\(\(r\) => \(\{ x: r\.x \/ 4, y: r\.y, w: r\.w \/ 4, h: r\.h \}\)\)/.test(p) && /aspect-ratio: 4 \/ 1;/.test(m));
   want("the page passes the Tiingo credit and the sizing words", /credit=\{\{ text: TIINGO_CREDIT, href: TIINGO_URL \}\}/.test(p) && /sizing\.basis === "cap"/.test(p));
   return fails;
 }
@@ -134,14 +144,17 @@ try {
   check("11 real links with full text; YTD by default; red for a fall; fine print and credit", r.length === 0, r.join("; "));
   console.log("\n3. Source");
   const s = sourceRules(mapSrc, pageSrc);
-  check("treemap above 640 px, 2-column grid below; the cards' rows; the credit", s.length === 0, s.join("; "));
+  check("treemap above 640 px in a 4:1 box, a 3-column grid below; small tiles; the cards' rows; the credit", s.length === 0, s.join("; "));
 
   console.log("\n4. Planted mutants");
   const LIB_M = [
     ["the default period back to last close", 'export const HEAT_DEFAULT_PERIOD: HeatPeriod = "ytd";', 'export const HEAT_DEFAULT_PERIOD: HeatPeriod = "day";'],
     ["cap sizing without the coverage test", 'const basis = minCoverage != null && minCoverage >= HEAT_CAP_COVERAGE_MIN ? "cap" : "companies";', 'const basis = "cap";'],
     ["the scale uncapped (largest move)", "return Math.max(abs[1] ?? abs[0] ?? 0, 0.5);", "return Math.max(abs[0] ?? 0, 0.5);"],
-    ["falls shaded green", '    : { background: `hsl(0, 60%, ${lightness}%)`, tone: "down" };', '    : { background: `hsl(142, 55%, ${lightness}%)`, tone: "down" };'],
+    ["falls shaded green", '    : { background: `hsl(0, ${saturation}%, ${lightness}%)`, tone: "down" };', '    : { background: `hsl(142, ${saturation}%, ${lightness}%)`, tone: "down" };'],
+    ["loud again (full saturation)", "const saturation = (18 + 24 * t).toFixed(1);", "const saturation = (55 + 0 * t).toFixed(1);"],
+    ["the flat band dropped", "Math.abs(value) < HEAT_FLAT_BAND", "Math.abs(value) < 0.005"],
+    ["no short names", "return SHORT_NAMES[name] ?? name;", "return name;"],
     ["the 5% floor dropped", "weight: Math.max(raw[i], floor)", "weight: raw[i]"],
     ["a strip layout (no squarifying)", "while (j < areas.length && worst([...row, areas[j]], side) <= worst(row, side)) {", "while (false) {"],
   ];
@@ -167,6 +180,9 @@ try {
   const SRC_M = [
     ["the treemap at every width (no phone grid)", "@media (min-width: 641px) {", "@media (min-width: 0px) {"],
     ["names allowed to break mid-word", "word-break: normal; hyphens: none;", "word-break: break-all; hyphens: auto;"],
+    ["back to the 2-column phone grid", "grid-template-columns: repeat(3, minmax(0, 1fr))", "grid-template-columns: repeat(2, minmax(0, 1fr))"],
+    ["the count kept in a short tile", "@container (max-height: 74px) { .heatCount { display: none; } }", ""],
+    ["back to the tall 2:1 box", "aspect-ratio: 4 / 1;", "aspect-ratio: 2 / 1;"],
   ];
   for (const [label, from, to] of SRC_M) {
     if (!mapSrc.includes(from)) { check(`mutant "${label}" applies`, false, "the anchor matched nothing"); continue; }

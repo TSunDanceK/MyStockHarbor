@@ -148,19 +148,46 @@ export function heatScale(values: Array<number | null>): number {
 }
 
 /**
- * A tile's fill: hue by sign (green up, red down, slate for none or flat),
- * lightness 16% to 30% by |move| / scale, capped at 1. 30% lightness keeps
- * white text above 4.5:1 on both hues.
+ * Moves inside this band (percentage points, either way) read as flat: slate,
+ * not a faint green or red (#553 COWORK #180).
+ */
+export const HEAT_FLAT_BAND = 0.5;
+
+/**
+ * A tile's fill: hue by sign (green up, red down, slate for none or inside
+ * HEAT_FLAT_BAND), a MUTED tint that deepens with |move| / scale, capped at 1
+ * (#553 COWORK #180: the old 55-60% saturation at up to 30% lightness read as
+ * loud full-tile colour). Saturation 18-42%, lightness 17-24%: white text stays
+ * well above 4.5:1 on every shade.
+ *
+ * HIDDEN, NOT DELETED (2026-10-06, COWORK #180). Was: lightness 16% to 30%,
+ * hsl(142, 55%, L) up and hsl(0, 60%, L) down, flat only at |move| < 0.005.
  */
 export function tileShade(value: number | null, scale: number): { background: string; tone: "up" | "down" | "flat" } {
-  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) < 0.005) {
+  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) < HEAT_FLAT_BAND) {
     return { background: "hsl(215, 20%, 18%)", tone: "flat" };
   }
   const t = Math.min(Math.abs(value) / scale, 1);
-  const lightness = (16 + 14 * t).toFixed(1);
+  const saturation = (18 + 24 * t).toFixed(1);
+  const lightness = (17 + 7 * t).toFixed(1);
   return value > 0
-    ? { background: `hsl(142, 55%, ${lightness}%)`, tone: "up" }
-    : { background: `hsl(0, 60%, ${lightness}%)`, tone: "down" };
+    ? { background: `hsl(142, ${saturation}%, ${lightness}%)`, tone: "up" }
+    : { background: `hsl(0, ${saturation}%, ${lightness}%)`, tone: "down" };
+}
+
+/**
+ * A small tile's name (#553 COWORK #180): the count goes first, then the name
+ * shortens; the % never does. Names without a short form keep their own.
+ */
+const SHORT_NAMES: Record<string, string> = {
+  "Communication Services": "Comm. Services",
+  "Financial Services": "Fin. Services",
+  "Consumer Cyclical": "Cons. Cyclical",
+  "Consumer Defensive": "Cons. Defensive",
+  "Basic Materials": "Materials",
+};
+export function heatShortName(name: string): string {
+  return SHORT_NAMES[name] ?? name;
 }
 
 export function formatHeatPct(value: number | null): string {

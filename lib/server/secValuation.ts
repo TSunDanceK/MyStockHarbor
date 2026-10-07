@@ -42,6 +42,7 @@ import { balanceSheetInstant, valueOf } from "./secFactCodec";
 import { isConsecutive, revenueLineIncomplete } from "./secEarningsView";
 import { DEADLINE_FALLBACK } from "./secReportDates";
 import { annualOnlyForm } from "./annualOnly";
+import { splitAdjusted } from "./secSplitAdjust";
 import { derivedParentEquity, enterpriseValueOf, readableDate, type Estimate } from "./secEstimates";
 
 /** Why a numerator could not be supplied. Rendered, never swallowed. */
@@ -536,6 +537,9 @@ export function valuationInputs(
   today: string,
   filer: FilerFacts = {}
 ): ValuationInputs {
+  // TTM EPS ON TODAY'S SHARE BASIS (#552 COWORK #187 §1): a trailing year that
+  // straddles a proven split would otherwise add pre- and post-split quarters.
+  set = splitAdjusted(set);
   const refusals: ValuationRefusal[] = [];
   // A NOTE'S TICKER HAS NO SHARE COUNT OR EPS OF ITS OWN: refused outright.
   if (filer.nonEquity) {
