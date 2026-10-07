@@ -31,6 +31,7 @@ import {
   revenueLineIncompleteValues,
   REVENUE_FALLBACK_CHAIN,
   REVENUE_TOTAL_OVER_CONTRACT,
+  SHARE_UNIT_SLIP_CORROBORATION,
   SHARE_UNIT_SLIP_FACTORS,
   SHARE_UNIT_SLIP_TOLERANCE,
   secFieldsHash,
@@ -1408,10 +1409,17 @@ function extractCompanyFactsWith(
     // supersedes #535 COWORK #12 ruling A for this case only.
     if (!filerTagsExcise(facts)) {
       const newest = [...quarterCells.keys(), ...yearCells.keys()].sort().at(-1);
-      const cellsAt = (end: string | undefined) => (end ? quarterCells.get(end) ?? yearCells.get(end) : undefined);
-      const fbAt = (end: string | undefined) => (end ? fbQuarter.get(end) ?? fbYear.get(end) : undefined);
-      const rev = cellsAt(newest)?.get("revenue");
-      const fb = fbAt(newest)?.get("revenue");
+      // LIKE FOR LIKE: a quarter against a quarter, else a year against a
+      // year -- never one duration against the other (ADP's $21.9B fiscal
+      // year against its $5.47B fourth quarter, caught by the round-2 census).
+      const pairAt = (cells: typeof quarterCells, fbCells: typeof fbQuarter) => {
+        const r = newest ? cells.get(newest)?.get("revenue") : undefined;
+        const f = newest ? fbCells.get(newest)?.get("revenue") : undefined;
+        return r && f ? { rev: r, fb: f } : null;
+      };
+      const pair = pairAt(quarterCells, fbQuarter) ?? pairAt(yearCells, fbYear);
+      const rev = pair?.rev;
+      const fb = pair?.fb;
       if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
           fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT) {
         let moved = 0, refused = 0;
@@ -1462,6 +1470,28 @@ function extractCompanyFactsWith(
   // -- against an AS-FILED EPS only, never one this file computed. A period
   // whose proof fails is left exactly as filed. Runs BEFORE the ratio
   // fallback, so no EPS is ever computed from a slipped count.
+  //
+  // ── AND CORROBORATED, BECAUSE THE RATIO CANNOT SAY WHICH FIGURE SLIPPED ──
+  // ~1/1,000 says EPS × shares is 1,000× net income -- the shares may be in
+  // units where they should be thousands, or the NET INCOME may be the figure
+  // on the slip. Rescaling the shares in the second case would corrupt a
+  // correct count. So the rescaled count must also land within
+  // SHARE_UNIT_SLIP_CORROBORATION of an independent count: the cover share
+  // count (dei), or the median of the filer's own periods whose arithmetic
+  // already closes at ~1. With neither, nothing is rescaled.
+  const cover = readCoverShares(facts)?.val ?? null;
+  const cleanMedian = (shareKey: "sharesBasic" | "sharesDiluted", epsKey: "epsBasic" | "epsDiluted") => {
+    const vals: number[] = [];
+    for (const cells of [quarterCells, yearCells]) for (const m of cells.values()) {
+      const ni = m.get("netIncome")?.val, sh = m.get(shareKey)?.val, eps = m.get(epsKey);
+      if (ni == null || ni === 0 || sh == null || sh <= 0 || !eps || eps.val == null || eps.val === 0 || eps.derived !== "as-filed") continue;
+      if (Math.abs(ni / (eps.val * sh) - 1) <= SHARE_UNIT_SLIP_TOLERANCE) vals.push(sh);
+    }
+    vals.sort((a, b) => a - b);
+    return vals.length ? vals[vals.length >> 1] : null;
+  };
+  const near = (x: number, ref: number | null) => ref !== null && ref > 0 && x / ref <= SHARE_UNIT_SLIP_CORROBORATION && ref / x <= SHARE_UNIT_SLIP_CORROBORATION;
+  const medians = { sharesBasic: cleanMedian("sharesBasic", "epsBasic"), sharesDiluted: cleanMedian("sharesDiluted", "epsDiluted") };
   for (const cells of [quarterCells, yearCells]) {
     for (const [end, m] of cells) {
       const ni = m.get("netIncome")?.val ?? null;
@@ -1471,6 +1501,10 @@ function extractCompanyFactsWith(
         if (!sh || sh.val == null || sh.val <= 0 || !eps || eps.val == null || eps.val === 0 || eps.derived !== "as-filed") continue;
         const f = unitSlipFactor(ni, eps.val, sh.val);
         if (f === null) continue;
+        if (!near(sh.val * f, cover) && !near(sh.val * f, medians[shareKey])) {
+          notes.push(`${shareKey} ${end}: ratio says x${f} but no independent count corroborates it; left as filed`);
+          continue;
+        }
         m.set(shareKey, { ...sh, val: sh.val * f });
         notes.push(`${shareKey} ${end}: ${sh.val} rescaled x${f} (net income ${ni} / (EPS ${eps.val} x shares) = ${(ni / (eps.val * sh.val)).toPrecision(4)})`);
       }

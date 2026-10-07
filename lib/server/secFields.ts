@@ -720,6 +720,12 @@ export const REVENUE_TOTAL_OVER_CONTRACT = 1.05;
  */
 export const SHARE_UNIT_SLIP_FACTORS: readonly number[] = [1e3, 1e6, 1e-3, 1e-6];
 export const SHARE_UNIT_SLIP_TOLERANCE = 0.03;
+/**
+ * …AND CORROBORATED: the rescaled count must sit within this factor of the
+ * cover share count or of the filer's own clean periods, since the ratio alone
+ * cannot say whether the shares or the net income slipped.
+ */
+export const SHARE_UNIT_SLIP_CORROBORATION = 2;
 
 export const SEC_FIELD_KEYS: string[] = SEC_FIELDS.map((f) => f.key);
 
@@ -813,7 +819,7 @@ export function secChainsHash(): string {
   feed(`revenue-total-over-contract|${REVENUE_TOTAL_OVER_CONTRACT}|no-excise`);
   // AND THE SHARE UNIT-SLIP RESCALE (#552 COWORK #192): it moves stored
   // weighted shares on every period it proves.
-  feed(`share-unit-slip|${SHARE_UNIT_SLIP_FACTORS.join(",")}|${SHARE_UNIT_SLIP_TOLERANCE}`);
+  feed(`share-unit-slip|${SHARE_UNIT_SLIP_FACTORS.join(",")}|${SHARE_UNIT_SLIP_TOLERANCE}|corroborated:${SHARE_UNIT_SLIP_CORROBORATION}`);
   return h.toString(16).padStart(8, "0");
 }
 
