@@ -1420,7 +1420,22 @@ function extractCompanyFactsWith(
       const pair = pairAt(quarterCells, fbQuarter) ?? pairAt(yearCells, fbYear);
       const rev = pair?.rev;
       const fb = pair?.fb;
+      // THE FLOOR (#552 COWORK #194): `Revenues` must cover at least as many of
+      // the newest 8 quarters, AND of the newest 4 years, as the contract line
+      // it would replace. Otherwise the one-concept rule would leave more
+      // periods unreported than it fixes (BANC, GLP, HRI in the round-2
+      // census), and the filer keeps its old concept.
+      const covers = (cells: typeof quarterCells, fbCells: typeof fbQuarter, n: number) => {
+        const ends = [...cells.keys()].sort().reverse().slice(0, n);
+        const total = ends.filter((e) => { const t = fbCells.get(e)?.get("revenue"); return t?.tag === "Revenues" && t.val != null; }).length;
+        const contract = ends.filter((e) => { const c = cells.get(e)?.get("revenue"); return c?.tag === CONTRACT_REVENUE_TAG && c.val != null; }).length;
+        return total >= contract;
+      };
+      const floorHolds = covers(quarterCells, fbQuarter, 8) && covers(yearCells, fbYear, 4);
       if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
+          fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT && !floorHolds) {
+        notes.push(`revenue: Revenues exceeds the contract line on ${newest} but covers fewer of the newest 8 quarters / 4 years; the contract line is kept (floor)`);
+      } else if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
           fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT) {
         let moved = 0, refused = 0;
         for (const [cells, fbCells] of [[quarterCells, fbQuarter], [yearCells, fbYear]] as const) {

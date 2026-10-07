@@ -816,7 +816,7 @@ export function secChainsHash(): string {
   feed(`revenue-fallback|${REVENUE_FALLBACK_CHAIN.join(",")}`);
   // AND THE TOTAL-OVER-CONTRACT RULE (#552 COWORK #192): it moves stored
   // revenue for every filer it reaches, so it re-reads like a chain edit.
-  feed(`revenue-total-over-contract|${REVENUE_TOTAL_OVER_CONTRACT}|no-excise`);
+  feed(`revenue-total-over-contract|${REVENUE_TOTAL_OVER_CONTRACT}|no-excise|floor:8q4y`);
   // AND THE SHARE UNIT-SLIP RESCALE (#552 COWORK #192): it moves stored
   // weighted shares on every period it proves.
   feed(`share-unit-slip|${SHARE_UNIT_SLIP_FACTORS.join(",")}|${SHARE_UNIT_SLIP_TOLERANCE}|corroborated:${SHARE_UNIT_SLIP_CORROBORATION}`);
