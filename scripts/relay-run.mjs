@@ -1413,6 +1413,7 @@ const TASKS = {
   // The #813 screens on the live build (#553 COWORK #194), read-only.
   "write-screen-live-counts": { script: "scripts/screen-live-counts.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-cap-reason-trace": { script: "scripts/cap-reason-trace.mjs", args: () => [], needsTypescript: true, writes: true },
+  "write-redis-bandwidth-reading": { script: "scripts/redis-bandwidth-reading.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
