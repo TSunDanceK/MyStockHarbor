@@ -9,11 +9,12 @@ import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pick
 import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
 import { valueSatisfies } from "@/lib/screenerFields";
 import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
-import { NOT_APPLICABLE_CODES, cellMark, cellWhyWords, compareForSort } from "@/lib/pickerCellWhy";
-import { BasisCell, CellWhyNote, WhyMark } from "@/app/components/PickerCellMarks";
+import { NOT_APPLICABLE_CODES, cellMark, cellWhyWords, compareForSort, dividendMark } from "@/lib/pickerCellWhy";
+import { BasisCell, CellWhyNote, TipMark, WhyMark } from "@/app/components/PickerCellMarks";
 import { perfAsOfLabel, perfWhyText, type PerfKey } from "@/lib/pickerPerf";
 import { EstimateCell, PickerEstimateKey, estimateMarksShown } from "@/app/components/PickerEstimateMarks";
 import { fmtZ, latestStretch } from "@/lib/stretch";
+import { compareEpsGrowth, epsGrowthText, epsGrowthTip } from "@/lib/epsGrowthView";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -94,9 +95,12 @@ function chartOverlayForEntry(configHref: string, configTitle: string, entry: Re
   // There is no client fallback, so a page routed here without that series
   // draws nothing rather than drawing something wrong.
   //
-  // The WEEKLY flip pages are excluded on purpose: their flip is weekly and this
-  // line is daily, so it would contradict the flip date in the same row.
-  if (href.includes("trend-flip") && !href.includes("weekly")) return "trendHelper" as const;
+  // The WEEKLY flip pages draw it too since #553 COWORK #186 ruling 6: their
+  // cards are weekly candles with the WEEKLY line (pickersBuilder's
+  // weeklyFlipPoints / weeklyTrendSeries), so the colour changes on the flip
+  // week the row prints. Before that they were excluded, because a daily line
+  // would have contradicted the weekly flip date.
+  if (href.includes("trend-flip")) return "trendHelper" as const;
   if (href.includes("best-trend")) return "trend" as const;
   // The 50-day pages drew bare candles: the chart has always computed ma50 (and
   // falls back to a local SMA when the payload omits it) but only ever drew it
@@ -635,6 +639,10 @@ type Col = {
   get: (e: ResultEntry, d: DerivedRow) => string | number | null;
   /** `inert`: inside the phone row's toggle button, where a nested control is invalid. */
   cell: (e: ResultEntry, d: DerivedRow, inert?: boolean) => ReactNode;
+  /** A row whose empty `get` still has a cell of its own (the small-base EPS change). */
+  ownCell?: (e: ResultEntry) => boolean;
+  /** Breaks a tie the column's own sort leaves (both empty, or equal). */
+  tie?: (a: ResultEntry, b: ResultEntry) => number;
 };
 
 // ── WHY A CELL IS EMPTY (#553 COWORK #69) ───────────────────────────────────
@@ -651,6 +659,7 @@ const COLUMN_DASH_WHY: Record<string, string> = {
   volume: "No volume for the latest session",
   ma200: "Not enough price history for a 200-day average",
   stretch: "Not enough price history for a 20-day average",
+  epsg: "Not on this screen: no like-for-like filed EPS growth of at least the screen's cut, with revenue up",
 };
 
 /** The Stretch column's header tip (#553 COWORK #144). */
@@ -687,6 +696,7 @@ export function withWhy(col: Col): Col {
   return {
     ...col,
     cell: (e, d, inert) => {
+      if (col.ownCell?.(e)) return filled(e, d, inert);
       if (!isEmptyValue(col.get(e, d))) return filled(e, d, inert);
       const why = cellWhyFor(e, col.key);
       return <WhyMark text={why.text} mark={why.mark} word={why.word} na={why.na} inert={inert} />;
@@ -1027,6 +1037,29 @@ export default function PickerResultsGrid({
       cell: (_e, d) => (d.stretch == null ? MUTED : <span style={{ fontVariantNumeric: "tabular-nums" }}>{d.stretch < 0 ? "-" : "+"}{fmtZ(d.stretch)}</span>),
     };
     const stretchPage = /oversold|overbought/i.test(configHref);
+    // EPS GROWTH (YoY) (#553 COWORK #186 ruling 1), on the earnings growth page
+    // only. Sorting it puts the % ranking first, the small-base group (shown in
+    // $, no %) next and rows with no figure last, A-Z -- the page's own default
+    // order (lib/epsGrowthView.compareEpsGrowth), whichever way it is sorted.
+    const epsGrowthPage = /strong-earnings-growth/i.test(configHref);
+    const epsg: Col = {
+      key: "epsg",
+      label: "EPS growth (YoY)",
+      sortType: "num",
+      get: (e) => (e.epsGrowth && !e.epsGrowth.small ? e.epsGrowth.pct : null),
+      ownCell: (e) => !!e.epsGrowth?.small,
+      tie: compareEpsGrowth,
+      cell: (e, _d, inert) => {
+        const g = e.epsGrowth;
+        if (!g) return MUTED;
+        return (
+          <span className="basisCell">
+            <TipMark text={epsGrowthTip(g)} label="EPS growth" className="epsgTag" inert={inert}>{g.label}</TipMark>{" "}
+            <span className={g.small ? "muted" : g.pct >= 0 ? "chgUp" : "chgDown"}>{epsGrowthText(g)}</span>
+          </span>
+        );
+      },
+    };
 
     const perf1w: Col = { key: "perf1w", label: "1W", sortType: "num", get: (e) => num(e.perf1w), cell: (e) => perfCell(e, "perf1w") };
     const perf1m: Col = { key: "perf1m", label: "1M", sortType: "num", get: (e) => num(e.perf1m), cell: (e) => perfCell(e, "perf1m") };
@@ -1043,7 +1076,20 @@ export default function PickerResultsGrid({
     const pb: Col = { key: "pb", label: "PB Ratio", sortType: "num", get: (e) => num(e.pbRatio), cell: (e, _d, inert) => <EstimateCell text={fmtNum(num(e.pbRatio))} est={e.cellEst?.pb} inert={inert} empty={MUTED} /> };
     const pfcf: Col = { key: "pfcf", label: "P/FCF", sortType: "num", get: (e, d) => pfcfRatio(e, d), cell: (e, d) => numCell(pfcfRatio(e, d)) };
 
-    const dps: Col = { key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare), cell: (e) => dollarCell(num(e.divPerShare)) };
+    // "cut" / "+ special" beside the figure, the reason on tap (#553 COWORK #184 item 1).
+    const dps: Col = {
+      key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare),
+      cell: (e, _d, inert) => {
+        const mark = dividendMark(e);
+        if (!mark) return dollarCell(num(e.divPerShare));
+        return (
+          <span className="basisCell">
+            <TipMark text={mark.tip} label="Dividend" className="epsgTag" inert={inert}>{mark.tag}</TipMark>{" "}
+            {dollarCell(num(e.divPerShare))}
+          </span>
+        );
+      },
+    };
     const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e, d) => divYieldPct(e, d), cell: (e, d) => plainPctCell(divYieldPct(e, d)) };
     const payout: Col = { key: "payout", label: "Payout Ratio", tip: BASIS_TIP, sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d, inert) => basisCell(plainPctCell(payoutRatioPct(e, d)), payoutRatioPct(e, d), e.fundamentalsFrom === "sec" ? e.payoutBasis : undefined, inert) };
     const dgrowth: Col = { key: "dgrowth", label: "Div Growth", sortType: "num", get: (e) => num(e.divGrowth), cell: (e) => pctCell(num(e.divGrowth)) };
@@ -1070,6 +1116,11 @@ export default function PickerResultsGrid({
     };
     // Stretch sits after % Change on the two stretch pages only.
     if (stretchPage) sets.general.splice(sets.general.indexOf(change) + 1, 0, stretch);
+    // EPS growth sits after % Change, and after EPS on Financials, on that page only.
+    if (epsGrowthPage) {
+      sets.general.splice(sets.general.indexOf(change) + 1, 0, epsg);
+      sets.financials.push(epsg);
+    }
     // THE REGISTRY, APPLIED ONCE: every tab drops the hidden columns, so a
     // hidden column cannot be rendered, sorted or picked as a phone headline.
     for (const tab of Object.keys(sets) as TabKey[]) {
@@ -1136,6 +1187,7 @@ export default function PickerResultsGrid({
     copy.sort((a, b) => {
       const da = derivedByEntry.get(a) ?? deriveRow(a);
       const db = derivedByEntry.get(b) ?? deriveRow(b);
+      if (sortCol.tie) return compareForSort(sortCol.get(a, da), sortCol.get(b, db), sortCol.sortType, sort.dir) || sortCol.tie(a, b);
       return compareForSort(sortCol.get(a, da), sortCol.get(b, db), sortCol.sortType, sort.dir);
     });
     return copy;
@@ -1405,7 +1457,7 @@ export default function PickerResultsGrid({
                 nothing to decode and nothing to cram. */}
             <select
               className="tabSelect"
-              value={ranking && !sort ? RANKING_OPTION : `${sortKey}:${sortDir}`}
+              value={!sort ? RANKING_OPTION : `${sortKey}:${sortDir}`}
               onChange={(e) => {
                 if (e.target.value === RANKING_OPTION) {
                   setSort(null);
@@ -1418,9 +1470,14 @@ export default function PickerResultsGrid({
               }}
               aria-label="Sort results"
             >
+              {/* UNSORTED READS AS THE PAGE'S ORDER (#553 COWORK #184 item 4): with
+                  no ranking to name, the list showed "Market Cap (high to low)"
+                  over rows that were not in market-cap order. */}
               {ranking ? (
                 <option value={RANKING_OPTION}>{sort ? `Back to ${ranking.short} ranking` : `Ranked by ${ranking.label}`}</option>
-              ) : null}
+              ) : (
+                <option value={RANKING_OPTION}>{sort ? "Back to the page's order" : "The page's order"}</option>
+              )}
               {metricColumns.flatMap((col) => {
                 // Biggest-first for figures, A-Z for names: the order you'd want
                 // if you picked that column and said nothing else.
@@ -1718,6 +1775,9 @@ export default function PickerResultsGrid({
         .basisSlot { display: inline-block; width: 2.2em; text-align: left; flex: 0 0 auto; }
         .basisFy { position: relative; cursor: help; font-size: 0.72em; letter-spacing: 0.02em; color: rgba(148,163,184,0.75); text-decoration: underline dotted rgba(148,163,184,0.45); text-underline-offset: 3px; }
         .basisFy:focus-visible { outline: 1px solid rgba(96,165,250,0.7); outline-offset: 2px; border-radius: 2px; }
+        /* EPS growth's period tag (#553 COWORK #186 ruling 1): the basisFy look, tap for the periods compared. */
+        .epsgTag { position: relative; cursor: help; margin-right: 6px; font-size: 0.72em; letter-spacing: 0.02em; color: rgba(148,163,184,0.75); text-decoration: underline dotted rgba(148,163,184,0.45); text-underline-offset: 3px; white-space: nowrap; }
+        .epsgTag:focus-visible { outline: 1px solid rgba(96,165,250,0.7); outline-offset: 2px; border-radius: 2px; }
         /* #553 COWORK #103 (2026-10-03): was centred (left: 50%) and up to 70vw
            wide, so a mark near either edge of a 360 px screen pushed it off
            the page. Now anchored to the mark's right edge (the grid's figures

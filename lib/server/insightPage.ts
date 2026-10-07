@@ -5,7 +5,9 @@
 // whole result is cached per post for 6 hours (getInsightPageDataCached): the
 // figures are end-of-day, and a reader sees the same page all day. Per refill:
 //   readTiingoHistory(SYM), readTiingoHistory("SPY")  2 GETs, Data Cache 24 h
-//   getSymbolOutlook                                   2 GETs (report dates + the universe probe)
+//   readReportDatesChecked                             1 GET: the next-report line (outlookFromRead)
+//                                                      and the reader vote's windows, from one record
+//   readVoteTally (the closed vote window, PR 2)       1 HGETALL, only once a window has closed
 //   getStockPageSecFacts                               2 GETs (fact set + report dates)
 //   readPeSectorMedians                                0 (Data Cache blobs, 6 h)
 //   getSectorPerformanceRow                            1 GET (15 min key)
@@ -22,7 +24,10 @@ import path from "node:path";
 import matter from "gray-matter";
 import { unstable_cache } from "next/cache";
 import { readTiingoHistory } from "@/lib/server/marketData/read";
-import { getSymbolOutlook } from "@/lib/server/symbolOutlook";
+import { outlookFromRead } from "@/lib/server/symbolOutlook";
+import { readReportDatesChecked } from "@/lib/server/secReportDatesStore";
+import { announcedDates, readVoteTally } from "@/lib/server/insightVoteStore";
+import { calledWords, voteWindows } from "@/lib/insightVote";
 import { getStockPageSecFacts } from "@/lib/server/secEarningsSnapshot";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
 import { marketCap, peRatio } from "@/lib/server/secValuation";
@@ -50,7 +55,7 @@ import { toSpendingInput } from "@/lib/server/capexSpendingJob";
 import { confluence } from "@/lib/ta/confluence";
 import type { KeyBar } from "@/lib/ta/keyLevels";
 import {
-  differenceNote, levelSeries, normaliseInsight, setupLabel, sinceView, LEVEL_NAME,
+  dayWords, differenceNote, indexOnOrBefore, isJunkHeadline, levelSeries, normaliseInsight, setupLabel, sinceView, LEVEL_NAME,
   type EodBar, type NormalisedInsight, type SetupLabel, type SinceView,
 } from "@/lib/insightView";
 import { SCREEN_ROUTES, screenFor, type ScreenFlag } from "@/lib/insightScreens";
@@ -163,6 +168,8 @@ export type MoreCard =
   | { kind: "calendar"; href: string }
   | { kind: "spx"; href: string };
 
+/** The headlines the news card shows under the drivers paragraph, at most (#146). */
+export const NEWS_SHOWN = 3;
 /** "What's driving {TICKER} now" (#563 COWORK #138 §1): the news page's own items and score. */
 export type InsightNews = {
   items: { title: string; link: string; source: string | null; date: string | null }[];
@@ -195,6 +202,12 @@ export type InsightPageData = {
   more: MoreCard[];
   related: { slug: string; title: string; date: string; symbol: string; art: CardArt }[];
   onTiingo: boolean;
+  /**
+   * THE READER VOTE (PR 2): the current window's id (the newest results
+   * announcement on or before today, or "open"), and how readers called the
+   * window the newest report closed, in words (null when too few voted).
+   */
+  vote: { window: string; called: string | null };
 };
 
 const capText = (v: number) => (v >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`);
@@ -226,10 +239,10 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
   // The news page's cached read, by its own key (same symbol, same options), so
   // a warm news page costs nothing here; the fact set is read once (secColdFetch
   // dedupes the in-flight read getStockPageSecFacts makes).
-  const [eod, spyEod, outlook, facts, medians, newsBase, cold] = await Promise.all([
+  const [eod, spyEod, dates, facts, medians, newsBase, cold] = await Promise.all([
     readTiingoHistory(sym).catch(() => null),
     readTiingoHistory("SPY").catch(() => null),
-    getSymbolOutlook(sym, today).catch(() => null),
+    readReportDatesChecked(sym).catch(() => ({ ok: false as const })),
     getStockPageSecFacts(sym).catch(() => null),
     readPeSectorMedians().catch(() => null),
     getStockNewsBaseData(sym, { maxDetailedItems: 5 }).catch(() => null),
@@ -238,6 +251,19 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
   const bars = ((eod?.bars ?? []) as EodBar[]).filter((b) => Number.isFinite(b[4]) && b[4] > 0);
   const spy = ((spyEod?.bars ?? []) as EodBar[]).filter((b) => Number.isFinite(b[4]) && b[4] > 0);
   const sector = sectorOf(sym);
+  // THE NEXT-REPORT LINE AND THE VOTE'S WINDOWS, from the one record read above.
+  const outlook = outlookFromRead(sym, dates, today);
+  const windows = voteWindows(announcedDates(dates.ok ? dates.rec : null), today);
+  let called: string | null = null;
+  if (windows.previous) {
+    const prev = windows.previous;
+    const tally = await readVoteTally(slug, prev.id).catch(() => null);
+    if (tally) {
+      const a = prev.from ? indexOnOrBefore(bars, prev.from) : -1, b = indexOnOrBefore(bars, prev.to);
+      const move = a >= 0 && b > a ? ((bars[b][4] - bars[a][4]) / bars[a][4]) * 100 : null;
+      called = calledWords(sym, tally, move, dayWords(prev.to));
+    }
+  }
   const [sectorRow, screenFlags, capex] = await Promise.all([
     sector?.slug ? getSectorPerformanceRow(sector.slug).catch(() => null) : null,
     readScreenFlags().catch(() => null),
@@ -331,7 +357,8 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
 
   // WHAT'S DRIVING IT NOW: the news page's lead items (newest, deduped, on topic) and its score.
   const news: InsightNews | null = newsBase ? {
-    items: (newsBase.detailedNews ?? []).slice(0, 5).filter((i) => i.title && /^https?:\/\//.test(i.link ?? "")).map((i) => ({ title: i.title, link: i.link, source: i.source ?? null, date: i.pubDate ?? null })),
+    // AT MOST THREE, AND NO FILING NOTICES OR QUOTE PAGES (#563 COWORK #146 §2/§5).
+    items: (newsBase.detailedNews ?? []).filter((i) => i.title && /^https?:\/\//.test(i.link ?? "") && !isJunkHeadline(i.title)).slice(0, NEWS_SHOWN).map((i) => ({ title: i.title, link: i.link, source: i.source ?? null, date: i.pubDate ?? null })),
     score: newsBase.newsScore?.available ? { label: newsBase.newsScore.label, tone: newsBase.newsScore.tone, reason: newsBase.newsScore.reason } : null,
   } : null;
   const SHORT: Record<string, string> = { MA50: "50-day", MA200: "200-day", WMA200: "200-week", BBMID: "20-day" };
@@ -352,12 +379,13 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
     sectorMove: sectorRow ? { name: sectorRow.name, slug: sectorRow.slug, day: sectorRow.day, week: sectorRow.week, month: sectorRow.month, ytd: sectorRow.ytd, rank: sectorRow.rank } : null,
     more: more.slice(0, 3), related,
     onTiingo: bars.length > 0,
+    vote: { window: windows.current.id, called },
   };
 }
 
 /** The page's data, cached per post for 6 hours (the reads above, at most four times a day a post). */
 export const getInsightPageDataCached = unstable_cache(
   (slug: string) => getInsightPageData(slug),
-  ["insight-page-data-v1"],
+  ["insight-page-data-v4"],
   { revalidate: 21600, tags: ["insight-page-data"] },
 );

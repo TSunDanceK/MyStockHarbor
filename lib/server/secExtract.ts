@@ -30,6 +30,10 @@ import {
   instantFields,
   revenueLineIncompleteValues,
   REVENUE_FALLBACK_CHAIN,
+  REVENUE_TOTAL_OVER_CONTRACT,
+  SHARE_UNIT_SLIP_CORROBORATION,
+  SHARE_UNIT_SLIP_FACTORS,
+  SHARE_UNIT_SLIP_TOLERANCE,
   secFieldsHash,
   SELLING_TAGS,
   SUMMED_SGA_TAG,
@@ -1093,6 +1097,31 @@ type ExtractOpts = {
 };
 
 /**
+ * THE UNIT-SLIP FACTOR, OR NULL (#552 COWORK #192): the power of ten that
+ * makes net income ÷ (EPS × shares) ~1, when it is within
+ * SHARE_UNIT_SLIP_TOLERANCE of one of SHARE_UNIT_SLIP_FACTORS. Anything else
+ * -- an ADS ratio, a preferred-dividend gap, a mismatched period -- is null.
+ */
+export function unitSlipFactor(netIncome: number, eps: number, shares: number): number | null {
+  if (!Number.isFinite(netIncome) || !Number.isFinite(eps) || !Number.isFinite(shares) || eps === 0 || shares <= 0) return null;
+  const u = netIncome / (eps * shares);
+  for (const f of SHARE_UNIT_SLIP_FACTORS) if (Math.abs(u / f - 1) <= SHARE_UNIT_SLIP_TOLERANCE) return f;
+  return null;
+}
+
+/** The contract-revenue tag the total-over-contract rule compares against. */
+const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
+
+/**
+ * DOES THE FILER TAG EXCISE AT ALL (#552 COWORK #192 ruling A)? Any us-gaap
+ * concept naming excise -- the filers whose `Revenues` is gross of excise or
+ * carries other income, which the total-over-contract rule must not reach.
+ */
+export function filerTagsExcise(facts: CompanyFacts): boolean {
+  return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k));
+}
+
+/**
  * THE EXTRACTION, WITH rankPerPeriod FILL-BACK (#552 COWORK #58, JD).
  *
  * A rankPerPeriod field (a total ahead of its component) resolves each period
@@ -1367,6 +1396,58 @@ function extractCompanyFactsWith(
         notes.push(`revenue ${end}: tagged line ${rev} is below ${op != null ? "operating" : "pre-tax"} income ${bar}; ${fb.tag} ${fb.val} used`);
       }
     }
+
+    // ── THE FILER'S TOTAL OVER ITS CONTRACT LINE (#552 COWORK #192 ruling A) ──
+    // AFRM's contract revenue ($1.11B FY2025) is one line of a $3.22B total,
+    // complete by the predicate above (no income exceeds it), so the page
+    // showed the sub-line. Where the filer's NEWEST period carries both and
+    // `Revenues` is more than REVENUE_TOTAL_OVER_CONTRACT larger, `Revenues`
+    // becomes the filer's ONE revenue concept: every period takes it, and a
+    // period without it reads Not reported rather than mixing measures.
+    // EXCISE-TAGGED FILERS ARE EXCLUDED: their `Revenues` carries other income
+    // or derivative gains (COP, CEG, MELI in the #198 census). This knowingly
+    // supersedes #535 COWORK #12 ruling A for this case only.
+    if (!filerTagsExcise(facts)) {
+      const newest = [...quarterCells.keys(), ...yearCells.keys()].sort().at(-1);
+      // LIKE FOR LIKE: a quarter against a quarter, else a year against a
+      // year -- never one duration against the other (ADP's $21.9B fiscal
+      // year against its $5.47B fourth quarter, caught by the round-2 census).
+      const pairAt = (cells: typeof quarterCells, fbCells: typeof fbQuarter) => {
+        const r = newest ? cells.get(newest)?.get("revenue") : undefined;
+        const f = newest ? fbCells.get(newest)?.get("revenue") : undefined;
+        return r && f ? { rev: r, fb: f } : null;
+      };
+      const pair = pairAt(quarterCells, fbQuarter) ?? pairAt(yearCells, fbYear);
+      const rev = pair?.rev;
+      const fb = pair?.fb;
+      // THE FLOOR (#552 COWORK #194): `Revenues` must cover at least as many of
+      // the newest 8 quarters, AND of the newest 4 years, as the contract line
+      // it would replace. Otherwise the one-concept rule would leave more
+      // periods unreported than it fixes (BANC, GLP, HRI in the round-2
+      // census), and the filer keeps its old concept.
+      const covers = (cells: typeof quarterCells, fbCells: typeof fbQuarter, n: number) => {
+        const ends = [...cells.keys()].sort().reverse().slice(0, n);
+        const total = ends.filter((e) => { const t = fbCells.get(e)?.get("revenue"); return t?.tag === "Revenues" && t.val != null; }).length;
+        const contract = ends.filter((e) => { const c = cells.get(e)?.get("revenue"); return c?.tag === CONTRACT_REVENUE_TAG && c.val != null; }).length;
+        return total >= contract;
+      };
+      const floorHolds = covers(quarterCells, fbQuarter, 8) && covers(yearCells, fbYear, 4);
+      if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
+          fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT && !floorHolds) {
+        notes.push(`revenue: Revenues exceeds the contract line on ${newest} but covers fewer of the newest 8 quarters / 4 years; the contract line is kept (floor)`);
+      } else if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
+          fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT) {
+        let moved = 0, refused = 0;
+        for (const [cells, fbCells] of [[quarterCells, fbQuarter], [yearCells, fbYear]] as const) {
+          for (const [end, m] of cells) {
+            const total = fbCells.get(end)?.get("revenue");
+            if (total && total.tag === "Revenues" && total.val != null) { m.set("revenue", total); moved++; }
+            else if (m.has("revenue")) { m.delete("revenue"); refused++; }
+          }
+        }
+        notes.push(`revenue: Revenues ${fb.val} exceeds the contract line ${rev.val} by more than ${Math.round((REVENUE_TOTAL_OVER_CONTRACT - 1) * 100)}% on ${newest}; Revenues used for ${moved} period(s), ${refused} without it left unreported`);
+      }
+    }
   }
 
   // ── durations that do NOT add: as filed, or not at all ─────────────────────
@@ -1392,6 +1473,56 @@ function extractCompanyFactsWith(
         val: best.row.val!, tag: best.tag, ns: best.ns, unit: best.unit, derived: "as-filed",
         covers: [best.row.start, best.row.end],
       });
+    }
+  }
+
+  // ── SHARE COUNTS ON A UNIT SLIP (#552 COWORK #192; CODE-A #199 §1) ───────
+  // 45 filers store some periods' weighted shares in thousands or millions
+  // (MCD, NMR, BBVA, NVMI …): net income ÷ (EPS × shares) comes out ~1,000 or
+  // ~1/1,000,000 instead of ~1. The filer's OWN three figures for the period
+  // prove the factor, so the count is rescaled only where that arithmetic
+  // lands within SHARE_UNIT_SLIP_TOLERANCE of a power in SHARE_UNIT_SLIP_FACTORS
+  // -- against an AS-FILED EPS only, never one this file computed. A period
+  // whose proof fails is left exactly as filed. Runs BEFORE the ratio
+  // fallback, so no EPS is ever computed from a slipped count.
+  //
+  // ── AND CORROBORATED, BECAUSE THE RATIO CANNOT SAY WHICH FIGURE SLIPPED ──
+  // ~1/1,000 says EPS × shares is 1,000× net income -- the shares may be in
+  // units where they should be thousands, or the NET INCOME may be the figure
+  // on the slip. Rescaling the shares in the second case would corrupt a
+  // correct count. So the rescaled count must also land within
+  // SHARE_UNIT_SLIP_CORROBORATION of an independent count: the cover share
+  // count (dei), or the median of the filer's own periods whose arithmetic
+  // already closes at ~1. With neither, nothing is rescaled.
+  const cover = readCoverShares(facts)?.val ?? null;
+  const cleanMedian = (shareKey: "sharesBasic" | "sharesDiluted", epsKey: "epsBasic" | "epsDiluted") => {
+    const vals: number[] = [];
+    for (const cells of [quarterCells, yearCells]) for (const m of cells.values()) {
+      const ni = m.get("netIncome")?.val, sh = m.get(shareKey)?.val, eps = m.get(epsKey);
+      if (ni == null || ni === 0 || sh == null || sh <= 0 || !eps || eps.val == null || eps.val === 0 || eps.derived !== "as-filed") continue;
+      if (Math.abs(ni / (eps.val * sh) - 1) <= SHARE_UNIT_SLIP_TOLERANCE) vals.push(sh);
+    }
+    vals.sort((a, b) => a - b);
+    return vals.length ? vals[vals.length >> 1] : null;
+  };
+  const near = (x: number, ref: number | null) => ref !== null && ref > 0 && x / ref <= SHARE_UNIT_SLIP_CORROBORATION && ref / x <= SHARE_UNIT_SLIP_CORROBORATION;
+  const medians = { sharesBasic: cleanMedian("sharesBasic", "epsBasic"), sharesDiluted: cleanMedian("sharesDiluted", "epsDiluted") };
+  for (const cells of [quarterCells, yearCells]) {
+    for (const [end, m] of cells) {
+      const ni = m.get("netIncome")?.val ?? null;
+      if (ni === null || ni === 0) continue;
+      for (const [shareKey, epsKey] of [["sharesBasic", "epsBasic"], ["sharesDiluted", "epsDiluted"]] as const) {
+        const sh = m.get(shareKey), eps = m.get(epsKey);
+        if (!sh || sh.val == null || sh.val <= 0 || !eps || eps.val == null || eps.val === 0 || eps.derived !== "as-filed") continue;
+        const f = unitSlipFactor(ni, eps.val, sh.val);
+        if (f === null) continue;
+        if (!near(sh.val * f, cover) && !near(sh.val * f, medians[shareKey])) {
+          notes.push(`${shareKey} ${end}: ratio says x${f} but no independent count corroborates it; left as filed`);
+          continue;
+        }
+        m.set(shareKey, { ...sh, val: sh.val * f });
+        notes.push(`${shareKey} ${end}: ${sh.val} rescaled x${f} (net income ${ni} / (EPS ${eps.val} x shares) = ${(ni / (eps.val * sh.val)).toPrecision(4)})`);
+      }
     }
   }
 

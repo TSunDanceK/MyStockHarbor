@@ -62,7 +62,8 @@ const config: PickerResultConfig = {
   title: "Top Stocks With Buy Signals",
   description: "Browse stocks currently showing multiple bullish technical conditions from the live MyStockHarbor picker feed.",
   explainerTitle: "How to use buy signal stocks",
-  explainerBody: "Buy signal pages are starting points, not automatic entries. Look for agreement between the mini chart, broader trend, moving averages, momentum and recent news before treating a signal as actionable.",
+  // The listing rule (#553 COWORK #186 ruling 2), stated where it is used.
+  explainerBody: "A stock is listed when it trades above its 200-day moving average and meets at least two more of the bullish conditions. Buy signal pages are starting points, not automatic entries. Look for agreement between the mini chart, broader trend, moving averages, momentum and recent news before treating a signal as actionable.",
   emptyText: "No buy signal stocks are currently available from the live picker feed.",
   tone: "green",
   kind: "buySignals",

@@ -173,13 +173,17 @@ export async function loadNextReportCard(mutate = (src) => src) {
 }
 
 /**
- * The price-reaction charts (app/stock/[symbol]/earnings/ReactionCharts.tsx).
- * Self-contained — its only import is React's types — so it transpiles alone.
+ * The price-reaction charts (app/stock/[symbol]/earnings/ReactionCharts.tsx),
+ * with the day slider it renders and the slider's pure module.
  */
 export async function loadReactionCharts(mutate = (src) => src) {
   const src = fs.readFileSync("app/stock/[symbol]/earnings/ReactionCharts.tsx", "utf8")
     .replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
-  return importTsxSource(mutate(src));
+  // THE DAY SLIDER (#552 COWORK #189) and its pure module, ahead of the card
+  // that renders it, with the one React hook it uses.
+  const days = stripImports("app/stock/[symbol]/earnings/reactionDays.ts");
+  const slider = stripImports("app/stock/[symbol]/earnings/ReactionDaySlider.tsx").replace(/^"use client";$/m, "");
+  return importTsxSource(mutate(['import { useState } from "react";', days, slider, src].join("\n")));
 }
 
 /** Render one element to markup. */

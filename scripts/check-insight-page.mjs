@@ -18,13 +18,19 @@
 //   - SEO (#138): an Article with the hero picture and dateModified from the
 //     post's own "updated", Insights › TICKER › post, one h1, the hero's alt;
 //   - the rail (#138/#139): the Key levels pole with the level discussed, the
-//     filed tiles or "not available yet", and the news card's empty state.
+//     filed tiles or "not available yet", and the news card's empty state;
+//   - drivers (#146): the loader's validation on fixtures (missing, bad date,
+//     empty, bad URL, too many sources); every post's `drivers` valid and free
+//     of advice words; the card leads with the dated paragraph, its sources as
+//     nofollow publisher links, then at most three headlines, and falls back to
+//     the tone line without it; filing notices and quote pages are skipped.
 // A mutant each.
 //
 //   node scripts/check-insight-page.mjs
 import fs from "node:fs";
 import ts from "typescript";
 import { stripComments } from "./lib/source-code.mjs";
+import matter from "gray-matter";
 
 const VIEW = "lib/insightView.ts", SCREENS = "lib/insightScreens.ts", PAGE = "app/insights/[slug]/InsightPage.tsx", ROUTE = "app/insights/[slug]/page.tsx";
 const CHART = "app/insights/[slug]/InsightChart.tsx", LOADER = "lib/server/insightPage.ts", TEMPLATE = "content/templates/insight-template.md";
@@ -77,8 +83,8 @@ const RULES = {
       V.TESTING_PCT === 2 && /^Uptrend/.test(up);
   },
   "an old post: its level from its chart indicator; the summary once; its scenarios as the two one-liners": ({ V }) => {
-    const raw = read(AMZN), fm = raw.split("---")[1], body = raw.split("---").slice(2).join("---");
-    const data = Object.fromEntries(fm.trim().split("\n").map((l) => { const m = /^(\w+):\s*(.*)$/.exec(l); return m ? [m[1], JSON.parse(m[2])] : null; }).filter(Boolean));
+    // gray-matter, as the site reads it (the post carries a nested `drivers` block since #146).
+    const { data, content: body } = matter(read(AMZN));
     const p = V.normaliseInsight("amzn", data, body);
     return p.format === "v1" && p.levels.join() === "MA200" && p.summary === data.excerpt && /^AMZN holds the 200-day/.test(p.bull) && /^Amazon raises capex guidance/.test(p.bear) &&
       /^Amazon has pulled back/.test(p.whatHappened) && p.claimedSide === "above" && !/## What happened|## Bull vs bear/.test(p.originalRest) && /## Levels to watch/.test(p.originalRest) &&
@@ -134,6 +140,38 @@ const RULES = {
       epsLine(1.26, ya(1.26)).words === "level with $1.26, Q2 FY2025" && /loss narrowed from -\$0\.71/.test(epsLine(-0.2, ya(-0.71)).words ?? "") &&
       epsLine(1.68, null).words !== "up from" && epsLine(null, ya(1.26)).words === null;
   },
+  "drivers: the loader rejects a malformed paragraph whole and keeps a good one": ({ V }) => {
+    const src = (n) => Array.from({ length: n }, (_, i) => ({ title: `Article ${i}`, publisher: `Pub ${i}`, url: `https://example.com/a${i}` }));
+    const ok = { asOf: "2026-10-07", text: "Amazon heads into its Q3 report.", sources: src(3) };
+    const good = V.parseDrivers(ok), dated = V.parseDrivers({ ...ok, asOf: new Date("2026-10-07T00:00:00Z") });
+    const bad = (over) => V.parseDrivers({ ...ok, ...over });
+    return good.drivers?.sources.length === 3 && good.problems.length === 0 && dated.drivers?.asOf === "2026-10-07" &&
+      V.parseDrivers(undefined).drivers === null && V.parseDrivers(undefined).problems.length === 0 &&
+      bad({ asOf: "7 Oct" }).drivers === null && bad({ asOf: "2026-02-30" }).drivers === null && bad({ text: "  " }).drivers === null &&
+      bad({ sources: [] }).drivers === null && bad({ sources: src(6) }).drivers === null && bad({ sources: src(5) }).drivers !== null &&
+      bad({ sources: [{ title: "x", publisher: "y", url: "http://example.com/a" }] }).drivers === null &&
+      bad({ sources: [{ title: "x", publisher: "", url: "https://example.com/a" }] }).drivers === null &&
+      V.normaliseInsight("x", { title: "t", date: "2026-07-28", symbol: "amzn", drivers: ok }, "").drivers?.text === ok.text &&
+      V.normaliseInsight("x", { title: "t", date: "2026-07-28", symbol: "amzn", drivers: { ...ok, sources: [] } }, "").drivers === null;
+  },
+  "drivers: every post's paragraph validates, is dated and advises nothing": ({ V }) => {
+    const ADVICE = /\b(buy|buying|sell|selling|should|must|recommend\w*|buy zone|target)\b/i;
+    const files = [...fs.readdirSync("content/insights").map((f) => `content/insights/${f}`), ...fs.readdirSync("content/insights-fixtures").map((f) => `content/insights-fixtures/${f}`)].filter((f) => f.endsWith(".md"));
+    const withDrivers = files.map((f) => matter(read(f)).data).filter((d) => d.drivers !== undefined);
+    return withDrivers.length >= 1 && withDrivers.every((d) => {
+      const r = V.parseDrivers(d.drivers);
+      return r.drivers && !ADVICE.test(r.drivers.text) && !d.updated;
+    });
+  },
+  "drivers: the card leads with the dated paragraph, nofollow sources, at most three headlines, the old layout without it": ({ page, loader, V }) =>
+    /<Card eyebrow=\{`What's driving \$\{sym\} now`\} title=\{`\$\{sym\} news and catalysts`\}/.test(page) &&
+    /data-insight-drivers-asof="">As of \{dayWords\(n\.drivers\.asOf\)\}<\/p>/.test(page) &&
+    /<p className="inRead inDrivers" data-insight-drivers="">\{n\.drivers\.text\}<\/p>/.test(page) &&
+    /rel="nofollow noopener"/.test(page) && /\{src\.publisher\}/.test(page) &&
+    /\) : d\.news\?\.score \? \(/.test(page) && /Latest headlines/.test(page) &&
+    /export const NEWS_SHOWN = 3;/.test(loader) && /!isJunkHeadline\(i\.title\)\)\.slice\(0, NEWS_SHOWN\)/.test(loader) &&
+    V.isJunkHeadline("Form 4 Amazon.com Inc For: Oct 03 Filed by: Jassy Andrew R") && V.isJunkHeadline("Amazon.com, Inc. (AMZN) historical prices and data") &&
+    V.isJunkHeadline("BKNG.BK board approves dividend") && !V.isJunkHeadline("Amazon raises its 2026 capex estimate as AWS growth speeds up"),
   "the fixture is served off production only, noindex, and never listed": () => {
     const loader = stripComments(read(LOADER), { file: LOADER }), route = stripComments(read(ROUTE), { file: ROUTE });
     return /export const fixturesServed = \(\) => process\.env\.VERCEL_ENV !== "production";/.test(loader) && /fixturesServed\(\) && /.test(loader) &&
@@ -154,6 +192,10 @@ const MUTANTS = [
   ["an old post:", "v", (s) => s.replace("const summary = str(data.excerpt) || str(data.overallBreakdown);", "const summary = `${str(data.excerpt)} ${str(data.overallBreakdown)}`;")],
   ["the muted line", "v", (s) => s.replace("if (actual === n.claimedSide) return null;", "")],
   ["the new format:", "v", (s) => s.replace(".filter((s): s is InsightSource => !!s && !!s.title && /^https:\\/\\//.test(s.url));", ".filter((s): s is InsightSource => !!s && !!s.title);")],
+  ["drivers: the loader", "v", (s) => s.replace("if (list.length < 1 || list.length > DRIVERS_MAX_SOURCES)", "if (list.length > 99)")],
+  ["drivers: the loader", "v", (s) => s.replace("if (!/^https:\\/\\/[^\\s/]+\\.[^\\s]+$/.test(src.url))", "if (!/^https?:\\/\\//.test(src.url))")],
+  ["drivers: the loader", "v", (s) => s.replace("return problems.length ? { drivers: null, problems } :", "return false ? { drivers: null, problems } :")],
+  ["drivers: the card", "v", (s) => s.replace("return /^form\\s*(?:4|3|5|144)\\b/i.test(title) ||", "return false ||")],
   ["the screens link", "s", (s) => s.replace('href: "/oversold-stocks-today"', 'href: "/oversold-today"')],
   ["no advice words", "v", (s) => s.replace('case "held": return { word: "Held", detail: "No daily close below it since", tone: "up" };', 'case "held": return { word: "Held", detail: "A level to buy while it holds", tone: "up" };')],
 ];
@@ -166,6 +208,9 @@ const SRC_MUTANTS = [
   ["#141:", PAGE, (s) => s.replace('"Top build-out receivers · their own filed sales"', '"Build-out sellers"')],
   ["#141:", PAGE, (s) => s.replace("vs: epsLine(s.eps.value, ya)", "vs: epsVsYearAgo(s.eps.value, ya?.eps, epsMoney)")],
   ["#141:", PAGE, (s) => s.replace('`${now > ya.eps ? "up" : "down"} from ${then}${when}`', "null")],
+  ["drivers: the card", PAGE, (s) => s.replace('rel="nofollow noopener"', 'rel="noopener"')],
+  ["drivers: the card", PAGE, (s) => s.replace(") : d.news?.score ? (", ") : null}{d.news?.score ? (")],
+  ["drivers: the card", LOADER, (s) => s.replace("export const NEWS_SHOWN = 3;", "export const NEWS_SHOWN = 5;")],
   ["the rail:", PAGE, (s) => s.replace('{d.snapshot?.available ? <EarningsTiles d={d} /> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet.</p>}', "<EarningsTiles d={d} />")],
 ];
 const R = Object.keys(RULES);

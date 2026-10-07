@@ -555,9 +555,19 @@ async function paceSecRequest(): Promise<void> {
  * outer withTimeout only stops waiting, it never stopped the fetch.
  */
 export const SEC_COLD_FETCH_DEADLINE_MS = SEC_COLD_TIMEOUT_MS;
-async function secFetch(url: string, init: RequestInit): Promise<Response> {
+/**
+ * COMPANYFACTS GETS ITS OWN, LONGER DEADLINE (#552 COWORK #187 §5, POOL). Its
+ * body is 3.0MB p50 / 6.4MB max, and a large filer's read ran past the shared
+ * 5s on a cold lambda, so the fill fell to the queue and the visitor saw
+ * "taking longer than usual". Still bounded: 20s, then the queue as before.
+ * Every other cold request keeps SEC_COLD_FETCH_DEADLINE_MS.
+ */
+export const SEC_COLD_FACTS_DEADLINE_MS = 20_000;
+/** The whole fill's budget: the companyfacts read plus room for the small requests after it. */
+export const SEC_COLD_FILL_BUDGET_MS = SEC_COLD_FACTS_DEADLINE_MS + SEC_COLD_TIMEOUT_MS;
+async function secFetch(url: string, init: RequestInit, deadlineMs: number = SEC_COLD_FETCH_DEADLINE_MS): Promise<Response> {
   await paceSecRequest();
-  return fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(SEC_COLD_FETCH_DEADLINE_MS) });
+  return fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(deadlineMs) });
 }
 
 /** The queue's head, oldest first, for the cron. */
@@ -639,7 +649,7 @@ async function fetchFactsFor(cik: string): Promise<CompanyFacts> {
     // NO-STORE AND BOUNDED, in secFetch (#552 COWORK #181). The body is
     // 3.0MB p50 / 6.4MB max, over the 2MB Data Cache limit, so Next's cache
     // never held it anyway; the real cache is the Redis write below.
-  });
+  }, SEC_COLD_FACTS_DEADLINE_MS);
   // A 404 IS "SEC HAS NO COMPANY FACTS FOR THIS CIK" — stored as the empty
   // answer it is (see companyFactsAbsent), the same rule as the cron's fetch.
   const absent = companyFactsAbsent(res.status);
@@ -858,7 +868,7 @@ export async function fillColdSymbol(symbol: string): Promise<ColdFillOutcome> {
   }
 
   try {
-    const set = await withTimeout(fetchAndStore(clean, cik), SEC_COLD_TIMEOUT_MS, `[sec-cold] ${clean}`);
+    const set = await withTimeout(fetchAndStore(clean, cik), SEC_COLD_FILL_BUDGET_MS, `[sec-cold] ${clean}`);
     if (hasUsableData(set)) return "filled";
     if (redis) {
       try {

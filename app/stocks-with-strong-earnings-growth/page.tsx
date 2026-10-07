@@ -66,7 +66,7 @@ const config: PickerResultConfig = {
   sectionIncludes: ["strong", "earnings", "growth"],
   // Named on the page (#553 COWORK #161): the SEC section is ordered by filed
   // EPS growth alone (pickersBuilder). The FMP rollback ranks by a composite.
-  rankedBy: SEC ? { label: "EPS growth, highest first", short: "growth" } : undefined,
+  rankedBy: SEC ? { label: "EPS growth, highest first, then small bases by the $ change", short: "growth" } : undefined,
   maxItems: 40,
 };
 

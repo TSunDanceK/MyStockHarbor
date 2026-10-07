@@ -196,7 +196,19 @@ console.log("\n3. the timeout");
 
 check("the fetch is wrapped in a timeout", /withTimeout\(\s*fetchAndStore/.test(code));
 check("the timeout is a named constant, not a literal at the call site",
-  /SEC_COLD_TIMEOUT_MS = \d/.test(code) && /SEC_COLD_TIMEOUT_MS\s*[,)]/.test(code));
+  /SEC_COLD_TIMEOUT_MS = \d/.test(code) && /withTimeout\(fetchAndStore\(clean, cik\), SEC_COLD_FILL_BUDGET_MS,/.test(code));
+// COMPANYFACTS' OWN DEADLINE (#552 COWORK #187 §5, POOL): bounded, longer than
+// the shared 5s, and the fill's budget is it plus room for the small requests.
+{
+  const facts = Number((code.match(/SEC_COLD_FACTS_DEADLINE_MS = ([\d_]+)/) ?? [])[1]?.replace(/_/g, ""));
+  check("companyfacts has its own bounded deadline, 10s-30s", facts >= 10_000 && facts <= 30_000, `${facts}ms`);
+  check("only the companyfacts read passes it; every other cold request keeps the shared deadline",
+    /companyfacts\/CIK\$\{cik\}\.json`, \{[\s\S]{0,400}?\}, SEC_COLD_FACTS_DEADLINE_MS\);/.test(code) && (code.match(/SEC_COLD_FACTS_DEADLINE_MS\)/g) ?? []).length === 1);
+  check("MUTATION: companyfacts back on the shared 5s deadline → caught",
+    !/companyfacts\/CIK\$\{cik\}\.json`, \{[\s\S]{0,400}?\}, SEC_COLD_FACTS_DEADLINE_MS\);/.test(code.replace("}, SEC_COLD_FACTS_DEADLINE_MS);", "});")));
+  check("the fill's budget is the companyfacts deadline plus the shared one",
+    /export const SEC_COLD_FILL_BUDGET_MS = SEC_COLD_FACTS_DEADLINE_MS \+ SEC_COLD_TIMEOUT_MS;/.test(code));
+}
 const ms = Number((code.match(/SEC_COLD_TIMEOUT_MS = ([\d_]+)/) ?? [])[1]?.replace(/_/g, ""));
 // Bounded both ways: long enough that a slow-but-real response lands, short
 // enough that the render cannot be what a 71-second news render was.
@@ -348,14 +360,14 @@ check('no import from "next/headers"', !/from "next\/headers"/.test(code));
 // below), and every fetch is the server action's, through secFetch.
 const secFetchFn = grabFunction(code, "secFetch") ?? "";
 const fetchRule = (fn, mod) =>
-  /cache: "no-store"/.test(fn) && /signal: AbortSignal\.timeout\(SEC_COLD_FETCH_DEADLINE_MS\)/.test(fn) &&
+  /cache: "no-store"/.test(fn) && /signal: AbortSignal\.timeout\(deadlineMs\)/.test(fn) && /deadlineMs(: number)? = SEC_COLD_FETCH_DEADLINE_MS/.test(fn) &&
   !/next: \{ revalidate/.test(mod) && (mod.match(/\bfetch\(/g) ?? []).length === 1;
 check("every cold SEC request is one fetch, in secFetch: no-store, a fresh per-request deadline, no revalidate hint",
   fetchRule(secFetchFn, code), "Next refetches a revalidate entry with the caller's signal stripped (#553 CODE-B #150)");
 check("MUTATION: the revalidate hint back → caught",
   !fetchRule(secFetchFn, code.replace('headers: { "User-Agent": SEC_UA } });', 'headers: { "User-Agent": SEC_UA }, next: { revalidate: 3600 } });')));
 check("MUTATION: the deadline dropped → caught",
-  !fetchRule(secFetchFn.replace(", signal: AbortSignal.timeout(SEC_COLD_FETCH_DEADLINE_MS)", ""), code));
+  !fetchRule(secFetchFn.replace(", signal: AbortSignal.timeout(deadlineMs)", ""), code));
 check("the render never fetches and carries no no-store",
   !/\bfetch\(|secFetch\(|no-store/.test(render), "a no-store fetch in this ISR render was the measured 500");
 check("the Redis client is PAGE_READ_CACHE-guarded",
@@ -378,7 +390,7 @@ check("the Redis client is PAGE_READ_CACHE-guarded",
   };
   const got = await timed(secFetchFn);
   check("a stalled body aborts at the deadline and throws a timeout", got.threw && /TimeoutError|AbortError|aborted/i.test(got.name) && got.ms >= 250 && got.ms < 2_000, `${got.name} after ${got.ms} ms`);
-  const unbounded = secFetchFn.replace(", signal: AbortSignal.timeout(SEC_COLD_FETCH_DEADLINE_MS)", "");
+  const unbounded = secFetchFn.replace(", signal: AbortSignal.timeout(deadlineMs)", "");
   const race = await Promise.race([timed(unbounded), new Promise((r) => setTimeout(() => r({ hung: true }), 1_500))]);
   check("MUTATION: without the signal the same request hangs → caught", race.hung === true);
   server.closeAllConnections?.(); server.close();

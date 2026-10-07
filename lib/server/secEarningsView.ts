@@ -931,6 +931,12 @@ export type SecEarningsView = {
     shortTermInvestments: ViewCell;
     totalDebt: number | null;
     totalDebtMissing: string | null;
+    /**
+     * The current debt line, set ONLY when no long-term line is on the same
+     * balance sheet -- the case where total debt is withheld (#552 COWORK #192
+     * ruling B). Rendered as "Short-term debt", never as a total.
+     */
+    shortTermDebtOnly: number | null;
     netCash: number | null;
     netCashMissing: string | null;
     currentRatio: number | null;
@@ -1566,7 +1572,14 @@ export function buildSecEarningsView(
   const bsAt = balanceSheetInstant(set);
   const std = valueOf(bsAt, "shortTermDebt");
   const ltd = valueOf(bsAt, "longTermDebt");
-  const totalDebt = std === null && ltd === null ? null : (std ?? 0) + (ltd ?? 0);
+  // TOTAL DEBT ONLY WITH A LONG-TERM LINE ON THIS BALANCE SHEET (#552 COWORK
+  // #192 ruling B). ORCL's newest 10-Q tags its current notes ($7.6B) and no
+  // undimensioned long-term line, so the old "whichever exists" sum read
+  // "Total debt $7.6B" against roughly $130B. A current line alone is shown
+  // as what it is -- short-term debt, labelled -- and Total stays blank. Both
+  // lines come from the one instant (bsAt), so they share a date by construction.
+  const totalDebt = ltd === null ? null : (std ?? 0) + ltd;
+  const shortTermDebtOnly = ltd === null && std !== null ? std : null;
   /**
    * ── CASH, AND THE ONE SUBSTITUTE THAT IS ALLOWED FOR IT ──────────────────
    *
@@ -1778,6 +1791,7 @@ export function buildSecEarningsView(
           shortTermInvestments: view(bsAt, "shortTermInvestments", "Short-term investments"),
           totalDebt,
           totalDebtMissing: missingOf([["short-term debt", std], ["long-term debt", ltd]]),
+          shortTermDebtOnly,
           netCash: liquid === null || totalDebt === null ? null : liquid - totalDebt,
           netCashMissing: missingOf([
             ["cash and short-term investments", liquid],
