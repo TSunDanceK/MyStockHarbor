@@ -1,7 +1,9 @@
 "use client";
 
 import { CRYPTO_MODE_ENABLED } from "@/lib/cryptoMode";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { holdOnAnalyser, scrollMotion, wantsAnalyser } from "@/lib/chartHref";
+import FiledEarningsChart, { FILED_EARNINGS_CSS } from "@/app/dashboard/FiledEarningsChart";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
@@ -71,8 +73,16 @@ export type DashboardLandingProps = {
   css: string;
 };
 type AnalyserTab = "chart" | "levels" | "zones" | "earnings" | "news";
-const ANALYSER_TABS: { key: AnalyserTab; label: string }[] = [
-  { key: "chart", label: "Chart" }, { key: "levels", label: "Key levels" }, { key: "zones", label: "Price zones" }, { key: "earnings", label: "Filed earnings" }, { key: "news", label: "News" },
+// THE TABS ON ONE LINE ON A PHONE (#563 COWORK #154 §5): an icon and a short
+// label (the icon over it) at 480 px and under, the full name everywhere else and always in the
+// accessible name; a horizontal strip, never page sideways-scroll, if 320 px
+// still cannot fit them.
+const ANALYSER_TABS: { key: AnalyserTab; label: string; short: string; icon: string }[] = [
+  { key: "chart", label: "Chart", short: "Chart", icon: "M3 17l5-6 4 3 6-8M3 21h18" },
+  { key: "levels", label: "Key levels", short: "Levels", icon: "M3 6h18M3 12h18M3 18h18" },
+  { key: "zones", label: "Price zones", short: "Zones", icon: "M3 8h18v4H3zM3 15h18v3H3z" },
+  { key: "earnings", label: "Filed earnings", short: "Earnings", icon: "M5 20V11M10 20V6M15 20v-7M20 20V9" },
+  { key: "news", label: "News", short: "News", icon: "M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M8 9h5M8 13h5" },
 ];
 /** The landing's hero and analyser styles (the server cards bring their own, LANDING_CSS). */
 const LANDING_CLIENT_CSS = `
@@ -98,6 +108,10 @@ const LANDING_CLIENT_CSS = `
 .dlTabs{display:flex;flex-wrap:wrap;gap:8px;}
 .dlTab{padding:8px 14px;border-radius:10px;border:1px solid #222c40;background:#0f1624;color:#cbd5e1;font-weight:800;font-size:var(--fs-label);cursor:pointer;}
 .dlTab[aria-selected="true"]{border-color:#2f6bff;background:#13213f;color:#fff;}
+.dlTab{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
+.dlTabIcon{width:16px;height:16px;flex:0 0 auto;display:none;}
+.dlTabShort{display:none;}
+@media(max-width:480px){.dlTabs{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;gap:4px;}.dlTabs::-webkit-scrollbar{display:none;}.dlTab{flex:1 0 auto;flex-direction:column;justify-content:center;padding:6px 6px;gap:3px;}.dlTabIcon{display:block;width:16px;height:16px;}.dlTabFull{display:none;}.dlTabShort{display:inline;}}
 @media(max-width:960px){.dlHero{grid-template-columns:minmax(0,1fr);}}
 @media(max-width:560px){.dlSearch{padding:0 8px;gap:6px;}.dlSearch .msh-go{padding:0 12px;}.dlHeroLeft{padding:18px;}.dlH1{font-size:2rem;}.dlVerdict{font-size:var(--fs-read);}}
 `;
@@ -637,12 +651,15 @@ export default function DashboardClient({
   const selectedTimeframe = useMemo(() => TIMEFRAMES.find(t => t.label === activeTimeframe) ?? TIMEFRAMES[0], [activeTimeframe]);
   const COLORS = useMemo(() => ({ isDark: true, pageBg: "#0a0f1a", pageFg: "#eaf0fa", mutedFg: "#8a97ad", mutedFg2: "#5f6b80", cardBg: "#141b2b", cardFg: "#eaf0fa", cardBg2: "#0f1624", border: "#222c40", borderSoft: "#1a2336", controlBg: "#0f1624", controlBgSolid: "#0f1624", controlBorder: "#222c40", controlFg: "#eaf0fa", blue: "#2f6bff", blueSoft: "#13213f", blueBorder: "#27406f", green: "#16c784", greenSoft: "#0f2a23", greenBorder: "#1c4a3c", amber: "#f5a524", amberSoft: "#2c2310", amberBorder: "#3a2f10", red: "#f04444", yellowBorder: "rgba(234,179,8,0.38)", yellowBg: "rgba(234,179,8,0.10)", yellowText: "#fde68a" }), []);
 
-  // A ?symbol= DEEP LINK LANDS ON THE ANALYSER (#563 COWORK #134): it moved
-  // below the landing, so the page scrolls to it rather than to the hero.
+  // A CHART LINK LANDS ON THE ANALYSER (#563 COWORK #134, #151, #152):
+  // chartHref's #analyser, the older #chart, or a ?symbol= deep link. A layout
+  // effect, so the first jump lands before the first paint after hydration and
+  // the hero never flashes; holdOnAnalyser then keeps it there while the page
+  // settles (the router's own scroll, images, fonts) until the reader moves.
   const deepSymbol = searchParams.get("symbol");
-  useEffect(() => {
-    if (!landing || !cleanSymbol(deepSymbol)) return;
-    analyserRef.current?.scrollIntoView({ block: "start" });
+  useLayoutEffect(() => {
+    if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;
+    return holdOnAnalyser(() => analyserRef.current);
   }, [landing, deepSymbol]);
   useEffect(() => { const r = () => setIsMobile(window.innerWidth <= 768); r(); window.addEventListener("resize", r); return () => window.removeEventListener("resize", r); }, []);
   useEffect(() => { if (symbolName.trim()) return; const list = assetType === "crypto" ? CRYPTO_PRESETS : PRESET_TICKERS; const f = list.find(x => x.symbol.toUpperCase() === symbol.toUpperCase()); if (f?.name) setSymbolName(f.name); }, [symbol, symbolName, assetType]);
@@ -836,7 +853,8 @@ export default function DashboardClient({
     return () => { c = true; clearTimeout(t); };
   }, [query, assetType]);
   useEffect(() => { let c = false; async function lb() { if (seededBenchRef.current) { seededBenchRef.current = false; return; } try { const scope = assetType === "crypto" ? "crypto" : "stock"; const r = await fetch(`/api/benchmarks?scope=${scope}`); if (!r.ok) throw new Error(""); const raw = (await r.json()) as any; if (!c) setBench({ updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(), scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks", items: Array.isArray(raw?.items) ? raw.items : [], ...(raw?.provider === "tiingo" ? { provider: "tiingo" as const } : {}) }); } catch { if (!c) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] }); } } lb(); return () => { c = true; }; }, [assetType]);
-  useEffect(() => { const h = typeof window !== "undefined" ? window.location.hash : ""; if (h !== "#chart" || !historyAll.length) return; const t = window.setTimeout(() => { chartSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); setHighlightChart(true); setTimeout(() => setHighlightChart(false), 1200); }, 80); return () => window.clearTimeout(t); }, [historyAll, symbol]);
+  // The older #chart link: with a landing, holdOnAnalyser already keeps the analyser in view (#152).
+  useEffect(() => { const h = typeof window !== "undefined" ? window.location.hash : ""; if (h !== "#chart" || !historyAll.length || landing) return; const t = window.setTimeout(() => { chartSectionRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }); setHighlightChart(true); setTimeout(() => setHighlightChart(false), 1200); }, 80); return () => window.clearTimeout(t); }, [historyAll, symbol, landing]);
   useEffect(() => { if (assetType === "crypto") { setNews(null); return; } if (seededNewsRef.current) { seededNewsRef.current = false; return; } let c = false; async function ln() { try { const r = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`); if (!r.ok) throw new Error(""); if (!c) setNews((await r.json()) as NewsPayload); } catch { if (!c) setNews(null); } } ln(); return () => { c = true; }; }, [symbol, assetType]);
   useEffect(() => { if (assetType === "crypto") { setEarningsSummary(null); return; } if (seededEarningsRef.current) { seededEarningsRef.current = false; return; } let c = false; async function le() { setEarningsSummary(null); try { const r = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" }); if (!r.ok) throw new Error(""); if (!c) setEarningsSummary((await r.json()) as StockEarningsSummary); } catch { if (!c) setEarningsSummary(null); } } le(); return () => { c = true; }; }, [symbol, assetType]);
 
@@ -933,7 +951,7 @@ export default function DashboardClient({
   function pickFromHero(sym: string, name?: string) {
     chooseSymbol(sym, name, "stock");
     setTab("chart");
-    if (landing) requestAnimationFrame(() => analyserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    if (landing) requestAnimationFrame(() => analyserRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }));
   }
   function switchAssetType(next: AssetType) {
     if (next === assetType) return;
@@ -1507,20 +1525,25 @@ export default function DashboardClient({
     if (tab === "chart") body = <PriceChartPanel />;
     else if (tab === "levels") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <KeyLevelsCard bars={dailyKeyBars} lastPrice={lastClose} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
     else if (tab === "zones") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <ConfluenceCard bars={dailyKeyBars} lastPrice={lastClose} ma50={typeof lastMA50 === "number" ? lastMA50 : null} ma200={typeof lastMA200 === "number" ? lastMA200 : null} macro={macroSupport ? { lower: macroSupport.lower, upper: macroSupport.upper } : null} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
-    else if (tab === "earnings") body = (
-      <SectionCard title={`${symbol} filed earnings`}>
-        {assetType !== "stock" ? <p className="dlEmpty">Filed earnings are for stocks only.</p>
-          : earningsSummary?.hasStructuredData ? <p className="dlRead">The latest filed quarter reads <strong>{earningsSummary.toneLabel}</strong> on our earnings snapshot. The figures behind it (EPS, margins and cash flow, each against a year earlier) are on the earnings page.</p>
-          : <p className="dlEmpty">Filed figures aren&apos;t available for {symbol} yet.</p>}
-        {assetType === "stock" ? <Link className="dlMore" href={`/stock/${encodeURIComponent(symbol)}/earnings`} prefetch={false}>{symbol} filed earnings →</Link> : null}
-        <p className="dlFine" data-fine-print="">Filings from SEC EDGAR</p>
-      </SectionCard>
-    );
+    // A REAL CHART (#563 COWORK #154 §6): the newest 8 filed quarters' EPS and
+    // operating margin, fetched only while this tab is open.
+    // SectionCard is declared in this render, so it is CALLED, not mounted: mounted,
+    // it is a new component type each render and the chart would remount and refetch.
+    else if (tab === "earnings") body = SectionCard({
+      title: `${symbol} filed earnings`,
+      children: assetType !== "stock" ? <p className="dlEmpty" data-filed-empty="">Filed figures not available for {symbol}.</p>
+        : <FiledEarningsChart symbol={symbol} verdict={earningsSummary?.hasStructuredData ? earningsSummary.toneLabel ?? null : null} tone={earningsSummary?.hasStructuredData ? earningsSummary.tone ?? null : null} />,
+    });
     else body = <NewsPanel />;
     return (
       <div className="msh-col dlTabbed">
         <div className="dlTabs" role="tablist" aria-label={`${symbol} analyser views`}>
-          {ANALYSER_TABS.map((t) => <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} data-tab={t.key} className="dlTab" onClick={() => setTab(t.key)}>{t.label}</button>)}
+          {ANALYSER_TABS.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} aria-label={t.label} data-tab={t.key} className="dlTab" onClick={() => setTab(t.key)}>
+              <svg className="dlTabIcon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={t.icon} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <span className="dlTabFull">{t.label}</span><span className="dlTabShort" aria-hidden="true">{t.short}</span>
+            </button>
+          ))}
         </div>
         <div role="tabpanel" aria-label={ANALYSER_TABS.find((t) => t.key === tab)?.label}>{body}</div>
       </div>
@@ -1576,7 +1599,7 @@ export default function DashboardClient({
       `}</style>
 
 
-      {landing ? <style>{landing.css + LANDING_CLIENT_CSS}</style> : null}
+      {landing ? <style>{landing.css + LANDING_CLIENT_CSS + FILED_EARNINGS_CSS}</style> : null}
       <div className="msh-wrap">
         {landing ? (
           <div className="dlHero" data-landing="">

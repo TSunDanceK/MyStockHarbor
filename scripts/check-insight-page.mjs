@@ -38,6 +38,7 @@ import { stripComments } from "./lib/source-code.mjs";
 import matter from "gray-matter";
 
 const VIEW = "lib/insightView.ts", SCREENS = "lib/insightScreens.ts", PAGE = "app/insights/[slug]/InsightPage.tsx", ROUTE = "app/insights/[slug]/page.tsx";
+const PRICE = "app/components/PriceChart.tsx";
 const CHART = "app/insights/[slug]/InsightChart.tsx", LOADER = "lib/server/insightPage.ts", TEMPLATE = "content/templates/insight-template.md";
 const FIXTURE = "content/insights-fixtures/fixture-aapl-new-format.md", AMZN = "content/insights/amzn-daily-ma200-buy-zone-july-2026.md";
 const read = (f) => fs.readFileSync(f, "utf8");
@@ -134,9 +135,9 @@ const RULES = {
     /<KeyLevelsCard bars=\{d\.railBars\} discussed=\{d\.discussed\}/.test(page) && /discussed: level && lvNow !== null \? \{ label: SHORT\[level\], value: lvNow \} : null,/.test(loader) &&
     /\{d\.snapshot\?\.available \? <EarningsTiles d=\{d\} \/> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet\.<\/p>\}/.test(page) &&
     /: <p className="inRead">No recent headlines\.<\/p>\}/.test(page) && /getStockNewsBaseData\(sym, \{ maxDetailedItems: 5 \}\)/.test(loader) && !/LatestEarningsCard/.test(page),
-  "#141: the flow's arrow points at a header naming whose figures they are; the EPS tile gives its year-ago figure": ({ page }) => {
-    const heads = /\{m\.mention\.list === "spending" \? "Top build-out receivers · their own filed sales" : "Top spenders · their own capex"\}/.test(page) &&
-      /<div className="inFlowBox">\s*<p className="inFlowHead" data-flow-head="">/.test(page);
+  "#141: the flow's header names whose figures they are (flat since #156); the EPS tile gives its year-ago figure": ({ page }) => {
+    const heads = /\{spending \? "Top build-out receivers · their own filed sales" : "Top spenders · their own capex"\}/.test(page) &&
+      /<div className="inCxOther" data-flow=\{m\.mention\.list\}>\s*<p className="inFlowHead" data-flow-head="">/.test(page);
     const fn = page.match(/const epsMoney = [^\n]*\n[\s\S]*?export function epsLine[\s\S]*?\n\}/)?.[0];
     if (!heads || !fn || !/vs: epsLine\(s\.eps\.value, ya\)/.test(page)) return false;
     const js = ts.transpileModule(`${read("lib/snapshotVsYearAgo.ts")}\n${fn.replace(/^export /m, "")}\nexports.epsLine = epsLine;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -211,6 +212,26 @@ const RULES = {
       /<h2 className="inOriginalTitle">The original post · \{dayWords\(n\.date\)\}<\/h2>/.test(orig) && order(orig, ["{shortCard}", "{whatCard}"]) &&
       order(withU[2], ["{shortCard}", "{chartCard}", "{newsCard}", "{whatCard}"]) && (page.match(/\{shortCard\}/g) ?? []).length === 2;
   },
+  // #563 COWORK #155: the slider IS the chart's x-axis, over the plot area, and marks its bar.
+  "#155 slider: the chart's own sessions, the plot area's width, a marker on the bar, pre-publication labelled": ({ chart, price }) =>
+    /<input id="inSliderRange" type="range" min=\{0\} max=\{last\} step=\{1\} value=\{i\}/.test(chart) && /marker=\{span >= 1 \? i : null\}/.test(chart) &&
+    /paddingLeft: `calc\(\$\{\(PRICE_CHART_PAD\.left \/ PRICE_CHART_PAD\.width\) \* 100\}% \+ 1px\)`, paddingRight: `calc\(\$\{\(PRICE_CHART_PAD\.right \/ PRICE_CHART_PAD\.width\) \* 100\}% - 1px\)`/.test(chart) &&
+    /\{before \? "before publication" : `\$\{pct\(/.test(chart) && /const before = i < p\.publishIndex;/.test(chart) &&
+    /export const PRICE_CHART_PAD = \{ left: 34, right: 54, width: 760 \} as const;/.test(price) && /const padL = 34;/.test(price) && /const padR = 54;/.test(price) &&
+    /<circle data-chart-marker-dot="" cx=\{x\(marker\)\} cy=\{yMain\(series\[marker\]\.close\)\}/.test(price),
+  // #563 COWORK #156 §1: the screen's other members, from one shared day's entry, streamed.
+  "#156 screens: up to 10 members, own ticker out, largest first, from one shared 24 h entry, streamed, with an empty state": ({ page, loader }) =>
+    /export const SCREEN_MEMBERS = 10;/.test(loader) && /out\[flag\] = syms\.slice\(0, SCREEN_MEMBERS \+ 1\)/.test(loader) &&
+    /\(PRESET_RANK\.get\(a\) \?\? 1e6\) - \(PRESET_RANK\.get\(b\) \?\? 1e6\)/.test(loader) &&
+    /\["insight-screen-members-v1"\],\s*\{ revalidate: 86400/.test(loader) && /readScreenMembers\(easternDate\(new Date\(\)\)\)/.test(loader) &&
+    /\.filter\(\(m\) => m\.symbol !== own\.toUpperCase\(\)\)\.slice\(0, SCREEN_MEMBERS\)/.test(loader) &&
+    /<Suspense fallback=\{<ul className="inScreenList" data-screen-skeleton=""/.test(page) && /<ScreenMembers flag=\{m\.flag\} sym=\{sym\} \/>/.test(page) &&
+    /data-screen-empty="">No other stocks in this setup today\.<\/p>/.test(page) && /title=\{x\.name\}/.test(page) &&
+    /\.inScreenCo \{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/.test(read(PAGE)) && /Open the screen →<\/Link>/.test(page),
+  // #563 COWORK #156 §2: Follow the money is one card, its rows directly on it, in the dashboard's purple bars.
+  "#156 follow the money: no card inside the card; the company row on top; purple bars": ({ page }) =>
+    !/inFlowBox|inFlowArrow/.test(page) && !/\.inCxOther \{[^}]*border/.test(read(PAGE)) && /<div className="inCxOwn" data-capex-own="">/.test(page) &&
+    page.indexOf('data-capex-own=""') < page.indexOf('data-flow-head=""') && /\.inCxFill \{[^}]*background: #a78bfa;/.test(read(PAGE)),
   "the fixture is served off production only, noindex, and never listed": () => {
     const loader = stripComments(read(LOADER), { file: LOADER }), route = stripComments(read(ROUTE), { file: ROUTE });
     return /export const fixturesServed = \(\) => process\.env\.VERCEL_ENV !== "production";/.test(loader) && /fixturesServed\(\) && /.test(loader) &&
@@ -243,6 +264,15 @@ const MUTANTS = [
 
 // Source mutants: [rule start, file, mutation].
 const SRC_MUTANTS = [
+  ["#155 slider", CHART, (s) => s.replace('min={0} max={last} step={1} value={i}', 'min={p.publishIndex} max={last} step={1} value={i}')],
+  ["#155 slider", CHART, (s) => s.replace(/style=\{\{ paddingLeft: `calc\([^`]*`, paddingRight: `calc\([^`]*` \}\}/, "style={{}}")],
+  ["#155 slider", CHART, (s) => s.replace("marker={span >= 1 ? i : null}", "")],
+  ["#155 slider", CHART, (s) => s.replace('{before ? "before publication" : `${pct(', '{false ? "before publication" : `${pct(')],
+  ["#156 screens", LOADER, (s) => s.replace(".filter((m) => m.symbol !== own.toUpperCase()).slice(0, SCREEN_MEMBERS)", ".slice(0, SCREEN_MEMBERS)")],
+  ["#156 screens", LOADER, (s) => s.replace("export const SCREEN_MEMBERS = 10;", "export const SCREEN_MEMBERS = 20;")],
+  ["#156 screens", PAGE, (s) => s.replace("No other stocks in this setup today.", "")],
+  ["#156 screens", PAGE, (s) => s.replace("<Suspense fallback=", "<div data-x=").replace("</Suspense>", "</div>")],
+  ["#156 follow the money", PAGE, (s) => s.replace('<div className="inCxOther" data-flow={m.mention.list}>', '<div className="inCxOther inFlowBox" data-flow={m.mention.list}>')],
   ["SEO:", ROUTE, (s) => s.replace("dateModified: modifiedTime,", "dateModified: new Date().toISOString(),")],
   ["SEO:", ROUTE, (s) => s.replace('"@type": "Article",', '"@type": "BlogPosting",')],
   ["the rail:", PAGE, (s) => s.replace("<KeyLevelsCard bars={d.railBars} discussed={d.discussed}", "<KeyLevelsCard bars={d.railBars}")],
@@ -262,7 +292,7 @@ const R = Object.keys(RULES);
 let failures = 0;
 const check = (label, ok) => { console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}`); if (!ok) failures++; };
 const run = (rule, m) => { try { return !!rule(m); } catch (e) { if (process.env.DEBUG) console.log(e); return false; } };
-const srcOf = (over = {}) => ({ route: stripComments(over[ROUTE] ?? read(ROUTE), { file: ROUTE }), page: stripComments(over[PAGE] ?? read(PAGE), { file: PAGE }), loader: stripComments(over[LOADER] ?? read(LOADER), { file: LOADER }) });
+const srcOf = (over = {}) => ({ chart: stripComments(over[CHART] ?? read(CHART), { file: CHART }), price: stripComments(over[PRICE] ?? read(PRICE), { file: PRICE }), route: stripComments(over[ROUTE] ?? read(ROUTE), { file: ROUTE }), page: stripComments(over[PAGE] ?? read(PAGE), { file: PAGE }), loader: stripComments(over[LOADER] ?? read(LOADER), { file: LOADER }) });
 const measure = async (v = read(VIEW), s = read(SCREENS), over = {}) => ({ V: await load(v, "view"), S: await load(s, "screens"), ...srcOf(over) });
 
 console.log("=== Rules ===");

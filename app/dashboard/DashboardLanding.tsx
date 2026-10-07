@@ -101,6 +101,12 @@ function HubWeb({ top }: { top: { ticker: string; count: number }[] }) {
  * node: there is no line from a company to another company, because there is
  * no estimated company→company flow (#563 rules). Server-drawn, no client code.
  */
+/** The capex rows' fixed height and gap, in px: the star's lines are drawn on them. */
+const CX_ROW = 28, CX_GAP = 8;
+
+/** The sectors card's one plain line (#154 §3). */
+export const SECTOR_WHAT = "How much each sector\u2019s stocks have risen or fallen since 1 January, weighted by company size.";
+
 function CapexFlow({ spenders, receivers }: { spenders: CapexBar[]; receivers: CapexBar[] }) {
   const side = (rows: CapexBar[], head: string, key: string) => {
     const max = Math.max(1, ...rows.map((r) => r.value));
@@ -120,18 +126,27 @@ function CapexFlow({ spenders, receivers }: { spenders: CapexBar[]; receivers: C
       </div>
     );
   };
-  // Row centres on a 0–120 box: the node is the middle; every line has one end on it.
-  const ys = (n: number) => Array.from({ length: n }, (_, i) => ((i + 0.5) * 120) / Math.max(n, 1));
+  // THE STAR, LINED UP (#563 COWORK #154 §1): the rows have a fixed height, so
+  // the lines are drawn in the lists' own pixels. Each line leaves its company
+  // row level, at that row's vertical centre, and turns into the hub, which
+  // sits on the middle row's centre. Every line has one end on the hub.
+  const n = Math.max(spenders.length, receivers.length, 1);
+  const H = n * CX_ROW + (n - 1) * CX_GAP, hubY = H / 2;
+  const cy = (i: number) => i * (CX_ROW + CX_GAP) + CX_ROW / 2;
   return (
     <div className="dlCapexChart" data-capex-chart="">
       {side(spenders, "Top spenders · their own capex", "spend")}
       <div className="dlCxNode">
-        <svg viewBox="0 0 80 120" preserveAspectRatio="none" className="dlCxLines" aria-hidden="true" focusable="false">
-          {ys(spenders.length).map((y) => <line key={`in${y}`} data-into-node="" x1={0} y1={y} x2={40} y2={60} stroke="rgba(167,139,250,0.55)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
-          {ys(receivers.length).map((y) => <line key={`out${y}`} data-from-node="" x1={40} y1={60} x2={80} y2={y} stroke="rgba(167,139,250,0.55)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
-          <circle cx={40} cy={60} r={7} fill="#a78bfa" vectorEffect="non-scaling-stroke" />
-        </svg>
-        <span className="dlCxNodeLabel" data-node="">the build-out</span>
+        <div className="dlCxStar" style={{ height: H }} data-hub-y={hubY}>
+          {/* Sizes the column to the label, so the label never wraps or overhangs the bars. */}
+          <span className="dlCxSize" aria-hidden="true">the build-out</span>
+          <svg viewBox={`0 0 80 ${H}`} preserveAspectRatio="none" className="dlCxLines" aria-hidden="true" focusable="false">
+            {spenders.map((r, i) => <path key={`in${r.ticker}`} data-into-node="" data-row-y={cy(i)} d={`M0 ${cy(i)} H14 L40 ${hubY}`} fill="none" stroke="rgba(167,139,250,0.55)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
+            {receivers.map((r, i) => <path key={`out${r.ticker}`} data-from-node="" data-row-y={cy(i)} d={`M40 ${hubY} L66 ${cy(i)} H80`} fill="none" stroke="rgba(167,139,250,0.55)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
+          </svg>
+          <i className="dlCxHub" style={{ top: hubY }} aria-hidden="true" />
+          <span className="dlCxNodeLabel" data-node="" style={{ top: hubY + 12 }}>the build-out</span>
+        </div>
       </div>
       {side(receivers, "Top build-out receivers · their own filed sales", "receive")}
     </div>
@@ -201,7 +216,8 @@ export function LandingCards({ c }: { c: DashboardCards }) {
         <Card id="capex" eyebrow="Follow the money · AI capex" tone="#c4b5fd" title={c.capex?.lead ? `${c.capex.lead.amount} out of ${c.capex.lead.ticker}. Where does it land?` : "Where the build-out money lands"} more={{ href: "/bottlenecks/capex", label: "See the full capex picture" }} empty={c.capex ? null : EMPTY.capex}>
           {c.capex ? (
             <>
-              <CapexFlow spenders={c.capex.spenders} receivers={c.capex.receivers} />
+              {/* THE STAR NEEDS ROOM (#154 §1): a card too narrow for it, a phone or a large text size, gets the stacked layout. */}
+              <div className="dlCapexWrap"><CapexFlow spenders={c.capex.spenders} receivers={c.capex.receivers} /></div>
               <p className="dlFine" data-fine-print="">From each company&apos;s filings. These are what suppliers sold, not a record of who paid them.</p>
             </>
           ) : null}
@@ -231,12 +247,25 @@ export function LandingCards({ c }: { c: DashboardCards }) {
         <Card id="earnings" eyebrow="Earnings · the next two weeks" tone="#38bdf8" title="Who is estimated to report next" more={{ href: "/earnings-calendar", label: "Open the calendar" }} empty={c.earnings ? null : EMPTY.earnings}>
           {c.earnings ? (
             <>
+              {/* A LIST, LIKE THE PICKERS CARD (#563 COWORK #154 §2): a heading per
+                  week, then one company per line, biggest first, the rest counted. */}
               <div className="dlWeeks">
                 {c.earnings.windows.map((w) => (
-                  <div key={w.range} className="dlWeek">
-                    <p className="dlWeekHead">{w.range}</p>
-                    <p className="dlFine" data-fine-print="">{w.count === 1 ? "1 company" : `${w.count} companies`}</p>
-                    <div className="dlChips">{w.top.map((s) => <Link key={s} href={`/stock/${encodeURIComponent(s)}/earnings`} prefetch={false} className="dlChip dlLogoChip" data-logo-chip=""><TickerLogo symbol={s} size={18} radius={4} alt="" /><span>{s}</span></Link>)}</div>
+                  <div key={w.range} className="dlWeek" data-week="">
+                    <p className="dlWeekHead">{w.range} · {w.count === 1 ? "1 company" : `${w.count} companies`}</p>
+                    <ul className="dlList dlEarnList">
+                      {w.top.map((e) => (
+                        <li key={e.symbol} className="dlEarnRow" data-earn-row="">
+                          <Link href={`/stock/${encodeURIComponent(e.symbol)}/earnings`} prefetch={false} className="dlEarnName" title={e.name}>
+                            <TickerLogo symbol={e.symbol} size={20} radius={5} alt="" />
+                            <strong>{e.symbol}</strong>
+                            <span className="dlEarnCo">{e.name}</span>
+                          </Link>
+                          <span className="dlEarnDay">{e.day} <em>Estimated</em></span>
+                        </li>
+                      ))}
+                    </ul>
+                    {w.count > w.top.length ? <Link href="/earnings-calendar" prefetch={false} className="dlEarnMore" data-earn-more="">+{w.count - w.top.length} more in the calendar →</Link> : null}
                   </div>
                 ))}
               </div>
@@ -245,9 +274,11 @@ export function LandingCards({ c }: { c: DashboardCards }) {
           ) : null}
         </Card>
 
-        <Card id="sectors" eyebrow="Sectors · year to date" tone="#facc15" title={c.sectors?.leader && c.sectors.laggard ? `${c.sectors.leader} leads, ${c.sectors.laggard} lags` : "Sectors this year"} more={{ href: "/sector", label: "All 11 sectors" }} empty={c.sectors ? null : EMPTY.sectors}>
+        <Card id="sectors" eyebrow="Sector growth · year to date" tone="#facc15" title={c.sectors?.leader && c.sectors.laggard ? `${c.sectors.leader} leads, ${c.sectors.laggard} lags` : "Sectors this year"} more={{ href: "/sector", label: "All 11 sectors" }} empty={c.sectors ? null : EMPTY.sectors}>
           {c.sectors ? (
             <>
+              {/* WHAT IT MEASURES, IN ONE PLAIN LINE (#563 COWORK #154 §3). */}
+              <p className="dlRead dlSecWhat" data-sector-what="">{SECTOR_WHAT}</p>
               <SectorBars rows={c.sectors.rows} spx={c.sectors.spxYtd} />
               <p className="dlFine" data-fine-print="">Cap-weighted across each sector&apos;s tracked stocks. {credit}</p>
             </>
@@ -256,19 +287,25 @@ export function LandingCards({ c }: { c: DashboardCards }) {
       </div>
 
       <div className="dlRow dlRow2">
-        <Card id="insight" eyebrow="Insight of the day" tone="#fbbf24" more={{ href: c.insight ? `/insights/${c.insight.slug}` : "/insights", label: c.insight ? "Read the breakdown" : "All insights" }} empty={c.insight ? null : EMPTY.insight}>
-          {c.insight ? (
-            <div className="dlInsight">
-              {c.insight.art.kind === "library" ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img className="dlInsightImg" src={c.insight.art.art.src} width={c.insight.art.art.width} height={c.insight.art.art.height} alt="" loading="lazy" decoding="async" />
-              ) : <span className="dlInsightImg" aria-hidden="true" />}
-              <div>
-                <h3 className="dlTitle"><Link href={`/insights/${c.insight.slug}`} prefetch={false}>{c.insight.title}</Link></h3>
-                <p className="dlFine" data-fine-print="">
-                  {c.insight.movePct !== null ? <><strong style={{ color: c.insight.movePct >= 0 ? "#86efac" : "#fca5a5" }}>{signed(c.insight.movePct)}</strong> since the post on {day(c.insight.date)}{c.insight.outcome ? ` · ${c.insight.outcome}` : ""}</> : <>Published {day(c.insight.date)} · {c.insight.symbol}</>}
-                </p>
-              </div>
+        {/* TWO POSTS ON A WIDE SCREEN (#563 COWORK #154 §4): the newest two side by
+            side at 1024 px and up; a phone shows the newest only. */}
+        <Card id="insight" eyebrow="Insight of the day" tone="#fbbf24" more={{ href: c.insights ? `/insights/${c.insights[0].slug}` : "/insights", label: c.insights ? "Read the breakdown" : "All insights" }} empty={c.insights ? null : EMPTY.insight}>
+          {c.insights ? (
+            <div className="dlInsights" data-insights={c.insights.length}>
+              {c.insights.map((p, i) => (
+                <div key={p.slug} className="dlInsight" data-insight-post={i}>
+                  {p.art.kind === "library" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className="dlInsightImg" src={p.art.art.src} width={p.art.art.width} height={p.art.art.height} alt="" loading="lazy" decoding="async" />
+                  ) : <span className="dlInsightImg" aria-hidden="true" />}
+                  <div>
+                    <h3 className="dlTitle"><Link href={`/insights/${p.slug}`} prefetch={false}>{p.title}</Link></h3>
+                    <p className="dlFine" data-fine-print="">
+                      {p.movePct !== null ? <><strong style={{ color: p.movePct >= 0 ? "#86efac" : "#fca5a5" }}>{signed(p.movePct)}</strong> since the post on {day(p.date)}{p.outcome ? ` · ${p.outcome}` : ""}</> : <>Published {day(p.date)} · {p.symbol}</>}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : null}
         </Card>
@@ -332,23 +369,27 @@ export const LANDING_CSS = `
 .dlWeb{width:100%;height:auto;max-width:300px;}
 .dlColHead{margin:0 0 4px;font-size:var(--fs-read);line-height:1.35;color:#8a97ad;font-weight:700;}
 .dlTk{font-weight:800;}
-.dlWeeks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.dlWeeks{display:block;}
 .dlLogoChip{display:inline-flex;align-items:center;gap:5px;}
 .dlScreen{flex-wrap:nowrap;}
 .dlScreenRight{display:inline-flex;align-items:center;gap:8px;flex:0 0 auto;}
 .dlPeek{display:inline-flex;gap:3px;}
-.dlCapexChart{display:grid;grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr);gap:8px;align-items:stretch;}
+.dlCapexChart{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:end;}
 .dlCx{min-width:0;}
 .dlCx .dlColHead{min-height:2.7em;}
 .dlCxList{list-style:none;margin:0;padding:0;display:grid;gap:8px;}
-.dlCxRow{display:grid;grid-template-columns:22px auto minmax(24px,1fr) auto;gap:6px;align-items:center;font-size:var(--fs-label);}
+.dlCxRow{display:grid;grid-template-columns:22px auto minmax(16px,1fr) auto;gap:6px;align-items:center;height:28px;font-size:var(--fs-label);}
 .dlCxRow .dlTk{color:#f8fafc;text-decoration:none;font-weight:900;}
 .dlCxTrack{display:block;height:12px;border-radius:4px;background:rgba(255,255,255,0.06);overflow:hidden;}
 .dlCxFill{display:block;height:12px;border-radius:4px;background:#a78bfa;}
 .dlCxAmt{font-weight:900;white-space:nowrap;}
-.dlCxNode{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:110px;padding-top:22px;}
-.dlCxLines{width:100%;height:100%;min-height:96px;flex:1;}
-.dlCxNodeLabel{font-size:var(--fs-label);font-weight:800;color:#c4b5fd;text-align:center;line-height:1.2;}
+.dlCxNode{min-width:0;}
+.dlCxStar{position:relative;}
+.dlCapexWrap{container-type:inline-size;}
+.dlCxSize{display:block;visibility:hidden;height:0;overflow:hidden;white-space:nowrap;font-size:var(--fs-label);font-weight:800;padding:0 10px;}
+.dlCxLines{display:block;width:100%;height:100%;}
+.dlCxHub{position:absolute;left:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#a78bfa;box-shadow:0 0 0 4px rgba(167,139,250,0.18);}
+.dlCxNodeLabel{position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:var(--fs-label);font-weight:800;color:#c4b5fd;line-height:1.2;padding:1px 6px;border-radius:6px;background:#141b2b;}
 .dlSecList{list-style:none;margin:0;padding:0;display:grid;gap:5px;}
 .dlSecRow{display:grid;grid-template-columns:minmax(0,9em) minmax(0,1fr) 4.4em;gap:8px;align-items:center;font-size:var(--fs-label);}
 .dlSecName{color:#e2e8f0;text-decoration:none;font-weight:700;line-height:1.15;overflow-wrap:anywhere;}
@@ -362,8 +403,21 @@ export const LANDING_CSS = `
 .dlSecVal[data-tone="up"]{color:#86efac;}
 .dlSecVal[data-tone="down"]{color:#fca5a5;}
 .dlSecKey{display:inline-block;width:0;height:10px;border-left:2px dashed #93c5fd;margin-right:4px;vertical-align:middle;}
-.dlWeek{padding:10px;border:1px solid #1a2336;border-radius:12px;background:#0f1624;min-width:0;}
-.dlWeekHead{margin:0;font-size:var(--fs-label);font-weight:800;}
+.dlWeek{min-width:0;}
+.dlWeek+.dlWeek{margin-top:12px;}
+.dlWeekHead{margin:0 0 6px;font-size:var(--fs-label);font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;}
+.dlEarnList{gap:6px;}
+.dlEarnRow{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;}
+.dlEarnName{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 auto;color:#e2e8f0;text-decoration:none;}
+.dlEarnName strong{color:#f8fafc;font-weight:900;flex:0 0 auto;}
+.dlEarnCo{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#94a3b8;}
+.dlEarnDay{flex:0 0 auto;white-space:nowrap;font-weight:700;color:#cbd5e1;font-size:var(--fs-label);}
+.dlEarnDay em{font-style:normal;color:#f59e0b;font-weight:800;margin-left:4px;}
+.dlEarnMore{display:inline-block;margin-top:6px;font-size:var(--fs-label);font-weight:800;color:#7dd3fc;text-decoration:none;}
+.dlSecWhat{margin:0 0 10px;color:#cbd5e1;}
+.dlInsights{display:grid;gap:16px;}
+.dlInsights[data-insights="2"] .dlInsight+.dlInsight{display:none;}
+@media(min-width:1024px){.dlInsights[data-insights="2"]{grid-template-columns:repeat(2,minmax(0,1fr));}.dlInsights[data-insights="2"] .dlInsight{grid-template-columns:minmax(0,1fr);align-content:start;}.dlInsights[data-insights="2"] .dlInsight+.dlInsight{display:grid;}.dlInsights[data-insights="2"] .dlInsightImg{width:100%;height:130px;}}
 .dlChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .dlChip{padding:3px 8px;border-radius:8px;background:#141b2b;border:1px solid #222c40;color:#eaf0fa;font-size:var(--fs-label);font-weight:800;text-decoration:none;}
 .dlInsight{display:grid;grid-template-columns:140px minmax(0,1fr);gap:16px;align-items:center;}
@@ -373,5 +427,7 @@ export const LANDING_CSS = `
 .dlNewsThumb{display:block;width:60px;height:60px;border-radius:10px;object-fit:cover;background:linear-gradient(135deg,#13213f,#0f1624);}
 @media(max-width:1100px){.dlRow3{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:860px){.dlRow2,.dlRow3{grid-template-columns:minmax(0,1fr);}.dlHub{grid-template-columns:minmax(0,1fr);}}
-@media(max-width:560px){.dlCx .dlColHead{min-height:0;}.dlCapexChart{grid-template-columns:minmax(0,1fr);}.dlCxNode{min-height:0;padding-top:0;flex-direction:row;gap:8px;}.dlCxLines{display:none;}.dlCxNodeLabel::before{content:"↓ ";}.dlCxNodeLabel::after{content:" ↓";}.dlTiles{grid-template-columns:minmax(0,1fr);}.dlWeeks{grid-template-columns:minmax(0,1fr);}.dlInsight{grid-template-columns:minmax(0,1fr);}.dlInsightImg{width:100%;height:140px;}.dlCard{padding:14px;}.dlH2{font-size:1.375rem;}}
+@media(max-width:560px){.dlTiles{grid-template-columns:minmax(0,1fr);}.dlInsight{grid-template-columns:minmax(0,1fr);}.dlInsightImg{width:100%;height:140px;}.dlCard{padding:14px;}.dlH2{font-size:1.375rem;}}
+/* THE STACKED STAR (#154 §1), last so it outranks the star's own rules. */
+@container (max-width:27em){.dlCx .dlColHead{min-height:0;}.dlCapexChart{grid-template-columns:minmax(0,1fr);}.dlCxNode{display:flex;justify-content:center;}.dlCxSize,.dlCxLines,.dlCxHub{display:none;}.dlCxStar{height:auto!important;}.dlCxNodeLabel{position:static;transform:none;background:none;}.dlCxNodeLabel::before{content:"↓ ";}.dlCxNodeLabel::after{content:" ↓";}}
 `;

@@ -60,6 +60,9 @@ import {
 } from "@/lib/insightView";
 import { SCREEN_ROUTES, screenFor, type ScreenFlag } from "@/lib/insightScreens";
 import { junkReason } from "@/lib/server/news/junkTitle";
+import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
+import { cleanName } from "@/lib/server/companyNames";
+import { easternDate } from "@/lib/server/calendarDayState";
 
 const INSIGHTS_DIR = path.join(process.cwd(), "content/insights");
 /**
@@ -102,6 +105,46 @@ const readScreenFlags = unstable_cache(
   ["insight-screen-flags-v1"],
   { revalidate: 21600, tags: ["insight-screen-flags"] },
 );
+
+// ── SCREEN MEMBERS (#563 COWORK #156 §1): one shared entry a session day ────
+// Per screen, its largest members (the preset universe's size order, as the
+// dashboard's picker logos), built once from the pickers payload and shared by
+// every post. 24 h, keyed by the session date, so a render reads the Data Cache
+// (0 commands) and a refill is the one getPickersData read (~3 commands). One
+// extra name per screen so a post can leave its own ticker out and keep 10.
+export const SCREEN_MEMBERS = 10;
+const PRESET_RANK = new Map(PRESET_UNIVERSE.map((s, i) => [s, i]));
+export type ScreenMember = { symbol: string; name: string };
+/** Pure, for the check: every screen's members, largest first (preset rank, then A–Z), SCREEN_MEMBERS + 1 of them. */
+export function screenMembersFrom(recs: ReadonlyArray<Record<string, unknown>>, nameOf: (s: string) => string): Record<string, ScreenMember[]> {
+  const out: Record<string, ScreenMember[]> = {};
+  for (const flag of Object.keys(SCREEN_ROUTES) as ScreenFlag[]) {
+    const syms = recs.filter((r) => r[flag] === true).map((r) => String(r.symbol ?? "").toUpperCase()).filter(Boolean);
+    syms.sort((a, b) => (PRESET_RANK.get(a) ?? 1e6) - (PRESET_RANK.get(b) ?? 1e6) || (a < b ? -1 : a > b ? 1 : 0));
+    out[flag] = syms.slice(0, SCREEN_MEMBERS + 1).map((symbol) => ({ symbol, name: nameOf(symbol) }));
+  }
+  return out;
+}
+export const readScreenMembers = unstable_cache(
+  // The session date is the cache key (one entry a day); the body does not need it.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async (_day: string): Promise<Record<string, ScreenMember[]> | null> => {
+    try {
+      const data = await getPickersData("https://www.mystockharbor.com");
+      return screenMembersFrom(data.signalRecords as unknown as Array<Record<string, unknown>>, (s) => cleanName(snapshotCompanyName(s)) || s);
+    } catch {
+      return null;
+    }
+  },
+  ["insight-screen-members-v1"],
+  { revalidate: 86400, tags: ["insight-screen-members"] },
+);
+/** The members a post's Screens card lists: its screen's, without the post's own ticker, at most 10. */
+export async function screenMembersFor(flag: ScreenFlag, own: string): Promise<ScreenMember[] | null> {
+  const all = await readScreenMembers(easternDate(new Date())).catch(() => null);
+  if (!all) return null;
+  return (all[flag] ?? []).filter((m) => m.symbol !== own.toUpperCase()).slice(0, SCREEN_MEMBERS);
+}
 
 // ── CAPEX (shared, 1 h) ─────────────────────────────────────────────────────
 // "Follow the money" (#563 COWORK #138 §5): where a ticker sits on the
@@ -164,7 +207,7 @@ export type MoreCard =
   | { kind: "capex"; href: string; mention: CapexMention; flow: { from: CapexFlowItem[]; to: CapexFlowItem[] };
       /** A spender's own capex, latest and prior fiscal year, from its filings. */
       own: { year: string; value: number; prior: number | null; changePct: number | null } | null }
-  | { kind: "pickers"; href: string; label: string }
+  | { kind: "pickers"; href: string; label: string; flag: ScreenFlag | null }
   | { kind: "sector"; href: string; name: string }
   | { kind: "calendar"; href: string }
   | { kind: "spx"; href: string };
@@ -343,7 +386,7 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
       flow: capexMention.list === "spending" ? { from: [], to: capex.topReceivers } : { from: capex.topSpenders, to: [] } });
   }
   const pick = screenFor(label, flags);
-  if (pick) more.push({ kind: "pickers", href: pick.href, label: pick.label });
+  if (pick) more.push({ kind: "pickers", href: pick.href, label: pick.label, flag: (Object.keys(SCREEN_ROUTES) as ScreenFlag[]).find((f) => SCREEN_ROUTES[f].href === pick.href) ?? null });
   if (more.length < 3 && sector?.slug) more.push({ kind: "sector", href: `/sector/${sector.slug}`, name: sector.name });
   if (more.length < 3) more.push({ kind: "calendar", href: "/earnings-calendar" });
   if (more.length < 3) more.push({ kind: "spx", href: "/markets/spx" });

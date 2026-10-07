@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { chartHref } from "@/lib/chartHref";
 import Link from "next/link";
 import TickerLogo from "@/app/components/TickerLogo";
 import { activeRowStyle } from "@/lib/listboxNav";
@@ -297,7 +298,7 @@ export default function EarningsTickerSearch() {
               View Earnings Page →
             </Link>
             <Link
-              href={`/dashboard?symbol=${encodeURIComponent(info.symbol)}`}
+              href={chartHref(info.symbol)}
               style={{
                 padding: "8px 12px",
                 borderRadius: 9,

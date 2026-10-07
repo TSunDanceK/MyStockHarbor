@@ -11,6 +11,7 @@
 // CACHING_REFRESH_ARCHITECTURE_PLAN.md (project doc) for the full context.
 
 import { Redis } from "@upstash/redis";
+import { chartHref } from "@/lib/chartHref";
 import { BULK_READ_CACHE, PAGE_READ_CACHE } from "./redisCacheMode";
 import { readMarketState } from "./marketState";
 import { NextRequest, NextResponse } from "next/server";
@@ -697,18 +698,8 @@ function buildDashboardHref(args: {
   timeframe?: "D" | "W" | "M";
   indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
 }) {
-  const params = new URLSearchParams();
-  params.set("symbol", args.symbol);
-
-  if (args.timeframe) {
-    params.set("tf", args.timeframe);
-  }
-
-  if (args.indicator) {
-    params.set("indicator", args.indicator);
-  }
-
-  return `/?${params.toString()}`;
+  // Lands on the analyser (#563 COWORK #151).
+  return chartHref(args.symbol, { tf: args.timeframe, indicator: args.indicator });
 }
 
 function scoreLinear(value: number, min: number, max: number) {

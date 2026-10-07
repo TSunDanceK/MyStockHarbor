@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { chartHref } from "@/lib/chartHref";
 import Link from "next/link";
 import LearnShell from "@/app/learn/LearnShell";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
@@ -70,7 +71,7 @@ export default function TradingSetupsPage() {
             <h2 style={{ margin: "0 0 10px", fontSize: 26 }}>Turn these lessons into live chart practice</h2>
             <p style={{ margin: 0, opacity: 0.82, lineHeight: 1.6 }}>Use the Dashboard to inspect charts and use Stock Pickers to search for ideas that match the setup you are learning.</p>
             <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <Link href="/" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 15px", borderRadius: 12, border: "1px solid rgba(250,204,21,0.42)", background: "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))", color: "#fefce8", textDecoration: "none", fontWeight: 900 }}>Open the Dashboard →</Link>
+              <Link href={chartHref()} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 15px", borderRadius: 12, border: "1px solid rgba(250,204,21,0.42)", background: "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))", color: "#fefce8", textDecoration: "none", fontWeight: 900 }}>Open the Dashboard →</Link>
               <Link href="/pickers" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 15px", borderRadius: 12, border: "1px solid rgba(239,68,68,0.38)", background: "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))", color: "#fef2f2", textDecoration: "none", fontWeight: 900 }}>Explore Stock Pickers →</Link>
             </div>
           </section>

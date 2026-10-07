@@ -174,6 +174,8 @@ initBotId({
     // returning voter's tally. Basic check, as on the other data routes.
     { path: "/api/insights/vote", method: "POST" },
     { path: "/api/insights/vote", method: "GET" },
+    // The dashboard's "Filed earnings" chart (#563 COWORK #154 §6).
+    { path: "/api/dashboard-earnings/*", method: "GET" },
   ],
 }
 );

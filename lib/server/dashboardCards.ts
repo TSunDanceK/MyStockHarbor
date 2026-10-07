@@ -14,8 +14,10 @@
 //   Bottlenecks         getBottleneckHub          content files, 0 commands
 //   Follow the money    readCapexShared           2 GETs, Data Cache 1 h (shared with the insight pages)
 //   Pickers             getPickersData            ~3 commands, Data Cache 6 h (below)
-//   Earnings            getCalendarForwardSections  2 commands + 1 HMGET for the caps (the calendar's)
-//   Insight of the day  getInsightPageDataCached  Data Cache 6 h (shared with the post's own page)
+//   Earnings            getCalendarForwardSections  2 commands + 1 HMGET for the caps (the calendar's);
+//                       names from the committed directory snapshot, 0 commands (#154 §2)
+//   Insight of the day  getInsightPageDataCached  Data Cache 6 h (shared with the post's own page),
+//                       for the newest two posts (#563 COWORK #154 §4)
 //   News                getStockNewsBaseData × 5  the news page's own cached read for the five
 //                       largest preset names (#563 COWORK #142 §4: the market feed carried
 //                       off-universe press releases); ~2 commands each while warm
@@ -48,6 +50,8 @@ import { getAllPosts } from "@/lib/blog";
 import { getStockNewsBaseData } from "@/lib/stock-news-data";
 import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
 import { outcomeWords } from "@/lib/insightView";
+import { cleanName } from "@/lib/server/companyNames";
+import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import type { CardArt } from "@/lib/server/news/art";
 import type { MoodCardView } from "@/app/markets/spx/MarketMoodCard";
 
@@ -68,11 +72,16 @@ export type DashboardCards = {
   capex: { spenders: CapexBar[]; receivers: CapexBar[]; lead: { ticker: string; amount: string } | null } | null;
   /** `peek`: up to 3 members, largest first by preset rank, for the logos (#148 §4). */
   pickers: { screens: { label: string; href: string; count: number; peek: string[] }[]; universe: number } | null;
-  /** Two week-windows: this week or next, then the one after (#148 §5). */
-  earnings: { windows: { label: string; range: string; count: number; top: string[] }[] } | null;
+  /**
+   * Two week-windows: this week or next, then the one after (#148 §5). Each
+   * lists its largest names, one per line (#154 §2): ticker, the company's
+   * name from the committed directory snapshot, and the estimated day.
+   */
+  earnings: { windows: { label: string; range: string; count: number; top: { symbol: string; name: string; day: string }[] }[] } | null;
   /** All 11 sectors, sorted by YTD; `spxYtd` is SPY's YTD, the reference line (#148 §6). */
   sectors: { rows: { name: string; slug: string; ytd: number | null }[]; leader: string | null; laggard: string | null; spxYtd: number | null } | null;
-  insight: { slug: string; title: string; symbol: string; date: string; art: CardArt; movePct: number | null; outcome: string | null } | null;
+  /** The newest posts, newest first: two, side by side at 1024 px and up, the first alone on a phone (#154 §4). */
+  insights: { slug: string; title: string; symbol: string; date: string; art: CardArt; movePct: number | null; outcome: string | null }[] | null;
   /** `thumb`: a small picture (#149 §2): the item's own image only where publisher images are allowed, else the library art. */
   news: { title: string; url: string; source: string; date: string | null; symbol: string; thumb: string | null }[] | null;
 };
@@ -175,7 +184,13 @@ async function readCapex(): Promise<DashboardCards["capex"]> {
   return { spenders: c.topSpenders.map(bar), receivers: c.topReceivers.map(bar), lead: c.topSpenders[0] ? { ticker: c.topSpenders[0].ticker, amount: c.topSpenders[0].amount } : null };
 }
 
-/** The calendar's "Coming up" windows after this week: count and the three largest names. */
+/** Names listed per week on the earnings card, biggest first (#154 §2); the rest are "+N more". */
+export const EARNINGS_ROWS = 4;
+const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "Tue 14 Oct" for a yyyy-mm-dd day. */
+export const shortDay = (d: string) => { const t = new Date(`${d}T00:00:00Z`); return `${WEEKDAY[t.getUTCDay()]} ${t.getUTCDate()} ${MON[t.getUTCMonth()]}`; };
+
+/** The calendar's "Coming up" windows after this week: count and the largest names. */
 async function readEarnings(): Promise<DashboardCards["earnings"]> {
   const today = easternDate(new Date());
   const forward = await getCalendarForwardSections(today).catch(() => null);
@@ -187,7 +202,7 @@ async function readEarnings(): Promise<DashboardCards["earnings"]> {
   // TWO WINDOWS (#148 §5): this week (when anything is estimated in it, else
   // comingUpColumns starts at next week), then the one after.
   const windows = comingUpColumns(list, today).slice(0, 2)
-    .map((c) => ({ label: c.label, range: c.range, count: c.items.length, top: c.items.slice(0, 3).map((i) => i.symbol) }));
+    .map((c) => ({ label: c.label, range: c.range, count: c.items.length, top: c.items.slice(0, EARNINGS_ROWS).map((i) => ({ symbol: i.symbol, name: cleanName(snapshotCompanyName(i.symbol)) || i.symbol, day: shortDay(i.estimatedOn) })) }));
   return windows.length ? { windows } : null;
 }
 
@@ -202,21 +217,26 @@ async function readSectors(): Promise<{ cards: DashboardCards["sectors"]; best: 
   return { cards: { rows: sorted, leader: ranked[0]?.name ?? null, laggard: ranked.length > 1 ? ranked[ranked.length - 1].name : null, spxYtd: null }, best };
 }
 
-/** The newest post, with its own page's "since published" result. */
-async function readInsight(): Promise<DashboardCards["insight"]> {
-  const post = getAllPosts()[0];
-  if (!post) return null;
-  const d = await getInsightPageDataCached(post.slug).catch(() => null);
-  if (!d) return null;
-  return {
-    slug: post.slug,
-    title: d.n.title,
-    symbol: d.n.symbol,
-    date: d.n.date,
-    art: d.art,
-    movePct: d.since?.movePct ?? null,
-    outcome: d.since?.level ? `${outcomeWords(d.since.level.outcome).word.toLowerCase()} the ${d.since.level.name}` : null,
-  };
+/** How many of the newest posts the card shows on a wide screen (#154 §4). */
+export const INSIGHTS_SHOWN = 2;
+/** The newest posts, each with its own page's "since published" result. */
+async function readInsights(): Promise<DashboardCards["insights"]> {
+  const posts = getAllPosts().slice(0, INSIGHTS_SHOWN);
+  const read = await Promise.all(posts.map(async (post) => {
+    const d = await getInsightPageDataCached(post.slug).catch(() => null);
+    if (!d) return null;
+    return {
+      slug: post.slug,
+      title: d.n.title,
+      symbol: d.n.symbol,
+      date: d.n.date,
+      art: d.art,
+      movePct: d.since?.movePct ?? null,
+      outcome: d.since?.level ? `${outcomeWords(d.since.level.outcome).word.toLowerCase()} the ${d.since.level.name}` : null,
+    };
+  }));
+  const list = read.filter((x): x is NonNullable<typeof x> => x !== null);
+  return list.length ? list : null;
 }
 
 /** How many of the largest preset names the news card reads, and shows. */
@@ -251,19 +271,19 @@ async function readNews(): Promise<DashboardCards["news"]> {
 
 async function loadDashboardLanding(): Promise<DashboardLanding> {
   const hub = readHub();
-  const [moodRaw, spy, sectors, capex, pickers, earnings, insight, news] = await Promise.all([
+  const [moodRaw, spy, sectors, capex, pickers, earnings, insights, news] = await Promise.all([
     readMarketMood().catch(() => null),
     readSpy().catch(() => ({ spx: null, trend: null, ytd: null })),
     readSectors().catch(() => ({ cards: null, best: null })),
     readCapex().catch(() => null),
     readScreenCounts().catch(() => null),
     readEarnings().catch(() => null),
-    readInsight().catch(() => null),
+    readInsights().catch(() => null),
     readNews().catch(() => null),
   ]);
   return {
     market: { mood: moodView(moodRaw), spx: spy.spx, trend: spy.trend, bestSector: sectors.best, mapped: hub?.mapped ?? null },
-    cards: { hub, capex, pickers, earnings, sectors: sectors.cards ? { ...sectors.cards, spxYtd: spy.ytd } : null, insight, news },
+    cards: { hub, capex, pickers, earnings, sectors: sectors.cards ? { ...sectors.cards, spxYtd: spy.ytd } : null, insights, news },
     bottlenecks: readBottleneckSlugs(),
   };
 }
@@ -277,10 +297,10 @@ function readBottleneckSlugs(): Record<string, string> {
 }
 
 /** The landing, cached 15 minutes; never throws (an empty landing renders every empty state). */
-export const getDashboardLanding = unstable_cache(loadDashboardLanding, ["dashboard-landing-v4"], { revalidate: 900, tags: ["dashboard-landing"] });
+export const getDashboardLanding = unstable_cache(loadDashboardLanding, ["dashboard-landing-v5"], { revalidate: 900, tags: ["dashboard-landing"] });
 
 export const EMPTY_LANDING: DashboardLanding = {
   market: { mood: null, spx: null, trend: null, bestSector: null, mapped: null },
-  cards: { hub: null, capex: null, pickers: null, earnings: null, sectors: null, insight: null, news: null },
+  cards: { hub: null, capex: null, pickers: null, earnings: null, sectors: null, insights: null, news: null },
   bottlenecks: {},
 };

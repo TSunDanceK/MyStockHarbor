@@ -214,7 +214,16 @@ type Props = {
    * keeps its height and type size instead of scaling up. Layout only.
    */
   viewWidth?: number;
+  /**
+   * A MARKED BAR (#563 COWORK #155, the insight page's slider): a thin vertical
+   * line at bar `index` and a dot on its close, so a control outside the chart
+   * can show where it points. Optional; nothing is drawn without it.
+   */
+  marker?: number | null;
 };
+
+/** The price plot's horizontal inset in viewBox units: a control lining up with the x-axis uses these. */
+export const PRICE_CHART_PAD = { left: 34, right: 54, width: 760 } as const;
 
 // Fixed, non-interactive brand watermark rendered on top of the chart
 // area (SVG or TradingView embed). Positioned via CSS against the
@@ -296,6 +305,7 @@ export default function PriceChart(props: Props) {
     showTradeLink = true,
     hideSourceToggle = false,
     viewWidth,
+    marker = null,
   } = props;
 
   const width = viewWidth && viewWidth > 0 ? viewWidth : 760;
@@ -319,6 +329,7 @@ export default function PriceChart(props: Props) {
     if (!isTradingViewControlled) setInternalShowTradingView(next);
   }
 
+  // The same numbers as PRICE_CHART_PAD (scripts/check-insight-page.mjs holds them equal).
   const padL = 34;
   const padR = 54;
   const padT = 24;
@@ -794,6 +805,13 @@ export default function PriceChart(props: Props) {
               );
             })
           : null}
+
+        {marker !== null && marker >= 0 && marker < series.length && Number.isFinite(series[marker]?.close) ? (
+          <g data-chart-marker={marker} pointerEvents="none">
+            <line x1={x(marker)} x2={x(marker)} y1={padT} y2={padT + priceH} stroke="rgba(147,197,253,0.75)" strokeWidth={1.2} />
+            <circle data-chart-marker-dot="" cx={x(marker)} cy={yMain(series[marker].close)} r={4.5} fill="#60a5fa" stroke="#0b1220" strokeWidth={1.5} />
+          </g>
+        ) : null}
 
         {referenceLines.map((line, idx) => {
           if (typeof line.price !== "number" || !Number.isFinite(line.price)) return null;

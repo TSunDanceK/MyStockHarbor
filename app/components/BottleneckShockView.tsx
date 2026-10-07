@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { chartHref } from "@/lib/chartHref";
 import { useState } from "react";
 import BottleneckPieChart, { NEON_PALETTE } from "./BottleneckPieChart";
 import type { BottleneckCompany, BottleneckPost } from "@/lib/bottlenecks";
@@ -146,7 +147,7 @@ function CompanyRow({
             Earnings →
           </Link>
           <Link
-            href={`/dashboard?symbol=${encodeURIComponent(company.ticker)}`}
+            href={chartHref(company.ticker)}
             className="bnActionBtn bnActionBtn--blue"
           >
             Chart →

@@ -1,6 +1,7 @@
 "use client";
 
 import { getBuySignalCount } from "@/lib/signalCounts";
+import { chartHrefFrom } from "@/lib/chartHref";
 import { qualifiesBuySignal, qualifiesSellSignal } from "@/lib/pickerScreenRules";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -64,18 +65,13 @@ export type PickersPayload = {
 // so every existing call site below is unchanged.
 const toneDot = toneDotColor;
 
+// Lands on the analyser with the row's symbol and its stored params (#563 COWORK #151).
 function toChartHref(href: string, symbol?: string) {
-  const cleanedSymbol = String(symbol || "").trim().toUpperCase();
-  const fallback = cleanedSymbol ? `/dashboard?symbol=${encodeURIComponent(cleanedSymbol)}` : "/dashboard";
-  const raw = href && href.trim() ? href.trim() : "";
-  const normalised = raw.startsWith("/?symbol=") ? raw.replace("/?symbol=", "/dashboard?symbol=") : raw.startsWith("/?")
-    ? raw.replace("/?", "/dashboard?") : raw;
-  const base = normalised.startsWith("/dashboard") ? normalised : fallback;
-  return base.includes("#chart") ? base : `${base}#chart`;
+  return chartHrefFrom(href, symbol);
 }
 
 // Inserts extra query params into a toChartHref()-built URL (which already
-// ends in "#chart") ahead of the hash, so deep-link params never end up
+// ends in "#analyser") ahead of the hash, so deep-link params never end up
 // tacked on after the fragment.
 function buildDashboardHref(rawHref: string, symbol: string, extraParams?: Record<string, string | number>) {
   const base = toChartHref(rawHref, symbol);

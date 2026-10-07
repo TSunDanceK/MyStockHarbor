@@ -18,14 +18,15 @@
 // string this file writes). Sizes in rem or the reading tokens; fine print
 // carries data-fine-print.
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
 import { epsVsYearAgo, marginVsYearAgo, VS_TINT, type Vs } from "@/lib/snapshotVsYearAgo";
 import InsightChart from "./InsightChart";
 import InsightVote from "./InsightVote";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
-import type { InsightPageData, MoreCard } from "@/lib/server/insightPage";
+import { screenMembersFor, type InsightPageData, type MoreCard, type ScreenMember } from "@/lib/server/insightPage";
+import type { ScreenFlag } from "@/lib/insightScreens";
 import { dayWords, outcomeWords, pctWords, ptsWords } from "@/lib/insightView";
 
 export type InsightHtml = { whatHappened: string | null; why: string | null; originalRest: string | null };
@@ -339,37 +340,38 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
     );
   }
   if (m.kind === "capex") {
-    // FOLLOW THE MONEY (#563 COWORK #138 §5): the figure, its change, and a small flow.
+    // FOLLOW THE MONEY, FLAT (#563 COWORK #156 §2): the company's own row on top,
+    // then the other list's header and rows directly on the card, in the
+    // dashboard's purple bars. No inner box: each figure is that company's own
+    // filing, never a payment from one to the other.
     const flow = m.mention.list === "spending" ? m.flow.to : m.flow.from;
     const max = Math.max(1, ...flow.map((f) => f.value || 0));
+    const spending = m.mention.list === "spending";
     return (
       <Link href={m.href} className="inMoreCard" data-more="capex">
         <span className="inEyebrow">Follow the money</span>
-        {m.mention.list === "spending" ? (
-          <>
-            <span className="inMoreBig">#{m.mention.rank} · {m.own ? bnWords(m.own.value) : m.mention.amount}</span>
-            <span className="inRead">{m.own ? `Capex in FY${m.own.year}${m.own.changePct !== null ? `, ${pctWords(m.own.changePct)} on the year before` : ""}, from its cash-flow statement.` : "Among the largest reported capex spenders."}</span>
-          </>
-        ) : (
-          <>
-            <span className="inMoreBig">#{m.mention.rank} · {m.mention.amount}</span>
-            <span className="inRead">{m.mention.line}, {m.mention.fyTo}{m.mention.changePct !== null ? `, ${pctWords(m.mention.changePct)} on the year before` : ""}.</span>
-          </>
-        )}
+        <div className="inCxOwn" data-capex-own="">
+          <TickerLogo symbol={sym} size={28} radius={7} alt="" />
+          <div>
+            <span className="inMoreBig"><span className="inCxSym">{sym}</span> #{m.mention.rank} · {spending ? (m.own ? bnWords(m.own.value) : m.mention.amount) : m.mention.amount}</span>
+            <span className="inRead">{m.mention.list === "spending"
+              ? (m.own ? `Capex in FY${m.own.year}${m.own.changePct !== null ? `, ${pctWords(m.own.changePct)} on the year before` : ""}, from its cash-flow statement.` : "Among the largest reported capex spenders.")
+              : `${m.mention.line}, ${m.mention.fyTo}${m.mention.changePct !== null ? `, ${pctWords(m.mention.changePct)} on the year before` : ""}.`}</span>
+          </div>
+        </div>
         {flow.length ? (
-          <div className="inFlow" data-flow={m.mention.list} aria-label={m.mention.list === "spending" ? `${sym}'s capex, and separately the largest build-out sellers' own filed sales` : `The largest spenders' own capex, and separately ${sym}'s build-out sales`}>
-            {m.mention.list === "spending" ? <><span className="inFlowEnd">{sym}</span><span className="inFlowArrow" aria-hidden="true">→</span></> : null}
-            {/* THE ARROW POINTS AT THE GROUP'S HEADER, not at its first name (#563 COWORK #141 §1): each
-                figure is that company's own filing, never a payment from one to the other. */}
-            <div className="inFlowBox">
-              <p className="inFlowHead" data-flow-head="">{m.mention.list === "spending" ? "Top build-out receivers · their own filed sales" : "Top spenders · their own capex"}</p>
-              <ul className="inFlowList">
-                {flow.map((f) => (
-                  <li key={f.ticker}><span className="inFlowSym">{f.ticker}</span><span className="inFlowBar" aria-hidden="true"><i style={{ width: `${Math.max(6, (100 * (f.value || 0)) / max)}%` }} /></span><span className="inFlowAmt">{f.amount}</span></li>
-                ))}
-              </ul>
-            </div>
-            {m.mention.list === "receiving" ? <><span className="inFlowArrow" aria-hidden="true">→</span><span className="inFlowEnd">{sym}</span></> : null}
+          <div className="inCxOther" data-flow={m.mention.list}>
+            <p className="inFlowHead" data-flow-head="">{spending ? "Top build-out receivers · their own filed sales" : "Top spenders · their own capex"}</p>
+            <ul className="inCxList">
+              {flow.map((f) => (
+                <li key={f.ticker} className="inCxRow">
+                  <TickerLogo symbol={f.ticker} size={22} radius={6} alt="" />
+                  <span className="inCxSym">{f.ticker}</span>
+                  <span className="inCxTrack" aria-hidden="true"><i className="inCxFill" style={{ width: `${Math.max(4, (100 * (f.value || 0)) / max)}%` }} /></span>
+                  <span className="inCxAmt">{f.amount}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
         <span className="inFineInline" data-fine-print="">What suppliers sold, not a record of who paid them.</span>
@@ -378,13 +380,20 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
     );
   }
   if (m.kind === "pickers") {
+    // THE SCREEN'S OTHER MEMBERS (#563 COWORK #156 §1): up to 10, largest first,
+    // streamed so the first visitor's page is not held up by the read.
     return (
-      <Link href={m.href} className="inMoreCard" data-more="pickers">
+      <div className="inMoreCard" data-more="pickers">
         <span className="inEyebrow">Screens</span>
-        <span className="inMoreBig inMoreMid">{m.label}</span>
+        <Link href={m.href} className="inMoreBig inMoreMid inMoreTitleLink">{m.label}</Link>
         <span className="inRead">Other stocks in the same kind of setup today.</span>
-        <span className="inMoreGo">Open the screen →</span>
-      </Link>
+        {m.flag ? (
+          <Suspense fallback={<ul className="inScreenList" data-screen-skeleton="" aria-hidden="true">{[0, 1, 2].map((k) => <li key={k} className="inSkel" />)}</ul>}>
+            <ScreenMembers flag={m.flag} sym={sym} />
+          </Suspense>
+        ) : <ScreenMembersList members={[]} />}
+        <Link href={m.href} className="inMoreGo">Open the screen →</Link>
+      </div>
     );
   }
   const words = m.kind === "sector" ? { eyebrow: "Sector", big: m.name, line: `How the ${m.name} sector is moving.`, go: "Open the sector page →" }
@@ -397,6 +406,29 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
       <span className="inRead">{words.line}</span>
       <span className="inMoreGo">{words.go}</span>
     </Link>
+  );
+}
+
+/** The screen's members, read from the shared day's entry (0 commands while warm). */
+async function ScreenMembers({ flag, sym }: { flag: ScreenFlag; sym: string }) {
+  return <ScreenMembersList members={(await screenMembersFor(flag, sym)) ?? []} />;
+}
+
+/** Up to 10 members: logo, ticker, name on one line; or the empty state. */
+export function ScreenMembersList({ members }: { members: ScreenMember[] }) {
+  if (!members.length) return <p className="inRead" data-screen-empty="">No other stocks in this setup today.</p>;
+  return (
+    <ul className="inScreenList" data-screen-members={members.length}>
+      {members.map((x) => (
+        <li key={x.symbol}>
+          <Link href={`/stock/${encodeURIComponent(x.symbol)}`} className="inScreenRow" title={x.name}>
+            <TickerLogo symbol={x.symbol} size={20} radius={5} alt="" />
+            <strong>{x.symbol}</strong>
+            <span className="inScreenCo" data-fine-print="">{x.name}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -557,7 +589,12 @@ const CSS = `
 .inToggle[data-on="1"] { background: rgba(59,130,246,0.22); border-color: rgba(147,197,253,0.6); }
 .inSlider { margin-top: 10px; }
 .inSliderLabel { display: block; font-size: var(--fs-label); color: rgba(203,213,225,0.8); }
-.inSlider input { width: 100%; margin-top: 6px; }
+.inSliderTrack { box-sizing: border-box; width: 100%; }
+.inSlider input { -webkit-appearance: none; appearance: none; display: block; width: calc(100% + 18px); margin: 6px -9px 0; height: 18px; background: transparent; cursor: pointer; }
+.inSlider input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, rgba(148,163,184,0.28) 0 var(--pub), #2f6bff var(--pub) 100%); }
+.inSlider input::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, rgba(148,163,184,0.28) 0 var(--pub), #2f6bff var(--pub) 100%); }
+.inSlider input::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%; background: #2f6bff; border: 2px solid #e2e8f0; box-sizing: border-box; }
+.inSlider input::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #2f6bff; border: 2px solid #e2e8f0; box-sizing: border-box; }
 .inReadout { margin: 6px 0 0; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(226,232,240,0.92); }
 .inThumb { margin: 14px 0 0; }
 .inMore, .inRelated { margin-top: 24px; }
@@ -603,17 +640,23 @@ const CSS = `
 .inH3 { margin: 10px 0 0; font-size: var(--fs-read); font-weight: 800; }
 .inInline { font-size: 1.125rem; margin-left: 6px; }
 .inTight { margin-top: 6px; gap: 4px; }
-.inFlow { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; min-width: 0; }
-.inFlowBox { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid rgba(148,163,184,0.22); border-radius: 10px; }
+.inCxOwn { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; margin-top: 4px; }
+.inCxOwn .inMoreBig, .inCxOwn .inRead { display: block; }
+.inCxSym { font-weight: 900; color: #f8fafc; }
+.inCxOther { margin-top: 10px; min-width: 0; }
+.inCxList { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.inCxRow { display: grid; grid-template-columns: 22px auto minmax(16px, 1fr) auto; gap: 6px; align-items: center; height: 28px; font-size: var(--fs-label); }
+.inCxTrack { display: block; height: 12px; border-radius: 4px; background: rgba(255,255,255,0.06); overflow: hidden; }
+.inCxFill { display: block; height: 12px; border-radius: 4px; background: #a78bfa; }
+.inCxAmt { font-weight: 900; white-space: nowrap; }
+.inScreenList { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; min-width: 0; }
+.inScreenList > li { min-width: 0; }
+.inScreenRow { max-width: 100%; display: flex; align-items: center; gap: 8px; min-width: 0; color: #e2e8f0; text-decoration: none; font-size: var(--fs-label); }
+.inScreenRow strong { color: #f8fafc; font-weight: 900; flex: 0 0 auto; }
+.inScreenCo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #94a3b8; }
+.inSkel { height: 20px; border-radius: 6px; background: linear-gradient(90deg, rgba(148,163,184,0.10), rgba(148,163,184,0.18), rgba(148,163,184,0.10)); }
+.inMoreTitleLink { color: inherit; text-decoration: none; }
 .inFlowHead { margin: 0 0 4px; font-size: var(--fs-read); line-height: 1.35; font-weight: 800; color: rgba(203,213,225,0.85); }
-.inFlowEnd { font-size: var(--fs-label); font-weight: 900; color: #5fd4c7; white-space: nowrap; margin-top: 7px; }
-.inFlowArrow { color: rgba(203,213,225,0.7); margin-top: 6px; }
-.inFlowList { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 0; }
-.inFlowList li { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto; gap: 6px; align-items: center; font-size: var(--fs-label); }
-.inFlowSym { font-weight: 800; }
-.inFlowBar { height: 6px; border-radius: 3px; background: rgba(148,163,184,0.15); overflow: hidden; }
-.inFlowBar i { display: block; height: 100%; background: rgba(95,212,199,0.7); }
-.inFlowAmt { font-variant-numeric: tabular-nums; color: rgba(226,232,240,0.9); }
 @media (max-width: 900px) {
   .inCols { grid-template-columns: minmax(0, 1fr); }
   .inStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }

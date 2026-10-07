@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { chartHref } from "@/lib/chartHref";
 import Link from "next/link";
 
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
@@ -277,7 +278,7 @@ export default async function StockDirectoryPage() {
 
       <div style={{ maxWidth: 1140, margin: "0 auto", padding: "40px 20px 80px" }}>
         <Link
-          href="/dashboard"
+          href={chartHref()}
           style={{
             fontSize: 13,
             color: "rgba(148,163,184,0.95)",

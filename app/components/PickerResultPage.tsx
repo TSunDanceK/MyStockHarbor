@@ -1,4 +1,5 @@
 import { getBuySignalCount } from "@/lib/signalCounts";
+import { chartHrefFrom } from "@/lib/chartHref";
 import { qualifiesBuySignal, qualifiesSellSignal } from "@/lib/pickerScreenRules";
 import type { EpsGrowthView } from "@/lib/epsGrowthView";
 import { attachTrendHelper } from "@/lib/ta/trendHelper";
@@ -431,23 +432,12 @@ function cleanSymbol(value: unknown) {
   return String(value || "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
 }
 
-// Routes "Open chart" links to /dashboard -- works correctly on both mobile and desktop.
+// Routes "Chart" links to the dashboard's analyser, symbol loaded (#563 COWORK #151).
 function chartHrefFor(symbol: string, href?: string) {
-  const fallback = `/dashboard?symbol=${encodeURIComponent(symbol)}`;
-  const raw = href && href.trim() ? href.trim() : "";
-
-  // Rewrite legacy /?symbol= links to /dashboard?symbol=
-  const normalised = raw.startsWith("/?symbol=")
-    ? raw.replace("/?symbol=", "/dashboard?symbol=")
-    : raw.startsWith("/?")
-    ? raw.replace("/?", "/dashboard?")
-    : raw;
-
-  const base = normalised.startsWith("/dashboard") ? normalised : fallback;
-  return base.includes("#chart") ? base : `${base}#chart`;
+  return chartHrefFrom(href, symbol);
 }
 
-// Inserts extra deep-link query params ahead of the "#chart" fragment.
+// Inserts extra deep-link query params ahead of the "#analyser" fragment.
 function withExtraChartParams(base: string, extra: Record<string, string | number>) {
   const hashIdx = base.indexOf("#");
   const beforeHash = hashIdx >= 0 ? base.slice(0, hashIdx) : base;

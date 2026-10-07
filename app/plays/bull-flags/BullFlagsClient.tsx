@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { chartHrefFrom } from "@/lib/chartHref";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ScreenerShell from "@/app/components/ScreenerShell";
 import TimeframeFilterDropdown from "@/app/components/TimeframeFilterDropdown";
@@ -189,10 +190,9 @@ function PlayChartWatermark() {
   );
 }
 
+// Lands on the analyser with the play's symbol and timeframe (#563 COWORK #151).
 function toChartHref(href: string) {
-  if (!href) return "/#chart";
-  if (href.includes("#chart")) return href;
-  return `${href}#chart`;
+  return chartHrefFrom(href);
 }
 
 function useIsNarrowScreen() {

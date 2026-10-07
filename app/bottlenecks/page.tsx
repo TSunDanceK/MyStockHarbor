@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { chartHref } from "@/lib/chartHref";
 import type { Metadata } from "next";
 import { getAllBottleneckPosts, getBottleneckHub } from "@/lib/bottlenecks";
 import BottleneckList from "@/app/components/BottleneckList";
@@ -168,7 +169,7 @@ export default function BottlenecksIndexPage() {
         <div style={{ maxWidth: 1160, margin: "0 auto" }}>
           <div style={{ marginBottom: 24 }}>
             <Link
-              href="/"
+              href={chartHref()}
               style={{
                 color: "#93c5fd",
                 textDecoration: "none",
