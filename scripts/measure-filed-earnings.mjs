@@ -8,8 +8,9 @@
 //     these figures"; no chart of the tab's own; the card inside the tab and
 //     nothing scrolling the page sideways;
 //   - SPY (a fund, available: false): "Filed figures not available for SPY.";
-//   - the five tabs on one line at 390 and 320 px, each with its full name as
-//     its accessible name; at 390 px they fit without scrolling.
+//   - the five icon tabs (#161: an icon over a short label at every width) on
+//     one line at 1280, 390 and 320 px, each with its full name as its
+//     accessible name and title; at 390 px they fit without scrolling.
 // With --shots DIR it saves the tab at 1280 and 390 px.
 // The snapshot is the AAPL measure fixture relabelled AMZN: illustrative, not AMZN's filings.
 //
@@ -81,7 +82,10 @@ async function openTab(sym, width, js = realJs) {
   const tabs = await page.evaluate(() => {
     const t = [...document.querySelectorAll(".dlTab")].filter((e) => e.getClientRects().length).map((e) => ({ top: e.getBoundingClientRect().top, name: e.getAttribute("aria-label") }));
     const strip = [...document.querySelectorAll(".dlTabs")].find((e) => e.getClientRects().length);
-    return { oneLine: t.length === 5 && t.every((x) => Math.abs(x.top - t[0].top) < 1), names: t.map((x) => x.name), scrolls: strip.scrollWidth > strip.clientWidth + 1 };
+    const icons = [...document.querySelectorAll(".dlTabIcon")].filter((e) => e.getClientRects().length).length;
+    const short = [...document.querySelectorAll(".dlTabShort")].filter((e) => e.getClientRects().length).map((e) => e.textContent).join("|");
+    const titles = [...document.querySelectorAll(".dlTab")].filter((e) => e.getClientRects().length).map((e) => e.getAttribute("title")).join("|");
+    return { oneLine: t.length === 5 && t.every((x) => Math.abs(x.top - t[0].top) < 1), names: t.map((x) => x.name), scrolls: strip.scrollWidth > strip.clientWidth + 1, icons, short, titles };
   });
   // The analyser re-renders as its own data settles (the 404s here), so the tab is clicked in the page.
   await page.waitForTimeout(500);
@@ -123,7 +127,9 @@ for (const width of [1280, 390, 320]) {
     : !r.about ? "no About these figures" : !r.inside ? "the card spills out of the tab"
     : !r.more.some(([t, h]) => t === "See full report →" && h === "/stock/AMZN/earnings") ? "no See full report link"
     : r.sideways ? "the page scrolls sideways"
-    : width <= 480 && !tabs.oneLine ? "the tabs wrap"
+    : !tabs.oneLine ? "the tabs wrap"
+    : tabs.icons !== 5 || tabs.short !== "Chart|Levels|Zones|Earnings|News" ? `icon tabs not drawn at ${width}px (${tabs.icons} icons, labels ${tabs.short})`
+    : tabs.titles !== FULL.join("|") ? `tab titles ${tabs.titles}`
     : tabs.names.join("|") !== FULL.join("|") ? `tab names ${tabs.names.join("|")}`
     : width === 390 && tabs.scrolls ? "the tabs need scrolling at 390px" : "");
 }

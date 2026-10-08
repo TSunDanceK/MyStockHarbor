@@ -116,19 +116,21 @@ function probe(cards) {
   // #154 §2: each earnings row on one line; a long name ends in an ellipsis.
   if (!empty) {
     for (const r of document.querySelectorAll(".dlEarnRow")) {
-      const co = r.querySelector(".dlEarnCo"), day = r.querySelector(".dlEarnDay");
-      if (!co || !day || co.getBoundingClientRect().height > parseFloat(getComputedStyle(co).fontSize) * 1.6 || Math.abs(co.getBoundingClientRect().top - day.getBoundingClientRect().top) > 8) { bad.push(`an earnings row wraps: ${r.textContent.trim().slice(0, 30)}`); break; }
+      // #163: no date beside the name any more; the name is the row's last item.
+      const co = r.querySelector(".dlEarnCo"), tk = r.querySelector("strong");
+      if (!co || !tk || co.getBoundingClientRect().height > parseFloat(getComputedStyle(co).fontSize) * 1.6 || Math.abs(co.getBoundingClientRect().top - tk.getBoundingClientRect().top) > 8) { bad.push(`an earnings row wraps: ${r.textContent.trim().slice(0, 30)}`); break; }
     }
-    const long = [...document.querySelectorAll(".dlEarnCo")].find((e) => e.textContent.length > 40);
-    if (long && !(long.scrollWidth > long.clientWidth && getComputedStyle(long).textOverflow === "ellipsis")) bad.push("a long company name does not end in an ellipsis");
+    // #163 gave the name the row's freed width, so a long name may now fit; one that does not must end in an ellipsis.
+    const cut = [...document.querySelectorAll(".dlEarnCo")].find((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).textOverflow !== "ellipsis");
+    if (cut) bad.push(`a company name is cut off without an ellipsis: ${cut.textContent.slice(0, 30)}`);
   }
   // #154 §4: two posts at 1024 px and up, one below.
   if (!empty) {
     const shown = [...document.querySelectorAll(".dlInsight")].filter(vis).length;
     if (shown !== (innerWidth >= 1024 ? 2 : 1)) bad.push(`${shown} insight posts shown at ${innerWidth}px`);
   }
-  // #154 §5: the analyser tabs on one line at 480 px and under, never the page sideways.
-  if (innerWidth <= 480) {
+  // #154 §5, #161: the analyser's icon tabs on one line at every width, never the page sideways.
+  {
     const tabs = [...document.querySelectorAll(".dlTab")].filter(vis).map((t) => t.getBoundingClientRect());
     if (tabs.length !== 5 || tabs.some((t) => Math.abs(t.top - tabs[0].top) > 1)) bad.push("the analyser tabs wrap onto two lines");
     const strip = [...document.querySelectorAll(".dlTabs")].find(vis);
