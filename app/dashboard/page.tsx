@@ -21,7 +21,7 @@ import { cleanSymbol, SYMBOL_COOKIE } from "@/lib/symbol";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { DASHBOARD_SOURCE_BUDGET_MS, withBudget } from "@/lib/server/sourceBudget";
 import { EMPTY_LANDING, getDashboardLanding } from "@/lib/server/dashboardCards";
-import { LANDING_CSS, LandingCards, MarketNow } from "./DashboardLanding";
+import { LANDING_CSS, LandingCards, MarketToday } from "./DashboardLanding";
 import { filedEarningsGate } from "@/lib/server/filedEarnings";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
@@ -259,7 +259,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           // without a reload. See lib/server/quoteToken.ts.
           pageToken={mintQuoteToken()}
           landing={{
-            market: <MarketNow m={landing.market} />,
+            market: <MarketToday m={landing.market} />,
             cards: <LandingCards c={landing.cards} hasFiledEarnings={await filedEarningsGate()} />,
             mapped: landing.market.mapped,
             bottlenecks: landing.bottlenecks,

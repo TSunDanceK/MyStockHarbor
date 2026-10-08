@@ -54,7 +54,30 @@ export function MoodSpark({ spark }: { spark: { d: string; r: number }[] }) {
   );
 }
 
-export default function MarketMoodCard({ view, credit }: { view: MoodCardView | null; credit?: ReactNode }) {
+/**
+ * THE COMPACT HALF-GAUGE (#563 COWORK #164 A, the dashboard's "Market today"):
+ * a 0–100 arc, red → green, with a needle at the reading. Decorative; the
+ * number and the label beside it carry the reading.
+ */
+export function MoodGauge({ r }: { r: number }) {
+  const W = 132, cx = 66, cy = 64, R = 54;
+  const at = (v: number) => { const a = Math.PI * (1 - Math.max(0, Math.min(100, v)) / 100); return { x: cx + R * Math.cos(a), y: cy - R * Math.sin(a) }; };
+  const tip = at(r);
+  return (
+    <svg className="moodGauge" viewBox={`0 0 ${W} 72`} width={W} height={72} aria-hidden="true" focusable="false" style={{ display: "block", flex: "0 0 auto" }}>
+      <defs>
+        <linearGradient id="moodGaugeArc" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stopColor="#ef4444" /><stop offset="0.28" stopColor="#f97316" /><stop offset="0.5" stopColor="#eab308" /><stop offset="0.72" stopColor="#84cc16" /><stop offset="1" stopColor="#22c55e" />
+        </linearGradient>
+      </defs>
+      <path d={`M${cx - R} ${cy} A${R} ${R} 0 0 1 ${cx + R} ${cy}`} fill="none" stroke="url(#moodGaugeArc)" strokeWidth={10} strokeLinecap="round" />
+      <line x1={cx} y1={cy} x2={tip.x} y2={tip.y} stroke="#f1f5f9" strokeWidth={3} strokeLinecap="round" data-gauge-needle={r} />
+      <circle cx={cx} cy={cy} r={5} fill="#f1f5f9" />
+    </svg>
+  );
+}
+
+export default function MarketMoodCard({ view, credit, variant = "thermometer" }: { view: MoodCardView | null; credit?: ReactNode; variant?: "thermometer" | "gauge" }) {
   const note = useTapNote();
   const phone = useIsPhone();
   const head = useRef<HTMLDivElement | null>(null);
@@ -73,22 +96,48 @@ export default function MarketMoodCard({ view, credit }: { view: MoodCardView | 
   const inputs = MOOD_INPUTS.filter((x) => typeof day.s[x.key] === "number");
   // The gradient spans the whole tube (red at 0, green at 100), so a fill of 37 ends in orange, not green.
   const fillPct = Math.max(7, Math.min(100, day.r));
+  const tapNote = (
+    <FlowPanel note={note} anchor={head} phone={phone} label="What goes into Market Mood" pointerX={180}>
+      <ul className="moodInputs" style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 4 }}>
+        {inputs.map((x) => (
+          <li key={x.key} className="moodInput" data-input={x.key} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <span>{x.line}</span><strong style={{ color: "rgba(241,245,249,0.94)", fontVariantNumeric: "tabular-nums" }}>{day.s[x.key]}</strong>
+          </li>
+        ))}
+      </ul>
+      <p className="moodNoteText" style={{ margin: "8px 0 0", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(203,213,225,0.7)" }}>{moodNoteText(inputs.length)}</p>
+    </FlowPanel>
+  );
+  if (variant === "gauge") {
+    // The dashboard's compact reading (#164 A): no card of its own, no sparkline;
+    // the same tap note. The page's credit line sits under the whole Market today card.
+    return (
+      <div className="moodCompact" data-mood-gauge="" style={{ position: "relative", minWidth: 0 }}>
+        <div ref={head} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+          <h3 style={{ ...eyebrowStyle, color: "rgba(203,213,225,0.82)" }}>Market Mood</h3>
+          <span style={{ fontSize: "var(--fs-read)", color: "rgba(203,213,225,0.72)" }}><NoteButton note={note}>What goes into it?</NoteButton></span>
+        </div>
+        {tapNote}
+        <div style={{ marginTop: 8, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+          <MoodGauge r={day.r} />
+          <div style={{ minWidth: 0 }}>
+            <div className="moodValue" style={{ fontSize: "2rem", lineHeight: 1, fontWeight: 950, letterSpacing: "-0.04em" }}>
+              {day.r}<span style={{ fontSize: "0.9375rem", fontWeight: 700, opacity: 0.7, letterSpacing: 0 }}>/100</span>
+            </div>
+            <div className="moodLabel" style={{ marginTop: 4, fontSize: "1.0625rem", fontWeight: 900, color: t.text }}>{label}</div>
+            <div className="moodDate" data-fine-print style={{ marginTop: 4, fontSize: "var(--fs-fine)", color: "rgba(203,213,225,0.72)" }}>Reading for {dayWords(day.d)}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <aside className="moodCard" style={{ ...cardStyle, border: `1px solid ${t.border}`, background: t.bg }}>
       <div ref={head} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <h2 style={eyebrowStyle}>Market Mood</h2>
         <span style={{ fontSize: "var(--fs-read)", color: "rgba(203,213,225,0.72)" }}><NoteButton note={note}>What goes into it?</NoteButton></span>
       </div>
-      <FlowPanel note={note} anchor={head} phone={phone} label="What goes into Market Mood" pointerX={180}>
-        <ul className="moodInputs" style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 4 }}>
-          {inputs.map((x) => (
-            <li key={x.key} className="moodInput" data-input={x.key} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <span>{x.line}</span><strong style={{ color: "rgba(241,245,249,0.94)", fontVariantNumeric: "tabular-nums" }}>{day.s[x.key]}</strong>
-            </li>
-          ))}
-        </ul>
-        <p className="moodNoteText" style={{ margin: "8px 0 0", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(203,213,225,0.7)" }}>{moodNoteText(inputs.length)}</p>
-      </FlowPanel>
+      {tapNote}
 
       <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "56px minmax(0, 1fr)", gap: 14, alignItems: "center" }}>
         {/* THE THERMOMETER: the tube, filled red → green to the reading's height, and the bulb in the reading's tone. */}
