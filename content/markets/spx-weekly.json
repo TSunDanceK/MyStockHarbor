@@ -1,69 +1,70 @@
 {
-  "asOf": "2026-10-02",
-  "indexClose": 7722.72,
+  "asOf": "2026-10-09",
+  "indexClose": 7811.54,
   "ath": {
-    "level": 7798.99,
-    "date": "2026-08-13"
+    "level": 7818.93,
+    "date": "2026-10-06"
   },
-  "oneLiner": "Up 0.73% on Friday after a weak September jobs report cut rate-hike odds; about 1% below the August 13 record close.",
-  "intro": "The S&P 500 closed at 7,722.72 on Friday, October 2, up 0.73% on the day after a much weaker-than-expected September jobs report cut the odds of another Fed rate hike. Even with Friday's bounce, the index finished the week down about 0.3% and sits roughly 1% below its record close of 7,798.99 from August 13. Breadth stayed thin, with September's gains confined almost entirely to technology.",
+  "oneLiner": "Closed at 7,811.54 Friday, up about 0.6% on the day and 1.1% on the week, just below Tuesday's new record close of 7,818.93.",
+  "intro": "The S&P 500 closed at 7,811.54 on Friday, October 9, up about 0.6% on the day and roughly 1.1% on the week. The index set a fresh record close of 7,818.93 on Tuesday, October 6, before a midweek wobble over AI stock valuations, and Friday's close sits about 0.1% below that peak. Fading Fed rate-hike bets, after another soft jobs report, drove most of the week's gains.",
   "sections": {
     "performance": {
       "heading": "How the index has done",
-      "body": "September was a rare down month for the S&P 500, which fell 0.4% as bond yields spiked, in an otherwise strong 2026. This week it slipped about 0.3% despite Friday's 0.73% gain, leaving it roughly 1% below its August 13 record. The strip above shows the same periods on SPY, which tracks the index closely."
+      "body": "This week's strip above shows the S&P 500 ETF SPY grinding to new highs alongside the index, after September's dip. The index itself set a fresh record close on Tuesday, then wobbled for two days over AI stock valuations before rallying back near that peak by Friday as earnings season got underway. The cards above track the same swings on SPY."
     },
     "chart": {
       "heading": "The trend against its moving averages",
-      "body": "On the daily chart the index has spent two weeks oscillating around its own 50-day and 200-day moving averages in the high-7,600s, rather than sitting clearly above them. That reads as a pause rather than a break: the longer-term averages are still rising, and the weekly chart further down stays above its 50- and 200-week lines."
+      "body": "On the daily chart the index is now trading above both its 50- and 200-day moving averages for the first time in weeks, after spending early October testing that area from below. Tuesday's record close confirmed the move; Thursday's AI-driven pullback tested the breakout before Friday's rebound. The chart above plots SPY against its own moving-average lines over the same stretch."
     },
     "levels": {
       "heading": "Where the nearby levels sit",
-      "body": "The record close of 7,798.99 from August 13 is the nearest marker above, about 1% away. Below, the high-7,600s, where the daily 50- and 200-day averages sit, is the area the index has swung around for the past two weeks. The Price zones and Key levels cards show where those levels cluster on SPY today."
+      "body": "The index's own record close from Tuesday is now the nearest marker above, with Friday's close sitting just a fraction below it. Below, the area around the 50- and 200-day moving averages, which the index cleared this week, is the first support zone to watch. The Price zones and Key levels cards above show where those levels sit on SPY today."
     },
     "signals": {
       "heading": "Momentum in plain words",
-      "body": "RSI (14) stayed in neutral territory through the week, not flagging the index as overbought or oversold even after the late-September dip and Friday's rebound. The panel above shows today's RSI and where MACD sits against its signal line on SPY."
+      "body": "Daily RSI (14) moved toward overbought territory as the index pushed to new highs this week, before easing back somewhat during Thursday's AI-driven pullback. MACD stayed constructive, continuing to sit above its signal line through the week's swings. The panel above shows today's readings on SPY."
     },
     "change": {
       "heading": "The weekly and monthly pattern",
-      "body": "Close to close, September ended 0.4% lower, a rare down month this year, and this week finished about 0.3% lower even after Friday's bounce. The swings came from bond yields and jobs data rather than any change in the earnings backdrop."
+      "body": "Close to close, the index is up about 1.1% this week, reversing September's 0.4% dip and adding a second straight weekly gain. Most of the move came from a fresh record on Tuesday, a wobble around AI stock valuations midweek, and a rally back toward that high on Friday."
     }
   },
   "marketRead": [
-    "The real story this week was the labour market reversing a rate-hike scare. Through late September, sticky inflation had pushed some Fed officials toward another hike, and the 10-year Treasury yield touched 5.297% on September 30, its highest level in 24 years. Friday's September jobs report flipped that: just 29,000 jobs were added against roughly 90,000 expected, and unemployment rose to 4.2%, cutting the market-implied odds of an October hike from about 64% to about 16%.",
-    "Under the surface, breadth stayed thin. Technology rose about 5% in September while financials, materials and REITs each fell around 7%, and retail investors have been net sellers for nine straight weeks even as hedge funds kept adding.",
-    "The bull case: the index absorbed a genuine bond-market scare without breaking its longer-term uptrend, and brokers' year-end targets are little changed, from Yardeni near 7,900 to Goldman Sachs and JPMorgan around 8,000 and UBS at 8,100. The bear case: yields are only just off a 24-year high, leadership is concentrated in a handful of AI-linked mega-caps, and Friday's relief rests on one weak jobs report that may not repeat.",
-    "That leaves two questions for the weeks ahead: whether bond yields keep easing from their late-September highs now that the labour market has cooled, and whether breadth can widen beyond technology. The August record was built on strong earnings and a resilient economy; the pullback since was driven by rates rather than profits, which is why the yield path matters more than any single headline right now."
+    "The S&P 500 climbed to a fresh record close of 7,818.93 on Tuesday, its first new high since August, as fading bets on another Fed interest-rate increase outweighed persistently elevated bond yields. Market-implied odds of a hike at the Fed's late-October meeting fell to roughly one in five, down from about one in two a week earlier, after September payrolls rose just 29,000 against expectations near 90,000 and unemployment ticked up to 4.2%. The Fed's own September projections had pointed to one more hike this year, but minutes released midweek did little to revive those bets.",
+    "The rally hit a speed bump midweek when a report suggested one major AI company's revenue run rate was tens of billions of dollars below the figure that had circulated, reviving worries about AI infrastructure spending. Chip and AI-infrastructure names fell sharply on the news before a separate report lifted that revenue estimate back toward $70 billion by year-end, helping the group, and the index, recover into Friday's close. Treasury yields stayed elevated throughout, with the 10-year near 5.25%, just off its highest level in roughly 24 years, even as the index pushed to new highs.",
+    "Underneath the headline strength, participation stayed uneven: about 49.8% of S&P 500 members traded above their 200-day average as of Tuesday's close, and only around 30% were above their 50-day average, well below the roughly 70% reading from midsummer. The optimistic case is that the index hit a record without breadth fully recovering, leaving room for other sectors to join if yields keep easing. The cautious case is that leadership stays narrow, yields are near multi-decade highs, and midweek's AI jitters showed how fast sentiment can turn on one data point.",
+    "The coming weeks may hinge on whether that breadth gap closes as big bank earnings begin next week, unofficially opening third-quarter reporting season after Delta Air Lines' results missed estimates and its guidance was cut on higher fuel costs. Investors are also watching whether softer inflation and jobs data continue to outweigh elevated yields, and whether the AI-spending questions that unsettled markets midweek resurface as more companies report."
   ],
   "points": [
     {
       "label": "Catalyst",
-      "text": "September payrolls rose 29,000 against about 90,000 expected; October hike odds fell from about 64% to about 16%."
+      "text": "Fading Fed rate-hike bets, after another soft jobs report, pushed October odds near one in five from about one in two a week earlier."
     },
     {
       "label": "Breadth",
-      "text": "September's gains were mostly technology (about +5%); financials, materials and REITs fell around 7% each."
+      "text": "About 49.8% of S&P 500 members were above their 200-day average as of Tuesday's close, versus roughly 70% in midsummer."
     },
     {
       "label": "Rates",
-      "text": "The 10-year Treasury yield touched 5.297% on September 30, a 24-year high, before easing after the jobs data."
+      "text": "The 10-year Treasury yield held near 5.25% all week, just off its highest level in roughly 24 years."
     }
   ],
   "breadth": {
-    "pct200": null,
-    "source": "Not in the 4 Oct weekly update",
-    "date": "2026-10-04"
+    "pct200": 49.8,
+    "pct50": 30,
+    "source": "InvestorPlace",
+    "date": "2026-10-06"
   },
   "watchDown": [
-    "The index closes a full week below its daily 200-day moving average, rather than swinging around it as it has for two weeks.",
-    "The 10-year Treasury yield climbs back above its late-September high near 5.3%.",
-    "Breadth narrows further from September's technology-only gains, or more of the index's stocks slip below their averages.",
-    "The soft jobs data proves a one-off, reviving the rate-hike concerns behind September's bond-market slide."
+    "Breadth stays below half the index above its 200-day average even as the headline index sits near records.",
+    "The 10-year Treasury yield climbs back above its recent multi-decade highs.",
+    "AI-linked chip and infrastructure stocks resume the sharp pullback seen earlier this week.",
+    "The soft jobs and inflation data reverse, reviving the Fed rate-hike bets that faded this week."
   ],
   "watchUp": [
-    "The index clears its record close of 7,798.99 and moves toward the 7,900–8,100 range of year-end targets.",
-    "The 10-year yield keeps easing from its 24-year high, taking pressure off valuations.",
-    "Financials, materials and REITs stabilise and breadth widens beyond technology.",
-    "The nine-week run of net retail outflows ends and participation in the rally broadens."
+    "The index clears Tuesday's record close of 7,818.93 and holds there for more than a single session.",
+    "The 10-year Treasury yield eases further from its recent multi-decade highs.",
+    "Breadth widens meaningfully beyond half of index members trading above their 200-day average.",
+    "Bank earnings starting next week come in strong enough to broaden the rally beyond technology."
   ]
 }
