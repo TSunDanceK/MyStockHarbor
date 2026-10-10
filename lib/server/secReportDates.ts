@@ -736,6 +736,156 @@ export const PRIMARY_ESTIMATOR: EstimatorId = "A";
 // rule was fixed before the run and says MEAN, so A ships and the split is
 // recorded rather than used to justify a different choice afterwards.
 
+// ── US EQUITY MARKET TRADING DAYS (#552 COWORK #199/#200) ─────────────────
+//
+// NYSE's full-day closures, computed from their rules rather than listed, so
+// the calendar never runs out: New Year's Day, Martin Luther King Jr. Day,
+// Washington's Birthday, Good Friday, Memorial Day, Juneteenth (from 2022),
+// Independence Day, Labor Day, Thanksgiving and Christmas. A holiday on a
+// Saturday is observed the Friday before, on a Sunday the Monday after --
+// EXCEPT New Year's Day on a Saturday, which NYSE does not move into the old
+// year (2022: open on Fri 31 Dec 2021). Unscheduled closures (a national day
+// of mourning) cannot be computed and are not here; early closes still trade.
+//
+// HERE, NOT IN ITS OWN MODULE, because this file is deliberately import-free:
+// several checks load it from source as a single data: module. It is used
+// only to keep an estimated REPORT DAY off a day the market is shut;
+// marketHours.ts and lastSession.ts are unchanged.
+
+const ymd = (y: number, m: number, d: number) =>
+  `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+/** The n-th (1-based) given weekday (0 = Sunday) of a month; n = -1 is the last. */
+function nthWeekday(y: number, m: number, weekday: number, n: number): string {
+  if (n > 0) {
+    const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+    return ymd(y, m, 1 + ((weekday - first + 7) % 7) + (n - 1) * 7);
+  }
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const last = new Date(Date.UTC(y, m - 1, lastDay)).getUTCDay();
+  return ymd(y, m, lastDay - ((last - weekday + 7) % 7));
+}
+
+/** Easter Sunday (Gregorian; anonymous algorithm). */
+function easter(y: number): string {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return ymd(y, month, day);
+}
+
+export const addCalendarDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+export const weekdayOf = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
+
+/** A fixed-date holiday moved to its observed weekday. */
+function observed(d: string, newYears = false): string | null {
+  const w = weekdayOf(d);
+  if (w === 6) return newYears ? null : addCalendarDays(d, -1);
+  if (w === 0) return addCalendarDays(d, 1);
+  return d;
+}
+
+const holidayCache = new Map<number, ReadonlySet<string>>();
+
+/** NYSE full-day holidays observed in calendar year `y`. */
+export function usMarketHolidays(y: number): ReadonlySet<string> {
+  const hit = holidayCache.get(y);
+  if (hit) return hit;
+  const days = [
+    observed(ymd(y, 1, 1), true),
+    nthWeekday(y, 1, 1, 3),          // MLK Day: third Monday of January
+    nthWeekday(y, 2, 1, 3),          // Washington's Birthday: third Monday of February
+    addCalendarDays(easter(y), -2),          // Good Friday
+    nthWeekday(y, 5, 1, -1),         // Memorial Day: last Monday of May
+    y >= 2022 ? observed(ymd(y, 6, 19)) : null,
+    observed(ymd(y, 7, 4)),
+    nthWeekday(y, 9, 1, 1),          // Labor Day: first Monday of September
+    nthWeekday(y, 11, 4, 4),         // Thanksgiving: fourth Thursday of November
+    observed(ymd(y, 12, 25)),
+  ].filter((d): d is string => Boolean(d));
+  const set = new Set(days);
+  holidayCache.set(y, set);
+  return set;
+}
+
+export function isUsMarketHoliday(d: string): boolean {
+  return usMarketHolidays(Number(d.slice(0, 4))).has(d);
+}
+
+/** Monday to Friday and not an NYSE holiday. */
+export function isUsTradingDay(d: string): boolean {
+  const w = weekdayOf(d);
+  return w !== 0 && w !== 6 && !isUsMarketHoliday(d);
+}
+
+/** The first trading day strictly after (step 1) or before (step -1) `d`. */
+export function nextUsTradingDay(d: string, step: 1 | -1 = 1): string {
+  let x = addCalendarDays(d, step);
+  while (!isUsTradingDay(x)) x = addCalendarDays(x, step);
+  return x;
+}
+
+// ── AN ESTIMATED DAY IS A TRADING DAY (#552 COWORK #199) ──────────────────
+//
+// US filers do not announce results on a Saturday, a Sunday or an NYSE
+// holiday, but a lag added to a period end lands wherever the calendar puts
+// it: NFLX's 30 Sep + 18 days read "Sun 18 Oct", GOOGL's "Sun 25 Oct".
+// The rule (owner, COWORK #199): such a day moves to the nearest trading day
+// IN THE DIRECTION OF THE FILER'S OWN HABIT -- the weekday its past 8-K 2.02
+// announcements fall on -- and otherwise to the following trading day.
+// Only the day moves: kind, window and confidence are left as they were.
+
+/** How many of the filer's newest results announcements decide its habit. */
+export const HABIT_EVENTS = 8;
+
+/**
+ * The weekday (1 = Monday ... 5 = Friday) the filer announces results on: the
+ * strict mode of its newest HABIT_EVENTS 8-K 2.02 dates (6-K results dates for
+ * a filer with no 8-K), seen at least twice. Null when there is no clear habit.
+ */
+export function habitWeekday(events: readonly ReportEvent[]): number | null {
+  const eightK = events.filter((e) => e.basis === "8-K item 2.02" && e.announcedOn);
+  const pool = (eightK.length ? eightK : events.filter((e) => e.basis === "6-K near period end" && e.announcedOn)).slice(0, HABIT_EVENTS);
+  const n = new Map<number, number>();
+  for (const e of pool) {
+    const w = weekdayOf(e.announcedOn);
+    if (w >= 1 && w <= 5) n.set(w, (n.get(w) ?? 0) + 1);
+  }
+  const ranked = [...n].sort((a, b) => b[1] - a[1]);
+  if (!ranked.length || ranked[0][1] < 2 || ranked[1]?.[1] === ranked[0][1]) return null;
+  return ranked[0][0];
+}
+
+/**
+ * `date` if the market trades that day; otherwise the trading day within three
+ * days either side that falls on the filer's habitual weekday (each weekday
+ * occurs exactly once in that seven-day window), else the following trading
+ * day. `notBefore` / `notAfter` bound the move: an estimate never moves into
+ * the past, and a deadline-clamped one never past its statutory deadline (it
+ * steps back to the previous trading day instead).
+ */
+export function onTradingDay(
+  date: string,
+  events: readonly ReportEvent[],
+  bounds: { notBefore?: string; notAfter?: string } = {},
+): string {
+  if (isUsTradingDay(date)) return date;
+  const inBounds = (d: string) => (!bounds.notBefore || d >= bounds.notBefore) && (!bounds.notAfter || d <= bounds.notAfter);
+  const habit = habitWeekday(events);
+  if (habit !== null) {
+    for (let k = -3; k <= 3; k++) {
+      const d = addCalendarDays(date, k);
+      if (weekdayOf(d) === habit && isUsTradingDay(d) && inBounds(d)) return d;
+    }
+  }
+  const after = nextUsTradingDay(date, 1);
+  if (inBounds(after)) return after;
+  const before = nextUsTradingDay(date, -1);
+  return inBounds(before) ? before : after;
+}
+
 /**
  * Estimate the next announcement.
  *
@@ -802,9 +952,11 @@ export function estimateNextReport(
   }
 
   if (spread <= REGULAR_SPREAD_DAYS) {
+    const capDay = cap.toISOString().slice(0, 10);
     return {
       kind: "date",
-      date: clamped ? cap.toISOString().slice(0, 10) : predicted,
+      // ON A TRADING DAY (#552 COWORK #199), never past the statutory deadline.
+      date: onTradingDay(clamped ? capDay : predicted, usable, { notAfter: capDay }),
       medianLagDays: median(lags)!,
       spreadDays: spread,
       fromEvents: lags.length,
