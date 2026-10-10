@@ -8,7 +8,7 @@
 // destination can be read off. Store: GET / SCAN / MGET only. No SEC requests.
 import { register } from "node:module";
 import { Redis } from "@upstash/redis";
-register("./lib/ts-resolve-app.mjs", import.meta.url);
+register("./lib/tsx-render-hooks.mjs", import.meta.url); // stubs next/* (dueInputs reaches pickersBuilder)
 const READS = new Set(["get", "scan", "mget"]);
 const counts = {};
 const realFetch = globalThis.fetch;
