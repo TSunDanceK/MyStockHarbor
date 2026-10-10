@@ -39,9 +39,13 @@ const transpile = (src, fileName = "m.ts", jsx = false) =>
 
 const stripImports = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 
-const m = await import(
-  `data:text/javascript;base64,${Buffer.from(transpile(stripImports("lib/server/expectedToReport.ts"))).toString("base64")}`
-);
+// expectedToReport's one value import (onTradingDay, #552 COWORK #199) comes
+// from secReportDates, itself import-free: loaded as its own module, the real code.
+const b64 = (src) => `data:text/javascript;base64,${Buffer.from(src).toString("base64")}`;
+const m = await import(b64(
+  `import { onTradingDay } from "${b64(transpile(stripImports("lib/server/secReportDates.ts")))}";\n` +
+  transpile(stripImports("lib/server/expectedToReport.ts"))
+));
 
 // ── Fixtures. Events are stored NEWEST FIRST, as the store writes them. ───
 const ev = (periodEnd, announcedOn, basis = "8-K item 2.02") => ({

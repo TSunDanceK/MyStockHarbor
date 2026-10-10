@@ -21,7 +21,8 @@ const load = (mutate = (s) => s, nonce = 0) =>
     mutate(SRC).replace(/export (const|function|type)/g, "$1") +
       "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, reactionDate," +
       " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary, reactionBarLabels, reportedLabel, latestResultsAnnouncement, pendingResults, snapPeriodEnd," +
-      " resultsPairing, earlyNonResultsPattern, looksLikeEarlyNonResults, periodicReportDates };" +
+      " resultsPairing, earlyNonResultsPattern, looksLikeEarlyNonResults, periodicReportDates,"+
+      " onTradingDay, habitWeekday, usMarketHolidays, isUsTradingDay, nextUsTradingDay };" +
       `\n// nonce ${nonce}`
   );
 const m = await load();
@@ -416,8 +417,10 @@ const ev = (period, accepted, basis = "8-K item 2.02") => ({
     m.runEstimator("A", regular, "2026-09-30") === "2026-11-01" &&
       m.runEstimator("B", regular, "2026-09-30") === "2026-10-31",
     `A ${m.runEstimator("A", regular, "2026-09-30")}, B ${m.runEstimator("B", regular, "2026-09-30")}`);
-  check("...and the shipped date is the primary's own arithmetic",
-    r.kind === "date" && r.date === m.runEstimator(m.PRIMARY_ESTIMATOR, regular, "2026-09-30"),
+  // ON A TRADING DAY (#552 COWORK #199): A's 2026-11-01 is a Sunday, and this
+  // filer's weekday habit is Friday (2026-05-01, 2026-01-30), so it ships Fri 30 Oct.
+  check("...and the shipped date is the primary's own arithmetic, moved onto a trading day",
+    r.kind === "date" && r.date === m.onTradingDay(m.runEstimator(m.PRIMARY_ESTIMATOR, regular, "2026-09-30"), regular) && r.date === "2026-10-30",
     `${r.date}`);
   check("...and the spread that earned it travels with it",
     r.kind === "date" && r.spreadDays <= m.REGULAR_SPREAD_DAYS, `spread ${r.spreadDays}`);
