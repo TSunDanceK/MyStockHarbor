@@ -82,8 +82,9 @@ async function suite(W, code) {
     /viewWidth=\{full \? undefined : basicViewWidth\}/.test(code.dash) && /const basicViewWidth = wideChart && !isMobile \? wideViewWidth\(deskGridWidth\) : undefined;/.test(code.dash));
   ok("the grid is measured by a ResizeObserver", /new ResizeObserver\(measure\)/.test(code.dash) && /ref=\{deskGridRef\}/.test(code.dash));
   ok("the other engines are nudged to re-measure on toggle", /window\.dispatchEvent\(new Event\("resize"\)\)\);\s*return \(\) => window\.cancelAnimationFrame\(id\);\s*\}, \[wideChart\]\);/.test(code.dash));
+  // (#164: on the landing the Breakdown is the collapsed accordion, passed in as {breakdown}.)
   ok("wide mode: the chart first, then the two cards in their own two-column row",
-    /<div className="msh-col msh-wide-chart"><ChartPanel \/><\/div>\s*<div className="msh-wide-cards"><OverviewPanel \/><BreakdownPanel \/><\/div>/.test(code.dash) &&
+    /<div className="msh-col msh-wide-chart"><ChartPanel \/><\/div>\s*<div className="msh-wide-cards"><OverviewPanel \/>(?:<BreakdownPanel \/>|\{breakdown\})<\/div>/.test(code.dash) &&
       code.dash.includes(".msh-grid-wide{grid-template-columns:1fr;}") && code.dash.includes(".msh-wide-cards{display:grid;grid-template-columns:1fr 1fr;"));
   ok("the button says what it does and is a toggle", /aria-pressed=\{wideChart\}/.test(code.dash) && code.dash.includes(`"Back to two columns"`) && code.dash.includes(`"Widen chart"`));
   ok("the button is hidden where the layout is single-column", code.dash.includes("@media(max-width:960px){.msh-widebtn{display:none!important;}"));

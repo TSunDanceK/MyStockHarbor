@@ -1,25 +1,31 @@
-// THE DASHBOARD LANDING'S RULES (#563 COWORK #134).
+// THE DASHBOARD LANDING'S RULES (#563 COWORK #134; v2, #164).
 //
 // Renders the landing's server parts (app/dashboard/DashboardLanding.tsx) with
 // the repo's render hooks, on the measure's two fixtures: every source filled,
-// and every source missing. It fails when:
-//   1. a card is missing, or shows its empty state with data, or (all missing)
-//      does not show its own empty-state words, or loses its section link;
-//   2. "Market right now" with nothing to show does not say so;
-//   3. a Pickers screen links outside PICKER_ROUTES;
-//   4. the landing's words advise (buy, sell, should);
-//   5. the wiring breaks: the page's landing read, the analyser's #analyser
-//      anchor, the ?symbol= deep link's scroll, the hero search's scroll, the H1;
-//   6. (#149) a news item has no thumbnail (60 px, lazy, alt="") or fallback, or
-//      the thumbnails stop coming from the stored image / the art library; "/"
-//      stops serving this page on every device, or loses its own SEO, or
-//      /dashboard stops canonicalising to "/";
-//   7. (#154) the capex star off its rows, the earnings card not a list, the
-//      sectors card not saying what it measures, one insight on a wide screen,
-//      the phone tabs wrapping or losing their names, or the Filed earnings tab
-//      not the filed chart (its reader, route and bars checked here).
-// Each card's empty state, the market's, the screen links and the deep-link
-// scroll each get a planted mutant.
+// and every source missing; reads the client, the page and the data module as
+// source. It fails when (one rule per #164 item, a planted mutant for each):
+//   A. Market today: no half-gauge, not the four index tiles (SPY, QQQ, DIA,
+//      IWM; 2 × 2 on a phone), not the trend / best-sector line, not one credit,
+//      or nothing said when empty; the old S&P / Trend / Best tiles back; the
+//      ticker tape or the Market Benchmarks row back on the landing; the hero
+//      not the brief's (lead line, the four Try chips, two columns from 860 px);
+//      the biggest-mover line missing or worded as a signal;
+//   B. the two open features in a card, without their divider, not stacking
+//      below 1024 px, or losing their empty states and links; the screens and
+//      sectors cards side by side (stacked at 640 px and under), the sectors
+//      card not the top 5 and the bottom 1;
+//   C. This week: not 3 + 3 earnings rows (no per-row date or tag; the fine
+//      line), not one featured post plus "Also:", not 4 one-line headlines with
+//      a thumbnail or logo; cards not stretched to one height with footers last;
+//   D. the analyser not one card under an H2 (#analyser kept), without the
+//      head, the "Change stock…" search, the verdict and the links; the tabs not
+//      beside their label at 641 px and up and over it at 640 and under; the
+//      Breakdown not collapsed on arrival;
+//   E. a card's eyebrow in a new hue; a section with more than one credit line;
+//      the landing cache key not bumped;
+// plus the standing rules: every card's empty state and section link, screen
+// links on PICKER_ROUTES, no advice words, the deep link's scroll, the H1, "/"
+// serving this page, and (7) the Filed earnings tab.
 //
 //   node scripts/check-dashboard-landing.mjs
 import fs from "node:fs";
@@ -32,7 +38,7 @@ register("./lib/tsx-render-hooks.mjs", import.meta.url);
 const { renderToStaticMarkup } = await import("react-dom/server");
 const React = await import("react");
 const { FULL_LANDING, EMPTY_LANDING } = await import("./lib/measure-stubs/dashboard-landing.mjs");
-const { DASHBOARD_SCREENS } = await import("../lib/server/dashboardCards.ts").catch(() => ({ DASHBOARD_SCREENS: null }));
+const { DASHBOARD_SCREENS, biggestMover } = await import("../lib/server/dashboardCards.ts").catch(() => ({ DASHBOARD_SCREENS: null, biggestMover: null }));
 const { PICKER_ROUTES } = await import("../lib/pickerRoutes.ts");
 const { ETF_NAMES } = await import("../lib/etfNames.ts");
 const { etfs: ETFS } = await import("../lib/curatedSymbols.ts");
@@ -43,7 +49,10 @@ const PAGE = "app/dashboard/page.tsx";
 const CARDS_SRC = "lib/server/dashboardCards.ts";
 const ROOT = "app/page.tsx";
 const read = (p) => fs.readFileSync(p, "utf8");
-const CARDS = ["hub", "capex", "pickers", "earnings", "sectors", "insight", "news"];
+/** The cards (with a border and an empty state each); the two open features are checked on their own. */
+const CARDS = ["pickers", "sectors", "earnings", "insight", "news"], OPEN = ["hub", "capex"];
+/** The existing eyebrow hues (#164 E: no new ones). */
+const HUES = ["#93c5fd", "#5FD4C7", "#c4b5fd", "#4ade80", "#facc15", "#38bdf8", "#fbbf24", "#f472b6"];
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -66,6 +75,14 @@ const cardHtml = (html, id) => {
   const end = html.indexOf("</section>", i);
   return html.slice(i, end);
 };
+const openHtml = (html, id) => {
+  const i = html.indexOf(`data-open="${id}"`);
+  if (i < 0) return null;
+  const next = [html.indexOf('data-open="', i + 12), html.indexOf('data-row="only-cards"', i)].filter((x) => x > 0);
+  return html.slice(i, Math.min(...next));
+};
+const tiingoLinks = (html) => (html.match(/href="https:\/\/www\.tiingo\.com/g) ?? []).length;
+const mediaFree = (css) => css.replace(/@media\([^)]*\)\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, "").replace(/@container[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, "");
 
 /** Every rule on one landing module; returns the failures. */
 function rules(mod, scr = DASHBOARD_SCREENS) {
@@ -75,11 +92,13 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
   try {
     full = renderToStaticMarkup(React.createElement(mod.LandingCards, { c: FULL_LANDING.cards, hasFiledEarnings: () => true }));
     empty = renderToStaticMarkup(React.createElement(mod.LandingCards, { c: EMPTY_LANDING.cards, hasFiledEarnings: () => true }));
-    mFull = renderToStaticMarkup(React.createElement(mod.MarketNow, { m: FULL_LANDING.market }));
-    mEmpty = renderToStaticMarkup(React.createElement(mod.MarketNow, { m: EMPTY_LANDING.market }));
+    mFull = renderToStaticMarkup(React.createElement(mod.MarketToday, { m: FULL_LANDING.market }));
+    mEmpty = renderToStaticMarkup(React.createElement(mod.MarketToday, { m: EMPTY_LANDING.market }));
   } catch (e) {
     return [`the landing renders with every source filled and every source missing (${String(e.message).slice(0, 80)})`];
   }
+  const css = mod.LANDING_CSS, base = mediaFree(css);
+  // Every card: its data, its empty state's own words, its section link.
   for (const id of CARDS) {
     const f = cardHtml(full, id), e = cardHtml(empty, id);
     want(`the ${id} card renders with data`, !!f);
@@ -89,85 +108,89 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
     want(`the ${id} card says "${mod.EMPTY[id]}" with nothing`, /^data-card="[a-z]+" data-empty=""/.test(e) && text(e).includes(mod.EMPTY[id]));
     want(`the ${id} card keeps its section link with nothing`, /<a (?=[^>]*class="dlMore")(?=[^>]*href="\/[a-z0-9/-]*")[^>]*>/.test(e));
   }
-  want("Market right now draws its tiles with data", (mFull.match(/data-tile=/g) ?? []).length === 3);
-  want(`Market right now says "${mod.EMPTY.market}" with nothing`, text(mEmpty).includes(mod.EMPTY.market));
-  // 3. The Pickers card's links, and the data module's screens, are real picker routes.
-  const hrefs = [...(cardHtml(full, "pickers") ?? "").matchAll(/href="([^"]+)"/g)].map((m) => m[1]).filter((h) => h !== "/stock-screener");
+
+  // ── A. Market today ──
+  want("A: Market today draws the Market Mood half-gauge, with \"What goes into it?\"", /data-mood-gauge=""/.test(mFull) && /data-gauge-needle="44"/.test(mFull) && text(mFull).includes("What goes into it?") && !/moodThermo|moodSpark/.test(mFull));
+  const tiles = [...mFull.matchAll(/data-index="([A-Z]+)"/g)].map((m) => m[1]);
+  want("A: the index row is SPY, QQQ, DIA, IWM, each its move on the close", tiles.join(",") === "SPY,QQQ,DIA,IWM" && text(mFull).includes("−1.04%") && text(mFull).includes("+0.21%"));
+  want("A: the index row is 2 × 2 at 560 px and under, one row of 4 above", /\.dlIdx\{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\);/.test(base) && /@media\(max-width:560px\)\{[^@]*\.dlIdx\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(css));
+  want("A: one line carries the trend score and the best sector", text(mFull).includes("Trend score 85/100, a strong uptrend · Best sector YTD: Technology +55%"));
+  want("A: the old S&P / Trend / Best-sector tiles are gone", !/data-tile=|dlTiles|S&amp;P 500 \(SPY\)/.test(mFull));
+  want(`A: Market today says "${mod.EMPTY.market}" with nothing`, text(mEmpty).includes(mod.EMPTY.market));
+  want("A: one linked Tiingo credit in Market today", tiingoLinks(mFull) === 1);
+  // The biggest mover (the retired tape's top item): one factual line, no signal words.
+  const pk = cardHtml(full, "pickers") ?? "";
+  want("A: the screens card carries \"Biggest mover today: SMCI, up 9.4%\" (facts, no signal words)", /data-mover=""/.test(pk) && text(pk).includes("Biggest mover today: SMCI, up 9.4%") && !/signal/i.test(text(pk)) &&
+    mod.moverLine({ symbol: "XYZ", changePct: -3.21, label: "Last close · 1 Oct" }) === "Biggest mover on the last close (1 Oct): XYZ, down 3.2%");
+  want("A: biggestMover takes the largest move either way", typeof biggestMover === "function" && biggestMover([{ symbol: "a", changePct: 3 }, { symbol: "b", changePct: -5.5 }, { symbol: "c", changePct: null }])?.symbol === "B");
+
+  // ── B. Only on MyStockHarbor ──
+  for (const id of OPEN) {
+    const f = openHtml(full, id), e = openHtml(empty, id);
+    want(`B: the ${id} feature is open (no card), inside the open row`, !!f && full.includes(`<div class="dlOpen" data-open="${id}">`) && /data-open-row=""/.test(full) && full.indexOf("data-open-row") < full.indexOf(`data-open="${id}"`) && !/class="dlCard"/.test(f ?? ""));
+    want(`B: the ${id} feature says "${mod.EMPTY[id]}" with nothing, and keeps its link`, !!e && text(e).includes(mod.EMPTY[id]) && /data-empty=""/.test(e) && /class="dlMore"/.test(e));
+  }
+  want("B: the open features sit on the page background, a thin line under them, side by side from 1024 px", /\.dlOpen\{(?![^}]*(?:border|background))[^}]*\}/.test(base) && /\.dlOpenRow\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\);[^}]*border-bottom:1px solid/.test(base) &&
+    /@media\(max-width:1023px\)\{\.dlOpenRow\{grid-template-columns:minmax\(0,1fr\);/.test(css));
+  want("B: the capex flow (both column heads, the fine line) fills its half", text(openHtml(full, "capex") ?? "").includes("their own capex") && text(openHtml(full, "capex") ?? "").includes("their own filed sales") && text(openHtml(full, "capex") ?? "").includes("not a record of who paid them"));
+  want("B: the screens and sectors cards side by side, stacked at 640 px and under", /data-row="only-cards"/.test(full) && full.indexOf('data-card="pickers"') > full.indexOf('data-row="only-cards"') && full.indexOf('data-card="sectors"') < full.indexOf('data-section="week"') &&
+    /\.dlRow2\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(base) && /@media\(max-width:640px\)\{\.dlRow2\{grid-template-columns:minmax\(0,1fr\);\}\}/.test(css));
+  const hrefs = [...pk.matchAll(/href="([^"]+)"/g)].map((m) => m[1]).filter((h) => h !== "/stock-screener" && !h.startsWith("/stock/"));
   want("every Pickers screen links to a PICKER_ROUTES page", hrefs.length === 5 && hrefs.every((h) => PICKER_ROUTES.includes(h)));
   want("DASHBOARD_SCREENS are all PICKER_ROUTES pages", Array.isArray(scr) && scr.length === 5 && scr.every((s) => PICKER_ROUTES.includes(s.href)));
-  // #142 §4: each news item carries its company's ticker, linking to that company's news page.
-  const newsChips = [...(cardHtml(full, "news") ?? "").matchAll(/href="\/stock\/([A-Z.]+)\/news"[^>]*>([A-Z.]+)</g)];
-  want("every news item links its ticker to that company's news page", newsChips.length === FULL_LANDING.cards.news.length && newsChips.every((m) => m[1] === m[2]));
-  // #142 §1: the S&P tile says which close it is, and its date.
-  want("the S&P tile names SPY and the close's date", /S&amp;P 500 \(SPY\)/.test(mFull) && text(mFull).includes("close on 6 Oct 2026"));
-  // #141 §1: the capex columns say whose figure each one is.
-  want("the capex columns say each figure is that company's own", text(cardHtml(full, "capex") ?? "").includes("their own capex") && text(cardHtml(full, "capex") ?? "").includes("their own filed sales"));
-  // #148 §4: "Build your own screen" goes to the screener; each screen shows a peek of its members' logos.
-  const pk = cardHtml(full, "pickers") ?? "";
-  want("\"Build your own screen\" links to /stock-screener", /<a (?=[^>]*class="dlMore")(?=[^>]*href="\/stock-screener")[^>]*>/.test(pk));
-  const peeks = [...pk.matchAll(/data-peek=""[^>]*>([\s\S]*?)<\/span>/g)].map((m) => (m[1].match(/<img src="\/logos\//g) ?? []).length);
-  const wantPeeks = FULL_LANDING.cards.pickers.screens.filter((x) => x.peek.length).map((x) => x.peek.length);
-  want("each screen shows its members' logos (up to 3)", peeks.length === wantPeeks.length && peeks.every((n, i) => n === wantPeeks[i] && n <= 3));
-  // #154 §2: a list like the Pickers card: "12–18 Oct · 11 companies", then one company
-  // per line (logo, bold ticker, its name truncated with the full name in title, the
-  // estimated day), up to 4 a week, then "+N more in the calendar →".
+  want("\"Build your own screen\" links to /stock-screener, with the members' logos", /<a (?=[^>]*class="dlMore")(?=[^>]*href="\/stock-screener")[^>]*>/.test(pk) && (pk.match(/data-peek=""/g) ?? []).length === 4);
+  const sc = cardHtml(full, "sectors") ?? "";
+  const secRows = [...sc.matchAll(/data-sector-row="([a-z-]+)"/g)].map((m) => m[1]);
+  want("B: the sectors card is the top 5 and the bottom 1, on the shared axis with the S&P line, and \"All 11 sectors\"", secRows.join(",") === "technology,energy,industrials,basic-materials,financial-services,consumer-cyclical" &&
+    /data-spx-ref=""/.test(sc) && /href="\/sector"/.test(sc) && text(sc).includes("All 11 sectors") && sc.includes(`<p class="dlRead dlSecWhat" data-sector-what="">${mod.SECTOR_WHAT.replace(/’/g, "’")}</p>`));
+  const bars = [...sc.matchAll(/class="dlSecBar" data-tone="(up|down)" style="left:([\d.]+)%;width:([\d.]+)%"/g)];
+  want("a rising sector's bar runs right of 0, a falling one left", bars.length === 6 && bars.every((b) => (b[1] === "up" ? Number(b[2]) === 50 : Math.abs(Number(b[2]) + Number(b[3]) - 50) < 0.01)));
+  // The capex star lined up (#154 §1): each line level with its row, ending on the hub.
+  const cx = openHtml(full, "capex") ?? "";
+  const hubY = Number(cx.match(/data-hub-y="([\d.]+)"/)?.[1] ?? NaN), rowY = (i) => i * 36 + 14;
+  const ins = [...cx.matchAll(/<path data-into-node="" data-row-y="([\d.]+)" d="([^"]+)"/g)], outs = [...cx.matchAll(/<path data-from-node="" data-row-y="([\d.]+)" d="([^"]+)"/g)];
+  want("the capex star: each line level with its own row and ending on the hub, never company to company", ins.length === 3 && outs.length === 3 && hubY === rowY(1) &&
+    ins.every((m, i) => m[2] === `M0 ${rowY(i)} H14 L40 ${hubY}`) && outs.every((m, i) => m[2] === `M40 ${hubY} L66 ${rowY(i)} H80`));
+
+  // ── C. This week ──
+  const week = full.slice(full.indexOf('data-section="week"'));
+  want("C: This week holds earnings, insight and headlines, three equal columns, stacked at 860 px and under", /data-row="week"/.test(week) && week.indexOf('data-card="earnings"') < week.indexOf('data-card="insight"') && week.indexOf('data-card="insight"') < week.indexOf('data-card="news"') &&
+    /\.dlRow3\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\);\}/.test(base) && /@media\(max-width:860px\)\{\.dlRow3\{grid-template-columns:minmax\(0,1fr\);\}\}/.test(css));
+  want("C: cards stretch to the row's height, their footer links last", /\.dlRow\{[^}]*align-items:stretch;/.test(base) && /\.dlCard\{display:flex;flex-direction:column;/.test(base) && /\.dlMore\{margin-top:auto;/.test(base));
   const ea = cardHtml(full, "earnings") ?? "";
-  const weeks = [...ea.matchAll(/<div class="dlWeek" data-week="">([\s\S]*?)(?=<div class="dlWeek"|<p class="dlFine")/g)].map((m) => m[1]);
   const W = FULL_LANDING.cards.earnings.windows;
-  want("the earnings card lists two weeks, each headed with its dates and count", weeks.length === 2 &&
-    weeks.every((h, i) => h.includes(`<p class="dlWeekHead">${W[i].range} · ${W[i].count} companies</p>`)));
-  // #162/#163: the week heading carries the timing; a row has no date and no "Estimated" tag.
-  want("each week lists up to 4 companies, one per line: logo, bold ticker, name (full name in title); no per-row date or tag", weeks.every((h, i) => {
+  const weeks = [...ea.matchAll(/<div class="dlWeek" data-week="">([\s\S]*?)(?=<div class="dlWeek"|<p class="dlFine")/g)].map((m) => m[1]);
+  want("C: two weeks, each headed with its dates and count", weeks.length === 2 && weeks.every((h, i) => h.includes(`<p class="dlWeekHead">${W[i].range} · ${W[i].count} companies</p>`)));
+  want("C: three companies a week: logo, bold ticker, name (full name in title); no per-row date or tag", weeks.every((h, i) => {
     const rows = [...h.matchAll(/<li class="dlEarnRow" data-earn-row="">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
-    return rows.length === Math.min(4, W[i].top.length) && rows.every((r, k) => {
+    return rows.length === 3 && rows.every((r, k) => {
       const e = W[i].top[k], esc = (t) => t.replace(/&/g, "&amp;");
-      return new RegExp(`title="${esc(e.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`).test(r) && /<img src="\/logos\//.test(r) && r.includes(`<strong>${e.symbol}</strong>`) &&
-        r.includes(`<span class="dlEarnCo">${esc(e.name)}</span>`) && !r.includes(e.day) && !/Estimated|dlEarnDay|<em>/.test(r);
+      return r.includes(`title="${esc(e.name)}"`) && /<img src="\/logos\//.test(r) && r.includes(`<strong>${e.symbol}</strong>`) && r.includes(`<span class="dlEarnCo">${esc(e.name)}</span>`) && !r.includes(e.day) && !/Estimated|dlEarnDay|<em>/.test(r);
     });
   }));
-  want("the rest of each week is counted: \"+N more in the calendar →\"", weeks.every((h, i) => h.includes(`href="/earnings-calendar" class="dlEarnMore" data-earn-more="">+${W[i].count - W[i].top.length} more in the calendar →</a>`)));
-  want("the fine line under the card says the dates are estimated (#162 keeps it)", ea.includes('<p class="dlFine" data-fine-print=""><strong style="color:#f59e0b">Estimated</strong> from each company&#x27;s own SEC reporting pattern'));
-  want("the name takes the full remaining width (#163: nothing beside it)", /\.dlEarnName\{[^}]*flex:1 1 auto;/.test(mod.LANDING_CSS) && !/dlEarnDay/.test(mod.LANDING_CSS));
-  want("a long name truncates on one line with an ellipsis", /\.dlEarnCo\{[^}]*overflow:hidden;[^}]*text-overflow:ellipsis;[^}]*white-space:nowrap;/.test(mod.LANDING_CSS) && !/dlLogoChip|data-logo-chip/.test(ea));
-  // #148 §3, lined up by #154 §1: every connector has one end on the hub (no line joins two
-  // companies); each leaves its own row level, at that row's centre (rows 28 px, gap 8); the
-  // hub sits on the middle row's centre; "the build-out" sits under it, on one line.
-  const cx = cardHtml(full, "capex") ?? "";
-  const hubY = Number(cx.match(/data-hub-y="([\d.]+)"/)?.[1] ?? NaN);
-  const rowY = (i) => i * 36 + 14;
-  const ins = [...cx.matchAll(/<path data-into-node="" data-row-y="([\d.]+)" d="([^"]+)"/g)], outs = [...cx.matchAll(/<path data-from-node="" data-row-y="([\d.]+)" d="([^"]+)"/g)];
-  want("the capex star: each line level with its own row's centre and ending on the hub, never company to company",
-    /data-capex-chart=""/.test(cx) && ins.length === 3 && outs.length === 3 &&
-    ins.every((m, i) => Number(m[1]) === rowY(i) && m[2] === `M0 ${rowY(i)} H14 L40 ${hubY}`) && outs.every((m, i) => Number(m[1]) === rowY(i) && m[2] === `M40 ${hubY} L66 ${rowY(i)} H80`) &&
-    (cx.match(/class="dlCxFill"/g) ?? []).length === 6 && (cx.match(/<img src="\/logos\//g) ?? []).length === 6);
-  want("the hub sits on the middle row's centre, the label under it on one line", hubY === rowY(1) &&
-    new RegExp(`<i class="dlCxHub" style="top:${hubY}px"`).test(cx) && new RegExp(`data-node="" style="top:${hubY + 12}px">the build-out<`).test(cx) &&
-    /\.dlCxNodeLabel\{[^}]*white-space:nowrap;/.test(mod.LANDING_CSS) && /\.dlCxRow\{[^}]*height:28px;/.test(mod.LANDING_CSS) && /\.dlCapexChart\{[^}]*grid-template-columns:minmax\(0,1fr\) auto minmax\(0,1fr\);[^}]*align-items:end;/.test(mod.LANDING_CSS) && /<span class="dlCxSize" aria-hidden="true">the build-out<\/span>/.test(cx));
-  // #148 §6: all eleven sectors on one diverging axis, with the S&P 500 reference line.
-  const sc = cardHtml(full, "sectors") ?? "";
-  const rowsSeen = (sc.match(/data-sector-row="/g) ?? []).length;
-  const bars = [...sc.matchAll(/class="dlSecBar" data-tone="(up|down)" style="left:([\d.]+)%;width:([\d.]+)%"/g)];
-  want("the sectors chart has all 11 rows, green right / red left of 0, and the S&P reference line",
-    rowsSeen === 11 && /data-spx-ref=""/.test(sc) && /S&amp;P 500 \(SPY\)/.test(sc) && bars.length === 11 &&
-    bars.every((b) => (b[1] === "up" ? Number(b[2]) === 50 : Math.abs(Number(b[2]) + Number(b[3]) - 50) < 0.01)));
-  // #154 §3: the sectors card says what it measures.
-  want("the sectors card is \"Sector growth · year to date\", with its one plain line", sc.includes(">Sector growth · year to date<") &&
-    sc.includes(`<p class="dlRead dlSecWhat" data-sector-what="">${mod.SECTOR_WHAT.replace(/\u2019/g, "’")}</p>`) && /since 1 January, weighted by company size\.$/.test(mod.SECTOR_WHAT));
-  // #154 §4: the newest two posts, the second shown only at 1024 px and up.
+  want("C: the earnings fine line, and \"Open the calendar\"", ea.includes('<p class="dlFine" data-fine-print=""><strong style="color:#f59e0b">Estimated</strong> from each company&#x27;s own SEC reporting pattern') && /href="\/earnings-calendar"[^>]*>Open the calendar →/.test(ea));
+  want("a long name truncates on one line with an ellipsis", /\.dlEarnCo\{[^}]*overflow:hidden;[^}]*text-overflow:ellipsis;[^}]*white-space:nowrap;/.test(css));
   const ins2 = cardHtml(full, "insight") ?? "";
-  want("Insight of the day holds the two newest posts; the second shows at 1024 px and up only", ins2.includes(">Insight of the day<") && /data-insights="2"/.test(ins2) &&
-    FULL_LANDING.cards.insights.every((p) => ins2.includes(`href="/insights/${p.slug}"`)) &&
-    /\.dlInsights\[data-insights="2"\] \.dlInsight\+\.dlInsight\{display:none;\}/.test(mod.LANDING_CSS) && /@media\(min-width:1024px\)\{\.dlInsights\[data-insights="2"\]\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(mod.LANDING_CSS));
-  // #149 §2: a thumbnail left of every headline, the item's stored picture or the art library's, else the fallback block.
-  const newsRows = [...(cardHtml(full, "news") ?? "").matchAll(/<li class="dlNewsRow">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+  const [p0, p1] = FULL_LANDING.cards.insights;
+  want("C: one featured post (art, title, since line), then \"Also:\" for the second", (ins2.match(/data-insight-post=/g) ?? []).length === 1 && ins2.includes(`href="/insights/${p0.slug}"`) && /class="dlInsightImg"/.test(ins2) &&
+    text(ins2).includes("since the post on 28 Jul 2026") && /data-insight-also=""><span class="dlAlsoLabel">Also:<\/span>/.test(ins2) && ins2.includes(`href="/insights/${p1.slug}"`) && !/data-insights=/.test(ins2));
+  const nw = cardHtml(full, "news") ?? "";
+  const newsRows = [...nw.matchAll(/<li class="dlNewsRow" data-news-row="">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
   const thumbOk = (row, item) => item.thumb
-    ? new RegExp(`^<img (?=[^>]*class="dlNewsThumb")(?=[^>]*src="${item.thumb.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}")(?=[^>]*alt="")(?=[^>]*width="60")(?=[^>]*loading="lazy")[^>]*>`).test(row)
-    : /^<span class="dlNewsThumb" data-news-thumb="fallback" aria-hidden="true"><\/span>/.test(row);
-  want("every news item starts with its thumbnail (60 px, lazy, alt=\"\") or the fallback block, then the headline, then the chip",
-    newsRows.length === FULL_LANDING.cards.news.length && FULL_LANDING.cards.news.some((n) => !n.thumb) && FULL_LANDING.cards.news.some((n) => n.thumb) &&
-    newsRows.every((r, i) => thumbOk(r, FULL_LANDING.cards.news[i]) && /dlNewsThumb[\s\S]*<a href="https:[\s\S]*class="dlPill"/.test(r)));
-  // 4. Describes, never advises.
-  for (const [name, html] of [["the cards", full], ["the empty cards", empty], ["Market right now", mFull]]) {
+    ? new RegExp(`^<img (?=[^>]*class="dlNewsThumb")(?=[^>]*src="${item.thumb.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}")(?=[^>]*alt="")(?=[^>]*width="44")(?=[^>]*loading="lazy")[^>]*>`).test(row)
+    : /^<div class="dlNewsThumb" data-news-thumb="logo"><div[^>]*><img src="\/logos\/[A-Z]+\.webp" alt=""/.test(row);
+  want("C: four headlines, each a thumbnail (44 px, lazy, alt=\"\") or the company's logo, then the headline on one line",
+    newsRows.length === 4 && FULL_LANDING.cards.news.some((n) => !n.thumb) && newsRows.every((r, i) => thumbOk(r, FULL_LANDING.cards.news[i]) && /<a class="dlNewsTitle" href="https:[^"]*" target="_blank" rel="noopener noreferrer nofollow" title="/.test(r)) &&
+    /\.dlNewsTitle\{[^}]*overflow:hidden;[^}]*text-overflow:ellipsis;[^}]*white-space:nowrap;/.test(css) && /href="\/headlines"/.test(nw));
+
+  // ── E. System ──
+  const eyebrows = [...(full + mFull).matchAll(/class="dlEyebrow" style="color:(#[0-9a-fA-F]{6})"/g)].map((m) => m[1]);
+  want("E: one accent per eyebrow, from the existing hues only", eyebrows.length === 8 && eyebrows.every((h) => HUES.includes(h)));
+  const only = full.slice(full.indexOf('data-section="only"'), full.indexOf('data-section="week"'));
+  want("E: one data-credit line per section (the head), none per block", tiingoLinks(only) === 1 && tiingoLinks(only.slice(only.indexOf("dlSectionHead"), only.indexOf("data-open-row"))) === 1 && tiingoLinks(week) === 0);
+
+  // Describes, never advises.
+  for (const [name, html] of [["the cards", full], ["the empty cards", empty], ["Market today", mFull]]) {
     const hit = text(html).match(/\b(buy|sell|should|must|recommend)\b/i);
     want(`${name} use no advice words${hit ? ` (found "${hit[0]}")` : ""}`, !hit);
   }
@@ -179,133 +202,143 @@ function wiring(client, page, cardsSrc, root = read(ROOT)) {
   const fails = [];
   const want = (label, ok) => { if (!ok) fails.push(label); };
   const c = stripComments(client, { file: CLIENT }), p = stripComments(page, { file: PAGE });
+  const base = mediaFree(c);
   want("the page reads the landing through the budget", /budget\("landing", getDashboardLanding\(\)/.test(p));
-  want("the page hands the landing to the client", /landing=\{\{\s*market: <MarketNow m=\{landing\.market\} \/>,\s*cards: <LandingCards c=\{landing\.cards\}(?: hasFiledEarnings=\{await filedEarningsGate\(\)\})? \/>/.test(p));
-  want("the analyser carries the #analyser anchor", /<section id="analyser" ref=\{analyserRef\}/.test(c));
+  want("the page hands the landing to the client", /landing=\{\{\s*market: <MarketToday m=\{landing\.market\} \/>,\s*cards: <LandingCards c=\{landing\.cards\}(?: hasFiledEarnings=\{await filedEarningsGate\(\)\})? \/>/.test(p));
+  // A. The hero: the brief's lead line, the four Try chips, two columns from 860 px; no tape, no benchmarks row.
+  want("A: the hero's lead line is the brief's", /<p className="dlLead">Every figure traced to an SEC filing, every chart explained in plain English, with supply-chain maps you won&apos;t find elsewhere\.<\/p>/.test(c));
+  want("A: the Try chips are NVDA, TSLA, JPM, AMZN and nothing else", /const TRY_SYMBOLS = \["NVDA", "TSLA", "JPM", "AMZN"\];/.test(c) && !/Scan for ideas/.test(c));
+  want("A: the hero is two columns from 860 px, stacked below", /\.dlHero\{display:grid;grid-template-columns:minmax\(0,1\.1fr\) minmax\(0,1fr\);/.test(base) && /@media\(max-width:859px\)\{\.dlHero\{grid-template-columns:minmax\(0,1fr\);\}\}/.test(c) && /\.dlHeroLeft\{display:flex;flex-direction:column;justify-content:center;/.test(base));
+  want("A: the live ticker tape is off the landing", /\{landing \? null : <DashboardTicker credit=\{tiingoCredit\} \/>\}/.test(c));
+  want("A: the Market Benchmarks row is off the landing", /\{landing \? null : \(\s*<div className="msh-lower">\s*<BenchmarksPanel \/>/.test(c));
+  // D. The analyser: an H2, one card, the head with "Change stock…", the links; #analyser kept.
+  want("D: \"Analyse any stock\" is an H2 over one card that holds the head, the panels and the links",
+    /<section id="analyser" ref=\{analyserRef\} className="dlAnalyser" aria-labelledby="dlAnalyserTitle">\s*<h2 id="dlAnalyserTitle" className="dlH2">Analyse any stock<\/h2>\s*<div className="dlAnalyserCard" data-analyser-card="">\s*\{AnalyserHead\(\)\}\s*\{errBox\}\s*\{grids\}\s*\{AnalyserFoot\(\)\}/.test(c));
+  want("D: the head: logo, symbol, name, price, and a compact \"Change stock…\" search", /data-analyser-id=""/.test(c) && /data-analyser-price=""/.test(c) && /<div className="msh-searchbox dlChange" ref=\{mobileSearchBoxRef\} data-change-stock="">/.test(c) && /placeholder="Change stock…"/.test(c) && /data-verdict=""/.test(c));
+  want("D: the Supply map and stock page links in the card's foot", /function AnalyserFoot\(\)[\s\S]*data-bottlenecks-link=""[\s\S]*stock page →/.test(c));
+  want("D: the tabs: icon beside the label at 641 px and up, over it at 640 and under; full names in aria-label and title",
+    /\.dlTab\{[^}]*flex-direction:row;/.test(base) && /@media\(max-width:640px\)\{\.dlTab\{flex-direction:column;/.test(c) && /\.dlTabIcon\{display:block;/.test(base) && !/\.dlTab(Icon|Short)\{[^}]*display:none/.test(c) &&
+    /aria-label=\{t\.label\} title=\{t\.label\} data-tab=\{t\.key\} className="dlTab"/.test(c) && /<span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/.test(c) && !/dlTabFull/.test(c));
+  want("at 480 px and under: a scroll strip, never the page sideways", /@media\(max-width:480px\)\{\.dlTabs\{overflow-x:auto;/.test(c));
+  want("D: the Breakdown collapsed by default (\"Breakdown ▸\") at every width on the landing", /const breakdown = landing \? <MobileBreakdownAccordion \/> : <BreakdownPanel \/>;/.test(c) && /const \[breakdownOpen, setBreakdownOpen\] = useState\(false\);/.test(c) && /Breakdown <span aria-hidden="true">\{breakdownOpen \? "▾" : "▸"\}<\/span>/.test(c) && /data-breakdown=\{breakdownOpen \? "open" : "collapsed"\}/.test(c));
   want("a ?symbol= or #analyser deep link scrolls to the analyser", /if \(!landing \|\| !wantsAnalyser\(window\.location\.hash, deepSymbol\)\) return;\s*return holdOnAnalyser\(\(\) => analyserRef\.current\);/.test(c) && /const deepSymbol = searchParams\.get\("symbol"\)/.test(c));
   want("a hero pick routes through chooseSymbol, then scrolls to the analyser", /function pickFromHero\([^)]*\) \{\s*chooseSymbol\(sym, name, "stock"\);[\s\S]{0,120}analyserRef\.current\?\.scrollIntoView/.test(c));
-  // #148 §2: the three points under the hero are gone.
-  want("the three points under the hero are gone", !/dlPoints|"As filed"|Explained, not advised/.test(c));
-  // #148 §1: the hero is called, never mounted as its own (render-local) component type.
-  want("the hero is called as a function, so the search input keeps its identity", /\{LandingHero\(\)\}/.test(c) && !/<LandingHero\s*\/>/.test(c));
+  want("the hero is called as a function, so the search input keeps its identity", /\{LandingHero\(\)\}/.test(c) && !/<LandingHero\s*\/>/.test(c) && !/<AnalyserHead\s*\/>/.test(c));
+  want("the two search boxes share the query; only the one last focused shows it and its list", /value=\{searchFrom === "hero" \? query : ""\}/.test(c) && /value=\{searchFrom === "change" \? query : ""\}/.test(c) && /open && searchFrom === "hero" && results\.length > 0/.test(c) && /open && searchFrom === "change" && results\.length > 0/.test(c));
   want("the landing's H1 is the brief's", /<h1 className="dlH1">Stock research from the filings, not the hype\.<\/h1>/.test(c));
   want("the old header H1 stays off the landing", /\{!landing \? \(<>\s*<div className="msh-hero">/.test(c));
   const d = stripComments(cardsSrc, { file: CARDS_SRC });
-  // #142 §4: the news card reads the largest preset names' own news, not the symbol-less market feed.
-  want("the news card reads the top preset names' own news", /PRESET_UNIVERSE\.slice\(0, NEWS_SYMBOLS\)/.test(d) && /getStockNewsBaseData\(sym, \{ maxDetailedItems: 5 \}\)/.test(d) && !/getGeneralMarketHeadlines/.test(d));
-  // #142 §1: the S&P tile reads SPY's latest stored close, not the weekly file.
-  want("the S&P tile reads SPY's latest stored close", /const eod = await readTiingoHistory\("SPY"\)/.test(d) && !/spx-weekly\.json/.test(d));
-  // #142 §2: the hero line is the title; the canonical stays.
+  // The data: the index row from the newest-bar blob, the mover from the pickers payload, 3 + 3, 4 headlines; the key bumped.
+  want("A: the index row reads the newest-bar blob (no new read)", /const eod = await readTiingoEodLast\(\)\.catch\(\(\) => null\);/.test(d) && /INDEX_ROW\.flatMap/.test(d));
+  want("A: the mover comes from the pickers payload the screens already read", /mover: biggestMover\(data\.tickerFeed\?\.topMovers \?\? \[\]\),/.test(d) && /\["dashboard-screen-counts-v3"\]/.test(d));
+  want("C: three earnings names a week, named from the committed snapshot", /export const EARNINGS_ROWS = 3;/.test(d) && /top: c\.items\.slice\(0, EARNINGS_ROWS\)\.map\(\(i\) => \(\{ symbol: i\.symbol, name: cleanName\(snapshotCompanyName\(i\.symbol\)\) \|\| i\.symbol, day: shortDay\(i\.estimatedOn\) \}\)\)/.test(d));
+  want("C: four headlines from the top preset names' own news", /export const NEWS_SYMBOLS = 5, NEWS_SHOWN = 4;/.test(d) && /PRESET_UNIVERSE\.slice\(0, NEWS_SYMBOLS\)/.test(d) && /getStockNewsBaseData\(sym, \{ maxDetailedItems: 5 \}\)/.test(d));
+  want("C: the insight card reads the newest two posts (one featured, one \"Also\")", /export const INSIGHTS_SHOWN = 2;/.test(d) && /getAllPosts\(\)\.slice\(0, INSIGHTS_SHOWN\)/.test(d));
+  want("E: the landing cache key bumped (v6), 15 minutes", /unstable_cache\(loadDashboardLanding, \["dashboard-landing-v6"\], \{ revalidate: 900/.test(d));
+  want("news thumbnails come from the stored image (where allowed) or the art library, no new read",
+    /if \(SHOW_PUBLISHER_IMAGES && image && \/\^https:\\\/\\\/\/\.test\(image\)\) return \{ \.\.\.n, thumb: image \};/.test(d) && /const art = artFor\(n\.symbol, n\.title, `dash-news:\$\{n\.url\}`, taken\);/.test(d) && !/\bfetch\(/.test(d));
   want("the title is the hero line; /dashboard canonicalises to \"/\" (#149 §1)", /const DASHBOARD_TITLE = "Stock research from the filings, not the hype \| MyStockHarbor";/.test(p) && /title: DASHBOARD_TITLE,/.test(p) && /canonical: "https:\/\/www\.mystockharbor\.com\/",/.test(p));
-  // #149 §1: "/" renders this page on every device and keeps its own title, canonical and structured data.
   const r = stripComments(root, { file: ROOT });
-  want("\"/\" renders the dashboard's page, with no phone-only branch", /import DashboardPage from "\.\/dashboard\/page";/.test(r) && /<DashboardPage searchParams=\{searchParams\} \/>/.test(r) &&
-    !/HomePageRouter|MobileHomePage|user-agent|headers\(\)/i.test(r));
+  want("\"/\" renders the dashboard's page, with no phone-only branch", /import DashboardPage from "\.\/dashboard\/page";/.test(r) && /<DashboardPage searchParams=\{searchParams\} \/>/.test(r) && !/HomePageRouter|MobileHomePage|user-agent|headers\(\)/i.test(r));
   want("\"/\" keeps its title, canonical and structured data", /title: "Stock Analysis Tools, Stock Pickers & Market Insights \| MyStockHarbor",/.test(r) && /canonical: "https:\/\/www\.mystockharbor\.com\/",/.test(r) &&
     /type="application\/ld\+json"/.test(r) && /"@type": "WebSite"/.test(r) && /"@type": "WebApplication"/.test(r));
-  // #149 §2: thumbnails from what the news read already holds; no new fetch per render.
-  want("news thumbnails come from the stored image (where allowed) or the art library, no new read",
-    /if \(SHOW_PUBLISHER_IMAGES && image && \/\^https:\\\/\\\/\/\.test\(image\)\) return \{ \.\.\.n, thumb: image \};/.test(d) && /const art = artFor\(n\.symbol, n\.title, `dash-news:\$\{n\.url\}`, taken\);/.test(d) &&
-    !/\bfetch\(/.test(d));
-  // #142 §3: every curated ETF has a name, and the analyser seeds it.
   want("every curated ETF has a name", ETFS.every((t) => typeof ETF_NAMES[t] === "string" && ETF_NAMES[t].length > 3) && /initialSymbolName \|\| ETF_NAMES\[defaultSymbol\.toUpperCase\(\)\]/.test(c));
-  want("the cards are cached with their sources (15 min)", /unstable_cache\(loadDashboardLanding, \["dashboard-landing-v5"\], \{ revalidate: 900/.test(stripComments(cardsSrc, { file: CARDS_SRC })));
-  // #154 §2/§4 data: four names a week from the committed snapshot (no read), the newest two posts.
-  want("the earnings rows: 4 a week, named from the committed snapshot, the estimated day", /export const EARNINGS_ROWS = 4;/.test(d) && /top: c\.items\.slice\(0, EARNINGS_ROWS\)\.map\(\(i\) => \(\{ symbol: i\.symbol, name: cleanName\(snapshotCompanyName\(i\.symbol\)\) \|\| i\.symbol, day: shortDay\(i\.estimatedOn\) \}\)\)/.test(d));
-  want("the insight card reads the newest two posts", /export const INSIGHTS_SHOWN = 2;/.test(d) && /getAllPosts\(\)\.slice\(0, INSIGHTS_SHOWN\)/.test(d));
-  // #161 (the phone style of #154 §5 at every width): icon over a short label, one line; the full name in aria-label and title.
-  want("the analyser tabs: an icon over a short label, full name in aria-label and title",
-    /aria-label=\{t\.label\} title=\{t\.label\} data-tab=\{t\.key\} className="dlTab"/.test(c) && /<svg className="dlTabIcon"[^\n]*<\/svg>\s*<span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/.test(c) && !/dlTabFull/.test(c) &&
-    /short: "Chart"[\s\S]*short: "Levels"[\s\S]*short: "Zones"[\s\S]*short: "Earnings"[\s\S]*short: "News"/.test(c));
-  // At 1280 px no media query applies, so the base rules alone must draw the icon tabs on one line.
-  const base = c.replace(/@media\([^)]*\)\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, "");
-  want("at 1280 px (the base rules): the icons shown, icon over label, one line; nothing hides the icon or the short label at any width",
-    /\.dlTabs\{[^}]*flex-wrap:nowrap;/.test(base) && /\.dlTab\{[^}]*flex-direction:column;/.test(base) && /\.dlTabIcon\{display:block;/.test(base) &&
-    !/\.dlTabIcon\{[^}]*display:none/.test(c) && !/\.dlTabShort\{[^}]*display:none/.test(c));
-  want("at 480 px and under: a scroll strip, never the page sideways", /@media\(max-width:480px\)\{\.dlTabs\{overflow-x:auto;/.test(c));
-  // #160 (replacing #154 §6): the Filed earnings tab is the stock page's snapshot card; its empty state the brief's words.
-  want("the Filed earnings tab's card is called, not mounted (a mount remounts and refetches the chart each render)", /else if \(tab === "earnings"\) body = SectionCard\(\{/.test(c));
-  want("the Filed earnings tab draws the stock page's snapshot, with the brief's empty state", /<FiledEarningsChart symbol=\{symbol\} \/>/.test(c) && /Filed figures not available for \{symbol\}\./.test(c) && !/The latest filed quarter reads/.test(c));
+  // #160: the Filed earnings tab is the stock page's snapshot card.
+  want("the Filed earnings tab's card is called, not mounted", /else if \(tab === "earnings"\) body = SectionCard\(\{/.test(c));
+  want("the Filed earnings tab draws the stock page's snapshot, with the brief's empty state", /<FiledEarningsChart symbol=\{symbol\} \/>/.test(c) && /Filed figures not available for \{symbol\}\./.test(c));
   return fails;
 }
 
-console.log("1–4. The landing on full and empty fixtures");
+console.log("1. The landing on full and empty fixtures (A, B, C, E)");
 const landingSrc = read(LANDING);
 const real = rules(await loadLanding(landingSrc));
 check("the real landing passes every rule", real.length === 0, real.slice(0, 4).join("; "));
 
-console.log("\n5. The wiring");
+console.log("\n2. The wiring (A, D, E)");
 const clientSrc = read(CLIENT), pageSrc = read(PAGE), cardsSrc = read(CARDS_SRC), rootSrc = read(ROOT);
 const realWiring = wiring(clientSrc, pageSrc, cardsSrc);
 check("the real page, client and data module pass every wiring rule", realWiring.length === 0, realWiring.join("; "));
 
-console.log("\n6. Planted mutants");
+console.log("\n3. Planted mutants");
 const LANDING_MUTANTS = [
-  ["a news thumbnail loses lazy loading", 'width={60} height={60} loading="lazy"', 'width={60} height={60}'],
-  ["a news item without a picture loses its fallback", '<span className="dlNewsThumb" data-news-thumb="fallback" aria-hidden="true" />', "null"],
-  ["the thumbnail gets alt text", 'src={n.thumb} alt=""', "src={n.thumb} alt={n.title}"],
-  ...CARDS.filter((id) => id !== "hub" && id !== "insight").map((id) => [`the ${id} card loses its empty state`, `empty={c.${id} ? null : EMPTY.${id}}`, "empty={null}"]),
-  ["the insight card loses its empty state", "empty={c.insights ? null : EMPTY.insight}", "empty={null}"],
-  ["#154 §1: the hub off the middle row", "const H = n * CX_ROW + (n - 1) * CX_GAP, hubY = H / 2;", "const H = n * CX_ROW + (n - 1) * CX_GAP, hubY = H / 3;"],
-  ["#154 §1: the label back above the hub", "style={{ top: hubY + 12 }}>the build-out", "style={{ top: hubY - 30 }}>the build-out"],
-  ["#154 §1: the lines no longer level with their rows", "d={`M0 ${cy(i)} H14 L40 ${hubY}`}", "d={`M0 ${(i + 0.5) * 30} L40 ${hubY}`}"],
-  ["#154 §2: the earnings card back to chips", '<strong>{e.symbol}</strong>', '<span>{e.symbol}</span>'],
-  ["#154 §2: the rest of the week not counted", "{w.count > w.top.length ? <Link", "{false ? <Link"],
-  ["#154 §2: long names wrap instead of truncating", ".dlEarnCo{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;", ".dlEarnCo{min-width:0;"],
-  ["#154 §2: the full name dropped from title", "className=\"dlEarnName\" title={e.name}", "className=\"dlEarnName\""],
-  ["#163: the per-row date back", "                          )}\n                        </li>", "                          )}\n                          <span className=\"dlEarnDay\">{e.day}</span>\n                        </li>"],
-  ["#162: the per-row \"Estimated\" tag back", "                          )}\n                        </li>", "                          )}\n                          <em>Estimated</em>\n                        </li>"],
-  ["#162: the fine line dropped", "<p className=\"dlFine\" data-fine-print=\"\"><strong style={{ color: \"#f59e0b\" }}>Estimated</strong> from", "<p className=\"dlFine\" data-fine-print=\"\">From"],
-  ["#154 §3: the old eyebrow", 'eyebrow="Sector growth · year to date"', 'eyebrow="Sectors · year to date"'],
-  ["#154 §3: the plain line dropped", '<p className="dlRead dlSecWhat" data-sector-what="">{SECTOR_WHAT}</p>', ""],
-  ["#154 §4: one post only", "{c.insights.map((p, i) => (", "{c.insights.slice(0, 1).map((p, i) => ("],
-  ["#154 §4: the second post on phones too", '.dlInsights[data-insights="2"] .dlInsight+.dlInsight{display:none;}', ""],
-  ["the hub card loses its empty state", "empty={hub ? null : EMPTY.hub}", "empty={null}"],
-  ["Market right now says nothing when empty", `{!m.mood && !tiles.length ? <p className="dlEmpty" data-card="market" data-empty="">{EMPTY.market}</p> : null}`, ""],
-  ["a Pickers screen links off the picker routes", `<Link href={s.href} prefetch={false}>{s.label}</Link>`, `<Link href={s.href + "-x"} prefetch={false}>{s.label}</Link>`],
-  ["the capex card advises", "From each company&apos;s filings.", "You should buy these. From each company&apos;s filings."],
-  ["the screener link points back at /pickers", 'more={{ href: "/stock-screener", label: "Build your own screen" }}', 'more={{ href: "/pickers", label: "Build your own screen" }}'],
-  ["the screens lose their logos", '{s.peek.length ? <span className="dlPeek"', '{false ? <span className="dlPeek"'],
-  ["the earnings names lose their logos", '<TickerLogo symbol={e.symbol} size={20} radius={5} alt="" />', ""],
+  // A
+  ["A: the thermometer back in Market today", '<MarketMoodCard view={m.mood} variant="gauge" />', "<MarketMoodCard view={m.mood} />"],
+  ["A: an index tile dropped", "if (!r) return null;", 'if (!r || x.symbol === "IWM") return null;'],
+  ["A: the index row stays 4 across on a phone", ".dlIdx{grid-template-columns:repeat(2,minmax(0,1fr));}", ""],
+  ["A: the trend / best-sector line dropped", '{line ? <p className="dlMarketLine" data-market-line="">{line}</p> : null}', ""],
+  ["A: Market today says nothing when empty", '{!shown ? <p className="dlEmpty" data-card="market" data-empty="">{EMPTY.market}</p> : null}', ""],
+  ["A: a second credit in Market today", "<span className=\"dlIdxSym\">{x.symbol}</span>", "<span className=\"dlIdxSym\">{x.symbol}</span>{credit}"],
+  ["A: the mover worded as a signal", "Biggest mover today", "Top buy signal today"],
+  ["A: the mover line dropped", "{c.pickers.mover ? (", "{false ? ("],
+  // B
+  ["B: the hub feature back in a card", '<div className="dlOpen" data-open="hub">', '<div className="dlOpen dlCard" data-open="hub">'],
+  ["B: the open features get a card background", ".dlOpen{display:flex;flex-direction:column;gap:10px;min-width:0;}", ".dlOpen{display:flex;flex-direction:column;gap:10px;min-width:0;background:#0d1422;}"],
+  ["B: the divider dropped", "padding:4px 0 24px;border-bottom:1px solid #1f2b44;}", "padding:4px 0 24px;}"],
+  ["B: the open features never stack", "@media(max-width:1023px){.dlOpenRow{grid-template-columns:minmax(0,1fr);gap:28px;}}", ""],
+  ["B: the hub feature loses its empty state", '<p className="dlEmpty" data-card="hub" data-empty="">{EMPTY.hub}</p>', ""],
+  ["B: the capex feature loses its empty state", '<p className="dlEmpty" data-card="capex" data-empty="">{EMPTY.capex}</p>', "null"],
+  ["B: all 11 sectors drawn again", "<SectorBars rows={sectorRows(c.sectors.rows)}", "<SectorBars rows={c.sectors.rows}"],
+  ["B: the screens and sectors cards stay side by side on a phone", "@media(max-width:640px){.dlRow2{grid-template-columns:minmax(0,1fr);}}", ""],
+  ["a Pickers screen links off the picker routes", "<Link href={s.href} prefetch={false}>{s.label}</Link>", "<Link href={s.href + \"-x\"} prefetch={false}>{s.label}</Link>"],
+  ["the capex feature advises", "From each company&apos;s filings.", "You should buy these. From each company&apos;s filings."],
   ["a line runs company to company", "d={`M40 ${hubY} L66 ${cy(i)} H80`}", "d={`M0 ${cy(i)} H80`}"],
-  ["the S&P reference line is dropped", '{spx !== null ? <i className="dlSecRef"', '{false ? <i className="dlSecRef"'],
-  ["a falling sector's bar draws to the right", 'style={up ? { left: "50%", width: `${at(v) - 50}%` } : { left: `${at(v)}%`, width: `${50 - at(v)}%` }}', 'style={{ left: "50%", width: `${Math.abs(at(v) - 50)}%` }}'],
-  ["a news chip links to the wrong page", "href={`/stock/${encodeURIComponent(n.symbol)}/news`}", "href={`/stock/${encodeURIComponent(n.symbol)}`}"],
-  ["the S&P tile loses its date", "close on {day(m.spx.date)}", "latest close"],
-  ["the capex columns lose whose figure it is", "Top spenders · their own capex", "Spending most"],
+  // C
+  ["C: the cards no longer stretch to one height", ".dlRow{display:grid;gap:16px;align-items:stretch;}", ".dlRow{display:grid;gap:16px;align-items:start;}"],
+  ["C: a card's footer no longer pinned to the bottom", ".dlMore{margin-top:auto;", ".dlMore{margin-top:6px;"],
+  ["C: This week never stacks", "@media(max-width:860px){.dlRow3{grid-template-columns:minmax(0,1fr);}}", ""],
+  ["C: the per-row date back", "                                <span className=\"dlEarnCo\">{e.name}</span>\n                              </Link>", "                                <span className=\"dlEarnCo\">{e.name}</span> {e.day}\n                              </Link>"],
+  ["C: the earnings fine line dropped", "<p className=\"dlFine\" data-fine-print=\"\"><strong style={{ color: \"#f59e0b\" }}>Estimated</strong> from", "<p className=\"dlFine\" data-fine-print=\"\">From"],
+  ["C: the earnings card loses its empty state", "empty={c.earnings ? null : EMPTY.earnings}", "empty={null}"],
+  ["C: the \"Also:\" row dropped", "{also ? <p className=\"dlAlso\"", "{false ? <p className=\"dlAlso\""],
+  ["C: the insight card loses its empty state", "empty={featured ? null : EMPTY.insight}", "empty={null}"],
+  ["C: a headline wraps", ".dlNewsTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}", ".dlNewsTitle{min-width:0;}"],
+  ["C: a headline without a picture loses its logo", "<div className=\"dlNewsThumb\" data-news-thumb=\"logo\"><TickerLogo symbol={n.symbol} size={28} radius={7} alt=\"\" /></div>", "null"],
+  ["C: a news thumbnail loses lazy loading", 'width={44} height={44} loading="lazy"', "width={44} height={44}"],
+  ["C: the news card loses its empty state", "empty={c.news ? null : EMPTY.news}", "empty={null}"],
+  ["the screens card loses its empty state", "empty={c.pickers ? null : EMPTY.pickers}", "empty={null}"],
+  ["the sectors card loses its empty state", "empty={c.sectors ? null : EMPTY.sectors}", "empty={null}"],
+  // E
+  ["E: a new eyebrow hue", 'tone="#38bdf8"', 'tone="#ff00aa"'],
+  ["E: a credit per block again", "<p className=\"dlFine\" data-fine-print=\"\">Cap-weighted across each sector&apos;s tracked stocks;", "<p className=\"dlFine\" data-fine-print=\"\">{credit} Cap-weighted across each sector&apos;s tracked stocks;"],
 ];
 for (const [label, from, to] of LANDING_MUTANTS) {
   if (!landingSrc.includes(from)) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
-  const fails = rules(await loadLanding(landingSrc.replace(from, to)));
+  const fails = rules(await loadLanding(landingSrc.split(from).join(to)));
   check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no rule failed");
 }
 const WIRING_MUTANTS = [
-  ["the deep link no longer scrolls", CLIENT, /if \(!landing \|\| !wantsAnalyser\(window\.location\.hash, deepSymbol\)\) return;\s*return holdOnAnalyser\(\(\) => analyserRef\.current\);/, "if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;"],
-  ["the analyser loses its anchor", CLIENT, /<section id="analyser" ref=\{analyserRef\}/, '<section ref={analyserRef}'],
-  ["the hero mounted as a component again", CLIENT, /\{LandingHero\(\)\}/, "<LandingHero />"],
-  ["the three points come back", CLIENT, /<div className="dlTry">/, '<div className="dlPoints"><h2>As filed</h2></div><div className="dlTry">'],
-  ["the title reverted", PAGE, /const DASHBOARD_TITLE = "[^"]*";/, 'const DASHBOARD_TITLE = "Stock Chart Dashboard | MyStockHarbor";'],
-  ["the ETF name seed dropped", CLIENT, /initialSymbolName \|\| ETF_NAMES\[defaultSymbol\.toUpperCase\(\)\] \|\| ""/, 'initialSymbolName'],
-  ["the news card back on the market feed", CARDS_SRC, /getStockNewsBaseData\(sym, \{ maxDetailedItems: 5 \}\)/, "getGeneralMarketHeadlines()"],
-  ["the S&P tile back on the weekly file", CARDS_SRC, /const eod = await readTiingoHistory\("SPY"\)/, 'const eod = await readWeekly("content/markets/spx-weekly.json")'],
-  ["/dashboard canonical back on itself", PAGE, /canonical: "https:\/\/www\.mystockharbor\.com\/",/, 'canonical: "https://www.mystockharbor.com/dashboard",'],
-  ["\"/\" back on the phone-only router", ROOT, /<DashboardPage searchParams=\{searchParams\} \/>/, "<HomePageRouter initialIsMobile={false} />"],
-  ["\"/\" loses its structured data", ROOT, /"@type": "WebApplication",/, '"@type": "Thing",'],
-  ["the thumbnails read the publisher picture regardless", CARDS_SRC, /if \(SHOW_PUBLISHER_IMAGES && image && /, "if (image && "],
-  ["#154 §5: the tabs lose their accessible full names", CLIENT, /aria-label=\{t\.label\} title/, "title"],
-  ["#154 §5: the tabs wrap on a phone", CLIENT, /@media\(max-width:480px\)\{\.dlTabs\{overflow-x:auto;/, "@media(max-width:480px){.dlTabs{flex-wrap:wrap;"],
-  ["#161: text-only tabs back on desktop (icons hidden above 480 px)", CLIENT, /\.dlTabIcon\{display:block;width:18px;height:18px;flex:0 0 auto;\}/, ".dlTabIcon{display:none;width:18px;height:18px;flex:0 0 auto;}"],
-  ["#161: desktop tabs side by side, not icon over label", CLIENT, /flex-direction:column;align-items:center;/, "align-items:center;"],
-  ["#161: the full name back as the desktop label", CLIENT, /<span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/, '<span className="dlTabFull">{t.label}</span><span className="dlTabShort" aria-hidden="true">{t.short}</span>'],
-  ["#161: the tooltip dropped", CLIENT, / title=\{t\.label\} data-tab/, " data-tab"],
-  ["#154 §5: the short labels gone", CLIENT, /<span className="dlTabShort" aria-hidden="true">\{t\.short\}<\/span>/, ""],
-  ["#154 §6: the tab's card mounted (remounts the chart)", CLIENT, /else if \(tab === "earnings"\) body = SectionCard\(\{/, 'else if (tab === "earnings") body = <SectionCard title="x">{null}</SectionCard>; else if (false) body = SectionCard({'],
-  ["#154 §6: the tab back to one sentence", CLIENT, /: <FiledEarningsChart symbol=\{symbol\}[^\n]*\/>,/, ": <p className=\"dlRead\">The latest filed quarter reads <strong>{earningsSummary?.toneLabel}</strong>.</p>,"],
-  ["#154 §2: earnings names from a live read", CARDS_SRC, /name: cleanName\(snapshotCompanyName\(i\.symbol\)\) \|\| i\.symbol/, "name: (await getCompanyNameMap()).get(i.symbol) ?? i.symbol"],
-  ["#154 §4: the newest post only", CARDS_SRC, /export const INSIGHTS_SHOWN = 2;/, "export const INSIGHTS_SHOWN = 1;"],
-  ["the landing read unbudgeted", PAGE, /budget\("landing", (getDashboardLanding\(\)\.catch\(\(\) => EMPTY_LANDING\)), EMPTY_LANDING\)/, "$1"],
+  ["A: the old lead line", /<p className="dlLead">Every figure traced to an SEC filing[^<]*<\/p>/, '<p className="dlLead">Every figure traced to the SEC filing or the price it came from.</p>', CLIENT],
+  ["A: \"Scan for ideas\" back in the hero", /\{TRY_SYMBOLS\.map\(\(t\) => <button key=\{t\} type="button" className="dlTryChip" onClick=\{\(\) => pickFromHero\(t\)\}>\{t\}<\/button>\)\}/, '{TRY_SYMBOLS.map((t) => <button key={t} type="button" className="dlTryChip" onClick={() => pickFromHero(t)}>{t}</button>)}<Link href="/pickers" className="dlTryChip">Scan for ideas →</Link>', CLIENT],
+  ["A: the hero stacks until 960 px", /@media\(max-width:859px\)\{\.dlHero/, "@media(max-width:960px){.dlHero", CLIENT],
+  ["A: the ticker tape back on the landing", /\{landing \? null : <DashboardTicker credit=\{tiingoCredit\} \/>\}/, "<DashboardTicker credit={tiingoCredit} />", CLIENT],
+  ["A: the Market Benchmarks row back on the landing", /\{landing \? null : \(\s*<div className="msh-lower">/, '{(\n          <div className="msh-lower">', CLIENT],
+  ["A: the index row on a new read", /const eod = await readTiingoEodLast\(\)\.catch\(\(\) => null\);/, 'const eod = await readIndexQuotes("SPY,QQQ,DIA,IWM");', CARDS_SRC],
+  ["D: the analyser loses its anchor", /<section id="analyser" ref=\{analyserRef\}/, "<section ref={analyserRef}", CLIENT],
+  ["D: the analyser card dropped (panels loose under the H2)", /<div className="dlAnalyserCard" data-analyser-card="">/, '<div className="dlAnalyserLoose">', CLIENT],
+  ["D: no \"Change stock…\" search in the head", /placeholder="Change stock…"/, 'placeholder=""', CLIENT],
+  ["D: the tabs stacked at every width again", /\.dlTab\{flex:1 1 0;min-width:0;display:inline-flex;flex-direction:row;/, ".dlTab{flex:1 1 0;min-width:0;display:inline-flex;flex-direction:column;", CLIENT],
+  ["D: the tabs beside their label on a phone too", /@media\(max-width:640px\)\{\.dlTab\{flex-direction:column;gap:4px;padding:8px 6px;\}\}/, "", CLIENT],
+  ["D: the tabs lose their accessible full names", /aria-label=\{t\.label\} title/, "title", CLIENT],
+  ["D: the tooltip dropped", / title=\{t\.label\} data-tab/, " data-tab", CLIENT],
+  ["D: the tabs wrap on a phone", /@media\(max-width:480px\)\{\.dlTabs\{overflow-x:auto;/, "@media(max-width:480px){.dlTabs{flex-wrap:wrap;", CLIENT],
+  ["D: the Breakdown open on desktop again", /const breakdown = landing \? <MobileBreakdownAccordion \/> : <BreakdownPanel \/>;/, "const breakdown = <BreakdownPanel />;", CLIENT],
+  ["D: the Breakdown open on arrival", /const \[breakdownOpen, setBreakdownOpen\] = useState\(false\);/, "const [breakdownOpen, setBreakdownOpen] = useState(true);", CLIENT],
+  ["the deep link no longer scrolls", /if \(!landing \|\| !wantsAnalyser\(window\.location\.hash, deepSymbol\)\) return;\s*return holdOnAnalyser\(\(\) => analyserRef\.current\);/, "if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;", CLIENT],
+  ["the hero mounted as a component again", /\{LandingHero\(\)\}/, "<LandingHero />", CLIENT],
+  ["both search boxes show the query at once", /value=\{searchFrom === "change" \? query : ""\}/, "value={query}", CLIENT],
+  ["the title reverted", /const DASHBOARD_TITLE = "[^"]*";/, 'const DASHBOARD_TITLE = "Stock Chart Dashboard | MyStockHarbor";', PAGE],
+  ["/dashboard canonical back on itself", /canonical: "https:\/\/www\.mystockharbor\.com\/",/, 'canonical: "https://www.mystockharbor.com/dashboard",', PAGE],
+  ["the landing read unbudgeted", /budget\("landing", (getDashboardLanding\(\)\.catch\(\(\) => EMPTY_LANDING\)), EMPTY_LANDING\)/, "$1", PAGE],
+  ["\"/\" back on the phone-only router", /<DashboardPage searchParams=\{searchParams\} \/>/, "<HomePageRouter initialIsMobile={false} />", ROOT],
+  ["\"/\" loses its structured data", /"@type": "WebApplication",/, '"@type": "Thing",', ROOT],
+  ["C: four earnings names a week again", /export const EARNINGS_ROWS = 3;/, "export const EARNINGS_ROWS = 4;", CARDS_SRC],
+  ["C: three headlines again", /NEWS_SHOWN = 4;/, "NEWS_SHOWN = 3;", CARDS_SRC],
+  ["C: earnings names from a live read", /name: cleanName\(snapshotCompanyName\(i\.symbol\)\) \|\| i\.symbol/, "name: (await getCompanyNameMap()).get(i.symbol) ?? i.symbol", CARDS_SRC],
+  ["E: the landing cache key not bumped", /\["dashboard-landing-v6"\]/, '["dashboard-landing-v5"]', CARDS_SRC],
+  ["the thumbnails read the publisher picture regardless", /if \(SHOW_PUBLISHER_IMAGES && image && /, "if (image && ", CARDS_SRC],
+  ["the Filed earnings tab's card mounted", /else if \(tab === "earnings"\) body = SectionCard\(\{/, 'else if (tab === "earnings") body = <SectionCard title="x">{null}</SectionCard>; else if (false) body = SectionCard({', CLIENT],
 ];
-for (const [label, file, from, to] of WIRING_MUTANTS) {
+for (const [label, from, to, file] of WIRING_MUTANTS) {
   const src = file === CLIENT ? clientSrc : file === PAGE ? pageSrc : file === ROOT ? rootSrc : cardsSrc;
   const m = src.replace(from, to);
   if (m === src) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }

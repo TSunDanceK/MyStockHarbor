@@ -73,10 +73,11 @@ export type DashboardLandingProps = {
   css: string;
 };
 type AnalyserTab = "chart" | "levels" | "zones" | "earnings" | "news";
-// THE ICON TABS AT EVERY WIDTH (#563 COWORK #161; the phone style of #154 §5):
-// an icon over a short label, on one line. The full name is the accessible name
-// and the tooltip (aria-label and title). Wider on desktop; on a phone a
-// horizontal strip, never page sideways-scroll, if 320 px still cannot fit them.
+// THE ICON TABS (#563 COWORK #161, laid out by #164 D): an icon BESIDE the
+// short label on one line at 641 px and up, the icon stacked OVER it at 640 px
+// and under. The full name is the accessible name and the tooltip (aria-label
+// and title). On a phone a horizontal strip, never page sideways-scroll, if
+// 320 px still cannot fit them.
 const ANALYSER_TABS: { key: AnalyserTab; label: string; short: string; icon: string }[] = [
   { key: "chart", label: "Chart", short: "Chart", icon: "M3 17l5-6 4 3 6-8M3 21h18" },
   { key: "levels", label: "Key levels", short: "Levels", icon: "M3 6h18M3 12h18M3 18h18" },
@@ -86,8 +87,9 @@ const ANALYSER_TABS: { key: AnalyserTab; label: string; short: string; icon: str
 ];
 /** The landing's hero and analyser styles (the server cards bring their own, LANDING_CSS). */
 const LANDING_CLIENT_CSS = `
-.dlHero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;padding:20px 0 16px;align-items:stretch;}
+.dlHero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px;padding:20px 0 8px;align-items:stretch;}
 .dlHeroLeft{display:flex;flex-direction:column;justify-content:center;padding:26px;border:1px solid #1f2b44;border-radius:20px;background:linear-gradient(160deg,rgba(37,99,235,0.16),rgba(13,20,34,0.96) 55%,rgba(16,185,129,0.08));min-width:0;}
+.dlHeroLeft>.dlEyebrow{margin-top:0;}
 .dlH1{margin:8px 0 0;font-size:2.75rem;line-height:1.08;font-weight:800;letter-spacing:-0.02em;}
 .dlLead{margin:14px 0 0;font-size:1.0625rem;line-height:1.6;color:#cbd5e1;max-width:620px;}
 .dlSearch{margin-top:18px;height:56px;flex:0 0 auto;}
@@ -97,21 +99,31 @@ const LANDING_CLIENT_CSS = `
 .dlTryLabel{font-size:var(--fs-label);color:#8a97ad;}
 .dlTryChip{padding:6px 12px;border-radius:999px;border:1px solid #222c40;background:#0f1624;color:#eaf0fa;font-weight:800;font-size:var(--fs-label);cursor:pointer;text-decoration:none;}
 .dlTryChip:hover{border-color:#27406f;}
-.dlAnalyser{scroll-margin-top:16px;margin:26px 0 14px;}
-.dlAnalyserHead{display:grid;gap:10px;}
-.dlAnalyserTitleRow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;}
+.dlAnalyser{scroll-margin-top:16px;margin:30px 0 14px;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;}
+.dlAnalyserCard{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;padding:18px;border:1px solid #222c40;border-radius:20px;background:#0a101c;min-width:0;}
+.dlAnalyserHead{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0;}
+.dlAnHeadRow{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;min-width:0;}
+.dlAnId{display:flex;align-items:center;gap:6px 12px;min-width:0;flex-wrap:wrap;}
+.dlAnSym{font-size:1.5rem;font-weight:900;line-height:1;letter-spacing:-0.01em;}
+.dlAnName{margin-top:3px;font-size:var(--fs-label);color:#8a97ad;max-width:min(30ch,100%);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dlAnPrice{font-size:1.5rem;font-weight:900;font-variant-numeric:tabular-nums;margin-left:6px;}
+.dlChange{flex:0 1 280px;height:42px;min-width:0;max-width:100%;box-sizing:border-box;}
+.dlAnId{flex:1 1 auto;}
+.dlChange input{font-size:var(--fs-read);min-width:0;}
 .dlVerdict{margin:0;font-size:1.125rem;line-height:1.6;color:#cbd5e1;max-width:900px;}
 .dlVerdict strong{color:#f1f5f9;}
 .dlChipsRow{display:flex;flex-wrap:wrap;gap:8px;}
 .dlInfoChip{display:inline-flex;gap:8px;align-items:baseline;padding:8px 12px;border:1px solid #222c40;border-radius:12px;background:#0f1624;color:#eaf0fa;font-size:var(--fs-read);font-weight:700;text-decoration:none;}
 .dlInfoLabel{font-size:var(--fs-label);color:#8a97ad;text-transform:uppercase;letter-spacing:.05em;font-weight:800;}
+.dlAnalyserCard .msh-grid,.dlAnalyserCard .msh-mobile-only{margin:0;}
 .dlTabs{display:flex;flex-wrap:nowrap;gap:8px;}
-.dlTab{flex:1 1 0;min-width:0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 10px;border-radius:10px;border:1px solid #222c40;background:#0f1624;color:#cbd5e1;font-weight:800;font-size:var(--fs-label);white-space:nowrap;cursor:pointer;}
+.dlTab{flex:1 1 0;min-width:0;display:inline-flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;padding:9px 12px;border-radius:10px;border:1px solid #222c40;background:#0f1624;color:#cbd5e1;font-weight:800;font-size:var(--fs-label);white-space:nowrap;cursor:pointer;}
 .dlTab[aria-selected="true"]{border-color:#2f6bff;background:#13213f;color:#fff;}
 .dlTabIcon{display:block;width:18px;height:18px;flex:0 0 auto;}
+@media(max-width:640px){.dlTab{flex-direction:column;gap:4px;padding:8px 6px;}}
 @media(max-width:480px){.dlTabs{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;gap:4px;}.dlTabs::-webkit-scrollbar{display:none;}.dlTab{flex:1 0 auto;padding:6px 6px;gap:3px;}.dlTabIcon{width:16px;height:16px;}}
-@media(max-width:960px){.dlHero{grid-template-columns:minmax(0,1fr);}}
-@media(max-width:560px){.dlSearch{padding:0 8px;gap:6px;}.dlSearch .msh-go{padding:0 12px;}.dlHeroLeft{padding:18px;}.dlH1{font-size:2rem;}.dlVerdict{font-size:var(--fs-read);}}
+@media(max-width:859px){.dlHero{grid-template-columns:minmax(0,1fr);}}
+@media(max-width:560px){.dlSearch{padding:0 8px;gap:6px;}.dlSearch .msh-go{padding:0 12px;}.dlHeroLeft{padding:18px;}.dlH1{font-size:2rem;}.dlVerdict{font-size:var(--fs-read);}.dlAnalyserCard{padding:12px;}.dlChange{flex:1 1 100%;}}
 `;
 /** The landing's Try chips (the brief's four). */
 const TRY_SYMBOLS = ["NVDA", "TSLA", "JPM", "AMZN"];
@@ -541,6 +553,11 @@ export default function DashboardClient({
   const [query, setQuery] = useState(symbol);
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
+  // TWO SEARCH BOXES ON THE LANDING (#563 COWORK #164 D): the hero's and the
+  // analyser's "Change stock…". They share the one query and result list, so
+  // only the box last focused shows the query and its dropdown.
+  const [searchFrom, setSearchFrom] = useState<"hero" | "change">("hero");
+  const focusSearch = (from: "hero" | "change") => { if (from !== searchFrom) { setSearchFrom(from); setQuery(""); } setOpen(true); };
   const searchBoxRef = useRef<HTMLDivElement>(null);
   const mobileSearchBoxRef = useRef<HTMLDivElement>(null);
   const [bench, setBench] = useState<BenchPayload | null>(initialBenchmarks);
@@ -1172,10 +1189,11 @@ export default function DashboardClient({
     const items = customMode ? selectedBreakdownRows : overviewItems;
     const bc = items.filter((i: any) => i.tone === "green").length, rc = items.filter((i: any) => i.tone === "red").length, nc = items.length - bc - rc;
     const sl = customMode ? "Custom indicators" : `Mixed · ${bc} bullish · ${rc} bearish · ${nc} neutral`;
-    return (<section style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, overflow: "hidden" }}>
-      <button type="button" onClick={() => setBreakdownOpen(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "none", background: "none", color: COLORS.cardFg, cursor: "pointer", textAlign: "left" }}>
+    // ON THE LANDING, COLLAPSED BY DEFAULT AT EVERY WIDTH (#563 COWORK #164 D): "Breakdown ▸".
+    return (<section data-breakdown={breakdownOpen ? "open" : "collapsed"} style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, overflow: "hidden" }}>
+      <button type="button" aria-expanded={breakdownOpen} onClick={() => setBreakdownOpen(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "none", background: "none", color: COLORS.cardFg, cursor: "pointer", textAlign: "left" }}>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: COLORS.blueSoft, border: `1px solid ${COLORS.blueBorder}`, display: "grid", placeItems: "center", flex: "0 0 auto" }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9cc0ff" strokeWidth="2.2" strokeLinecap="round"><path d="M4 19V5M4 19h16M9 16V9M14 16V6M19 16v-4" /></svg></div>
-        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 14 }}>Indicator Breakdown</div><div style={{ fontSize: 12, color: COLORS.mutedFg, marginTop: 1 }}>{sl}</div></div>
+        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 14 }}>{landing ? <>Breakdown <span aria-hidden="true">{breakdownOpen ? "▾" : "▸"}</span></> : "Indicator Breakdown"}</div><div style={{ fontSize: 12, color: COLORS.mutedFg, marginTop: 1 }}>{sl}</div></div>
         <div style={{ display: "flex", gap: 3, flex: "0 0 auto" }}>{Array.from({ length: Math.min(bc, 4) }).map((_, i) => <span key={`b${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.green }} />)}{Array.from({ length: Math.min(rc, 4) }).map((_, i) => <span key={`r${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.red }} />)}{Array.from({ length: Math.min(nc, 4) }).map((_, i) => <span key={`n${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.mutedFg2 }} />)}</div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={COLORS.mutedFg} strokeWidth="2.4" strokeLinecap="round" style={{ flex: "0 0 auto", transform: breakdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.25s ease" }}><path d="M6 9l6 6 6-6" /></svg>
       </button>
@@ -1464,17 +1482,16 @@ export default function DashboardClient({
       <div className="dlHeroLeft">
         <p className="dlEyebrow" style={{ color: "#93c5fd" }}>MyStockHarbor</p>
         <h1 className="dlH1">Stock research from the filings, not the hype.</h1>
-        <p className="dlLead">Every figure traced to the SEC filing or the price it came from. Every chart explained in plain English. Supply chains, capex flows and screens you won&apos;t find on other stock sites.</p>
+        <p className="dlLead">Every figure traced to an SEC filing, every chart explained in plain English, with supply-chain maps you won&apos;t find elsewhere.</p>
         <div className="msh-searchbox dlSearch" ref={searchBoxRef}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
-          <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} {...navDesk.inputAria} aria-label="Search a ticker or company" onKeyDown={e => { if (navDesk.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) pickFromHero(f.symbol, f.name); } }} placeholder="Search a ticker or company… e.g. TSLA" />
+          <input value={searchFrom === "hero" ? query : ""} onChange={e => { setSearchFrom("hero"); setQuery(e.target.value); setOpen(true); }} onFocus={() => focusSearch("hero")} {...navDesk.inputAria} aria-label="Search a ticker or company" onKeyDown={e => { if (navDesk.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) pickFromHero(f.symbol, f.name); } }} placeholder="Search a ticker or company… e.g. TSLA" />
           <button className="msh-go" type="button" onClick={() => { if (results[0]) pickFromHero(results[0].symbol, results[0].name); }}>Analyse</button>
-          {open && results.length > 0 ? <div {...navDesk.listProps} aria-label="Ticker search results" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navDesk.optionProps(i)} onClick={() => pickFromHero(r.symbol, r.name)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navDesk.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
+          {open && searchFrom === "hero" && results.length > 0 ? <div {...navDesk.listProps} aria-label="Ticker search results" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navDesk.optionProps(i)} onClick={() => pickFromHero(r.symbol, r.name)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navDesk.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
         </div>
         <div className="dlTry">
           <span className="dlTryLabel">Try:</span>
           {TRY_SYMBOLS.map((t) => <button key={t} type="button" className="dlTryChip" onClick={() => pickFromHero(t)}>{t}</button>)}
-          <Link href="/pickers" className="dlTryChip" prefetch={false}>Scan for ideas →</Link>
         </div>
       </div>
     );
@@ -1489,23 +1506,43 @@ export default function DashboardClient({
     return `${tw}${f === null ? "" : f === 0 ? ", not stretched" : f <= 2 ? ", slightly stretched" : ", stretched"}.`;
   })();
 
+  // THE ANALYSER CARD'S HEAD (#563 COWORK #164 D): the symbol, its name and
+  // price, a compact "Change stock…" search (the landing's second search box,
+  // on the shared query: see searchFrom), then the plain-English verdict.
+  // Called, never mounted (its input must keep its identity, as the hero's).
   function AnalyserHead() {
-    const mapSlug = assetType === "stock" ? landing?.bottlenecks[symbol] ?? null : null;
-    const next = assetType === "stock" ? earningsSummary?.nextReport ?? null : null;
     return (
       <div className="dlAnalyserHead">
-        <div className="dlAnalyserTitleRow">
-          <h2 className="dlH2">{symbol} at a glance</h2>
-          <p className="dlFine" data-fine-print="">The analyser you know, with plain English first</p>
+        <div className="dlAnHeadRow">
+          <div className="dlAnId" data-analyser-id="">
+            <TickerLogo symbol={symbol} size={36} radius={9} />
+            <div style={{ minWidth: 0 }}>
+              <div className="dlAnSym">{symbol}</div>
+              {symbolName ? <div className="dlAnName" title={symbolName} data-fine-print="">{symbolName}</div> : null}
+            </div>
+            <div className="dlAnPrice" data-analyser-price="">{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div>
+          </div>
+          <div className="msh-searchbox dlChange" ref={mobileSearchBoxRef} data-change-stock="">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+            <input value={searchFrom === "change" ? query : ""} onChange={e => { setSearchFrom("change"); setQuery(e.target.value); setOpen(true); }} onFocus={() => focusSearch("change")} {...navMobile.inputAria} aria-label="Change stock" onKeyDown={e => { if (navMobile.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) chooseSymbol(f.symbol, f.name, "stock"); } }} placeholder="Change stock…" />
+            {open && searchFrom === "change" && results.length > 0 ? <div {...navMobile.listProps} aria-label="Ticker search results" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navMobile.optionProps(i)} onClick={() => chooseSymbol(r.symbol, r.name, "stock")} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navMobile.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
+          </div>
         </div>
         <p className="dlVerdict" data-verdict="">{verdictHead ? <strong>{verdictHead} </strong> : null}{chartSummaryText}</p>
-        {next || mapSlug || assetType === "stock" ? (
-          <div className="dlChipsRow">
-            {next ? <span className="dlInfoChip" data-next-report=""><span className="dlInfoLabel">Next report</span> {next.text}{next.estimated ? " (estimated)" : ""}</span> : null}
-            {mapSlug ? <Link className="dlInfoChip" href={`/bottlenecks/${mapSlug}`} prefetch={false} data-bottlenecks-link=""><span className="dlInfoLabel">On Bottlenecks</span> Supply map →</Link> : null}
-            {assetType === "stock" ? <Link className="dlInfoChip" href={`/stock/${encodeURIComponent(symbol)}`} prefetch={false}><span className="dlInfoLabel">Full breakdown</span> {symbol} stock page →</Link> : null}
-          </div>
-        ) : null}
+      </div>
+    );
+  }
+
+  /** The card's foot (#164 D): the next report, the Supply map and stock page links. */
+  function AnalyserFoot() {
+    const mapSlug = assetType === "stock" ? landing?.bottlenecks[symbol] ?? null : null;
+    const next = assetType === "stock" ? earningsSummary?.nextReport ?? null : null;
+    if (!next && !mapSlug && assetType !== "stock") return null;
+    return (
+      <div className="dlChipsRow" data-analyser-links="">
+        {next ? <span className="dlInfoChip" data-next-report=""><span className="dlInfoLabel">Next report</span> {next.text}{next.estimated ? " (estimated)" : ""}</span> : null}
+        {mapSlug ? <Link className="dlInfoChip" href={`/bottlenecks/${mapSlug}`} prefetch={false} data-bottlenecks-link=""><span className="dlInfoLabel">On Bottlenecks</span> Supply map →</Link> : null}
+        {assetType === "stock" ? <Link className="dlInfoChip" href={`/stock/${encodeURIComponent(symbol)}`} prefetch={false}><span className="dlInfoLabel">Full breakdown</span> {symbol} stock page →</Link> : null}
       </div>
     );
   }
@@ -1628,40 +1665,64 @@ export default function DashboardClient({
         <div className="msh-mobile-only">{isMobile ? MobileHero() : null}</div>
         </>) : null}
 
-        <DashboardTicker credit={tiingoCredit} />
+        {/* THE LIVE TICKER TAPE is gone from the landing (#563 COWORK #164 A): its top
+            item is the screens card's "Biggest mover" line. Elsewhere it stays. */}
+        {landing ? null : <DashboardTicker credit={tiingoCredit} />}
 
         {landing ? landing.cards : null}
 
-        {landing ? <section id="analyser" ref={analyserRef} className="dlAnalyser" aria-label={`${symbol} at a glance`}>{AnalyserHead()}</section> : null}
-
-        {err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null}
-
-        <div ref={deskGridRef} className={`msh-grid msh-desktop-only${wideChart ? " msh-grid-wide" : ""}`} data-wide-chart={wideChart ? "1" : "0"}>
-          {wideChart ? (
+        {(() => {
+          const errBox = err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null;
+          // On the landing the Breakdown is collapsed at every width (#164 D); elsewhere the desktop card stays.
+          const breakdown = landing ? <MobileBreakdownAccordion /> : <BreakdownPanel />;
+          const grids = (
             <>
-              <div className="msh-col msh-wide-chart"><ChartPanel /></div>
-              <div className="msh-wide-cards"><OverviewPanel /><BreakdownPanel /></div>
+              <div ref={deskGridRef} className={`msh-grid msh-desktop-only${wideChart ? " msh-grid-wide" : ""}`} data-wide-chart={wideChart ? "1" : "0"}>
+                {wideChart ? (
+                  <>
+                    <div className="msh-col msh-wide-chart"><ChartPanel /></div>
+                    <div className="msh-wide-cards"><OverviewPanel />{breakdown}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="msh-col"><OverviewPanel />{breakdown}</div>
+                    <div className="msh-col"><ChartPanel /></div>
+                  </>
+                )}
+              </div>
+              <div className="msh-mobile-only" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
+                <OverviewPanel />
+                <ChartPanel />
+                <MobileBreakdownAccordion />
+              </div>
             </>
-          ) : (
-            <>
-              <div className="msh-col"><OverviewPanel /><BreakdownPanel /></div>
-              <div className="msh-col"><ChartPanel /></div>
-            </>
-          )}
-        </div>
+          );
+          // D. "ANALYSE ANY STOCK" (#164 D): an H2, then ONE card holding the head, the
+          // tabs, the overview and the chart, the collapsed Breakdown and the links.
+          // #analyser is still every chartHref link's target.
+          return landing ? (
+            <section id="analyser" ref={analyserRef} className="dlAnalyser" aria-labelledby="dlAnalyserTitle">
+              <h2 id="dlAnalyserTitle" className="dlH2">Analyse any stock</h2>
+              <div className="dlAnalyserCard" data-analyser-card="">
+                {AnalyserHead()}
+                {errBox}
+                {grids}
+                {AnalyserFoot()}
+              </div>
+            </section>
+          ) : <>{errBox}{grids}</>;
+        })()}
 
-        <div className="msh-mobile-only" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
-          <OverviewPanel />
-          <ChartPanel />
-          <MobileBreakdownAccordion />
-        </div>
-
-        {/* The landing's cards carry the news and the insight; the analyser's own
-            news is its News tab. Benchmarks stay (#563 COWORK #134: no feature removed). */}
-        <div className="msh-lower">
-          <BenchmarksPanel />
-          {landing ? null : <><NewsPanel /><InsightsPanel /></>}
-        </div>
+        {/* The landing's cards carry the news and the insight, and "Market today"
+            the benchmarks' figures (#164 A: the Market Benchmarks row is gone from
+            the landing); the analyser's own news is its News tab. */}
+        {landing ? null : (
+          <div className="msh-lower">
+            <BenchmarksPanel />
+            <NewsPanel />
+            <InsightsPanel />
+          </div>
+        )}
       </div>
 
       {expanded ? (

@@ -45,6 +45,9 @@ const MUTANT = "app/components/.DashboardClient.chart-links-mutant.tsx";
 const tmp = fs.mkdtempSync(path.join("scripts", ".chart-links-"));
 // useSearchParams reads the real URL, as Next's does.
 fs.writeFileSync(path.join(tmp, "nav.js"), `const r={push(){},replace(){},prefetch(){},back(){},refresh(){}};export const useRouter=()=>r;export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(location.search);export const useParams=()=>({});export const notFound=()=>{};export const redirect=()=>{};`);
+// ColdFill (the not-yet-read prompt inside A's earnings card, in the Filed earnings tab since
+// #160) calls a server action, which Next compiles to a reference and esbuild cannot bundle.
+fs.writeFileSync(path.join(tmp, "coldfill.js"), `export default function ColdFill(){return null;}`);
 fs.writeFileSync(path.join(tmp, "link.js"), `import React from "react";export default React.forwardRef(function Link({href,prefetch,scroll,replace,...p},ref){return React.createElement("a",{...p,href:typeof href==="string"?href:"#",ref});});`);
 
 function bundle(clientPath, name, phone = false) {
@@ -67,7 +70,7 @@ ${phone ? `// A client navigation, as Next makes it: no page load, so no browser
 (window as unknown as { mountDashboard: () => void }).mountDashboard = () => createRoot(document.getElementById("root")!).render(React.createElement(RouterScroll, null, React.createElement(DashboardClient, { defaultSymbol: (new URLSearchParams(location.search).get("symbol") || "SPY").toUpperCase(), landing })));` : 'createRoot(document.getElementById("root")!).render(app);'}
 `);
   try {
-    const args = [entry, "--bundle", "--platform=browser", "--format=iife", "--jsx=automatic", "--alias:@=.", `--alias:next/navigation=./${path.join(tmp, "nav.js")}`, `--alias:next/link=./${path.join(tmp, "link.js")}`, '--define:process.env.NODE_ENV="production"', '--banner:js=var process={env:{NODE_ENV:"production"}};', `--outfile=${out}`, "--log-level=error"];
+    const args = [entry, "--bundle", "--platform=browser", "--format=iife", "--jsx=automatic", "--alias:@=.", `--alias:next/navigation=./${path.join(tmp, "nav.js")}`, `--alias:next/link=./${path.join(tmp, "link.js")}`, `--alias:@/app/stock/[symbol]/ColdFill=./${path.join(tmp, "coldfill.js")}`, '--define:process.env.NODE_ENV="production"', '--banner:js=var process={env:{NODE_ENV:"production"}};', `--outfile=${out}`, "--log-level=error"];
     if (process.env.ESBUILD_BIN) execFileSync(process.env.ESBUILD_BIN, args, { stdio: "inherit" });
     else execFileSync("npx", ["--yes", "esbuild@0.24.2", ...args], { stdio: "inherit" });
   } finally { fs.rmSync(entry, { force: true }); }

@@ -1,28 +1,33 @@
-// THE DASHBOARD LANDING IN CHROMIUM (#563 COWORK #134).
+// THE DASHBOARD LANDING IN CHROMIUM (#563 COWORK #134; v2, #164).
 //
 // Renders the real /dashboard (app/dashboard/page.tsx, server markup) with the
 // repo's render hooks and stubbed reads (scripts/lib/measure-stubs/: the
 // landing's data filled, or all missing with MEASURE_LANDING=empty; a fixture
-// quote; daily bars for every symbol), for ?symbol=TSLA. At 1280, 1024, 768 and
-// 390 px (and 320), 16 and 20 px roots, it fails when:
-//   - the page scrolls sideways, or a block spills out of its card;
-//   - reading text (six words or more, or a sentence) in the landing or the
-//     analyser's head is under 16 px outside fine print, or anything is under 12 px;
-//   - there is not exactly one h1, or it is not the landing's;
-//   - a card is missing, or (empty run) a card shows no empty state;
-//   - the analyser is missing, or opening #analyser does not land on it;
-//   - at 560 px and under, the order is not hero, Market right now, the cards,
-//     then the analyser;
-//   - (#154) the capex hub (where the card is wide enough to draw it) is off the middle row, or its label wraps or crowds
-//     a bar; an earnings row wraps or a long name has no ellipsis; the insight
-//     card does not show 2 posts at 1024 px and up and 1 below; the analyser
-//     tabs wrap at 480 px and under (and at 390 px need scrolling).
-// The news thumbnails (#149 §2) must draw 56–64 px square, left of their
-// headline, at every width. And "/" (#149 §1), rendered from app/page.tsx and
-// opened at 390 px with a phone's user agent, must be this same landing: its
-// H1, its cards and the analyser, with no old tile page.
-// With --shots DIR it saves 1280 and 390 px screenshots. A mutant (a 700 px
-// wide block) must be caught as sideways scroll.
+// quote; daily bars for every symbol), for ?symbol=TSLA. At 1280, 1024, 768,
+// 640, 390 and 320 px, 16 and 20 px roots, it fails when:
+//   - the page scrolls sideways, or a block spills out of its card or feature;
+//   - reading text (six words or more, or a sentence) is under 16 px outside
+//     fine print, or anything is under 12 px;
+//   - there is not exactly one h1, or it is not the hero's;
+//   - (#164 A) "Market today" lacks its four index tiles (one row; 2 × 2 at
+//     560 px and under), or the ticker tape or the "Market Benchmarks" row is back;
+//   - (#164 B) the two open features are missing or sit in a card (a border or
+//     a background), or a card is missing, or (empty run) shows no empty state;
+//   - (#164 B, C) at 1280 px the cards in a row differ in height by more than
+//     4 px, or their footer links do not line up;
+//   - (#164 C) a week lists other than 3 companies, the insight card shows other
+//     than one featured post (plus its "Also:" row), a headline wraps, or a
+//     thumbnail is not a 40–48 px square left of its headline;
+//   - (#164 D) the analyser card is missing; the tabs wrap or (at 390 px) need
+//     scrolling; the icon is not beside its label at 641 px and up, or not over
+//     it at 640 px and under; the Breakdown is open on arrival;
+//   - at 560 px and under the order is not hero, Market today, Only on
+//     MyStockHarbor, This week, then the analyser;
+//   - (#154) the capex hub, drawn, is off the middle row or its label wraps or
+//     crowds a bar; an earnings name is cut off without an ellipsis.
+// "/" (#149 §1), rendered from app/page.tsx and opened at 390 px with a phone's
+// user agent, must be this same landing. With --shots DIR it saves 1280 and 390 px
+// screenshots. A mutant (a 700 px wide block) must be caught as sideways scroll.
 //
 //   node scripts/measure-dashboard-landing.mjs [--shots DIR]
 //
@@ -69,43 +74,88 @@ const CSS = fs.readFileSync("app/globals.css", "utf8").replace(/@import[^;]*;|@t
 let mode = "full";
 const doc = (body, root) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${CSS}</style><style>html{font-size:${root}px}body{margin:0}</style></head><body data-mode="${mode}">${body}</body></html>`;
 
-const CARDS = ["hub", "capex", "pickers", "earnings", "sectors", "insight", "news"];
-function probe(cards) {
+function probe() {
   const vis = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
   const bad = [];
   const q = (s) => document.querySelector(s);
   const empty = document.body.dataset.mode === "empty";
-  for (const [sel, what] of [["[data-landing]", "hero"], ["[data-market-now]", "Market right now"], [".dlCards", "the cards"], ["#analyser", "the analyser"], ["[data-verdict]", "the verdict line"], [".dlTabs", "the analyser's tabs"]]) if (!q(sel)) bad.push(`missing: ${what}`);
-  for (const c of cards) {
+  for (const [sel, what] of [["[data-landing]", "hero"], ["[data-market-now]", "Market today"], ['[data-section="only"]', "Only on MyStockHarbor"], ['[data-section="week"]', "This week"], ["#analyser", "the analyser"], ["[data-analyser-card]", "the analyser card"], ["[data-verdict]", "the verdict line"], [".dlTabs", "the analyser's tabs"]]) if (!q(sel)) bad.push(`missing: ${what}`);
+  for (const c of ["pickers", "sectors", "earnings", "insight", "news"]) {
     const el = q(`[data-card="${c}"]`);
     if (!el) bad.push(`missing card: ${c}`);
     else if (empty !== el.hasAttribute("data-empty")) bad.push(`card ${c}: ${empty ? "no empty state" : "shows its empty state"}`);
   }
+  // #164 B: two OPEN features, on the page background (no border, no background of their own).
+  for (const o of ["hub", "capex"]) {
+    const el = q(`[data-open="${o}"]`);
+    if (!el) { bad.push(`missing feature: ${o}`); continue; }
+    const cs = getComputedStyle(el);
+    if (el.closest(".dlCard") || parseFloat(cs.borderTopWidth) > 0 || (cs.backgroundColor !== "rgba(0, 0, 0, 0)" && cs.backgroundColor !== "transparent") || cs.backgroundImage !== "none") bad.push(`the ${o} feature sits in a card`);
+    if (empty && !el.querySelector(`[data-card="${o}"][data-empty]`)) bad.push(`feature ${o}: no empty state`);
+  }
+  const row = q("[data-open-row]");
+  if (row && !(parseFloat(getComputedStyle(row).borderBottomWidth) > 0)) bad.push("no divider under the open features");
   const h1s = document.querySelectorAll("h1");
-  if (h1s.length !== 1 || !h1s[0].closest("[data-landing]")) bad.push(`${h1s.length} h1s, or not the landing's`);
+  if (h1s.length !== 1 || !h1s[0].closest("[data-landing]")) bad.push(`${h1s.length} h1s, or not the hero's`);
   if (document.documentElement.scrollWidth > innerWidth) {
     const wide = [...document.querySelectorAll("body *")].filter((e) => vis(e) && e.getBoundingClientRect().right > innerWidth + 1).slice(0, 3)
       .map((e) => `${e.tagName.toLowerCase()}.${typeof e.className === "string" ? e.className.split(" ")[0] : ""}[${Math.round(e.getBoundingClientRect().right)}] ${e.textContent.trim().slice(0, 25)}`);
     bad.push(`scrolls sideways (${document.documentElement.scrollWidth} > ${innerWidth}: ${wide.join(", ")})`);
   }
-  for (const card of document.querySelectorAll(".dlCard, .dlTile, .dlPoint, .dlHeroLeft, .dlWeek")) {
+  for (const card of document.querySelectorAll(".dlCard, .dlIdxTile, .dlHeroLeft, .dlWeek, .dlMarket, .dlOpen, [data-analyser-card]")) {
     const c = card.getBoundingClientRect();
     for (const el of card.querySelectorAll("*")) {
-      if (!vis(el) || el.closest("svg")) continue;
+      // The tab strip scrolls inside itself at 480 px and under (#154 §5): its tabs may run past it; the strip may not.
+      if (!vis(el) || el.closest("svg") || el.closest('[role="listbox"]') || el.parentElement?.closest(".dlTabs")) continue;
       const r = el.getBoundingClientRect();
-      if (r.width && (r.right > c.right + 1 || r.left < c.left - 1)) { bad.push(`spills out of its card: ${el.tagName.toLowerCase()}.${el.className} "${el.textContent.trim().slice(0, 30)}"`); break; }
+      if (r.width && (r.right > c.right + 1 || r.left < c.left - 1)) { bad.push(`spills out of its card: ${el.tagName.toLowerCase()}.${typeof el.className === "string" ? el.className : ""} "${el.textContent.trim().slice(0, 30)}"`); break; }
     }
   }
-  // #149 §2: each news thumbnail 56–64 px square, left of its headline.
-  for (const row of document.querySelectorAll(".dlNewsRow")) {
-    const t = row.querySelector("[data-news-thumb]")?.getBoundingClientRect(), a = row.querySelector("a")?.getBoundingClientRect();
-    if (!t || !a) { bad.push("a news item has no thumbnail"); break; }
-    if (t.width < 56 || t.width > 64 || Math.abs(t.width - t.height) > 1 || t.right > a.left) { bad.push(`news thumbnail ${Math.round(t.width)}x${Math.round(t.height)}, or not left of its headline`); break; }
+  // #164 A: the ticker tape and the "Market Benchmarks" row are gone; the index row is in Market today.
+  if ([...document.querySelectorAll("body *")].some((e) => e.children.length === 0 && /^(Market Benchmarks|Crypto Benchmarks)$/.test(e.textContent.trim()))) bad.push("the Market Benchmarks row is back");
+  if (/\b(sell|buy) signals?\b/i.test(document.body.textContent)) bad.push("signal wording on the page (the ticker tape?)");
+  if (!empty) {
+    const tiles = [...document.querySelectorAll("[data-index-row] .dlIdxTile")].filter(vis).map((t) => t.getBoundingClientRect());
+    const rowsOf = new Set(tiles.map((t) => Math.round(t.top))).size;
+    if (tiles.length !== 4 || rowsOf !== (innerWidth <= 560 ? 2 : 1)) bad.push(`index row: ${tiles.length} tiles on ${rowsOf} rows`);
+    if (!q("[data-market-line]")) bad.push("no trend / best-sector line");
   }
-  // #154 §1: the hub on the middle spender row's centre; the label under it, one line, clear of the bars.
-  // Stacked (no hub drawn): no lines either, and the label sits between the two lists.
+  // #164 B, C: equal heights in a row, footers aligned (where the cards sit side by side).
+  if (innerWidth >= 1024) {
+    for (const r of document.querySelectorAll("[data-row]")) {
+      const cs = [...r.children].filter(vis).map((c) => ({ box: c.getBoundingClientRect(), more: c.querySelector(".dlMore")?.getBoundingClientRect() }));
+      const tops = new Set(cs.map((c) => Math.round(c.box.top)));
+      if (tops.size !== 1) continue;
+      const hs = cs.map((c) => c.box.height);
+      if (Math.max(...hs) - Math.min(...hs) > 4) bad.push(`row ${r.dataset.row}: card heights ${hs.map(Math.round).join("/")}`);
+      const fb = cs.map((c) => c.more?.bottom ?? NaN);
+      if (Math.max(...fb) - Math.min(...fb) > 4) bad.push(`row ${r.dataset.row}: footers not aligned (${fb.map(Math.round).join("/")})`);
+    }
+  }
+  // #164 C: each news row's thumbnail (or logo) a 40–48 px square, left of its one-line headline.
+  for (const r of document.querySelectorAll(".dlNewsRow")) {
+    const t = r.querySelector("[data-news-thumb]")?.getBoundingClientRect(), a = r.querySelector(".dlNewsTitle");
+    if (!t || !a) { bad.push("a headline has no thumbnail"); break; }
+    const ab = a.getBoundingClientRect();
+    if (t.width < 40 || t.width > 48 || Math.abs(t.width - t.height) > 1 || t.right > ab.left) { bad.push(`news thumbnail ${Math.round(t.width)}x${Math.round(t.height)}, or not left of its headline`); break; }
+    if (ab.height > parseFloat(getComputedStyle(a).fontSize) * 1.7 || getComputedStyle(a).textOverflow !== "ellipsis") { bad.push(`a headline wraps or has no ellipsis: ${a.textContent.slice(0, 30)}`); break; }
+  }
+  if (!empty) {
+    const newsRows = document.querySelectorAll(".dlNewsRow").length;
+    if (newsRows !== 4) bad.push(`${newsRows} headlines`);
+    const weeks = [...document.querySelectorAll("[data-week]")].map((w) => w.querySelectorAll("[data-earn-row]").length);
+    if (weeks.length !== 2 || weeks.some((n) => n !== 3)) bad.push(`earnings rows per week: ${weeks.join("+")}`);
+    const posts = [...document.querySelectorAll("[data-insight-post]")].filter(vis).length;
+    if (posts !== 1 || !q("[data-insight-also]")) bad.push(`${posts} featured insight posts, or no "Also:" row`);
+    for (const r of document.querySelectorAll(".dlEarnRow")) {
+      const co = r.querySelector(".dlEarnCo"), tk = r.querySelector("strong");
+      if (!co || !tk || co.getBoundingClientRect().height > parseFloat(getComputedStyle(co).fontSize) * 1.6 || Math.abs(co.getBoundingClientRect().top - tk.getBoundingClientRect().top) > 8) { bad.push(`an earnings row wraps: ${r.textContent.trim().slice(0, 30)}`); break; }
+    }
+    const cut = [...document.querySelectorAll(".dlEarnCo")].find((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).textOverflow !== "ellipsis");
+    if (cut) bad.push(`a company name is cut off without an ellipsis: ${cut.textContent.slice(0, 30)}`);
+  }
+  // #154 §1: the capex hub on the middle spender row's centre; the label under it, one line, clear of the bars.
   if (!empty && q(".dlCxHub") && !vis(q(".dlCxHub")) && q(".dlCxLines") && vis(q(".dlCxLines"))) bad.push("the stacked capex chart still draws the star's lines");
-  // (A card too narrow for the star, a phone or a large text size, stacks it: the hub is not drawn.)
   if (!empty && q(".dlCxHub") && vis(q(".dlCxHub"))) {
     const hub = q(".dlCxHub")?.getBoundingClientRect(), mid = document.querySelectorAll('[data-side="spend"] .dlCxRow')[1]?.getBoundingClientRect();
     const label = q(".dlCxNodeLabel")?.getBoundingClientRect();
@@ -113,37 +163,30 @@ function probe(cards) {
     if (!label || !hub || label.top < hub.bottom || label.height > 26) bad.push("the hub label is not one line under the hub");
     for (const r of document.querySelectorAll(".dlCxRow")) { const b = r.getBoundingClientRect(); if (label && label.right > b.left && label.left < b.right && label.bottom > b.top && label.top < b.bottom) { bad.push("the hub label crowds a bar"); break; } }
   }
-  // #154 §2: each earnings row on one line; a long name ends in an ellipsis.
-  if (!empty) {
-    for (const r of document.querySelectorAll(".dlEarnRow")) {
-      // #163: no date beside the name any more; the name is the row's last item.
-      const co = r.querySelector(".dlEarnCo"), tk = r.querySelector("strong");
-      if (!co || !tk || co.getBoundingClientRect().height > parseFloat(getComputedStyle(co).fontSize) * 1.6 || Math.abs(co.getBoundingClientRect().top - tk.getBoundingClientRect().top) > 8) { bad.push(`an earnings row wraps: ${r.textContent.trim().slice(0, 30)}`); break; }
-    }
-    // #163 gave the name the row's freed width, so a long name may now fit; one that does not must end in an ellipsis.
-    const cut = [...document.querySelectorAll(".dlEarnCo")].find((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).textOverflow !== "ellipsis");
-    if (cut) bad.push(`a company name is cut off without an ellipsis: ${cut.textContent.slice(0, 30)}`);
-  }
-  // #154 §4: two posts at 1024 px and up, one below.
-  if (!empty) {
-    const shown = [...document.querySelectorAll(".dlInsight")].filter(vis).length;
-    if (shown !== (innerWidth >= 1024 ? 2 : 1)) bad.push(`${shown} insight posts shown at ${innerWidth}px`);
-  }
-  // #154 §5, #161: the analyser's icon tabs on one line at every width, never the page sideways.
+  // #164 D: the tabs on one line; icon beside its label at 641 px and up, over it at 640 and under.
   {
-    const tabs = [...document.querySelectorAll(".dlTab")].filter(vis).map((t) => t.getBoundingClientRect());
-    if (tabs.length !== 5 || tabs.some((t) => Math.abs(t.top - tabs[0].top) > 1)) bad.push("the analyser tabs wrap onto two lines");
+    const tabs = [...document.querySelectorAll(".dlTab")].filter(vis);
+    const boxes = tabs.map((t) => t.getBoundingClientRect());
+    if (boxes.length !== 5 || boxes.some((t) => Math.abs(t.top - boxes[0].top) > 1)) bad.push("the analyser tabs wrap onto two lines");
     const strip = [...document.querySelectorAll(".dlTabs")].find(vis);
     if (innerWidth >= 390 && strip && strip.scrollWidth > strip.clientWidth + 1) bad.push(`the tabs need scrolling at ${innerWidth}px`);
+    const t0 = tabs[0], ic = t0?.querySelector(".dlTabIcon")?.getBoundingClientRect(), lb = t0?.querySelector(".dlTabShort")?.getBoundingClientRect();
+    if (ic && lb) {
+      const beside = ic.right <= lb.left + 1 && Math.abs((ic.top + ic.height / 2) - (lb.top + lb.height / 2)) < 4;
+      const over = ic.bottom <= lb.top + 1;
+      if (innerWidth >= 641 ? !beside : !over) bad.push(`tab icon ${innerWidth >= 641 ? "not beside" : "not over"} its label at ${innerWidth}px`);
+    }
   }
-  // At 560 px and under: hero, Market right now, the cards, then the analyser.
+  const bds = [...document.querySelectorAll("[data-breakdown]")].filter(vis);
+  if (!bds.length || bds.some((b) => b.dataset.breakdown !== "collapsed")) bad.push("the Breakdown is not collapsed on arrival");
+  // At 560 px and under: hero, Market today, Only on, This week, then the analyser.
   if (innerWidth <= 560) {
     const top = (s) => q(s)?.getBoundingClientRect().top ?? NaN;
-    const order = [top(".dlHeroLeft"), top("[data-market-now]"), top(".dlCards"), top("#analyser")];
-    if (!order.every((v, i) => i === 0 || v > order[i - 1])) bad.push(`mobile order is not hero, market, cards, analyser (${order.map(Math.round).join(", ")})`);
+    const order = [top(".dlHeroLeft"), top("[data-market-now]"), top('[data-section="only"]'), top('[data-section="week"]'), top("#analyser")];
+    if (!order.every((v, i) => i === 0 || v > order[i - 1])) bad.push(`mobile order is not hero, market, only, week, analyser (${order.map(Math.round).join(", ")})`);
   }
   const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize);
-  for (const scope of document.querySelectorAll("[data-landing], .dlCards, .dlAnalyserHead")) {
+  for (const scope of document.querySelectorAll("[data-landing], [data-section], .dlAnalyserHead, [data-analyser-links]")) {
     const walk = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
     for (let n = walk.nextNode(); n; n = walk.nextNode()) {
       const t = n.textContent.replace(/\s+/g, " ").trim(), el = n.parentElement;
@@ -174,9 +217,9 @@ let failures = 0;
 for (const [name, body] of runs) {
   mode = name;
   for (const root of [16, 20]) {
-    for (const width of [320, 390, 768, 1024, 1280]) {
+    for (const width of [320, 390, 640, 768, 1024, 1280]) {
       const page = await open(body, root, width);
-      const bad = await page.evaluate(probe, CARDS);
+      const bad = await page.evaluate(probe);
       if (bad.length) failures++;
       console.log(`${name} ${width}px @ ${root}px: ${bad.length ? `FAIL ${bad.join("; ")}` : "OK"}`);
       if (SHOTS && root === 16 && (width === 1280 || width === 390)) {
@@ -193,7 +236,7 @@ for (const [name, body] of runs) {
 {
   mode = "full";
   const page = await open(rootHtml, 16, 390, "", IPHONE);
-  const bad = await page.evaluate(probe, CARDS);
+  const bad = await page.evaluate(probe);
   const h1 = await page.evaluate(() => document.querySelector("h1")?.textContent ?? "");
   const ld = /"@type":"WebApplication"/.test(rootHtml);
   const ok = !bad.length && h1 === "Stock research from the filings, not the hype." && ld && !/msh-mobile-home|MobileHomePage/.test(rootHtml);
@@ -216,7 +259,7 @@ for (const [name, body] of runs) {
 {
   const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
   await page.setContent(doc(runs[0][1].replace('<div class="msh-wrap">', '<div class="msh-wrap"><div style="width:700px">x</div>'), 16));
-  const caught = (await page.evaluate(probe, CARDS)).some((b) => /scrolls sideways/.test(b));
+  const caught = (await page.evaluate(probe)).some((b) => /scrolls sideways/.test(b));
   console.log(`mutant (a 700 px block): ${caught ? "caught" : "NOT CAUGHT"}`);
   if (!caught) failures++;
   await page.close();

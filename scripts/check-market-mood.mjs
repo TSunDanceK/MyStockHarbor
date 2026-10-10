@@ -228,7 +228,7 @@ const MUTANTS = [
   [R[9], "words", (s) => s.replace("the Market Mood reading beside it is the broader measure.", "sentiment is the Fear & Greed reading beside it.")],
   [R[10], "card", (s) => s.replace("{moodNoteText(inputs.length)}", "{moodNoteText(6)}")],
   [R[10], "page", (s) => s.replace(/<MarketMoodCard view=\{mood\} credit=\{<a[^\n]*\/>/, "<MarketMoodCard view={mood} credit={credit} />")],
-  [R[10], "card", (s) => s.replace("Reading for {dayWords(day.d)}", "Latest reading")],
+  [R[10], "card", (s) => s.replaceAll("Reading for {dayWords(day.d)}", "Latest reading")],
   [R[10], "card", (s) => s.replace('backgroundSize: `100% ${(100 * 100) / fillPct}%`, backgroundPosition: "bottom", ', "")],
   [R[10], "card", (s) => s.replace("Market Mood will appear after tonight&apos;s update.", "Market Mood isn&apos;t available just now. This is a problem on our side.")],
   [R[11], "card", (s) => s.replace("minWidth: 0, boxSizing: \"border-box\", position: \"relative\"", "minWidth: 320, boxSizing: \"border-box\", position: \"relative\"")],

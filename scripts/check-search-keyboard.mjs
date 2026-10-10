@@ -140,7 +140,8 @@ if (base.length) {
 
 const mut = (label, s, from, to) => {
   if (!s.includes(from)) throw new Error(`mutant "${label}": anchor not found`);
-  return s.replace(from, () => to);
+  // Every occurrence: the landing has two search boxes on the same hook pattern since #164.
+  return s.split(from).join(to);
 };
 const MUTANTS = [
   ["Enter with nothing highlighted takes the first row", () => [mut("enter", src, `return has && cur >= 0 ? { kind: "select", index: cur } : { kind: "none" };`, `return has ? { kind: "select", index: Math.max(cur, 0) } : { kind: "none" };`), code]],
