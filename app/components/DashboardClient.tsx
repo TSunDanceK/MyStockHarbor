@@ -123,6 +123,27 @@ const LANDING_CLIENT_CSS = `
 @media(max-width:640px){.dlTab{flex-direction:column;gap:4px;padding:8px 6px;}}
 @media(max-width:480px){.dlTabs{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;gap:4px;}.dlTabs::-webkit-scrollbar{display:none;}.dlTab{flex:1 0 auto;padding:6px 6px;gap:3px;}.dlTabIcon{width:16px;height:16px;}}
 @media(max-width:859px){.dlHero{grid-template-columns:minmax(0,1fr);}}
+/* THE CHART TOOLBAR ON A PHONE, TWO LINES (#563, after #164 put the chart inside the analyser card):
+   line 1 the mode switch, then + and − on the right; line 2 Indicator, line/candle, D/W/M.
+   Tighter gaps and padding; the groups shrink rather than stack. 640 px and under only:
+   the desktop toolbar is untouched. !important: the controls carry inline styles. */
+@media(max-width:640px){
+.dlTb{padding:10px!important;}
+.dlTbHead{gap:6px!important;flex-wrap:nowrap!important;}
+.dlTbTitle{display:none!important;}
+.dlTbRow{flex-wrap:nowrap!important;gap:5px!important;min-width:0;}
+.dlTbRow[data-tb-line="1"]{flex:1 1 auto;}
+.dlTbRow[data-tb-line="2"]{margin-top:8px!important;}
+.dlTbSeg{flex:0 1 auto!important;min-width:0;padding:2px!important;gap:2px!important;}
+.dlTbSegBtn{padding:6px 7px!important;min-width:0!important;}
+.dlTbZoom{margin-left:auto;gap:4px!important;}
+.dlTbBtn{padding:6px 9px!important;}
+.dlTbInd{flex:1 1 auto!important;min-width:0!important;}
+.dlTbIndBtn{padding:8px 9px!important;}
+.dlTbTf{flex:0 0 auto;}
+}
+/* Headroom on the narrowest phones (320 px and a little under). */
+@media(max-width:360px){.dlTbSegBtn{padding:6px 5px!important;}.dlTbBtn{padding:6px 7px!important;}.dlTbRow{gap:4px!important;}}
 @media(max-width:560px){.dlSearch{padding:0 8px;gap:6px;}.dlSearch .msh-go{padding:0 12px;}.dlHeroLeft{padding:18px;}.dlH1{font-size:2rem;}.dlVerdict{font-size:var(--fs-read);}.dlAnalyserCard{padding:12px;}.dlChange{flex:1 1 100%;}}
 `;
 /** The landing's Try chips (the brief's four). */
@@ -1074,9 +1095,9 @@ export default function DashboardClient({
   // switch.
   function TimeframeToggle() {
     return (
-      <div style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }} role="group" aria-label="Timeframe">
+      <div className="dlTbSeg" data-tb="timeframe" style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }} role="group" aria-label="Timeframe">
         {TIMEFRAMES.map(t => (
-          <button key={t.label} type="button" onClick={() => setActiveTimeframe(t.label)} aria-pressed={activeTimeframe === t.label}
+          <button key={t.label} type="button" className="dlTbSegBtn" onClick={() => setActiveTimeframe(t.label)} aria-pressed={activeTimeframe === t.label}
             style={{ border: "none", borderRadius: 7, padding: isMobile ? "6px 10px" : "7px 13px", background: activeTimeframe === t.label ? COLORS.blue : "transparent", color: activeTimeframe === t.label ? "#fff" : COLORS.mutedFg, fontWeight: 800, fontSize: 12, cursor: "pointer", letterSpacing: "0.02em", minWidth: isMobile ? 30 : 34 }}>
             {t.label}
           </button>
@@ -1100,9 +1121,9 @@ export default function DashboardClient({
   // bracket button and the ⤢ expand button were removed to save space.
   function ChartToolbar() {
     const zBtn: React.CSSProperties = { padding: "7px 11px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, lineHeight: 1, fontSize: 14 };
-    return (<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", flex: "0 0 auto" }}>
-      <button type="button" onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" aria-label="Zoom in" style={zBtn}>+</button>
-      <button type="button" onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" aria-label="Zoom out" style={zBtn}>−</button>
+    return (<div className="dlTbZoom" data-tb="zoom" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", flex: "0 0 auto" }}>
+      <button type="button" className="dlTbBtn" onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" aria-label="Zoom in" style={zBtn}>+</button>
+      <button type="button" className="dlTbBtn" onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" aria-label="Zoom out" style={zBtn}>−</button>
     </div>);
   }
 
@@ -1216,9 +1237,9 @@ export default function DashboardClient({
       { key: "tradingview", label: "TradingView" },
     ];
     return (
-      <div style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flexWrap: "nowrap" }} role="group" aria-label="Chart mode">
+      <div className="dlTbSeg" data-tb="mode" style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flexWrap: "nowrap" }} role="group" aria-label="Chart mode">
         {modes.map(m => (
-          <button key={m.key} type="button" onClick={() => selectChartMode(m.key)} aria-pressed={chartMode === m.key}
+          <button key={m.key} type="button" className="dlTbSegBtn" onClick={() => selectChartMode(m.key)} aria-pressed={chartMode === m.key}
             style={{ border: "none", borderRadius: 7, padding: compact ? "6px 9px" : "7px 12px", background: chartMode === m.key ? "rgba(167,139,250,0.28)" : "transparent", color: chartMode === m.key ? "#ede9fe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartMode === m.key ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none", whiteSpace: "nowrap" }}>
             {m.label}
           </button>
@@ -1278,10 +1299,10 @@ export default function DashboardClient({
     const modeTitle = chartMode === "tradingview" ? `TradingView · ${symbol}` : chartMode === "interactive" ? `Interactive · ${symbol}` : `Price · ${chartIndicatorName}`;
     return (<div id="chart" ref={chartSectionRef} style={{ scrollMarginTop: 24 }}>
       <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
-        <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
-            {!isMobile ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}><WideChartButton /><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div></div> : null}
-            <div style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="dlTb" data-chart-toolbar="" style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
+          <div className="dlTbHead" style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
+            {!isMobile ? <div className="dlTbTitle" style={{ display: "flex", alignItems: "center", gap: 10 }}><WideChartButton /><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div></div> : null}
+            <div className="dlTbRow" data-tb-line="1" style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChartModeSwitcher compact={isMobile} />
               {/* On Basic: the zoom + / − controls ride on this (mode-switch)
                   line so the toolbar fits in 2 lines on phone portrait. D/W/M
@@ -1293,9 +1314,9 @@ export default function DashboardClient({
             </div>
           </div>
           {chartMode === "basic" ? (
-            <div style={{ marginTop: 12, display: "flex", gap: isMobile ? 7 : 10, alignItems: "center", flexWrap: "wrap" }}>
-              <div style={{ position: "relative", flex: isMobile ? "0 1 auto" : 1, minWidth: isMobile ? 116 : 160 }} ref={indicatorMenuRef}>
-                <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator"}</span><span>▾</span></button>
+            <div className="dlTbRow" data-tb-line="2" style={{ marginTop: 12, display: "flex", gap: isMobile ? 7 : 10, alignItems: "center", flexWrap: "wrap" }}>
+              <div className="dlTbInd" style={{ position: "relative", flex: isMobile ? "0 1 auto" : 1, minWidth: isMobile ? 116 : 160 }} ref={indicatorMenuRef}>
+                <button type="button" className="dlTbIndBtn" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator"}</span><span>▾</span></button>
                 {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? 250 : 300, maxWidth: "84vw", maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
                   <button type="button" onClick={clearIndicatorSelection} style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Clear all · Overview</button>
                   {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map(group => <div key={group.title}><div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>{group.opts.map(opt => (
@@ -1305,8 +1326,8 @@ export default function DashboardClient({
                   ))}</div>)}
                 </div> : null}
               </div>
-              <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" onClick={() => setChartType(type)} title={type === "line" ? "Line" : "Candles"} aria-label={type === "line" ? "Line" : "Candles"} aria-pressed={chartType === type} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 7, padding: "6px 11px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? LINE_ICON : CANDLE_ICON}</button>)}</div>
-              <div style={{ flex: "0 0 auto" }}><TimeframeToggle /></div>
+              <div className="dlTbSeg" data-tb="type" style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" className="dlTbSegBtn" onClick={() => setChartType(type)} title={type === "line" ? "Line" : "Candles"} aria-label={type === "line" ? "Line" : "Candles"} aria-pressed={chartType === type} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 7, padding: "6px 11px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? LINE_ICON : CANDLE_ICON}</button>)}</div>
+              <div className="dlTbTf" style={{ flex: "0 0 auto" }}><TimeframeToggle /></div>
             </div>
           ) : null}
         </div>

@@ -21,6 +21,9 @@
 //   - (#164 D) the analyser card is missing; the tabs wrap or (at 390 px) need
 //     scrolling; the icon is not beside its label at 641 px and up, or not over
 //     it at 640 px and under; the Breakdown is open on arrival;
+//   - (after #829) at 320, 390 and 640 px the chart toolbar is not two lines
+//     (line 1: Basic / Interactive / TradingView, then + and − on the right;
+//     line 2: Indicator, line/candle, D / W / M), or a control spills out of it;
 //   - at 560 px and under the order is not hero, Market today, Only on
 //     MyStockHarbor, This week, then the analyser;
 //   - (#154) the capex hub, drawn, is off the middle row or its label wraps or
@@ -177,6 +180,36 @@ function probe() {
       if (innerWidth >= 641 ? !beside : !over) bad.push(`tab icon ${innerWidth >= 641 ? "not beside" : "not over"} its label at ${innerWidth}px`);
     }
   }
+  // THE CHART TOOLBAR ON A PHONE (after #829): two lines, in order, nothing spilling.
+  if (innerWidth <= 640) {
+    const tb = [...document.querySelectorAll("[data-chart-toolbar]")].find(vis);
+    if (!tb) bad.push("no chart toolbar");
+    else {
+      const box = tb.getBoundingClientRect();
+      const ctl = [...tb.querySelectorAll("button")].filter((b) => vis(b) && !b.closest('[style*="position: absolute"]'));
+      const mid = (b) => { const r = b.getBoundingClientRect(); return r.top + r.height / 2; };
+      const lines = [];
+      for (const b of ctl) { const y = mid(b); const l = lines.find((x) => Math.abs(x.y - y) < 10); if (l) l.items.push(b); else lines.push({ y, items: [b] }); }
+      lines.sort((a, b) => a.y - b.y);
+      const words = lines.map((l) => l.items.map((b) => (b.getAttribute("aria-label") || b.textContent).trim()).join("|"));
+      if (lines.length !== 2) bad.push(`chart toolbar on ${lines.length} lines at ${innerWidth}px: ${words.join(" / ")}`);
+      else {
+        if (!/^Basic\|Interactive\|TradingView\|Zoom in\|Zoom out$/.test(words[0])) bad.push(`toolbar line 1 is "${words[0]}"`);
+        if (!/^Indicator ?▾\|Line\|Candles\|D\|W\|M$/.test(words[1].replace(/\s+/g, " "))) bad.push(`toolbar line 2 is "${words[1]}"`);
+        const zoom = tb.querySelector('[data-tb="zoom"]')?.getBoundingClientRect(), pad = parseFloat(getComputedStyle(tb).paddingRight);
+        if (!zoom || box.right - pad - zoom.right > 2) bad.push("+ and − are not right-aligned on line 1");
+      }
+      const out = ctl.find((b) => { const r = b.getBoundingClientRect(); return r.right > box.right + 1 || r.left < box.left - 1; });
+      if (out) bad.push(`a toolbar control spills: ${(out.getAttribute("aria-label") || out.textContent).trim()}`);
+      // A group shrunk below its content lets its buttons run into the next control: none may overlap.
+      for (const l of lines) {
+        const rs = l.items.map((b) => b.getBoundingClientRect()).sort((a, b) => a.left - b.left);
+        if (rs.some((r, i) => i > 0 && r.left < rs[i - 1].right - 0.5)) { bad.push(`toolbar controls overlap at ${innerWidth}px`); break; }
+      }
+      const spilled = [...tb.querySelectorAll(".dlTbSeg")].filter(vis).find((g) => { const gb = g.getBoundingClientRect(); return [...g.querySelectorAll("button")].some((b) => { const r = b.getBoundingClientRect(); return r.right > gb.right + 1 || r.left < gb.left - 1; }); });
+      if (spilled) bad.push(`a toolbar group spills its buttons (${spilled.getAttribute("data-tb")})`);
+    }
+  }
   const bds = [...document.querySelectorAll("[data-breakdown]")].filter(vis);
   if (!bds.length || bds.some((b) => b.dataset.breakdown !== "collapsed")) bad.push("the Breakdown is not collapsed on arrival");
   // At 560 px and under: hero, Market today, Only on, This week, then the analyser.
@@ -261,6 +294,21 @@ for (const [name, body] of runs) {
   await page.setContent(doc(runs[0][1].replace('<div class="msh-wrap">', '<div class="msh-wrap"><div style="width:700px">x</div>'), 16));
   const caught = (await page.evaluate(probe)).some((b) => /scrolls sideways/.test(b));
   console.log(`mutant (a 700 px block): ${caught ? "caught" : "NOT CAUGHT"}`);
+  if (!caught) failures++;
+  await page.close();
+}
+// THE PHONE TOOLBAR'S MUTANTS (after #829): the old wrapping, and controls too wide to fit.
+for (const [label, from, to, width] of [
+  ["the phone block removed (the live bug after #829)", "@media(max-width:640px){\n.dlTb{padding:10px!important;}", "@media(max-width:1px){\n.dlTb{padding:10px!important;}", 390],
+  ["the lines allowed to wrap", ".dlTbRow{flex-wrap:nowrap!important;gap:5px!important;min-width:0;}", ".dlTbRow{min-width:0;}", 320],
+  ["the segmented buttons keep their desktop padding", ".dlTbSegBtn{padding:6px 7px!important;min-width:0!important;}", ".dlTbSegBtn{padding:7px 14px!important;min-width:40px!important;}", 320],
+  ["the zoom buttons drop to the left", ".dlTbZoom{margin-left:auto;gap:4px!important;}", ".dlTbZoom{gap:4px!important;}", 640],
+]) {
+  if (!runs[0][1].includes(from)) { console.log(`mutant (${label}): DOES NOT APPLY`); failures++; continue; }
+  const page = await browser.newPage({ viewport: { width, height: 900 } });
+  await page.setContent(doc(runs[0][1].split(from).join(to), 16));
+  const caught = (await page.evaluate(probe)).some((b) => /toolbar|spills|right-aligned/.test(b));
+  console.log(`mutant (${label}, ${width}px): ${caught ? "caught" : "NOT CAUGHT"}`);
   if (!caught) failures++;
   await page.close();
 }
