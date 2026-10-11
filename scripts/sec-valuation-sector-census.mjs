@@ -90,7 +90,7 @@ console.log(`rows ${rows} (fresh) · priced ${priced} · no sector ${noGroup}`);
 
 const market = {};
 for (const m of MULTS) market[m] = [...vals[m].values()].flat();
-const stat = (xs) => ({ n: xs.length, p25: quantile(xs, 0.25), med: quantile(xs, 0.5), p75: quantile(xs, 0.75), spread: halfSampleSpreadPct(xs) });
+const stat = (xs0) => { const xs = [...xs0].sort((a, b) => a - b); return ({ n: xs.length, p25: quantile(xs, 0.25), med: quantile(xs, 0.5), p75: quantile(xs, 0.75), spread: halfSampleSpreadPct(xs) }); }; // SORTED (round 3), as lib/valuationBands quartileBench
 const f1 = (x) => (Number.isFinite(x) ? x.toFixed(1) : "—");
 const bench = {};
 for (const m of MULTS) {
