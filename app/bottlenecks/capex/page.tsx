@@ -59,7 +59,12 @@ export default async function CapexPage() {
   return (
     <main style={mainStyle}>
       <div className="capexWrap">
-        <section style={heroStyle}>
+        <section className="capexHero" data-capex-hero="" style={heroStyle}>
+          {/* THE HERO PICTURE (#563 COWORK #166 e): the coins image from the news
+              art set, under the insight heroes' own shade so the text stays legible. Decorative. */}
+          <img className="capexHeroImg" src="/news-art/any-cash-04.webp" srcSet="/news-art/any-cash-04-sm.webp 320w, /news-art/any-cash-04.webp 1200w" sizes="(max-width: 1100px) 100vw, 1100px" width={1200} height={675} alt="" aria-hidden="true" loading="eager" decoding="async" />
+          <div className="capexHeroShade" aria-hidden="true" />
+          <div className="capexHeroBody">
           <div style={tagStyle}>BOTTLENECKS · CAPEX</div>
           <h1 style={titleStyle}>Follow the money</h1>
           <p style={leadStyle}>
@@ -71,6 +76,7 @@ export default async function CapexPage() {
             <a href="#spending" style={chipStyle}>Who is spending</a>
             <a href="#receiving" style={chipStyle}>Who is receiving</a>
             <a href="#contracts" style={chipStyle}>Federal contracts</a>
+          </div>
           </div>
         </section>
 
@@ -218,6 +224,9 @@ export default async function CapexPage() {
 
       <style>{`
         .capexWrap { max-width: 1240px; margin: 0 auto; padding: 28px 16px 56px; }
+        .capexHeroImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: right center; }
+        .capexHeroShade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,8,13,0.15) 0%, rgba(6,8,13,0.72) 55%, rgba(6,8,13,0.96) 100%); }
+        .capexHeroBody { position: relative; }
         /* Two columns like the earnings page: panels left, insight cards right.
            Under 980px one column, the cards ABOVE the panels (#563 COWORK #12). */
         .capexGrid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.85fr); gap: 22px; align-items: start; }
@@ -473,7 +482,7 @@ const mainStyle: CSSProperties = {
   color: "#f1f5f9",
   fontFamily: "system-ui, Arial",
 };
-const heroStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 28, padding: 22, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))" };
+const heroStyle: CSSProperties = { position: "relative", overflow: "hidden", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 28, padding: 22, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))" };
 const tagStyle: CSSProperties = { display: "inline-flex", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "rgba(59,130,246,0.14)", color: "#dbeafe", fontSize: 12, fontWeight: 950, letterSpacing: "0.08em" };
 const titleStyle: CSSProperties = { margin: "14px 0 0 0", fontSize: 40, lineHeight: 1.04, letterSpacing: "-0.05em" };
 const leadStyle: CSSProperties = { margin: "14px 0 0 0", maxWidth: 820, fontSize: 16, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };

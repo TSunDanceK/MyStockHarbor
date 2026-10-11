@@ -46,7 +46,8 @@ import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
-import { readSurfacePrice, TIINGO_CREDIT, TIINGO_URL, type SurfacePrice } from "@/lib/server/tiingoSurfacePrice";
+import { readSurfacePrice, type SurfacePrice } from "@/lib/server/tiingoSurfacePrice";
+import TiingoCredit, { TiingoLink } from "@/app/components/TiingoCredit";
 
 export const runtime = "nodejs";
 
@@ -772,7 +773,7 @@ export default async function StockNewsPage({ params }: Props) {
                     {/* What the figure is and where it is from (#553 COWORK #56,
                         #563 COWORK #31 §4-5): the credit is linked. */}
                     <div style={{ marginTop: 4, fontSize: 11, opacity: 0.6, lineHeight: 1.4 }}>
-                      {heroPrice.label} · <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                      {heroPrice.label} · <TiingoLink />
                     </div>
                   </>
                 ) : quote?.price != null ? (
@@ -860,11 +861,7 @@ export default async function StockNewsPage({ params }: Props) {
                 <p style={bodyCopyStyle}>{technicalRead.momentumText}</p>
                 <p style={bodyCopyStyle}>{technicalRead.levelText}</p>
                 {/* The linked credit on the Tiingo history path (#563 COWORK #31 §5). */}
-                {historySource === "tiingo" ? (
-                  <p style={{ ...bodyCopyStyle, fontSize: 12, opacity: 0.7 }}>
-                    <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
-                  </p>
-                ) : null}
+                {historySource === "tiingo" ? <TiingoCredit /> : null}
               </div>
             </section>
           </aside>

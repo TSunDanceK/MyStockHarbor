@@ -57,6 +57,38 @@ const config: PickerResultConfig = {
   kind: "allSymbols",
   showAllImmediately: true,
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "A blank starting point",
+      paragraphs: [
+        "Most picker pages on this site open with a rule already applied. This one does not. It shows the whole analysis universe, roughly 700 US-listed stocks, with no condition switched on, so you can build a screen from scratch or simply browse.",
+        "That universe is assembled from about 100 large caps, the 300 largest companies by market cap, popular searches on the site, and the day’s movers. It is broad but not complete: many smaller US listings sit outside it and will not appear however you filter.",
+        "Rows open in order of conditions met, a count of how many tracked screener conditions each stock currently meets, with ties settled alphabetically. A stock near the top is not ranked as better; it simply matches more of the rules the site tracks.",
+      ],
+    },
+    {
+      heading: "Narrowing and reading the table",
+      paragraphs: [
+        "The sidebar labeled “Select Screener” holds the conditions used across the site’s picker pages. Ticking them filters the table in place, so you can combine, say, a moving-average condition with a momentum one without leaving the page. ‘See more’ just expands how many rows are visible; it does not change which stocks match.",
+        "Column headers sort the table, and the tabs switch the data on show: General, Performance, Valuation, Dividends, Financials and Analysts. Every column and tab is available here. Sorting by a single column, such as market cap or a performance figure, can be a quick way to get oriented before ticking any conditions at all.",
+        "One practical approach may be to start with a single technical condition, then check the Valuation or Financials tab for context, since a chart pattern and a company’s reported numbers can tell quite different stories about the same stock.",
+      ],
+    },
+    {
+      heading: "What the data can and cannot show",
+      paragraphs: [
+        "Prices come from daily bars of end-of-day data, so the newest bar is the previous session’s close, and the page rebuilds hourly. Moves made during today’s session will not show until the next daily bar lands.",
+        "Technical conditions use fixed definitions: moving averages are simple (SMA), RSI is RSI(14), MACD is 12/26/9 and ATR is ATR(14), a measure of typical daily range. A stock may look different on a chart using other settings, and a reading close to a threshold can flip in or out from one day to the next.",
+        "The conditions-met figure is also just a count. It does not weigh one condition above another, and it mixes conditions that can point in opposite directions, so a high number might mean quite different things for two stocks. Opening a stock’s chart is usually the quickest way to see what is actually going on.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/oversold-stocks-today", label: "Oversold stocks today" },
+    { href: "/best-trend-score-stocks", label: "Best trend score stocks" },
+    { href: "/low-pe-stocks", label: "Low P/E stocks" },
+    { href: "/top-stocks-with-buy-signals", label: "Top stocks with Buy Signals" },
+  ],
 };
 
 export default function Page() {

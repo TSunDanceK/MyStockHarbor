@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import BullFlagsClient, { type PlaysPayload } from "./BullFlagsClient";
 import { getBullFlagsData } from "@/lib/server/bullFlagsBuilder";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 
 // ISR rather than force-dynamic. `force-dynamic` shipped Cache-Control:
 // no-store, so every visit and every crawl paid a full serverless render of
@@ -95,9 +95,7 @@ export default async function BullFlagsPage() {
           PRICE_PROVIDER_PICKERS is on (#553 COWORK #103, 2026-10-03). */}
       <BullFlagsClient
         initialPayload={initialPayload}
-        marketDataCredit={
-          <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
-        }
+        marketDataCredit={<TiingoLink />}
       />
     </>
   );

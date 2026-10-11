@@ -93,6 +93,11 @@ const config: PickerResultConfig = {
       ],
     },
   ],
+  relatedScreens: [
+    { href: "/oversold-stocks-today", label: "Oversold stocks today" },
+    { href: "/bearish-rsi-divergence-stocks", label: "Bearish RSI divergence stocks" },
+    { href: "/top-stocks-with-sell-signals", label: "Stocks with sell-signal conditions" },
+  ],
   relatedGuide: {
     href: "/overbought-stocks",
     label: "our guide to overbought stocks",

@@ -14,7 +14,12 @@
 //   6. the "What could change this map" card shows with no `watch` bullets,
 //      or hides with them;
 //   7. the default grades break (30% supplier, single-source, diversified
-//      customers) or the FAQ and its JSON-LD drift apart.
+//      customers) or the FAQ and its JSON-LD drift apart;
+//   8. (#166 f) an entry's description is not behind a closed "Read more"
+//      <details> after the head and the listed line, or is not in the HTML;
+//   9. (#166 g) the phone map's SUPPLIERS / CUSTOMERS labels are missing or
+//      sit on the boxes;
+//  10. (#166 e) the capex hero loses its coins picture or the insight heroes' shade.
 // A mutant each.
 //
 //   node scripts/check-bottleneck-page.mjs
@@ -29,6 +34,7 @@ const { renderToStaticMarkup } = await import("react-dom/server");
 const React = await import("react");
 
 const RULES_SRC = "lib/bottleneckPage.ts", VIEW = "app/bottlenecks/[ticker]/BottleneckView.tsx", PAGE = "app/bottlenecks/[ticker]/page.tsx";
+const MAP = "app/bottlenecks/[ticker]/BottleneckMap.tsx", CAPEX = "app/bottlenecks/capex/page.tsx", INSIGHT = "app/insights/[slug]/InsightPage.tsx";
 const read = (f) => fs.readFileSync(f, "utf8");
 let seq = 0;
 async function loadCopy(file, src) {
@@ -53,7 +59,7 @@ const DATA = {
   hasFiledEarnings: { FIXT: true, MSFT: true, AMZN: false, GOOGL: true, ZZZZ: false },
 };
 
-function rules(R, V) {
+function rules(R, V, capexSrc = read(CAPEX)) {
   const fails = [], want = (l, ok) => { if (!ok) fails.push(l); };
   // 3. Meters.
   const s = (a, b) => R.supplierMeter([a, b]).level;
@@ -85,6 +91,27 @@ function rules(R, V) {
   const deps = [...html.matchAll(/<li class="bnDep" id="([sc])-(\d+)" data-dep="" data-grade="(hard|some|spread)">([\s\S]*?)<\/li>/g)];
   want("every dependency row carries its grade chip", deps.length === POST.supplyChain.length + POST.customers.length &&
     deps.every((d) => new RegExp(`class="bnGrade" data-grade="${d[3]}">${R.GRADE_WORDS[d[3]]}<`).test(d[4])) && !/critical/i.test(html));
+  // 8 (#563 COWORK #166 f). Each entry: title, grade and share up front, then the
+  // listed / not-listed line, then the long description behind a closed native
+  // disclosure ("Read more"), server-rendered so the text stays in the HTML.
+  want("each entry: the head, then the listed line, then its description in a closed <details> \"Read more\" (in the HTML)", deps.length > 0 && deps.every((d) => {
+    const b = d[4], head = b.indexOf('class="bnDepHead"'), links = b.indexOf('class="bnDepLinks"'), det = b.indexOf('<details class="bnMore" data-dep-more="">');
+    return head >= 0 && links > head && det > links && b.indexOf('class="bnWhy"') > det && /<details class="bnMore" data-dep-more=""><summary>Read more<\/summary><p class="bnWhy">[^<]+<\/p><\/details>$/.test(b.trim());
+  }) && html.includes("Single-source wafers.") && !/<details class="bnMore"[^>]*\sopen/.test(html));
+  // 9 (#166 g). The phone map labels each group: SUPPLIERS above the suppliers, CUSTOMERS between the company and its customers.
+  const narrow = html.match(/<svg class="bnMapNarrow"[\s\S]*?<\/svg>/)?.[0] ?? "";
+  const ys = (re) => [...narrow.matchAll(re)].map((m) => Number(m[1]));
+  const boxY = ys(/<g data-map-box="[a-z]+"><rect x="[\d.]+" y="([\d.]+)"/g), hubY = ys(/<rect x="[\d.]+" y="([\d.]+)" width="180" height="56"/g)[0];
+  const supY = ys(/<text[^>]*y="([\d.]+)"[^>]*data-map-label="suppliers">SUPPLIERS<\/text>/g)[0], cusY = ys(/<text[^>]*y="([\d.]+)"[^>]*data-map-label="customers">CUSTOMERS<\/text>/g)[0];
+  const supBoxes = boxY.slice(0, 7), cusBoxes = boxY.slice(7);
+  want("the phone map labels SUPPLIERS above its group and CUSTOMERS above its own, clear of the boxes", supY > 0 && cusY > 0 && supBoxes.length === 7 && cusBoxes.length === 3 &&
+    supY <= Math.min(...supBoxes) - 6 && cusY > hubY + 56 + 6 && cusY <= Math.min(...cusBoxes) - 6);
+  // 10 (#166 e). The capex hero's picture: the coins image from the news art set, under the insight heroes' own shade.
+  const shade = (src, cls) => src.match(new RegExp(`\\.${cls} \\{ position: absolute; inset: 0; background: (linear-gradient\\([^;]*\\)); \\}`))?.[1];
+  want("the capex hero carries the coins picture under the insight heroes' shade, text above both", /<img className="capexHeroImg" src="\/news-art\/any-cash-04\.webp"[^>]*alt="" aria-hidden="true"/.test(capexSrc) &&
+    fs.existsSync("public/news-art/any-cash-04.webp") && !!shade(capexSrc, "capexHeroShade") && shade(capexSrc, "capexHeroShade") === shade(read(INSIGHT), "inHeroShade") &&
+    /\.capexHeroBody \{ position: relative; \}/.test(capexSrc) && /const heroStyle: CSSProperties = \{ position: "relative", overflow: "hidden",/.test(capexSrc) &&
+    capexSrc.indexOf('className="capexHeroImg"') < capexSrc.indexOf('className="capexHeroShade"') && capexSrc.indexOf('className="capexHeroShade"') < capexSrc.indexOf('className="capexHeroBody"'));
   // 4. Gated links.
   const earn = [...html.matchAll(/href="\/stock\/([A-Z]+)\/earnings"[^>]*data-earnings-link=""/g)].map((m) => m[1]);
   want("Earnings links only where the gate allows (FIXT, MSFT, GOOGL), never AMZN or ZZZZ", earn.includes("FIXT") && earn.includes("MSFT") && earn.includes("GOOGL") && !earn.includes("AMZN") && !earn.includes("ZZZZ"));
@@ -145,12 +172,27 @@ const MUTANTS = [
   ["a hand-built chart link", VIEW, "<Link href={chartHref(t)} prefetch={false} className=\"bnLink\">Chart →</Link>", "<Link href={`/dashboard?symbol=${t}`} prefetch={false} className=\"bnLink\">Chart →</Link>"],
   ["the watch card always shown", VIEW, "{post.watch.length ? (", "{true ? ("],
   ["the reverse meter dropped", VIEW, "<strong>×{d.namedBy.count}</strong>", "<strong />"],
+  // #166 f, g, e.
+  ["the description back up front", VIEW, "      <div className=\"bnDepLinks\">", "      {c.blurb ? <p className=\"bnWhy\">{c.blurb}</p> : null}\n      <div className=\"bnDepLinks\">"],
+  ["the description open on arrival", VIEW, "<details className=\"bnMore\" data-dep-more=\"\">", "<details className=\"bnMore\" data-dep-more=\"\" open>"],
+  ["the description dropped from the HTML", VIEW, "<p className=\"bnWhy\">{c.blurb}</p>\n        </details>", "</details>"],
+  ["the phone map loses its SUPPLIERS label", MAP, "data-map-label=\"suppliers\">SUPPLIERS</text>", "data-map-label=\"x\"></text>"],
+  ["the labels sit on the boxes (no room made)", MAP, "LBL = left.length ? 26 : 0, RLBL = right.length ? 26 : 0;", "LBL = 0, RLBL = 0;"],
+  ["the capex hero loses its picture", CAPEX, "<img className=\"capexHeroImg\" src=\"/news-art/any-cash-04.webp\"", "<img className=\"capexHeroImg\" src=\"\""],
+  ["the capex hero's own shade, not the insight heroes'", CAPEX, "rgba(6,8,13,0.72) 55%", "rgba(6,8,13,0.4) 55%"],
 ];
+const mapSrc = read(MAP), capexSrc0 = read(CAPEX);
+/** A copy of the view wired to a copy of the (mutated) map. */
+async function viewWithMap(mapMut) {
+  const mapTmp = path.join(path.dirname(MAP), `.check-bn-map-${process.pid}-${seq++}.tsx`);
+  fs.writeFileSync(mapTmp, mapMut);
+  try { return await loadCopy(VIEW, viewSrc.replace('from "./BottleneckMap";', `from "./${path.basename(mapTmp, ".tsx")}";`)); } finally { fs.rmSync(mapTmp, { force: true }); }
+}
 for (const [label, file, from, to] of MUTANTS) {
-  const src = file === RULES_SRC ? rulesSrc : viewSrc;
+  const src = file === RULES_SRC ? rulesSrc : file === MAP ? mapSrc : file === CAPEX ? capexSrc0 : viewSrc;
   if (!src.includes(from)) { check(`mutant "${label}" applies`, false, "matched nothing"); continue; }
   const m = src.replace(from, to);
-  const f = file === RULES_SRC ? rules(await loadCopy(RULES_SRC, m), V) : rules(R, await loadCopy(VIEW, m));
+  const f = file === RULES_SRC ? rules(await loadCopy(RULES_SRC, m), V) : file === MAP ? rules(R, await viewWithMap(m)) : file === CAPEX ? rules(R, V, m) : rules(R, await loadCopy(VIEW, m));
   check(`mutant "${label}" is caught`, f.length > 0, f[0] ?? "no rule failed");
 }
 console.log(failures ? `\n${failures} FAILED` : "\nALL CHECKS PASSED");
