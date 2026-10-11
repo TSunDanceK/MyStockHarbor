@@ -218,6 +218,11 @@ export function derivationNote(
       return "Derived: net income divided by this quarter's weighted average share count.";
     case "ambiguous":
       return "The filer reports this separately for each share class and the filing does not say which is which, so no single figure is shown.";
+    // A DERIVED Q4 THAT CROSSES SCOPES (#552 COWORK #196/#200). The value is
+    // null; this is the tap note under "Not reported". Hedged: the filings
+    // show the mismatch, they do not say why.
+    case "withheld":
+      return "Not shown: Q4 is not filed on its own, and the full-year figure minus the first nine months gives a result that does not fit this company\u2019s other quarters. The filed figures suggest the annual and quarterly revenue lines cover different scopes.";
     default:
       return null;
   }
