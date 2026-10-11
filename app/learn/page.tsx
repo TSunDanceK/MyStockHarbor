@@ -112,9 +112,10 @@ export default function LearnPage() {
         </div>
 
         {/* ============================================================
-            EDUCATION — every lesson and guide as one learning path
-            (#563 COWORK #166 PR 3): titles only, a "?" for each one's
-            short description, every node a real link.
+            EDUCATION — every lesson and guide as one spider map
+            (#563 COWORK #166 PR 3, reworked per #169): titles only, each
+            one's short description in its hover / tap card, every lesson a
+            real link.
             ============================================================ */}
         <div style={{ marginTop: 28, marginBottom: 4 }}>
           <div
@@ -125,10 +126,10 @@ export default function LearnPage() {
               color: "rgba(148,163,184,0.85)",
             }}
           >
-            YOUR LEARNING PATH
+            YOUR LEARNING MAP
           </div>
           <div data-fine-print="" style={{ marginTop: 4, fontSize: "var(--fs-fine)", opacity: 0.7, lineHeight: 1.5 }}>
-            Start at the top and work down. Tap a title to open it, or the ? to see what it covers.
+            Start at the hub and follow a branch. Hover or tap a lesson to see what it covers; click, or tap again, to open it.
           </div>
         </div>
 
