@@ -380,6 +380,81 @@
    "symbol": "WTRG",
    "requestedAt": "2026-09-27T09:10:40Z",
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
+  },
+  {
+   "symbol": "AD",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "AMLX",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "APLD",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "CNA",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "COF",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "ECPG",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "FIX",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "FRO",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "GPRE",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "HLIT",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "OSCR",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "OXY",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "RLAY",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "TDS",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
+  },
+  {
+   "symbol": "VAL",
+   "requestedAt": "2026-10-12T00:00:00Z",
+   "reason": "#552 COWORK #196/#200 item 2: a derived Q4 revenue that crosses scopes (negative, or under 40% of the year's other quarters with the filer's own Revenues total or nine-month figure disagreeing) is now withheld as Not reported; the stored set carries the old figure"
   }
  ]
 }
