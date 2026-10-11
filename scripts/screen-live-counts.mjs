@@ -65,4 +65,11 @@ const show = (i) => {
 };
 for (const i of withView.filter((x) => !x.epsGrowth.small).slice(0, 5)) console.log(show(i));
 for (const i of withView.filter((x) => x.epsGrowth.small).slice(0, 2)) console.log(show(i));
+// NAMED ROWS (#553 COWORK #198 item 1): the #819 $0.50 line's names, wherever they sit.
+const NAMED = (process.env.NAMED || "TWLO BCE AFRM").split(/\s+/).filter(Boolean);
+console.log(`\nNamed (${NAMED.join(", ")}):`);
+for (const s of NAMED) {
+  const i = items.find((x) => String(x?.symbol).toUpperCase() === s);
+  console.log(i?.epsGrowth ? show(i) : `  ${s}: ${i ? "listed, no EPS growth view" : "not in the section"}`);
+}
 console.log(`\nRedis commands ${commands} (read-only: GET, MGET)`);
