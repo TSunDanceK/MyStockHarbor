@@ -11,25 +11,27 @@
 // symbols of news hourly would dwarf every other consumer on the account, which
 // is the opposite of the problem this solves.
 //
-// THE WRITES DO NOT BLOCK THE READER. Three Redis writes hang off a refresh --
-// the store itself, the refresh counters and the staleness mark -- and a render
-// consumes none of them: it already holds `kept` in memory before any of them
-// runs. They used to be awaited in the render's critical path anyway, so every
-// cold view paid three sequential Redis round trips for data nobody was waiting
-// on. They now go through next/server's after().
+// THE WRITES ARE AWAITED, BOUNDED, AND NEVER GO THROUGH after() (#553 COWORK
+// #203, from #563 CODE-C #138). Three Redis writes hang off a refresh -- the
+// store itself, the refresh counters and the staleness mark. They used to go
+// through next/server's after(), but this module runs only INSIDE the news
+// pages' unstable_cache builders, and Next also runs those builders as a
+// BACKGROUND refresh of a stale entry, after the response has closed. An
+// after() registered there is held by a response that has already ended, so
+// Vercel kept the function alive until it killed it at 300 s: 60-80 a day,
+// about 4 in 5 of the landing page's refills.
 //
-// after() AND NOT A DETACHED PROMISE. A floating promise in a serverless
-// function is not "background work", it is work that may be killed the instant
-// the response is sent -- so the store would sometimes not be written and the
-// next view would refetch, which is the failure this dataset exists to avoid.
-// after() is the platform's contract for "run this, the response does not wait".
-// Next 16 exports it directly; no dependency was added for it.
+// So each write is awaited inside the builder through boundedDeferred(), capped
+// at NEWS_DEFERRED_WRITE_BUDGET_MS (10 s; under a second when Redis answers).
+// Awaited, not a detached promise: a floating promise may be cut off when the
+// builder returns, and an unwritten store means the next view refetches. The
+// cost is the writes' round trips on a refresh only, never on a cache hit.
+// scripts/check-news-store-no-after.mjs keeps after() out of this file.
 //
 // DEPENDENCIES ARE INJECTED, not imported. lib/stock-news-data.ts owns the FMP
 // request shape, the #343 similarity dedup and the earnings matcher, and it is
 // the caller here -- importing any of them back would be a cycle. Passing them
 // in also keeps the one implementation of dedup shared rather than copied.
-import { after } from "next/server";
 import {
   classifyProviderStats,
   PROVIDER_STAT_PREFIX,
@@ -281,9 +283,8 @@ async function readOrRefresh<T extends NewsMergeItem>(
   const pin = deps.isEarnings ? selectEarningsPin(merged, deps.isEarnings, nowMs) : null;
   const kept = capNews(merged, pin);
 
-  // OUT OF THE BLOCKING PATH. `kept` is already in hand; the reader needs
-  // nothing these produce. Both swallow their own errors, so after() can never
-  // surface a failure into the response either.
+  // `kept` is already in hand; the writes below only persist it. Both swallow
+  // their own errors, so a failed write never surfaces into the page.
   // Counted from `fetched` (what the adapters returned this pass), seeded with
   // a zero for every active adapter so a silent one is visible as a zero rather
   // than as an absent field.
@@ -296,20 +297,18 @@ async function readOrRefresh<T extends NewsMergeItem>(
     }
   }
 
-  // BOUNDED (#553 COWORK #146): after() holds the function open until its
-  // callback settles, and our Upstash client has no request timeout, so a write
-  // that never answers would keep the invocation alive to the 300 s limit after
-  // the response had already gone.
-  after(
-    boundedDeferred("news-store", key, async () => {
-      await writeStored(key, kept, nowMs);
-      await recordRefreshStats(mode, added, nowMs, byProvider);
-    }, NEWS_DEFERRED_WRITE_BUDGET_MS)
-  );
-
-  // ENDS BEFORE THE WRITES, deliberately: they are after() now, so counting
-  // them would report a blocking cost the reader no longer pays.
+  // ENDS BEFORE THE WRITES, deliberately: it times the read and the adapters,
+  // the pair this instrumentation exists to separate.
   endTotal();
+
+  // AWAITED AND BOUNDED (#553 COWORK #146, #203): our Upstash client has no
+  // request timeout, so the budget is what stops a write that never answers
+  // from holding the builder; see the header for why this is not after().
+  await boundedDeferred("news-store", key, async () => {
+    await writeStored(key, kept, nowMs);
+    await recordRefreshStats(mode, added, nowMs, byProvider);
+  }, NEWS_DEFERRED_WRITE_BUDGET_MS)();
+
   return { items: kept, mode, added };
 }
 
@@ -343,9 +342,8 @@ export async function readOrRefreshSymbolNews<T extends NewsMergeItem>(
 
   // Only a real refresh marks. A cached read proves the store is warm, not that
   // it is fresh, and marking on it would keep the staleness set green forever.
-  // Deferred like the other two writes: health reporting is not something a
-  // reader waits on.
-  if (result.mode !== "cached") after(boundedDeferred("news-store", upper, () => markViewed("news", upper, nowMs), NEWS_DEFERRED_WRITE_BUDGET_MS));
+  // Bounded like the other two writes, and awaited for the same reason.
+  if (result.mode !== "cached") await boundedDeferred("news-store", upper, () => markViewed("news", upper, nowMs), NEWS_DEFERRED_WRITE_BUDGET_MS)();
 
   return result;
 }
@@ -391,7 +389,7 @@ export async function readOrRefreshSectorNews<T extends NewsMergeItem>(
   const lower = slug.toLowerCase();
   const result = await readOrRefresh(sectorKey(lower), deps, nowMs);
 
-  if (result.mode !== "cached") after(boundedDeferred("news-store", lower, () => markViewed("sectorNews", lower, nowMs), NEWS_DEFERRED_WRITE_BUDGET_MS));
+  if (result.mode !== "cached") await boundedDeferred("news-store", lower, () => markViewed("sectorNews", lower, nowMs), NEWS_DEFERRED_WRITE_BUDGET_MS)();
 
   return result;
 }

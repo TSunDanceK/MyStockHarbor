@@ -4,7 +4,8 @@ import EarningsSymbolPicker from "./EarningsSymbolPicker";
 import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
 import { reactionDayRows } from "./reactionDays";
 import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
-import { TIINGO_CREDIT, TIINGO_URL, readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";
+import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import {
   computeIndicatorSeed,
   type Point,
@@ -1246,10 +1247,11 @@ export default async function StockEarningsPage({ params }: Props) {
 
               {/* THE LINKED CREDIT, once for the page, whenever the reaction
                   chart or the valuation price is Tiingo's (B3; the contract's
-                  credit, #563 COWORK #31 §5). */}
+                  credit, #563 COWORK #31 §5). B's site-wide "powered by Tiingo"
+                  link since #552 COWORK #205. */}
               {data.pricesFromTiingo ? (
                 <p className="earningsDataNote">
-                  Prices: <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                  Prices <TiingoLink />
                 </p>
               ) : null}
 

@@ -74,8 +74,8 @@ function rules(srcs) {
   // quote credit, step 3's chart credit) renders a linked credit for each one.
   for (const f of [STOCK_PAGE, DASHBOARD]) {
     const props = new Set([...(code[f] ?? "").matchAll(/\b(tiingoCredit|historyCredit)=\{/g)].map((m) => m[1]));
-    // The old linked {TIINGO_CREDIT}, or the site-wide <TiingoLink /> (#563 COWORK #171), which is the same link.
-    const links = ((code[f] ?? "").match(/<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>|<TiingoLink \/>/g) ?? []).length;
+    // The old linked constant, or B's <TiingoLink /> (A's stock page, #552 COWORK #205; C's dashboard, #563 COWORK #171): the same link.
+    const links = ((code[f] ?? "").match(/<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>|<TiingoLink\b[^>]*\/>/g) ?? []).length;
     want(`${f} renders a linked credit for each credit it passes (${links} for ${props.size})`, props.size > 0 && links >= props.size);
   }
   for (const f of C_SURFACES) want(`${f} credits Tiingo with <TiingoLink /> only (#563 COWORK #171)`, /<TiingoLink \/>/.test(code[f] ?? "") && !/\{TIINGO_CREDIT\}/.test(code[f] ?? ""));
@@ -127,12 +127,12 @@ const MUTANTS = [
   ["the component's credit is not a link", COMPONENT, /<a\s+href=\{TIINGO_HOME\}[\s\S]*?<\/a>/, "<span>{TIINGO_POWERED_BY}</span>"],
   ["the corner line is not fine print", COMPONENT, /\s+data-fine-print/, ""],
   ["a page hand-types the new credit", HUB, /priceProviderFor\("PICKERS"\) === "tiingo" \? <TiingoCredit\b[^>]*\/> : null/, 'priceProviderFor("PICKERS") === "tiingo" ? <TiingoCredit /> : <p>powered by Tiingo</p>'],
-  ["the stock page drops its chart credit (step 3)", STOCK_PAGE, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "null"],
+  ["the stock page drops its chart credit (step 3)", STOCK_PAGE, /<TiingoLink \/>/, "null"],
   ["the dashboard's chart credit loses its link (step 3)", DASHBOARD, /<TiingoLink \/>/, "<span>{TIINGO_CREDIT}</span>"],
   ["the insight page back on the older credit", "app/insights/[slug]/InsightPage.tsx", /<TiingoLink \/>/g, '<a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a>'],
   ["a page hand-types the credit unlinked", HUB, /priceProviderFor\("PICKERS"\) === "tiingo" \? <TiingoCredit\b[^>]*\/> : null/, '"Market data from Tiingo.com"'],
-  ["the calendar drops its credit", CALENDAR, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, ""],
-  ["the calendar's credit is unlinked", CALENDAR, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "{TIINGO_CREDIT}"],
+  ["the calendar drops its credit", CALENDAR, /<TiingoLink \/>/, ""],
+  ["the calendar's credit is unlinked", CALENDAR, /<TiingoLink \/>/, "<span>powered by Tiingo</span>"],
   ["the calendar's credit is never switched on", CALENDAR, /priceProviderFor\("POOL"\) === "tiingo" && /, "false && "],
 ];
 for (const [label, file, from, to] of MUTANTS) {
