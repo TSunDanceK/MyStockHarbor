@@ -172,7 +172,13 @@ export type Derivation =
   /** Computed from two other fields of the SAME period. See FieldDef.ratioSource. */
   | "computed"
   /** Several values for one period and no way to choose. Value is null. */
-  | "ambiguous";
+  | "ambiguous"
+  /**
+   * A differenced Q4 the filer's own figures show crosses scopes (#552 COWORK
+   * #196/#200, see q4RevenueScope). Value is null; the page reads "Not
+   * reported" with the reason on tap.
+   */
+  | "withheld";
 
 export type FieldValue = {
   val: number | null;
@@ -1109,6 +1115,44 @@ export function unitSlipFactor(netIncome: number, eps: number, shares: number): 
   return null;
 }
 
+/**
+ * A DERIVED Q4 REVENUE THAT CROSSES SCOPES (#552 COWORK #196/#200; census
+ * CODE-A #205). Q4 is FY − 9M, and where the year's line and the quarters'
+ * line cover different scopes the difference is arithmetic on unlike numbers:
+ * OXY's FY2025 Q4 read $1.66B against $5–7B in its other quarters.
+ *
+ * A LOW Q4 ALONE PROVES NOTHING. The plain ratio flagged 27 filers, most of
+ * them small biotechs whose Q4 really was small (milestone revenue), so the
+ * test needs the filer's own second opinion. Withheld when:
+ *   1. the derived Q4 is NEGATIVE — revenue cannot be below zero (FIX, AMLX);
+ *   2. it is under DERIVED_Q4_FLOOR of the mean of the same year's other three
+ *      quarters, AND the filer's own `Revenues` total (or
+ *      `RevenuesNetOfInterestExpense`), differenced the same way, gives a Q4
+ *      at or above that floor of ITS quarters' mean — the total says the year
+ *      had a normal fourth quarter, so the line's collapse is a scope artefact.
+ * With no second total, or one that also collapses, the Q4 stands as filed
+ * arithmetic: that keeps the true small quarters.
+ *
+ * PURE, so check-q4-revenue-scope can drive it with plain numbers.
+ */
+export const DERIVED_Q4_FLOOR = 0.4;
+export type Q4ScopeVerdict = "negative" | "scope" | null;
+export function q4RevenueScope(
+  q4: number,
+  siblings: number[],
+  total?: { q4: number; siblings: number[] } | null,
+): Q4ScopeVerdict {
+  if (!Number.isFinite(q4)) return null;
+  if (q4 < 0) return "negative";
+  const mean = (xs: number[]) => (xs.length === 3 && xs.every(Number.isFinite) ? (xs[0] + xs[1] + xs[2]) / 3 : null);
+  const m = mean(siblings);
+  if (m == null || !(m > 0) || q4 >= DERIVED_Q4_FLOOR * m) return null;
+  if (!total || !Number.isFinite(total.q4)) return null;
+  const tm = mean(total.siblings);
+  if (tm == null || !(tm > 0)) return null;
+  return total.q4 >= DERIVED_Q4_FLOOR * tm ? "scope" : null;
+}
+
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 
@@ -1447,6 +1491,42 @@ function extractCompanyFactsWith(
         }
         notes.push(`revenue: Revenues ${fb.val} exceeds the contract line ${rev.val} by more than ${Math.round((REVENUE_TOTAL_OVER_CONTRACT - 1) * 100)}% on ${newest}; Revenues used for ${moved} period(s), ${refused} without it left unreported`);
       }
+    }
+
+    // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD (#552 COWORK #196/#200) ──
+    // AFTER every revenue choice above, so it judges the figure that would be
+    // stored. Only a DIFFERENCED revenue cell can be judged: an as-filed
+    // quarter is the filer's own number. Siblings are the quarters inside the
+    // nine months the Q4 was differenced from (the 372-day window covers a
+    // 53-week year). The second total is the fallback chain's own differenced
+    // cells, and only when it is a DIFFERENT concept from the one judged.
+    const siblingsOf = (cells: typeof quarterCells, q4: FieldValue) => {
+      const [nineEnd, q4End] = q4.covers ?? [null, null];
+      if (!nineEnd || !q4End) return [];
+      const floor = new Date(Date.parse(q4End) - 372 * DAY).toISOString().slice(0, 10);
+      const out: number[] = [];
+      for (const m of cells.values()) {
+        const c = m.get("revenue");
+        if (!c?.covers || c.val == null) continue;
+        if (c.covers[1] <= nineEnd && c.covers[0] >= floor) out.push(c.val);
+      }
+      return out;
+    };
+    for (const [end, m] of quarterCells) {
+      const q4 = m.get("revenue");
+      if (!q4 || q4.derived !== "differenced" || q4.val == null) continue;
+      const fb = fbQuarter.get(end)?.get("revenue");
+      const total = fb && fb.val != null && `${fb.ns}|${fb.tag}` !== `${q4.ns}|${q4.tag}`
+        ? { q4: fb.val, siblings: siblingsOf(fbQuarter, fb) }
+        : null;
+      const verdict = q4RevenueScope(q4.val, siblingsOf(quarterCells, q4), total);
+      if (!verdict) continue;
+      m.set("revenue", { ...q4, val: null, derived: "withheld" });
+      notes.push(
+        verdict === "negative"
+          ? `revenue ${end}: derived Q4 ${q4.val} is negative; withheld`
+          : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
+      );
     }
   }
 

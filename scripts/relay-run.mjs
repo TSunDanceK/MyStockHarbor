@@ -1410,6 +1410,8 @@ const TASKS = {
   "write-market-dynamic-dry-run": { script: "scripts/market-dynamic-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY (Relay B, #553 COWORK #191 item 1): stored news, junk headlines by day.
   "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (#552 COWORK #200 item 2): the derived-Q4 rule on the store's flagged filers. SCAN/MGET + ≤ 80 SEC companyfacts requests at ≤ 4/s.
+  "write-q4-rule-census": { script: "scripts/sec-q4-rule-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
