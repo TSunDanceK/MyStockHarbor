@@ -86,6 +86,11 @@ const config: PickerResultConfig = {
       ],
     },
   ],
+  relatedScreens: [
+    { href: "/stocks-below-200-day-moving-average", label: "Stocks below the 200-day moving average" },
+    { href: "/stocks-near-200-day-moving-average", label: "Stocks near the 200-day moving average" },
+    { href: "/best-trend-score-stocks", label: "Best trend score stocks" },
+  ],
   relatedGuide: {
     href: "/learn/moving-averages",
     label: "our lesson on moving averages",

@@ -10,7 +10,10 @@
 //   - the map is not drawn, or its visible drawing is wider than the viewport
 //     (the wide map above 640 px, the vertical one at 640 and under);
 //   - reading text (six words or more, or a sentence) is under 16 px outside
-//     fine print, or anything is under 12 px.
+//     fine print, or anything is under 12 px;
+//   - (#166 g) at 640 px and under the stacked map has no SUPPLIERS / CUSTOMERS
+//     labels, or a label sits on a box;
+//   - (#166 f) an entry's description is open on arrival or outside its "Read more".
 // With --shots DIR it saves 1280 and 390 px screenshots. A mutant (a 900 px
 // block in the map card) must be caught (cut off past the viewport, or spilling).
 //
@@ -59,6 +62,18 @@ function probe() {
   const want = innerWidth <= 640 ? "bnMapNarrow" : "bnMapWide";
   if (maps.length !== 1 || !maps[0].classList.contains(want)) bad.push(`the map: ${maps.map((m) => m.getAttribute("class")).join(",") || "none"} drawn, want ${want}`);
   else { const r = maps[0].getBoundingClientRect(); if (r.left < -1 || r.right > innerWidth + 1 || r.width < 200) bad.push(`the map is not in the viewport (${Math.round(r.left)}–${Math.round(r.right)})`); }
+  // #166 g: on a phone, each group of the stacked map is labelled, and no label touches a box.
+  if (innerWidth <= 640 && maps[0]?.classList.contains("bnMapNarrow")) {
+    const svg = maps[0], boxes = [...svg.querySelectorAll("[data-map-box] rect")].map((r) => r.getBoundingClientRect());
+    const hasSup = svg.querySelector('[data-map-box] rect') && !!svg.querySelector("path"), labels = [...svg.querySelectorAll("[data-map-label]")];
+    const sides = labels.map((l) => l.getAttribute("data-map-label")).join(",");
+    if (hasSup && !/suppliers|customers/.test(sides)) bad.push("the phone map has no SUPPLIERS / CUSTOMERS labels");
+    for (const l of labels) { const b = l.getBoundingClientRect(); if (boxes.some((r) => b.bottom > r.top + 0.5 && b.top < r.bottom - 0.5 && b.right > r.left && b.left < r.right)) bad.push(`the map label ${l.textContent} sits on a box`); }
+  }
+  // #166 f: every entry's description is in the page, behind a closed "Read more".
+  const mores = [...document.querySelectorAll("details.bnMore")];
+  if (mores.some((d) => d.open)) bad.push("an entry's description is open on arrival");
+  if ([...document.querySelectorAll("li.bnDep")].some((li) => li.querySelector(".bnWhy") && !li.querySelector(".bnWhy").closest("details.bnMore"))) bad.push("an entry's description sits outside its Read more");
   for (const card of document.querySelectorAll(".bnCard, .bnHeroLeft, .bnGlance, .bnDep")) {
     const c = card.getBoundingClientRect();
     for (const el of card.querySelectorAll("*")) {
@@ -114,6 +129,20 @@ for (const [slug, body] of pages) {
   await page.setContent(doc(pages[0][1].replace('<h2 id="bnMapTitle" class="bnH2">', '<div style="width:900px">x</div><h2 id="bnMapTitle" class="bnH2">'), 16));
   const caught = (await page.evaluate(probe)).some((b) => /scrolls sideways|cut off|spills/.test(b));
   console.log(`mutant (a 900 px block): ${caught ? "caught" : "NOT CAUGHT"}`);
+  if (!caught) failures++;
+  await page.close();
+}
+// #166's mutants: the phone map's labels dropped; a description open on arrival.
+for (const [label, from, to, pat] of [
+  ["the phone map's labels dropped", /<text[^>]*data-map-label="(?:suppliers|customers)"[^>]*>[A-Z]+<\/text>/g, "", /no SUPPLIERS/],
+  ["a description open on arrival", '<details class="bnMore" data-dep-more="">', '<details class="bnMore" data-dep-more="" open>', /open on arrival/],
+]) {
+  const body = pages[0][1].replace(from, to);
+  if (body === pages[0][1]) { console.log(`mutant (${label}): DOES NOT APPLY`); failures++; continue; }
+  const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
+  await page.setContent(doc(body, 16));
+  const caught = (await page.evaluate(probe)).some((b) => pat.test(b));
+  console.log(`mutant (${label}): ${caught ? "caught" : "NOT CAUGHT"}`);
   if (!caught) failures++;
   await page.close();
 }

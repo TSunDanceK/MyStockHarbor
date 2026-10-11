@@ -91,6 +91,11 @@ const config: PickerResultConfig = {
       ],
     },
   ],
+  relatedScreens: [
+    { href: "/cheap-tech-stocks", label: "Cheap tech stocks" },
+    { href: "/stocks-with-strong-earnings-growth", label: "Stocks with strong earnings growth" },
+    { href: "/all-time-high-breakout-stocks", label: "All-time high breakout stocks" },
+  ],
 };
 
 export default function Page() {

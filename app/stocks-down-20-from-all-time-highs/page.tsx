@@ -72,6 +72,40 @@ const config: PickerResultConfig = {
   presetFilters: ["buyTheDip"],
   sectionIncludes: ["stocks down 20"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "A deep pullback inside a longer uptrend",
+      paragraphs: [
+        "This screen pairs two conditions that can look contradictory at first. A stock must be at least 20% below the highest close in its loaded history, and its last close must still be above the 200-day simple moving average (SMA200). The aim is to surface pullbacks that have happened within a longer-term rise, rather than charts that have been falling for a long time.",
+        "The “all-time high” here is the highest daily close in up to about five years of data, so it is a long-window peak rather than a true lifetime high, and intraday spikes are ignored. A stock needs at least 220 closes to be considered.",
+      ],
+    },
+    {
+      heading: "How the top 20 are chosen",
+      paragraphs: [
+        "The first 20 rows are ordered by a score that tends to favor drawdowns of roughly 20–35%, heavily traded stocks, a tight trading range over the last 20 days, the strength of the trend, and how price has behaved over the last 10 sessions. The idea is that a moderate decline that has started to settle into a narrow range reads differently from a steep slide still in motion. Everything after the top 20 is sorted by conditions met, the count of tracked screener conditions each stock meets.",
+        "When reading the list, it can help to compare the drawdown figure with how far price sits above the 200-day average. A stock only just above that line has less of a cushion than one comfortably clear of it. The chart may also show whether recent lows are holding or still stepping lower.",
+      ],
+    },
+    {
+      heading: "What this view can miss",
+      paragraphs: [
+        "Moving averages lag, so a stock can stay above its 200-day line well after its trend has weakened. A 20% decline may reflect a real change in the business that no price rule can see, such as an earnings reset or lost guidance. The data are daily end-of-day bars, refreshed hourly, so a sharp move in the latest session may not show yet. Membership describes the chart’s shape, not whether the decline is over.",
+      ],
+    },
+    {
+      heading: "Reading one row, and the edges of the rule",
+      paragraphs: [
+        "Take a stock whose highest close in the loaded window was 150 and whose latest close is 114, a 24% drawdown, sitting about 4% above a 200-day average of roughly 110. That fits the rule and lands inside the 20–35% range the ranking favors. If the same stock slipped to 108, it would fall below the average and leave the page, though its drawdown barely changed.",
+        "Conversely, a stock 19% off its peak is excluded, however orderly its pullback, and one down 45% can still appear if it remains above its 200-day line, though it will tend to rank lower. Unlike the stocks near the 200-day moving average page, which measures only distance from that average, this screen starts from the size of the decline from the peak and uses the average as a filter.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-near-200-day-moving-average", label: "Stocks near the 200-day moving average" },
+    { href: "/oversold-stocks-today", label: "Oversold stocks today" },
+    { href: "/macro-support-resistance-stocks", label: "Macro support and resistance stocks" },
+  ],
   relatedGuide: {
     href: "/how-to-find-buy-the-dip-stocks",
     label: "our guide to finding buy-the-dip stocks",

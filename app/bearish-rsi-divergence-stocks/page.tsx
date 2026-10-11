@@ -57,6 +57,42 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["bearishRsiDivergence"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "Price up, RSI down",
+      paragraphs: [
+        "RSI, the Relative Strength Index, scores recent gains against recent losses on a 0 to 100 scale, using a 14-bar window here. This page shows stocks whose closing price has set a higher swing high while RSI printed a lower reading at that second high than at the first. Analysts tend to read that as momentum thinning out beneath a rising price.",
+        "Treat the list as a set of charts to inspect. A divergence describes the past few weeks of trading; it does not predict a decline. Some readers pair it with a trend check, such as whether price still holds above its 50-day average.",
+      ],
+    },
+    {
+      heading: "What counts as a real drop",
+      paragraphs: [
+        "The swing highs are pivots on closes, each compared with the two bars on either side, found by the same detector the MACD divergence pages use. Daily scans look back 45 bars, require at least a 1.6% gap between the two highs, and need the second within 16 bars of today. Weekly scans look back 30 bars, require 2.0%, and allow 10 bars.",
+        "The RSI condition is a fixed points threshold rather than a relative one. On daily bars RSI must be at least 6 points lower at the second high than at the first; on weekly bars, at least 5 points. A one- or two-point dip, which can happen almost randomly, will not qualify.",
+      ],
+    },
+    {
+      heading: "Making sense of the results",
+      paragraphs: [
+        "The default order is conditions met, a tally of how many tracked screener conditions a stock matches, so the top row is not necessarily the clearest divergence. Checking whether the first high was itself overbought, above 70, and whether volume shrank into the second high may add context.",
+        "Strong trends can produce repeated bearish divergences while price keeps climbing. The data comes from end-of-day bars, the latest being the previous session’s close, rebuilt hourly, so intraday moves are not reflected until the next update.",
+      ],
+    },
+    {
+      heading: "An illustrative row, and close calls",
+      paragraphs: [
+        "Consider a stock with a weekly close high of 80 followed, seven weeks later, by a higher one at 82, a 2.5% rise that clears the 2.0% weekly bar. If RSI stood at 71 on the first high and 64 on the second, the 7-point drop exceeds the 5 points weekly data requires, so the pair can count. With RSI at 67 on the second high, a 4-point drop, it would not, though the chart would look nearly identical.",
+        "The same pair seen on daily bars would need a 6-point drop and a 1.6% price gap, with the second high inside 16 bars. A pattern can also age out, vanishing once the newer high leaves the window. The bearish MACD divergence page uses the same pivots but a different momentum test, scaled to each stock’s own MACD variation, so a stock with a modest, steady momentum fade might register there and not here, or the reverse.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/bullish-rsi-divergence-stocks", label: "Bullish RSI divergence" },
+    { href: "/bearish-macd-divergence-stocks", label: "Bearish MACD divergence" },
+    { href: "/bullish-bearish-divergence-stocks", label: "Best divergences ranked" },
+    { href: "/overbought-stocks-today", label: "Overbought stocks today" },
+  ],
   relatedGuide: {
     href: "/bearish-divergence-explained",
     label: "bearish divergence explained",

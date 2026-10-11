@@ -57,6 +57,41 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["aboveMA50"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "A wide net for shorter-term strength",
+      paragraphs: [
+        "The 50-day moving average is the plain mean of the last 50 daily closes, a simple moving average or SMA. A stock is listed here when its most recent close sits strictly above that line. In a firm market this can include a large share of the roughly 700 US-listed stocks the site analyzes, so the page works best as a first filter rather than a shortlist.",
+        "The test is one close against one number. There is no requirement for a fresh cross, no minimum distance above the line, and no need for the close to hold for several days. A stock that rose through its 50-day average yesterday and one that has stayed above it for months look identical to the rule.",
+      ],
+    },
+    {
+      heading: "Narrowing it down",
+      paragraphs: [
+        "Rows sort by conditions met, the number of tracked screener conditions a stock satisfies, which tends to push names with several technical flags toward the top. Useful next questions include how far price is above the average, since a close well above it may be stretched, and whether the 200-day average agrees. A stock above its 50-day but below its 200-day can be bouncing inside a longer slide.",
+        "The sidebar filters can add a second condition, such as above the 200-day, without leaving the page.",
+      ],
+    },
+    {
+      heading: "What one close cannot show",
+      paragraphs: [
+        "A 50-day average lags price by design, and stocks trading sideways near it can flip in and out of this list from one session to the next. Bars are end-of-day, the newest being the previous close, and the page rebuilds hourly, so it will not reflect intraday moves.",
+        "The screen also cannot see why a stock is above its average. A rally driven by one earnings report, a broad market lift, or a slow steady climb all pass the same test, and the chart is usually the quickest way to tell them apart.",
+      ],
+    },
+    {
+      heading: "Two rows that look alike",
+      paragraphs: [
+        "Picture a stock that closed at 52.40 with its 50-day average at 50.00, about 4.8% above the line. It qualifies. If the session before closed at 49.80, it was absent a day earlier, yet nothing in the row flags it as new. A second stock closing 25% above its average carries the same standing, even though it could fall several percent and stay listed, while the first might drop off after one soft session.",
+        "The page for stocks above the 200-day average asks the same kind of question over roughly ten months instead of about ten weeks. Because the 50-day line tracks price more closely, this list tends to turn over faster and may pick up a change in direction sooner, at the cost of more short-lived entries. A name that shows up here but not on the 200-day list is still trading under its longer average.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-trading-above-200-day-moving-average", label: "Above the 200-day average" },
+    { href: "/best-trend-score-stocks", label: "Best trend score" },
+    { href: "/stocks-with-bullish-trend-flip", label: "Bullish trend flips" },
+  ],
 };
 
 export default function Page() {

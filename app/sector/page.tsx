@@ -11,7 +11,7 @@ import {
 import { getSectorConstituentCounts } from "@/lib/server/sectorUniverse";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { lastCloseLabel } from "@/lib/server/marketData/eodLast";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import TiingoCredit, { TIINGO_HOME, TIINGO_POWERED_BY } from "@/app/components/TiingoCredit";
 import { heatSizing, heatTiles, squarify } from "@/lib/sectorHeatmap";
 import SectorHeatMap from "./SectorHeatMap";
 import SectorSpark from "./SectorSpark";
@@ -194,7 +194,7 @@ export default async function SectorIndexPage() {
         </section>
 
         {table.rows.length ? (
-          <SectorHeatMap tiles={tiles} rects={rects} dayLabel={heatDayLabel} sizedBy={sizedBy} credit={{ text: TIINGO_CREDIT, href: TIINGO_URL }} />
+          <SectorHeatMap tiles={tiles} rects={rects} dayLabel={heatDayLabel} sizedBy={sizedBy} credit={{ text: TIINGO_POWERED_BY, href: TIINGO_HOME }} />
         ) : null}
 
         <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 12, marginTop: 22 }} className="sectorGrid">
@@ -306,11 +306,11 @@ export default async function SectorIndexPage() {
           {/* Step 5 (#553 COWORK #98): on Tiingo the figures are consolidated closes from the nightly end-of-day data. */}
           {priceProviderFor("POOL") === "tiingo" ? (
             <>
-              {" "}On the last close: consolidated end-of-day prices.{" "}
-              <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+              {" "}On the last close: consolidated end-of-day prices.
             </>
           ) : null}
         </p>
+        {priceProviderFor("POOL") === "tiingo" ? <TiingoCredit /> : null}
       </div>
 
       <style>{`

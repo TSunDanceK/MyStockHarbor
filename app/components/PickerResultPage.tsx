@@ -40,7 +40,7 @@ import { toDotted } from "@/lib/symbolSpellings.mjs";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { applyPerf, type PerfFields, type PerfRow } from "@/lib/pickerPerf";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import TiingoCredit from "@/app/components/TiingoCredit";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
 import { CATEGORY_FIELDS, valueSatisfies, type Predicate } from "@/lib/screenerFields";
@@ -82,6 +82,11 @@ export type PickerResultConfig = {
   // one generated sentence is thin content -- see
   // claude/preset-pages-universe-blocker-2026-08-04.md.
   bodySections?: { heading: string; paragraphs: string[] }[];
+  // RELATED SCREENS (#553 COWORK #200 item 1): two to four other picker pages
+  // named at the end of the write-up, server-rendered links, so a reader (and
+  // a crawler) moves between screens that answer neighbouring questions.
+  // scripts/check-screener-copy.mjs checks each points at a real picker route.
+  relatedScreens?: { href: string; label: string }[];
   // Which results tab to open on. Defaults to "general". Set it to the tab
   // holding the metric this page screens on, so the number the page is named
   // after is visible on arrival rather than a click away — dividend growth,
@@ -1738,6 +1743,8 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         /* Read text: the reading floor (--fs-read / --lh-read, #553 COWORK #152). */
         .screenerProse p { margin: 0 0 12px; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(226,232,240,0.78); }
         .screenerProse p:last-child { margin-bottom: 0; }
+        .screenerRelated { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: var(--fs-read); line-height: var(--lh-read); }
+        .screenerRelated a { color: #7dd3fc; }
 
         .screenerGuideLink { margin-top: 28px; padding: 16px 18px; border: 1px solid rgba(96,165,250,0.28); border-radius: 16px; background: rgba(59,130,246,0.08); max-width: 780px; }
         .screenerGuideEyebrow { display: block; font-size: 10.5px; font-weight: 900; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(147,197,253,0.85); margin-bottom: 6px; }
@@ -1985,6 +1992,18 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                         ))}
                       </div>
                     ))}
+                    {config.relatedScreens?.length ? (
+                      <div className="screenerProseBlock">
+                        <h2>Related screens</h2>
+                        <ul className="screenerRelated">
+                          {config.relatedScreens.map((r) => (
+                            <li key={r.href}>
+                              <Link href={r.href}>{r.label}</Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </section>
                 ) : null}
 
@@ -2004,9 +2023,10 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                   poolSize={dynamicUniverseCount}
                   updatedLabel={formatUpdatedAt(updatedAt)}
                   priceLabel={priceWindow && volumeLabel ? `${priceWindow} · volume ${volumeLabel}` : priceWindow}
-                  marketDataCredit={tiingoPrices ? TIINGO_CREDIT : null}
-                  marketDataHref={tiingoPrices ? TIINGO_URL : null}
                 />
+                {/* THE CREDIT IN THE CARD'S CORNER (#553 COWORK #200 item 2): "powered by
+                    Tiingo", linked, under the same switch as the old status-line credit. */}
+                {tiingoPrices ? <TiingoCredit style={{ margin: "4px 12px 0" }} /> : null}
 
                 <HideWatermarksBar />
               </div>

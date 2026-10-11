@@ -171,7 +171,7 @@ function creditRules(srcs) {
     const cl = code(clientFile, srcs[clientFile]);
     // #103: the page hands the linked credit over; the CLIENT shows it only
     // while the payload on screen records Tiingo bars (not on the flag alone).
-    if (!new RegExp(`<${client}\\s+initialPayload=\\{initialPayload\\}\\s+marketDataCredit=\\{\\s*<a href=\\{TIINGO_URL\\}[^>]*>\\{TIINGO_CREDIT\\}</a>\\s*\\}`).test(p))
+    if (!new RegExp(`<${client}\\s+initialPayload=\\{initialPayload\\}\\s+marketDataCredit=\\{\\s*<TiingoLink \\/>\\s*\\}`).test(p))
       fails.push(`${page} hands ${client} the linked credit`);
     if (/priceProviderFor\(/.test(p)) fails.push(`${page} decides the credit from the flag, not from the bars`);
     if (!/\{marketDataCredit && playsBarsFromTiingo\(history\) \? <> · \{marketDataCredit\}<\/> : null\}/.test(cl)) fails.push(`${clientFile} renders the credit only when the payload's bars are Tiingo's`);
@@ -318,11 +318,11 @@ const SRC_MUTANTS = [
   ["the Tiingo branch splices FMP into the series", "builder", BUILDERS[0], /tiingoScan\.bySymbol\.get\(symbol\) \?\? \[\]/, "[...(await getFmpHistoryForScan(symbol)), ...(tiingoScan.bySymbol.get(symbol) ?? [])]"],
   ["bull flags never switch", "builder", BUILDERS[1], /if \(!tiingoScan\) return getFmpHistoryForScan\(symbol\);/, "return getFmpHistoryForScan(symbol);"],
   ["descending triangles skip the Tiingo read", "builder", BUILDERS[2], /const tiingoScan = await playsTiingoHistory\(universe, getFmpHistoryForScan\);/, "const tiingoScan = null as Awaited<ReturnType<typeof playsTiingoHistory>>;"],
-  ["/plays drops its credit", "credit", "app/plays/page.tsx", /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "null"],
-  ["the bull-flags credit is unlinked", "credit", "app/plays/bull-flags/page.tsx", /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "<span>{TIINGO_CREDIT}</span>"],
+  ["/plays drops its credit", "credit", "app/plays/page.tsx", /<TiingoLink \/>/, "null"],
+  ["the bull-flags credit is unlinked", "credit", "app/plays/bull-flags/page.tsx", /<TiingoLink \/>/, "<span>powered by Tiingo</span>"],
   ["the descending-triangles client never renders it", "credit", "app/plays/descending-triangles/DescendingTrianglesClient.tsx", /\s*\{marketDataCredit && playsBarsFromTiingo\(history\) \? <> · \{marketDataCredit\}<\/> : null\}/, ""],
   ["the /plays credit shows whenever handed over (the flag decides)", "credit", "app/plays/PlaysClient.tsx", /\{marketDataCredit && playsBarsFromTiingo\(history\) \?/, "{marketDataCredit ?"],
-  ["the bull-flags page gates the credit on the flag again", "credit", "app/plays/bull-flags/page.tsx", /marketDataCredit=\{\s*<a href/, 'marketDataCredit={priceProviderFor("PICKERS") === "tiingo" && <a href'],
+  ["the bull-flags page gates the credit on the flag again", "credit", "app/plays/bull-flags/page.tsx", /marketDataCredit=\{\s*<TiingoLink/, 'marketDataCredit={priceProviderFor("PICKERS") === "tiingo" && <TiingoLink'],
   ["the descending-triangles credit keeps the first payload's provider", "credit", "app/plays/descending-triangles/DescendingTrianglesClient.tsx", /setHistory\(data\.history \?\? null\);/, ""],
   ["the page takes FMP's perf on the flag", "b6", PICKER_PAGE, /if \(!perfOnTiingo\) \{/, "if (true) {"],
   ["perf from FMP-fallback series", "b6", PICKERS_BUILDER, /perfFromTiingo\.has\(symbol\)\s*\?/, "true ?"],

@@ -69,6 +69,42 @@ const config: PickerResultConfig = {
   kind: "sellSignals",
   presetFilters: ["hasSellSignal"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "What gets counted",
+      paragraphs: [
+        "Top Stocks With Sell Signals is the name of a rule count. It tracks five bearish technical conditions — overbought, below the 50-day simple moving average, below the 200-day simple moving average, a bearish RSI divergence and a bearish MACD divergence — and lists stocks meeting two or more. It is not advice, and appearing here is not a call on where the price goes next.",
+        "One extra rule keeps the list focused on events rather than states. At least one of the conditions met must be overbought or a bearish divergence, so a stock that is merely sitting below both averages, two points on its own, does not qualify.",
+        "Overbought has its own definition: RSI(14) at 70 or above, plus at least one other overbought check, and more overbought checks than oversold ones. A bearish divergence means price made a higher closing peak while momentum, measured by RSI or the MACD line, made a lower one.",
+      ],
+    },
+    {
+      heading: "Reading and questioning the list",
+      paragraphs: [
+        "Rows are sorted by count, highest first, then A–Z. An overbought reading above a rising 200-day average is a different picture from a bearish divergence below both averages, so looking at which conditions combine can be more useful than the number alone.",
+        "The conditions come from end-of-day bars, with the newest being the previous session’s close, and the page rebuilds hourly. Overbought readings can persist through strong uptrends, divergences can fade without any decline, and the count cannot see earnings, news or valuation.",
+      ],
+    },
+    {
+      heading: "Why the count can change quickly",
+      paragraphs: [
+        "Because several conditions depend on a single close, a stock can enter or leave the list from one session to the next. An RSI that dips from 71 to 69, or a close that moves back above the 50-day average, may be enough to change the count. A short stay on the page is common and does not by itself mean much.",
+      ],
+    },
+    {
+      heading: "A sample row and a close cousin",
+      paragraphs: [
+        "Take a hypothetical stock with an RSI(14) of 74 that also meets one other overbought check, while showing more overbought than oversold checks. If its price has also made a higher closing peak while the MACD line made a lower one, it scores two: overbought plus a bearish MACD divergence. A stock with the same RSI but no second overbought check would not count as overbought, and with nothing else it would not appear.",
+        "The Top Stocks With Buy Signals page is built the other way round. It counts mostly bullish conditions, scores zero for any stock not above its 200-day average, and needs at least three; this page needs only two and has no 200-day requirement. A stock can therefore appear here while still trading above its 200-day average, and both pages are best read as rule counts describing a chart, not as opposing verdicts.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/top-stocks-with-buy-signals", label: "Top Stocks With Buy Signals (rule count)" },
+    { href: "/overbought-stocks-today", label: "Overbought stocks today" },
+    { href: "/bearish-rsi-divergence-stocks", label: "Bearish RSI divergence stocks" },
+    { href: "/bearish-macd-divergence-stocks", label: "Bearish MACD divergence stocks" },
+  ],
 };
 
 export default function Page() {

@@ -92,6 +92,11 @@ const config: PickerResultConfig = {
       ],
     },
   ],
+  relatedScreens: [
+    { href: "/dividend-growth-stocks", label: "Dividend growth stocks" },
+    { href: "/cash-rich-value-stocks", label: "Cash-rich value stocks" },
+    { href: "/low-pe-stocks", label: "Low P/E stocks" },
+  ],
 };
 
 export default function Page() {

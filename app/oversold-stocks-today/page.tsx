@@ -66,6 +66,38 @@ const config: PickerResultConfig = {
   presetFilters: ["oversold"],
   sectionIncludes: ["oversold"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "What counts as oversold on this page",
+      paragraphs: [
+        "This screen looks for stocks whose recent selling has stretched them unusually far from their normal trading range. “Oversold” here describes how far and how fast a price has fallen, judged by a handful of indicators. It does not say the decline is over, and it is not a recommendation.",
+        "Each stock is tested against six checks: RSI(14), a 0–100 momentum gauge, at or below 30; a close under the lower Bollinger Band, which sits two standard deviations below the 20-day average; a close at least 5% below the 20-day EMA, a moving average that weights recent days more heavily; a close at least 5% below the 50-day simple moving average; a close at least 5% below the 200-day; and a MACD histogram at or below −0.2% of the price.",
+        "To qualify, a stock needs at least two of those checks, more oversold checks than overbought ones, and RSI at or below 30 must be one of them. Stocks with fewer than 60 daily closes are skipped, since several of the indicators need that much history to settle.",
+      ],
+    },
+    {
+      heading: "How the list is ordered and what to compare",
+      paragraphs: [
+        "The first 20 rows are ranked by an oversold score, so the most stretched names in the screen’s judgment tend to sit at the top. Anything beyond those 20 is ordered by conditions met, a count of how many tracked screener conditions a stock currently meets. ‘See more’ only lengthens the list; it does not change which stocks belong to it.",
+        "A useful habit is to compare where the stretch comes from. A stock far below its 200-day average may be in a long downtrend, while one that is only under its 20-day EMA and lower band may have had a sharp but short drop. The Performance tab can help separate a single bad week from months of weakness, and the chart link can show whether a nearby support area exists.",
+        "You can also tick extra conditions in “Select Screener” to narrow the list in place, for example to see which oversold names are also showing a bullish divergence.",
+      ],
+    },
+    {
+      heading: "What the screen cannot tell you",
+      paragraphs: [
+        "Everything here runs on daily bars of end-of-day prices, so the newest bar is the previous session’s close, and the page rebuilds hourly. A stock that bounced or fell further during today’s session will not reflect that until the next daily bar arrives.",
+        "Oversold readings can also persist. In a strong decline, RSI may stay under 30 for days or weeks, and a stock can keep appearing here while it keeps falling. The screen cannot see news, earnings or the reason for the selling, and those may matter more than any indicator.",
+        "The universe is limited to about 700 US-listed stocks, so a name outside it will never appear, however stretched it might be. Treat the list as a set of charts that may be worth a closer look, not as a signal on its own.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/overbought-stocks-today", label: "Overbought stocks today" },
+    { href: "/bullish-rsi-divergence-stocks", label: "Bullish RSI divergence stocks" },
+    { href: "/stocks-down-20-from-all-time-highs", label: "Stocks down 20% from their highs" },
+    { href: "/stocks-below-200-day-moving-average", label: "Stocks below the 200-day average" },
+  ],
   relatedGuide: {
     href: "/oversold-stocks",
     label: "our guide to oversold stocks",

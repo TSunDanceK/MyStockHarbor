@@ -66,6 +66,31 @@ const config: PickerResultConfig = {
   presetFilters: ["threeMonthHighPick"],
   sectionIncludes: ["3-month high breakout"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "The rule behind a three-month high",
+      paragraphs: [
+        "This screen looks for stocks whose latest close has climbed back to the top of their recent range. It works on daily bars of end-of-day prices, so the newest bar is the previous session’s close, and a stock needs at least 90 daily bars of history before it can be considered at all.",
+        "The reference level is the highest close across 63 bars, roughly three months of trading, that ends five bars ago. The latest five sessions are deliberately left out of that window, so a stock is measured against the high it had to get past rather than against a peak it set only days earlier. A stock qualifies when its last close is at least 99.5% of that reference high. In other words it may sit up to 0.5% below the level and still count, so not every name here has actually closed above it.",
+        "Only the top 20 qualifiers are listed, ranked by a blended score: how recent the move is carries 45%, volume compared with its own 20-day average 25%, liquidity (how heavily the stock trades) 20%, and extension 10%.",
+      ],
+    },
+    {
+      heading: "Reading the ranked list and where it falls short",
+      paragraphs: [
+        "Because the order comes from that score, a name near the top tends to be a fresh move on stronger-than-usual volume in a liquid stock. A useful habit is to open the chart and see whether the old high was a single spike or a level price struggled with several times; a level tested repeatedly may carry more meaning than a lone peak.",
+        "As an illustration, picture a stock whose highest close in that 63-bar window was $50.00. A last close of $49.80 works out to 99.6% of the reference, so it would be listed despite sitting 20 cents short. A close of $49.70, at 99.4%, would miss and stay off the page until price edges higher.",
+        "The closest relative is the all-time-high breakout screen, which measures against up to about five years of closes with a looser 1% tolerance. A name can show up here while still far below its long-run peak, so this page may catch recoveries within a wider range.",
+        "Volume is worth a second look on its own. A close near the high on thin trading can fade more easily than one where activity has picked up, and the score only weights volume rather than requiring it.",
+        "The screen has clear limits. It reads closing prices only, so an intraday push through the level that reversed by the close will not appear. Pages rebuild hourly from data that is already a session old, so the picture may have moved. And a stock pressing a three-month high can just as easily stall there; the list shows where price is, not where it might go next.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/all-time-high-breakout-stocks", label: "All-time high breakout stocks" },
+    { href: "/breakout-signal-stocks", label: "Breakout signal stocks" },
+    { href: "/volume-spike-stocks", label: "Volume spike stocks" },
+  ],
 };
 
 export default function Page() {

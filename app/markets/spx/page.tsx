@@ -15,6 +15,7 @@ import PageShareBar from "@/app/components/PageShareBar";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { readTiingoHistory } from "@/lib/server/marketData/read";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import TiingoCredit from "@/app/components/TiingoCredit";
 import { performanceStrip } from "@/lib/ta/performance";
 import { computeMacroSupport } from "@/lib/ta/macroSupport";
 import { macdTone } from "@/lib/ta/macdSeries";
@@ -451,7 +452,7 @@ export default async function SPXPage() {
               <div style={{ marginTop: 12 }}>
                 <ReturnsToggleCard symbol={onSpy ? "SPY" : "SPX"} daily={dailyReturnBars(points, 20)} weekly={weeklyReturnBars(points, 12)} monthly={monthlyReturnBars(points, 12)} />
               </div>
-              {credit ? <p data-fine-print style={small}>Daily prices: {credit}</p> : null}
+              {credit ? <TiingoCredit /> : null}
               <WriteUp weekly={weekly} k="change" stale={stale} />
             </section>
           ) : null}
@@ -526,10 +527,10 @@ export default async function SPXPage() {
                 linked (COWORK #31 §5). */}
             {chartSeries === "SPY" ? (
               <p style={{ margin: "12px 0 0", fontSize: "var(--fs-read)", opacity: 0.7, lineHeight: "var(--lh-read)" }}>
-                Chart shows the SPDR S&amp;P 500 ETF (SPY). Levels quoted in the text refer to the S&amp;P 500 index.{" "}
-                <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                Chart shows the SPDR S&amp;P 500 ETF (SPY). Levels quoted in the text refer to the S&amp;P 500 index.
               </p>
             ) : null}
+            {chartSeries === "SPY" ? <TiingoCredit /> : null}
             {/* WHY THE WEEKLY CHART MATTERS (#91): evergreen, visible, ~150–200 words. */}
             <div className="spxWeeklyWhy" style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.rule}` }}>
               <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 800 }}>Why the weekly chart matters</h3>
