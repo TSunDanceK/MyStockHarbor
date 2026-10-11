@@ -158,12 +158,12 @@ function wiringRules(pageRaw, storeRaw) {
   want("with no FMP key the history seed reads the cache only",
     /process\.env\.FMP_API_KEY\s*\?\s*getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\s*:\s*getCachedDailyHistory\(symbol, "dashboard"\)/.test(page));
 
-  // The news store: no bare after() callbacks left.
-  const afters = [...store.matchAll(/\bafter\(/g)].length;
-  const bounded = [...store.matchAll(/\bafter\(\s*boundedDeferred\(/g)].length;
-  want("the news store's deferred writes were found", afters >= 3);
-  want("every after() in the news store is bounded", afters === bounded);
-  want("...by NEWS_DEFERRED_WRITE_BUDGET_MS", [...store.matchAll(/NEWS_DEFERRED_WRITE_BUDGET_MS\)/g)].length === bounded);
+  // The news store (#553 COWORK #203): no after() at all; each write awaited
+  // through boundedDeferred(...)() and bounded by NEWS_DEFERRED_WRITE_BUDGET_MS.
+  const bounded = [...store.matchAll(/await boundedDeferred\("news-store", /g)].length;
+  want("the news store's bounded writes were found", bounded >= 3);
+  want("the news store calls no after()", !/\bafter\(/.test(store));
+  want("...each bounded by NEWS_DEFERRED_WRITE_BUDGET_MS", [...store.matchAll(/NEWS_DEFERRED_WRITE_BUDGET_MS\)\(\);/g)].length === bounded);
   return fails;
 }
 
@@ -203,8 +203,8 @@ try {
     ["a seventh, unbudgeted source", PAGE, /budget\("earnings", getInitialEarningsSummary\(symbol\), null\),/, 'budget("earnings", getInitialEarningsSummary(symbol), null),\n      getInitialNews(symbol),'],
     ["the budget constant swapped for a literal", PAGE, /work, fallback, DASHBOARD_SOURCE_BUDGET_MS\)/, "work, fallback, 300_000)"],
     ["the no-key short-circuit removed", PAGE, /process\.env\.FMP_API_KEY\s*\?\s*getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\s*:\s*getCachedDailyHistory\(symbol, "dashboard"\)/, 'getDailyHistory(symbol, { caller: "dashboard" })'],
-    ["the store write left unbounded", STORE, /after\(\n\s*boundedDeferred\("news-store", key, (async \(\) => \{[\s\S]*?\n {4}\}), NEWS_DEFERRED_WRITE_BUDGET_MS\)\n {2}\);/, "after($1);"],
-    ["the staleness mark left unbounded", STORE, /after\(boundedDeferred\("news-store", upper, (\(\) => markViewed\("news", upper, nowMs\)), NEWS_DEFERRED_WRITE_BUDGET_MS\)\)/, "after($1)"],
+    ["the store write left unbounded", STORE, /await boundedDeferred\("news-store", key, (async \(\) => \{[\s\S]*?\n {2}\}), NEWS_DEFERRED_WRITE_BUDGET_MS\)\(\);/, "await ($1)();"],
+    ["the staleness mark put back in after()", STORE, /await (boundedDeferred\("news-store", upper, \(\) => markViewed\("news", upper, nowMs\), NEWS_DEFERRED_WRITE_BUDGET_MS\))\(\);/, "after($1);"],
   ];
   for (const [label, file, from, to] of WIRING_MUTANTS) {
     const src = file === PAGE ? pageSrc : storeSrc;
