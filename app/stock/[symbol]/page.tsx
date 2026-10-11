@@ -28,6 +28,8 @@ import {
 import { readableDate } from "@/lib/server/secEstimates";
 import { isBankSic, peSectorOf, readPeSectorMedians } from "@/lib/server/peSectorMedians";
 import { peSectorLine } from "@/lib/peSectorLine";
+import { readValuationBenchmarks, valuationGroupOf } from "@/lib/server/valuationBenchmarks";
+import { valuationBand } from "@/lib/valuationBands";
 import { symbolSpellings } from "@/lib/symbolSpellings.mjs";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
@@ -643,7 +645,22 @@ export default async function StockPage({ params }: Props) {
   const pe = fyPe ?? multiples?.pe;
   const peEps = fyPe && inputs?.fyEps ? inputs.fyEps : inputs?.eps ?? null;
   const fyWord = fyPe ? word(fyPe) : null;
+  // LOW / FAIR / RICH VS THE SECTOR (#552 COWORK #202 item 3): one Data Cache
+  // read, no Redis command on a hit. The trailing P/E only — never the FY
+  // fallback, which the benchmarks are not built on. Rules: lib/valuationBands.ts.
+  const bandGroup = valuationGroupOf(upper);
+  const benchmarks = await readValuationBenchmarks().catch(() => null);
+  // AN ESTIMATED FIGURE GETS NO BAR: the peers are filed figures only, and
+  // nothing is built on an estimate beyond its own marked value.
+  const filed = (f: ValuationFigure | null | undefined) => (mark(f) ? null : figure(f));
+  const bands = {
+    peRatio: fyPe ? null : valuationBand(figure(pe), bandGroup, benchmarks, "peRatio", "A P/E"),
+    priceToSalesRatio: valuationBand(filed(multiples?.ps), bandGroup, benchmarks, "priceToSalesRatio", "A P/S"),
+    priceToBookRatio: valuationBand(filed(multiples?.pb), bandGroup, benchmarks, "priceToBookRatio", "A P/B"),
+    evToEbitda: valuationBand(filed(multiples?.evEbitda), bandGroup, benchmarks, "evToEbitda", "An EV/EBITDA"),
+  };
   const valuation = {
+    bands,
     peRatio: figure(pe),
     priceToSalesRatio: figure(multiples?.ps),
     priceToBookRatio: figure(multiples?.pb),
