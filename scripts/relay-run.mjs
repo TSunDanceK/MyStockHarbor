@@ -1410,6 +1410,8 @@ const TASKS = {
   "write-market-dynamic-dry-run": { script: "scripts/market-dynamic-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY (Relay B, #553 COWORK #191 item 1): stored news, junk headlines by day.
   "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (#552 COWORK #200 item 3): the #811 re-read report. GET/SCAN/MGET, no SEC requests.
+  "write-reread-report": { script: "scripts/sec-reread-report.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
