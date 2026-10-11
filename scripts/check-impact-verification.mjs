@@ -5,9 +5,12 @@
 //   <meta name="impact-site-verification" value="9aa5dfcb-1339-4383-b1e8-7c2ac0ab674b">
 // with the attribute `value`, which is what Impact reads. Next's metadata.other
 // would render `content=` instead, so a mutant that switches the tag to
-// `content=` (or drops it, or changes the ID) must be caught. And there is
-// exactly ONE Impact tag (#563 COWORK #168): the older metadata.other entry
-// (cfd647ce…, rendered as content=) is retired, and must not come back.
+// `content=` (or drops it, or changes the ID) must be caught.
+//
+// BOTH TAGS STAY (#563 COWORK #170/#171): the older entry in the metadata
+// object, other["impact-site-verification"] = cfd647ce…, which Next renders
+// as content=, is kept beside the raw value= tag. Dropping either one, or
+// changing the old ID, must be caught too.
 //
 // The layout itself can't be rendered here (next/font only loads inside Next),
 // so the check takes the tag's JSX and the ID constant out of the layout's own
@@ -27,6 +30,8 @@ const React = await import("react");
 
 const LAYOUT = "app/layout.tsx";
 const ID = "9aa5dfcb-1339-4383-b1e8-7c2ac0ab674b";
+/** The older ID, as it stood in app/layout.tsx before #838 (copied from git history, not retyped). */
+const OLD_ID = "cfd647ce-ddd8-4f2a-921f-3763ef298b2a";
 const src = fs.readFileSync(LAYOUT, "utf8");
 
 let seq = 0;
@@ -44,27 +49,31 @@ async function headOf(source) {
   } finally { fs.rmSync(file, { force: true }); }
 }
 
-/** The layout's code (comments stripped) names the Impact tag once: the raw tag, no metadata entry. */
-const oneTag = (source) => {
+/** The older tag: the metadata object's other["impact-site-verification"] = OLD_ID (rendered by Next as content=). */
+const oldTag = (source) => {
   const code = stripComments(source, { file: LAYOUT });
-  return (code.match(/impact-site-verification/g) ?? []).length === 1 && !/cfd647ce/.test(code);
+  const meta = code.slice(code.indexOf("export const metadata"), code.indexOf("export default"));
+  return new RegExp(`\\bother: \\{\\s*"impact-site-verification": "${OLD_ID}",?\\s*\\}`).test(meta);
 };
-const rule = (head, source = src) => oneTag(source) && (() => {
+/** The newer tag: the raw <meta ... value="ID"> in <head>, rendered once, never as content=. */
+const newTag = (head) => {
   const tags = head.match(/<meta name="impact-site-verification"[^>]*>/g) ?? [];
   return tags.length === 1 && new RegExp(`^<meta name="impact-site-verification" value="${ID}"/?>$`).test(tags[0]) && !/content=/.test(tags[0]);
-})();
+};
+const rule = (head, source = src) => oldTag(source) && newTag(head);
 
 let failures = 0;
 const check = (label, ok) => { console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}`); if (!ok) failures++; };
 
 const head = await headOf(src);
-check(`exactly one Impact tag: the old metadata.other entry (cfd647ce…, content=) is gone`, oneTag(src));
-check(`the layout's <head> carries <meta name="impact-site-verification" value="${ID}"> (value=, not content=)`, rule(head));
+check(`the older tag stays: metadata other["impact-site-verification"] = "${OLD_ID}" (rendered as content=)`, oldTag(src));
+check(`the newer tag: the layout's <head> carries <meta name="impact-site-verification" value="${ID}"> (value=, not content=)`, newTag(head));
 for (const [label, from, to] of [
   ["the tag rendered with content= (the metadata API's form)", "{...{ value: IMPACT_SITE_VERIFICATION }}", "content={IMPACT_SITE_VERIFICATION}"],
   ["the tag dropped", '<meta name="impact-site-verification" {...{ value: IMPACT_SITE_VERIFICATION }} />', ""],
   ["the wrong ID", 'const IMPACT_SITE_VERIFICATION = "9aa5dfcb', 'const IMPACT_SITE_VERIFICATION = "0aa5dfcb'],
-  ["the old metadata.other tag back (two tags)", "  // No `other` Impact entry:", '  other: { "impact-site-verification": "cfd647ce-ddd8-4f2a-921f-3763ef298b2a" },\n  // No `other` Impact entry:'],
+  ["the older tag dropped", '    "impact-site-verification": "cfd647ce-ddd8-4f2a-921f-3763ef298b2a",\n', ""],
+  ["the older tag's ID changed", '"impact-site-verification": "cfd647ce-', '"impact-site-verification": "0fd647ce-'],
 ]) {
   if (!src.includes(from)) { check(`mutant "${label}" applies`, false); continue; }
   let ok;
