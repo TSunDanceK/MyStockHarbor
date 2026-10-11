@@ -149,6 +149,19 @@ const seoGuides = [
   // version is the one that survives rather than the weekly/0.8 default.
   "/sector",
   ...SECTORS.map((sector) => sectorNewsPath(sector.slug)),
+  // THE SCREENERS THAT WERE NEVER LISTED (#553 COWORK #202, 2026-10-11). These
+  // picker pages were missing from this array entirely, so leaving the noindex
+  // list could not put them in the sitemap. /bullish-rsi-divergence-stocks
+  // left it in batch 1 (5 Oct) and was never listed until now.
+  "/atr-spike-stocks",
+  "/bearish-macd-divergence-stocks",
+  "/bearish-rsi-divergence-stocks",
+  "/breakout-signal-stocks",
+  "/bullish-macd-divergence-stocks",
+  "/bullish-rsi-divergence-stocks",
+  "/stocks-above-50-day-moving-average",
+  "/stocks-below-200-day-moving-average",
+  "/stocks-below-50-day-moving-average",
 ];
 
 // coreMegaCaps / retailInterestStocks / recognizableMidCaps / etfs and the

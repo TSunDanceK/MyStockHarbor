@@ -11,7 +11,7 @@ import { getPickersData } from "@/lib/server/pickersBuilder";
 import { pickersWithoutBars } from "@/lib/pickersPublic";
 import { publicPickersPayload } from "@/lib/pickerPerf";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import TiingoCredit from "@/app/components/TiingoCredit";
 
 const pickersJsonLd = {
   "@context": "https://schema.org",
@@ -222,11 +222,7 @@ export default async function PickersPage() {
             {/* THE CREDIT ON THE HUB TOO (#553 COWORK #92): the cards show prices
                 from the same Pickers build, so the hub carries the same linked
                 credit as every result page, under the same switch. */}
-            {priceProviderFor("PICKERS") === "tiingo" ? (
-              <p className="pickersCredit" style={{ margin: "12px 2px 0", fontSize: 12, color: "rgba(148,163,184,0.8)" }}>
-                <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
-              </p>
-            ) : null}
+            {priceProviderFor("PICKERS") === "tiingo" ? <TiingoCredit style={{ margin: "12px 2px 0" }} /> : null}
           </div>
         </section>
 

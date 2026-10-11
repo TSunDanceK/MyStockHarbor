@@ -97,6 +97,11 @@ const config: PickerResultConfig = {
       ],
     },
   ],
+  relatedScreens: [
+    { href: "/high-dividend-yield-stocks", label: "High dividend yield stocks" },
+    { href: "/cash-rich-value-stocks", label: "Cash-rich value stocks" },
+    { href: "/low-pe-stocks", label: "Low P/E stocks" },
+  ],
 };
 
 export default function Page() {

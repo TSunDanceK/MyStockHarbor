@@ -14,7 +14,13 @@
 //   3. The Pickers footer is given the link with the credit, and ScanFooter
 //      renders a credit with an href as a link.
 //   4. Nobody hand-types the credit: the string lives in one constant.
-//   5. Mutants: each rule broken once, and caught.
+//   5. "POWERED BY TIINGO" (#553 COWORK #200 item 2): app/components/
+//      TiingoCredit.tsx is the site-wide credit. It links to TIINGO_HOME, which
+//      must equal TIINGO_URL; its text lives there once; the corner line is
+//      fine print. A page counts as crediting Tiingo when it renders the old
+//      linked {TIINGO_CREDIT} or <TiingoCredit /> / <TiingoLink />. The Pickers
+//      result pages and the hub render <TiingoCredit /> under their switch.
+//   6. Mutants: each rule broken once, and caught.
 //
 //   node scripts/check-tiingo-credit.mjs
 import fs from "node:fs";
@@ -44,6 +50,7 @@ const HUB = "app/pickers/page.tsx";
 const STOCK_PAGE = "app/stock/[symbol]/page.tsx";
 const DASHBOARD = "app/dashboard/page.tsx";
 const CREDIT_FILE = "lib/server/tiingoSurfacePrice.ts";
+const COMPONENT = "app/components/TiingoCredit.tsx";
 // The calendar's Price column reads the pool, so POOL=tiingo makes it a
 // Tiingo surface too (#552 COWORK #108).
 const CALENDAR = "app/earnings-calendar/page.tsx";
@@ -57,7 +64,7 @@ function rules(srcs) {
   // 1. pages that switch a surface render the credit
   const pages = Object.keys(code).filter((f) => f.startsWith("app/") && !f.startsWith("app/api/") && /\b(priceProviderFor|readSurfacePrice|historyForSurface|historyOnTiingo)\(/.test(code[f]));
   want(`the switched pages are found (${pages.length})`, pages.length >= 6 && pages.includes(HUB) && pages.includes(PICKER_PAGE) && pages.includes(STOCK_PAGE) && pages.includes(DASHBOARD));
-  for (const f of pages) want(`${f} renders the Tiingo credit`, /\{TIINGO_CREDIT\}|marketDataCredit=\{[^}]*TIINGO_CREDIT/.test(code[f]));
+  for (const f of pages) want(`${f} renders the Tiingo credit`, /\{TIINGO_CREDIT\}|marketDataCredit=\{[^}]*TIINGO_CREDIT|<TiingoCredit\b|<TiingoLink\b/.test(code[f]));
   // 1b. a page that hands several surfaces' credits to its client (step 4's
   // quote credit, step 3's chart credit) renders a linked credit for each one.
   for (const f of [STOCK_PAGE, DASHBOARD]) {
@@ -78,9 +85,20 @@ function rules(srcs) {
     }
   }
 
-  // 3. the Pickers footer: the link is passed with the credit, and rendered
-  want("the Pickers footer is given TIINGO_URL with the credit", /marketDataCredit=\{[^}]*TIINGO_CREDIT[^}]*\}\s*marketDataHref=\{[^}]*TIINGO_URL[^}]*\}/.test(code[PICKER_PAGE] ?? ""));
+  // 3. the Pickers result pages and the hub: the corner credit under their switch
+  want("the Pickers result pages render <TiingoCredit /> when their prices are Tiingo's", /\{tiingoPrices \? <TiingoCredit\b[^>]*\/> : null\}/.test(code[PICKER_PAGE] ?? ""));
+  want("the hub renders <TiingoCredit /> on PICKERS=tiingo", /priceProviderFor\("PICKERS"\) === "tiingo" \? <TiingoCredit\b[^>]*\/> : null/.test(code[HUB] ?? ""));
   want("ScanFooter renders a credit with an href as a link", /marketDataHref \? \(\s*<a href=\{marketDataHref\}[^>]*>\{marketDataCredit\}<\/a>/.test(code[FOOTER] ?? ""));
+
+  // 5. the component: a link to Tiingo's site, the text once, the corner line fine print
+  const comp = code[COMPONENT] ?? "";
+  const home = /export const TIINGO_HOME = "([^"]+)";/.exec(comp)?.[1];
+  const url = /export const TIINGO_URL = "([^"]+)";/.exec(code[CREDIT_FILE] ?? "")?.[1];
+  want("TiingoCredit's address is the contract's TIINGO_URL", Boolean(home) && home === url);
+  want("TiingoLink is a link to TIINGO_HOME, opening Tiingo's site", /<a\s+href=\{TIINGO_HOME\}\s+target="_blank"\s+rel="noopener noreferrer"[\s\S]*?>\s*\{TIINGO_POWERED_BY\}\s*<\/a>/.test(comp));
+  want("TiingoCredit renders TiingoLink as a fine-print line", /<p[\s\S]*?data-fine-print[\s\S]*?>\s*<TiingoLink \/>\s*<\/p>/.test(comp));
+  const typedNew = Object.entries(code).filter(([f, c]) => f !== COMPONENT && /powered by Tiingo/i.test(c)).map(([f]) => f);
+  want(`nobody hand-types "powered by Tiingo"${typedNew.length ? ` (${typedNew.join(", ")})` : ""}`, typedNew.length === 0);
 
   // 4. one constant, no hand-typed credit
   const typed = Object.entries(code).filter(([f, c]) => f !== CREDIT_FILE && /Market data from Tiingo/.test(c)).map(([f]) => f);
@@ -96,11 +114,15 @@ check("every Tiingo price carries the linked credit", real.length === 0);
 
 const MUTANTS = [
   ["the footer renders the credit as plain text", FOOTER, /marketDataHref \? \(\s*<a href=\{marketDataHref\}[^>]*>\{marketDataCredit\}<\/a>\s*\) : \(\s*marketDataCredit\s*\)/, "marketDataCredit"],
-  ["the Pickers footer loses its link", PICKER_PAGE, /\s*marketDataHref=\{[^}]*\}/, ""],
-  ["the hub drops its credit", HUB, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, ""],
+  ["the Pickers result pages drop the corner credit", PICKER_PAGE, /\{tiingoPrices \? <TiingoCredit\b[^>]*\/> : null\}/, ""],
+  ["the hub drops its credit", HUB, /priceProviderFor\("PICKERS"\) === "tiingo" \? <TiingoCredit\b[^>]*\/> : null/, "null"],
+  ["the component links somewhere else", COMPONENT, /export const TIINGO_HOME = "[^"]+";/, 'export const TIINGO_HOME = "https://example.com/";'],
+  ["the component's credit is not a link", COMPONENT, /<a\s+href=\{TIINGO_HOME\}[\s\S]*?<\/a>/, "<span>{TIINGO_POWERED_BY}</span>"],
+  ["the corner line is not fine print", COMPONENT, /\s+data-fine-print/, ""],
+  ["a page hand-types the new credit", HUB, /priceProviderFor\("PICKERS"\) === "tiingo" \? <TiingoCredit\b[^>]*\/> : null/, 'priceProviderFor("PICKERS") === "tiingo" ? <TiingoCredit /> : <p>powered by Tiingo</p>'],
   ["the stock page drops its chart credit (step 3)", STOCK_PAGE, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "null"],
   ["the dashboard's chart credit loses its link (step 3)", DASHBOARD, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "<span>{TIINGO_CREDIT}</span>"],
-  ["a page hand-types the credit unlinked", HUB, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "Market data from Tiingo.com"],
+  ["a page hand-types the credit unlinked", HUB, /priceProviderFor\("PICKERS"\) === "tiingo" \? <TiingoCredit\b[^>]*\/> : null/, '"Market data from Tiingo.com"'],
   ["the calendar drops its credit", CALENDAR, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, ""],
   ["the calendar's credit is unlinked", CALENDAR, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "{TIINGO_CREDIT}"],
   ["the calendar's credit is never switched on", CALENDAR, /priceProviderFor\("POOL"\) === "tiingo" && /, "false && "],

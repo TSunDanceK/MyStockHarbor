@@ -129,7 +129,7 @@ function sourceRules(mapRaw, pageRaw) {
   want("the toggle swaps the shown figure only", /const value = tile\[period\];/.test(m) && /useState<HeatPeriod>\(HEAT_DEFAULT_PERIOD\)/.test(m));
   want("the page feeds the cards' own rows (no recomputing)", /day: row\?\.day \?\? null,\s*month: row\?\.month \?\? null,\s*ytd: row\?\.ytd \?\? null,\s*capSum: row\?\.capSum/.test(p));
   want("the treemap is laid out in the box's own 4:1 shape (about half the old height)", /squarify\(tiles\.map\(\(t\) => t\.weight\), 400, 100\)\.map\(\(r\) => \(\{ x: r\.x \/ 4, y: r\.y, w: r\.w \/ 4, h: r\.h \}\)\)/.test(p) && /aspect-ratio: 4 \/ 1;/.test(m));
-  want("the page passes the Tiingo credit and the sizing words", /credit=\{\{ text: TIINGO_CREDIT, href: TIINGO_URL \}\}/.test(p) && /sizing\.basis === "cap"/.test(p));
+  want("the page passes the Tiingo credit and the sizing words", /credit=\{\{ text: TIINGO_POWERED_BY, href: TIINGO_HOME \}\}/.test(p) && /sizing\.basis === "cap"/.test(p));
   return fails;
 }
 

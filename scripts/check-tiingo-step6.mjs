@@ -165,7 +165,7 @@ const rules = {
     /if \(priceProviderFor\("NEWS_TECH", env\) !== "tiingo"\) return null;/.test(src) &&
     /readTiingoHistory\(/.test(src) && !/readTiingoPool|fetch\(|tiingo\.com/.test(src),
   "news tech: the linked credit, and one source for the technical text": (src) =>
-    /historySource === "tiingo" \? \(\s*<p[^>]*>\s*<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src) &&
+    /historySource === "tiingo" \? <TiingoCredit \/> : null/.test(src) &&
     /const technicalPrice = historySource === "tiingo" \? heroPrice\?\.price \?\? lastClose : quote\?\.price \?\? lastClose;/.test(src) &&
     /buildTechnicalRead\(\{ symbol: upper, price: technicalPrice,/.test(src),
   "the AI routes read no price source": (src) => !PRICE_READS.test(src),
@@ -191,9 +191,9 @@ const rules = {
   // 4. credit
   "SPX: the linked credit under the chart": (src) => /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src),
   "video page: the linked credit with the label": (src) =>
-    /stockData\?\.priceLabel/.test(src) && /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src),
+    /\{stockData\?\.priceLabel \? \(\s*<>\s*<p [^>]*>\s*Price: \{stockData\.priceLabel\}[\s\S]*?<\/p>\s*<TiingoCredit \/>\s*<\/>/.test(src),
   "news hero: the label and the linked credit": (src) =>
-    /\{heroPrice\.label\}/.test(src) && /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src),
+    /\{heroPrice\.label\} · <TiingoLink \/>/.test(src),
   // 5. SPY says so
   "SPX: the approved caption, shown only for SPY": (src) =>
     /chartSeries === "SPY" \?/.test(src) &&
@@ -285,7 +285,7 @@ const mutants = [
   ["news tech: the Tiingo history only through the NEWS_TECH gate, Yahoo kept as the fallback", (s) => s.replace('return { points: await fetchYahooHistory(symbol), source: "yahoo" };', 'return { points: [], source: "yahoo" };')],
   ["news tech: the reader is gated and reads only the stored history", (s) => s.replace('if (priceProviderFor("NEWS_TECH", env) !== "tiingo") return null;', "")],
   ["news tech: the linked credit, and one source for the technical text", (s) => s.replace("price: technicalPrice,", "price: quote?.price ?? lastClose,")],
-  ["news tech: the linked credit, and one source for the technical text", (s) => s.replace(/historySource === "tiingo" \? \(\s*<p([^>]*)>\s*<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, 'historySource === "tiingo" ? (<p$1>{TIINGO_CREDIT}')],
+  ["news tech: the linked credit, and one source for the technical text", (s) => s.replace('historySource === "tiingo" ? <TiingoCredit /> : null', "null")],
   ["the AI routes read no price source", (s) => `${s}\nconst p = getDailyHistory("X");`],
   ["the news AI components get no hero price", (s) => s.replace("<AiInsightCard", "<AiInsightCard heroPrice={heroPrice}")],
   ["SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept", (s) => s.replace('priceProviderFor("SPX") === "tiingo"', "true")],
@@ -294,7 +294,7 @@ const mutants = [
   ["videos: market cap and P/E through A's modules, not copied", (s) => s.replace("peRatio(valuation, surface.price)", "surface.price / 20")],
   ["news hero: gated, and the FMP title reads skipped only when Tiingo answered", (s) => s.replace('priceProviderFor("NEWS_HERO") !== "tiingo") return null', "false) return null")],
   ["SPX: the linked credit under the chart", (s) => s.replaceAll("<a href={TIINGO_URL}", "<span data-href={TIINGO_URL}")],
-  ["video page: the linked credit with the label", (s) => s.replace(/<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "{TIINGO_CREDIT}")],
+  ["video page: the linked credit with the label", (s) => s.replace("<TiingoCredit />", "")],
   ["news hero: the label and the linked credit", (s) => s.replace("{heroPrice.label}", "")],
   ["SPX: the approved caption, shown only for SPY", (s) => s.replace("Levels quoted in the text refer to the S&amp;P 500 index.", "")],
   ["SPX chart: the symbol is passed through, not fixed to SPX", (s) => s.replace("symbol={symbol}", 'symbol="SPX"')],
