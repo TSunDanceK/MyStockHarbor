@@ -396,7 +396,7 @@ export default async function UpcomingIposPage() {
               right now. */}
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
             {isSec
-              ? "Data source: SEC EDGAR filings (public domain) — compiled from S-1, S-1/A, F-1, F-1/A, 424B and 8-A12B filings, each filer's EDGAR company record, and the filing-fee exhibit. "
+              ? "Data source: SEC EDGAR filings (public domain) — compiled from S-1, S-1/A, F-1, F-1/A, 424B and 8-A12B filings, each filer's EDGAR company record, the filing-fee exhibit, and the prospectus summary of the latest S-1 or F-1 (quoted, not rewritten). "
               : "Data source: financialmodelingprep.com. "}
             IPO terms can change before listing day — treat this as a starting
             point for further research, not investment advice.

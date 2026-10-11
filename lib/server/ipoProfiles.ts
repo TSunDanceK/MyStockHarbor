@@ -18,16 +18,23 @@
 // registration filing's index.json, and its fee exhibit (only when the index
 // names one). Bounded by a filer cap and a deadline per run.
 //
+// "WHAT IT DOES" (#553 COWORK #159 PR 2): a fourth request, the latest
+// registration filing's own document (the prospectus), from which
+// extractAbout() lifts two or three sentences of the prospectus summary word
+// for word. No AI and no rewording: what cannot be extracted cleanly is not
+// shown. A profile built before PR 2 has no `about` key and is rebuilt once.
+//
 // Commands: job +1 GET +0/1 SET a day; page +1 GET per ISR regeneration
-// (daily). SEC requests: <= 3 x filers with a new filing (a few a day; ~300 on
-// the first fill, spread over runs by IPO_PROFILE_MAX_FILERS).
+// (daily). SEC requests: <= 4 x filers with a new filing (a few a day; ~400 on
+// the first fill or the PR 2 backfill, spread over runs by
+// IPO_PROFILE_MAX_FILERS).
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { secFetcher, SecThrottled } from "../secArchiveBackfill.mjs";
-import { PROFILE_FORMS, latestRegistration, type IpoProfile, type IpoProfileFiling } from "../ipoProfileView";
+import { PROFILE_FORMS, latestRegistration, type IpoAbout, type IpoProfile, type IpoProfileFiling } from "../ipoProfileView";
 
 export const IPO_PROFILES_KEY = "msh:ipo:profiles:v1";
-/** Filers fetched per run at most: 3 requests each at <= 8/s is ~12 s of pacing. */
+/** Filers fetched per run at most: 4 requests each at <= 8/s is ~20 s of pacing. */
 export const IPO_PROFILE_MAX_FILERS = 40;
 /** Keep longer than a missed run or two; rebuilt from SEC in any case. */
 const IPO_PROFILES_TTL_SECONDS = 10 * 24 * 60 * 60;
@@ -127,9 +134,150 @@ export function parseFeeExhibitMax(html: string): number | null {
   return Number.isFinite(v) && v > 0 ? Math.round(v) : null;
 }
 
-/** A profile is rebuilt only when the filer's record shows a newer filing than it was built from. */
+// ── "What it does": the prospectus summary, extracted (PR 2) ───────────────
+//
+// A registration statement opens with a table of contents, then the
+// "Prospectus Summary", whose first section is usually "Overview". That
+// section's opening sentences are the company describing itself. The rules,
+// all of them reasons to OMIT rather than to guess:
+//   - tables are dropped whole (the contents page and every figure grid);
+//     footnote markers (<sup>) are dropped;
+//   - the summary heading must stand alone in its block ("Prospectus
+//     Summary"/"Summary"), so a contents line with a page number never counts;
+//   - the standard preamble is skipped ("This summary highlights...", "Unless
+//     the context otherwise requires...", the defined terms);
+//   - a sentence with a placeholder ("[•]", "[ ]"), a defined-term list, or
+//     boilerplate (emerging growth company, forward-looking, risk factors, "this
+//     prospectus") is left out;
+//   - two or three sentences, cut on sentence boundaries to about 60 words;
+//     under 20 words, or nothing prose-like, and the block is omitted.
+
+/** The soft and hard word limits, and the floor below which the block is omitted. */
+export const ABOUT_TARGET_WORDS = 60;
+export const ABOUT_MAX_WORDS = 80;
+export const ABOUT_MIN_WORDS = 20;
+
+const ENTITIES: Record<string, string> = {
+  nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", rsquo: "\u2019", lsquo: "\u2018",
+  rdquo: "\u201d", ldquo: "\u201c", mdash: "\u2014", ndash: "\u2013", hellip: "\u2026", reg: "\u00ae",
+  trade: "\u2122", copy: "\u00a9", bull: "\u2022", middot: "\u00b7", eacute: "\u00e9",
+};
+
+function decodeEntities(t: string): string {
+  return t
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => safeChar(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d: string) => safeChar(Number(d)))
+    .replace(/&([a-z]+);/gi, (m, n: string) => ENTITIES[n.toLowerCase()] ?? m);
+}
+function safeChar(code: number): string {
+  if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff) return " ";
+  return code === 0xa0 ? " " : String.fromCodePoint(code);
+}
+
+/** The document as text blocks (one per paragraph or heading), tables and footnote markers removed. */
+export function htmlBlocks(html: string): string[] {
+  const t = html
+    .replace(/<ix:header>[\s\S]*?<\/ix:header>/gi, " ")
+    .replace(/<(script|style|head)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<table\b[\s\S]*?<\/table>/gi, "\n\n")
+    .replace(/<sup\b[\s\S]*?<\/sup>/gi, "")
+    .replace(/<\/?(p|div|br|h[1-6]|li|ul|ol|tr|section|center|hr|body)\b[^>]*>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "");
+  return decodeEntities(t)
+    .split(/\n\s*\n/)
+    .map((b) => b.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+const SUMMARY_HEADING = /^(prospectus\s+)?summary$/i;
+const OVERVIEW_HEADING = /^(overview|our company|company overview|business overview|our business|who we are|our mission)$/i;
+const END_OF_SECTION = /^(the offering|risk factors|summary risk factors|summary of risk factors|risks? associated with our business|corporate information|implications of being an emerging growth company|summary (consolidated )?(historical )?financial (and other )?data)$/i;
+const PREAMBLE = /this summary highlights|summary highlights (selected )?information|does not contain all (of )?the information|you should read the (entire|following)|unless (otherwise indicated|the context)|as used in this prospectus|throughout this prospectus|references in this prospectus|in this prospectus,? (unless|references|we|the terms)|we use the terms?|references to [“"]/i;
+const BAD_SENTENCE = /emerging growth company|smaller reporting company|forward-looking|risk factors|this prospectus|you should|unless the context|references to|[“"](we|us|our)[,”"]|\[\s*[•●]?\s*\]|[•●]|\.{4,}|\|/i;
+const ABBREVIATION = /(?:^|[\s(])(?:inc|corp|co|ltd|llc|l\.p|n\.v|s\.a|plc|no|nos|approx|e\.g|i\.e|etc|vs|mr|ms|dr|st|jr|sr|u\.s|u\.k|[a-z])\.$/i;
+
+const wordsOf = (t: string) => t.split(/\s+/).filter(Boolean).length;
+const strip = (h: string) => h.replace(/[\s.:\u2014\u2013-]+$/, "").trim();
+
+/** Sentences on boundaries a reader would agree with: not after "Inc.", "U.S." or an initial. */
+export function splitSentences(text: string): string[] {
+  const out: string[] = [];
+  let start = 0;
+  const re = /[.!?]["”’)]?(?=\s+["“(]?[A-Z0-9])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const end = m.index + m[0].length;
+    const upTo = text.slice(start, m.index + 1);
+    if (m[0][0] === "." && ABBREVIATION.test(upTo)) continue;
+    out.push(text.slice(start, end).trim());
+    start = end;
+  }
+  const rest = text.slice(start).trim();
+  if (rest) out.push(rest);
+  return out;
+}
+
+/** True when a block reads as running prose: long enough, mostly letters, ends a sentence. */
+function isProse(b: string): boolean {
+  if (wordsOf(b) < 12 || !/[.!?]["”’)]?$/.test(b)) return false;
+  const nonSpace = b.replace(/\s/g, "");
+  const letters = (nonSpace.match(/[A-Za-z]/g) ?? []).length;
+  return letters / Math.max(1, nonSpace.length) >= 0.7;
+}
+
+/** Two or three sentences, cut on sentence boundaries; null when they would not read cleanly. */
+export function trimToSentences(paragraphs: string[]): string | null {
+  const picked: string[] = [];
+  let words = 0;
+  for (const sentence of paragraphs.flatMap(splitSentences)) {
+    if (picked.length >= 3) break;
+    const w = wordsOf(sentence);
+    if (w < 5 || BAD_SENTENCE.test(sentence) || !/[.!?]["”’)]?$/.test(sentence)) {
+      if (picked.length) break; // a gap would join sentences that were not side by side
+      continue;
+    }
+    if (words + w <= ABOUT_TARGET_WORDS || (picked.length < 2 && words + w <= ABOUT_MAX_WORDS)) {
+      picked.push(sentence);
+      words += w;
+    } else break;
+  }
+  if (!picked.length || words < ABOUT_MIN_WORDS) return null;
+  return picked.join(" ");
+}
+
+/**
+ * "What it does" from a registration filing's HTML, or null. Pure. Tries each
+ * standalone summary heading in order and takes the first that yields clean
+ * prose; within it, starts after "Overview" when that heading comes first.
+ */
+export function extractAbout(html: string): string | null {
+  const blocks = htmlBlocks(html);
+  for (let h = 0; h < blocks.length; h++) {
+    if (!SUMMARY_HEADING.test(strip(blocks[h]))) continue;
+    let from = h + 1;
+    for (let k = h + 1; k < Math.min(blocks.length, h + 30); k++) {
+      if (END_OF_SECTION.test(strip(blocks[k]))) break;
+      if (OVERVIEW_HEADING.test(strip(blocks[k]))) { from = k + 1; break; }
+    }
+    const paragraphs: string[] = [];
+    for (let k = from; k < Math.min(blocks.length, from + 40) && paragraphs.length < 2; k++) {
+      const b = blocks[k];
+      if (END_OF_SECTION.test(strip(b)) || SUMMARY_HEADING.test(strip(b))) break;
+      if (!isProse(b) || PREAMBLE.test(b)) continue;
+      paragraphs.push(b);
+    }
+    const text = paragraphs.length ? trimToSentences(paragraphs) : null;
+    if (text) return text;
+  }
+  return null;
+}
+
+/**
+ * A profile is rebuilt only when the filer's record shows a newer filing than
+ * it was built from, or once when it predates "What it does" (no `about` key).
+ */
 export function needsRefresh(stored: IpoProfile | undefined, latestFilingDate: string): boolean {
-  return !stored || stored.v !== 1 || latestFilingDate > stored.basedOn;
+  return !stored || stored.v !== 1 || latestFilingDate > stored.basedOn || !("about" in stored);
 }
 
 // ── the job step ────────────────────────────────────────────────────────────
@@ -141,6 +289,9 @@ export type IpoProfilesStepResult = {
   refreshed: number;
   failed: number;
   feeFound: number;
+  /** Profiles whose prospectus yielded a "What it does" extract / were read but yielded none. */
+  aboutFound: number;
+  aboutOmitted: number;
   deferred: number;
   throttled: boolean;
   secRequests: number;
@@ -161,7 +312,7 @@ export async function refreshIpoProfiles(
 ): Promise<IpoProfilesStepResult> {
   const now = opts.now ?? Date.now;
   const counters = { secRequests: 0 };
-  const result: IpoProfilesStepResult = { targets: targets.length, refreshed: 0, failed: 0, feeFound: 0, deferred: 0, throttled: false, secRequests: 0, redisCommands: 1, wrote: false };
+  const result: IpoProfilesStepResult = { targets: targets.length, refreshed: 0, failed: 0, feeFound: 0, aboutFound: 0, aboutOmitted: 0, deferred: 0, throttled: false, secRequests: 0, redisCommands: 1, wrote: false };
   let stored: StoredIpoProfiles | null = null;
   try {
     stored = await r.get<StoredIpoProfiles>(IPO_PROFILES_KEY);
@@ -204,6 +355,23 @@ export async function refreshIpoProfiles(
             profile.maxDealSize = max;
             profile.maxDealSizeFrom = { form: reg.form, date: reg.date };
             result.feeFound++;
+          }
+        }
+        // "WHAT IT DOES" (PR 2): the filing's own document. A fetch that fails
+        // leaves `about` absent, so the next run tries again; a document that
+        // yields no clean extract is recorded as null, and not re-read until a
+        // newer filing arrives.
+        if (reg.doc && now() <= opts.deadlineMs) {
+          try {
+            const docBuf = await get(`${base}/${encodeURIComponent(reg.doc)}`);
+            if (docBuf) {
+              const text = extractAbout(docBuf.toString("utf8"));
+              profile.about = text ? ({ text, form: reg.form, date: reg.date } satisfies IpoAbout) : null;
+              if (text) result.aboutFound++;
+              else result.aboutOmitted++;
+            }
+          } catch (err) {
+            if (err instanceof SecThrottled) throw err;
           }
         }
       }

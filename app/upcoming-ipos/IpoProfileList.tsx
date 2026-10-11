@@ -1,7 +1,7 @@
 "use client";
 
 // /upcoming-ipos ON THE SEC PATH: EACH LISTING OPENS INTO A SHORT PROFILE
-// (#553 COWORK #159 PR 1).
+// (#553 COWORK #159 PR 1; "What it does" is PR 2).
 //
 // EVERY ROW IS A <details>, SERVER-RENDERED WITH ITS BODY. The profile is in
 // the HTML the crawler gets, closed; nothing is fetched on a click. Only the
@@ -130,6 +130,21 @@ export default function IpoProfileList({
             </summary>
 
             <div className="ipoBody">
+              {/* WHAT IT DOES (#553 COWORK #159 PR 2): the company's own words,
+                  extracted from its prospectus summary in the daily job, never
+                  generated. No clean extract, no block. */}
+              {profile?.about ? (
+                <section className="ipoBlock">
+                  <h3 className="ipoBlockTitle">What it does</h3>
+                  <p className="ipoAbout">
+                    <span className="ipoAboutLead">From its prospectus:</span> {profile.about.text}
+                  </p>
+                  <p className="ipoAboutSrc">
+                    Source: {profile.about.form} filed {formatDate(profile.about.date)}, prospectus summary
+                  </p>
+                </section>
+              ) : null}
+
               <section className="ipoBlock">
                 <h3 className="ipoBlockTitle">The deal</h3>
                 <div className="ipoFacts">
@@ -224,6 +239,9 @@ export default function IpoProfileList({
         .ipoFact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .ipoFactLabel { font-size: var(--fs-label); font-weight: 750; color: rgba(148,163,184,0.85); }
         .ipoFactValue { font-size: var(--fs-read); font-weight: 750; color: rgba(241,245,249,0.95); overflow-wrap: anywhere; }
+        .ipoAbout { margin: 0; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(241,245,249,0.95); overflow-wrap: anywhere; }
+        .ipoAboutLead { font-weight: 800; color: rgba(191,219,254,0.9); }
+        .ipoAboutSrc { margin: 4px 0 0; font-size: var(--fs-label); color: rgba(148,163,184,0.9); }
         .ipoSpacNote { margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(251,191,36,0.35); background: rgba(251,191,36,0.06); font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(254,243,199,0.95); }
         .ipoTimeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid rgba(148,163,184,0.25); display: grid; gap: 8px; }
         .ipoTimeline li { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: var(--fs-read); position: relative; }

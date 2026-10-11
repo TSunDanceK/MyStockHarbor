@@ -32,7 +32,18 @@ export type IpoProfile = {
   maxDealSize: number | null;
   /** Which filing that figure was read from. */
   maxDealSizeFrom: { form: string; date: string } | null;
+  /**
+   * "What it does" (#553 COWORK #159 PR 2): two or three sentences extracted,
+   * word for word, from the latest registration filing's prospectus summary,
+   * with the filing they came from. Null when the extraction failed or read
+   * badly (the block is then omitted). ABSENT on a profile built before PR 2,
+   * or when the prospectus could not be fetched: the job retries those.
+   */
+  about?: IpoAbout | null;
 };
+
+/** The prospectus extract and its source filing. */
+export type IpoAbout = { text: string; form: string; date: string };
 
 export const REGISTRATION = /^(S-1|F-1)$/;
 export const REG_AMENDMENT = /^(S-1|F-1)\/A$/;
