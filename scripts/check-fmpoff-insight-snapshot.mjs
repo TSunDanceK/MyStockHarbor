@@ -262,7 +262,7 @@ function statics(pageSrc, modSrc, viewSrc = VIEW_SRC) {
   const view = stripComments(viewSrc, { file: VIEW });
   want("page: the snapshot reaches the page as closes only (the thumbnail), never whole",
     /snapshot\?\.chartPoints\?\.length \? snapshot\.chartPoints\.slice\(-120\)\.map\(\(p\) => p\.close\) : null/.test(page) && !/snapshot=\{|\.\.\.snapshot/.test(page));
-  want("page: the Tiingo credit is linked to TIINGO_URL", /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(view));
+  want("page: the Tiingo credit is the linked <TiingoLink />", /<TiingoLink \/>/.test(view) && !/\{TIINGO_CREDIT\}/.test(view));
   want("module: gated on the CHARTS surface", /priceProviderFor\("CHARTS", deps\.env\) === "tiingo"/.test(mod));
   want("module: bars come from the Data Cache reader", /readBars: async \(s\) => \(await readTiingoHistory\(s\)\)\?\.bars/.test(mod));
   want("module: no Tiingo adapter import", !/marketData\/tiingo["']/.test(mod));
@@ -311,7 +311,7 @@ for (const [name, from, to] of MOD_MUTANTS) {
   check(`mutant caught: ${name}`, fails.length > 0, fails.slice(0, 2).join("; "));
 }
 const PAGE_MUTANTS = [
-  ["view", "credit unlinked", '<a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a>', "{TIINGO_CREDIT}"],
+  ["view", "credit unlinked", "<TiingoLink />", "{TIINGO_CREDIT}"],
   ["page", "the snapshot sent whole", "snapshot?.chartPoints?.length ? snapshot.chartPoints.slice(-120).map((p) => p.close) : null", "snapshot?.chartPoints?.length ? { ...snapshot } : null"],
 ];
 for (const [where, name, from, to] of PAGE_MUTANTS) {
