@@ -19,6 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { register } from "node:module";
 import { pathToFileURL } from "node:url";
+import { stripComments } from "./lib/source-code.mjs";
 
 register("./lib/tsx-render-hooks.mjs", import.meta.url);
 const { renderToStaticMarkup } = await import("react-dom/server");
@@ -45,7 +46,7 @@ async function headOf(source) {
 
 /** The layout's code (comments stripped) names the Impact tag once: the raw tag, no metadata entry. */
 const oneTag = (source) => {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const code = stripComments(source, { file: LAYOUT });
   return (code.match(/impact-site-verification/g) ?? []).length === 1 && !/cfd647ce/.test(code);
 };
 const rule = (head, source = src) => oneTag(source) && (() => {

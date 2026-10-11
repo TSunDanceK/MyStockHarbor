@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 import MarketMoodCard from "@/app/markets/spx/MarketMoodCard";
 import { INDEX_ROW } from "@/lib/dashboardIndexRow";
 import TickerLogo from "@/app/components/TickerLogo";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import { formatHeatPct } from "@/lib/sectorHeatmap";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import type { CapexBar, DashboardCards, DashboardMarket, Mover } from "@/lib/server/dashboardCards";
@@ -133,9 +134,8 @@ export function MarketToday({ m }: { m: DashboardMarket }) {
       {m.indices.length || m.trend ? (
         <div className="dlMarketFoot">
           <p className="dlFine" data-fine-print="">ETF moves on the close of {day(m.indices[0]?.date ?? m.spx?.date ?? "")} against the close before; ETF prices, not index levels. Trend score from SPY&apos;s daily closes.</p>
-          {/* THE CREDIT (#166 b): small, bottom right. Styled inline to match B's
-              coming data-credit component (#553 COWORK #200); swap it in when that lands. */}
-          <a className="dlPowered" data-fine-print="" data-credit="tiingo" href={TIINGO_URL} target="_blank" rel="noopener noreferrer">Powered by Tiingo</a>
+          {/* THE CREDIT (#166 b): small, bottom right, B's site-wide link (#553 COWORK #200). */}
+          <span className="dlPowered" data-fine-print="" data-credit="tiingo"><TiingoLink /></span>
         </div>
       ) : null}
     </section>
@@ -482,7 +482,7 @@ export const LANDING_CSS = `
 .dlMarketFoot{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;gap:6px 14px;flex-wrap:wrap;}
 .dlMarketFoot .dlFine{flex:1 1 220px;min-width:0;}
 .dlPowered{flex:0 0 auto;margin-left:auto;font-size:var(--fs-fine);color:#8a97ad;text-decoration:none;white-space:nowrap;}
-.dlPowered:hover{color:#cbd5e1;text-decoration:underline;}
+.dlPowered a:hover{color:#cbd5e1;}
 .dlSection{margin:30px 0 8px;display:grid;gap:16px;}
 .dlSectionHead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;}
 .dlSectionHead .dlFine{margin:0;}

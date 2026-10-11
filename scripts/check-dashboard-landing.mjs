@@ -123,7 +123,7 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
   want("A: the meter's tone follows the score (red under 45, amber to 55, green from 56)", mod.trendTone(30) === "down" && mod.trendTone(50) === "flat" && mod.trendTone(56) === "up" && /\.dlMeter\[data-tone="up"\] i\[data-on\]\{background:#22c55e;\}/.test(css) && /\.dlMeter\[data-tone="down"\] i\[data-on\]\{background:#ef4444;\}/.test(css));
   want("A: the header says \"As of <date>\", on the right", /<div class="dlMarketHead"><h2 [^>]*>Market today<\/h2><span class="dlAsOf" data-as-of=""[^>]*>As of 6 Oct 2026<\/span><\/div>/.test(mFull) && /\.dlMarketHead\{display:flex;justify-content:space-between;/.test(base));
   want("A: only the four ETF tiles are boxed (no border or background on the rest)", ["dlMarketHead", "dlPerf", "dlPerfItem", "dlMarketFoot"].every((k) => { const r = base.match(new RegExp(`\\.${k}\\{([^}]*)\\}`)); return !!r && !/border|background/.test(r[1]); }));
-  want("A: the credit is a small \"Powered by Tiingo\", bottom right of the footnote", /<div class="dlMarketFoot"><p class="dlFine" data-fine-print="">ETF moves on the close[^<]*<\/p><a class="dlPowered" data-fine-print="" data-credit="tiingo" href="https:\/\/www\.tiingo\.com\/"[^>]*>Powered by Tiingo<\/a><\/div>/.test(mFull) &&
+  want("A: the credit is B's small \"powered by Tiingo\" link, bottom right of the footnote", /<div class="dlMarketFoot"><p class="dlFine" data-fine-print="">ETF moves on the close[^<]*<\/p><span class="dlPowered" data-fine-print="" data-credit="tiingo"><a href="https:\/\/www\.tiingo\.com\/"[^>]*class="tiingoCredit"[^>]*>powered by Tiingo<\/a><\/span><\/div>/.test(mFull) &&
     /\.dlPowered\{flex:0 0 auto;margin-left:auto;font-size:var\(--fs-fine\);/.test(base));
   want("A: the old S&P / Trend / Best-sector tiles are gone", !/data-tile=|dlTiles|S&amp;P 500 \(SPY\)/.test(mFull));
   want(`A: Market today says "${mod.EMPTY.market}" with nothing`, text(mEmpty).includes(mod.EMPTY.market));
@@ -285,7 +285,7 @@ const LANDING_MUTANTS = [
   ["A: the meter lights every cell", "data-on={i < lit ? \"\" : undefined}", "data-on=\"\""],
   ["A: the \"As of\" date dropped", '{asOf ? <span className="dlAsOf" data-as-of="" data-fine-print="">As of {day(asOf)}</span> : null}', ""],
   ["A: the performance line boxed", ".dlPerf{display:flex;flex-wrap:wrap;", ".dlPerf{border:1px solid #222c40;display:flex;flex-wrap:wrap;"],
-  ["A: the credit back to the long inline line", '>Powered by Tiingo</a>', ">Market data from Tiingo.com</a>"],
+  ["A: the credit back to the long inline line", '<span className="dlPowered" data-fine-print="" data-credit="tiingo"><TiingoLink /></span>', '<span className="dlPowered" data-fine-print="" data-credit="tiingo">{credit}</span>'],
   ["A: the credit not at the right", ".dlPowered{flex:0 0 auto;margin-left:auto;", ".dlPowered{flex:0 0 auto;"],
   ["A: the mover's colour dropped", '<span className="dlMoverMove" data-tone={c.pickers.mover.changePct >= 0 ? "up" : "down"}>', '<span className="dlMoverMove">'],
   ["A: the mover's up/down word dropped (colour the only cue)", "export const moverMove = (m: Mover) => `${m.changePct >= 0 ? \"up\" : \"down\"} ${", "export const moverMove = (m: Mover) => `${"],
