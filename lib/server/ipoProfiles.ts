@@ -190,7 +190,14 @@ export function htmlBlocks(html: string): string[] {
 }
 
 const SUMMARY_HEADING = /^(prospectus\s+)?summary$/i;
-const OVERVIEW_HEADING = /^(overview|our company|company overview|business overview|our business|who we are|our mission)$/i;
+const OVERVIEW_HEADING = /^(overview|general|our company|company overview|business overview|our business|who we are|our mission)$/i;
+/**
+ * The opening sentence must be the company saying what it is or does ("We are
+ * a ...", "Acme is a ...", "We develop ..."). Measured on the live list
+ * (2026-10-11): without it, team biographies, a risk paragraph and a sentence
+ * cut by a page break all read as "prose" in SPAC summaries.
+ */
+const DESCRIBES = /\b(is|are|was) (a|an)\b|\b(we|[A-Z][\w.&’'-]*) (develops?|designs?|builds?|provides?|operates?|offers?|makes?|sells?|manufactures?|owns?|focus(es)?|speciali[sz]es?)\b/;
 const END_OF_SECTION = /^(the offering|risk factors|summary risk factors|summary of risk factors|risks? associated with our business|corporate information|implications of being an emerging growth company|summary (consolidated )?(historical )?financial (and other )?data)$/i;
 const PREAMBLE = /this summary highlights|summary highlights (selected )?information|does not contain all (of )?the information|you should read the (entire|following)|unless (otherwise indicated|the context)|as used in this prospectus|throughout this prospectus|references in this prospectus|in this prospectus,? (unless|references|we|the terms)|we use the terms?|references to [“"]/i;
 const BAD_SENTENCE = /emerging growth company|smaller reporting company|forward-looking|risk factors|this prospectus|you should|unless the context|references to|[“"](we|us|our)[,”"]|\[\s*[•●]?\s*\]|[•●]|\.{4,}|\|/i;
@@ -217,9 +224,12 @@ export function splitSentences(text: string): string[] {
   return out;
 }
 
-/** True when a block reads as running prose: long enough, mostly letters, ends a sentence. */
+/**
+ * True when a block reads as running prose: long enough, mostly letters, starts
+ * a sentence (not a fragment cut by a page break, not a bullet) and ends one.
+ */
 function isProse(b: string): boolean {
-  if (wordsOf(b) < 12 || !/[.!?]["”’)]?$/.test(b)) return false;
+  if (wordsOf(b) < 12 || !/^["“(]?[A-Z0-9]/.test(b) || !/[.!?]["”’)]?$/.test(b)) return false;
   const nonSpace = b.replace(/\s/g, "");
   const letters = (nonSpace.match(/[A-Za-z]/g) ?? []).length;
   return letters / Math.max(1, nonSpace.length) >= 0.7;
@@ -246,9 +256,15 @@ export function trimToSentences(paragraphs: string[]): string | null {
 }
 
 /**
- * "What it does" from a registration filing's HTML, or null. Pure. Tries each
- * standalone summary heading in order and takes the first that yields clean
- * prose; within it, starts after "Overview" when that heading comes first.
+ * "What it does" from a registration filing's HTML, or null. Pure.
+ *
+ * The summary is the first standalone summary heading followed by any prose
+ * (a contents line left outside a table has none, so it is passed over). The
+ * decision is made THERE, once: no later "Summary" elsewhere in the document
+ * is tried. Within it, reading starts after "Overview" (or "General") when
+ * that heading comes first, and the extract starts at the first paragraph
+ * whose opening sentence describes the company (DESCRIBES); that paragraph and
+ * the one after it are trimmed to two or three sentences.
  */
 export function extractAbout(html: string): string | null {
   const blocks = htmlBlocks(html);
@@ -259,15 +275,15 @@ export function extractAbout(html: string): string | null {
       if (END_OF_SECTION.test(strip(blocks[k]))) break;
       if (OVERVIEW_HEADING.test(strip(blocks[k]))) { from = k + 1; break; }
     }
-    const paragraphs: string[] = [];
-    for (let k = from; k < Math.min(blocks.length, from + 40) && paragraphs.length < 2; k++) {
+    const prose: string[] = [];
+    for (let k = from; k < Math.min(blocks.length, from + 40); k++) {
       const b = blocks[k];
       if (END_OF_SECTION.test(strip(b)) || SUMMARY_HEADING.test(strip(b))) break;
-      if (!isProse(b) || PREAMBLE.test(b)) continue;
-      paragraphs.push(b);
+      if (isProse(b) && !PREAMBLE.test(b)) prose.push(b);
     }
-    const text = paragraphs.length ? trimToSentences(paragraphs) : null;
-    if (text) return text;
+    if (!prose.length) continue; // a contents line, not the summary
+    const start = prose.findIndex((b) => DESCRIBES.test(splitSentences(b)[0] ?? ""));
+    return start < 0 ? null : trimToSentences(prose.slice(start, start + 2));
   }
   return null;
 }

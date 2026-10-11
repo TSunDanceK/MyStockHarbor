@@ -99,7 +99,7 @@ const PROSPECTUS = `<html><body>
 <div style="text-align:center"><b>PROSPECTUS SUMMARY</b></div>
 <p>This summary highlights selected information that is presented in greater detail elsewhere in this prospectus. It does not contain all of the information you should consider before investing.</p>
 <p>Unless the context otherwise requires, references in this prospectus to &#8220;Acme,&#8221; &#8220;we,&#8221; &#8220;us&#8221; and &#8220;our&#8221; refer to Acme Robotics Inc. and its subsidiaries.</p>
-<p>The following summary is qualified in its entirety by the more detailed information and financial statements appearing elsewhere.</p>
+<p>Acme Robotics Inc. is a Delaware corporation formed in 2019, and its principal executive offices are located in Austin, Texas.</p>
 <p><b>Overview</b></p>
 <p>Acme Robotics Inc. builds autonomous warehouse robots for U.S. retailers.<sup>(1)</sup> Our robots pick, pack and sort goods without changes to a customer&#8217;s shelving or software. We sold to 40 customers across 12 states in 2025. A fourth sentence that should never be shown because three sentences is the most the block ever takes.</p>
 <p><b>The Offering</b></p>
@@ -108,7 +108,7 @@ const PROSPECTUS = `<html><body>
 const PROSPECTUS_TABLE_ONLY = `<p>PROSPECTUS SUMMARY</p><table><tr><td>Acme Robotics Inc. builds autonomous warehouse robots for retailers across the country today. Our robots pick, pack and sort goods without changes to shelving.</td></tr></table><p>The Offering</p>`;
 const PROSPECTUS_BOILERPLATE = `<p>Prospectus Summary</p><p>This summary highlights information contained elsewhere in this prospectus and does not contain all of the information you should consider.</p><p>Overview</p><p>We are an emerging growth company as defined in the JOBS Act and may take advantage of reduced reporting requirements. We are offering [&#9679;] shares of our common stock in this offering at a price to be set.</p><p>The Offering</p>`;
 const PROSPECTUS_SHORT = `<p>Summary</p><p>Overview</p><p>Acme makes robots for many large warehouses and small depots in the whole world.</p><p>The Offering</p>`;
-const PROSPECTUS_SPAC = `<p>SUMMARY</p><p>This summary highlights selected information about us and our business. It may not contain all of the information that is important to investors.</p><p>We are a newly incorporated blank check company incorporated as a Cayman Islands exempted company for the purpose of effecting a merger, share exchange or similar business combination with one or more businesses. We have not selected any business combination target. Our sponsor is Gamma Sponsor LLC, a Delaware limited liability company.</p><p>The Offering</p>`;
+const PROSPECTUS_SPAC = `<p>SUMMARY</p><p>This summary highlights selected information about Gamma, which is a newly organized blank check company, and its offering of units.</p><p>We are a newly incorporated blank check company incorporated as a Cayman Islands exempted company for the purpose of effecting a merger, share exchange or similar business combination with one or more businesses. We have not selected any business combination target. Our sponsor is Gamma Sponsor LLC, a Delaware limited liability company.</p><p>The Offering</p>`;
 const ABOUT_ACME = "Acme Robotics Inc. builds autonomous warehouse robots for U.S. retailers. Our robots pick, pack and sort goods without changes to a customer\u2019s shelving or software. We sold to 40 customers across 12 states in 2025.";
 
 const INDEX_WITH = { directory: { item: [{ name: "s1a2.htm" }, { name: "ex1-1.htm" }, { name: "ex107.htm" }, { name: "R1.htm" }] } };
@@ -154,6 +154,7 @@ function aboutRules(S) {
   want("too short to say anything: omitted", S.extractAbout(PROSPECTUS_SHORT) === null, S.extractAbout(PROSPECTUS_SHORT));
   const spac = S.extractAbout(PROSPECTUS_SPAC);
   want("a SPAC's summary without an \"Overview\" heading still reads", typeof spac === "string" && spac.startsWith("We are a newly incorporated blank check company") && /Gamma Sponsor LLC, a Delaware limited liability company\.$/.test(spac), spac);
+  want("an opening that does not describe the company (team biographies, a risk, a fragment cut by a page break): omitted", S.extractAbout("<p>Summary</p><p>The members of our team have extensive experience with special purpose acquisition companies and serve as officers and directors of several prior blank check companies listed in the United States.</p><p>interest to pay dissolution expenses, which is a cost borne by the trust account, divided by the number of public shares outstanding.</p><p>The Offering</p>") === null);
   want("no summary heading at all: omitted", S.extractAbout("<p>Overview</p><p>Acme Robotics Inc. builds autonomous warehouse robots for many retailers in the country. Our robots pick, pack and sort goods without changes.</p>") === null);
   return fails;
 }
@@ -302,12 +303,14 @@ try {
     ["a SET every run", "  if (changed) {", "  if (true) {"],
     ["tables read as prose", "    .replace(/<table\\b[\\s\\S]*?<\\/table>/gi, \"\\n\\n\")\n", ""],
     ["footnote markers kept", "    .replace(/<sup\\b[\\s\\S]*?<\\/sup>/gi, \"\")\n", ""],
-    ["the preamble taken as the description", "      if (!isProse(b) || PREAMBLE.test(b)) continue;", "      if (!isProse(b)) continue;"],
+    ["the preamble taken as the description", "      if (isProse(b) && !PREAMBLE.test(b)) prose.push(b);", "      if (isProse(b)) prose.push(b);"],
     ["boilerplate sentences kept", "    if (w < 5 || BAD_SENTENCE.test(sentence) || !/[.!?][\"”’)]?$/.test(sentence)) {", "    if (w < 5 || !/[.!?][\"”’)]?$/.test(sentence)) {"],
     ["\"U.S.\" read as a sentence end", "    if (m[0][0] === \".\" && ABBREVIATION.test(upTo)) continue;", ""],
     ["no word or sentence limit", "    if (picked.length >= 3) break;", ""],
     ["a too-short extract shown", "  if (!picked.length || words < ABOUT_MIN_WORDS) return null;", "  if (!picked.length) return null;"],
     ["\"Overview\" not looked for", "      if (OVERVIEW_HEADING.test(strip(blocks[k]))) { from = k + 1; break; }", ""],
+    ["any prose taken as the description", "    const start = prose.findIndex((b) => DESCRIBES.test(splitSentences(b)[0] ?? \"\"));", "    const start = 0;"],
+    ["a fragment cut by a page break read as prose", "!/^[\"“(]?[A-Z0-9]/.test(b) || ", ""],
     ["no prospectus fetch", "        if (reg.doc && now() <= opts.deadlineMs) {", "        if (false) {"],
     ["a failed fetch recorded as no extract (never retried)", "          } catch (err) {\n            if (err instanceof SecThrottled) throw err;\n          }", "          } catch (err) {\n            if (err instanceof SecThrottled) throw err;\n            profile.about = null;\n          }"],
     ["old profiles never backfilled", " || !(\"about\" in stored);", ";"],
