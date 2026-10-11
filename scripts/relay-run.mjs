@@ -1420,6 +1420,8 @@ const TASKS = {
   "write-revenue-trace": { script: "scripts/cap-reason-trace.mjs", args: () => [], needsTypescript: true, writes: true, env: { NAMED: "OXY PSX NVDA JPM", SHOW_REVENUE: "1" } },
   // READS ONLY (#553 COWORK #198 item 2): the five dividend cells through the page's own calls.
   "write-dividend-cells": { script: "scripts/cap-reason-trace.mjs", args: () => [], needsTypescript: true, writes: true, env: { NAMED: "NSC PGR FMC BKNG KHC", SHOW_DIV: "1" } },
+  // READS ONLY (#553 COWORK #199 items 2 and 4): Op. Income / FCF for OXY and PSX, FMC's Div Growth inputs.
+  "write-oi-fcf-trace": { script: "scripts/oi-fcf-trace.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
