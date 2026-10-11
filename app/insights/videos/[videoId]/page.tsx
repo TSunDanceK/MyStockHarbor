@@ -1,0 +1,436 @@
+import type { Metadata } from "next";
+import type { CSSProperties } from "react";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { getYouTubeVideoById, getLatestYouTubeVideos } from "@/lib/youtube";
+import {
+  getVideoContent,
+  getAllVideoMeta,
+  mergeVideoLists,
+} from "@/lib/videoContent";
+import { LATEST_VIDEOS_LIMIT, resolveVideo } from "@/lib/videoResolve";
+import { getVideoStockData } from "@/lib/videoStockData";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { remark } from "remark";
+import html from "remark-html";
+import VideoPageClient from "./VideoPageClient";
+import DatasheetViewer from "./DatasheetViewer";
+import PageShareBar from "@/app/components/PageShareBar";
+import { ReasonedValue } from "@/app/components/EstimatedValue";
+import { hasFiledEarnings } from "@/lib/server/filedEarnings";
+
+// Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
+// makes every crawl a full serverless render Google can never cheaply
+// revalidate. These pages are a YouTube embed plus a frozen markdown article;
+// the only moving part is the live stock strip, which the page itself already
+// labels as differing from the figures in the video. 30 minutes is well
+// inside that tolerance. See claude/seo-recovery-plan-2026-08-15.md item 3.1.
+export const revalidate = 1800;
+
+// EMPTY, deliberately -- and required, not optional. A dynamic segment cannot
+// be ISR without this export, so without it the `revalidate` above has never
+// had any effect and this route has been fully dynamic since it was written.
+// Nothing warns about that; see claude/traps/inert-route-revalidate.md.
+//
+// Empty rather than the 21 known video ids: each page calls getYouTubeVideoById,
+// and the YouTube quota is already tight enough to be logging "Hourly call
+// budget exhausted -- serving last-known-good video" in production. Prerendering
+// the full set at build would spend that budget to bake pages that on-demand ISR
+// produces just as well, once, on first request. `dynamicParams` defaults to
+// true, so every id still resolves.
+// REMOVED in #323. Same cause as /insights/[slug]: #310 made this route ● and
+// a prerendered route doing a request-time `no-store` fetch throws
+// DYNAMIC_SERVER_USAGE and 500s. Do not re-add until every Redis client on
+// this route's transitive read path uses PAGE_READ_CACHE AND a real videoId
+// has been requested against a preview deployment and returned 200.
+type Props = {
+  params: Promise<{ videoId: string }>;
+};
+
+function formatDate(value: string) {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function formatDateShort(value: string) {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function fmtPct(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)}%`;
+}
+
+function fmtPrice(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { videoId } = await params;
+
+  // The latest list is the page body's own cached read (same limit, same entry).
+  const [apiVideo, videoContent, apiVideos] = await Promise.all([
+    getYouTubeVideoById(videoId),
+    Promise.resolve(getVideoContent(videoId)),
+    getLatestYouTubeVideos(LATEST_VIDEOS_LIMIT),
+  ]);
+
+  // Same fallback rule as the page body below (lib/videoResolve.ts).
+  const video = resolveVideo(videoId, apiVideo, apiVideos, videoContent);
+
+  if (!video) {
+    return {
+      title: "Video | MyStockHarbor",
+      description: "Stock market video analysis from MyStockHarbor.",
+    };
+  }
+
+  const ticker = videoContent?.ticker ?? null;
+
+  const title = ticker
+    ? `${ticker} — ${video.title} | MyStockHarbor`
+    : `${video.title} | MyStockHarbor`;
+
+  const description = ticker
+    ? `${ticker} stock analysis: ${video.title}. Watch the full breakdown on MyStockHarbor.`
+    : `Watch and read the full analysis: ${video.title}`;
+
+  const url = `https://www.mystockharbor.com/insights/videos/${videoId}`;
+
+  const ogImage = video.thumbnailUrl
+    ? { url: video.thumbnailUrl, width: 1280, height: 720, alt: video.title }
+    : { url: "https://www.mystockharbor.com/og-image-v2.png", width: 1200, height: 630, alt: "MyStockHarbor" };
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: "MyStockHarbor",
+      images: [ogImage],
+      type: "article",
+      locale: "en_GB",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage.url],
+    },
+  };
+}
+
+export default async function VideoPage({ params }: Props) {
+  const { videoId } = await params;
+
+  const [apiVideo, videoContent, apiVideos] = await Promise.all([
+    getYouTubeVideoById(videoId),
+    Promise.resolve(getVideoContent(videoId)),
+    getLatestYouTubeVideos(LATEST_VIDEOS_LIMIT),
+  ]);
+
+  // This used to be `if (!video) notFound()` against the API result alone,
+  // which meant a page with a full written analysis committed to
+  // content/videos/*.md — and submitted to Google in sitemap.xml — returned a
+  // 404 whenever the YouTube API was unavailable AND Redis held no
+  // last-known-good entry for this ID (quota exhaustion, a bad key, a cold
+  // 30-day TTL, or simply a video never fetched successfully). A sitemap URL
+  // serving 404s to Googlebot is about the worst indexing signal available.
+  //
+  // Disk content is now sufficient on its own: toFallbackVideo builds the
+  // embed, thumbnail and watch URLs deterministically from the video ID. The
+  // API is preferred when present (real title and publish date), and 404
+  // remains correct only when NO source knows this ID.
+  //
+  // THE LATEST LIST IS A SOURCE TOO (#563 COWORK #70). A new video has no
+  // last-known-good copy, so with the hourly budget spent its by-id read is
+  // null, and with no article on disk yet the header's own "Video Breakdowns"
+  // link 404'd (and ISR cached the 404). The list in hand already knows it.
+  const video = resolveVideo(videoId, apiVideo, apiVideos, videoContent);
+
+  if (!video) notFound();
+
+  // Same reasoning as the /insights rail (PR #249): the "More videos" sidebar
+  // is an internal link block, so it must not silently empty out when the API
+  // is down. Disk-backed entries are the floor, live data enriches them.
+  const relatedVideos = mergeVideoLists(getAllVideoMeta(), apiVideos).filter(
+    (v) => v.id !== videoId
+  );
+
+  const ticker = videoContent?.ticker ?? null;
+
+  const [stockData, contentHtml] = await Promise.all([
+    ticker ? getVideoStockData(ticker) : Promise.resolve(null),
+    videoContent?.content
+      ? remark().use(html).process(videoContent.content).then((r) => r.toString())
+      : Promise.resolve(null),
+  ]);
+
+  const embedUrl = `${video.embedUrl}?vq=hd720&rel=0`;
+
+  const videoJsonLd = {
+    "@context": "https://schema.org", "@type": "VideoObject",
+    name: video.title, description: `Stock market analysis: ${video.title}`,
+    thumbnailUrl: video.thumbnailUrl,
+    // Omitted entirely rather than emitted empty when the publish date is
+    // unknown (disk fallback with no `date:` frontmatter) — an empty
+    // uploadDate is an invalid VideoObject, a missing one is merely optional.
+    ...(video.publishedAt ? { uploadDate: video.publishedAt } : {}),
+    url: video.url, embedUrl: video.embedUrl,
+    publisher: { "@type": "Organization", name: "MyStockHarbor", url: "https://www.mystockharbor.com" },
+  };
+
+  const statItems: { label: string; value: string; note?: string | null }[] | null = stockData ? [
+    { label: "Price", value: fmtPrice(stockData.price) },
+    // A WITHHELD CAP SAYS WHY (#563 COWORK #45): every dash explains itself.
+    { label: "Market cap", value: stockData.marketCap ?? "—", note: stockData.marketCap ? null : stockData.marketCapNote ?? null },
+    // The Tiingo path says why an MA tile is empty with a price on screen (#553 COWORK #88).
+    { label: "vs MA50", value: fmtPct(stockData.ma50Pct), note: stockData.ma50Note ?? null },
+    { label: "vs MA200", value: fmtPct(stockData.ma200Pct), note: stockData.ma200Note ?? null },
+    // THE FY FALLBACK (#563 COWORK #50): labelled for the year, with its note on tap/hover.
+    ...(stockData.peRatio ? [{ label: stockData.peLabel ?? "P/E (TTM)", value: stockData.peRatio.toFixed(1), note: stockData.peNote ?? null }] : []),
+    ...(stockData.trend ? [{ label: "Trend", value: stockData.trend }] : []),
+  ] : null;
+
+  const CARD_H = 260;
+  const MAX_VISIBLE = 6;
+
+  const pageUrl = `https://www.mystockharbor.com/insights/videos/${videoId}`;
+  const shareText = ticker
+    ? `${ticker} stock analysis: ${video.title} 📊 MyStockHarbor`
+    : `${video.title} 📊 MyStockHarbor`;
+
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(videoJsonLd) }} />
+
+      <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px 20px 60px" }}>
+
+          {/* Breadcrumb + share */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, opacity: 0.6 }}>
+              <Link href="/insights" style={{ color: "inherit", textDecoration: "none" }}>Insights</Link>
+              <span style={{ margin: "0 8px" }}>›</span>
+              <span>Video</span>
+            </div>
+            <PageShareBar
+              url={pageUrl}
+              title={ticker ? `${ticker} — ${video.title} | MyStockHarbor` : `${video.title} | MyStockHarbor`}
+              text={shareText}
+              align="right"
+            />
+          </div>
+
+          {/* Header + stats */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+              {ticker && <span style={{ display: "inline-flex", alignItems: "center", padding: "5px 12px", borderRadius: 999, background: "rgba(59,130,246,0.16)", border: "1px solid rgba(59,130,246,0.28)", fontSize: 13, fontWeight: 900, color: "#dbeafe" }}>{ticker}</span>}
+              {stockData?.sector && <span style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#94a3b8" }}>{stockData.sector}</span>}
+              {video.publishedAt && <span style={{ fontSize: 13, opacity: 0.6 }}>{formatDate(video.publishedAt)}</span>}
+            </div>
+            <h1 style={{ margin: "0 0 6px", fontSize: 28, fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.3px" }}>{video.title}</h1>
+            {stockData?.companyName && <p style={{ margin: "0 0 14px", opacity: 0.7, fontSize: 15 }}>{stockData.companyName}</p>}
+            {statItems && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, marginBottom: 10 }}>
+                {statItems.map(({ label, value, note }) => (
+                  <div key={label} style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "10px 14px" }}>
+                    <div style={{ fontSize: 10, opacity: 0.6, fontWeight: 700, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+                    {/* TAP, KEYBOARD AND HOVER (#563 COWORK #47): A's shared ReasonedValue, so a
+                        "—" or an empty MA explains itself on a phone too, not only on hover. */}
+                    <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "-0.2px" }}><ReasonedValue text={value} reason={note} /></div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* THE TIINGO PATH NAMES ITS PRICE AND CREDITS ITS SOURCE (#563 COWORK
+                #30/#31): "update live" is not true of a pooled IEX trade or an EOD
+                close, and the contract asks for the linked credit on each figure. */}
+            {stockData?.priceLabel ? (
+              <p style={{ fontSize: 11, opacity: 0.5, marginBottom: 0, fontStyle: "italic" }}>
+                Price: {stockData.priceLabel}.{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null} Figures will differ from those in the video. <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+              </p>
+            ) : stockData ? (
+              <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 0, fontStyle: "italic" }}>Price and market cap update live &mdash; figures will differ from those in the video.</p>
+            ) : null}
+          </div>
+
+          {/* ── MOBILE ── */}
+          <div className="mobileOnly">
+            <div style={{ position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.10)", background: "#000", marginBottom: 10 }}>
+              <iframe src={embedUrl} title={video.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} />
+            </div>
+            <div style={{ marginBottom: 18, textAlign: "right" }}>
+              <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube ↗</a>
+            </div>
+            <VideoPageClient videos={relatedVideos} contentHtml={contentHtml} />
+            {videoContent?.datasheetImage && (
+              <DatasheetViewer src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} />
+            )}
+            <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 13, opacity: 0.5, lineHeight: 1.6, marginBottom: 16 }}>
+              This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
+            </div>
+            <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>← Back to Insights</Link>
+          </div>
+
+          {/* ── DESKTOP ── */}
+          <div className="desktopOnly videoPageLayout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 28, alignItems: "start" }}>
+            <div>
+              <div style={{ position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.10)", background: "#000", marginBottom: 10 }}>
+                <iframe src={embedUrl} title={video.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} />
+              </div>
+              <div style={{ marginBottom: 28, textAlign: "right" }}>
+                <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube ↗</a>
+              </div>
+              {contentHtml ? (
+                <article className="video-article" style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "28px 30px", marginBottom: 24 }}>
+                  <div dangerouslySetInnerHTML={{ __html: contentHtml }} />
+                </article>
+              ) : (
+                <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 18, lineHeight: 1.8 }}>Written analysis coming soon &mdash; watch the video above for the full breakdown.</div>
+              )}
+              {videoContent?.datasheetImage && (
+                <DatasheetViewer src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} />
+              )}
+              <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 13, opacity: 0.5, lineHeight: 1.6, marginBottom: 24 }}>
+                This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
+              </div>
+              <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>← Back to Insights</Link>
+            </div>
+
+            <aside style={{ position: "sticky", top: 24 }}>
+              <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>More videos</div>
+              <div style={{ maxHeight: `${MAX_VISIBLE * CARD_H}px`, overflowY: "auto", display: "grid", gap: 8, scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent", touchAction: "pan-y" }}>
+                {relatedVideos.length === 0 ? (
+                  <div style={{ fontSize: 13, opacity: 0.5, lineHeight: 1.6 }}>No other videos available.</div>
+                ) : (
+                  relatedVideos.map((v) => (
+                    <Link key={v.id} href={`/insights/videos/${v.id}`} style={{ display: "block", textDecoration: "none", color: "#f1f5f9", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.025)" }}>
+                      <div style={{ width: "100%", aspectRatio: "16 / 9", overflow: "hidden", background: "#0b1220" }}>
+                        {v.thumbnailUrl ? <img src={v.thumbnailUrl} alt={v.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null}
+                      </div>
+                      <div style={{ padding: "8px 10px 10px" }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{v.title}</div>
+                        <div style={{ marginTop: 4, fontSize: 11, opacity: 0.5 }}>{formatDateShort(v.publishedAt)}</div>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+              <a href="https://www.youtube.com/@MyStockHarbor" target="_blank" rel="noopener noreferrer" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)", color: "#fecaca", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Visit YouTube Channel ↗</a>
+            </aside>
+          </div>
+
+          {/* Continue exploring — server-rendered internal links for crawlability.
+              Stock-specific videos (ticker present in the .md frontmatter) point at
+              that stock's own pages; generic / multi-stock videos (no ticker) point
+              at the site's evergreen hub pages instead. */}
+          <section style={{ marginTop: 36, border: "1px solid rgba(255,255,255,0.10)", borderRadius: 18, padding: 20, background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: "-0.02em" }}>Continue exploring</div>
+            <div style={{ marginTop: 6, marginBottom: 14, fontSize: 14, lineHeight: 1.6, opacity: 0.72 }}>
+              {ticker
+                ? `Dig deeper into ${ticker} with the full stock page, the latest earnings breakdown and recent news.`
+                : "Keep researching with supply-chain bottlenecks, the latest market headlines and upcoming earnings dates."}
+            </div>
+            <div className="videoExploreActions" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {ticker ? (
+                <>
+                  <Link href={`/stock/${encodeURIComponent(ticker)}`} style={exploreLinkStyle("blue")}>
+                    {ticker} stock page →
+                  </Link>
+                  {/* #552 COWORK #197: only with a filed SEC set. */}
+                  {(await hasFiledEarnings(ticker)) ? (
+                    <Link href={`/stock/${encodeURIComponent(ticker)}/earnings`} style={exploreLinkStyle("gold")}>
+                      {ticker} earnings →
+                    </Link>
+                  ) : null}
+                  <Link href={`/stock/${encodeURIComponent(ticker)}/news`} style={exploreLinkStyle("green")}>
+                    {ticker} news →
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/bottlenecks" style={exploreLinkStyle("blue")}>
+                    Bottlenecks →
+                  </Link>
+                  <Link href="/headlines" style={exploreLinkStyle("green")}>
+                    Market headlines →
+                  </Link>
+                  <Link href="/earnings-calendar" style={exploreLinkStyle("gold")}>
+                    Earnings calendar →
+                  </Link>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <style>{`
+          .mobileOnly { display: none; }
+          .desktopOnly { display: grid; }
+          .video-article { font-size: 18px; line-height: 1.8; color: #cbd5e1; }
+          .video-article h2 { font-size: 24px; font-weight: 800; color: #f1f5f9; margin: 36px 0 14px; letter-spacing: -0.3px; line-height: 1.25; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+          .video-article h2:first-child { margin-top: 0; }
+          .video-article p { margin: 0 0 20px; line-height: 1.85; }
+          .video-article p:last-child { margin-bottom: 0; }
+          .video-article ul { margin: 0 0 20px; padding: 0; list-style: none; }
+          .video-article ul li { position: relative; padding: 12px 0 12px 24px; line-height: 1.75; border-bottom: 1px solid rgba(255,255,255,0.05); }
+          .video-article ul li:last-child { border-bottom: none; padding-bottom: 0; }
+          .video-article ul li::before { content: ''; position: absolute; left: 0; top: 22px; width: 7px; height: 7px; border-radius: 50%; background: rgba(59,130,246,0.8); }
+          .video-article strong { font-weight: 800; color: #f1f5f9; }
+          @media (max-width: 960px) {
+            .mobileOnly { display: block; }
+            .desktopOnly { display: none !important; }
+          }
+          @media (max-width: 640px) {
+            .videoExploreActions { display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important; }
+          }
+        `}</style>
+      </main>
+    </>
+  );
+}
+
+function exploreLinkStyle(tint: "blue" | "green" | "gold"): CSSProperties {
+  const map = {
+    blue: {
+      border: "rgba(59,130,246,0.34)",
+      background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+      color: "#dbeafe",
+    },
+    green: {
+      border: "rgba(34,197,94,0.30)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
+    },
+    gold: {
+      border: "rgba(250,204,21,0.30)",
+      background: "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))",
+      color: "#fef3c7",
+    },
+  };
+  const t = map[tint];
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 42,
+    padding: "10px 16px",
+    borderRadius: 12,
+    border: `1px solid ${t.border}`,
+    background: t.background,
+    color: t.color,
+    textDecoration: "none",
+    fontWeight: 900,
+    fontSize: 13,
+    whiteSpace: "nowrap",
+  };
+}

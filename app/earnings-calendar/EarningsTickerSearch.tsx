@@ -1,0 +1,324 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { chartHref } from "@/lib/chartHref";
+import Link from "next/link";
+import TickerLogo from "@/app/components/TickerLogo";
+import { activeRowStyle } from "@/lib/listboxNav";
+import { useListboxNav } from "@/app/components/useListboxNav";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
+
+type SymbolResult = { symbol: string; name: string; exchange: string };
+
+/**
+ * What the server hands back, already worded.
+ *
+ * ── THIS COMPONENT NO LONGER FORMATS A DATE, AND THAT IS THE POINT ────────
+ * It used to hold `nextEarningsDate` and a `formatDate` helper, and rendered
+ * "NVDA next reports on Nov 18, 2026" from FMP's calendar as a flat fact. Both
+ * are gone. The answer now arrives as finished sentences from
+ * lib/server/symbolOutlook.ts, composed beside the copy the "Expected to
+ * report" section uses, so the hedge cannot be dropped in a JSX tidy-up and a
+ * band cannot be quietly turned back into a day by a helper living here.
+ *
+ * If a future change needs a date formatter in this file, that is the signal
+ * to stop and re-read lib/server/dueToReport.ts's header first.
+ */
+type Outlook = {
+  symbol: string;
+  kind: "due" | "expected" | "beyond-window" | "no-estimate" | "unavailable";
+  headline: string;
+  hedge: string | null;
+  evidence: string[];
+};
+
+/**
+ * The client's own fallback. NOT a silent empty state: a fetch that never
+ * landed is a gap on our side, and saying nothing here would read to a reader
+ * exactly like "this company has nothing coming up".
+ */
+const unreachable = (symbol: string): Outlook => ({
+  symbol,
+  kind: "unavailable",
+  headline: "Report estimates cannot be shown right now — that is a gap on our side.",
+  hedge: null,
+  evidence: [],
+});
+
+export default function EarningsTickerSearch() {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SymbolResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const [info, setInfo] = useState<Outlook | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    function onClickOutside(event: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`);
+        const data = (await res.json()) as { results?: SymbolResult[] };
+        // /api/symbols already returns relevance-ranked results -- no
+        // client-side re-sort (see app/api/symbols/route.ts history).
+        setResults(Array.isArray(data.results) ? data.results : []);
+      } catch {
+        setResults([]);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  async function chooseResult(result: SymbolResult) {
+    setQuery(result.symbol);
+    setOpen(false);
+    setInfo(null);
+    setLoading(true);
+
+    try {
+      // 503 is a real answer here, not a failure to handle: the route returns
+      // it for an unreadable filing record and the body still carries the
+      // sentence that says so. Parsing it is what keeps "we are broken" from
+      // being rendered as "nothing is coming".
+      const res = await fetch(`/api/earnings-outlook/${encodeURIComponent(result.symbol)}`);
+      const data = (await res.json()) as Partial<Outlook>;
+      if (typeof data.headline === "string" && data.headline) {
+        setInfo({
+          symbol: result.symbol,
+          kind: data.kind ?? "unavailable",
+          headline: data.headline,
+          hedge: typeof data.hedge === "string" ? data.hedge : null,
+          evidence: Array.isArray(data.evidence) ? data.evidence : [],
+        });
+      } else {
+        setInfo(unreachable(result.symbol));
+      }
+    } catch {
+      setInfo(unreachable(result.symbol));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Arrow keys, Enter, Escape and Tab: the shared rules (#553 COWORK #36).
+  const nav = useListboxNav({
+    count: Math.min(results.length, 8),
+    open,
+    onSelect: (i) => { const r = results[i]; if (r) void chooseResult(r); },
+    onClose: () => setOpen(false),
+    resetKey: query,
+  });
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", maxWidth: 440 }}>
+      {/* Icon + input share their own relative box. The results dropdown below
+          is positioned off the OUTER wrapper, not this one -- that wrapper's
+          height is still just the input's when the dropdown is open (the info
+          panel only renders once a result is chosen, which closes it), so
+          top: calc(100% + 8px) is unaffected by this extra element. */}
+      <div style={{ position: "relative" }}>
+        <svg
+          aria-hidden="true"
+          focusable="false"
+          viewBox="0 0 24 24"
+          width={17}
+          height={17}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            position: "absolute",
+            left: 13,
+            top: "50%",
+            transform: "translateY(-50%)",
+            // Kept brighter than a plain slate grey: the blue-tinted border and
+            // navy fill make a mid grey read as washed-out blue in situ.
+            color: "rgba(203,213,225,0.78)",
+            // Taps in the icon's corner should focus the field, not dead-end
+            // on the SVG.
+            pointerEvents: "none",
+          }}
+        >
+          <circle cx="11" cy="11" r="7" />
+          <line x1="16.2" y1="16.2" x2="21" y2="21" />
+        </svg>
+        <input
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value.toUpperCase());
+            setOpen(true);
+            setInfo(null);
+          }}
+          onFocus={() => setOpen(true)}
+          {...nav.inputAria}
+          onKeyDown={(e) => {
+            if (nav.onKeyDown(e)) return;
+            // Nothing highlighted: an exact ticker match in the list; none, nothing (#553 COWORK #40).
+            if (e.key === "Enter") {
+              const exact = results.find((r) => r.symbol.trim().toUpperCase() === query.trim().toUpperCase());
+              if (exact) { e.preventDefault(); void chooseResult(exact); }
+            }
+          }}
+          placeholder="Search a ticker or company"
+          aria-label="Search for a ticker or company"
+          style={{
+            width: "100%",
+            // Left padding clears the 17px icon at left: 13.
+            padding: "12px 14px 12px 38px",
+            borderRadius: 12,
+            border: "1px solid rgba(59,130,246,0.32)",
+            background: "rgba(15,23,42,0.72)",
+            color: "#f8fafc",
+            fontSize: 14,
+            fontWeight: 700,
+            outline: "none",
+            boxSizing: "border-box",
+          }}
+        />
+      </div>
+
+      {open && results.length > 0 ? (
+        <div
+          {...nav.listProps}
+          aria-label="Ticker search results"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            right: 0,
+            zIndex: 30,
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 13,
+            background: "#0b1220",
+            boxShadow: "0 14px 28px rgba(0,0,0,0.4)",
+            overflow: "hidden",
+          }}
+        >
+          {results.slice(0, 8).map((result, i) => (
+            <button
+              key={`${result.symbol}-${result.exchange}`}
+              type="button"
+              tabIndex={-1}
+              {...nav.optionProps(i)}
+              onClick={() => chooseResult(result)}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "10px 13px",
+                border: "none",
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+                background: "#0b1220",
+                color: "#f8fafc",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                ...(nav.active === i ? activeRowStyle(true) : null),
+              }}
+            >
+              <TickerLogo symbol={result.symbol} size={22} radius={6} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 13 }}>{result.symbol}</div>
+                <div style={{ fontSize: 12, color: "rgba(226,232,240,0.66)" }}>
+                  {result.name}
+                  {result.exchange ? ` · ${result.exchange}` : ""}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.7 }}>Reading its filing history…</div>
+      ) : info ? (
+        <div
+          style={{
+            marginTop: 10,
+            padding: 12,
+            borderRadius: 12,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <div style={{ fontSize: 13, lineHeight: 1.6, fontWeight: 700 }}>{info.headline}</div>
+          {info.hedge ? (
+            <div style={{ marginTop: 5, fontSize: 12, lineHeight: 1.55, color: "rgba(226,232,240,0.7)" }}>
+              {info.hedge}
+            </div>
+          ) : null}
+          {info.evidence.length ? (
+            <ul
+              style={{
+                margin: "9px 0 0",
+                padding: 0,
+                listStyle: "none",
+                display: "flex",
+                flexDirection: "column",
+                gap: 3,
+              }}
+            >
+              {info.evidence.map((line) => (
+                <li key={line} style={{ fontSize: 12, lineHeight: 1.5, color: "rgba(226,232,240,0.62)" }}>
+                  {line}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {hasFiledEarnings(info.symbol) ? (
+            <Link
+              href={`/stock/${encodeURIComponent(info.symbol)}/earnings`}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 9,
+                border: "1px solid rgba(147,197,253,0.28)",
+                background: "rgba(147,197,253,0.10)",
+                color: "#93c5fd",
+                textDecoration: "none",
+                fontWeight: 700,
+                fontSize: 12.5,
+              }}
+            >
+              View Earnings Page →
+            </Link>
+            ) : null}
+            <Link
+              href={chartHref(info.symbol)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 9,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(255,255,255,0.04)",
+                color: "#e2e8f0",
+                textDecoration: "none",
+                fontWeight: 700,
+                fontSize: 12.5,
+              }}
+            >
+              Chart →
+            </Link>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

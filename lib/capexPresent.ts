@@ -1,0 +1,372 @@
+// What the capex page shows, decided in one pure place (Relay C, #563 COWORK
+// #2 presentation rules). Import-free, so the check loads it in bare Node.
+//
+// THE RULES, each asserted by scripts/check-capex-page.mjs:
+//   * the bar is the % CHANGE (current vs prior fiscal year) -- it compares
+//     across companies and currencies; the filed amount is secondary text;
+//   * amounts in the FILED currency (ASML in EUR), never converted;
+//   * rows grouped under our plain headings, and NO group totals -- nothing is
+//     ever summed across companies;
+//   * "FY to <month year>" per row, because fiscal years end differently;
+//   * a "Broad line" tag on every line that is not data-centre specific;
+//   * a line with no positive prior year is "New line", not a bar.
+
+export type PresentEntry = {
+  id: string;
+  ticker: string;
+  group: string;
+  filedLabel: string;
+  subLabel: { text: string } | null;
+  broad: boolean;
+  hyperscaler: boolean;
+};
+
+export type PresentFigure = {
+  fyEnd: string;
+  currency: string;
+  current: number;
+  prior: number | null;
+  changePct: number | null;
+  subLabelOk: boolean;
+  staleSince: string | null;
+  form: string;
+};
+
+export type ReceiverView = {
+  id: string;
+  ticker: string;
+  label: string;
+  subLabel: string | null;
+  broad: boolean;
+  fyTo: string;
+  amount: string;
+  priorAmount: string | null;
+  changePct: number | null;
+  changeText: string;
+  /** 0..100: the bar's share of the panel's scale. */
+  barPct: number;
+  /** The bar was cut at the scale's cap; the text carries the real value. */
+  capped: boolean;
+  stale: boolean;
+  form: string;
+};
+
+export type ReceiverGroupView = { id: string; heading: string; hyperscalerNote: boolean; rows: ReceiverView[] };
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "FY to Jan 2026". A 52/53-week year ending in the first days of a month
+ *  belongs to the month before ("2026-07-03" -> "Jun 2026"). */
+export function fyToLabel(fyEnd: string): string {
+  const [y, m, d] = fyEnd.split("-").map(Number);
+  let month = m - 1;
+  let year = y;
+  if (d <= 7) {
+    month -= 1;
+    if (month < 0) { month = 11; year -= 1; }
+  }
+  return `FY to ${MONTHS[month]} ${year}`;
+}
+
+/** "$193.7bn" / "EUR 10.4bn" / "$480m". The filed currency, never converted. */
+export function formatAmount(value: number, currency: string): string {
+  const sign = value < 0 ? "-" : "";
+  const abs = Math.abs(value);
+  const prefix = currency === "USD" ? "$" : `${currency} `;
+  if (abs >= 1e9) return `${sign}${prefix}${(abs / 1e9).toFixed(abs >= 1e11 ? 0 : 1)}bn`;
+  return `${sign}${prefix}${Math.round(abs / 1e6)}m`;
+}
+
+export function changeText(pct: number | null): string {
+  if (pct === null) return "New line";
+  const r = Math.round(pct);
+  return `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r)}%`;
+}
+
+/** Bars share one scale, capped so one +600% line does not flatten the rest. */
+export const BAR_CAP_PCT = 150;
+
+export function buildReceiverGroups(
+  groups: Array<{ id: string; heading: string }>,
+  entries: PresentEntry[],
+  figures: Record<string, PresentFigure | undefined>
+): ReceiverGroupView[] {
+  const out: ReceiverGroupView[] = [];
+  for (const g of groups) {
+    const rows: ReceiverView[] = [];
+    for (const e of entries) {
+      if (e.group !== g.id) continue;
+      const f = figures[e.id];
+      if (!f) continue;
+      const pct = f.changePct;
+      const capped = pct !== null && Math.abs(pct) > BAR_CAP_PCT;
+      rows.push({
+        id: e.id,
+        ticker: e.ticker,
+        label: e.filedLabel,
+        subLabel: e.subLabel && f.subLabelOk ? e.subLabel.text : null,
+        broad: e.broad,
+        fyTo: fyToLabel(f.fyEnd),
+        amount: formatAmount(f.current, f.currency),
+        priorAmount: f.prior === null ? null : formatAmount(f.prior, f.currency),
+        changePct: pct,
+        changeText: changeText(pct),
+        barPct: pct === null ? 0 : (Math.min(Math.abs(pct), BAR_CAP_PCT) / BAR_CAP_PCT) * 100,
+        capped,
+        stale: Boolean(f.staleSince),
+        form: f.form,
+      });
+    }
+    // Largest change first; new lines last (they have no change to rank).
+    rows.sort((a, b) => (b.changePct ?? -Infinity) - (a.changePct ?? -Infinity));
+    if (rows.length) out.push({ id: g.id, heading: g.heading, hyperscalerNote: entries.some((e) => e.group === g.id && e.hyperscaler), rows });
+  }
+  return out;
+}
+
+// ── "Who is receiving most" (#563 COWORK #124) ─────────────────────────────
+// The sidebar's five largest build-out sales lines, read off panel 2's own
+// lines: no new record, no new read. What qualifies, so the ranking is honest
+// (each rule asserted by scripts/check-capex-receiving.mjs):
+//   * supplier groups only -- "Cloud & data centres" are the spenders;
+//   * no "Broad line" -- its data-centre share can't be separated;
+//   * no "New line" -- no prior year to stand on;
+//   * USD lines only -- amounts are shown as filed, never converted, so a EUR
+//     line can't be ranked against a dollar one.
+// Ranked by the filed amount. Nothing says who paid whom.
+
+/** The group whose lines are the spenders' own sales, never ranked as receivers. */
+export const SPENDER_GROUP = "cloud-datacentres";
+
+export type TopReceiverView = {
+  id: string;
+  ticker: string;
+  name: string;
+  /** The filed line, with its sub-label once verified, as panel 2 shows it. */
+  line: string;
+  fyTo: string;
+  amount: string;
+  stale: boolean;
+};
+
+export function buildTopReceivers(
+  entries: PresentEntry[],
+  figures: Record<string, PresentFigure | undefined>,
+  companyName: (ticker: string) => string = () => "",
+  show = 5
+): TopReceiverView[] {
+  const picked: Array<{ e: PresentEntry; f: PresentFigure }> = [];
+  for (const e of entries) {
+    const f = figures[e.id];
+    if (!f) continue;
+    if (e.group === SPENDER_GROUP) continue;
+    if (e.broad) continue;
+    if (f.changePct === null) continue;
+    if (f.currency !== "USD") continue;
+    picked.push({ e, f });
+  }
+  picked.sort((a, b) => b.f.current - a.f.current);
+  return picked.slice(0, show).map(({ e, f }) => {
+    const sub = e.subLabel && f.subLabelOk ? e.subLabel.text : null;
+    return {
+      id: e.id,
+      ticker: e.ticker,
+      name: companyName(e.ticker) || e.ticker,
+      line: sub ? `${e.filedLabel} — ${sub}` : e.filedLabel,
+      fyTo: fyToLabel(f.fyEnd),
+      amount: formatAmount(f.current, f.currency),
+      stale: Boolean(f.staleSince),
+    };
+  });
+}
+
+export type ContractView = {
+  ticker: string;
+  /** Our directory name for the company ("General Dynamics"); the ticker when there is none. */
+  company: string;
+  amount: string;
+  barPct: number;
+  /** The USAspending recipient names, largest first, in normal case, each once. */
+  entities: string[];
+  /** Recipient records behind them: USAspending often repeats one name under several registrations. */
+  records: number;
+};
+
+// Words USAspending writes in capitals that ARE capitals, and a few names whose
+// own capitalisation is mixed. Everything else is put in normal case: the page
+// shows no all-caps names (#563 COWORK #4).
+const KEEP_UPPER = new Set(["LLC", "USG", "OTS", "CACI", "KBR", "HII", "QTC", "CGI", "FCA", "US", "USA", "V2X", "BAE", "IBM", "SAIC", "GE", "RTX", "AWS", "DXC", "AECOM", "BWXT", "NASA", "IT", "II", "III"]);
+const MIXED: Record<string, string> = { L3HARRIS: "L3Harris", OPTUMRX: "OptumRx", OPTUMSERVE: "OptumServe", AMERISOURCEBERGEN: "AmerisourceBergen" };
+const LEGAL: Record<string, string> = { INC: "Inc.", CORP: "Corp.", CO: "Co.", LTD: "Ltd", LP: "L.P.", PLC: "plc" };
+const SMALL = new Set(["AND", "OF", "THE", "FOR", "DE"]);
+
+/** "ELECTRIC BOAT CORPORATION" -> "Electric Boat Corporation"; a name already in mixed case is left alone. */
+export function entityCase(raw: string): string {
+  const name = String(raw ?? "").trim();
+  if (/[a-z]/.test(name)) return name;
+  return name
+    .split(/\s+/)
+    .map((word, i) =>
+      word.replace(/[A-Z0-9&]+(?:\.[A-Z](?![A-Z]))*\.?/g, (tok, at: number, whole: string) => {
+        if (at > 0 && whole[at - 1] === "'") return tok.toLowerCase(); // MCDONALD'S -> McDonald's
+        const bare = tok.replace(/\./g, "");
+        if (MIXED[bare]) return MIXED[bare];
+        if (LEGAL[bare]) return LEGAL[bare];
+        if (KEEP_UPPER.has(bare) || tok.includes("&")) return tok;
+        if (i > 0 && SMALL.has(bare)) return tok.toLowerCase();
+        // Scottish/Irish "Mc" names: MCKESSON -> McKesson, MCDONALD -> McDonald.
+        if (/^MC[A-Z]{4,}$/.test(tok)) return "Mc" + tok.charAt(2) + tok.slice(3).toLowerCase();
+        return tok.charAt(0) + tok.slice(1).toLowerCase();
+      })
+    )
+    .join(" ");
+}
+
+export function buildContractRows(
+  rows: Array<{ ticker: string; amount: number; entities: Array<{ name: string }> }>,
+  show: number,
+  companyName: (ticker: string) => string = () => ""
+): ContractView[] {
+  const top = rows.slice(0, show);
+  const max = Math.max(0, ...top.map((r) => r.amount));
+  return top.map((r) => ({
+    ticker: r.ticker,
+    company: companyName(r.ticker) || r.ticker,
+    amount: formatAmount(r.amount, "USD"),
+    barPct: max > 0 ? (Math.max(0, r.amount) / max) * 100 : 0,
+    entities: [...new Set(r.entities.map((e) => entityCase(e.name)))],
+    records: r.entities.length,
+  }));
+}
+
+// ── "Who is spending" (Layer 1, #563 COWORK #1 D1) ─────────────────────────
+// One row per sector. The long bar is the latest calendar year on ONE scale
+// shared by every sector (the largest sector is full width); the five small
+// bars are that sector's own five years on its own scale, so they show shape,
+// not size. Capex ÷ revenue is shown as text for the first and latest year.
+
+export type SpendingSectorInput = {
+  sector: string;
+  cohort: number;
+  capex: number[];
+  ratioCohort: number;
+  capexToRevenue: (number | null)[];
+  top: string[];
+};
+
+export type SpendingView = {
+  sector: string;
+  cohort: number;
+  latest: string;
+  /** 0..100 on the scale shared by all sectors. */
+  barPct: number;
+  /** 0..100 per year, on this sector's own scale. */
+  spark: number[];
+  sparkTitles: string[];
+  /** "'21".."'25", under the small bars. */
+  sparkYears: string[];
+  /** Each year's amount, the small bars' hover/tap value. */
+  sparkValues: string[];
+  changeText: string;
+  ratioFirst: string | null;
+  ratioLatest: string | null;
+  ratioCohort: number;
+  top: string[];
+};
+
+const pctText = (x: number | null) => (x === null ? null : `${(x * 100).toFixed(1)}%`);
+
+export function buildSpendingRows(sectors: SpendingSectorInput[], years: number[]): SpendingView[] {
+  const last = years.length - 1;
+  const max = Math.max(0, ...sectors.map((s) => s.capex[last] ?? 0));
+  return sectors.map((s) => {
+    const own = Math.max(0, ...s.capex);
+    const first = s.capex[0];
+    const latest = s.capex[last];
+    return {
+      sector: s.sector,
+      cohort: s.cohort,
+      latest: formatAmount(latest, "USD"),
+      barPct: max > 0 ? (Math.max(0, latest) / max) * 100 : 0,
+      spark: s.capex.map((v) => (own > 0 ? (Math.max(0, v) / own) * 100 : 0)),
+      sparkTitles: s.capex.map((v, i) => `${years[i]}: ${formatAmount(v, "USD")}`),
+      sparkYears: years.map((y) => `'${String(y).slice(2)}`),
+      sparkValues: s.capex.map((v) => formatAmount(v, "USD")),
+      changeText: first > 0 ? changeText(((latest - first) / first) * 100) : "New line",
+      ratioFirst: pctText(s.capexToRevenue[0] ?? null),
+      ratioLatest: pctText(s.capexToRevenue[last] ?? null),
+      ratioCohort: s.ratioCohort,
+      top: s.top,
+    };
+  });
+}
+
+// ── The insight cards (#563 COWORK #12) ────────────────────────────────────
+// Every figure is read off the page's own three records; nothing is fetched,
+// nothing is estimated, and nothing flows between panels. The one sum is the
+// share of the 2025 capex across the sectors shown -- within ONE panel, never
+// across receivers or contracts.
+
+export type InsightInput = {
+  spending: { years: number[]; sectors: SpendingSectorInput[]; leaders?: Array<{ symbol: string; sector: string; capex: number }> } | null;
+  receivers: Array<{ ticker: string; label: string; subLabel: string | null; changePct: number | null; changeText: string; fyTo: string }>;
+  contracts: { rows: Array<{ ticker: string; amount: number }>; mappedAmount: number; totalAmount: number | null; window: { start: string; end: string } } | null;
+  companyName: (ticker: string) => string;
+};
+
+export type Insights = {
+  year: number | null;
+  whereMoney: Array<{ sector: string; amount: string; sharePct: number; shareText: string }>;
+  /** The remaining sectors' share, so the share bar's empty part is named. */
+  otherSectors: { count: number; shareText: string } | null;
+  topSpenders: Array<{ ticker: string; name: string; amount: string; sector: string }>;
+  fastest: { sector: string; changeText: string; from: string; to: string; firstYear: number } | null;
+  reinvest: { sector: string; ratioText: string; cohort: number } | null;
+  receiverTop: { ticker: string; name: string; line: string; changeText: string; fyTo: string } | null;
+  contractTop: { ticker: string; name: string; amount: string; mapped: string; total: string | null } | null;
+};
+
+export function buildInsights(input: InsightInput): Insights {
+  const sp = input.spending;
+  const last = sp ? sp.years.length - 1 : -1;
+  const sectors = sp ? sp.sectors.filter((s) => Number.isFinite(s.capex[last])) : [];
+  const allLatest = sectors.reduce((a, s) => a + Math.max(0, s.capex[last]), 0);
+  const byLatest = [...sectors].sort((a, b) => b.capex[last] - a.capex[last]);
+  const whereMoney = allLatest > 0
+    ? byLatest.slice(0, 3).map((s) => {
+        const sharePct = (s.capex[last] / allLatest) * 100;
+        return { sector: s.sector, amount: formatAmount(s.capex[last], "USD"), sharePct, shareText: `${Math.round(sharePct)}%` };
+      })
+    : [];
+  const shownShare = whereMoney.reduce((a, w) => a + w.sharePct, 0);
+  const otherSectors = whereMoney.length && sectors.length > whereMoney.length
+    ? { count: sectors.length - whereMoney.length, shareText: `${Math.round(100 - shownShare)}%` }
+    : null;
+  const topSpenders = (sp?.leaders ?? []).slice(0, 5).map((l) => ({
+    ticker: l.symbol,
+    name: input.companyName(l.symbol) || l.symbol,
+    amount: formatAmount(l.capex, "USD"),
+    sector: l.sector,
+  }));
+  const growth = sectors
+    .filter((s) => s.capex[0] > 0)
+    .map((s) => ({ s, pct: ((s.capex[last] - s.capex[0]) / s.capex[0]) * 100 }))
+    .sort((a, b) => b.pct - a.pct)[0];
+  const fastest = growth && sp
+    ? { sector: growth.s.sector, changeText: changeText(growth.pct), from: formatAmount(growth.s.capex[0], "USD"), to: formatAmount(growth.s.capex[last], "USD"), firstYear: sp.years[0] }
+    : null;
+  const ratio = sectors
+    .filter((s) => typeof s.capexToRevenue[last] === "number")
+    .sort((a, b) => (b.capexToRevenue[last] as number) - (a.capexToRevenue[last] as number))[0];
+  const reinvest = ratio ? { sector: ratio.sector, ratioText: `${((ratio.capexToRevenue[last] as number) * 100).toFixed(1)}%`, cohort: ratio.ratioCohort } : null;
+  const rTop = input.receivers.filter((r) => r.changePct !== null).sort((a, b) => (b.changePct as number) - (a.changePct as number))[0];
+  const receiverTop = rTop
+    ? { ticker: rTop.ticker, name: input.companyName(rTop.ticker) || rTop.ticker, line: rTop.subLabel ? `${rTop.label} (${rTop.subLabel})` : rTop.label, changeText: rTop.changeText, fyTo: rTop.fyTo }
+    : null;
+  const c = input.contracts;
+  const cTop = c ? [...c.rows].sort((a, b) => b.amount - a.amount)[0] : undefined;
+  const contractTop = c && cTop
+    ? { ticker: cTop.ticker, name: input.companyName(cTop.ticker) || cTop.ticker, amount: formatAmount(cTop.amount, "USD"), mapped: formatAmount(c.mappedAmount, "USD"), total: c.totalAmount ? formatAmount(c.totalAmount, "USD") : null }
+    : null;
+  return { year: sp ? sp.years[last] : null, whereMoney, otherSectors, topSpenders, fastest, reinvest, receiverTop, contractTop };
+}

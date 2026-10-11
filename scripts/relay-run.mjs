@@ -1,0 +1,1591 @@
+// Task router for .github/workflows/relay.yml.
+//
+// WHY THE ROUTING LIVES HERE AND NOT IN THE WORKFLOW. workflow_dispatch only
+// registers for workflow files on the DEFAULT BRANCH, so anything encoded in
+// relay.yml costs a merge-and-wait round trip to change. That toll was paid twice
+// in one day (#436 gated Step 0, #444 gated Phase 0). A `case` statement inside
+// the workflow would have kept paying it: every new phase would still need an
+// edit to main before it could run once.
+//
+// A workflow can be dispatched with `ref` pointed at a FEATURE BRANCH, and it
+// checks that branch out. So everything that varies per phase belongs in
+// scripts/, where a branch can add it and dispatch it the same minute. relay.yml
+// now holds only what cannot move: the input declarations and the credential
+// split.
+//
+// THE WRITE PREFIX IS A SECURITY BOUNDARY, NOT A NAMING STYLE. Tasks whose name
+// begins with "write-" are routed by relay.yml to a separate job that holds the
+// Upstash credentials; everything else runs in a job that references no secrets
+// at all and does not even install the Redis client. This file enforces the same
+// rule independently, from the other side: invoked without --allow-writes it
+// REFUSES to run a write- task, so a mis-edited `if:` in the workflow cannot
+// cause a credentialled task to execute in the read-only job. Two mechanisms,
+// one rule -- because a single `if:` expression is one typo from silently
+// inverting.
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+// task name -> script, plus the args it takes from the environment. Adding a
+// phase is an edit HERE, on a branch, with no workflow change and no merge.
+const TASKS = {
+  "stooq-access": { script: "scripts/stooq-access-probe.mjs", args: () => [] },
+  // WHAT FED H.10 AND THE ECB ACTUALLY SERVE. Read-only and UNCREDENTIALLED on
+  // purpose: it touches no store, so it belongs in the job that cannot reach
+  // one. Both hosts are 403 CONNECT from the agent sandbox, so this is the only
+  // place the rate sources can be measured at all.
+  "fx-sources": { script: "scripts/fx-source-probe.mjs", args: () => [] },
+  // THE SAME FOUR QUESTIONS asked of FRED's clean-CSV endpoint for the H.10
+  // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
+  // URL from an unavailable source. Read-only and uncredentialled likewise.
+  "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // THE CURRENCY VOTE (#552 COWORK #50/#55): ties on fields and rules (a)/(b)/(c),
+  // against the SHIPPED reportingCurrency. ALL=1 widens to every registrant.
+  "currency-vote-census": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true },
+  "currency-vote-census-all": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true, env: { ALL: "1" } },
+  // IS DEXTAUS CURRENT, WHICH WAY IT POINTS, AND WHAT ECB'S TWD LEG LOOKS
+  // LIKE BESIDE IT (#552, COWORK #22 §0). Read-only and uncredentialled likewise.
+  "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
+  // DEXINUS / DEXMXUS before they become primaries (#552 COWORK #132 (c)). Read-only and uncredentialled likewise.
+  "fred-inr-mxn": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [] },
+  // DEXCHUS before it becomes CNY's primary (#552 COWORK #140). Read-only and uncredentialled likewise.
+  "fred-cny": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "CNY:DEXCHUS" } },
+  // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
+  // and every FRED series the adapter names; touches no store, so read-only.
+  "fx-filer-diagnosis": {
+    script: "scripts/fx-filer-diagnosis.mjs",
+    args: () => [],
+    // It LIFTS the shipped reportingCurrency and extractCompanyFacts out of
+    // .ts modules, so it needs the compiler to erase types. The router
+    // installs it in isolation; this stays in the read-only job because it
+    // touches no store.
+    needsTypescript: true,
+  },
+  // Added on a branch and dispatched the same minute, with no workflow edit and
+  // no merge -- which is the whole reason routing lives here instead of in a
+  // case statement inside relay.yml.
+  "bars-providers": { script: "scripts/bars-provider-probe.mjs", args: () => [] },
+  // DOES YAHOO WANT BRK.B OR BRK-B? The sandbox answers 403 CONNECT for
+  // query1.finance.yahoo.com and stooq.com both, so this is the only place the
+  // question can be asked -- and it has to be asked before the quote path
+  // converts anything on the Yahoo leg, because the dot is what the app sends
+  // today and converting the one vendor that already accepts it would break it.
+  // Re-asks Stooq at the same time, since the proposal to delete that leg rests
+  // on a measurement from 2026-09-12. Read-only and uncredentialled: public
+  // endpoints, no store.
+  "share-class-spelling": { script: "scripts/share-class-spelling-probe.mjs", args: () => [] },
+  "nasdaq-refill": {
+    script: "scripts/nasdaq-refill-analysis.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  "listing-split": {
+    script: "scripts/listing-split.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  "phase0-adjustment": {
+    script: "scripts/phase0-adjustment-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  coverage: {
+    script: "scripts/stooq-coverage.mjs",
+    args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
+    needsDump: true,
+  },
+  // Name-matching, NOT ticker-matching -- the ticker key is what failed.
+  //
+  // needsDump WAS true AND IS NOW FALSE, because run 48 proved the dump has
+  // nothing this task wants: its FMP cache rows carry sector and industry and
+  // no company name at all, so the run came back void. Names now come from the
+  // Nasdaq Trader directory, fetched on the runner. The dump is still READ if
+  // one is attached -- it contributes the pickers half of the universe -- but
+  // requiring it would make the task wait on an artifact it does not need.
+  "sec-titles": {
+    script: "scripts/sec-title-candidates.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: false,
+  },
+  "sec-fundamentals": {
+    script: "scripts/sec-fundamentals-ingest.mjs",
+    args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
+    needsDump: true,
+  },
+  // Read-only: fetches two public pipe-delimited text files and prints them.
+  // Needed because the sandbox is refused www.nasdaqtrader.com by policy, and
+  // that directory is where the news path's company name actually comes from.
+  "company-name-sample": { script: "scripts/company-name-sample.mjs", args: () => [] },
+  // Read-only: fetches a public RSS feed and prints it. Needed because the
+  // sandbox is refused news.google.com by policy, and the adapter's parser must
+  // be tested against the feed's real shape.
+  "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
+  // SYMBOLS comes from the workflow's `symbols` input and the script defaults
+  // to the five drone/defence names when it is blank, so a dispatch that
+  // forgets it still captures the thing it was added for.
+  "drone-sample": { script: "scripts/drone-headline-sample.mjs", args: () => [] },
+  // How much of a symbol's real pool its anchored short-name needle admits, and
+  // how much of that is the company rather than the index, the month or the
+  // noun. news.google.com is refused from the sandbox; a runner reaches it.
+  "anchor-collisions": { script: "scripts/anchor-collision-sample.mjs", args: () => [] },
+  // Does a fund-or-note verdict EVER produce a usable query? assessCompanyName
+  // says such a name should never reach a per-symbol query; gnewsProvider warns
+  // and queries anyway. 90 committed names carry the verdict, and the marker
+  // fires on real MLPs and BDCs as well as on genuine instruments, so a skip
+  // cannot be made safe by reading either file. news.google.com is refused from
+  // the sandbox; a runner reaches it.
+  "fund-or-note": { script: "scripts/fund-or-note-sample.mjs", args: () => [] },
+  // Read-only, but needs the frozen universe to compute the match ratio: the
+  // question "how many wire items are about a stock we cover" cannot be answered
+  // without the symbol set.
+  "wire-feeds": {
+    script: "scripts/wire-feeds-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only. Needs the dump for the universe: both the CIK map and the
+  // sicDescription comparison are scoped to the symbols the site covers.
+  "sec": {
+    script: "scripts/sec-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only. One poll of all three free news sources, digested to the raw
+  // inputs §7's cascade reads — no judgement made on the runner, so the
+  // measurement describes the shipped derivation and not a copy of it.
+  "eventtype-sample": { script: "scripts/eventtype-sample.mjs", args: () => [] },
+  // Read-only: the FULL Google News feed per symbol, digested to publisher,
+  // link host and title. Asked after the preview showed 13 of 15 MU cards were
+  // institutional-holding churn that every precision probe had scored 96-100%,
+  // because "is it about MU" and "is it worth reading" are different questions
+  // and only the first had ever been measured.
+  "churn-sample": { script: "scripts/churn-sample.mjs", args: () => [] },
+  // Read-only: asks a deployment for pages so their renders emit [timing] lines
+  // into the Vercel runtime log. Prints no response body -- the measurement is
+  // in the log, not in the HTML, and the sandbox is refused *.vercel.app anyway.
+  "render": {
+    script: "scripts/render-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+  },
+  // Read-only: how long each free news adapter actually takes, cold, against
+  // the real hosts. Asked before choosing a per-adapter timeout budget, because
+  // the sandbox cannot reach any of the three and a guessed budget is a guess.
+  "news-timing": { script: "scripts/news-timing-probe.mjs", args: () => [] },
+  // Read-only, NO NETWORK AT ALL: inventories the frozen dump already on the
+  // runner. Asked before building the static-profile snapshot, because if the
+  // dump carries the taxonomy the snapshot costs no FMP calls whatsoever.
+  "dump-inventory": {
+    script: "scripts/dump-inventory.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // "static-profile" RETIRED 2026-09-23 (#552, COWORK #4): it built
+  // data/static-profile.json from the FMP dump; the file and script are removed.
+  // Fetches SEC's ticker file on a runner, because the agent sandbox is refused
+  // www.sec.gov with 403 CONNECT. Read-only by name and by nature: it writes a
+  // file into the workspace, which the workflow uploads as an artifact, and
+  // touches no credential.
+  "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // PR 3 step 1: can the company's own 10-K Item 1 / 20-F Item 4.B replace
+  // FMP's description? Reads submissions and the latest annual primary
+  // document for ~30 symbols. Read-only, no credentials; renders nothing.
+  "sec-description-probe": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true },
+  // The same probe with DIAGNOSE=1: prints every Item-heading line per filing.
+  "sec-description-diagnose": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { DIAGNOSE: "1" } },
+  // Item 4's sub-headings, read from the filing (#552 COWORK #48). Read-only.
+  "sec-description-heads": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { HEADS: "1" } },
+  // Points and bytes of the fiscal-year share series (StoredFactSet.as) per
+  // symbol, from the shipped extractor on the live payload. Read-only.
+  // XOM (#518): which CIK — predecessor 34088 or holding company 2115436 —
+  // carries the recent quarters, and whether 2115436 has filed an annual yet.
+  // Read-only, no credentials.
+  "sec-cik-periods": { script: "scripts/sec-cik-periods-probe.mjs", args: () => [], needsTypescript: true },
+  // PR 3 render (#518): the company's own description for every profiled
+  // symbol, in six shards so each fits the read-only job's 30 minutes. Each
+  // writes data/sec/descriptions-part-k.json; descriptions-commit.yml merges
+  // them into data/sec/descriptions.json. Read-only, no credentials.
+  "sec-descriptions-1": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/6" } },
+  "sec-descriptions-2": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/6" } },
+  "sec-descriptions-3": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/6" } },
+  "sec-descriptions-4": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
+  "sec-descriptions-5": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
+  "sec-descriptions-6": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
+  // Named symbols only (SYMBOLS=…): prints each row for a one-row refresh (#552 COWORK #38).
+  "sec-descriptions-adhoc": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true },
+  // NOT A TASK: preview screenshots run in .github/workflows/preview-screenshots.yml,
+  // which reads its Vercel bypass credential from a masked repo secret. A relay
+  // input is printed in the log, and the read-only job holds no secrets by
+  // design, so a credentialled screenshot cannot be a relay task (owner, #518).
+  "sec-share-series": { script: "scripts/sec-share-series-probe.mjs", args: () => [], needsTypescript: true },
+  // Registrant facts (SIC, business address, incorporation, website, fiscal
+  // year end, entity type, latest annual form) for every profiled symbol, from
+  // SEC submissions. Read-only, no credentials. Prints the file into its log
+  // for the session to reassemble — see the script header.
+  // Named symbols only (SYMBOLS=…): fetch those rows, print each (#552 COWORK #35).
+  "sec-registrants-named": { script: "scripts/sec-registrants.mjs", args: () => [], needsTypescript: true },
+  "sec-registrants": { script: "scripts/sec-registrants.mjs", args: () => [], needsTypescript: true },
+  // EDGAR's own state/country code list, with ISO-3166 codes attached by name
+  // match, for the /stock page's Country row. Read-only, no credentials.
+  "sec-country-codes": { script: "scripts/sec-country-codes.mjs", args: () => [] },
+  // NOT A TASK, DELIBERATELY: scripts/window-fixture-diff.mjs reads the committed
+  // fixture and a live symbol list and touches no network, so it runs locally.
+  // Adding it here would imply it needs a runner, which is the kind of drift
+  // this table exists to avoid.
+  //
+  // Read-only: captures the REAL filing rows for a date window so a check can
+  // replay them through applyFilings. §17 previously built its own 281 synthetic
+  // symbols and handed them forms from a modulo-5 round robin, which cannot be
+  // evidence about what the route does with a real week of EDGAR.
+  "sec-window-fixture": {
+    script: "scripts/sec-window-fixture.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    // It LIFTS the shipped parsers, and type erasure needs the TypeScript
+    // compiler. See needsTypescript below for why that is one package and not
+    // `npm ci`.
+    needsTypescript: true,
+  },
+  // Read-only: the two venue reference files disagree about this universe, and
+  // the totals alone cannot say which is wrong. Emits the per-symbol diff plus
+  // what the 62.5%-by-dollar-volume figure becomes under each source. Needs the
+  // dump for the universe AND for the bars that weight the swing.
+  "listing-venue-diff": {
+    script: "scripts/listing-venue-diff.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only: asks data.sec.gov/submissions whether a registrant is still
+  // filing. Absence from the ticker file is not proof of deregistration, and
+  // retiring a symbol on a lookup miss would discard its filing history.
+  "sec-symbol-status": { script: "scripts/sec-symbol-status.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only: measures what it COSTS to find out whether a filer's numbers
+  // changed -- conditional requests on companyfacts and submissions, both with
+  // negative controls, plus whether submissions' isXBRL flag can tell a
+  // quarter-carrying 6-K from a press release.
+  // Read-only: the shipped fetch + extraction on named symbols, printing the
+  // error sec-reread.yml's public log only counts (#552 COWORK #56, TSM).
+  "sec-facts-one": { script: "scripts/sec-facts-one.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
+  // READS ONLY: the stored-fact-set index against a SCAN, DBSIZE, manifest
+  // dot/dash duplicates (#552 COWORK #59). Weekly or on demand.
+  "write-fact-set-index-drift": { script: "scripts/fact-set-index-drift.mjs", args: () => [], writes: true },
+  // Read-only, uncredentialled: non-operating total vs component, before and
+  // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
+  "nonop-rank-census": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true },
+  "nonop-rank-census-detail": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true, env: { DETAIL: "1" } },
+  "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only, no dump: it fetches public endpoints only. The runner is a
+  // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
+  // residential path NOR Vercel -- the script says so itself rather than
+  // leaving the reader to remember it.
+  "ipo-sources": { script: "scripts/ipo-source-probe.mjs", args: () => [] },
+  // Run 2. Run 1's S-1/A sample turned out to be already-listed issuers filing
+  // resale registrations, so its "price range 0/5" measured the sampling frame
+  // rather than the filings. This one defines the cohort from 8-A12B -- the form
+  // that means a class is being registered on an exchange -- and reports the hit
+  // rate within it.
+  "ipo-sec-cohort": { script: "scripts/ipo-sec-cohort-probe.mjs", args: () => [] },
+  // Phase 0 of the IPO build brief. Measure and stop: the S-1/A extraction rate
+  // with SPACs separated (a SPAC unit is fixed at $10 and has no range, which is
+  // what made the earlier 1/4 meaningless), the price parser against a negative
+  // control, and the age histogram the withdrawal cap needs.
+  "ipo-phase0": { script: "scripts/ipo-phase0-probe.mjs", args: () => [] },
+  // §4.10's three exclusion classes, measured before any is built. Checks the
+  // ticker map for OTC coverage first, because if it carries OTC issuers then
+  // class (a) already catches uplistings and class (c) costs nothing.
+  "ipo-exclusions": { script: "scripts/ipo-exclusions-probe.mjs", args: () => [] },
+  // Build order step 2: seed the 90-day window. Imports the SAME TypeScript
+  // classifier the render calls -- Node 24 strips the types, so no build step
+  // and no npm ci. If this re-implemented the rules, seeded and daily rows would
+  // disagree about what an IPO is and both would look plausible.
+  "ipo-seed": {
+    script: "scripts/ipo-seed.mjs",
+    args: () => [],
+    // Imports the app's TypeScript classifier directly. Node's ESM loader needs
+    // explicit extensions and lib/server/*.ts does not carry them, so a resolve
+    // hook bridges the gap WITHOUT editing any app file or tsconfig. Node 24 on
+    // the runner strips the types itself.
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // WHAT A SPAC COVER ACTUALLY SAYS. The share-count fix took correctness from
+  // 29% to ~100% and its cost landed on the SPAC rows that dominate this page:
+  // the one unit-shaped anchor matched 1 of 94 covers, so Deal Size is blank on
+  // almost everything live. This prints the masthead and every dollar amount,
+  // unit count and trust sentence — and deliberately carries NO candidate
+  // patterns, so the output cannot be read as confirmation of a guess.
+  "ipo-spac": {
+    script: "scripts/ipo-spac-probe.mjs",
+    args: () => [],
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // MEASURE THE SHARE COUNT, which Phase 0 never did -- it gated the PRICE
+  // parser at 5/5 and left sharesOffered untested. The first live ingest run
+  // produced ADARx at 88,250,216 shares (shares outstanding, not an offering)
+  // and Alopexx at a $2.1M NYSE American IPO. Prints every "<n> shares" on each
+  // cover with its sentence, so the rule is chosen by reading the filings
+  // rather than by guessing a tighter regex.
+  "ipo-shares": {
+    script: "scripts/ipo-shares-probe.mjs",
+    args: () => [],
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // THE FIRST LIVE RUN OF THE DAILY INGEST. Steps 3-5 have only ever been
+  // fixture-proven; this calls ingestIpoWindow(), mergeIpoRecords() and
+  // buildSecIpoTables() -- the shipped functions, not copies -- against real
+  // EDGAR and prints both tables. Read-only by construction: the write is
+  // app-side (app/api/jobs/ipo-refresh) because that is where the write token
+  // is, and this job holds none.
+  "ipo-ingest": {
+    script: "scripts/ipo-ingest-probe.mjs",
+    args: () => [],
+    // Same reason as ipo-seed: it imports the app's .ts modules directly, and
+    // Node's ESM loader needs the resolve hook to find their extensionless
+    // relative specifiers.
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // Read-only: runs the SHIPPED extraction over five real filers' companyfacts
+  // and diffs every extracted number against the frozen FMP ground truth in the
+  // dump. Needs the dump for the FMP side and the network for the SEC side, and
+  // the sandbox is refused data.sec.gov with 403 CONNECT. Lifts secFields.ts and
+  // secExtract.ts, so type erasure needs the TypeScript compiler.
+  "sec-extract": {
+    script: "scripts/sec-extract-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    needsTypescript: true,
+  },
+  // THE SAME PROBE AS ITS OWN "BEFORE". Removes the concepts this branch added
+  // to the field chains, then reports exactly as sec-extract does — so the null
+  // rate per field, both canaries and the identities table are comparable
+  // line for line against the sec-extract run from the SAME commit.
+  //
+  // NOT `ref=main`, which was the first attempt and is the wrong instrument
+  // twice over: it compares two runs of DIFFERENT CODE, so a difference is the
+  // chains plus whatever else moved between the refs — and the probe crashes
+  // on main anyway, on a loss-making filer's crossing string.
+  "sec-extract-before": {
+    script: "scripts/sec-extract-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    needsTypescript: true,
+    env: { REVERT_CHAINS: "1" },
+  },
+  // Read-only, NO CREDENTIAL: Phase 0 of the logo-harvest brief. Asks FMP's
+  // image CDN whether it actually holds a logo for each symbol in the union
+  // universe. The CDN needs no API key, so this belongs in the uncredentialled
+  // job -- the FMP key stays out of Actions, per the static-profile README.
+  // Fetches the Nasdaq symdir live for the Exchange and ETF columns, because
+  // `exchange` is in static-profile.json's absentFields.blocked.
+  "logo-coverage": { script: "scripts/logo-coverage-probe.mjs", args: () => [] },
+  // Read-only: what one symbol COSTS to populate — fetch, parse, extract,
+  // encode — measured sequentially and paced exactly as the route paces it, so
+  // SEC_POPULATE_PER_RUN is sized against a number rather than an estimate.
+  // Needs the dump for the universe and the network for companyfacts.
+  "sec-populate-cost": {
+    script: "scripts/sec-populate-cost.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    needsTypescript: true,
+  },
+  // Read-only: does the page read IFRS filings now, and what is left when it
+  // does. Runs the SHIPPED extractor over the ten FPIs that measured as empty
+  // plus the universe FPIs the brief named plus a us-gaap control, and reports
+  // which mapped ifrs-full tags never hit and which published tags nothing
+  // maps. No dump, no credential; needs the network and the TypeScript
+  // compiler for the lift.
+  "sec-ifrs": {
+    script: "scripts/sec-ifrs-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
+  // Read-only: runs the SHIPPED view builder and the SHIPPED scorer over real
+  // companyfacts and prints what a reader would see — the snapshot card's
+  // strings, the growth table row by row with its base disclosed, and the
+  // score with the components it could not read. Prints the OLD q[i+4] base
+  // beside the new one so "unchanged for a dense filer" is checked rather than
+  // asserted. Also diagnoses an empty cash-flow chain against the payload.
+  // No dump, no credential; needs the network and the TypeScript compiler.
+  "sec-period-match": {
+    script: "scripts/sec-period-match-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
+  // Read-only: what twelve stored quarters COST, measured against real
+  // payloads before the window is changed. Reports the stored record size at
+  // four window variants, whether the reader's hash gate moves (it cannot),
+  // and how many of the eight RENDERED rows can reach a prior-year period at
+  // each. No dump, no credential; needs the network and the TypeScript
+  // compiler for the lift.
+  "sec-window-size": {
+    script: "scripts/sec-window-size-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
+  // Read-only: captures a REAL StoredFactSet for a symbol and prints it
+  // gzip+base64 with a SHA-256 of the plaintext, so a fixture can be committed
+  // and proven byte-identical to what the runner produced. Actions artifacts
+  // download via a blob host the sandbox cannot reach, which is why it goes
+  // through the log.
+  "sec-fixture": {
+    script: "scripts/sec-fixture-capture.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
+  // Read-only: WHY a field renders "—" on a given filer. Lists every concept
+  // the filer actually tagged in the period whose name could plausibly be the
+  // figure, with values, and says whether our chain lists it. Answers "chain
+  // gap or not tagged" with evidence instead of a guess.
+  "sec-missing-fields": {
+    script: "scripts/sec-missing-field-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // Read-only: every balance-sheet-total and non-operating concept a filer
+  // publishes for its newest periods, with values (earnings page round 2).
+  "sec-concept-list": {
+    script: "scripts/sec-concept-list-probe.mjs",
+    args: () => [],
+  },
+  // Read-only: the NEXT question after sec-missing-fields. That probe says
+  // whether the filer tagged the concept; this one says why a concept it DID
+  // tag, and our chain DOES list, still renders blank — extraction, period
+  // selection, or render. Prints the frame ladder, the stored periods and the
+  // view's own numbers together.
+  "sec-blank-cell": {
+    script: "scripts/sec-blank-cell-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // Read-only: the blast radius of a chain ADDITION, measured by running the
+  // shipped extractor twice over one payload — once with the chain minus the
+  // entries the edit added, once as it ships. Separates "cells that were null
+  // now carry a figure" (the intent) from "cells that had a figure now have a
+  // different one" (the risk).
+  "sec-capex-blast": {
+    script: "scripts/sec-capex-blast-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // Read-only: the two questions a two-concept chain owes an answer to —
+  // how many derived quarters the same-concept differencing rule NULLS, and,
+  // where a filer publishes both concepts for one period, how far apart they
+  // are. The first is measured twice (the extractor's own refusal notes, and a
+  // run with the same-concept test mutated out) and the probe says so if the
+  // two routes disagree.
+  "sec-capex-concepts": {
+    script: "scripts/sec-capex-concept-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // THE SAME PROBE, AIMED AT THE OTHER UNMEASURED CHAIN EDIT — and it is a
+  // SEPARATE TASK rather than an input because relay.yml's inputs live on the
+  // DEFAULT BRANCH, so adding FIELD/DROP to the dispatch form would cost the
+  // merge-and-wait this whole relay exists to remove. The task name carries
+  // the parameters instead, which also makes "what was measured" answerable
+  // from the run's title rather than from its form values.
+  //
+  // DROP names the ONE concept the VRT ruling added. Not "everything after the
+  // first": this chain already had four entries, so the default would measure
+  // what the other three contribute — a real question, and not this one.
+  // WHAT THE ONE-CONCEPT-PER-FILER RULING COSTS, PER CELL. Sibling of the blast
+  // probes: same two-runs-one-payload shape, but the switch is the FIELD FLAG
+  // rather than the chain, because the chain is identical on both sides of this
+  // question and a chain comparison would measure the wrong edit.
+  // DOES EVERY QUARTER CELL COME FROM A QUARTER-LENGTH FRAME. Written for the
+  // NVDA Q2 FY2027 report: net income $59.69B beside a derived operating cash
+  // flow of $24.08B, which is the shape of a six-month figure in a quarter row.
+  "sec-frame-lengths": {
+    script: "scripts/sec-frame-length-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // WHERE THE CASH CARD'S NET INCOME COMES FROM. sec-frame-lengths cleared the
+  // AS-FILED half of the NVDA Q2 FY2027 report (0 offenders); this prints the
+  // DIFFERENCED half — each cell's own span and operands — beside the filer's
+  // raw ladder, which is the only way to check the arithmetic against what was
+  // actually filed.
+  "sec-cash-card": {
+    script: "scripts/sec-cash-card-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  "sec-sticky-concepts": {
+    script: "scripts/sec-sticky-concept-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // THE REVENUE CHAIN'S FOURTH ENTRY, measured over the whole frozen universe
+  // rather than the default 120: IncludingAssessedTax was added for AVAV's
+  // FY2022/FY2023 years (earnings-page cleanup brief, A5).
+  "sec-revenue-blast": {
+    script: "scripts/sec-capex-blast-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    env: {
+      FIELD: "revenue",
+      DROP: "RevenueFromContractWithCustomerIncludingAssessedTax",
+      LIMIT: "5000",
+    },
+  },
+  "sec-sti-blast": {
+    script: "scripts/sec-capex-blast-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    env: {
+      FIELD: "shortTermInvestments",
+      DROP: "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
+    },
+  },
+  // Credentialled because Upstash lives in that job; performs NO writes.
+  // Counts, from the STORED universe, how many SYMBOLS render the annual-filer
+  // card and how many sets are still on the old quarter window.
+  // Credentialled because Upstash lives in that job; performs NO writes.
+  // Counts manifest entries with no CIK — the ones populationQueues cannot
+  // select — split into those the ticker map can resolve and those only a cold
+  // write can.
+  "write-cik-gaps": {
+    script: "scripts/cik-gap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // THE ONE-OFF BACKFILL for stored sets no queue can select. DRY RUN unless
+  // the `symbols` input is the word APPLY.
+  //
+  // THE FLAG RIDES `symbols` BECAUSE A NEW INPUT COSTS A MERGE. workflow_dispatch
+  // only registers inputs declared on the DEFAULT BRANCH, so an `apply:` input
+  // could not be dispatched from this branch at all until relay.yml reached main
+  // -- the exact toll the task router exists to remove. Routing it here keeps
+  // the whole thing dispatchable from a branch the same minute.
+  "write-cold-cik-backfill": {
+    script: "scripts/cold-cik-backfill.mjs",
+    args: (env) => (String(env.SYMBOLS ?? "").trim().toUpperCase() === "APPLY" ? ["--apply"] : []),
+    needsTypescript: true,
+    writes: true,
+  },
+  // END-TO-END, NOT A READ OF THE SOURCE: builds the app, starts it twice with
+  // FMP broken two different ways, and asserts the earnings page still 200s
+  // with its SEC content and its no-history fallback. Credentialled because the
+  // BUILD needs Upstash; it performs no writes.
+  "write-bad-key-earnings": {
+    script: "scripts/bad-key-earnings-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // WHY THE POPULATE BACKLOG MOVED AND HOW LONG REWINDOW TAKES, simulated with
+  // the shipped populationQueues rather than divided. Credentialled, read-only.
+  // WHETHER A CHAIN EDIT ENLARGES THE RE-READ QUEUE: stored sets already
+  // chain-stale vs current under main's chains (which the edit re-queues).
+  // Credentialled, read-only: one manifest GET.
+  "write-chain-bump-census": {
+    script: "scripts/sec-chain-bump-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX: earnings page round 2's four gaps counted
+  // over the manifest with the shipped extraction, before/after the chain
+  // edits, plus the re-read backlog the edit causes. GETs only.
+  // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  "write-round2-gap-census": {
+    script: "scripts/sec-round2-gap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-queue-projection": {
+    script: "scripts/sec-queue-projection.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // REPORT DATES AND TIMING FROM EDGAR, measured against the stored FMP dates.
+  // Credentialled to read the store; fetches EDGAR itself. No writes.
+  // SEEDS THE REPORT-DATES STORE for a preview, using the shipped functions.
+  // A real write, to a key nothing on main reads; the cron overwrites it once
+  // the branch merges.
+  // HOW MANY SYMBOLS THE FISCAL-YEAR CALIBRATION RELABELS, and which.
+  // Credentialled to read the store; fetches companyfacts only for the filers
+  // a relabel is arithmetically possible for. No writes.
+  // RE-EXTRACT AND REWRITE NAMED FACT SETS with the shipped extraction, so a
+  // labelling change can be eye-checked before the rewindow queue reaches it.
+  // Refuses an empty symbol list; it is not a backfill.
+  "write-refresh-sets": {
+    script: "scripts/sec-refresh-sets.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHY A STORED SET'S NEWEST PERIOD IS OLDER THAN THE FILER'S NEWEST FILING.
+  // Credentialled to read the store and the report-date records; fetches
+  // submissions. No writes.
+  // CAN THE DUE STRIP RENDER A ROW AT ALL? Measured before the DueInput
+  // producer is written, because three of DueInput's five fields cannot be
+  // read from the store as it stands and whether that matters is a question
+  // about production data. Also prices the filerCategory decision by running
+  // the SHIPPED selectDue twice, one field apart, rather than arguing it.
+  //
+  // READ-ONLY DESPITE THE PREFIX -- same as write-beta-mu and
+  // write-queue-projection. `write-` is the CREDENTIAL boundary, not a claim
+  // that the task mutates anything; the report-dates store lives in Upstash and
+  // the credentials live in that job.
+  "write-due-input-census": {
+    script: "scripts/due-input-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX: the early-2.02 mispick measured across the
+  // universe (review of #512/#513 items A, B, E). Reads the stored records,
+  // the fact sets, SEC submissions and the production pages; writes nothing.
+  "write-early-202-census": {
+    script: "scripts/early-202-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY: the pairing rewrite's per-run counters and the drained count.
+  // READS ONLY: HLEN of the grid's day index and the rewrite job's last
+  // summary (#552). 3 commands.
+  // READS ONLY: COWORK #3's measurement (#552). Aggregates only: SIC coverage,
+  // sector agreement per filter, industry purity per SIC code, preset counts.
+  // Fetches SEC submissions for symbols registrants.json lacks.
+  "write-sic-classification-census": {
+    script: "scripts/sic-classification-census.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: how many Pickers names a multi-class market-cap rule could
+  // recover (#552 COWORK #26). SEC values only; ~30 commands.
+  "write-multiclass-cap-census": {
+    script: "scripts/multiclass-cap-census.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: the TTM EPS fix measured before it ships (#552 COWORK #8/#9):
+  // old rule vs derived Q4 vs NI/shares; reference compared in aggregate only.
+  // ~70 commands.
+  // READS ONLY: why the 51 quarterly filers have no TTM EPS (#552 COWORK #33). 3 MGET.
+  "write-no-ttm-eps-probe": { script: "scripts/no-ttm-eps-probe.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), writes: true },
+  // READS ONLY: the Pickers universe as symbols (#552 COWORK #37). 1 GET.
+  // READS ONLY: the capex record's unplaced symbols (#552 COWORK #35). 1 GET.
+  "write-capex-unplaced-list": { script: "scripts/capex-unplaced-list.mjs", args: () => [], writes: true },
+  "write-pickers-universe-list": { script: "scripts/pickers-universe-list.mjs", args: () => [], writes: true },
+  // READS ONLY: has the committed re-read queue drained (#552 COWORK #39). ~4 commands.
+  "write-reread-drain-probe": { script: "scripts/reread-drain-probe.mjs", args: () => [], writes: true },
+  // READS ONLY: first-filers' stored sets (#552 COWORK #37). 1 MGET.
+  "write-new-listing-sets": { script: "scripts/new-listing-sets-probe.mjs", args: () => [], writes: true },
+  // THE ADS MAP'S PREVIEW FIGURES (#552 COWORK #45): EPS and shares per the
+  // traded unit and every refusal, from the stored sets. No price. 1 MGET.
+  "write-ads-preview-figures": { script: "scripts/ads-preview-figures-probe.mjs", args: () => [], writes: true },
+  // Pages the layout pass touches (#552 COWORK #40/#49). Reads only; ~51 MGETs.
+  "write-layout-pass-census": { script: "scripts/layout-pass-census.mjs", args: () => [], writes: true },
+  "write-ttm-eps-measure": {
+    script: "scripts/ttm-eps-measure.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: fact sets with no years / unlabelled quarters (XOM's shape),
+  // and companyfacts + the shipped extractor for XOM and a few more
+  // (#552 COWORK #28). ~35 commands.
+  // Read-only, no credential: EDGAR submissions for successor:predecessor
+  // CIK pairs, to cite a holding-company succession (#552 COWORK #28).
+  // Read-only, no credential: the XOM succession merge on the real payloads,
+  // through the shipped code, lifted (#552 COWORK #28).
+  "sec-succession-verify": { script: "scripts/sec-succession-verify.mjs", args: (env) => [env.SYMBOLS || "XOM"], needsTypescript: true },
+  // Read-only, no credential: why a filer's fiscal year-end anchor is wrong
+  // (QXO, #552 COWORK #30). Lifts the shipped fiscalYearOffset.
+  "sec-fy-anchor": { script: "scripts/sec-fy-anchor-probe.mjs", args: (env) => [env.SYMBOLS || "QXO"], needsTypescript: true },
+  "sec-succession": { script: "scripts/sec-succession-probe.mjs", args: (env) => [env.SYMBOLS || "2115436:34088"] },
+  "write-sec-sparse-sets": {
+    script: "scripts/sec-sparse-sets-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: the Pickers symbols ranked by SEC shares x pool price (ranks
+  // only, no values), to place the unclassified names (#552 COWORK #29).
+  "write-pickers-universe-rank": {
+    script: "scripts/pickers-universe-rank.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: the Pickers names the SEC resolver cannot place, with their
+  // SIC, filing text and size rank (ranks only) (#552 COWORK #29).
+  "write-pickers-unplaced": {
+    script: "scripts/pickers-unplaced.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // Read-only, no credential: why a universe symbol has no registrant row --
+  // EDGAR's current ticker file and each CIK's submissions (#552 COWORK #29).
+  "sec-ticker-status": { script: "scripts/sec-ticker-status-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  // READS ONLY (the symbol list, 1 command) + companyfacts for the pool: the
+  // QXO anchor fix measured before it ships (#552 COWORK #30).
+  "write-sec-fy-anchor-census": {
+    script: "scripts/sec-fy-anchor-census.mjs",
+    args: () => [],
+    writes: true,
+    needsTypescript: true,
+  },
+  // READS ONLY: why Pickers market caps are refused on the share count, with
+  // each filing's own per-class cover facts (#552 COWORK #31).
+  "write-cover-shares-refusals": {
+    script: "scripts/cover-shares-refusal-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // Read-only, no credential: the 10-K sentences on how a filer's share
+  // classes relate (conversion, economic rights) (#552 COWORK #31).
+  "sec-share-class-evidence": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  "sec-share-class-evidence-equal": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "equal" } },
+  // Read-only, no credential: a passage from a filer's latest filing of a form.
+  "sec-filing-grep": { script: "scripts/sec-filing-grep-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  // Read-only, no credential: the shipped class-cover read over every cited entry (#552 COWORK #31).
+  // Read-only, no credential: a filer's EPS concepts, companyfacts and instance (#552 COWORK #33).
+  "sec-eps-concepts": { script: "scripts/eps-concepts-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  // Read-only, no credential: the shipped filing-based TTM EPS on real filings (#552 COWORK #33).
+  "sec-instance-eps-verify": { script: "scripts/sec-instance-eps-verify.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), needsTypescript: true },
+  // Read-only, no credential: the longer Item 1 excerpt for named symbols (#552 COWORK #32/#37).
+  "sec-item1-excerpts": { script: "scripts/sec-item1-excerpts-build.mjs", args: (env) => [env.SYMBOLS || ""], needsTypescript: true },
+  // Read-only, no credential: which descriptions a locator change moves (#552 COWORK #38).
+  "sec-locator-census-1": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/6" } },
+  "sec-locator-census-2": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/6" } },
+  "sec-locator-census-3": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/6" } },
+  "sec-locator-census-4": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
+  "sec-locator-census-5": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
+  "sec-locator-census-6": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
+  "sec-locator-debug": { script: "scripts/sec-locator-debug.mjs", args: (env) => [env.SYMBOLS || ""], needsTypescript: true },
+  "sec-locator-census": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true },
+  // Read-only, no credential: instance facts matching PATTERN (#552 COWORK #38).
+  "sec-instance-facts-asconverted": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "AsConverted|ConversionRate", LIMIT: "300" } },
+  "sec-instance-facts": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "Conversion|AsConverted|Converted|ExchangeRatio" } },
+  // Read-only, no credential: the automatic two-class cover path on live filings (#552 COWORK #37).
+  // Read-only, no credential: each 20-F filer's stated ADS ratio (#552 COWORK #22 §1).
+  "ads-ratio-census-1": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/3" } },
+  "ads-ratio-census-2": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
+  "ads-ratio-census-3": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
+  "ads-ratio-census": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true },
+  "ads-ratio-12b": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHOW12B: "1" } },
+  "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
+  "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
+  "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },
+  "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
+  "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
+  "write-results-days-status": {
+    script: "scripts/results-days-status.mjs",
+    args: () => [],
+    writes: true,
+  },
+  "write-report-dates-rewrite-progress": {
+    script: "scripts/report-dates-rewrite-progress.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: the same-day tie-break flips, a general current-period rule
+  // scored on history, and why the thin FPIs are thin (review of #515).
+  "write-pairing-followups": {
+    script: "scripts/pairing-followups-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY: which fact sets sec-facts failed on, reproduced with the
+  // shipped fetch rule and extraction over the queues failures stay in.
+  "write-sec-facts-failures": {
+    script: "scripts/sec-facts-failures.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY: why sec-facts times out -- last runs, next queues, fetch cost.
+  "write-sec-facts-timeout-diagnosis": {
+    script: "scripts/sec-facts-timeout-diagnosis.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY: every stored fact set's h against secFieldsHash (readFactSet's gate).
+  "write-sec-factset-readability": {
+    script: "scripts/sec-factset-readability.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX, same as write-due-input-census above:
+  // `write-` is the CREDENTIAL boundary, and the report-dates store lives in
+  // Upstash behind credentials that only the write- half of relay.yml carries.
+  // Renders the ticker search's answer for the cut plus a handful of names a
+  // reader would actually type, against the live record.
+  "write-symbol-outlook": {
+    script: "scripts/symbol-outlook-render.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY IN PRACTICE, credentialled for the READ, same as
+  // write-symbol-outlook. The next-report tile and card, BEFORE and AFTER the
+  // 30-day-band change (owner decision 2026-09-23), rendered against the live
+  // record. SYMBOLS overrides the default six.
+  "write-next-report-band": {
+    script: "scripts/next-report-band-render.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-stale-period-census": {
+    script: "scripts/sec-stale-period-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // #535 COWORK #8: Q4_SPLIT before/after on live records. Read-only.
+  "write-q4-split-render": {
+    script: "scripts/q4-split-render.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-fy-naming-census": {
+    script: "scripts/fiscal-year-naming-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-report-dates-seed": {
+    script: "scripts/sec-report-dates-seed.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-report-dates": {
+    script: "scripts/sec-report-dates-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // MANIFEST ENTRIES WHOSE STAMP IS BEHIND THEIR OWN STORED SET, counted.
+  // Credentialled to read the manifest and the fact sets; writes nothing.
+  // WHY ONE REPORT VANISHES FROM THE PRICE-REACTION CARDS. Runs the shipped
+  // reaction calculation over the full series AND the bounded window and
+  // prints both, so the window is convicted or exonerated by the same data.
+  // Credentialled to read the bar cache and the report dates; writes nothing.
+  "write-reaction-window": {
+    script: "scripts/reaction-window-diagnosis.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY, but the bars and the report dates both live in Upstash and the
+  // credentials live in the write- job. The prefix is the CREDENTIAL boundary,
+  // not a claim about what the script does.
+  // READS ONLY (Upstash + data.sec.gov for concept names). Counts the two
+  // blast radii the ABVX diagnosis raised before either change is made.
+  // READS ONLY. Counts how many symbols in the SITE's universe have no CIK in
+  // the committed registrant file, which is exactly the set the earnings route
+  // 404s on. Credentialled because the universe lives in Upstash.
+  // READS ONLY, NO CREDENTIALS NEEDED — it compares the committed registrant
+  // file against SEC's live one and the curated universe, all of which are
+  // either in the repo or on data.sec.gov. Hence no write- prefix.
+  "ticker-snapshot-scope": {
+    script: "scripts/ticker-snapshot-scope-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  "write-no-cik-scope": {
+    script: "scripts/no-cik-scope-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHICH STANDARD A SET IS READ UNDER, and how many sets carry both us-gaap
+  // and ifrs-full. READ-ONLY despite the prefix: credentials for the store,
+  // companyfacts for the mixed sets only. Owner question on #514.
+  "write-accounting-census": {
+    script: "scripts/sec-accounting-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-tie-ifrs-census": {
+    script: "scripts/sec-tie-and-ifrs-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY. The stored SEC fact set lives in Upstash and the credentials
+  // live in this job, so the write- prefix is the CREDENTIAL boundary again,
+  // not a claim about what the script does. It reaches data.sec.gov for
+  // CONCEPT NAMES only — never to re-extract, because the whole point is to
+  // read the object the page reads.
+  "write-stored-set": {
+    script: "scripts/sec-stored-set-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // BETA FROM BARS ALREADY IN REDIS — the worked example the read-only probe
+  // could not produce, because the sandbox has no Upstash credentials and every
+  // bars provider is refused at the gateway.
+  //
+  // READ-ONLY DESPITE THE PREFIX. It issues GETs for two history keys and
+  // nothing else. `write-` here means "needs the credentials", which is the
+  // boundary this file and relay.yml both enforce; it does not mean the task
+  // mutates anything. See the routing docblock at the top of this file.
+  "write-beta-mu": {
+    script: "scripts/beta-worked-example.mjs",
+    args: () => [],
+    // PINNED ON THE TASK, so the task NAME is the record of what was measured.
+    // relay.yml's inputs live on the default branch and have no symbol field;
+    // pinning here is what lets a branch measure a named symbol without a merge.
+    // THE PIN IS THE CANDIDATE LIST, not one symbol. Run 35597733409 scanned
+    // ^GSPC alone and nothing else, because this env PIN WINS over the ambient
+    // environment by design (see the note where `env` is applied below) — so
+    // the script's own multi-candidate default never applied. The router was
+    // right and the pin was wrong.
+    env: { BETA_SYMBOL: "MU", BETA_BENCH: "^GSPC,SPY,VOO,IVV,QQQ,DIA" },
+    // scripts/lib/source-code.mjs imports typescript to strip comments before
+    // the prefix regexes run, and the credentialled job installs only
+    // @upstash/redis. Same flag as every other task that lifts from source.
+    needsTypescript: true,
+    // NEEDS THE CREDENTIALS; PERFORMS NO WRITES. Same declaration and the same
+    // reason as "write-bad-key-earnings" above. The flag is what the router
+    // checks against the name — the two must agree or it fails closed, which is
+    // how this task failed its first dispatch (run 35597058149) rather than
+    // running uncredentialled and reporting "no cached bars".
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX. The /earnings-calendar grid's three FMP calls
+  // (candidates, names, quote exchange) measured against the SEC record and the
+  // price pool. The FMP side is read out of what production already cached in
+  // Redis -- no FMP key exists in this environment -- and the SEC side from the
+  // report-dates store plus live submissions. GETs only; `write-` is the
+  // CREDENTIAL boundary. claude/grid-fmp-measurement-2026-09-23.md
+  "write-grid-fmp-measurement": {
+    script: "scripts/grid-fmp-measurement.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX. What closes the grid's in-universe SEC gaps
+  // (6-K results, missing records, stale records), projected coverage, job-time
+  // cost, and SEC-only market-cap floor counts. GETs only; `write-` is the
+  // CREDENTIAL boundary. claude/grid-sec-gaps-measured-2026-09-23.md
+  "write-grid-sec-gaps": {
+    script: "scripts/grid-sec-gaps.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-valuation-price": {
+    script: "scripts/valuation-price-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-manifest-stamp-census": {
+    script: "scripts/manifest-stamp-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-annual-filer-census": {
+    script: "scripts/annual-filer-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-stooq-ingest": {
+    script: "scripts/stooq-ingest.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    writes: true,
+  },
+  // Read-only, NO credential and NO FMP: measures how well a filer's next
+  // results date can be predicted from its own filing history alone. Asked
+  // before deciding whether the earnings calendar's FORWARD half can come off
+  // FMP at all -- §4 of the off-FMP brief proposes filing cadence as the
+  // fallback and nothing had measured it.
+  "sec-results-dates": { script: "scripts/sec-results-date-predictability.mjs", args: () => [] },
+  // Read-only, no credential: does a filer ANNOUNCE its next results date in an
+  // 8-K (item 7.01/8.01) ahead of time? The last input to the forward-calendar
+  // decision -- predicting the date from cadence was measured and is weak, so
+  // the question is whether it can be READ instead of predicted. Needs the dump
+  // for the universe and for market caps: "do companies do this" and "do the
+  // companies a calendar is searched for do this" are different questions.
+  "sec-scheduling": {
+    script: "scripts/sec-scheduling-announcements.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, no credential, submissions ONLY (no document fetching): simulates
+  // a "due to report" list over the past 12 months across the FULL analysis
+  // universe and sweeps k. List size scales with the universe, so a sample
+  // cannot answer it. Needs the dump for the analysis universe.
+  // DOES A 30-DAY WINDOW SURVIVE WHAT AN EXACT DATE DID NOT? The day-level
+  // forward calendar was measured and killed (2 of 48 filers inside their own
+  // p90 band; 0 of 276 8-K scheduling announcements in the needed band). The
+  // coarser claim -- "expected to report in the next 30 days" -- is a different
+  // claim and had never been measured. Same pairing and walk-forward as
+  // sec-results-date-predictability, scored on a ROLLING window, over the FULL
+  // universe rather than a hand-picked sample, and against a computed
+  // list-everyone-every-day baseline.
+  //
+  // Read-only, no credential; needs the dump for the universe and the network
+  // for submissions.
+  "window30": {
+    script: "scripts/sec-window30-predictability.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // THE SAME PROBE WITH THE PAGING CAP LIFTED. 81 filers were excluded for
+  // thin history and 5 of them hit this script's own 2-page budget, so their
+  // thinness is OUR limit or THEIRS and the first run could not say which.
+  // A separate task rather than an input, because relay.yml's inputs live on
+  // the default branch -- the task name is the record of what was measured.
+  "window30-recheck": {
+    script: "scripts/sec-window30-predictability.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    env: { RECHECK_THIN: "1" },
+  },
+  "sec-due-sweep": {
+    script: "scripts/sec-due-to-report-sweep.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // NO NETWORK AT ALL. Re-slices the due-to-report simulation from the fact set
+  // the sweep persists (data/sec/due-sweep-facts.json), which the relay's own
+  // artifact carries. Dispatch it with run_id/artifact_name pointing at a
+  // sec-due-sweep run: that artifact holds both the fact set and the step 0
+  // dump's universe.json, so the locate step resolves.
+  "sec-due-reslice": {
+    script: "scripts/sec-due-reslice.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // "consensus-freeze" RETIRED 2026-09-23 (#552, COWORK #4/#5): it distilled
+  // FMP analyst consensus out of the dump; the script and its data are removed.
+  // Read-only, NO credential and NO network: ranks the analysis universe by the
+  // frozen pool's market cap and emits the due strip's static top-50 membership.
+  // The strip is a CUT, and this generates the cut. Membership only -- no cap
+  // figure is carried out of the run.
+  // WHICH UNIT A FOREIGN PRIVATE ISSUER'S EPS IS FILED IN. #489 suppressed the
+  // market cap for five ADS filers and recorded the P/E beside it as an OPEN
+  // question, explicitly not to be settled by assuming symmetry. This settles
+  // it from the filers' own arithmetic. Read-only, uncredentialled, no dump.
+  "ads-eps-unit": { script: "scripts/ads-eps-unit-probe.mjs", args: () => [] },
+  // NON-OPERATING TAG COVERAGE (#552 COWORK #47): SEC frames, counts only. Read-only.
+  "nonop-tag-coverage": { script: "scripts/nonop-tag-coverage.mjs", args: () => [] },
+  // STORED SETS AS JSON for a local render fixture (#552 COWORK #47). 1 MGET.
+  "write-factset-dump": { script: "scripts/factset-dump-probe.mjs", args: () => [], writes: true },
+  // CAN A MULTI-CLASS FILER'S SHARES BE SPLIT BY CLASS AT ALL? BUILD-BRIEF §5
+  // prescribes summing each class's shares x that class's close; secFields.ts
+  // records from measurement that companyfacts carries no class label. Both
+  // cannot be acted on, and guessing produces a plausible wrong market cap.
+  "multiclass-shares": { script: "scripts/multiclass-shares-probe.mjs", args: () => [] },
+  "due-strip-universe": {
+    script: "scripts/due-strip-universe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, NO credential and NO network: reads the frozen Step 0 dump and
+  // reports whether the empty-day poisoning has already fired in production.
+  // The live read happens in the Step 0 job under Upstash's read-only token;
+  // this half only does arithmetic on the result.
+  // MEASUREMENT ONLY, no fix: separates the three states due-strip-universe's
+  // single "source: none" verdict cannot tell apart -- the symbol is ABSENT
+  // from a source, present with a NULL cap, present under a key capOf does not
+  // read, or present under a different SPELLING. Different owners, one verdict
+  // today. Lifts CAP_SOURCES and capOf out of due-strip-universe.mjs so the
+  // probe cannot measure a set the consumer does not use. Read-only, no
+  // credential, NO NETWORK; needs a step 0 dump.
+  "pricepool-cap-gap": {
+    script: "scripts/pricepool-cap-gap-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  "earnings-poisoning": {
+    script: "scripts/earnings-poisoning-scan.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #5): which Redis keys in
+  // B's area still hold FMP payloads, and how many news records carry FMP-era
+  // items. SCAN + sampled TTL + MGET only.
+  // READ-ONLY (Relay B, #553 COWORK #12): why a sector's "Sector today" reads
+  // "--". write- only for the Redis credentials; 5 commands.
+  "write-sector-today-probe": {
+    script: "scripts/sector-today-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
+  "write-fmp-residue-census": {
+    script: "scripts/fmp-residue-census.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // A REAL DELETE when SYMBOLS carries mode=delete confirm=<surface> (Relay B,
+  // #553 COWORK #8 §3). Dry run by default. One FMP key family per run, each
+  // on the owner's GO in chat; see the script header for what must be true
+  // before each surface is run.
+  "write-fmp-cache-delete": {
+    script: "scripts/fmp-cache-delete.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #1 item 4): Pickers SEC
+  // coverage vs the FMP values production shows, per column and per preset,
+  // plus the preset row counts under the shipped lib/server/pickersSecFundamentals.
+  // HKEYS/HMGET/MGET/GET only; ~870 commands once.
+  "write-pickers-sec-coverage": {
+    script: "scripts/pickers-sec-coverage.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #11): items per sector
+  // news page on the free stack, from the shipped sectorWindow + the stores.
+  "write-sector-news-count": {
+    script: "scripts/sector-news-free-count.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },  // Relay C (#563 COWORK #2): the capex receivers job's own code against live
+  // SEC. DRY by default (0 Redis); SYMBOLS="mode=seed" writes the one key
+  // msh:capex:receivers:v1 (1 SET) -- only on the owner's OK.
+  "write-capex-receivers": {
+    script: "scripts/capex-receivers-run.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
+  },  // READ-ONLY DESPITE THE PREFIX (Relay C, #563 D5): USAspending's own names
+  // and parent records for the top recipients -- the evidence the committed
+  // contract alias list is written from. 0 Redis.
+  "write-capex-contract-aliases": {
+    script: "scripts/capex-usaspending-aliases.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // Relay C (#563 D1): the "Who is spending" builder against the live SEC fact
+  // sets. DRY by default (reads only); SYMBOLS="mode=seed" writes
+  // msh:capex:spending:v1 (1 SET) -- only on the owner's OK.
+  "write-capex-spending": {
+    script: "scripts/capex-spending-run.mjs",
+    args: () => ["--allow-writes"],
+    writes: true,
+  },
+  // Relay C (#563 D5): the weekly contracts job's logic from a runner. DRY by
+  // default (0 Redis); SYMBOLS="mode=seed" writes msh:capex:contracts:v1 (1
+  // SET) -- only on the owner's OK.
+  "write-capex-contracts": {
+    script: "scripts/capex-contracts-run.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
+  },
+  // CAPEX — FOLLOW THE MONEY feasibility probe (#563 queue item 1). Read-only
+  // and uncredentialled: public SEC and USAspending endpoints, no store. One
+  // PART per task so each fits the 30-minute job and they run side by side.
+  "capex-frames": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "frames" } },
+  "capex-segments": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "segments" } },
+  "capex-links-1": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "1/5" } },
+  "capex-links-2": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "2/5" } },
+  "capex-links-3": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "3/5" } },
+  "capex-links-4": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "4/5" } },
+  "capex-links-5": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "5/5" } },
+  "capex-fts-nvidia": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "NVIDIA" } },
+  "capex-fts-tsmc": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "TSMC" } },
+  "capex-fts-asml": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "ASML" } },
+  "capex-8k": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "8k" } },
+  "capex-usa": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa" } },
+  "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
+  "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
+  "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  // Credentialled because Upstash lives in that job; performs NO writes.
+  // Relay C (#563 COWORK #12): prints the capex page's three records (1 MGET)
+  // for a local render against production data.
+  "write-capex-records-dump": {
+    script: "scripts/capex-records-dump.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READ-ONLY (Relay C, #563 COWORK #5): a filing's own wording for a line
+  // (e.g. ASML's NXE), so a sub-label is verbatim. SYMBOLS="CIK=..;TERM=..;PHRASES=a|b".
+  "capex-text-probe": { script: "scripts/capex-text-probe.mjs", args: () => [] },
+  "capex-usa-small": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa", USA_PAGES: "10", USA_DETAIL: "200", FETCH_TIMEOUT_MS: "45000" } },
+  // A REAL WRITE (Relay B, Pickers PR): seeds msh:pickers:sec-fundamentals:v1
+  // once so the PR preview shows the filings figures. A key nothing on main
+  // reads; ~860 commands. Run only on the owner's OK. The flag is passed on so
+  // the script's own gate holds even if it is ever invoked outside this router.
+  "write-pickers-sec-seed": {
+    script: "scripts/pickers-sec-seed.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
+  },
+  // The same seed into the PREVIEW-ONLY key (#553 COWORK #60), which production
+  // never reads or overwrites, so a Cowork preview check isn't raced by the
+  // 05:35 job. ~860 commands per seed; the key lapses on the 3-day TTL.
+  "write-pickers-sec-seed-preview": {
+    script: "scripts/pickers-sec-seed.mjs",
+    args: () => ["--allow-writes", "--preview"],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY (Relay B, #553 COWORK #3): the "Classification needed" helper in
+  // --dry mode against the live Pickers universe -- prints the issue body, writes
+  // nothing. 2 Redis reads.
+  // WHICH UNIVERSE NAMES A PRESET'S INDUSTRY HOLDS (#553 COWORK #24), under
+  // A's resolver. SYMBOLS = the industry label. Read-only; 1 Redis read.
+  "write-pickers-industry-list": {
+    script: "scripts/pickers-industry-list.mjs",
+    args: () => [],
+    writes: true,
+  },
+  "write-classification-needed-dry": {
+    script: "scripts/classification-needed.mjs",
+    args: () => ["--dry"],
+    writes: true,
+  },
+  // READ-ONLY (Relay B, #553 COWORK #16 item 3): where Pickers' Market Cap
+  // comes from today over the Pickers universe, for the Friday price split.
+  // 3 Redis reads.
+  "write-pickers-marketcap-census": {
+    script: "scripts/pickers-marketcap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHICH UNIVERSE SYMBOLS SEC NO LONGER LISTS (#553 COWORK #20): measured
+  // before the delisting sweep acts on it. Read-only; ~4 Redis reads.
+  "write-sec-delisting-census": {
+    script: "scripts/sec-delisting-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // THE FOUR STALE TICKERS (#553 COWORK #20): BK -> BNY and EQR -> VMRK with
+  // their scores carried, EA and WBS evicted. Owner's GO only; ~15 commands.
+  "write-pickers-ticker-swap-dry": {
+    script: "scripts/pickers-ticker-swap.mjs",
+    args: () => ["--dry"],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-pickers-ticker-swap": {
+    script: "scripts/pickers-ticker-swap.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // P/E, EPS AND PAYOUT: FMP TODAY VS secValuation (#553 COWORK #18/#19),
+  // measured before the move, plus the refused caps per reason for A.
+  // Read-only; ~705 Redis reads (one GET per fact set).
+  "write-pickers-pe-census": {
+    script: "scripts/pickers-pe-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHY AN FY-MARKED P/E LOOKS WRONG (#553 COWORK #64): what #587 ships for a
+  // few symbols beside its inputs. Read-only; ~15 Redis reads.
+  "write-pickers-pe-probe": {
+    script: "scripts/pickers-pe-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // TIINGO, VERIFIED BEFORE BUILDING (#553 COWORK #49). Runs in relay.yml's
+  // `tiingo` job (TIINGO_API_KEY only). Prints no Tiingo data: statuses,
+  // counts, timings and field names. Stores nothing; 0 Redis commands.
+  "tiingo-verify": { script: "scripts/tiingo-verify.mjs", args: () => [], tiingo: true },
+  // The universe it checks (price pool + Pickers), as tickers only.
+  // Read-only; HKEYS + GET = 2 Redis commands.
+  "write-universe-tickers": { script: "scripts/universe-tickers.mjs", args: () => [], writes: true },
+  // THE PRICE POOL'S DOTTED ORPHANS (#553 COWORK #53): fold BRK.B into BRK-B.
+  // One-time, after the poolField change deploys. 4-5 commands.
+  "write-pool-spelling-migrate-dry": { script: "scripts/pool-spelling-migrate.mjs", args: () => [], writes: true },
+  "write-pool-spelling-migrate": { script: "scripts/pool-spelling-migrate.mjs", args: () => ["--apply"], writes: true },
+  // TIINGO (#553 COWORK #55 §2). The §7 purge: every msh:tiingo: key, counts
+  // only; dry unless applied. ~2 commands dry, ~6 applied.
+  "write-tiingo-purge-dry": { script: "scripts/tiingo-purge.mjs", args: () => [], writes: true },
+  "write-tiingo-purge": { script: "scripts/tiingo-purge.mjs", args: () => ["--apply"], writes: true },
+  // Tiingo vs FMP history on ~50 symbols, counts and differences only. ~4 commands.
+  "write-tiingo-parity": { script: "scripts/tiingo-parity.mjs", args: () => [], writes: true },
+  // RETICKERED SYMBOLS OUT OF THE PRICE POOL (#553 COWORK #70): found by the
+  // Tiingo universe's own rule (retickeredOut), old CIKs from the sweep's chain
+  // then A's manifest. Dry run first; --apply (delete + record the CIKs) only
+  // on the owner's OK. 3-5 Redis commands, once.
+  "write-pool-retick-drop-dry": { script: "scripts/pool-retick-drop.mjs", args: () => ["--allow-writes"], needsTypescript: true, writes: true },
+  // The apply deletes ONLY the owner-reviewed list (COWORK #73) and refuses,
+  // deleting nothing, if anything else is unlisted at run time.
+  "write-pool-retick-drop": { script: "scripts/pool-retick-drop.mjs", args: () => ["--allow-writes", "--apply", "--only", "BK,EQR,WBA,CTRA,EA,K,PXD,WBS"], needsTypescript: true, writes: true },
+  // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
+  // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
+  "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
+  // Does Tiingo carry C's pool-add tickers? (#553 COWORK #83) Metadata only, one
+  // request per symbol, presence/exchange/recency printed.
+  "tiingo-carries": { script: "scripts/tiingo-carries.mjs", args: () => [], tiingo: true },
+  // PICKERS SIGNAL PARITY (#553 step 2): the real build twice, on FMP's and on
+  // Tiingo's bars, compared per section and per flag. READ-ONLY DESPITE THE
+  // PREFIX: the script refuses any write verb before it is sent; `write-` is the
+  // credential boundary. Counts, symbols and flag names only in the log.
+  "write-pickers-history-parity": { script: "scripts/pickers-history-parity.mjs", args: () => [], needsTypescript: true, writes: true },
+  // Pickers "–" census (#553 COWORK #87a), READ-ONLY despite the prefix: the
+  // script refuses any write verb before it is sent. Names (live exact / dotted /
+  // committed floor / none) and empty-cell reason codes per column; counts,
+  // symbols and codes only in the log. Redis: GET + one HMGET per page of rows.
+  "write-pickers-why-census": { script: "scripts/pickers-why-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // Capex named links, plan (c) (#563 COWORK #19): read-only scan of every tracked
+  // filer's latest 10-K/20-F for sentences naming a receiver next to a trade word.
+  // Candidates for review only; nothing is published unreviewed. Redis 0.
+  "capex-receiver-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "1/4" } },
+  "capex-receiver-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "2/4" } },
+  "capex-receiver-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "3/4" } },
+  "capex-receiver-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "4/4" } },
+  // Batch 2 (#563 COWORK #23): the receivers' own reports (all named tracked
+  // parties), and the six zero-candidate receivers re-scanned with filed names.
+  "capex-receiver-own-scan": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "own" } },
+  "capex-receiver-six-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "1/4" } },
+  "capex-receiver-six-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "2/4" } },
+  "capex-receiver-six-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "3/4" } },
+  "capex-receiver-six-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "4/4" } },
+  // Batch 2 fix (#563 COWORK #24): the filed text before a truncated quote. SYMBOLS carries QUOTE_CONTEXT.
+  "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
+  // READS ONLY: which margin the Growth & margins chart draws across the universe (#563 COWORK #71). ~105 MGET.
+  "write-margin-kind-census": { script: "scripts/margin-kind-census.mjs", args: () => [], writes: true },
+  // READS ONLY: the confluence ladder's census before the build (#563 COWORK #83 §4). GET + ~110 MGET.
+  "write-confluence-census": { script: "scripts/confluence-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY: Market Mood's shipped maths on the stored bars (#563 COWORK #96). 1 GET + ~105 MGET; dates and 0–100 scores only.
+  "write-market-mood-dryrun": { script: "scripts/market-mood-dryrun.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #148): the stored SEC
+  // sets that fail the seed gate (symbol + reason), and how many still have a
+  // picker row. 1 SMEMBERS + 1 HKEYS; deletes nothing.
+  "write-sec-gate-stored-census": { script: "scripts/sec-gate-stored-census.mjs", args: () => [], writes: true },
+  // THE FMP PURGE (Relay B, #553 COWORK #136). ONLY AFTER THE FMP CANCEL, ON THE
+  // OWNER'S SAY. Dry: counts per group, every opt-in group included (one SCAN
+  // pass + MGETs + 1 HGETALL). Applied: the default groups only; each opt-in
+  // group (pool figures, market:state, FMP-era snapshots, meters) needs its own
+  // task, added on a ruling. See scripts/lib/fmp-purge-plan.mjs.
+  "write-fmp-purge-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--pool-figures", "--market-state", "--insight-snapshots", "--meters"], writes: true },
+  "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
+  // THE OWNER'S OPT-INS (Relay B, #553 COWORK #171, 2026-10-06): the default groups plus the FMP usage
+  // meters, and the FMP figures nulled in the price-pool rows (fields and bookkeeping kept). Market
+  // state and insight snapshots stay out (held).
+  "write-fmp-purge-meters-pool": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--meters", "--pool-figures"], writes: true },
+  // READS ONLY (Relay B, #553 COWORK #171): which posts the FMP-era insight snapshots belong to and
+  // whether stored Tiingo bars could rebuild each. SCAN + MGET + GET; slugs, symbols, dates, counts.
+  "write-insight-snapshot-census": { script: "scripts/insight-snapshot-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // THE 63 FMP-ERA INSIGHT SNAPSHOTS (Relay B, #553, the owner's OK 2026-10-06): dry first, then the
+  // deletion. Tiingo-path records are never touched; each post rebuilds from its stored Tiingo bars.
+  "write-fmp-purge-snapshots-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--insight-snapshots"], writes: true },
+  "write-fmp-purge-snapshots": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--insight-snapshots"], writes: true },
+  // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
+  "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
+  // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
+  "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
+  // THE DUE-STRIP CUT, RE-RANKED (#552 COWORK #185). Read-only (its guard
+  // refuses anything but GET/HKEYS/HMGET); prints CUT_JSON for
+  // data/due-strip.json. -pickers measures the old rule (the analysis universe).
+  "write-due-strip-rank": {
+    script: "scripts/due-strip-rank.mjs",
+    args: () => [],
+    writes: true,
+  },
+  "write-due-strip-rank-pickers": {
+    script: "scripts/due-strip-rank.mjs",
+    args: () => [],
+    writes: true,
+    env: { UNIVERSE: "pickers" },
+  },
+  // THE 63 SNAPSHOTS ONLY (Relay B, #553 CODE-B #152): write-fmp-purge-snapshots above also re-deletes
+  // the default groups, and on 2026-10-06 its dry run found 8 of A's refilled earnings keys there.
+  // --opt-ins-only keeps every default key; use these two in its place.
+  "write-fmp-purge-snapshots-only-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--opt-ins-only", "--insight-snapshots"], writes: true },
+  "write-fmp-purge-snapshots-only": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--opt-ins-only", "--insight-snapshots"], writes: true },
+  // READS ONLY (Relay B, #553 COWORK #181): the insight writer's list (GET of the nightly key; repeats from content/insights).
+  "write-insight-candidates-read": { script: "scripts/insight-candidates-read.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #181/#188/#190): the last 5 sessions' lists, dry.
+  "write-insight-candidates-dry-run": { script: "scripts/insight-candidates-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #173/#190): the nightly market state built dry from eod-last, against the old key.
+  "write-market-dynamic-dry-run": { script: "scripts/market-dynamic-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #191 item 1): stored news, junk headlines by day.
+  "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
+};
+
+const argv = process.argv.slice(2);
+const allowWrites = argv.includes("--allow-writes");
+const task = argv.find((a) => !a.startsWith("--"));
+
+if (!task) {
+  console.error("FATAL: no task given. Usage: relay-run.mjs <task> [--allow-writes]");
+  console.error(`Known tasks: ${Object.keys(TASKS).join(", ")}`);
+  process.exit(2);
+}
+
+const spec = TASKS[task];
+if (!spec) {
+  // A CLEAR FAILURE, WITH THE LIST. An unknown task is most often a typo in the
+  // dispatch form, and discovering it as "module not found" three minutes into a
+  // runner is the round trip this whole design exists to avoid.
+  console.error(`FATAL: unknown task "${task}".`);
+  console.error(`Known tasks: ${Object.keys(TASKS).join(", ")}`);
+  console.error(
+    "Add it to TASKS in scripts/relay-run.mjs — on a branch, and dispatch the " +
+      "relay with ref pointed at that branch. No workflow edit is needed."
+  );
+  process.exit(2);
+}
+
+// THE SECOND HALF OF THE BOUNDARY. relay.yml routes by the write- prefix; this
+// refuses to act on a write task unless the caller says it is the credentialled
+// job. The two must agree, and disagreeing fails closed.
+const named = task.startsWith("write-");
+if (named !== Boolean(spec.writes)) {
+  console.error(
+    `FATAL: naming/permission mismatch for "${task}". A task that writes MUST be ` +
+      `named with the write- prefix, and a task named write- MUST declare ` +
+      `writes: true. The prefix is what routes it to the credentialled job, so a ` +
+      `disagreement here means the routing is wrong.`
+  );
+  process.exit(2);
+}
+// THE THIRD JOB (#553 COWORK #49). The tiingo- prefix routes to the job that
+// holds TIINGO_API_KEY and nothing else; the same agreement is enforced here,
+// and nothing else may run where that key is present.
+if (task.startsWith("tiingo-") !== Boolean(spec.tiingo) || (spec.tiingo && spec.writes)) {
+  console.error(
+    `FATAL: "${task}": a Tiingo task MUST be named tiingo-, declare tiingo: true ` +
+      `and not write; a task named tiingo- MUST declare tiingo: true.`
+  );
+  process.exit(2);
+}
+if (!spec.tiingo && process.env.TIINGO_API_KEY) {
+  console.error(`FATAL: "${task}" is not a Tiingo task but TIINGO_API_KEY is present. Refusing.`);
+  process.exit(2);
+}
+if (spec.writes && !allowWrites) {
+  console.error(
+    `FATAL: "${task}" writes, and this invocation was not granted writes. It is ` +
+      `running in the read-only relay job, which holds no credentials. Refusing ` +
+      `rather than failing later with an authentication error that would read as ` +
+      `a bad secret.`
+  );
+  process.exit(2);
+}
+if (!spec.writes && allowWrites) {
+  console.error(
+    `FATAL: "${task}" does not write, but was invoked from the credentialled job. ` +
+      `Read-only work must not run where the write token is present — that is the ` +
+      `whole point of the split.`
+  );
+  process.exit(2);
+}
+
+if (!fs.existsSync(spec.script)) {
+  console.error(
+    `FATAL: "${task}" routes to ${spec.script}, which does not exist on this ref.`
+  );
+  console.error(
+    "Either the script has not been written yet, or the relay was dispatched " +
+      "against a ref that predates it. Dispatch with ref pointed at the branch " +
+      "that carries the script."
+  );
+  process.exit(2);
+}
+// TYPESCRIPT, ON DEMAND, AND GENUINELY ONLY TYPESCRIPT.
+//
+// The read-only job deliberately runs no `npm ci` -- relay.yml states the
+// property plainly: not installing the Upstash client is what keeps this job
+// unable to reach the database even if a future edit tried to. A task that LIFTS
+// a shipped function needs ts.transpileModule to erase types, so it needs the
+// compiler.
+//
+// THE OBVIOUS FIX DOES NOT WORK, AND IT FAILS SILENTLY. `npm install --no-save
+// typescript` run in the repo root resolves the WHOLE of package.json first:
+// measured on run 34830229705, "added 438 packages in 10s" -- @upstash/redis
+// among them. It looked like a one-package install and was a full tree, which
+// would have quietly voided the property the workflow comment describes.
+//
+// So the install happens in an EMPTY temporary directory, where typescript has
+// no dependencies of its own and npm adds exactly one package, and only that
+// package is copied into ./node_modules. Verified: `npm install --no-save
+// --no-package-lock typescript@^5` in an empty dir reports "added 1 package".
+//
+// AND IT LIVES HERE, NOT IN relay.yml, for the reason in this file's header: a
+// workflow edit costs a merge-and-wait before it can run once.
+if (spec.needsTypescript) {
+  let present = false;
+  try {
+    await import("typescript");
+    present = true;
+  } catch {
+    present = false;
+  }
+  if (!present) {
+    // Pinned to the same range the repo builds with, so erase() behaves here
+    // exactly as it does in check-all. A floating install could change what a
+    // lifted function's body looks like, which is the one thing this must not do.
+    const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+    const range = pkg.devDependencies?.typescript ?? pkg.dependencies?.typescript;
+    if (!range) {
+      console.error("FATAL: package.json declares no typescript, but this task lifts TS source.");
+      process.exit(2);
+    }
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "relay-ts-"));
+    console.log(`relay: installing typescript@${range} in isolation (NOT npm ci, NOT the repo tree)`);
+    const r = spawnSync(
+      "npm",
+      ["install", "--no-save", "--no-package-lock", "--no-audit", "--no-fund", `typescript@${range}`],
+      { cwd: tmp, stdio: "inherit" }
+    );
+    const from = path.join(tmp, "node_modules", "typescript");
+    if (r.status !== 0 || !fs.existsSync(from)) {
+      console.error(
+        `FATAL: could not install typescript (exit ${r.status}). This task lifts functions ` +
+          `from .ts sources and cannot erase types without it. Reimplementing the parsers ` +
+          `instead is not the fallback -- a capture that parses with its own code is not ` +
+          `evidence about the shipped parser.`
+      );
+      process.exit(2);
+    }
+    // ONE DIRECTORY, COPIED BY NAME. Anything else npm happened to leave in the
+    // temp tree stays there.
+    fs.mkdirSync("node_modules", { recursive: true });
+    fs.cpSync(from, path.join("node_modules", "typescript"), { recursive: true });
+    const installed = fs.readdirSync(path.join(tmp, "node_modules")).filter((d) => !d.startsWith("."));
+    console.log(`relay: typescript in place (isolated install held ${installed.length}: ${installed.join(", ")})`);
+  }
+}
+
+// RETIRED 2026-09-24 (#552 COWORK #23): the Step 0 dump was FMP data, is
+// deleted, and relay.yml no longer downloads it. A task still marked needsDump
+// is refused outright rather than run against nothing.
+if (spec.needsDump) {
+  console.error(
+    `FATAL: "${task}" reads the Step 0 FMP dump, which is deleted. Dump-reading ` +
+      `relay tasks are retired (#552); no relay task may depend on it.`
+  );
+  process.exit(2);
+}
+
+const args = spec.args(process.env).filter((a) => a !== "");
+// ── A TASK MAY PIN ITS OWN PARAMETERS, AND THEY WIN ──────────────────────
+// relay.yml's inputs are fixed on the default branch, so a task needing a knob
+// the form does not have would otherwise cost a merge. `env` puts the knob on
+// the TASK instead, and the task name becomes the record of what was measured.
+//
+// SPEC WINS OVER THE AMBIENT ENVIRONMENT, deliberately. If the surrounding env
+// could override it, a stray variable on a runner would silently change what a
+// named task measures while the run still reported the task's name — a report
+// that says one thing and did another.
+const env = { ...process.env, ...(spec.env ?? {}) };
+if (spec.env) {
+  console.log(`relay: ${task} pins ${Object.entries(spec.env).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+}
+console.log(`relay: ${task} -> node ${spec.script} ${args.join(" ")}`);
+// nodeArgs are flags for the node PROCESS, not arguments to the task. Only a
+// task that declares them gets them, so nothing else changes behaviour.
+const nodeArgs = spec.nodeArgs ?? [];
+if (nodeArgs.length) console.log(`relay: node flags ${nodeArgs.join(" ")}`);
+const res = spawnSync("node", [...nodeArgs, spec.script, ...args], { stdio: "inherit", env });
+process.exit(res.status ?? 1);

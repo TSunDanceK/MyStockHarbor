@@ -1,0 +1,230 @@
+// Every claude/*.md path cited from code must exist in this repo.
+//
+// THE CITATION IS THE ARGUMENT. This tree does not repeat its reasoning at each
+// call site; it points at a doc. "See claude/pickers-firewall-selfblock-
+// 2026-07-17.md" is doing the work of a paragraph explaining why a route must
+// not be guarded. A citation pointing at nothing reads as "the reasoning is
+// recorded elsewhere" when it is not -- and someone who cannot find the doc has
+// to choose between trusting a claim they cannot check and overriding a
+// constraint they do not understand.
+//
+// That was not hypothetical. The most-cited document in this codebase -- 20 code
+// files -- existed only in the Claude Project and had never been mirrored here,
+// while the entire stated purpose of the claude/ directory is that these are
+// "readable from GitHub itself -- e.g. from a phone, without needing to open
+// Claude" (CLAUDE.md). Its content materially changed what several of those 20
+// call sites mean: the root cause was a Vercel Firewall rule on the `node`
+// User-Agent, NOT BotID, and that rule was removed on 2026-07-17. Anyone
+// reasoning from the call sites alone would have had the mechanism wrong.
+//
+// MIRRORED 2026-08-25 and struck from the list below -- the first of the 24 off.
+//
+// A DATED ALLOWLIST, NOT A CLEAN PASS. 24 of 59 cited paths were missing on
+// 2026-08-24; 23 remain.
+// A check that fails on all of them is a check someone disables; a check with no
+// allowlist at all would have to be added as already-failing. So the backlog is
+// listed here explicitly -- visible in the repo rather than in a chat, shrinking
+// as docs are mirrored, and any NEW dangling citation fails immediately.
+//
+//   node scripts/check-doc-citations.mjs
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+
+const ROOT = process.cwd();
+let failures = 0;
+const check = (label, ok, detail = "") => {
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
+  if (!ok) failures++;
+};
+
+// Missing as of 2026-08-24. Each is a doc that exists in the Claude Project and
+// was never mirrored. Remove entries as they land; do not add without saying
+// why in the commit.
+//
+// STRUCK 2026-08-25: claude/pickers-firewall-selfblock-2026-07-17.md, mirrored
+// verbatim with a dated status block on top. The body is the July record and is
+// not edited -- the status block exists because the body's "Plays still
+// self-fetch; consider the same in-process treatment later" would otherwise send
+// the next reader to convert a page that was converted long ago. A mirrored doc
+// is a snapshot, and a snapshot with no date on the drift is its own trap.
+const KNOWN_MISSING = new Set([
+  // ADDED 2026-09-21, and it is the SAME MIRRORING GAP ONE LEVEL DOWN that the
+  // dashboard-off-FMP entry below records — mirroring the citing doc is what
+  // exposed it rather than what caused it.
+  //
+  // REVIEW-news-art-v2-held-out-2026-09-21.md was written from Cowork and
+  // mirrored here on the same day, and its header cites this handoff for the
+  // reason it had to be mirrored at all: project_write does not commit to git,
+  // so a doc that only exists Project-side is a doc the branch cites and nobody
+  // can read. That citation is the mirror explaining its own existence, and a
+  // verbatim mirror that deletes an inconvenient reference is no longer
+  // verbatim — the argument already made for the two entries below.
+  //
+  // Strike this line when the handoff is mirrored; the stale-entry assertion
+  // will force it out on the next run, as it just did for the review itself.
+  "claude/HANDOFF-news-production-verification-2026-09-20.md",
+  // ADDED 2026-09-21 with the dashboard-off-FMP scoping doc, mirrored verbatim
+  // for the whole-market bars migration. That doc cites this one, which is
+  // Project-only and was never mirrored -- the SAME mirroring gap, one level
+  // down, and mirroring the citing doc is what exposed it rather than caused it.
+  //
+  // The body is not edited to remove the citation: a verbatim mirror that drops
+  // an inconvenient reference is no longer verbatim, and the reference is the
+  // only record that the 2026-07-22 measurement exists at all. It is the
+  // evidence behind "crypto is the one place FMP's live data was genuinely
+  // live" (§4), so losing the pointer loses the reason that decision was made.
+  "claude/pickers-earnings-longcache-and-price-pool-2026-07-22.md",
+  // THE 09-21 HANDOFF WAS HERE AND IS GONE AGAIN, which is the entry working.
+  // It was allowlisted earlier on 2026-09-21 because a sandbox session has no
+  // claude.ai Project access and the paste carried only a placeholder. The doc
+  // was then supplied as plain text and mirrored, and the stale-entry assertion
+  // below turned red on the next run and forced this line out. Nobody had to
+  // remember; the check did.
+  //
+  // ITS PREDECESSOR IS STILL MISSING and is allowlisted in its place. The 09-21
+  // handoff opens by superseding it and by saying which parts stay accurate
+  // history ("why the freeze mattered, why FPI market cap needed a veto"), so
+  // the citation is load-bearing: it is the only record of where that reasoning
+  // lives. Deleting it to get green would destroy exactly what a verbatim
+  // mirror is for.
+  "claude/HANDOFF-earnings-calendar-v1-2026-09-17.md",
+  // ADDED 2026-09-13 with the SEC build brief. The brief and the evidence docs
+  // it supersedes landed in the repo together; these seven are cited by
+  // earnings-page-free-sources and sec-pipeline-spec and were never mirrored --
+  // Project-only, same situation and same resolution as the image-policy
+  // citation struck above. Nothing here was broken by the build branch; the
+  // citations arrived with the docs.
+  "claude/NEXT-SESSION-2026-09-12.md",
+  "claude/data-vendor-enquiry-2026-09-12.md",
+  "claude/stooq-sec-probe-INSTRUCTIONS-2026-09-12.md",
+  "claude/earnings-probe-adjudication-2026-09-13.md",
+  "claude/tiering-freshness-follows-display-2026-09-01.md",
+  "claude/fmp-exit-options-pickers-2026-09-12.md",
+  // ADDED 2026-09-21 with the /stock/[symbol] FMP-exit handoff. Same situation
+  // as the seven above and the same resolution: it is a Project-only doc, cited
+  // by the brief that commissioned that work, and the handoff records what it
+  // could and could not verify against the repo BECAUSE this doc is unreadable
+  // from here. Dropping the citation would delete the reason the handoff's §0.2
+  // exists at all -- that the Pickers Analysts-tab hide it was told to mirror is
+  // not present in the code -- and turn a recorded gap into a silent assumption.
+  "claude/HANDOFF-earnings-2026-09-17.md",
+  "claude/firewall-asn-audit-2026-08-31.md",
+
+  "claude/seo-recovery-plan-2026-08-15.md",
+  "claude/list-link-prefetch-disable-2026-07-21.md",
+  "claude/stock-daily-rate-limit-2026-07-21.md",
+  "claude/stock-page-earnings-selfblock-2026-07-21.md",
+  "claude/header-nav-not-crawlable-2026-08-17.md",
+  "claude/CLAUDE.md",
+  "claude/firewall-bot-protection-audit-2026-07-19.md",
+  "claude/universe-architecture-audit-2026-08-06.md",
+  "claude/video-page-quote-selfblock-fix-2026-07-21.md",
+  "claude/popular-searches-universe-spec-2026-07-23.md",
+  "claude/stock-page-consolidation.md",
+  "claude/PICKERS_ACCORDION_REDESIGN.md",
+  "claude/picker-columns-needed-2026-08-22.md",
+  "claude/NEXT-SESSION-2026-08-18.md",
+  "claude/all-stocks-full-universe-and-header-dropdown-2026-07-23.md",
+  "claude/universe-megacap-preset-fix-2026-07-23.md",
+  "claude/sector-news-plan-2026-08-07.md",
+  "claude/picker-signals-and-news-bandwidth-2026-08-22.md",
+  "claude/picker-pages-demand-data-2026-08-15.md",
+  "claude/firewall-allowed-bot-scraping-audit-2026-07-21.md",
+  "claude/firewall-ja4-repeat-offenders-selfblock-2026-07-21.md",
+  // moved to private storage
+  "claude/tiingo-contract-and-limits-2026-09-23.md",
+  // ADDED 2026-09-30: app/robots.ts (#648) cites the firewall watch that found
+  // SERankingBacklinksBot. The daily firewall watches are written Project-side
+  // and never mirrored to the repo, like the two firewall entries above.
+  "claude/firewall-daily-watch-2026-09-27.md",
+]);
+
+// TRACKED **AND** UNTRACKED-BUT-NOT-IGNORED. `git ls-files` alone misses a file
+// that has not been committed yet, so a brand-new dangling citation would pass
+// until the commit AFTER the one that introduced it. Found the hard way: the S3
+// calibration fixture below sat untracked through a green run and only failed
+// once committed.
+const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+  cwd: ROOT,
+  encoding: "utf8",
+}).split("\n").filter(Boolean);
+
+// TWO FILES CANNOT BE SCANNED, and both would corrupt the measurement rather
+// than merely add noise:
+//
+//   this file      -- its allowlist IS a list of claude/*.md paths, so scanning
+//                     itself would count every allowlisted doc as "cited from
+//                     code". That turned "19 of 24 cited from code" into "24 of
+//                     24" and inflated every per-doc weight by one, which is the
+//                     figure someone would use to decide what to mirror first.
+//   calibrations/  -- mutation specs carry deliberately-fake paths as fixtures.
+//                     A spec asserting that a dangling citation FAILS is not
+//                     itself a dangling citation.
+const SELF = "scripts/check-doc-citations.mjs";
+const skip = (rel) => rel === SELF || rel.startsWith("scripts/calibrations/");
+
+const PAT = /claude\/[A-Za-z0-9_\-./]+\.md/g;
+
+const cited = new Map(); // path -> Set(citing files)
+for (const rel of files) {
+  if (skip(rel)) continue;
+  let text;
+  try {
+    text = fs.readFileSync(path.join(ROOT, rel), "utf8");
+  } catch {
+    continue;
+  }
+  for (const m of new Set(text.match(PAT) ?? [])) {
+    if (!cited.has(m)) cited.set(m, new Set());
+    cited.get(m).add(rel);
+  }
+}
+
+const exists = (p) => fs.existsSync(path.join(ROOT, p));
+const missing = [...cited].filter(([p]) => !exists(p));
+const isCode = (f) => /\.(ts|tsx|mjs|js)$/.test(f);
+
+console.log(`\n=== ${cited.size} cited claude/*.md paths, ${missing.length} missing ===\n`);
+
+const unexpected = missing.filter(([p]) => !KNOWN_MISSING.has(p));
+check(
+  "no NEW dangling citation",
+  unexpected.length === 0,
+  unexpected.length
+    ? unexpected.map(([p, srcs]) => `${p} (cited by ${[...srcs].join(", ")})`).join(" | ")
+    : `${missing.length} known, all allowlisted`
+);
+
+// The allowlist must shrink, not rot. An entry for a doc that now exists is a
+// stale exemption, and a stale exemption is how an allowlist stops meaning
+// anything.
+const staleAllowlist = [...KNOWN_MISSING].filter((p) => exists(p));
+check(
+  "the allowlist has no stale entries",
+  staleAllowlist.length === 0,
+  staleAllowlist.length ? `now present, remove from KNOWN_MISSING: ${staleAllowlist.join(", ")}` : "every entry is still genuinely missing"
+);
+
+// An allowlist entry nothing cites any more is also dead weight.
+const uncited = [...KNOWN_MISSING].filter((p) => !cited.has(p));
+check(
+  "the allowlist has no orphans",
+  uncited.length === 0,
+  uncited.length ? `no longer cited, remove: ${uncited.join(", ")}` : "every entry is still cited"
+);
+
+console.log("\n=== The backlog, weighted by how much code leans on it ===\n");
+const byWeight = missing
+  .map(([p, srcs]) => [p, [...srcs].filter(isCode).length, srcs.size])
+  .sort((a, b) => b[1] - a[1]);
+for (const [p, code, total] of byWeight.slice(0, 8)) {
+  console.log(`  ${String(code).padStart(2)} code file(s) of ${total}  ${p}`);
+}
+if (byWeight.length > 8) console.log(`  ... and ${byWeight.length - 8} more`);
+
+const codeCited = missing.filter(([, srcs]) => [...srcs].some(isCode)).length;
+console.log(`\n  ${codeCited} of ${missing.length} missing docs are cited FROM CODE, not just from other docs.`);
+
+console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
+process.exit(failures ? 1 : 0);

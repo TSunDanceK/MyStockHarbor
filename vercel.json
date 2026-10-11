@@ -1,0 +1,105 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "mystockharbour.com"
+        }
+      ],
+      "destination": "https://www.mystockharbor.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.mystockharbour.com"
+        }
+      ],
+      "destination": "https://www.mystockharbor.com/:path*",
+      "permanent": true
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/jobs/warm-picker-universe",
+      "schedule": "2 7 * * *"
+    },
+    {
+      "path": "/api/jobs/warm-earnings",
+      "schedule": "15 7 * * *"
+    },
+    {
+      "path": "/api/jobs/warm-screener-fundamentals",
+      "schedule": "50 7 * * *"
+    },
+    {
+      "path": "/api/jobs/warm-fundamentals",
+      "schedule": "22 * * * *"
+    },
+    {
+      "path": "/api/jobs/warm-price-pool",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/jobs/warm-stock-data",
+      "schedule": "7-57/10 * * * *"
+    },
+    {
+      "path": "/api/jobs/sec-daily-index",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/jobs/sec-facts",
+      "schedule": "20 4,16 * * *"
+    },
+    {
+      "path": "/api/jobs/ipo-refresh",
+      "schedule": "40 4 * * *"
+    },
+    {
+      "path": "/api/jobs/sec-report-dates-rewrite",
+      "schedule": "10 5 * * *"
+    },
+    {
+      "path": "/api/jobs/sec-filings",
+      "schedule": "40 * * * *"
+    },
+    {
+      "path": "/api/jobs/warm-pickers-sec",
+      "schedule": "35 5 * * *"
+    },
+    {
+      "path": "/api/jobs/capex-receivers",
+      "schedule": "50 5 * * *"
+    },
+    {
+      "path": "/api/jobs/capex-contracts",
+      "schedule": "10 6 * * *"
+    },
+    {
+      "path": "/api/jobs/capex-spending",
+      "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/jobs/tiingo-quotes",
+      "schedule": "11-59/15 * * * *"
+    },
+    {
+      "path": "/api/jobs/tiingo-eod",
+      "schedule": "45 0,2 * * *"
+    },
+    {
+      "path": "/api/jobs/tiingo-supported",
+      "schedule": "25 3 * * *"
+    },
+    {
+      "path": "/api/jobs/tiingo-cold-queue",
+      "schedule": "3-59/10 * * * *"
+    }
+  ],
+  "ignoreCommand": "bash scripts/vercel-ignore-build.sh"
+}

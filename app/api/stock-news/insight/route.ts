@@ -1,0 +1,181 @@
+import { NextRequest, NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
+import { getAiNewsInsight } from "@/lib/ai-news-briefs";
+import { buildBeyondHeadline, buildWhatItMeans, type ScoreTone } from "@/lib/stock-news-templates";
+import { isUnwantedBot } from "@/lib/botid-guard";
+
+export const runtime = "nodejs";
+
+type RequestItem = {
+  title?: unknown;
+  source?: unknown;
+  pubDate?: unknown;
+  description?: unknown;
+};
+
+type RequestBody = {
+  symbol?: unknown;
+  companyName?: unknown;
+  trend?: unknown;
+  newsScore?: { score?: unknown; tone?: unknown; label?: unknown };
+  earningsScore?: { label?: unknown };
+  lastRsi?: unknown;
+  priceVs50?: unknown;
+  priceVs200?: unknown;
+  recentHigh?: unknown;
+  recentLow?: unknown;
+  items?: RequestItem[];
+};
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function strOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function num(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+// The "yellow" arm is a real default, but it is not a fabricated claim: this
+// tone is only consumed by the algorithmic template fallbacks, which branch on
+// tone === "green" and tone === "red" exclusively (lib/stock-news-templates.ts
+// lines 64, 67, 83, 87, 119, 122). "yellow" therefore selects the generic prose
+// in every case -- it degrades to no claim rather than to a neutral verdict.
+// The tone is not sent to the model; only newsScoreLabel/newsScoreValue are.
+function tone(value: unknown): ScoreTone {
+  return value === "green" || value === "red" ? value : "yellow";
+}
+
+type CleanItem = {
+  title: string;
+  source: string | null;
+  pubDate: string | null;
+  description: string | null;
+  summary: string | null;
+  whyItMatters: string | null;
+};
+
+// NON-PRICE ONLY (#563 COWORK #31 (b)): trend, RSI, MA distance and the range
+// still feed the deterministic fallback text below, never the model's payload.
+type CachedPayload = {
+  symbol: string;
+  companyName: string;
+  newsScoreLabel: string | null;
+  newsScoreValue: number | null;
+  earningsTone: string;
+  items: CleanItem[];
+};
+
+// The cache key is derived from the full payload below, which includes the
+// current top-article set (title/source/pubDate/description for each). As
+// long as that article set is unchanged, repeated clicks across every
+// visitor hit the same cached AI read -- this is a shared, effectively
+// indefinite cache (revalidate: false). The moment a new article enters the
+// top set (or an old one drops out), the serialized payload changes, so
+// unstable_cache naturally produces a fresh cache key and a fresh AI call.
+// No manual invalidation is needed.
+const getCachedInsight = unstable_cache(
+  async (payloadJson: string) => {
+    const payload = JSON.parse(payloadJson) as CachedPayload;
+    return getAiNewsInsight(payload);
+  },
+  ["msh-news-insight-route-v2-non-price"],
+  { revalidate: false }
+);
+
+export async function POST(request: NextRequest) {
+  let body: RequestBody;
+  try {
+    body = (await request.json()) as RequestBody;
+  } catch {
+    return NextResponse.json({ ai: false, beyondHeadline: "", whatItMeans: [] }, { status: 400 });
+  }
+
+  // Deep Analysis (2026-07-20): this route calls OpenAI on a cache keyed by
+  // the full request payload (including attacker-controlled article
+  // title/description text), so varying that text forces fresh, billed
+  // OpenAI calls on every attempt -- a cheap way to run up real API cost.
+  // checkLevel here MUST match the advancedOptions set for this path/method
+  // in instrumentation-client.ts, or verification fails outright.
+  if (await isUnwantedBot("deepAnalysis")) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
+  const symbol = str(body.symbol).toUpperCase();
+  if (!symbol) {
+    return NextResponse.json({ ai: false, beyondHeadline: "", whatItMeans: [] }, { status: 400 });
+  }
+
+  const companyName = str(body.companyName);
+  // "" would reach the model as an empty trend field rather than an absent one.
+  const trend = str(body.trend) || null;
+  const newsScoreTone = tone(body.newsScore?.tone);
+  // A missing news score means the client had nothing to score, so send null.
+  // `|| "Neutral"` and `?? 50` invented a specific sentiment reading and handed
+  // it to the model as fact -- the whole payload is JSON.stringify'd straight
+  // into the user prompt, so a fabricated 50/"Neutral" became the ground truth
+  // the generated editorial was written around.
+  const newsScoreLabel = str(body.newsScore?.label) || null;
+  const newsScoreValue = num(body.newsScore?.score) ?? null;
+  const earningsToneLabel = str(body.earningsScore?.label) || "Unavailable";
+  const rsi = num(body.lastRsi);
+  const priceVs50 = num(body.priceVs50);
+  const recentHigh = num(body.recentHigh);
+  const recentLow = num(body.recentLow);
+
+  const items: CleanItem[] = Array.isArray(body.items)
+    ? body.items
+        .filter((item) => typeof item?.title === "string" && item.title.trim())
+        .slice(0, 5)
+        .map((item) => ({
+          title: str(item.title),
+          source: strOrNull(item.source),
+          pubDate: strOrNull(item.pubDate),
+          description: strOrNull(item.description),
+          summary: strOrNull(item.description),
+          whyItMatters: null,
+        }))
+    : [];
+
+  const fallbackBeyondHeadline = buildBeyondHeadline({
+    symbol,
+    newsScore: { tone: newsScoreTone },
+    trend,
+    recentHigh,
+    recentLow,
+  });
+  const fallbackWhatItMeans = buildWhatItMeans({
+    symbol,
+    trend,
+    newsScore: { tone: newsScoreTone },
+    rsi,
+    priceVs50,
+  });
+
+  if (!items.length) {
+    return NextResponse.json({ ai: false, beyondHeadline: fallbackBeyondHeadline, whatItMeans: fallbackWhatItMeans });
+  }
+
+  const payload: CachedPayload = {
+    symbol,
+    companyName,
+    newsScoreLabel,
+    newsScoreValue,
+    earningsTone: earningsToneLabel,
+    items,
+  };
+
+  try {
+    const insight = await getCachedInsight(JSON.stringify(payload));
+    if (insight?.beyondHeadline?.trim() && insight.whatItMeans?.length) {
+      return NextResponse.json({ ai: true, beyondHeadline: insight.beyondHeadline, whatItMeans: insight.whatItMeans });
+    }
+  } catch {
+    // Fall through to the algorithmic fallback below.
+  }
+
+  return NextResponse.json({ ai: false, beyondHeadline: fallbackBeyondHeadline, whatItMeans: fallbackWhatItMeans });
+}

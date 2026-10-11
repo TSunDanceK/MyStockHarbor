@@ -1,0 +1,256 @@
+// The constraints around the stored news dataset that are not expressible in
+// newsMerge's unit tests, because they are about wiring rather than logic.
+//
+// THE ONE THAT MATTERS MOST IS THE ABSENCE OF A CRON. Population is lazy by
+// design: first view of a symbol populates it, later views read Redis, and a
+// symbol nobody views costs nothing. Adding news to vercel.json would warm 755
+// symbols an hour and dwarf every other consumer on the FMP account -- turning
+// the fix into a bigger version of the problem it was built to solve. That is a
+// one-line mistake to make and it would not fail anything, so it is asserted.
+//
+//   node scripts/check-news-store.mjs
+import ts from "typescript";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { readCodeOnly } from "./lib/source-code.mjs";
+
+/** Transpile a TS module and import it, so an assertion can RUN the code. */
+const loadTs = async (source, tag) => {
+  if (/^import /m.test(source)) throw new Error(`${tag}: an import survived; this loader inlines nothing`);
+  const file = path.join(process.cwd(), `.check-${tag}.mjs`);
+  fs.writeFileSync(file, ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText);
+  try { return await import(`${pathToFileURL(file).href}?t=${Date.now()}`); }
+  finally { fs.unlinkSync(file); }
+};
+
+let failures = 0;
+const check = (label, ok, detail = "") => {
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
+  if (!ok) failures++;
+};
+
+const store = readCodeOnly("lib/server/newsStore.ts");
+const merge = readCodeOnly("lib/server/newsMerge.ts");
+const newsData = readCodeOnly("lib/stock-news-data.ts");
+const staleness = readCodeOnly("lib/server/stalenessQueue.ts");
+const ROOT = process.cwd();
+const vercel = JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8"));
+const spec = fs.readFileSync(
+  path.join(process.cwd(), "claude/news-as-stored-dataset-spec-2026-08-22.md"),
+  "utf8"
+);
+
+console.log("\n=== 1. Population stays lazy ===\n");
+
+const newsCron = (vercel.crons ?? []).filter((c) => /news/i.test(c.path));
+check(
+  "no news cron in vercel.json",
+  newsCron.length === 0,
+  `warming 755 symbols hourly would dwarf every other consumer on the account — found ${newsCron.length}`
+);
+
+check(
+  "the store is reached from the render path, not a job route",
+  /readOrRefreshSymbolNews/.test(newsData),
+  "lazy population only works if the thing that populates is the thing that reads"
+);
+
+console.log("\n=== 2. The pure half stays pure ===\n");
+
+// THE PROPERTY IS "LOADS WITHOUT REDIS AND WITHOUT NEXT", not "has no import
+// line". It was written as the latter because at the time the two coincided,
+// and then capNews needed the churn grammar and the choice was one import or a
+// second copy of a regex that can disagree with the first. Relaxed to an
+// allowlist rather than deleted: "no import at all" would have failed a correct
+// change, and "any import is fine" would not have noticed `import { Redis }`.
+const MERGE_ALLOWED_IMPORTS = ["./news/filingChurn"];
+const mergeImports = [...merge.matchAll(/^import [\s\S]*?from "([^"]+)";$/gm)].map((m) => m[1]);
+check(
+  "newsMerge imports nothing outside its allowlist",
+  mergeImports.every((spec) => MERGE_ALLOWED_IMPORTS.includes(spec)),
+  `found ${mergeImports.filter((s) => !MERGE_ALLOWED_IMPORTS.includes(s)).join(", ") || "none"} — ` +
+    "it is split out so the tests can run the real module; a Redis or Next import is what would stop them"
+);
+check(
+  "...and every module on that allowlist imports nothing itself",
+  MERGE_ALLOWED_IMPORTS.every((spec) => {
+    const rel = spec.replace(/^\.\//, "lib/server/") + ".ts";
+    return !/^import /m.test(fs.readFileSync(path.join(ROOT, rel), "utf8"));
+  }),
+  "one hop is the allowance; a transitive dependency on Redis is the same failure one file further away"
+);
+
+check(
+  "newsMerge does not reimplement the #343 dedup",
+  !/OVERLAP_THRESHOLD|titleOverlap/.test(merge),
+  "a second copy of that rule could disagree with the first, which is worse than the testability it would buy"
+);
+
+check(
+  "the dedup is injected into the store rather than imported by it",
+  // Either the bare injection or (2026-09-23, #553 COWORK #5) the same dedup
+  // wrapped with the FMP-era purge -- still injected, still one implementation.
+  /dedupe:\s*(?:dedupeNews\b|\(list\) => dedupeNews\(list\.filter\(fromActive\)\))/.test(newsData),
+  "the store importing lib/stock-news-data would be a cycle, and copying the rule would be two implementations"
+);
+
+console.log("\n=== 3. The spec's numbers are the code's numbers ===\n");
+
+check("the overlap is 6 hours", /NEWS_OVERLAP_HOURS = 6;/.test(merge));
+check("the store cap is 40", /NEWS_STORE_CAP = 40;/.test(merge));
+check("the earnings pin backstop is 7 days", /EARNINGS_PIN_MAX_AGE_MS = 7 \*/.test(merge));
+
+const keyTtl = store.match(/NEWS_KEY_TTL_SECONDS = (\d+) \*/)?.[1];
+check(
+  "the key TTL outlives the earnings pin",
+  Number(keyTtl) > 7,
+  `a key that expires inside the pin's 7 days would make the backstop the primary rule — ${keyTtl} days`
+);
+
+check(
+  "sector news gets no earnings pin",
+  /Omit<RefreshDeps<T>, "isEarnings">/.test(store),
+  "pinning one constituent's earnings inside a sector feed would present it as sector-wide coverage"
+);
+
+console.log("\n=== 4. Instrumentation answers the question it exists for ===\n");
+
+check(
+  "cold and incremental refreshes are counted separately",
+  /coldFetches/.test(store) && /incrementalFetches/.test(store),
+  "a zero-add refresh is healthy, so only the ratio distinguishes a working store from one being evicted"
+);
+
+check(
+  "items added per refresh is recorded",
+  /itemsAdded/.test(store),
+  "zero on a quiet hour is healthy, not a failure — the number is only readable next to the cold/incremental split"
+);
+
+check(
+  "NEITHER feed marks the dataset refreshed on a cached read",
+  (store.match(/result\.mode !== "cached"/g) ?? []).length === 2,
+  "marking on a cache hit holds the staleness set green whether or not anything was refetched, and the two feeds guard it separately"
+);
+
+console.log("\n=== 5. Registered as a dataset, honestly ===\n");
+
+check(
+  "news and sectorNews are on the DATASETS registry",
+  /^  news: \{/m.test(staleness) && /^  sectorNews: \{/m.test(staleness),
+  "the spec asks for news on the health page like every other dataset"
+);
+
+check(
+  "they declare lazy population rather than naming a job",
+  (staleness.match(/population: "on-demand",/g) ?? []).length === 2,
+  "inventing a job name to satisfy the shape is how the page ends up naming a cron nobody runs"
+);
+
+check(
+  "they are observed-only, not registered",
+  /sectorNews: \{[^}]*coverage: "observed-only"/s.test(staleness),
+  "the denominator is symbols someone happened to view, which is self-selecting by construction"
+);
+
+console.log("\n=== 6. The gate is recorded ===\n");
+
+check(
+  "the spec names a probe verdict",
+  /VERDICT: PASS/.test(spec),
+  "the spec's own rule is that the design is not cleared to build until this table names a result"
+);
+
+console.log("\n=== 7. Configured is not contributed ===\n");
+
+// /cache-health read "gnews + wire + sec" for two days while GlobeNewswire was
+// being tarpitted and returning nothing at all. Nothing was wrong with that
+// line -- those three ARE registered -- it simply could not tell a working
+// adapter from a silent one, and the silent one threw nothing, logged nothing
+// and never settled. The counts below are the only thing that can.
+// claude/wire-egress-verdict-2026-09-14.md.
+
+check(
+  "every active adapter is seeded to zero before the items are counted",
+  /for \(const id of deps\.attribution\.activeIds\(\)\) byProvider\.set\(id, 0\)/.test(store),
+  "an adapter that returned NOTHING leaves no item to read an id off, so without the seed " +
+    "'contributed 0' and 'not registered' are the same absent field — the exact ambiguity this removes"
+);
+check(
+  "...and the count is taken from what the adapters RETURNED, not from what survived dedup",
+  /for \(const item of fetched\)/.test(store),
+  "post-dedup survivors would read as a failure when a wire release is correctly collapsed into " +
+    "the Google News copy of itself — a different fact, and not the one being asked"
+);
+check(
+  "the per-provider counts are actually written to the stats hash",
+  /hincrby\(key, `\$\{PROVIDER_STAT_PREFIX\}\$\{providerId\}`/.test(store),
+  "computed and dropped is the same as not computed"
+);
+check(
+  "the active list comes from activeNewsProviders(), not a literal at the call site",
+  /activeIds: \(\) => activeNewsProviders\(\)\.map\(/.test(newsData),
+  "a hardcoded list would keep reporting an adapter that had been removed, and miss one that was added"
+);
+
+// THE THREE ZEROES, RUN RATHER THAN GREPPED. Redis absent, nothing refreshed
+// yet, and an adapter that really did return nothing all render as a zero if
+// they are collapsed, and only the third is an alarm. Two false alarms would
+// retire the true one.
+//
+// THE FIRST VERSION OF THESE THREE ASSERTIONS WAS WORTHLESS and the mutation
+// suite said so: they grepped newsStore.ts for `status: "idle"` and friends,
+// which appear in the TYPE DECLARATION regardless of what the code does. Both
+// collapse mutations sailed through. That is why classifyProviderStats was
+// split into a module with no imports — so the real function can be called.
+const providerStats = await loadTs(
+  fs.readFileSync(path.join(ROOT, "lib/server/news/providerStats.ts"), "utf8"),
+  "provider-stats"
+);
+check(
+  "Redis absent reads as unavailable, not as zero",
+  providerStats.classifyProviderStats(null).status === "unavailable",
+  "a missing credential rendered as 0 reports an adapter outage that is not happening"
+);
+check(
+  "a day with no refresh yet reads as idle, not as zero",
+  providerStats.classifyProviderStats({ coldFetches: 0 }).status === "idle",
+  "every morning before the first refresh would otherwise cry wolf"
+);
+check(
+  "...and an adapter that really returned nothing reads as ok with a zero",
+  (() => {
+    const got = providerStats.classifyProviderStats({ "provider:gnews": 412, "provider:wire": 0 });
+    return got.status === "ok" && got.counts.wire === 0 && got.counts.gnews === 412;
+  })(),
+  "THE ONE TRUE ALARM: asked today, brought back nothing — the GlobeNewswire shape"
+);
+check(
+  "a hash of nothing but zeroes is still ok, not idle",
+  (() => {
+    const got = providerStats.classifyProviderStats({ "provider:wire": 0 });
+    return got.status === "ok" && got.counts.wire === 0;
+  })(),
+  "counting field PRESENCE rather than value is what keeps the alarm case visible"
+);
+check(
+  "non-provider fields are not mistaken for adapters",
+  (() => {
+    const got = providerStats.classifyProviderStats({ itemsAdded: 91, "provider:sec": 3 });
+    return got.status === "ok" && got.counts.itemsAdded === undefined && got.counts.sec === 3;
+  })(),
+  "the prefix is the namespace; without it a counter named after a provider would render as one"
+);
+check(
+  "the panel renders a count ONLY in the ok state, and null otherwise",
+  /providerStats\.status === "ok" \? providerStats\.counts\[id\] \?\? 0 : null/.test(
+    readCodeOnly("app/cache-health/page.tsx")
+  ),
+  "the tail of that ternary is the whole assertion — `: 0` would report every unknown as an outage"
+);
+
+console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\nFAILED (${failures})\n`);
+process.exit(failures === 0 ? 0 : 1);

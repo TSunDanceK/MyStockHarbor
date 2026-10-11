@@ -1,0 +1,418 @@
+import type { MetadataRoute } from "next";
+import { getAllPosts } from "@/lib/blog";
+import { getAllVideoMeta } from "@/lib/videoContent";
+import { getAllBottleneckPosts } from "@/lib/bottlenecks";
+import { LESSONS } from "@/app/learn/lessons";
+import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
+import { SECTORS, sectorNewsPath } from "@/lib/sectors";
+import { NOINDEX_PICKER_PAGES } from "@/lib/noindexPickerPages";
+import { cikForSymbol, sitemapSecState } from "@/lib/server/secColdFetch";
+import { readTiingoEodLast } from "@/lib/server/marketData/read";
+import { earningsPageIndexable, stockPageIndexable } from "@/lib/stockPageRobots";
+import { filedEarningsSet } from "@/lib/server/filedEarnings";
+import { hasFiledEarningsIn } from "@/lib/filedEarningsLinks";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
+
+// REGENERATED AT MOST DAILY (#535 COWORK #21): the stock entries below depend
+// on which symbols have a stored SEC set, and that changes as the jobs fill
+// them. Per regeneration: one pipelined round trip — an EXISTS per curated
+// symbol (~161) and one HMGET of the figures-changed hash.
+export const revalidate = 86400;
+
+const baseUrl = "https://www.mystockharbor.com";
+
+// Google's hard cap is 50,000 URLs per sitemap file. We're nowhere near it
+// today, but content/insights/ now grows 5x faster than before (5 posts/day
+// instead of 1), so this is a genuine long-run number, not a hypothetical.
+// If this ever fires in a Vercel build log, it's the cue to split this file
+// using Next's generateSitemaps() - see the note above `insightEntries`
+// below for exactly how, with the API confirmed against the Next.js 16 docs.
+const SITEMAP_WARN_THRESHOLD = 40000;
+
+const mainPages = [
+  { path: "", changeFrequency: "daily" as const, priority: 1 },
+  { path: "/dashboard", changeFrequency: "daily" as const, priority: 0.95 },
+  { path: "/learn", changeFrequency: "weekly" as const, priority: 0.9 },
+  { path: "/pickers", changeFrequency: "daily" as const, priority: 0.9 },
+  { path: "/utilities", changeFrequency: "weekly" as const, priority: 0.7 },
+  { path: "/insights", changeFrequency: "daily" as const, priority: 0.85 },
+  { path: "/bottlenecks", changeFrequency: "daily" as const, priority: 0.85 },
+  { path: "/bottlenecks/capex", changeFrequency: "weekly" as const, priority: 0.7 },
+  // A-Z directory of every curated /stock/{sym} page and its /news and
+  // /earnings subpages (app/stocks/page.tsx). High priority because it is
+  // the only internal link path to 322 of the URLs below -- see the note at
+  // the top of that file and claude/seo-recovery-plan-2026-08-15.md.
+  { path: "/stocks", changeFrequency: "weekly" as const, priority: 0.85 },
+  { path: "/upcoming-ipos", changeFrequency: "daily" as const, priority: 0.75 },
+  { path: "/headlines", changeFrequency: "hourly" as const, priority: 0.8 },
+  { path: "/earnings-calendar", changeFrequency: "daily" as const, priority: 0.85 },
+  { path: "/about", changeFrequency: "monthly" as const, priority: 0.5 },
+  { path: "/contact", changeFrequency: "monthly" as const, priority: 0.5 },
+  { path: "/privacy-policy", changeFrequency: "monthly" as const, priority: 0.4 },
+  { path: "/affiliate-disclosure", changeFrequency: "monthly" as const, priority: 0.4 },
+  { path: "/risk-disclaimer", changeFrequency: "monthly" as const, priority: 0.4 },
+];
+
+const marketPages = [
+  // Market overview / analysis pages
+  "/markets/spx",
+];
+
+const seoGuides = [
+  "/how-to-read-stock-charts",
+  "/best-stock-indicators-for-beginners",
+  "/how-to-identify-stock-trends",
+  "/what-is-vwap-indicator",
+  "/stocks-down-from-highs",
+  "/stocks-down-20-from-all-time-highs",
+  "/trading-setups",
+  "/stock-screener-for-breakouts",
+  "/stock-screener-for-oversold-stocks",
+  "/stocks-down-20-percent",
+  "/stock-screener",
+  "/how-to-find-buy-the-dip-stocks",
+  "/bullish-divergence-explained",
+  "/bearish-divergence-explained",
+  "/best-indicators-for-swing-trading",
+  "/how-to-scan-stocks",
+  "/stocks-ready-to-break-out",
+  "/best-charting-platforms",
+  "/how-to-analyse-stocks",
+  "/stocks-with-high-rsi",
+  "/stocks-with-low-rsi",
+  "/volume-spike-stocks",
+  "/position-sizing-guide",
+  "/stop-loss-strategy",
+  "/risk-reward-ratio",
+  "/margin-trading-explained",
+  "/trading-risk-management",
+  "/platforms",
+  "/stocks-trading-above-200-day-moving-average",
+  "/macro-support-resistance-stocks",
+  "/stock-indicators",
+  "/stock-scanners",
+
+  // live setup / picker SEO pages
+  "/oversold-stocks-today",
+  "/overbought-stocks-today",
+  "/all-time-high-breakout-stocks",
+  "/3-month-high-breakout-stocks",
+  "/bullish-bearish-divergence-stocks",
+  "/best-trend-score-stocks",
+  "/top-stocks-with-buy-signals",
+  "/top-stocks-with-sell-signals",
+  "/stocks-near-200-day-moving-average",
+  "/stocks-near-weekly-200-day-moving-average",
+  "/stocks-with-positive-last-earnings",
+  "/stocks-with-strong-earnings-growth",
+  // The four Trend Helper flip pages. Listed here, but currently filtered back
+  // out by NOINDEX_PICKER_PAGES below -- see lib/noindexPickerPages.ts for why
+  // and for the one-line-each change that flips them in.
+  "/stocks-with-bullish-trend-flip",
+  "/stocks-with-bearish-trend-flip",
+  "/stocks-with-weekly-bullish-trend-flip",
+  "/stocks-with-weekly-bearish-trend-flip",
+
+  // "Popular Screens" — hand-written landing pages, each a saved fundamental
+  // screen rather than a technical condition. Reachable from the Pickers
+  // dropdown and the Select Screener sidebar; listed here too, but it's the
+  // internal links that actually get them indexed (see
+  // claude/preset-pages-universe-blocker-2026-08-04.md).
+  "/low-pe-stocks",
+  "/high-dividend-yield-stocks",
+  "/dividend-growth-stocks",
+  "/cash-rich-value-stocks",
+  "/semiconductor-stocks",
+  "/cheap-tech-stocks",
+
+  // chart pattern plays
+  "/plays",
+  "/plays/descending-triangles",
+  "/plays/bull-flags",
+
+  // beginner setup explainer guides (real built pages, previously missing
+  // from the sitemap - found via June 2026 SEO audit)
+  "/breakout-stocks",
+  "/oversold-stocks",
+  // /bullish-divergence-stocks and /bearish-divergence-stocks removed
+  // 2026-08-15: next.config.ts 301s both to /bullish-bearish-divergence-
+  // stocks, so they were being submitted to Google as crawlable URLs that
+  // only ever return a redirect. The canonical combined page is already
+  // listed above.
+
+  // Sector news (added 2026-08-07). Listed here as well as in the dedicated
+  // sectorEntries block below for one specific reason: the daily insight-post
+  // workflow verifies every internal link against THIS array (repo CLAUDE.md,
+  // step 4), so a page absent from it can never be linked from a post. The
+  // duplicate is harmless -- entries are deduped by URL below, and
+  // sectorEntries is placed ahead of seoGuideEntries so the hourly/0.75
+  // version is the one that survives rather than the weekly/0.8 default.
+  "/sector",
+  ...SECTORS.map((sector) => sectorNewsPath(sector.slug)),
+];
+
+// coreMegaCaps / retailInterestStocks / recognizableMidCaps / etfs and the
+// derived priorityStocks / uniqueEtfs now live in lib/curatedSymbols.ts —
+// the same shared source of truth used by the "Explore More Stocks"
+// internal-linking module on /stock/[symbol] pages (see
+// app/components/RelatedStocks.tsx). Import them from there instead of
+// redefining inline; this file's output is unchanged.
+
+function toAbsoluteUrl(path: string) {
+  return `${baseUrl}${path}`;
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // NO `const now` here, deliberately.
+  //
+  // Every block below used to stamp `lastModified: now`, so the sitemap told
+  // Google that nearly every URL on the site had changed at the moment of the
+  // fetch, on every fetch. lastmod is the ONE sitemap attribute Google
+  // actually uses -- priority and changefreq are ignored -- and it is used
+  // only while it looks trustworthy. A file that always claims everything just
+  // changed teaches Google to discount lastmod site-wide, which was dragging
+  // down the two blocks (insights, bottlenecks) whose dates were real.
+  //
+  // lastmod is OPTIONAL in the sitemap protocol, so the fix is omission, not a
+  // better guess. A URL now carries a date only where a truthful one exists:
+  // a post's own `date`, or a video's frontmatter `date`. Everything else says
+  // nothing.
+  //
+  // If you are tempted to reintroduce a fallback, the two that look reasonable
+  // and are not:
+  //   - git last-commit date per file. Vercel clones SHALLOW, so every file
+  //     older than the clone horizon reports the horizon commit's timestamp.
+  //     Measured: 34 of 60 sampled pages returned one identical second, and
+  //     nothing errored. That is this same bug wearing a plausible date.
+  //   - last market close for /stock/*. Identical for every symbol, so it is
+  //     the same synchronised claim with a better excuse, and it is simply
+  //     wrong for /news (hourly) and /earnings (quarterly).
+  // See claude/traps/absence-needs-the-producer-to-have-run.md and
+  // claude/traps/suspicious-uniformity.md.
+  const insightPosts = getAllPosts();
+  const bottleneckPosts = getAllBottleneckPosts();
+  const videoMeta = getAllVideoMeta();
+
+  const mainPageEntries: MetadataRoute.Sitemap = mainPages.map((page) => ({
+    url: toAbsoluteUrl(page.path),
+    changeFrequency: page.changeFrequency,
+    priority: page.priority,
+  }));
+
+  const marketPageEntries: MetadataRoute.Sitemap = marketPages.map((path) => ({
+    url: toAbsoluteUrl(path),
+    changeFrequency: "daily" as const,
+    priority: 0.88,
+  }));
+
+  // The 22 noindexed picker pages are filtered out here rather than deleted
+  // from `seoGuides` above, and that distinction matters: per repo CLAUDE.md
+  // step 4, the daily insight-post workflow validates every internal link it
+  // writes against the `seoGuides` array, so a path removed from the array
+  // can never be linked from a post again. These pages are meant to stay
+  // live and internally linked (see lib/noindexPickerPages.ts) - it is only
+  // their sitemap entry that has to go, because listing a noindex URL in a
+  // sitemap asks Google to crawl something it has been told not to index.
+  const noindexPickerPaths = new Set<string>(NOINDEX_PICKER_PAGES);
+
+  const seoGuideEntries: MetadataRoute.Sitemap = seoGuides
+    .filter((path) => !noindexPickerPaths.has(path))
+    .map((path) => ({
+      url: toAbsoluteUrl(path),
+      changeFrequency: "weekly",
+      priority: 0.8,
+    }));
+
+  // Insight posts are frozen snapshots tied to their `date` field - they
+  // never change after publish (see claude/CLAUDE.md "Lessons learned").
+  // "yearly" is a more honest signal than "monthly" for Google's crawl
+  // budget, and matters more now that 5 new frozen posts land every day
+  // instead of 1.
+  //
+  // FUTURE SCALING NOTE: at 5 posts/day this list reaches Google's 50,000
+  // per-sitemap cap in ~27 years - not urgent, but if SITEMAP_WARN_THRESHOLD
+  // below ever fires, split this into its own nested file
+  // (app/insights/sitemap.ts) using Next's generateSitemaps():
+  //   export async function generateSitemaps() {
+  //     const total = getAllPosts().length;
+  //     return Array.from({ length: Math.ceil(total / 40000) }, (_, id) => ({ id }));
+  //   }
+  // which serves chunks at /insights/sitemap/0.xml, /insights/sitemap/1.xml,
+  // etc. (confirmed against the Next.js 16 docs - a plain /insights/sitemap.xml
+  // does not additionally exist once generateSitemaps is used). Add each new
+  // chunk URL to the `sitemap` array in app/robots.ts alongside the existing
+  // root sitemap - do NOT replace the already-registered
+  // https://www.mystockharbor.com/sitemap.xml with this, only add to it.
+  const insightEntries: MetadataRoute.Sitemap = insightPosts.map((post) => ({
+    url: toAbsoluteUrl(`/insights/${post.slug}`),
+    ...(post.date ? { lastModified: new Date(post.date) } : {}),
+    changeFrequency: "yearly",
+    priority: 0.72,
+  }));
+
+  const bottleneckEntries: MetadataRoute.Sitemap = bottleneckPosts.map(
+    (post) => ({
+      url: toAbsoluteUrl(`/bottlenecks/${post.slug}`),
+      ...(post.date ? { lastModified: new Date(post.date) } : {}),
+      changeFrequency: "weekly",
+      priority: 0.72,
+    })
+  );
+
+  // Video pages — only pages with a content file are submitted to Google.
+  // Auto-updates as new content/videos/*.md files are added.
+  //
+  // The one MIXED block for lastModified: frontmatter `date` is optional, so
+  // publishedAt is "" for any video that omits it (most of them today). Emitted
+  // per item where a real date exists and omitted where it does not, rather
+  // than filling the gap -- see the note above `entries`.
+  const videoEntries: MetadataRoute.Sitemap = videoMeta.map((video) => ({
+    url: toAbsoluteUrl(`/insights/videos/${video.youtubeId}`),
+    ...(video.publishedAt ? { lastModified: new Date(video.publishedAt) } : {}),
+    changeFrequency: "monthly" as const,
+    priority: 0.75,
+  }));
+
+  const learnEntries: MetadataRoute.Sitemap = LESSONS.map((lesson) => ({
+    url: toAbsoluteUrl(`/learn/${encodeURIComponent(lesson.slug)}`),
+    changeFrequency: "monthly",
+    priority: 0.68,
+  }));
+
+  // /stock/[symbol] (and its /news, /earnings subpages) now carry real,
+  // non-thin content -- FMP company profile + fundamentals
+  // (CompanyProfile.tsx), a shared earnings snapshot (LatestEarningsCard.tsx)
+  // and a dedicated earnings-history page (PR #100/#101/#105) -- and
+  // generateMetadata on all three routes already sets
+  // robots: { index: true, follow: true }. This file was the only place
+  // still treating them as excluded (stale comment/void from before that
+  // indexing change landed). We submit the curated priorityStocks/uniqueEtfs
+  // universe below (mega caps, retail-interest names, recognizable mid caps,
+  // major ETFs) rather than every possible symbol, so Google has an explicit
+  // discovery path into the highest-traffic tickers without ballooning the
+  // sitemap with the full long-tail universe -- those stay reachable (and
+  // indexable, since they're index:true too) via internal links from
+  // pickers/plays/screener pages, just without a sitemap entry of their own.
+  const stockSymbols = Array.from(new Set([...priorityStocks, ...uniqueEtfs]));
+
+  // ── ONLY PAGES THAT RENDER WITH DATA AND `index` (#535 COWORK #21 §1) ────
+  // Googlebot runs no cold fill (BotID refuses every bot), so a symbol whose
+  // SEC set is not stored renders "not yet read" and `noindex` on BOTH pages,
+  // and a sitemap that lists it earns "Submitted URL marked noindex". The
+  // test is the pages' own (awaitingSecRead), asked for all symbols at once.
+  // Unanswerable (null) keeps everything, as before this rule: a Redis blip
+  // must not empty the sitemap. Measured 2026-09-23: SPY, QQQ and DIA were
+  // the three; companyfacts 404s for them, now stored as the empty answer.
+  //
+  // AND THE PAGES' OWN PREDICATE (#553 COWORK #143): the robots tag and this
+  // entry both come from lib/stockPageRobots.ts, so a URL is never listed while
+  // its page says noindex. hasData here is "the symbol has stored daily bars"
+  // (eod-last, one Data Cache read); unreadable (null) keeps everything, as above.
+  const [sec, eodLast, filedSet] = await Promise.all([
+    sitemapSecState(stockSymbols),
+    readTiingoEodLast().catch(() => null),
+    filedEarningsSet(),
+  ]);
+  const awaiting = (symbol: string) => Boolean(sec?.awaiting.has(symbol));
+  const hasData = (symbol: string) => eodLast === null || Boolean(eodLast[toDashed(symbol)]);
+  const renderable = (symbol: string) => stockPageIndexable({ hasData: hasData(symbol), awaitingSecRead: awaiting(symbol) });
+  // AND A FILED SET (#552 COWORK #197): an earnings URL with no filed period
+  // is noindex, so it is not listed. Unreadable (null) keeps everything, as above.
+  const earningsRenderable = (symbol: string) =>
+    earningsPageIndexable({ hasCik: cikForSymbol(symbol) !== null, awaitingSecRead: awaiting(symbol), filed: filedSet ? hasFiledEarningsIn(filedSet, symbol) : null });
+  // lastmod only where a truthful one exists: when the stored figures last
+  // changed (stamped by writeFactSet, which runs only on a change). Never a
+  // re-read time, which moves daily; absent stays absent.
+  const figuresChangedAt = (symbol: string) => {
+    const at = sec?.changedAt.get(symbol);
+    return at ? { lastModified: new Date(at) } : {};
+  };
+
+  const stockPageEntries: MetadataRoute.Sitemap = stockSymbols.filter(renderable).map((symbol) => ({
+    url: toAbsoluteUrl(`/stock/${symbol}`),
+    changeFrequency: "daily" as const,
+    priority: 0.78,
+  }));
+
+  const stockNewsEntries: MetadataRoute.Sitemap = stockSymbols.map((symbol) => ({
+    url: toAbsoluteUrl(`/stock/${symbol}/news`),
+    changeFrequency: "hourly" as const,
+    priority: 0.7,
+  }));
+
+  // ETFs are excluded here, unlike the two blocks above. A fund does not
+  // report earnings, so /stock/{etf}/earnings is structurally empty - there
+  // is no quarter for it to show. Submitting all 32 asks Google to spend
+  // crawl requests, on a site that gets ~6 HTML crawls a day, discovering
+  // pages that can only ever be thin. RelatedStocks.tsx already stopped
+  // linking them for the same reason (PR #242); this stops submitting them.
+  // The routes stay live and reachable - only the sitemap entry goes.
+  const etfSymbols = new Set<string>(uniqueEtfs);
+
+  const stockEarningsEntries: MetadataRoute.Sitemap = stockSymbols
+    .filter((symbol) => !etfSymbols.has(symbol) && earningsRenderable(symbol))
+    .map((symbol) => ({
+      url: toAbsoluteUrl(`/stock/${symbol}/earnings`),
+      ...figuresChangedAt(symbol),
+      changeFrequency: "weekly" as const,
+      priority: 0.68,
+    }));
+
+  // Sector news: one hub plus one page per sector. changeFrequency mirrors
+  // stockNewsEntries ("hourly") because the underlying feed refreshes on the
+  // hour, and these sit ahead of seoGuideEntries in `entries` so they win the
+  // URL dedupe below against their seoGuides listing.
+  const sectorEntries: MetadataRoute.Sitemap = [
+    {
+      url: toAbsoluteUrl("/sector"),
+      changeFrequency: "daily" as const,
+      priority: 0.75,
+    },
+    ...SECTORS.map((sector) => ({
+      url: toAbsoluteUrl(sectorNewsPath(sector.slug)),
+      changeFrequency: "hourly" as const,
+      priority: 0.75,
+    })),
+  ];
+
+  const entries: MetadataRoute.Sitemap = [
+    ...mainPageEntries,
+    ...sectorEntries,
+    ...marketPageEntries,
+    ...seoGuideEntries,
+    ...insightEntries,
+    ...bottleneckEntries,
+    ...videoEntries,
+    ...learnEntries,
+    ...stockPageEntries,
+    ...stockNewsEntries,
+    ...stockEarningsEntries,
+  ];
+
+  // Safety guard: only return clean canonical www HTTPS URLs once.
+  const seen = new Set<string>();
+
+  const deduped = entries.filter((entry) => {
+    if (!entry.url.startsWith(`${baseUrl}/`) && entry.url !== baseUrl) {
+      return false;
+    }
+    if (seen.has(entry.url)) {
+      return false;
+    }
+    seen.add(entry.url);
+    return true;
+  });
+
+  // Advance warning well before Google's real 50,000-per-sitemap limit, so
+  // this shows up in a Vercel build log years before it could ever become
+  // an actual problem - see the scaling note above `insightEntries`.
+  if (deduped.length > SITEMAP_WARN_THRESHOLD) {
+    console.warn(
+      `[sitemap] ${deduped.length} URLs in the root sitemap - approaching Google's 50,000 ` +
+        "per-sitemap limit. Time to split insights/bottlenecks into their own " +
+        "generateSitemaps()-based files (see the comment above insightEntries in app/sitemap.ts)."
+    );
+  }
+
+  return deduped;
+}

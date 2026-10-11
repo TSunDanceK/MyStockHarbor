@@ -1,0 +1,470 @@
+// THE /stock "ABOUT" BLOCK IS COMPOSED FROM FREE SOURCES — asserted by running it.
+//
+// Brief 2026-09-22 PR 2. What must hold, each paired with a mutation that
+// breaks it (a check that cannot fail reports PASS and proves nothing):
+//
+//   1. No FMP attribution reaches a reader at all: the description is the
+//      company's own annual-report wording with its filing named under it,
+//      and no description means one neutral line, never a gap (#552 COWORK #57;
+//      it was no paragraph at all under PR 3, #518).
+//   2. A market-cap refusal HIDES the row; it is never printed in the card.
+//   3. Every 20-F filer's cap is refused — AZN and ABVX included, which the
+//      five-name list missed (§2.6).
+//   4. The 52-week range is the high/low of the last 252 bars, not all bars.
+//   5. Country is the headquarters' country, via EDGAR's own code table.
+//   6. The share-dilution series comes from the stored set's sharesBasic, and
+//      the chart's footer names SEC, not FMP.
+//   7. IPO date and Website are hidden by the registry, not by a missing value.
+//
+// NO FIXTURE SUPPLIES AN EXPECTED VALUE: data/sec/factset-fixture-*.json and
+// data/sec/registrants.json come from SEC via the shipped code.
+import fs from "node:fs";
+import ts from "typescript";
+import { grabConst } from "./lib/source-code.mjs";
+import { grabFunction } from "./lib/earnings-plan.mjs";
+import { splitAdjustSource } from "./lib/split-adjust-source.mjs";
+import { loadProfile, html, visibleText, once, React } from "./lib/render-snapshot.mjs";
+
+let failures = 0;
+const check = (name, ok, detail = "") => {
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
+  if (!ok) failures++;
+};
+const read = (f) => fs.readFileSync(f, "utf8");
+const strip = (f) =>
+  read(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^export \* from "\.\/[^"]+";$/gm, "");
+
+/** The composer and its pure dependencies, as one transpiled unit. */
+async function loadComposer(mutate = (s) => s) {
+  const unit = [
+    read("lib/server/secFields.ts"),
+    strip("lib/server/secExtract.ts"),
+    strip("lib/server/fxRates.ts"),
+    strip("lib/server/secCurrency.ts"),
+    strip("lib/server/secFactCodec.ts"),
+    splitAdjustSource({ withHistory: false }),
+    strip("lib/server/secEarningsView.ts"),
+    grabConst("lib/server/secReportDates.ts", "DEADLINE_FALLBACK"),
+    // THE ANNUAL-ONLY PREDICATE (#548), AHEAD OF secValuation THAT READS IT
+    // for the P/E basis (#552 COWORK #9). The function and its one constant,
+    // not the module: annualOnly declares MONTHS, which other lifted modules
+    // may declare too.
+    grabConst("lib/server/annualOnly.ts", "ANNUAL_ONLY_QUARTER_MONTHS"),
+    grabFunction(fs.readFileSync("lib/server/annualOnly.ts", "utf8"), "annualOnlyForm"),
+    // THE ESTIMATE LAYER, which secValuation reads (#552 COWORK #112).
+    strip("lib/server/secEstimates.ts"),
+    strip("lib/server/secValuation.ts"),
+    strip("lib/server/secShareHistory.ts"),
+    read("lib/symbolSpellings.mjs").replace(/^export /gm, ""),
+    `const registrantsFile = ${read("data/sec/registrants.json")};`,
+    `const locationFile = ${read("data/sec/edgar-location-codes.json")};`,
+    // exchangeFor is not exercised here (the test passes `exchange` in); a stub
+    // keeps the unit loadable without the ticker file's fs/Redis path.
+    "const loadTickerMap = () => ({ map: new Map() });",
+    // The composer's attribution helper; the committed rows are not read here.
+    "const descriptionsFile = { rows: {}, misses: {} };",
+    strip("lib/server/filingDescription.ts"),
+    // The 52-week helper moved to its own module (step 5) so the Tiingo header
+    // shares it; stockProfile re-exports it (export * is stripped above).
+    strip("lib/server/fiftyTwoWeek.ts"),
+    strip("lib/server/stockProfile.ts"),
+  ].join("\n");
+  const js = ts.transpileModule(mutate(unit), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const tmp = `scripts/.check-stock-profile-${process.pid}-${Math.random().toString(36).slice(2)}.mjs`;
+  fs.writeFileSync(tmp, js);
+  try { return await import(`${process.cwd()}/${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+}
+
+const fixture = (sym) => JSON.parse(read(`data/sec/factset-fixture-${sym}.json`));
+const TODAY = "2026-09-22";
+const bars = (n, fn) => Array.from({ length: n }, (_, i) => ({ date: `d${i}`, close: fn(i) }));
+const taxonomy = { sector: "Technology", industry: "Consumer Electronics", source: "snapshot", sectorSource: "fmp-snapshot", industrySource: "fmp-snapshot" };
+
+const FILED = {
+  text: "Apple designs, manufactures and markets smartphones and personal computers.\n\niPhone® is the Company’s line of smartphones.",
+  form: "10-K", filedOn: "2025-10-31", accession: "0000320193-25-000079",
+};
+const M = await loadComposer();
+const compose = (mod, sym, over = {}) => {
+  const set = fixture(sym);
+  return mod.composeCompanyProfile({
+    symbol: sym, directoryName: "", snapshotName: "", entityName: set.entityName,
+    filingDescription: FILED, taxonomy, classificationAsOf: "2026-09-13",
+    valuation: mod.valuationInputs(set, TODAY, { annualForm: mod.registrantFor(sym)?.annualForm ?? null }),
+    price: 200, points: bars(300, (i) => 100 + i), exchange: "NASDAQ",
+    registrant: mod.registrantFor(sym), ...over,
+  });
+};
+
+const P = await loadProfile();
+const noDividend = { state: "none", perShare: null, periodLabel: null, why: "test" };
+const render = (mod, profile, sym) =>
+  visibleText(html(React.createElement(mod.default, { profile, symbol: sym, dividend: noDividend })));
+
+console.log("\n1. no FMP attribution; the description is the company's own, with its filing named");
+{
+  const aapl = compose(M, "AAPL", { directoryName: "Apple Inc." });
+  const t = render(P, aapl, "AAPL");
+  check("no FMP mention anywhere in the block", !/Financial Modeling Prep|FMP/.test(t));
+  check("the attribution is the owner's wording", /From Apple Inc\.'s 10-K, filed Oct 2025/.test(t));
+  const h = html(React.createElement(P.default, { profile: aapl, symbol: "AAPL", dividend: noDividend }));
+  check("each paragraph is its own <p>, camel-case start kept",
+    /<p[^>]*>Apple designs[^<]*<\/p><p[^>]*>iPhone® is the Company’s line of smartphones\.<\/p>/.test(h));
+  check("the other rows credit SEC EDGAR and market data",
+    /Market cap: shares from SEC EDGAR/.test(t) && /Exchange: SEC EDGAR/.test(t) && /Country: SEC EDGAR/.test(t), "");
+  const none = compose(M, "AAPL", { filingDescription: null });
+  const noDesc = render(P, none, "AAPL");
+  check("no filing description → no paragraph, no attribution, no FMP",
+    none.description === null && none.descriptionAttribution === null &&
+      !/From .*'s (10-K|20-F)/.test(noDesc) && !/Financial Modeling Prep|FMP/.test(noDesc) && !/Apple designs/.test(noDesc));
+  check("dates are month-year, parsed without a time zone",
+    M.monthYear("2026-01-01") === "Jan 2026" && M.monthYear("2025-12-31") === "Dec 2025" && M.monthYear("bad") === null);
+  const old = await loadProfile(once(
+    "? `${profile.sources.map((s) => `${s.field}: ${s.source}`).join(\" · \")}.`",
+    "? `Company profile data from Financial Modeling Prep.`"
+  ));
+  check("...and CATCHES the blanket FMP line put back",
+    (render(old, none, "AAPL").match(/Financial Modeling Prep/g) ?? []).length > 0);
+  const unattributed = await loadComposer(once(
+    "descriptionAttribution: i.filingDescription ? descriptionAttribution(name, i.filingDescription) : null,",
+    "descriptionAttribution: null,"
+  ));
+  check("...and CATCHES a description shown without its filing",
+    !/From Apple Inc\.'s 10-K/.test(render(P, compose(unattributed, "AAPL", { directoryName: "Apple Inc." }), "AAPL")));
+  // THE LAST FMP PROFILE CALL IS GONE from the page, and nothing replaced it
+  // with a fallback: the description is read from the committed file only.
+  const page = read("app/stock/[symbol]/page.tsx");
+  check("the page no longer calls FMP's profile, and reads the committed description",
+    !/fetchCompanyProfile\(upper\)/.test(page) && /filingDescription: filingDescriptionFor\(upper\)/.test(page) &&
+      !/fmpDescription|fmpProfile/.test(page));
+}
+
+console.log("\n2. market cap: shares x the page's price, and a refusal hides the row");
+{
+  const aapl = compose(M, "AAPL");
+  const shares = fixture("AAPL").cover?.val;
+  check("AAPL's cap is its cover-page shares times the price given",
+    aapl.marketCap === shares * 200, `${aapl.marketCap} vs ${shares} x 200`);
+  const refused = compose(M, "AAPL", { valuation: { shares: null, eps: null, refusals: ["no-cover-share-count"] } });
+  check("a refusal yields no Market cap row", !/Market cap/.test(render(P, refused, "AAPL")));
+  const printed = await loadComposer(once("marketCap: cap?.ok ? cap.val : null,", "marketCap: cap?.ok ? cap.val : 0,"));
+  const m2 = printed.composeCompanyProfile({ ...{ symbol: "AAPL", directoryName: "", snapshotName: "", entityName: null, filingDescription: null, taxonomy, price: 200, points: [], exchange: null, registrant: null }, valuation: { shares: null, eps: null, refusals: ["no-cover-share-count"] } });
+  check("...and CATCHES a refusal rendered as a figure", m2.marketCap !== null);
+}
+
+console.log("\n3. every 20-F filer's cap is refused (the §2.6 ADS guard)");
+{
+  const reg = JSON.parse(read("data/sec/registrants.json")).rows;
+  const twentyF = Object.entries(reg).filter(([, r]) => r.annualForm === "20-F").map(([s]) => s);
+  check("the registrant file names the 20-F filers", twentyF.length > 300, `${twentyF.length}`);
+  check("AZN and ABVX are among them — neither was on the five-name list",
+    reg.AZN?.annualForm === "20-F" && reg.ABVX?.annualForm === "20-F");
+  const azn = compose(M, "AZN");
+  check("AZN's cap is refused, not printed at the ordinary-share count", azn.marketCap === null);
+  check("AZN's P/E is refused too",
+    M.peRatio(M.valuationInputs(fixture("AZN"), TODAY, { annualForm: "20-F" }), 70)?.ok === false);
+  check("a 10-K filer is unaffected", compose(M, "AAPL").marketCap !== null);
+  const blind = await loadComposer(once(
+    'if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {',
+    "if (!ads && (sharesAreIncomparableToPrice(set.symbol))) {"
+  ));
+  // On the REFUSAL, not the cap: AZN's fixture carries no cover-page count, so
+  // its cap is null either way and would not distinguish the two rules.
+  check("...and CATCHES the five-name list alone",
+    !blind.valuationInputs(fixture("AZN"), TODAY, { annualForm: "20-F" }).refusals.includes("ads-ratio-makes-shares-incomparable"));
+  check("the refusal is the ADS one, not a missing share count",
+    M.valuationInputs(fixture("AZN"), TODAY, { annualForm: "20-F" }).refusals.includes("ads-ratio-makes-shares-incomparable"));
+}
+
+console.log("\n4. the 52-week range is the last 252 bars");
+{
+  // 300 rising bars: all-time low is 100, the 252-bar low is 148.
+  const r = M.fiftyTwoWeekRange(bars(300, (i) => 100 + i));
+  check("low and high over the last 252 bars only", r?.low === 148 && r?.high === 399, JSON.stringify(r));
+  check("high/low fields win over the close when present",
+    M.fiftyTwoWeekRange([...bars(30, () => 10), { close: 10, high: 15, low: 5 }])?.low === 5);
+  check("too few bars hides the row", M.fiftyTwoWeekRange(bars(5, () => 1)) === null);
+  const all = await loadComposer(once("const window = points.slice(-RANGE_BARS)", "const window = points"));
+  check("...and CATCHES a range over every bar", all.fiftyTwoWeekRange(bars(300, (i) => 100 + i))?.low === 100);
+}
+
+console.log("\n5. country: the headquarters, via EDGAR's code table");
+{
+  check("ABVX → FR (business address in France)", M.countryFor(M.registrantFor("ABVX")) === "FR", String(M.countryFor(M.registrantFor("ABVX"))));
+  check("AZN → GB", M.countryFor(M.registrantFor("AZN")) === "GB", String(M.countryFor(M.registrantFor("AZN"))));
+  check("AAPL → US", M.countryFor(M.registrantFor("AAPL")) === "US");
+  check("an unknown code yields null, never a guess",
+    M.countryFor({ stateOrCountry: "Q!", stateOfIncorporation: null }) === null);
+  check("incorporation is the fallback only when no business address was filed",
+    M.countryFor({ stateOrCountry: null, stateOfIncorporation: "DE" }) === "US" &&
+      M.countryFor({ stateOrCountry: "L3", stateOfIncorporation: "DE" }) === "IL");
+}
+
+console.log("\n6. the share-dilution series is SEC's");
+{
+  const counts = {};
+  for (const sym of ["AAPL", "AZN", "TSLA", "GEV", "KTOS", "KGC"]) {
+    const h = M.buildShareHistory(fixture(sym));
+    counts[sym] = h ? `${h.points.length} ${h.basis}` : "none";
+  }
+  // QUARTERS PLUS FISCAL YEARS since #552 COWORK #136: the year-ends no quarter covers are the years'.
+  check("AAPL gets quarters plus fiscal years from sharesBasic", /^\d+ annual\+quarters$/.test(counts.AAPL), JSON.stringify(counts));
+  const s = M.buildShareHistory(fixture("AAPL"));
+  check("ascending by date", s.points.every((p, i, a) => i === 0 || a[i - 1].date < p.date));
+  const dil = read("app/components/DilutionHistory.tsx");
+  check("the chart's footer names SEC filings, not FMP",
+    /own SEC filings/.test(dil) && !/data from Financial Modeling Prep/.test(dil));
+  const page = read("app/stock/[symbol]/page.tsx");
+  check("the page no longer calls the FMP share-history read",
+    !/fetchShareHistory\(upper\)/.test(page) && /secFacts\.profileFacts\.shareHistory/.test(page));
+}
+
+console.log("\n7. IPO date and Website are hidden by the registry");
+{
+  const withBoth = { ...compose(M, "AAPL"), ipoDate: "1980-12-12", website: "https://www.apple.com" };
+  const t = render(P, withBoth, "AAPL");
+  check("neither renders even when a value is present", !/IPO date/.test(t) && !/Website/.test(t));
+  const reg = JSON.parse(read("data/sec/registrants.json")).rows;
+  const withSite = Object.values(reg).filter((r) => r.website).length;
+  check("SEC's website field is blank across the registrant file (why Website stays hidden)",
+    withSite === 0, `${withSite} of ${Object.keys(reg).length} carry one`);
+}
+
+console.log("\n8. the valuation multiples are the filings', one period basis each");
+{
+  const set = fixture("AAPL");
+  const inputs = M.valuationInputs(set, TODAY, {});
+  const mi = M.multipleInputs(set);
+  const v = M.valuationMultiples(inputs, mi, 200);
+  const cap = M.marketCap(inputs, 200).val;
+  const rev4 = set.quarters.slice(0, 4).map((q) => M.valueOf(q, "revenue")).reduce((a, b) => a + b, 0);
+  check("AAPL's P/S is cap ÷ four consecutive quarters of revenue",
+    mi.revenue.basis === "four-quarters" && Math.abs(v.ps.val - cap / rev4) < 1e-9, `${v.ps.val?.toFixed(2)}`);
+  check("AAPL's P/B is cap ÷ the latest balance sheet's stockholders' equity",
+    Math.abs(v.pb.val - cap / M.valueOf(set.instants[0], "stockholdersEquity")) < 1e-9, `${v.pb.val?.toFixed(2)}`);
+  check("AAPL's P/E is peRatio(), unchanged", v.pe.val === M.peRatio(inputs, 200).val);
+  const b = mi.balanceSheet, e = mi.ebitda.vals;
+  const ev = cap + b.shortTermDebt + b.longTermDebt - b.cash;
+  check("AAPL's EV/EBITDA is (cap + debt − cash) ÷ (operating income + D&A)",
+    Math.abs(v.evEbitda.val - ev / (e.operatingIncome + e.depreciationAndAmortization)) < 1e-9, `${v.evEbitda.val?.toFixed(2)}`);
+
+  // NEVER MIXED: AZN's stored quarters are all Q2s — not consecutive — so the
+  // fiscal year is the basis for every twelve-month input.
+  const azn = M.multipleInputs(fixture("AZN"));
+  check("a filer with non-consecutive quarters is read on the fiscal year",
+    azn.revenue?.basis === "fiscal-year" && (azn.ebitda === null || azn.ebitda.basis === "fiscal-year"),
+    JSON.stringify({ revenue: azn.revenue?.basis, ebitda: azn.ebitda?.basis ?? null }));
+  const mixed = await loadComposer(once(
+    "four.length === 4 && four.every((q, i) => i === 0 || isConsecutive(four[i - 1], q));",
+    "four.length === 4;"
+  ));
+  check("...and CATCHES four non-consecutive quarters summed as a year",
+    mixed.multipleInputs(fixture("AZN")).revenue?.basis === "four-quarters");
+
+  // NOT APPROXIMATED unless the surface renders the estimate mark (#552
+  // COWORK #112): by default one missing debt line refuses EV/EBITDA outright.
+  // An opted-in surface gets the back-tested M2 estimate for short-term debt
+  // ONLY; long-term debt or cash missing is still refused (check-estimates).
+  const noDebt = { ...mi, balanceSheet: { ...mi.balanceSheet, shortTermDebt: null } };
+  check("a missing debt line refuses EV/EBITDA rather than assuming zero",
+    M.valuationMultiples(inputs, noDebt, 200).evEbitda?.why === "enterprise-value-input-missing");
+  const noLtd = { ...mi, balanceSheet: { ...mi.balanceSheet, longTermDebt: null } };
+  check("...and, opted in, a missing long-term debt line is still refused",
+    M.valuationMultiples(inputs, noLtd, 200, { withEstimates: true }).evEbitda?.why === "enterprise-value-input-missing");
+  const zeroed = await loadComposer(once(
+    "evAny.val !== null && evAny.est && !opts.withEstimates",
+    "false"
+  ));
+  check("...and CATCHES a missing debt line treated as zero on a surface that has not opted in",
+    // A non-bank SIC, so only the opt-in gate stands between the fixture and an estimate.
+    zeroed.valuationMultiples({ ...inputs, sic: "3826" }, noDebt, 200).evEbitda?.ok !== false);
+
+  check("non-positive equity refuses P/B",
+    M.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity: -5 } }, 200).pb?.why === "equity-is-zero-or-negative");
+
+  // P/B ON A SLIVER OF EQUITY (#552 COWORK #86b, census CODE-A #112): GDDY's
+  // 1,813x refused as not meaningful; MA's ~70x (equity ~1.4% of cap) still a
+  // figure; exactly 1% is the edge and is kept.
+  const capAt200 = inputs.shares.val * 200;
+  const pbWith = (mod, equity) => mod.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity } }, 200).pb;
+  check("a GDDY-shaped P/B (equity 1/1813 of cap) is refused as not meaningful",
+    pbWith(M, capAt200 / 1813)?.why === "equity-too-small-for-pb");
+  check("an MA-shaped P/B (equity 1.4% of cap) is still shown",
+    pbWith(M, capAt200 * 0.014)?.ok === true);
+  check("equity at exactly 1% of cap is still shown (the rule is strictly under)",
+    pbWith(M, capAt200 * 0.01)?.ok === true);
+  check("the threshold is 1% and the reader's words say so",
+    M.PB_MIN_EQUITY_SHARE === 0.01 && /under 1% of market cap/.test(M.REFUSAL_WORDS["equity-too-small-for-pb"] ?? ""));
+  const noFloor = await loadComposer(once("equity < cap.val * PB_MIN_EQUITY_SHARE", "false"));
+  check("...and CATCHES the floor removed (GDDY's 1,813x shown again)",
+    pbWith(noFloor, capAt200 / 1813)?.ok === true);
+  const twoPct = await loadComposer(once("export const PB_MIN_EQUITY_SHARE = 0.01;", "export const PB_MIN_EQUITY_SHARE = 0.02;"));
+  check("...and CATCHES the floor raised to 2% (MA refused)",
+    pbWith(twoPct, capAt200 * 0.014)?.ok === false);
+  // A BANK WHOSE REVENUE LINE IS FEE INCOME ONLY (#552 COWORK #86b/#92): the
+  // same filed revenue under ZION refuses P/S; under JPM (a total concept) it
+  // stays. The list is named, so a mutation that empties it must show ZION.
+  const asBank = (sym) => M.valuationMultiples(inputs, M.multipleInputs({ ...set, symbol: sym }), 200).ps;
+  check("ZION (fee-only revenue line) refuses P/S as revenue-line-incomplete", asBank("ZION")?.why === "revenue-line-incomplete", JSON.stringify(asBank("ZION")));
+  check("the same filed revenue under JPM keeps its P/S", asBank("JPM")?.ok === true);
+  check("the list is exactly the 8 measured (CODE-A #113)",
+    [...M.BANK_REVENUE_IS_FEES_ONLY].sort().join(" ") === "AXP CFG CFR COF KEY NTRS SOFI ZION");
+  const noBankList = await loadComposer(once("|| BANK_REVENUE_IS_FEES_ONLY.has(set.symbol)", ""));
+  check("...and CATCHES the bank list unwired (ZION's P/S shown again)",
+    noBankList.valuationMultiples(inputs, noBankList.multipleInputs({ ...set, symbol: "ZION" }), 200).ps?.ok === true);
+
+  check("no twelve months of revenue refuses P/S",
+    M.valuationMultiples(inputs, { ...mi, revenue: null }, 200).ps?.why === "no-twelve-month-revenue");
+
+  // THE 20-F RULE REFUSES ALL FOUR.
+  const f20 = M.valuationMultiples(M.valuationInputs(set, TODAY, { annualForm: "20-F" }), mi, 200);
+  check("a 20-F filer refuses all four",
+    ["pe", "ps", "pb", "evEbitda"].every((k) => f20[k]?.ok === false), JSON.stringify(Object.fromEntries(Object.entries(f20).map(([k, x]) => [k, x?.why]))));
+
+  // NO FMP WORDING LEFT IN THE SECTION, and no client fetch of the FMP route.
+  const client = read("app/stock/[symbol]/StockSymbolPageClient.tsx");
+  const sec = client.slice(client.indexOf("Valuation multiples (SEC filings, TTM)"), client.indexOf("Analyst ratings & price targets"));
+  check("the section's footer names SEC EDGAR and no FMP",
+    /SEC EDGAR/.test(sec) && !/Financial Modeling Prep|FMP/.test(sec));
+  check("the client no longer fetches /api/stock-valuation",
+    !/await fetch\(`\/api\/stock-valuation/.test(client));
+  check("the page computes the multiples on the server",
+    /valuationMultiples\(/.test(read("app/stock/[symbol]/page.tsx")));
+}
+
+console.log("\n9. the long share history: fiscal years from the payload, then recent quarters");
+{
+  // A payload with fifteen fiscal years of basic shares and one 10-Q
+  // trailing-twelve-month comparative that must NOT count as a year.
+  const row = (val, start, end, fp = "FY", form = "10-K") =>
+    ({ val, start, end, fy: Number(end.slice(0, 4)), fp, form, filed: `${Number(end.slice(0, 4)) + 1}-02-01`, accn: `0000000000-${end}` });
+  const years = Array.from({ length: 15 }, (_, i) => 2010 + i);
+  const facts = { cik: 1, entityName: "Synthetic", facts: { "us-gaap": {
+    WeightedAverageNumberOfSharesOutstandingBasic: { units: { shares: [
+      ...years.map((y) => row(1000 + y, `${y}-01-01`, `${y}-12-31`)),
+      row(9999, "2024-07-01", "2025-06-30", "Q2", "10-Q"),
+    ] } },
+    NetIncomeLoss: { units: { USD: years.map((y) => row(5, `${y}-01-01`, `${y}-12-31`)) } },
+  } } };
+  const r = M.extractCompanyFacts("SYN", facts);
+  check("every fiscal year in the payload is kept, beyond the retained window",
+    r.annualShares?.length === 15 && r.annualShares[0][0] === "2010-12-31", `${r.annualShares?.length} years`);
+  check("a trailing-twelve-month comparative is not a fiscal year",
+    !r.annualShares.some(([e]) => e === "2025-06-30"));
+  const enc = M.encodeFactSet(r);
+  check("the codec stores it as `as`, about 20 bytes a year",
+    enc.as?.length === 15 && JSON.stringify(enc.as).length < 15 * 25, `${JSON.stringify(enc.as).length} bytes`);
+
+  // THE CHART (#552 COWORK #136, replacing #517's shape): every fiscal year the
+  // set carries, every filed quarter, and a year-end only where no quarter was
+  // filed on that date (the fourth quarter, whose count is never filed alone).
+  const set = fixture("AAPL");
+  const lastFy = set.years[0].e;
+  const SI = M.SEC_FIELD_KEYS.indexOf("sharesBasic");
+  const qs = set.quarters.filter((q) => typeof q.v?.[SI] === "number").map((q) => q.e).sort();
+  const withAs = { ...set, as: [["2012-09-29", 26e9], ["2018-09-29", 19e9], [lastFy, 15e9]] };
+  const h = M.buildShareHistory(withAs);
+  const dates = new Set(h.points.map((p) => p.date));
+  check("the chart draws the earlier fiscal years, every filed quarter, and the year-ends no quarter covers",
+    h.basis === "annual+quarters" && h.points[0].date === "2012-09-29" && dates.has("2018-09-29") &&
+      qs.every((q) => dates.has(q)) && h.points.some((p) => p.date === lastFy && p.shares === 15e9),
+    `${h.points.length} points, quarters ${qs.length}`);
+  // PLAUSIBLE ON PURPOSE (2% off the quarter), so only the same-date rule can keep it out.
+  const qVal = set.quarters.find((q) => q.e === qs[2]).v[SI];
+  const onQuarter = { ...set, as: [["2012-09-29", 26e9], [qs[2], qVal * 1.02]] };
+  check("a year ending on a filed quarter's date is left to the quarter",
+    !M.buildShareHistory(onQuarter).points.some((p) => p.shares === qVal * 1.02));
+  check("a set without `as` takes its stored fiscal years", (M.buildShareHistory(set).yearEnds ?? []).length > 0);
+  const dil = read("app/components/DilutionHistory.tsx");
+  check("the footer names the basis: quarterly averages plus fiscal-year averages", /quarterly averages plus/.test(dil));
+  const overlap = await loadComposer(once(
+    "    if (quarterDates.has(y.date)) continue;\n",
+    ""
+  ));
+  check("...and CATCHES a yearly point plotted on a filed quarter's date",
+    overlap.buildShareHistory(onQuarter).points.some((p) => p.shares === qVal * 1.02));
+  const dropQuarters = await loadComposer(once(
+    "const points = [...years, ...quarters].sort((a, b) => a.date.localeCompare(b.date));",
+    "const points = [...years, ...quarters.filter((p) => p.date > (set.as?.at(-1)?.[0] ?? \"\"))].sort((a, b) => a.date.localeCompare(b.date));"
+  ));
+  check("...and CATCHES quarters dropped from the combined series",
+    dropQuarters.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length <
+      M.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length);
+}
+
+console.log("\n10. the sector/industry credit reads the same whichever leg answered");
+{
+  // The owner's wording: "Sector and industry: classification as of {date}",
+  // dated by the answering leg's own capture (classificationAsOf in
+  // staticProfile.ts, asserted per leg in check-static-profile §8). ONDS and
+  // AAPL resolve from the snapshot or the cache; ALAB stands in for a SIC-only
+  // company, since none exists in today's files.
+  const leg = (source) => ({
+    source,
+    sectorSource: source === "cache" ? "fmp-cache" : source === "snapshot" ? "fmp-snapshot" : "sic",
+    industrySource: source === "cache" ? "fmp-cache" : source === "snapshot" ? "fmp-snapshot" : "sic",
+  });
+  const cases = [
+    ["ONDS", "AAPL", { sector: "Technology", industry: "Communication Equipment", ...leg("snapshot") }, "2026-09-13", "13 Sep 2026"],
+    ["ONDS", "AAPL", { sector: "Technology", industry: "Communication Equipment", ...leg("cache") }, "2026-09-21", "21 Sep 2026"],
+    ["AAPL", "AAPL", { sector: "Technology", industry: "Consumer Electronics", ...leg("snapshot") }, "2026-09-13", "13 Sep 2026"],
+    ["AAPL", "AAPL", { sector: "Technology", industry: "Consumer Electronics", ...leg("cache") }, "2026-09-21", "21 Sep 2026"],
+    ["ALAB", "AAPL", { sector: "Technology", industry: "Semiconductors", ...leg("sic") }, "2026-09-22", "22 Sep 2026"],
+  ];
+  for (const [sym, fx, tax, asOf, shown] of cases) {
+    const t = render(P, compose(M, fx, { taxonomy: tax, classificationAsOf: asOf }), sym);
+    const got = /Sector and industry: [^·.]*/.exec(t)?.[0]?.trim() ?? "(none)";
+    check(`${sym} via ${tax.source}: "${got}"`, got === `Sector and industry: classification as of ${shown}`);
+  }
+  const noDate = render(P, compose(M, "AAPL", { classificationAsOf: null }), "AAPL");
+  check("no date → no sector credit, never an undated or borrowed one", !/Sector and industry:/.test(noDate));
+  check("no leg name reaches the reader (cache / SIC / snapshot)",
+    cases.every(([sym, fx, tax, asOf]) =>
+      !/classification cache|SIC code|Sector classification/.test(render(P, compose(M, fx, { taxonomy: tax, classificationAsOf: asOf }), sym))));
+  const legacy = await loadComposer(once(
+    "if (asOf) add(\"Sector and industry\", `classification as of ${asOf}`);",
+    "add(\"Sector and industry\", i.taxonomy.sectorSource === \"fmp-cache\" ? \"classification cache\" : `classification as of ${asOf}`);"
+  ));
+  check("...and CATCHES the cache leg going back to \"classification cache\"",
+    /classification cache/.test(render(P, compose(legacy, "AAPL", { taxonomy: { ...taxonomy, ...leg("cache") } }), "AAPL")));
+  // WHICH TWELVE MONTHS THE P/E IS ON (#552 COWORK #8/#9): the label says it,
+  // and the client no longer hard-codes "P/E (TTM)" over a fiscal year.
+  check("P/E basis label: 'TTM to 26 Jul 2026' for four quarters, 'FY2024' for a fiscal year",
+    M.peBasisLabel({ val: 7.91, basis: "four-quarters", periodEnd: "2026-07-26", derivedQ4: "2026-01-25" }) === "TTM to 26 Jul 2026" &&
+      M.peBasisLabel({ val: 1.36, basis: "fiscal-year", periodEnd: "2024-12-31", fiscalYear: 2024 }) === "FY2024" &&
+      M.peBasisLabel(null) === null);
+  check("the derived-Q4 caveat is said when (and only when) a Q4 was derived",
+    /25 Jan 2026/.test(M.peBasisNote({ val: 7.91, basis: "four-quarters", periodEnd: "2026-07-26", derivedQ4: "2026-01-25" }) ?? "") &&
+      M.peBasisNote({ val: 3.9, basis: "four-quarters", periodEnd: "2026-06-30" }) === null);
+  {
+    const client = fs.readFileSync("app/stock/[symbol]/StockSymbolPageClient.tsx", "utf8");
+    check("the hero P/E label carries the basis, not a hard-coded TTM",
+      client.includes("P/E ({valuation.peBasis ?? \"TTM\"})") && !client.includes(">P/E (TTM)<"));
+  }
+  check("dates are day-month-year, parsed without a time zone",
+    M.dayMonthYear("2026-09-13") === "13 Sep 2026" && M.dayMonthYear("2026-01-01") === "1 Jan 2026" && M.dayMonthYear("2026-09-21T04:10:00Z") === null);
+}
+
+// NO DESCRIPTION IS SAID, NEVER A GAP (#552 COWORK #57): a symbol in the
+// descriptions file's misses renders one neutral line where the text would be,
+// in every layout branch (with or without stat rows).
+{
+  const cp = fs.readFileSync("app/components/CompanyProfile.tsx", "utf8");
+  const saysNone = (src) => {
+    const line = (src.match(/NO_DESCRIPTION_LINE = "([^"]+)"/) ?? [])[1];
+    const block = src.slice(src.indexOf("const descriptionBlock = hasDescription ?"), src.indexOf("const statBoxes"));
+    const branches = src.slice(src.indexOf("{hasDescription && hasRows ? ("));
+    const noDescBranch = branches.slice(branches.indexOf(") : (") , branches.indexOf("</section>"));
+    return line === "Description not available from the filing." && /\) : \(\s*<div className="cp-desc">\s*<p[^>]*>\{NO_DESCRIPTION_LINE\}<\/p>/.test(block) && noDescBranch.includes("{descriptionBlock}");
+  };
+  check("no description → the neutral line 'Description not available from the filing.', in the no-description layout too", saysNone(cp));
+  check("...and CATCHES the block going back to null (a silent gap)",
+    !saysNone(cp.replace(/\) : \(\s*<div className="cp-desc">\s*<p[^>]*>\{NO_DESCRIPTION_LINE\}<\/p>\s*<\/div>\s*\);/, ") : null;")));
+  check("...and CATCHES the no-description layout dropping the block",
+    !saysNone(cp.replace("<>\n          {descriptionBlock}\n          <div style={gridStyle}", "<>\n          <div style={gridStyle}")));
+}
+
+console.log(failures ? `\n${failures} FAILED` : "\nThe About block is composed from free sources.");
+process.exit(failures ? 1 : 0);

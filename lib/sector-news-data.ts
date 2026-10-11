@@ -1,0 +1,587 @@
+import { unstable_cache } from "next/cache";
+import { recordSectorTone } from "@/lib/server/sectorTone";
+import { readOrRefreshSectorNews, readStoredSymbolNews } from "@/lib/server/newsStore";
+import { activeNewsProviders, newsProviderMode } from "@/lib/server/news";
+import { wireProvider } from "@/lib/server/news/wireProvider";
+import {
+  attributedSymbols,
+  composeFreeSectorPools,
+  isFromActiveProvider,
+} from "@/lib/server/news/sectorWindow";
+
+import { fmpFetch } from "@/lib/server/fmpUsage";
+import { getSectorBySlug, type SectorDef } from "@/lib/sectors";
+import { getSectorConstituents, getSectorIndex } from "@/lib/server/sectorUniverse";
+import { hasFmpCapacity, reserveFmpCallSlot } from "@/lib/server/historyCache";
+import {
+  cleanRssDescription,
+  containsHtmlMarkup,
+  dedupeNews,
+  isActualEarningsResultNews,
+  isEarningsExceptionSource,
+  isEarningsNewsItem,
+  isLowValueNewsItem,
+  isMajorWireSource,
+  isVideoOrLowQualitySource,
+  logResponseWindow,
+  mergeNewsPools,
+  newestFirst,
+  scoreEarnings,
+  MARKET_NEWS_SCOPE,
+  scoreNews,
+  scoreNewsItem,
+  scoreToEarningsLabel,
+  scoreToEarningsWord,
+  scoreToNewsLabel,
+  scoreToTone,
+  stripHtmlTags,
+  type EarningsScoreResult,
+  type FmpStockNewsItem,
+  type NewsItem,
+  type NewsScoreResult,
+} from "@/lib/news-scoring";
+
+// ---------------------------------------------------------------------------
+// Sector news: the per-stock news engine, pointed at a basket instead of a
+// ticker.
+//
+// ── 2026-09-23: OFF FMP ON THE FREE STACK (#553 COWORK #1) ─────────────────
+// Everything below about "the fetch" describes the NEWS_PROVIDER=fmp ROLLBACK
+// path only. This file called FMP's stock-news endpoint directly, outside
+// NEWS_PROVIDER, so the step-7 flip never reached sector pages. On the free
+// stack (the default) the window is now spec §4's design: "the union of the
+// sector's constituent per-symbol stores, deduped" -- one MGET of the
+// constituents' msh:news:v1:<SYM> records -- plus the shared wire poll filtered
+// to constituents. No FMP call and no per-constituent upstream call on a render.
+// See fetchFreeSectorNewsWindow below.
+//
+// The scoring, filtering and feed-shaping are NOT reimplemented here -- they
+// are imported from lib/news-scoring.ts, which re-exports the live
+// implementations out of lib/stock-news-data.ts. Only the two genuinely
+// symbol-bound steps are replaced:
+//
+//   1. THE FETCH. FMP's stock-news endpoint takes `symbols=` as a LIST; the
+//      per-stock path just happens to pass one. So a sector feed is the same
+//      endpoint called with the sector's largest constituents, chunked.
+//   2. THE RELEVANCE GATE. rankNews() in the stock path spends most of its
+//      effort proving an article is really about the requested company
+//      (fmpSymbols match, then company-name text matching). Here that gate is
+//      redundant by construction -- every article came back from a query for a
+//      constituent -- so ranking is purely quality + recency.
+//
+// One further deliberate divergence, in limitPerDate() below: the stock feed
+// collapses to ONE article per calendar date, because several same-day stories
+// about one company are usually the same story. A sector feed aggregating 40
+// companies has genuinely distinct same-day stories about different companies,
+// so the sector cap is per-date AND per-company instead.
+//
+// COST. SECTOR_NEWS_SYMBOL_LIMIT / SECTOR_NEWS_CHUNK_SIZE = 2 FMP calls per
+// sector per cache miss, and the cache holds for an hour: ~22 calls/hour across
+// all 11 sectors, against a 300-calls-per-MINUTE ceiling. Every call still goes
+// through reserveFmpCallSlot() so it shares the same guard as the crons rather
+// than sitting outside the budget.
+// ---------------------------------------------------------------------------
+
+/** How many of the sector's largest names the feed is drawn from. */
+const SECTOR_NEWS_SYMBOL_LIMIT = 40;
+/** Symbols per FMP request. Keeps the URL short and the call count at 2. */
+const SECTOR_NEWS_CHUNK_SIZE = 20;
+/** Articles requested per chunk. */
+const SECTOR_NEWS_LIMIT_PER_CHUNK = 100;
+/** Leave room for the price-pool / history / earnings warmers. */
+const FMP_MIN_HEADROOM_CALLS = 40;
+
+const MAX_POOL_ITEMS = 120;
+const MAX_DETAILED_ITEMS = 6;
+const MAX_COMPACT_ITEMS = 10;
+const MAX_ARTICLES_PER_DATE = 3;
+
+export type SectorMention = {
+  symbol: string;
+  count: number;
+};
+
+export type SectorNewsBaseData = {
+  slug: string;
+  sectorName: string;
+  /** Symbols the feed was built from, largest market cap first. */
+  constituents: string[];
+  news: NewsItem[];
+  rankedNews: NewsItem[];
+  detailedNews: NewsItem[];
+  compactNews: NewsItem[];
+  newsScore: NewsScoreResult;
+  earningsScore: EarningsScoreResult;
+  /** Most-mentioned constituents across the ranked feed, busiest first. */
+  mentions: SectorMention[];
+  /** True when no source returned anything usable for the whole basket. */
+  isDataUnavailable: boolean;
+  /** Universe classification counts, so the page can be honest about coverage. */
+  coverage: { classified: number; total: number };
+};
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Ticker symbols FMP attached to an article. Unlike the per-stock path's
+ * extractFmpSymbols, this does NOT inject a requested symbol -- there isn't
+ * one -- so the result is purely what upstream claimed the article is about.
+ */
+function extractSymbols(item: FmpStockNewsItem): string[] {
+  const symbols = new Set<string>();
+
+  const addValue = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(addValue);
+      return;
+    }
+
+    if (typeof value !== "string") return;
+
+    value
+      .split(/[,.|\s]+/)
+      .map((part) => part.trim().toUpperCase())
+      .filter(Boolean)
+      .forEach((part) => symbols.add(part));
+  };
+
+  addValue(item.symbol);
+  addValue(item.symbols);
+  addValue(item.ticker);
+  addValue(item.tickers);
+
+  return [...symbols];
+}
+
+function mapFmpItem(item: FmpStockNewsItem, constituentSet: Set<string>): NewsItem | null {
+  const title = typeof item.title === "string" ? item.title.trim() : "";
+  const link =
+    typeof item.url === "string" && item.url.trim()
+      ? item.url.trim()
+      : typeof item.link === "string"
+        ? item.link.trim()
+        : "";
+
+  if (!title || !link) return null;
+  if (containsHtmlMarkup(title)) return null;
+
+  const fmpSymbols = extractSymbols(item);
+
+  const descriptionSource =
+    typeof item.text === "string" && item.text.trim()
+      ? item.text
+      : typeof item.content === "string" && item.content.trim()
+        ? item.content
+        : typeof item.description === "string"
+          ? item.description
+          : "";
+
+  return {
+    title: stripHtmlTags(title),
+    link,
+    pubDate:
+      typeof item.publishedDate === "string" && item.publishedDate.trim()
+        ? item.publishedDate
+        : typeof item.date === "string" && item.date.trim()
+          ? item.date
+          : null,
+    source:
+      typeof item.site === "string" && item.site.trim()
+        ? item.site.trim()
+        : typeof item.publisher === "string" && item.publisher.trim()
+          ? item.publisher.trim()
+          : "FMP News",
+    description: descriptionSource.trim()
+      ? cleanRssDescription(descriptionSource.slice(0, 650))
+      : null,
+    image:
+      typeof item.image === "string" && item.image.trim() ? item.image.trim() : null,
+    fmpSymbols,
+    fmpSymbolMatched: fmpSymbols.some((symbol) => constituentSet.has(symbol)),
+  };
+}
+
+/**
+ * One windowed sector fetch. `from` null is a cold start.
+ *
+ * Already chunked at SECTOR_NEWS_CHUNK_SIZE because `symbols=` is list-aware --
+ * a 40-constituent sector is ~2 calls, not 40. That was measured, and it means
+ * this half was never the expensive one; what `from` adds is not re-fetching
+ * the same window every render once the store holds it.
+ */
+async function fetchFmpSectorNewsWindow(
+  symbols: string[],
+  from: string | null
+): Promise<NewsItem[]> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey || !symbols.length) return [];
+
+  const key = encodeURIComponent(apiKey);
+  const constituentSet = new Set(symbols);
+  const pools: NewsItem[][] = [];
+  // Rows returned per chunk, for the depth reading below. Not the same as the
+  // requested limit: a chunk can come back short.
+  const fetchedPerChunk: number[] = [];
+
+  for (const group of chunk(symbols, SECTOR_NEWS_CHUNK_SIZE)) {
+    // Respect the same per-minute guard the crons use. If the budget is tight
+    // right now, stop early and render with whatever came back rather than
+    // queueing behind a warm run and blowing the request's time budget.
+    try {
+      if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) break;
+      await reserveFmpCallSlot();
+    } catch {
+      break;
+    }
+
+    const encoded = encodeURIComponent(group.join(","));
+    const fromParam = from ? `&from=${encodeURIComponent(from)}` : "";
+    const url = `https://financialmodelingprep.com/stable/news/stock?symbols=${encoded}&limit=${SECTOR_NEWS_LIMIT_PER_CHUNK}${fromParam}&apikey=${key}`;
+
+    try {
+      const res = await fmpFetch(url, { next: { revalidate: 900 } });
+      if (!res.ok) continue;
+
+      const data = (await res.json()) as unknown;
+      if (!Array.isArray(data)) continue;
+
+      // The same reading the per-stock feed takes, on the same payload shape and
+      // equally free. Different question here, though, and the label says which:
+      // this chunk carries up to 20 SYMBOLS, so a high maxPerDay is expected and
+      // is not evidence of saturation the way it is for one ticker. What matters
+      // for the sector pool is distinctDays and the inversion count.
+      logResponseWindow("sector", group.join("+"), data, SECTOR_NEWS_LIMIT_PER_CHUNK);
+
+      const items = data
+        .map((row: FmpStockNewsItem, index: number) => {
+          const mapped = mapFmpItem(row, constituentSet);
+          // Stamped at the only point where the upstream ordering is intact --
+          // see NewsItem.sourceIndex in lib/stock-news-data.ts.
+          if (mapped) mapped.sourceIndex = index;
+          return mapped;
+        })
+        .filter((row): row is NewsItem => Boolean(row))
+        .filter((row) => !isVideoOrLowQualitySource(row));
+
+      fetchedPerChunk.push(data.length);
+      if (items.length) pools.push(items);
+    } catch {
+      continue;
+    }
+  }
+
+  const pool = mergeNewsPools(pools).slice(0, MAX_POOL_ITEMS);
+
+  // THE SAME UNMEASURED QUESTION AS THE PER-STOCK FEED, one level up.
+  // SECTOR_NEWS_LIMIT_PER_CHUNK is 100 across 2 chunks, so up to 200 articles
+  // are fetched, 120 survive into the pool and the page renders 6 detailed
+  // plus 10 compact -- 16. That ratio looks like obvious waste and may not be:
+  // dedupeNews collapses the same market-wide story reported across several
+  // constituents, so a large fetch can shrink to very little. maxIndex is the
+  // smallest per-chunk limit that would have produced the same pool.
+  //
+  // Note this differs from the per-stock reading in one way worth not
+  // confusing: indices here are positions WITHIN A CHUNK, and there are two
+  // chunks, so a maxIndex of 90 means one of the two chunks reached 90 -- not
+  // that 90 of 200 were used.
+  const indices = pool
+    .map((item) => item.sourceIndex)
+    .filter((i): i is number => typeof i === "number");
+  console.log(
+    `[news-depth] sector chunks=${fetchedPerChunk.length} fetched=[${fetchedPerChunk.join(",")}]` +
+      ` pool=${pool.length} maxIndexWithinChunk=${indices.length ? Math.max(...indices) : "none"}`
+  );
+
+  return pool;
+}
+
+/**
+ * The free stack's sector window: spec §4, "union of the sector's constituent
+ * per-symbol stores, deduped", plus the wire poll filtered to constituents.
+ * What is kept is decided in lib/server/news/sectorWindow.ts (pure, checked);
+ * this is only the I/O.
+ *
+ * COST: one Redis MGET for all constituents (1 command, however many symbols)
+ * and the wire poll, which is one shared fetch per hour for the whole site
+ * (Next's data cache). No Google News or SEC call is made here, and no FMP call.
+ *
+ * `from` is not used: the store's merge keys by link, so re-offering a held
+ * item adds nothing.
+ */
+async function fetchFreeSectorNewsWindow(symbols: string[]): Promise<NewsItem[]> {
+  const activeIds = new Set<string>(activeNewsProviders().map((p) => p.id));
+
+  const [stored, wire] = await Promise.all([
+    readStoredSymbolNews<NewsItem>(symbols),
+    wireProvider.fetchMarket().catch(() => [] as NewsItem[]),
+  ]);
+
+  const pools = composeFreeSectorPools(symbols, stored, wire, activeIds);
+  const pool = mergeNewsPools(pools)
+    .filter((row) => !isVideoOrLowQualitySource(row))
+    .slice(0, MAX_POOL_ITEMS);
+  console.log(
+    `[news-depth] sector free stores=${stored.size}/${symbols.length} wire=${pools[pools.length - 1].length} pool=${pool.length}`
+  );
+  return pool;
+}
+
+/**
+ * Quality-then-recency ranking with the per-company relevance gate removed
+ * (see the header note). dedupeNews still collapses the same story reported by
+ * several outlets, which matters far more here than on a single-ticker page --
+ * a market-wide story gets covered once per constituent it mentions.
+ */
+function rankSectorNews(news: NewsItem[]): NewsItem[] {
+  return dedupeNews(
+    [...news].sort((a, b) => {
+      const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
+      if (scoreDiff !== 0) return scoreDiff;
+
+      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return bTime - aTime;
+    })
+  );
+}
+
+function primarySymbol(item: NewsItem, constituentSet: Set<string>): string | null {
+  for (const symbol of attributedSymbols(item)) {
+    if (constituentSet.has(symbol)) return symbol;
+  }
+  return null;
+}
+
+/**
+ * The sector analogue of the stock feed's oneArticlePerDate. Allows several
+ * stories per date -- 40 companies produce genuinely distinct same-day news --
+ * but never two about the SAME company on the same date, which is where
+ * duplicate-feeling coverage actually comes from. Actual earnings-result
+ * headlines are exempt, matching the stock path's reasoning.
+ */
+function limitPerDate(
+  items: NewsItem[],
+  constituentSet: Set<string>,
+  maxPerDate = MAX_ARTICLES_PER_DATE
+): NewsItem[] {
+  const perDate = new Map<string, number>();
+  const seenDateSymbol = new Set<string>();
+  const out: NewsItem[] = [];
+
+  for (const item of items) {
+    const dateKey = item.pubDate
+      ? new Date(item.pubDate).toISOString().slice(0, 10)
+      : "unknown";
+
+    const isEarningsResult = isActualEarningsResultNews(item);
+    const symbol = primarySymbol(item, constituentSet);
+    const symbolKey = symbol ? `${dateKey}:${symbol}` : null;
+
+    if (!isEarningsResult) {
+      if ((perDate.get(dateKey) ?? 0) >= maxPerDate) continue;
+      if (symbolKey && seenDateSymbol.has(symbolKey)) continue;
+    }
+
+    perDate.set(dateKey, (perDate.get(dateKey) ?? 0) + 1);
+    if (symbolKey) seenDateSymbol.add(symbolKey);
+    out.push(item);
+  }
+
+  return out;
+}
+
+function countMentions(items: NewsItem[], constituentSet: Set<string>): SectorMention[] {
+  const counts = new Map<string, number>();
+
+  for (const item of items) {
+    // Count each constituent once per article, not once per mention.
+    const seen = new Set<string>();
+    for (const symbol of attributedSymbols(item)) {
+      if (!constituentSet.has(symbol) || seen.has(symbol)) continue;
+      seen.add(symbol);
+      counts.set(symbol, (counts.get(symbol) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .map(([symbol, count]) => ({ symbol, count }))
+    .sort((a, b) => b.count - a.count || a.symbol.localeCompare(b.symbol))
+    .slice(0, 8);
+}
+
+async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBaseData> {
+  const [constituents, index] = await Promise.all([
+    getSectorConstituents(sector.slug, SECTOR_NEWS_SYMBOL_LIMIT),
+    getSectorIndex(),
+  ]);
+
+  const constituentSet = new Set(constituents);
+  // Store-backed, same as the symbol feed: Redis first, FMP only when cold or
+  // due, and NO earnings pin -- pinning one constituent's earnings article
+  // inside a sector feed would present it as sector-wide coverage.
+  //
+  // OUTSTANDING, and called out rather than assumed away: the #343 dedup
+  // threshold (0.6) was calibrated on single-ticker traffic. Sector traffic is
+  // the case it has never seen -- ~40 constituents means a market-wide story
+  // arrives many times over, which is both where dedup matters most and where
+  // the threshold is least tested. Persisting the pool makes that measurable
+  // for the first time; it does not make it measured.
+  const onFmp = newsProviderMode() === "fmp";
+  const mode = onFmp ? "fmp" : "free";
+  const activeIds = new Set<string>(activeNewsProviders().map((p) => p.id));
+  const fromActive = (item: NewsItem) => isFromActiveProvider(item, activeIds, mode);
+  const { items: stored } = await readOrRefreshSectorNews<NewsItem>(sector.slug, {
+    fetchWindow: (from) =>
+      onFmp ? fetchFmpSectorNewsWindow(constituents, from) : fetchFreeSectorNewsWindow(constituents),
+    // PURGED AT THE FIRST REFRESH, not just hidden. The store runs the merged
+    // (held + fetched) list through this before capping at 40, so FMP-era items
+    // held in msh:sector-news:v1:<slug> leave the record on the first refresh
+    // after deploy instead of occupying cap slots, invisibly, for days.
+    // Under the fmp rollback the filter passes everything, as before.
+    dedupe: (items) => dedupeNews(items.filter(fromActive)),
+  });
+  // AND FILTERED ON READ, for the up-to-an-hour a record is served from cache
+  // before its first refresh under this code.
+  let news = stored.filter(fromActive);
+
+  // ── A RECORD THAT HELD FMP ITEMS IS REBUILT NOW, NOT IN AN HOUR ─────────
+  // Found on the #558 preview (COWORK #11): every sector page was EMPTY. The
+  // store is shared Redis, and production -- still on the FMP path until this
+  // merges -- kept rewriting msh:sector-news:v1:<slug> with FMP items on each
+  // view. The preview read that record inside its one-hour window (no refresh),
+  // the filter above correctly removed every item, and nothing was left. The
+  // same would happen for up to an hour after deploy. So: if the read had to
+  // drop anything, compose the free window immediately (one MGET + the shared
+  // wire poll) and merge it in. The store is still rewritten, without FMP
+  // items, at its next refresh.
+  if (!onFmp && news.length < stored.length) {
+    const fresh = await fetchFreeSectorNewsWindow(constituents).catch(() => [] as NewsItem[]);
+    news = dedupeNews(mergeNewsPools([news, fresh]));
+  }
+
+  const rankedNews = rankSectorNews(news);
+  const earningsNews = news.filter(isEarningsNewsItem);
+
+  // MARKET SCOPE, AND HERE IT IS THE RIGHT ANSWER RATHER THAN THE DEFAULT ONE.
+  // A sector has no symbol to be about, so there is no relevance rule to narrow
+  // by -- this is the legitimate no-symbol path the scope type exists to keep
+  // expressible. It is spelled out because scoreNews no longer chooses for its
+  // callers: on a stock page the same call now narrows to that company.
+  const keywordNewsScore = scoreNews(news, MARKET_NEWS_SCOPE);
+  const keywordEarningsScore = scoreEarnings(earningsNews);
+
+  const hasActualEarningsHeadlines = earningsNews.some((item) =>
+    isActualEarningsResultNews(item)
+  );
+
+  const newsScoreValue = keywordNewsScore.score;
+  const earningsScoreValue = hasActualEarningsHeadlines ? keywordEarningsScore.score : 50;
+
+  const newsScore: NewsScoreResult = {
+    ...keywordNewsScore,
+    score: newsScoreValue,
+    tone: scoreToTone(newsScoreValue),
+    label: scoreToNewsLabel(newsScoreValue),
+    reason: news.length
+      ? keywordNewsScore.reason
+      : `No recent headlines are stored yet for the largest ${sector.name} names.`,
+  };
+
+  // Kept for the /sector cards (#553 COWORK #157): only a score built from
+  // real headlines, so a sector with none shows no chip rather than "Neutral".
+  if (news.length) await recordSectorTone(sector.slug, newsScore.label, newsScore.score);
+
+  const earningsScore: EarningsScoreResult = {
+    ...keywordEarningsScore,
+    score: earningsScoreValue,
+    tone: scoreToTone(earningsScoreValue),
+    label: hasActualEarningsHeadlines
+      ? scoreToEarningsLabel(earningsScoreValue)
+      : "No clear earnings read",
+    // The bare adjective, for any prose that supplies its own noun. The sector
+    // page renders the LABEL as a chip, where the full phrase is right, but the
+    // field travels with the score so a future sentence here cannot repeat the
+    // /stock/[symbol]/news stammer. See EARNINGS_TONE_BANDS.
+    word: hasActualEarningsHeadlines ? scoreToEarningsWord(earningsScoreValue) : null,
+    reason: hasActualEarningsHeadlines
+      ? keywordEarningsScore.reason
+      : `There are no fresh earnings-result headlines across the largest ${sector.name} names right now.`,
+  };
+
+  // Feed shaping mirrors the stock path: high-value items only in the main
+  // feed, gated to major wires plus genuine Benzinga/Zacks earnings results,
+  // with everything else routed to the lighter feed.
+  const displayPool = rankedNews.length ? rankedNews : dedupeNews(news);
+  const highValueNews = displayPool.filter((item) => !isLowValueNewsItem(item));
+  const fallbackNews = displayPool.filter((item) => isLowValueNewsItem(item));
+
+  const mainFeedNews = highValueNews.filter(
+    (item) =>
+      isMajorWireSource(item) ||
+      (isEarningsExceptionSource(item) && isActualEarningsResultNews(item))
+  );
+
+  let detailedNews = limitPerDate(newestFirst(mainFeedNews), constituentSet).slice(
+    0,
+    MAX_DETAILED_ITEMS
+  );
+
+  if (detailedNews.length < MAX_DETAILED_ITEMS) {
+    const usedLinks = new Set(detailedNews.map((item) => item.link));
+    const backfill = limitPerDate(
+      newestFirst(highValueNews).filter((item) => !usedLinks.has(item.link)),
+      constituentSet
+    ).slice(0, MAX_DETAILED_ITEMS - detailedNews.length);
+
+    detailedNews = [...detailedNews, ...backfill];
+  }
+
+  const compactPool = dedupeNews([
+    ...highValueNews.filter(
+      (item) => !detailedNews.some((picked) => picked.link === item.link)
+    ),
+    ...fallbackNews,
+  ]);
+
+  const compactNews = limitPerDate(newestFirst(compactPool), constituentSet).slice(
+    0,
+    MAX_COMPACT_ITEMS
+  );
+
+  return {
+    slug: sector.slug,
+    sectorName: sector.name,
+    constituents,
+    news,
+    rankedNews,
+    detailedNews,
+    compactNews,
+    newsScore,
+    earningsScore,
+    mentions: countMentions(rankedNews, constituentSet),
+    isDataUnavailable: news.length === 0,
+    coverage: { classified: index.classified, total: index.total },
+  };
+}
+
+const getCachedSectorNewsBaseData = unstable_cache(
+  async (slug: string) => {
+    const sector = getSectorBySlug(slug);
+    if (!sector) return null;
+    return buildSectorNewsBaseData(sector);
+  },
+  // v2: v1 entries were built from FMP; a new key stops them being served for
+  // up to an hour after deploy.
+  ["msh-sector-news-base-data-v2"],
+  { revalidate: 3600 }
+);
+
+export async function getSectorNewsBaseData(
+  slug: string
+): Promise<SectorNewsBaseData | null> {
+  return getCachedSectorNewsBaseData(String(slug ?? "").trim().toLowerCase());
+}

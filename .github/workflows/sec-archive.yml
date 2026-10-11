@@ -1,0 +1,106 @@
+name: SEC archive — backfill, incremental, diff (Cloudflare R2)
+
+# LAYER 1 OF THE SEC PIPELINE (#552 COWORK #65; owner chose R2, CODE-A #66).
+#   backfill     (dispatch) every registrant CIK not yet archived — PR 1.
+#   incremental  (daily 03:05 UTC, or dispatch) the CIKs EDGAR's daily form
+#                index shows filed since the last run — PR 2 (COWORK #70).
+#   diff         (dispatch) every stored Layer 2 set against the same symbol
+#                rebuilt from the archive; READS ONLY, writes nothing — PR 2.
+# Nothing here switches Layer 2 to the archive: that is its own PR.
+#
+# ITS OWN WORKFLOW, NOT A RELAY TASK: the R2 credential is referenced here and
+# nowhere else, so neither relay job can reach the archive's write key. The
+# Upstash credential appears ONLY in the diff job, which issues read commands
+# only (SMEMBERS, GET, MGET — checked by check-sec-archive); the backfill and
+# incremental jobs never see it.
+#
+# ONE runner: SEC's fair-access limit is per requester, not per machine, so
+# this is never sharded. The backfill paces at ≤8 SEC requests/s; the
+# incremental at ≤4/s. 03:05 UTC is when no app job reads SEC, BUT GitHub starts
+# this repo's schedules hours late, so the incremental job also carries a CLOCK
+# GUARD (lib/secArchiveIncremental.mjs inSecJobWindow): it will not start, and
+# stops, inside the app's SEC job windows. Resumable, and SEC 429/403 stops a
+# run with the index saved.
+#
+# PUBLIC LOGS: status and counts (the diff also names symbols, never values).
+
+on:
+  schedule:
+    - cron: "5 3 * * *"
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "backfill | incremental | diff"
+        required: false
+        default: "backfill"
+      limit:
+        description: "backfill: max filers this run (0 = all remaining)"
+        required: false
+        default: "0"
+      refresh:
+        description: "backfill: re-archive filers already in the index (yes/no)"
+        required: false
+        default: "no"
+
+concurrency:
+  group: sec-archive
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.task == 'backfill' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Backfill
+        run: node scripts/sec-archive-backfill.mjs
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          LIMIT: ${{ inputs.limit }}
+          REFRESH: ${{ inputs.refresh }}
+
+  incremental:
+    if: ${{ github.event_name == 'schedule' || inputs.task == 'incremental' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Incremental
+        run: node scripts/sec-archive-incremental.mjs
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
+  diff:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.task == 'diff' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Diff (reads only)
+        run: node scripts/sec-archive-diff.mjs
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}

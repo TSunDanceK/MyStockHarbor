@@ -1,0 +1,100 @@
+import { NextRequest, NextResponse } from "next/server";
+import { recordJobRun } from "../../../../lib/server/jobRuns";
+import { guardJob } from "../../../../lib/server/jobGuard";
+import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
+import { warmStockData } from "../../../../lib/server/stockDataCache";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+// Raised alongside warm-price-pool, which demonstrably 504'd at 60s once the
+// universe grew. This route is arguably MORE exposed: REFRESH_SLICE_SIZE is 25
+// and a symbol costs 5 calls on the clock-only path or 8 when its filing-driven
+// endpoints are also due, so a full slice is 125-200 sequential FMP calls in
+// one run -- a fixed cost that has always been close to the old 60s ceiling,
+// independent of universe size. It simply had not been observed failing yet.
+export const maxDuration = 300;
+
+// Cron (see vercel.json) that refreshes the Redis-cached extended stock data
+// (valuation / dividends / financials / analyst fields) for the current
+// universe, so the screener list-view tabs render with zero FMP calls per page
+// load. Reads the symbol set from the already-cached pickers payload, then
+// hands it to warmStockData(), which refreshes the stalest slice per run under
+// the shared budget guard.
+
+function isAuthorized(req: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return true;
+  const auth = req.headers.get("authorization") || "";
+  return auth === `Bearer ${secret}`;
+}
+
+async function handleGET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!process.env.FMP_API_KEY) {
+    // NO KEY IS A HEALTHY SKIP, NOT A FAILURE (#553 CODE-B #94, FMP-off). This
+    // used to answer 500 on every run once Production dropped the key -- about
+    // 170 red runs a day across this job, warm-earnings, warm-fundamentals and
+    // warm-stock-data -- for a job with nothing it can do. Mirrors the
+    // warm-price-pool no-key skip: recorded as ok + skipped, so /cache-health
+    // shows a skip rather than either a failure or silence.
+    // Nothing runs without the key: warmStockData() itself bails with
+    // "no-fmp-key", so the target derivation is skipped as well.
+    await recordJobRun("warm-stock-data", true, { skipped: true, reason: "no FMP_API_KEY" });
+    return NextResponse.json({ ok: true, skipped: true, reason: "no FMP_API_KEY" });
+  }
+
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
+
+  try {
+    // Displayed symbols UNION the rolling dynamic universe, so a symbol that
+    // rotates into the scan is already warm rather than arriving cold.
+    // See lib/server/warmTargets.ts for why this must not be a replacement.
+    const { symbols, displayed, universe } = await getWarmTargetSymbols(base);
+    console.log(`[warm-stock-data] targets: ${symbols.length} (displayed ${displayed}, universe ${universe})`);
+
+    const result = await warmStockData(symbols, Date.now());
+    console.log("[warm-stock-data]", JSON.stringify(result));
+    await recordJobRun("warm-stock-data", result.ok !== false, {
+      // How much of the run was filing-driven, and how many symbols the
+      // earnings index knew about. quarterlyRefreshes stuck at 0 across many
+      // runs means the trigger is inert and everything is riding the 120-day
+      // floor; scheduleSize at 0 means the index itself failed to build.
+      // Symbols where NO endpoint returned a row. They are written (fields are
+      // carried forward) but NOT marked refreshed, so they now go stale on
+      // /cache-health instead of resetting their own freshness every run --
+      // which is how a delisted ticker used to read green forever.
+      noEndpointAnswered: result.noEndpointAnswered ?? null,
+      markedRefreshed: result.markedRefreshed ?? null,
+      quarterlyRefreshes: result.quarterlyRefreshes ?? null,
+      // WHY A ZERO IS A ZERO. quarterlyRefreshes has read 0 on every run since
+      // #400 and could not say which of two things it meant. Beside these it
+      // can: 0 refreshes with quarterlyStamped === sliceSize is "nothing was
+      // due" and healthy; 0 with quarterlyStamped 0 is "everything was due and
+      // none ran" and is not. scheduleCovered answers the third state --
+      // scheduleSize is GLOBAL, so a healthy index can still cover none of this
+      // slice, and then every symbol here rides the 120-day floor in silence.
+      // Same principle as deferredByCap and outOfTime.
+      quarterlyStamped: result.quarterlyStamped ?? null,
+      sliceSize: result.sliceSize ?? null,
+      scheduleCovered: result.scheduleCovered ?? null,
+      // The run ended on its own clock rather than draining its slice. Was a
+      // silent `break` on the first exhausted minute until this change.
+      outOfTime: result.outOfTime ?? null,
+      scheduleSize: result.scheduleSize ?? null,
+      targets: symbols.length,
+      written: result.written ?? null,
+      reason: result.reason ?? null,
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "warm-stock-data failed";
+    await recordJobRun("warm-stock-data", false, { error: message });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}
+
+// RUNAWAY-COST GUARD (#553 COWORK #51 item 3): kill switch, daily circuit
+// breaker, per-run command budget, stop on Redis errors. See lib/server/jobGuard.ts.
+export const GET = guardJob("warm-stock-data", handleGET);

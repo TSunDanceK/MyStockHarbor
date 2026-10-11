@@ -1,0 +1,1649 @@
+"use client";
+import { EstimatedValue, ReasonedValue } from "@/app/components/EstimatedValue";
+import { chartHref } from "@/lib/chartHref";
+import { EstimateKey } from "@/app/components/EstimateKey";
+import type { EstimateMark } from "@/app/components/estimateMark";
+
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import TickerLogo from "@/app/components/TickerLogo";
+import type { IndicatorSeed } from "@/lib/indicators";
+import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
+import { DayCandle, DayRange, PeLine, PriceChange, PriceSpark, RsiPane, TrendSpark, VolumeBars } from "./HeaderStripParts";
+import StockTickerJump from "./StockTickerJump";
+import LatestEarningsCard from "@/app/components/LatestEarningsCard";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
+import ConfluenceCard from "./ConfluenceCard";
+import KeyLevelsCard from "./KeyLevelsCard";
+import PerformanceCard from "./PerformanceCard";
+import type { PerfStrip } from "@/lib/ta/performance";
+import LevelsSignals from "./LevelsSignals";
+import { liveBars } from "@/lib/ta/sessionBar";
+import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
+import type { ProfileDividend } from "@/lib/server/secDividend";
+import { isRetiredBlock } from "./retiredBlocks";
+import CompanyProfile, {
+  type CompanyProfile as CompanyProfileData,
+} from "@/app/components/CompanyProfile";
+import DilutionHistory, {
+  type DilutionHistoryData,
+} from "@/app/components/DilutionHistory";
+import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
+import { dailyReturnBars, monthlyReturnBars, weeklyReturnBars } from "@/lib/closeReturns";
+import ShareButton from "@/app/components/ShareButton";
+import { STRENGTH_CSS, StrengthNote, StrengthPill, useStrengthNote } from "./StrengthBadge";
+import type { StrengthBadge } from "@/lib/strengthBadge";
+
+type Quote = {
+  symbol: string;
+  price: number | null;
+  date: string | null;
+  time: string | null;
+  source: string;
+  // Quote-snapshot extras — all come from the same FMP stable/quote call
+  // that already supplied `price`, so these are "free" additions.
+  open?: number | null;
+  previousClose?: number | null;
+  change?: number | null;
+  changePercentage?: number | null;
+  dayLow?: number | null;
+  dayHigh?: number | null;
+  yearLow?: number | null;
+  yearHigh?: number | null;
+  volume?: number | null;
+  avgVolume?: number | null;
+  // Tiingo path only (step 4, #553 COWORK #56): "last IEX trade, 14:05 ET" /
+  // "close, 1 Oct 2026", and "as of last close" for the EOD-only volume.
+  priceLabel?: string | null;
+  volumeLabel?: string | null;
+};
+
+// Server-fetched quote payload passed down from page.tsx so the header
+// quote-snapshot renders real numbers in the initial HTML.
+export type InitialQuote = {
+  price: number | null;
+  date: string | null;
+  open: number | null;
+  previousClose: number | null;
+  change: number | null;
+  changePercentage: number | null;
+  dayLow: number | null;
+  dayHigh: number | null;
+  yearLow: number | null;
+  yearHigh: number | null;
+  volume: number | null;
+  avgVolume: number | null;
+  priceLabel?: string | null;
+  volumeLabel?: string | null;
+};
+
+type StockValuationData = {
+  peRatio: number | null;
+  priceToSalesRatio: number | null;
+  priceToBookRatio: number | null;
+  evToEbitda: number | null;
+  /** Why a figure is blank, in words; null where it has a value. From SEC. */
+  reasons?: Partial<Record<"peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda", string | null>>;
+  sourceNote: string;
+  /** "▲ Above sector median (21.5×)" and its note, or null for no line (lib/peSectorLine.ts). */
+  peSector?: { glyph: string; text: string; note: string; median?: number | null } | null;
+  /** "TTM to 26 Jul 2026" or "FY2025": which twelve months the P/E is on. */
+  peBasis?: string | null;
+  /** The derived-Q4 caveat, when the TTM includes one. */
+  peBasisNote?: string | null;
+  /** "Loss", "Not meaningful", "Neg." in place of a dash (#552 COWORK #98 §1); its reason is `reasons`. */
+  words?: Partial<Record<ValuationKey, string | null>>;
+  /** The estimate/derived mark on a figure (lib/server/secEstimates); absent on a filed figure. */
+  estimates?: Partial<Record<ValuationKey, EstimateMark | null>>;
+};
+type ValuationKey = "peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda";
+
+type AnalystRatingData = {
+  consensusRating: string | null;
+  strongBuy: number | null;
+  buy: number | null;
+  hold: number | null;
+  sell: number | null;
+  strongSell: number | null;
+  totalAnalysts: number | null;
+  targetHigh: number | null;
+  targetLow: number | null;
+  targetMedian: number | null;
+  targetConsensus: number | null;
+  sourceNote: string;
+};
+
+type ScoreTone = "green" | "yellow" | "red";
+
+type EarningsPeriodSummary = {
+  label: string;
+  date: string | null;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak";
+  actualEps: number | null;
+  estimatedEps: number | null;
+  epsSurprisePercent: number | null;
+  revenueSurprisePercent: number | null;
+};
+
+type EarningsYearSummary = {
+  year: string;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak";
+  goodCount: number;
+  neutralCount: number;
+  weakCount: number;
+};
+
+type Point = {
+  date: string;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+  // Tiingo only (step 3, #553 COWORK #57 §2): today's partial bar, "today so
+  // far (IEX), hh:mm ET". It carries no volume.
+  label?: string;
+};
+
+type StockSymbolPageClientProps = {
+  symbol: string;
+  // Short-lived signed token minted server-side (lib/server/quoteToken.ts) and
+  // echoed back on the /api/quote fetch below. "" / undefined means the feature
+  // is unconfigured, and we send no header at all.
+  pageToken?: string;
+  earningsSnapshot: SecEarningsSnapshot;
+  profile: CompanyProfileData | null;
+  /** The Dividend row, resolved server-side from the filings. */
+  dividend: ProfileDividend;
+  shareHistory: DilutionHistoryData | null;
+  /**
+   * The Valuation section and the hero P/E, computed server-side from the SEC
+   * fact set (owner addendum, brief 2026-09-22 PR 2). Replaces the client fetch
+   * of /api/stock-valuation, which read FMP.
+   */
+  valuation: StockValuationData | null;
+  seed?: IndicatorSeed | null;
+  // Recent daily history computed on the server. Seeds `history` so the page
+  // renders real chart/indicator content on the server (crawlable), not behind
+  // a client "Loading…" gate. The client still refreshes it in the background.
+  initialHistory?: Point[];
+  // Server-fetched quote snapshot (price, day range, volume vs average,
+  // change) — seeds the header stats bar so it renders real numbers
+  // immediately instead of waiting on the client refresh.
+  initialQuote?: InitialQuote;
+  // The linked "Market data from Tiingo.com", rendered by page.tsx when
+  // PRICE_PROVIDER_STOCK_PAGE=tiingo (step 4). Shown only under a Tiingo quote.
+  tiingoCredit?: ReactNode;
+  // The linked "Market data from Tiingo.com", rendered by page.tsx when the
+  // series shown can be Tiingo's (step 3). Shown under the chart only while
+  // the series actually shown is Tiingo's (#553 COWORK #103).
+  historyCredit?: ReactNode;
+  // Whose bars `initialHistory` is: "tiingo", "fmp" or "none".
+  historyProvider?: string;
+  /** The performance strip (#563 COWORK #69), computed server-side from the full series. */
+  performance?: PerfStrip;
+  /** The strength badge (#563 COWORK #105), scored server-side from the same series; absent off Tiingo. */
+  strength?: StrengthBadge | null;
+  /** The server's render time (#563 COWORK #75/#76), for "is today's partial bar in session". */
+  renderedAt?: number;
+};
+
+function movingAverage(values: number[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    if (i >= window) sum -= values[i - window];
+    if (i >= window - 1) out[i] = sum / window;
+  }
+  return out;
+}
+
+function lastNum(arr: (number | null)[]) {
+  return arr.length ? arr[arr.length - 1] : null;
+}
+
+function rsiWilder(values: number[], period = 14): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (values.length < period + 1) return out;
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = values[i] - values[i - 1];
+    if (diff >= 0) gain += diff; else loss += -diff;
+  }
+  let avgGain = gain / period, avgLoss = loss / period;
+  out[period] = 100 - 100 / (1 + (avgLoss === 0 ? Infinity : avgGain / avgLoss));
+  for (let i = period + 1; i < values.length; i++) {
+    const diff = values[i] - values[i - 1];
+    avgGain = (avgGain * (period - 1) + (diff > 0 ? diff : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
+    out[i] = 100 - 100 / (1 + (avgLoss === 0 ? Infinity : avgGain / avgLoss));
+  }
+  return out;
+}
+
+// Mirrors lib/indicators.ts buildTrendScore, including `known`. This is one of
+// three copies and is NOT deduped here on purpose: #315 fixed the lib copy,
+// which drives the SEO title; this copy drives what a reader actually sees.
+// Consolidating three copies is two-validators-for-one-value and wants its own
+// PR and its own argument.
+//
+// `known` is false when the checks had no inputs, not when they ran and failed.
+// ma200 needs 200 bars, so any listing under ~9.5 months old. Confirmed live on
+// /stock/SKHY. See claude/traps/return-type-cannot-express-failure.md.
+function buildTrendScore(args: { lastClose: number | null; ma50: number | null; ma200: number | null }) {
+  const { lastClose, ma50, ma200 } = args;
+  const checks = [
+    typeof lastClose === "number" && typeof ma200 === "number" ? lastClose > ma200 : null,
+    typeof lastClose === "number" && typeof ma50 === "number" ? lastClose > ma50 : null,
+    typeof ma50 === "number" && typeof ma200 === "number" ? ma50 > ma200 : null,
+  ];
+  const passed = checks.reduce((acc, v) => acc + (v === true ? 1 : 0), 0);
+  return { passed, total: 3, known: checks.every((c) => c !== null) };
+}
+
+function trendLabel(args: { lastClose: number | null; ma50: number | null; ma200: number | null }) {
+  const { lastClose, ma50, ma200 } = args;
+  if (typeof lastClose === "number" && typeof ma50 === "number" && typeof ma200 === "number") {
+    if (lastClose > ma50 && ma50 > ma200) return "Uptrend";
+    if (lastClose < ma50 && ma50 < ma200) return "Downtrend";
+    return "Range / Mixed";
+  }
+  // Not determinable. "Range / Mixed" is a real market state and must not be
+  // asserted for a stock whose trend cannot be computed yet.
+  return null;
+}
+
+function formatValuationMultiple(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (value < 0) return "N/A";
+  if (value >= 100) return `${Math.round(value)}×`;
+  if (value >= 10) return `${value.toFixed(1)}×`;
+  return `${value.toFixed(2)}×`;
+}
+
+// -- Analyst rating helpers ---------------------------------------------
+function formatTargetPrice(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `$${value.toFixed(2)}`;
+}
+
+function consensusTone(rating: string | null): "green" | "yellow" | "red" {
+  if (!rating) return "yellow";
+  const normalized = rating.toLowerCase();
+  if (normalized.includes("strong buy") || normalized === "buy") return "green";
+  if (normalized.includes("sell")) return "red";
+  return "yellow";
+}
+
+function computeUpsidePct(target: number | null | undefined, price: number | null | undefined) {
+  if (typeof target !== "number" || typeof price !== "number" || !Number.isFinite(target) || !Number.isFinite(price) || price === 0) return null;
+  return ((target - price) / price) * 100;
+}
+
+function toneColor(tone: "green" | "yellow" | "red") {
+  if (tone === "green") return "#22c55e";
+  if (tone === "yellow") return "#eab308";
+  return "#ef4444";
+}
+
+function toneSoftBackground(tone: "green" | "yellow" | "red") {
+  if (tone === "green") return "rgba(34,197,94,0.06)";
+  if (tone === "yellow") return "rgba(250,204,21,0.06)";
+  return "rgba(239,68,68,0.06)";
+}
+
+function toneBorder(tone: "green" | "yellow" | "red") {
+  if (tone === "green") return "1px solid rgba(34,197,94,0.20)";
+  if (tone === "yellow") return "1px solid rgba(250,204,21,0.20)";
+  return "1px solid rgba(239,68,68,0.20)";
+}
+
+function metricToneFromPct(value: number | null): "green" | "yellow" | "red" {
+  if (typeof value !== "number") return "yellow";
+  if (value >= 0) return "green";
+  return "red";
+}
+
+function rsiTone(value: number | null): "green" | "yellow" | "red" {
+  if (typeof value !== "number") return "yellow";
+  if (value >= 70 || value <= 30) return "red";
+  if (value >= 55) return "green";
+  return "yellow";
+}
+
+function pctFromBase(last: number | null, base: number | null) {
+  if (typeof last !== "number" || typeof base !== "number" || !Number.isFinite(last) || !Number.isFinite(base) || base === 0) return null;
+  return ((last - base) / base) * 100;
+}
+
+// -- Quote-snapshot helpers (day range, volume vs average, change) ----------
+function formatRange(low: number | null | undefined, high: number | null | undefined) {
+  if (typeof low !== "number" || typeof high !== "number" || !Number.isFinite(low) || !Number.isFinite(high)) return "—";
+  return `$${low.toFixed(2)}–$${high.toFixed(2)}`;
+}
+
+function formatCompactNumber(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return `${Math.round(value)}`;
+}
+
+function volumeTone(volume: number | null | undefined, avgVolume: number | null | undefined): "green" | "yellow" | "red" {
+  if (typeof volume !== "number" || typeof avgVolume !== "number" || avgVolume <= 0) return "yellow";
+  const ratio = volume / avgVolume;
+  if (ratio >= 1.5) return "green";
+  if (ratio <= 0.5) return "red";
+  return "yellow";
+}
+
+function formatChangeLabel(change: number | null | undefined, changePercent: number | null | undefined) {
+  if (typeof change !== "number" || typeof changePercent !== "number" || !Number.isFinite(change) || !Number.isFinite(changePercent)) return null;
+  const sign = change >= 0 ? "+" : "";
+  return `${sign}${change.toFixed(2)} (${sign}${changePercent.toFixed(2)}%)`;
+}
+
+// changeTone retired 2026-10-04 (#563 COWORK #99 §4): the change's colour now
+// comes with its arrow, from lib/headerStrip.ts changeDirection.
+
+type MacroSupportResult = {
+  lower: number; upper: number; level: number; distancePct: number; touches: number; volumeRatio: number | null;
+};
+
+type MacdResult = {
+  macd: number; signal: number; histogram: number; label: "Bullish" | "Bearish" | "Mixed"; tone: "green" | "yellow" | "red"; meta: string;
+};
+
+function avg(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function aggregateWeekly(points: Point[]): Point[] {
+  const buckets = new Map<string, Point>();
+  for (const point of points) {
+    const date = new Date(`${point.date}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) continue;
+    const day = date.getUTCDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    date.setUTCDate(date.getUTCDate() + mondayOffset);
+    const key = date.toISOString().slice(0, 10);
+    const existing = buckets.get(key);
+    const high = typeof point.high === "number" && Number.isFinite(point.high) ? point.high : point.close;
+    const low = typeof point.low === "number" && Number.isFinite(point.low) ? point.low : point.close;
+    const volume = typeof point.volume === "number" && Number.isFinite(point.volume) ? point.volume : 0;
+    if (!existing) { buckets.set(key, { date: key, close: point.close, high, low, volume }); }
+    else { buckets.set(key, { date: key, close: point.close, high: Math.max(existing.high ?? existing.close, high), low: Math.min(existing.low ?? existing.close, low), volume: (existing.volume ?? 0) + volume }); }
+  }
+  return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function computeMacroSupport(points: Point[], lastClose: number | null): MacroSupportResult | null {
+  if (typeof lastClose !== "number" || !Number.isFinite(lastClose) || lastClose <= 0) return null;
+  const weekly = aggregateWeekly(points).slice(-156);
+  if (weekly.length < 35) return null;
+  type Pivot = { idx: number; price: number };
+  const pivots: Pivot[] = [];
+  const leftRight = 2;
+  for (let i = leftRight; i < weekly.length - leftRight; i++) {
+    const point = weekly[i];
+    const low = typeof point.low === "number" ? point.low : point.close;
+    if (!Number.isFinite(low)) continue;
+    let isSwingLow = true;
+    for (let offset = 1; offset <= leftRight; offset++) {
+      const leftLow = weekly[i - offset].low ?? weekly[i - offset].close;
+      const rightLow = weekly[i + offset].low ?? weekly[i + offset].close;
+      if (low > leftLow || low > rightLow) { isSwingLow = false; break; }
+    }
+    if (isSwingLow && low > 0) pivots.push({ idx: i, price: low });
+  }
+  if (pivots.length < 2) return null;
+  const maxZonePct = 5.5;
+  const candidates: Array<MacroSupportResult & { score: number }> = [];
+  for (const pivot of pivots) {
+    const members = pivots.filter((candidate) => {
+      const mid = (candidate.price + pivot.price) / 2;
+      if (mid <= 0) return false;
+      return Math.abs(((candidate.price - pivot.price) / mid) * 100) <= maxZonePct;
+    });
+    if (members.length < 2) continue;
+    const prices = members.map((member) => member.price);
+    const lower = Math.min(...prices), upper = Math.max(...prices), level = avg(prices);
+    const zoneWidthPct = level > 0 ? ((upper - lower) / level) * 100 : 999;
+    if (zoneWidthPct > maxZonePct) continue;
+    const firstIdx = Math.min(...members.map((member) => member.idx));
+    const lastIdx = Math.max(...members.map((member) => member.idx));
+    const spanWeeks = lastIdx - firstIdx;
+    if (spanWeeks < 8) continue;
+    const distancePct = lastClose >= upper ? ((lastClose - upper) / lastClose) * 100 : 0;
+    if (lastClose < lower * 0.97) continue;
+    if (distancePct > 35) continue;
+    const normalVolume = avg(weekly.slice(-52).map((week) => week.volume ?? 0).filter((volume) => volume > 0));
+    const zoneVolumes = weekly.filter((week) => { const l = week.low ?? week.close; const h = week.high ?? week.close; return h >= lower && l <= upper; }).map((week) => week.volume ?? 0).filter((volume) => volume > 0);
+    const volumeRatio = normalVolume > 0 && zoneVolumes.length ? avg(zoneVolumes) / normalVolume : null;
+    const touchScore = Math.min(members.length / 5, 1) * 36;
+    const proximityScore = Math.max(0, 1 - distancePct / 35) * 28;
+    const spanScore = Math.min(spanWeeks / 80, 1) * 16;
+    const tightnessScore = Math.max(0, 1 - zoneWidthPct / maxZonePct) * 12;
+    const volumeScore = typeof volumeRatio === "number" ? Math.min(volumeRatio / 1.6, 1) * 8 : 2;
+    candidates.push({ lower, upper, level, distancePct, touches: members.length, volumeRatio, score: touchScore + proximityScore + spanScore + tightnessScore + volumeScore });
+  }
+  return candidates.sort((a, b) => b.score - a.score || a.distancePct - b.distancePct)[0] ?? null;
+}
+
+function ema(values: number[], period: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (values.length < period) return out;
+  const multiplier = 2 / (period + 1);
+  let current = avg(values.slice(0, period));
+  out[period - 1] = current;
+  for (let i = period; i < values.length; i++) { current = (values[i] - current) * multiplier + current; out[i] = current; }
+  return out;
+}
+
+function buildMacd(values: number[]): MacdResult | null {
+  if (values.length < 35) return null;
+  const ema12 = ema(values, 12), ema26 = ema(values, 26);
+  const macdLine = values.map((_, index) => { const fast = ema12[index]; const slow = ema26[index]; return typeof fast === "number" && typeof slow === "number" ? fast - slow : null; });
+  const firstMacdIndex = macdLine.findIndex((value) => typeof value === "number");
+  if (firstMacdIndex < 0) return null;
+  const macdValues = macdLine.slice(firstMacdIndex).filter((value): value is number => typeof value === "number");
+  const signalValues = ema(macdValues, 9);
+  const lastSignal = lastNum(signalValues), lastMacd = macdValues.length ? macdValues[macdValues.length - 1] : null;
+  if (typeof lastMacd !== "number" || typeof lastSignal !== "number") return null;
+  const histogram = lastMacd - lastSignal;
+  const quietThreshold = Math.max(values[values.length - 1] * 0.001, 0.03);
+  if (Math.abs(histogram) <= quietThreshold) return { macd: lastMacd, signal: lastSignal, histogram, label: "Mixed", tone: "yellow", meta: "MACD near signal line" };
+  if (histogram > 0) return { macd: lastMacd, signal: lastSignal, histogram, label: "Bullish", tone: "green", meta: "Momentum above signal" };
+  return { macd: lastMacd, signal: lastSignal, histogram, label: "Bearish", tone: "red", meta: "Momentum below signal" };
+}
+
+function supportTone(distancePct: number | null): "green" | "yellow" | "red" {
+  if (typeof distancePct !== "number") return "yellow";
+  if (distancePct <= 8) return "green";
+  if (distancePct <= 18) return "yellow";
+  return "red";
+}
+
+function supportQualityTone(support: MacroSupportResult | null): "green" | "yellow" | "red" {
+  if (!support) return "yellow";
+  const volumeRatio = support.volumeRatio ?? 1;
+  if (support.touches >= 4 && volumeRatio >= 1.1) return "green";
+  if (support.touches >= 2) return "yellow";
+  return "red";
+}
+
+function buildLongSummary(args: { symbol: string; companyName: string; quote: Quote | null; lastClose: number | null; ma50: number | null; ma200: number | null; trend: string | null; trendScore: { passed: number; total: number; known: boolean }; rsi: number | null }) {
+  const { symbol, companyName, quote, lastClose, ma50, ma200, trend, trendScore, rsi } = args;
+  const companyLead = companyName ? `${companyName} (${symbol})` : symbol;
+  // NO PRICE IS SAID AS SUCH. It used to read "The latest available price is an
+  // unavailable latest price" (BRK.B, COWORK #2 item 5, 2026-09-23); a symbol
+  // with no quote now gets a plain statement instead of a price-shaped phrase.
+  const priceLead = typeof quote?.price === "number"
+    ? `The latest available price is $${quote.price.toFixed(2)}`
+    : "No current price is available";
+  const ma50Pct = pctFromBase(lastClose, ma50), ma200Pct = pctFromBase(lastClose, ma200);
+  // trend === null means the trend is not computable yet (under ~200 bars), NOT
+  // that it is mixed. Say so rather than describing the stock as uncertain.
+  let trendLead = trend === null
+    ? `${companyLead} has not traded long enough to establish a trend on these measures.`
+    : `${companyLead} currently looks mixed rather than cleanly directional.`;
+  if (trend === "Uptrend") {
+    if (trendScore.passed === trendScore.total) trendLead = `${companyLead} is still trading in a constructive trend overall.`;
+    else if (trendScore.passed >= 2) trendLead = `${companyLead} still shows some constructive trend features, even if the setup is not perfect.`;
+    else trendLead = `${companyLead} is holding some bullish traits, but the chart no longer looks especially clean.`;
+  } else if (trend === "Downtrend") {
+    if (trendScore.passed <= 1) trendLead = `${companyLead} currently looks weaker on the chart and is not showing much trend strength.`;
+    else trendLead = `${companyLead} is leaning weaker overall, although not every signal is fully bearish.`;
+  } else if (trend !== null) {
+    if (trendScore.passed >= 2) trendLead = `${companyLead} looks more range-bound than strongly trending, but there are still a few supportive signs on the chart.`;
+    else trendLead = `${companyLead} currently looks more uncertain than directional, with a fairly mixed technical picture.`;
+  }
+  let movingAverageText = "";
+  if (typeof ma50Pct === "number" && typeof ma200Pct === "number") {
+    movingAverageText = ` Price is ${ma50Pct >= 0 ? "trading above" : "trading below"} the 50-day moving average by ${Math.abs(ma50Pct).toFixed(1)}% and ${ma200Pct >= 0 ? "above" : "below"} the 200-day moving average by ${Math.abs(ma200Pct).toFixed(1)}%.`;
+  } else if (typeof ma50Pct === "number") {
+    movingAverageText = ` Price is ${ma50Pct >= 0 ? "trading above" : "trading below"} the 50-day moving average by ${Math.abs(ma50Pct).toFixed(1)}%.`;
+  } else if (typeof ma200Pct === "number") {
+    movingAverageText = ` Price is ${ma200Pct >= 0 ? "trading above" : "trading below"} the 200-day moving average by ${Math.abs(ma200Pct).toFixed(1)}%.`;
+  }
+  // "0 of 3 core trend checks are currently passing" reads as three failed
+  // checks. When !known the checks did not run at all, so the clause is dropped
+  // rather than reported as a score.
+  const checksSentence = trendScore.known
+    ? ` ${priceLead}, and ${trendScore.passed} of ${trendScore.total} core trend checks are currently passing.`
+    : ` ${priceLead}, and there is not yet enough price history to run the core trend checks.`;
+  const trendParagraph = `${trendLead}${checksSentence}` + movingAverageText;
+  let momentumParagraph = `${symbol} currently looks fairly balanced from a momentum perspective.`;
+  if (typeof rsi === "number") {
+    if (rsi >= 75) momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which points to very strong short-term momentum but also a fairly extended setup. Stocks can stay strong for longer than expected, but this kind of reading often tells beginners not to confuse strength with low-risk entry timing.`;
+    else if (rsi >= 70) momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which suggests stronger momentum and a more stretched short-term backdrop. Trend traders may still find that attractive, while more patient traders may prefer to wait and see whether the stock cools off first.`;
+    else if (rsi <= 25) momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which places it in a deeply oversold zone. That can sometimes lead to bounce-watch setups, but it can also reflect genuine weakness, so the chart still needs proper confirmation rather than hope alone.`;
+    else if (rsi <= 30) momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which suggests weaker momentum and a more oversold condition. Some traders may review this kind of setup for a rebound or buy-the-dip idea, but oversold readings by themselves do not guarantee a reversal.`;
+    else if (rsi >= 55) momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which leans mildly positive without looking too stretched. In other words, momentum is supportive, but not yet extreme enough to dominate the entire chart read.`;
+    else if (rsi <= 45) momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which leans a little softer than neutral. That does not automatically make the chart bearish, but it does suggest momentum is not especially strong right now.`;
+    else momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which sits in a neutral range. That usually means momentum is not especially stretched in either direction, so traders may need to rely more on chart structure than on oscillator extremes alone.`;
+  }
+  let structureParagraph = `This page is designed to help you quickly understand what the ${symbol} chart looks like before opening the full dashboard. The aim is not to tell you what to buy or sell, but to make it easier to judge whether the stock is trending cleanly, becoming stretched, or simply moving in a more awkward range.`;
+  if (trend === "Uptrend") structureParagraph = `For traders reviewing ${symbol} next, the key question is whether the trend still looks healthy or whether price has started to outrun itself. A strong uptrend can stay strong, but entries often become more difficult when price is already extended, so many traders will watch for pullbacks, support reactions, or fresh bases rather than chasing strength blindly.`;
+  else if (trend === "Downtrend") structureParagraph = `For traders reviewing ${symbol} next, the main question is whether weakness is starting to stabilise or whether the chart still looks vulnerable to further downside. Some traders may watch for bounce attempts, but others will want to see stronger proof that the trend is improving before treating the stock as a cleaner setup.`;
+  else if (typeof rsi === "number" && rsi <= 30) structureParagraph = `Because ${symbol} is showing a more oversold-style momentum reading inside a mixed structure, the next step is usually to watch how price behaves rather than assuming a rebound is guaranteed. Traders often want to see a stabilisation phase, a stronger reclaim, or some sign that selling pressure is starting to fade.`;
+  else if (typeof rsi === "number" && rsi >= 70) structureParagraph = `Because ${symbol} is showing stronger momentum inside a more extended backdrop, the next step is often about timing rather than direction. A stock can keep pushing higher, but many traders will still watch for whether the move stays orderly or starts to look too stretched to offer a comfortable entry.`;
+  return { trendParagraph, momentumParagraph, structureParagraph };
+}
+
+// Short one-sentence lede shown right under the H1/company name — gives crawlers
+// and readers a real summary of the page above the fold instead of a bare ticker.
+function buildHeroLede(args: {
+  symbol: string;
+  companyName: string;
+  trend: "Uptrend" | "Downtrend" | "Range / Mixed" | null;
+  trendScore: { passed: number; total: number; known: boolean };
+  rsi: number | null;
+  lastClose: number | null;
+  ma50: number | null;
+  ma200: number | null;
+}): string {
+  const { symbol, companyName, trend, trendScore, rsi, lastClose, ma50, ma200 } = args;
+  const lead = companyName ? `${companyName} (${symbol})` : symbol;
+  // trend === null must not fall through to the last arm of a ternary chain. It
+  // is handled ahead of the trend sentence entirely, below.
+  const trendText = trend === "Range / Mixed" ? "a range/mixed trend" : trend === "Uptrend" ? "an uptrend" : "a downtrend";
+
+  let maPhrase = "";
+  if (typeof lastClose === "number" && typeof ma50 === "number" && typeof ma200 === "number") {
+    const aboveMa50 = lastClose > ma50, aboveMa200 = lastClose > ma200;
+    if (aboveMa50 && aboveMa200) maPhrase = ", trading above both the 50-day and 200-day moving averages";
+    else if (!aboveMa50 && !aboveMa200) maPhrase = ", trading below both the 50-day and 200-day moving averages";
+    else if (aboveMa200) maPhrase = ", above the 200-day MA but below the 50-day MA";
+    else maPhrase = ", above the 50-day MA but below the 200-day MA";
+  }
+
+  const checksPhrase = trendScore.known ? `${trendScore.passed}/${trendScore.total} trend checks passing` : "";
+  const rsiPhrase = typeof rsi === "number"
+    ? ` RSI is at ${rsi.toFixed(1)}${rsi >= 70 ? " (overbought)" : rsi <= 30 ? " (oversold)" : ""}${checksPhrase ? `, with ${checksPhrase}` : ""}.`
+    : checksPhrase ? ` ${checksPhrase[0].toUpperCase()}${checksPhrase.slice(1)} currently.` : "";
+
+  // When the trend is not computable, say that instead of naming a trend. This
+  // is the same input condition as maPhrase being empty (all three of lastClose,
+  // ma50 and ma200 are needed for either), so no MA clause is lost here.
+  if (trend === null) return `${lead} has not traded long enough to establish a trend on these measures.${rsiPhrase}`;
+
+  return `${lead} is currently in ${trendText}${maPhrase}.${rsiPhrase}`;
+}
+
+// Visual price-target chart: current price plotted on the left, Low/Avg/High
+// analyst targets plotted on the right at their relative price height, with
+// a connecting line from price to each target colour-coded by whether that
+// target implies upside (green), downside (red), or is roughly flat (yellow).
+function declutterLabelYs(
+  items: Array<{ key: string; y: number }>,
+  minGap: number,
+  lowBound: number,
+  highBound: number
+): Map<string, number> {
+  const sorted = items.map((item) => ({ ...item })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].y - sorted[i - 1].y < minGap) {
+      sorted[i].y = sorted[i - 1].y + minGap;
+    }
+  }
+  const overflow = sorted.length ? sorted[sorted.length - 1].y - highBound : 0;
+  if (overflow > 0) {
+    for (let i = 0; i < sorted.length; i++) sorted[i].y -= overflow;
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].y - sorted[i - 1].y < minGap) sorted[i].y = sorted[i - 1].y + minGap;
+    }
+  }
+  if (sorted.length && sorted[0].y < lowBound) {
+    const shiftUp = lowBound - sorted[0].y;
+    for (let i = 0; i < sorted.length; i++) sorted[i].y += shiftUp;
+  }
+  const map = new Map<string, number>();
+  sorted.forEach((item) => map.set(item.key, item.y));
+  return map;
+}
+
+function AnalystTargetChart({
+  price,
+  low,
+  avg: avgTarget,
+  high,
+}: {
+  price: number | null;
+  low: number | null;
+  avg: number | null;
+  high: number | null;
+}) {
+  if (typeof price !== "number" || !Number.isFinite(price) || typeof low !== "number" || typeof high !== "number") return null;
+
+  // `price` is narrowed to `number` here, but that narrowing does not persist
+  // inside the nested `function` declarations below (yFor/targetTone) since
+  // TS can't guarantee the closure runs before any reassignment. Assigning
+  // to a new const gives it a fresh, non-nullable inferred type that nested
+  // functions can safely reference.
+  const priceValue: number = price;
+
+  const width = 640;
+  const height = 200;
+  const padTop = 26;
+  const padBottom = 26;
+  const leftX = 64;
+  const rightX = width - 172;
+
+  const values = [priceValue, low, high, ...(typeof avgTarget === "number" ? [avgTarget] : [])];
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const span = rawMax - rawMin || Math.max(priceValue * 0.05, 1);
+  const min = rawMin - span * 0.18;
+  const max = rawMax + span * 0.18;
+  const usableHeight = height - padTop - padBottom;
+
+  function yFor(value: number) {
+    const clamped = Math.max(min, Math.min(max, value));
+    return height - padBottom - ((clamped - min) / (max - min || 1)) * usableHeight;
+  }
+
+  function targetTone(value: number): "green" | "yellow" | "red" {
+    const diffPct = ((value - priceValue) / priceValue) * 100;
+    if (diffPct > 1.5) return "green";
+    if (diffPct < -1.5) return "red";
+    return "yellow";
+  }
+
+  const targets: Array<{ key: string; label: string; value: number }> = [
+    { key: "high", label: "HIGH", value: high },
+    ...(typeof avgTarget === "number" ? [{ key: "avg", label: "AVG", value: avgTarget }] : []),
+    { key: "low", label: "LOW", value: low },
+  ];
+
+  const priceY = yFor(priceValue);
+
+  // Dots plot at the mathematically true y for each target's price. When two
+  // or three targets are close in price (common — analyst high/avg/low
+  // targets often cluster), their true y positions land close together too,
+  // and the 3-line text block next to each dot (label / value / % diff,
+  // ~42px tall) would visually overlap. This pass keeps the dots and the
+  // NOW-to-target connecting lines at the true positions, but pushes the
+  // LABEL text blocks apart to a minimum 46px gap so they never blend
+  // together, adding a short dashed leader line back to the dot whenever a
+  // label ends up meaningfully offset from its true position.
+  const labelMinGap = 46;
+  const labelLowBound = padTop + 8;
+  const labelHighBound = height - padBottom - 8;
+  const trueYs = targets.map((t) => ({ key: t.key, y: yFor(t.value) }));
+  const labelYs = declutterLabelYs(trueYs, labelMinGap, labelLowBound, labelHighBound);
+
+  return (
+    <div style={{ width: "100%", overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} style={{ display: "block", minWidth: 420, overflow: "visible" }}>
+        {targets.map((t) => {
+          const tone = targetTone(t.value);
+          const trueY = yFor(t.value);
+          return (
+            <line key={`line-${t.key}`} x1={leftX} y1={priceY} x2={rightX} y2={trueY} stroke={toneColor(tone)} strokeWidth={1.75} strokeOpacity={0.55} />
+          );
+        })}
+
+        {/* Current price marker */}
+        <circle cx={leftX} cy={priceY} r={6} fill="#f8fafc" stroke="#06080d" strokeWidth={2} />
+        <text x={leftX} y={priceY - 16} textAnchor="middle" fontSize="0.75rem" fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">NOW</text>
+        <text x={leftX} y={priceY + 24} textAnchor="middle" fontSize="0.8125rem" fontWeight={800} fill="#f8fafc">{`$${priceValue.toFixed(2)}`}</text>
+
+        {/* Target markers + decluttered labels */}
+        {targets.map((t) => {
+          const tone = targetTone(t.value);
+          const trueY = yFor(t.value);
+          const labelY = labelYs.get(t.key) ?? trueY;
+          const isOffset = Math.abs(labelY - trueY) > 3;
+          const diffPct = ((t.value - priceValue) / priceValue) * 100;
+          return (
+            <g key={`target-${t.key}`}>
+              <circle cx={rightX} cy={trueY} r={5} fill={toneColor(tone)} />
+              {isOffset ? (
+                <line
+                  x1={rightX + 3}
+                  y1={trueY}
+                  x2={rightX + 10}
+                  y2={labelY}
+                  stroke={toneColor(tone)}
+                  strokeWidth={1}
+                  strokeDasharray="2,2"
+                  strokeOpacity={0.5}
+                />
+              ) : null}
+              <text x={rightX + 14} y={labelY - 3} fontSize="0.75rem" fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">{t.label}</text>
+              <text x={rightX + 14} y={labelY + 13} fontSize="0.875rem" fontWeight={800} fill={toneColor(tone)}>{`$${t.value.toFixed(2)}`}</text>
+              <text x={rightX + 14} y={labelY + 26} fontSize="0.75rem" fill="rgba(226,232,240,0.45)">{`${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%`}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+const sectionLabelStyle: React.CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
+const sectionHeadingStyle: React.CSSProperties = { margin: 0, fontSize: "1.625rem", lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
+const miniLabelStyle: React.CSSProperties = { fontSize: "var(--fs-label)", opacity: 0.60, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" };
+
+function sideCardStyle(): React.CSSProperties {
+  return { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, overflow: "hidden", background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
+}
+function sideCardHeaderStyle(): React.CSSProperties {
+  return { padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" };
+}
+function sideCardBodyStyle(): React.CSSProperties {
+  return { padding: "14px 14px" };
+}
+
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, performance, strength, renderedAt }: StockSymbolPageClientProps) {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
+  // THE STRENGTH BADGE (#563 COWORK #105): two copies, one shown (left of Share; under the ticker on a phone).
+  const strengthTop = useStrengthNote();
+  const strengthUnder = useStrengthNote();
+  const strengthTopRow = useRef<HTMLDivElement | null>(null);
+  const strengthUnderRow = useRef<HTMLDivElement | null>(null);
+  const strengthCredit = historyProvider === "tiingo" ? historyCredit : undefined;
+  const seededHistory = (initialHistory?.length ?? 0) > 0;
+  // Whose bars the chart is showing: the seed's provider, or what the client
+  // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
+  const [shownProvider, setShownProvider] = useState<string | null>(seededHistory ? historyProvider ?? null : null);
+  const [quote, setQuote] = useState<Quote | null>(
+    initialQuote?.price != null || seed?.price != null
+      ? {
+          symbol,
+          price: initialQuote?.price ?? seed?.price ?? null,
+          date: initialQuote?.date ?? seed?.priceDate ?? null,
+          time: null,
+          source: "ssr",
+          open: initialQuote?.open ?? null,
+          previousClose: initialQuote?.previousClose ?? null,
+          change: initialQuote?.change ?? null,
+          changePercentage: initialQuote?.changePercentage ?? null,
+          dayLow: initialQuote?.dayLow ?? null,
+          dayHigh: initialQuote?.dayHigh ?? null,
+          yearLow: initialQuote?.yearLow ?? null,
+          yearHigh: initialQuote?.yearHigh ?? null,
+          volume: initialQuote?.volume ?? null,
+          avgVolume: initialQuote?.avgVolume ?? null,
+          priceLabel: initialQuote?.priceLabel ?? null,
+          volumeLabel: initialQuote?.volumeLabel ?? null,
+        }
+      : null
+  );
+  const [history, setHistory] = useState<Point[]>(initialHistory ?? []);
+  // Was seeded from `seed` alone and then overwritten by a third
+  // /api/symbols call in the load effect below, purely to look up a name the
+  // server already had. Worse than redundant: when that lookup found no exact
+  // match it set "" and wiped a correct server-rendered company name.
+  // `profile` (the FMP company profile, server-fetched) is the better source
+  // and `seed` stays as the fallback.
+  const [companyName] = useState(
+    profile?.companyName ?? seed?.companyName ?? ""
+  );
+  // When we have server-seeded history, the layout renders immediately (no gate);
+  // the effect below still refreshes data in the background.
+  const [priceLoading, setPriceLoading] = useState(!seededHistory);
+  const [err, setErr] = useState<string | null>(null);
+  // SERVER-RESOLVED since 2026-09-22 — no loading state, it is in the HTML.
+  const valuation = serverValuation;
+  const valuationLoading = false;
+  const [analystRating, setAnalystRating] = useState<AnalystRatingData | null>(null);
+  const [analystRatingLoading, setAnalystRatingLoading] = useState(true);
+
+  // Two independent effects, deliberately not one Promise.all.
+  //
+  // They were coupled, and that coupling was the whole problem: the chart
+  // could not paint until the quote had also resolved, and neither could be
+  // skipped without skipping both. Splitting them lets the history fetch
+  // disappear entirely on a seeded render while the quote still refreshes.
+
+  // -- History -------------------------------------------------------------
+  // Skipped outright when the server seeded it. Previously `seededHistory`
+  // only suppressed the SPINNER, so a cache=HIT page shipped a complete,
+  // correct history in its HTML and then immediately re-fetched it over the
+  // network and threw the seeded copy away.
+  //
+  // The seed is sized for this: the chart renders history.slice(-240) and
+  // ma200 needs 200 prior bars to be defined across that window, so 440 is
+  // the real floor. page.tsx now seeds 500 (was 300, which left MA200
+  // undefined over roughly half the visible chart and is why the client
+  // asked for 900 in the first place).
+  //
+  // Staleness: the page is ISR-cached for 900s, so a seeded daily history can
+  // be up to 15 minutes behind on its most recent bar. That is acceptable for
+  // daily candles -- the last bar is a running close that moves continuously
+  // anyway, and the next revalidation picks it up. It would NOT be acceptable
+  // for the quote, which is why the quote is handled separately below.
+  useEffect(() => {
+    if (seededHistory) return;
+
+    let cancelled = false;
+    async function loadHistory() {
+      setErr(null);
+      setPriceLoading(true);
+      try {
+        // No cache:"no-store". /api/history already declares revalidate = 900
+        // and returns its own tiered s-maxage; a no-store request header opted
+        // the browser and the CDN out of both.
+        // The page token lets a browser that sends no Sec-Fetch-Site through
+        // /api/history's same-origin check on the Tiingo path (#553 COWORK #103).
+        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined);
+        if (!res.ok) throw new Error("History fetch failed");
+        const data = (await res.json()) as { symbol: string; points: any[]; provider?: string };
+        if (cancelled) return;
+        setShownProvider(typeof data.provider === "string" ? data.provider : null);
+        const ptsRaw = Array.isArray(data.points) ? data.points : [];
+        const pts: Point[] = ptsRaw.map((p: any) => ({ date: String(p?.date ?? ""), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume), label: typeof p?.label === "string" ? p.label : undefined })).filter((p) => p.date && Number.isFinite(p.close));
+        setHistory(pts);
+      } catch {
+        if (cancelled) return;
+        setErr("Failed to load stock page."); setHistory([]); setShownProvider(null);
+      }
+      finally { if (!cancelled) setPriceLoading(false); }
+    }
+    loadHistory();
+    return () => { cancelled = true; };
+  }, [symbol, seededHistory, pageToken]);
+
+  // -- Quote ---------------------------------------------------------------
+  // Still fetched on every load, and deliberately so. `initialQuote` seeds the
+  // header stats so they paint immediately from the server, but the HTML is
+  // ISR-cached for 900s, so during market hours that seeded price can be a
+  // quarter of an hour old -- and a stale price presented as current is a
+  // correctness problem on a stock page, not a performance trade-off.
+  //
+  // What changed is that it no longer blocks anything: it does not gate the
+  // chart, it does not set priceLoading, and a failure leaves the seeded quote
+  // in place rather than clearing the page. It is a background correction to
+  // already-painted content, not part of the first-paint path.
+  //
+  // (It also keeps the stock page contributing to the QUOTE_TOKEN pilot, which
+  // is log-only today -- see lib/server/quoteToken.ts. Dropping the call
+  // entirely would silence that sample as a side effect, which is not a
+  // decision this change should be making on its own.)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadQuote() {
+      try {
+        const res = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, {
+          cache: "no-store",
+          // Only /api/quote is token-gated in this pilot, so only this fetch
+          // carries the header. Omitted entirely when unconfigured.
+          ...(pageToken ? { headers: { "x-msh-page-token": pageToken } } : {}),
+        });
+        if (!res.ok) return;
+        const quoteData = (await res.json()) as Quote;
+        if (!cancelled) setQuote(quoteData);
+      } catch {
+        // Leave the server-seeded quote showing.
+      }
+    }
+    loadQuote();
+    return () => { cancelled = true; };
+    // pageToken is a stable server-minted prop for the life of this render,
+    // so including it satisfies exhaustive-deps without causing a refetch.
+  }, [symbol, pageToken]);
+
+  // ── RETIRED 2026-09-22: the client fetch of /api/stock-valuation ─────────
+  // That route reads FMP ratios-ttm / key-metrics-ttm / quote / income-
+  // statement. The four multiples and the hero P/E are now computed on the
+  // server from the SEC fact set and arrive as the `valuation` prop, so this
+  // effect no longer runs. Kept as a record, per the hidden-not-removed rule:
+  //
+  //   fetch(`/api/stock-valuation/${encodeURIComponent(symbol)}`) → setValuation
+
+  useEffect(() => {
+    // HIDING THE BLOCK HAS TO STOP THE FETCH, or the hide costs what it saved.
+    //
+    // The section below is guarded by isRetiredBlock("analyst-ratings") and
+    // reaches no reader, but this effect ran on every load regardless and
+    // spent an FMP call per view on data nothing draws. That is not a
+    // theoretical cost: claude/fmp-bandwidth-97pct-2026-08-30.md has the plan
+    // at 97% of its allowance, and /stock/[symbol] is the most-crawled route
+    // on the site.
+    //
+    // ONE FLAG DECIDES BOTH. Reading the registry here rather than hardcoding
+    // `false` is what keeps them in step — un-register the block to bring it
+    // back and the data it needs comes back with it, in the same edit.
+    if (isRetiredBlock("analyst-ratings")) {
+      // NOT the loading state. `analystRatingLoading` left true would render
+      // every figure in the block as an em dash if it were ever un-hidden
+      // without this being revisited; false with a null payload is the state
+      // the block already knows how to draw ("unavailable right now").
+      setAnalystRatingLoading(false);
+      setAnalystRating(null);
+      return;
+    }
+    // UNREACHABLE WHILE RETIRED: the route below was deleted 2026-09-23 (#552
+    // COWORK #1). Un-retiring the block needs a new source first; until then
+    // this fetch would 404 and draw the block's "unavailable" state.
+    let cancelled = false;
+    async function loadAnalystRating() {
+      setAnalystRatingLoading(true);
+      // Same as valuation above; the route's header is 12h, matching its own
+      // FMP revalidate.
+      try { const res = await fetch(`/api/stock-analyst-rating/${encodeURIComponent(symbol)}`); if (!res.ok) throw new Error("Analyst rating fetch failed"); const data = (await res.json()) as AnalystRatingData; if (!cancelled) setAnalystRating(data); }
+      catch { if (!cancelled) setAnalystRating(null); }
+      finally { if (!cancelled) setAnalystRatingLoading(false); }
+    }
+    loadAnalystRating();
+    return () => { cancelled = true; };
+  }, [symbol]);
+
+  const closes = useMemo(() => history.map((p) => p.close), [history]);
+  const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
+  const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
+  const rsi14 = useMemo(() => rsiWilder(closes, 14), [closes]);
+  const lastClose = history.length ? history[history.length - 1].close : null;
+  const lastMA50 = lastNum(ma50), lastMA200 = lastNum(ma200), lastRsi = lastNum(rsi14);
+  const trendScore = useMemo(() => buildTrendScore({ lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null }), [lastClose, lastMA50, lastMA200]);
+  const trend = useMemo(() => trendLabel({ lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null }), [lastClose, lastMA50, lastMA200]);
+  // null tone = inherit the default text colour. Forcing green/yellow/red would
+  // only pick which false reading to show, and red for an uncomputable trend is
+  // the bug this fixes.
+  const trendTone: "green" | "yellow" | "red" | null = !trendScore.known
+    ? null
+    : trendScore.passed >= 3 ? "green" : trendScore.passed === 2 ? "yellow" : "red";
+  const longSummary = useMemo(() => buildLongSummary({ symbol, companyName, quote, lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null, trend, trendScore, rsi: typeof lastRsi === "number" ? lastRsi : null }), [symbol, companyName, quote, lastClose, lastMA50, lastMA200, trend, trendScore, lastRsi]);
+  const heroLede = useMemo(() => buildHeroLede({ symbol, companyName, trend, trendScore, rsi: typeof lastRsi === "number" ? lastRsi : null, lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null }), [symbol, companyName, trend, trendScore, lastRsi, lastClose, lastMA50, lastMA200]);
+  const ma50Pct = pctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
+  const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
+  const macroSupport = useMemo(() => computeMacroSupport(history, lastClose), [history, lastClose]);
+  const macdSignal = useMemo(() => buildMacd(closes), [closes]);
+  // THE SIGNALS COLUMN'S MACD (#563 COWORK #75/#76): the same buildMacd, over
+  // completed sessions plus today's partial bar only while it is in session, so
+  // the pill and its mini chart agree and a stale partial never counts.
+  const macdLive = useMemo(() => {
+    const l = liveBars(history as (Point & { partial?: boolean; label?: string })[], renderedAt ?? NaN);
+    return { tone: buildMacd(l.bars.map((p) => p.close))?.tone ?? null, bars: l.bars, today: l.live && l.phase ? { time: l.time, phase: l.phase } : null };
+  }, [history, renderedAt]);
+  // The Price Action card's three series, from the bars the page already holds,
+  // labelled by the END of each period (lib/closeReturns.ts, #553 COWORK #115):
+  // 20 daily, 12 weekly, 12 complete months (+ the month in progress, kept apart).
+  const dailyReturns = useMemo(() => dailyReturnBars(history, 20), [history]);
+  const weeklyReturns = useMemo(() => weeklyReturnBars(history, 12), [history]);
+  const monthlyReturns = useMemo(() => monthlyReturnBars(history, 12), [history]);
+
+  // Shared "Learn the indicators" links. Rendered inside the company-profile
+  // right-hand column (under the stat cards) when a profile exists, and as a
+  // standalone section otherwise.
+  const learnRows = (
+    <div className="learn-grid">
+      <Link href="/learn/moving-averages" style={learnRowStyle}><span style={learnDotStyle("blue")} /><div><div style={{ fontWeight: 700, fontSize: "0.875rem" }}>Moving Averages</div><div style={{ fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6, marginTop: 2 }}>How traders use MA50 and MA200 to judge medium and long-term structure.</div></div></Link>
+      <Link href="/learn/rsi" style={learnRowStyle}><span style={learnDotStyle("green")} /><div><div style={{ fontWeight: 700, fontSize: "0.875rem" }}>RSI Guide</div><div style={{ fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6, marginTop: 2 }}>How RSI highlights momentum, overbought and oversold conditions.</div></div></Link>
+      <Link href="/learn/macd" style={learnRowStyle}><span style={learnDotStyle("red")} /><div><div style={{ fontWeight: 700, fontSize: "0.875rem" }}>MACD Guide</div><div style={{ fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6, marginTop: 2 }}>How MACD helps read momentum strength and weakening trend behaviour.</div></div></Link>
+    </div>
+  );
+
+  // Share button strings (moved into the hero pill row so Share no longer
+  // occupies its own line above the card). Mirrors the text page.tsx used to
+  // pass to the old standalone PageShareBar.
+  const shareUrl = `https://www.mystockharbor.com/stock/${symbol}`;
+  const shareTitle = `${symbol} Stock Analysis | MyStockHarbor`;
+  const shareText =
+    lastClose != null
+      ? `${symbol} stock analysis — Price $${lastClose.toFixed(2)}${trend ? `, ${trend}` : ""} 📊 MyStockHarbor`
+      : `${symbol} stock analysis — chart, indicators & technical read 📊 MyStockHarbor`;
+
+  // Right-column presentation: a compact eyebrow-titled block that sits under
+  // the company stat cards. Spans the full row when the column collapses to a
+  // 2-up grid on mobile.
+  const learnIndicatorsAside = (
+    <div data-reading-owner="c" style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+      <div style={{ ...sectionLabelStyle, marginBottom: 8 }}>Learn the indicators</div>
+      {learnRows}
+    </div>
+  );
+
+  return (
+    <main style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 22%), radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 22%), #06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
+      <div className="stock-wrap">
+
+        {/* -- Page header -------------------------------------------- */}
+        <header style={{ paddingTop: 24, paddingBottom: 4 }}>
+          <div style={stockHeroBoxStyle}>
+          <div ref={strengthTopRow} data-strength-row style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={stockDeskTagStyle}>Stock Analysis</span>
+            <Link href="/pickers" style={{ fontSize: "var(--fs-label)", fontWeight: 600, color: "rgba(148,163,184,0.65)", textDecoration: "none" }}>← Pickers</Link>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              {strength ? <StrengthPill s={strengthTop} badge={strength} place="top" /> : null}
+              <ShareButton url={shareUrl} title={shareTitle} text={shareText} />
+            </div>
+          </div>
+          {strength ? <StrengthNote s={strengthTop} row={strengthTopRow} badge={strength} credit={strengthCredit} place="top" /> : null}
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <TickerLogo symbol={symbol} name={companyName} size={34} radius={8} />
+              <h1 style={{ margin: 0, fontSize: "2.125rem", lineHeight: 1.05, fontWeight: 800, letterSpacing: "-0.045em" }}>{symbol}</h1>
+            </div>
+            {strength ? (
+              <>
+                <div ref={strengthUnderRow} data-strength-row className="strengthUnderRow">
+                  <StrengthPill s={strengthUnder} badge={strength} place="under" />
+                </div>
+                <StrengthNote s={strengthUnder} row={strengthUnderRow} badge={strength} credit={strengthCredit} place="under" />
+                <style>{STRENGTH_CSS}</style>
+              </>
+            ) : null}
+            {companyName ? <p style={{ margin: "4px 0 0", fontSize: "1rem", opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
+            {lastClose !== null ? <p style={{ margin: "12px 0 0", fontSize: "1rem", lineHeight: 1.7, opacity: 0.82, maxWidth: 760 }}>{heroLede}</p> : null}
+          </div>
+          {!priceLoading && !err ? (
+            <div className="stock-header-stats" style={{ marginTop: 20 }}>
+              {/* THE CELLS' MINI-GRAPHICS (#563 COWORK #112): each decorative (aria-hidden), faint, behind or beside the figure, in the cell's colour; no transform. */}
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <PriceSpark closes={closes} prevClose={quote?.previousClose} />
+                <div className="stock-stat-label">Price</div>
+                <div className="stock-stat-value">{typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}</div>
+                {/* THE HEADER STRIP (#563 COWORK #99 §4): ▲/▼ beside the signed change, and spoken words for it. */}
+                <div className="stock-stat-sub" style={formatChangeLabel(quote?.change, quote?.changePercentage) ? { opacity: 1 } : undefined}>
+                  {formatChangeLabel(quote?.change, quote?.changePercentage)
+                    ? <PriceChange change={quote?.change} pct={quote?.changePercentage} label={formatChangeLabel(quote?.change, quote?.changePercentage)!} />
+                    : quote?.date ?? "—"}
+                </div>
+              </div>
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <DayCandle open={quote?.open} high={quote?.dayHigh} low={quote?.dayLow} last={quote?.price} />
+                <div className="stock-stat-label">Day range</div>
+                <DayRange low={quote?.dayLow} high={quote?.dayHigh} last={quote?.price} />
+                <div className="stock-stat-sub">52wk <span style={{ whiteSpace: "nowrap" }}>{formatRange(quote?.yearLow, quote?.yearHigh)}</span></div>
+              </div>
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <VolumeBars vols={history.map((p) => p.volume)} avg={quote?.avgVolume} colour={toneColor(volumeTone(quote?.volume, quote?.avgVolume))} />
+                <div className="stock-stat-label">Volume</div>
+                <div className="stock-stat-value" style={{ color: toneColor(volumeTone(quote?.volume, quote?.avgVolume)) }}>{formatCompactNumber(quote?.volume)}</div>
+                <div className="stock-stat-sub">{quote?.volumeLabel ? `50-day avg ${formatCompactNumber(quote?.avgVolume)} · ${quote.volumeLabel}` : `Avg ${formatCompactNumber(quote?.avgVolume)}`}</div>
+              </div>
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                {/* The chart window's closes, faint, behind the score (decorative; the number and word are the content). */}
+                <TrendSpark closes={closes.slice(-240)} colour={trendTone ? toneColor(trendTone) : "rgba(203,213,225,0.8)"} />
+                <div className="stock-stat-label">Trend score</div>
+                <div className="stock-stat-value" style={trendTone ? { color: toneColor(trendTone) } : undefined}>{trendScore.known ? `${trendScore.passed}/${trendScore.total}` : "—"}</div>
+                <div className="stock-stat-sub">{trend ?? "Not enough history yet"}</div>
+              </div>
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <RsiPane series={rsi14} colour={toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null))} />
+                <div className="stock-stat-label">RSI (14)</div>
+                <div className="stock-stat-value" style={{ color: toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null)) }}>{typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}</div>
+                <div className="stock-stat-sub">{typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought" : lastRsi <= 30 ? "Oversold" : "Neutral") : "—"}</div>
+              </div>
+              {!valuationLoading && valuation ? (
+                <div className="stock-stat-cell" style={{ position: "relative", paddingBottom: 17 }}>
+                  {/* A's numeric sector median (#781); no quartiles exist, so no band. ~4 px clear of the words above it (#563 COWORK #116). */}
+                  {valuation.peRatio != null && valuation.peSector ? <PeLine pe={valuation.peRatio} median={valuation.peSector.median} /> : null}
+                  <div className="stock-stat-label">P/E ({valuation.peBasis ?? "TTM"})</div>
+                  <div className="stock-stat-value">
+                    {valuation.peRatio != null
+                      ? formatValuationMultiple(valuation.peRatio)
+                      : <ReasonedValue text={valuation.words?.peRatio ?? "—"} reason={valuation.reasons?.peRatio} />}
+                  </div>
+                  {/* P/E VS ITS SECTOR (#552 COWORK #147 §2): the glyph and the
+                      words carry it, in the page's ordinary ink (a comparison,
+                      not a verdict); the note names the peers and the date. */}
+                  {/* A baseline row, so the glyph keeps to its first word when the words wrap (#563 COWORK #116). */}
+                  <div className="stock-stat-sub" data-pe-sector={valuation.peSector ? "" : undefined}>
+                    {valuation.peSector
+                      ? <span style={{ display: "flex", alignItems: "baseline", columnGap: "0.3em" }}><span aria-hidden="true">{valuation.peSector.glyph} </span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></span>
+                      : "See valuation ↓"}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {!priceLoading && !err ? (
+            <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              {[
+                { label: "Price above MA50", pass: lastClose !== null && lastMA50 !== null && lastClose > lastMA50 },
+                { label: "Price above MA200", pass: lastClose !== null && lastMA200 !== null && lastClose > lastMA200 },
+                { label: "MA50 above MA200", pass: lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 },
+              ].map((check) => (
+                <span key={check.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "var(--fs-label)", color: check.pass ? "#86efac" : "rgba(248,113,113,0.80)" }}>
+                  <span style={{ fontWeight: 900 }}>{check.pass ? "✓" : "✕"}</span>
+                  {check.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {!priceLoading && !err && quote?.priceLabel ? (
+            // Step 4 (#553 COWORK #56): what the header's price is, and whose.
+            <p data-fine-print style={{ margin: "12px 0 0", fontSize: "var(--fs-fine)", opacity: 0.6 }}>
+              Price: {quote.priceLabel}{tiingoCredit ? <> · {tiingoCredit}</> : null}
+            </p>
+          ) : null}
+          {/* The 1M–5Y period boxes left the header on 5 Oct 2026 (#563 COWORK #111): they are the Performance card in the left column. */}
+          </div>{/* end hero box */}
+        </header>
+
+        {priceLoading ? (
+          <div style={{ paddingTop: 40, opacity: 0.60, fontSize: "var(--fs-read)" }}>Loading chart and price data…</div>
+        ) : err ? (
+          <div style={{ paddingTop: 40, opacity: 0.70, fontSize: "var(--fs-read)" }}>{err}</div>
+        ) : (
+          <div className="stock-page-layout" style={{ paddingTop: 24 }}>
+
+            {/* ---- LEFT SIDEBAR ----------------------------------- */}
+            <aside className="stock-page-sidebar">
+
+              {/* Change stock — desktop only (hidden on mobile via CSS) */}
+              <div className="sidebar-change-stock" style={sideCardStyle()}>
+                <div style={sideCardHeaderStyle()}>
+                  <div style={{ fontSize: "var(--fs-label)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
+                  <div style={{ marginTop: 3, fontSize: "var(--fs-read)", opacity: 0.6, lineHeight: 1.5 }}>Search another ticker to view its stock analysis page.</div>
+                </div>
+                <div style={sideCardBodyStyle()}>
+                  <StockTickerJump currentSymbol={symbol} />
+                </div>
+              </div>
+
+              {/* Price zones (#563 COWORK #83/#84): C's confluence card, directly above Key levels. */}
+              <div className="sp-slot sp-confluence">
+                <ConfluenceCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} ma50={typeof lastMA50 === "number" ? lastMA50 : null} ma200={typeof lastMA200 === "number" ? lastMA200 : null} macro={macroSupport ? { lower: macroSupport.lower, upper: macroSupport.upper } : null} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              </div>
+
+              {/* Key levels (#563 COWORK #64): C's card, from the bars already held. */}
+              <div className="sp-slot sp-keylevels">
+                <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              </div>
+
+              {/* Performance vs the S&P 500 (#563 COWORK #111): C's card, the strip's own figures, under Key levels. */}
+              {performance ? (
+                <div className="sp-slot sp-performance">
+                  <PerformanceCard strip={performance} credit={historyProvider === "tiingo" ? historyCredit : undefined} />
+                </div>
+              ) : null}
+
+              {/* Earnings snapshot — sidebar */}
+              {/* A'S CARD (#563 COWORK #100): its type sizes are A's PR (#552 COWORK #153); the reading-size measure reports it, report-only. */}
+              <div className="sp-slot sp-earnings" data-reading-owner="a">
+                <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} hasFiledEarnings={hasFiledEarnings(symbol)} />
+              </div>
+
+            </aside>
+
+            {/* ---- MAIN COLUMN ------------------------------------ */}
+            <div className="stock-page-main">
+
+              {/* -- Chart section ----------------------------------- */}
+              <section className="sp-slot sp-chart" style={{ marginTop: 20 }}>
+                <div style={sectionLabelStyle}>Chart View</div>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+                  <h2 style={sectionHeadingStyle}>{symbol} with MA50 and MA200</h2>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", maxWidth: "100%" }}>
+                    <Link href={chartHref(symbol)} style={chartLinkStyle("blue")}>Dashboard</Link>
+                    <Link href={`/stock/${encodeURIComponent(symbol)}/news`} style={chartLinkStyle("red")}>News</Link>
+                    <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
+                  </div>
+                </div>
+                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} gapBars={history} />
+              </section>
+
+              {/* -- Daily / weekly returns --------------------------- */}
+              <section className="sp-slot sp-returns" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Price Action</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily, weekly or monthly close-over-close change</h2>
+                {/* ONE card, Daily | Weekly | Monthly toggle, Daily first (#552 COWORK #89, #553 COWORK #115). Every view server-rendered. */}
+                <div className="returns-charts-grid">
+                  <ReturnsToggleCard symbol={symbol} daily={dailyReturns} weekly={weeklyReturns} monthly={monthlyReturns} />
+                </div>
+              </section>
+
+              {/* -- Technical indicators ---------------------------- */}
+              <section className="sp-slot sp-signals" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Technical Indicators</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Price levels &amp; signals</h2>
+                {/* #563 COWORK #68: the same figures as pictures, handed over as computed above. */}
+                <LevelsSignals
+                  last={lastClose}
+                  ma50={typeof lastMA50 === "number" ? lastMA50 : null}
+                  ma200={typeof lastMA200 === "number" ? lastMA200 : null}
+                  zone={macroSupport}
+                  zoneMissing="No repeated weekly support zone found"
+                  ma50Missing={closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : null}
+                  ma200Missing={closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : null}
+                  rsi={typeof lastRsi === "number" ? lastRsi : null}
+                  macdTone={macdLive.tone}
+                  macdBars={macdLive.bars}
+                  macdToday={macdLive.today}
+                  asOf={history.length ? history[history.length - 1].date : null}
+                  asOfPartial={!!(history[history.length - 1] as { partial?: boolean } | undefined)?.partial}
+                  credit={shownProvider === "tiingo" ? historyCredit : undefined}
+                />
+              </section>
+
+              {/* -- Valuation multiples (SEC filings, TTM) ----------- */}
+              <section className="sp-slot sp-valuation" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Valuation</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>{symbol} valuation multiples (TTM)</h2>
+                <div className="valuationGrid">
+                  {([
+                    { key: "peRatio", label: valuation?.peBasis ? `P/E Ratio (${valuation.peBasis})` : "P/E Ratio", value: valuation?.peRatio, reason: valuation?.reasons?.peRatio ?? (valuation?.peRatio != null ? valuation?.peBasisNote : null) },
+                    { key: "priceToSalesRatio", label: "P/S Ratio", value: valuation?.priceToSalesRatio, reason: valuation?.reasons?.priceToSalesRatio },
+                    { key: "priceToBookRatio", label: "P/B Ratio", value: valuation?.priceToBookRatio, reason: valuation?.reasons?.priceToBookRatio },
+                    { key: "evToEbitda", label: "EV/EBITDA", value: valuation?.evToEbitda, reason: valuation?.reasons?.evToEbitda },
+                  ] as { key: ValuationKey; label: string; value: number | null | undefined; reason: string | null | undefined }[]).map((item) => (
+                    <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                      <div style={miniLabelStyle}>{item.label}</div>
+                      <div style={{ marginTop: 4, fontSize: "1.375rem", fontWeight: 800, letterSpacing: "-0.02em" }}>
+                        {valuationLoading ? "—" : item.value != null
+                          ? <EstimatedValue text={formatValuationMultiple(item.value)} est={valuation?.estimates?.[item.key]} />
+                          : <ReasonedValue text={valuation?.words?.[item.key] ?? "—"} reason={item.reason} />}
+                      </div>
+                      {/* A FIGURE'S NOTE (its basis, NCI-inclusive equity) sits behind a
+                          tap, "How it's calculated", at reading size when open: the card
+                          shows only the figure and its label (owner ruling, #563 COWORK
+                          #104: explanations go behind a tap, not as small text). A
+                          REFUSAL'S reason is on hover/tap of the dash or word instead
+                          (#552 COWORK #98 §1). */}
+                      {item.value != null && item.reason ? (
+                        <details className="valuationHow" style={{ marginTop: 6 }}>
+                          <summary style={{ cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" }}>How it&apos;s calculated</summary>
+                          <div style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" }}>{item.reason}</div>
+                        </details>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+                <div data-reading-owner="a" style={{ display: "contents" }}><EstimateKey
+                  marks={[valuation?.estimates?.priceToSalesRatio, valuation?.estimates?.priceToBookRatio, valuation?.estimates?.evToEbitda]}
+                  style={{ marginTop: 12 }}
+                /></div>
+                <div data-fine-print style={{ marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.6, opacity: 0.55 }}>
+                  {valuation?.sourceNote ? "From the company's SEC filings and this page's share price." : "Computed from the company's own filings on SEC EDGAR; none are on file for this symbol."}
+                </div>
+                {valuation?.sourceNote ? (
+                  // OPENS AT READING SIZE (#552 COWORK #157 §2): an explanation behind a
+                  // tap, not 12px fine print; the summary at label size.
+                  <details data-valuation-how="" style={{ marginTop: 6 }}>
+                    <summary style={{ cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" }}>How these are calculated</summary>
+                    <div style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" }}>{valuation.sourceNote}</div>
+                  </details>
+                ) : null}
+              </section>
+
+              {/* -- Analyst ratings & price targets (FMP) ------------ */}
+              {/* HIDDEN, NOT REMOVED — the owner's standing rule, 2026-09-21.
+                  The whole block below still compiles and still knows how to
+                  draw itself; RETIRED_BLOCKS["analyst-ratings"] in
+                  ./retiredBlocks.ts is what stops it reaching a reader, and
+                  names the source (FMP /stable/price-target-consensus and
+                  /grades-consensus, via /api/stock-analyst-rating, a route
+                  deleted 2026-09-23), the
+                  date, and why there is no successor to move it to.
+
+                  THE SOURCE NOTE GOES DARK WITH IT, which is the point of
+                  hiding the SECTION rather than the figures inside it:
+                  claude/fmp-provider-attribution-inventory-2026-09-12.md §7
+                  is about exactly this line — "provided by Financial Modeling
+                  Prep when available" — surviving the data it describes and
+                  explaining an absence to a reader who can see nothing there.
+
+                  NOTHING RENDERS IN ITS PLACE. Same reversal as HiddenCard on
+                  the earnings page: no dashed placeholder, no apology. */}
+              {isRetiredBlock("analyst-ratings") ? null : (
+                <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                  <div style={sectionLabelStyle}>Analyst Ratings</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap", marginBottom: 16 }}>
+                    <h2 style={sectionHeadingStyle}>{symbol} analyst consensus</h2>
+                    {!analystRatingLoading && analystRating?.consensusRating ? (
+                      <span style={{ fontSize: "var(--fs-label)", fontWeight: 700, padding: "4px 10px", borderRadius: 7, border: toneBorder(consensusTone(analystRating.consensusRating)), background: toneSoftBackground(consensusTone(analystRating.consensusRating)), color: toneColor(consensusTone(analystRating.consensusRating)) }}>
+                        {analystRating.consensusRating}
+                        {typeof analystRating.totalAnalysts === "number" ? ` · ${analystRating.totalAnalysts} analysts` : ""}
+                      </span>
+                    ) : null}
+                  </div>
+                  {!analystRatingLoading && !analystRating?.consensusRating && analystRating?.targetConsensus == null ? (
+                    <p style={{ margin: 0, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", opacity: 0.6 }}>{analystRating?.sourceNote ?? "Analyst rating data is unavailable right now."}</p>
+                  ) : (
+                    <>
+                      {!analystRatingLoading ? (
+                        <div style={{ marginBottom: 18 }}>
+                          <AnalystTargetChart
+                            price={quote?.price ?? null}
+                            low={analystRating?.targetLow ?? null}
+                            avg={analystRating?.targetConsensus ?? analystRating?.targetMedian ?? null}
+                            high={analystRating?.targetHigh ?? null}
+                          />
+                        </div>
+                      ) : null}
+                      <div className="valuationGrid">
+                        {[
+                          {
+                            label: "Avg Price Target",
+                            value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetConsensus ?? analystRating?.targetMedian),
+                            sub: (() => {
+                              const upside = computeUpsidePct(analystRating?.targetConsensus ?? analystRating?.targetMedian, quote?.price);
+                              return typeof upside === "number" ? `${upside >= 0 ? "+" : ""}${upside.toFixed(1)}% vs price` : null;
+                            })(),
+                          },
+                          { label: "High Target", value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetHigh), sub: null },
+                          { label: "Low Target", value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetLow), sub: null },
+                          { label: "Analyst Coverage", value: analystRatingLoading ? "—" : (typeof analystRating?.totalAnalysts === "number" ? `${analystRating.totalAnalysts}` : "—"), sub: null },
+                        ].map((item) => (
+                          <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                            <div style={miniLabelStyle}>{item.label}</div>
+                            <div style={{ marginTop: 4, fontSize: "1.375rem", fontWeight: 800, letterSpacing: "-0.02em" }}>{item.value}</div>
+                            {item.sub ? <div style={{ marginTop: 2, fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6 }}>{item.sub}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                      {!analystRatingLoading && analystRating && [analystRating.strongBuy, analystRating.buy, analystRating.hold, analystRating.sell, analystRating.strongSell].some((v) => typeof v === "number") ? (
+                        <div style={{ marginTop: 16 }}>
+                          <div style={miniLabelStyle}>Rating breakdown</div>
+                          <div className="ratingBreakdownGrid" style={{ marginTop: 10 }}>
+                            {[
+                              { label: "Strong Buy", value: analystRating.strongBuy, tone: "green" as const },
+                              { label: "Buy", value: analystRating.buy, tone: "green" as const },
+                              { label: "Hold", value: analystRating.hold, tone: "yellow" as const },
+                              { label: "Sell", value: analystRating.sell, tone: "red" as const },
+                              { label: "Strong Sell", value: analystRating.strongSell, tone: "red" as const },
+                            ].map((item) => (
+                              <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 9, border: toneBorder(item.tone), background: toneSoftBackground(item.tone), fontSize: "0.8125rem", fontWeight: 700 }}>
+                                <span style={{ opacity: 0.85 }}>{item.label}</span>
+                                <span style={{ color: toneColor(item.tone) }}>{item.value ?? 0}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                  <div data-fine-print style={{ marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.6, opacity: 0.55 }}>{analystRating?.sourceNote ?? "Analyst ratings and price targets are provided by Financial Modeling Prep when available."}</div>
+                </section>
+              )}
+
+
+              {/* -- Chart summaries --------------------------------- */}
+              <section className="sp-slot sp-summary" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Chart Summary</div>
+                <div>
+                  {[
+                    { heading: `Trend summary for ${symbol}`, text: longSummary.trendParagraph, dot: trendTone ?? "yellow" },
+                    { heading: "Momentum and stretch context", text: longSummary.momentumParagraph, dot: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
+                    { heading: "What traders may watch next", text: longSummary.structureParagraph, dot: "yellow" as const },
+                  ].map((item, i) => (
+                    <div key={i} style={{ padding: "18px 0", borderBottom: i < 2 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(item.dot), marginTop: 6, flex: "0 0 auto", boxShadow: `0 0 5px ${toneColor(item.dot)}66` }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: "1rem", fontWeight: 700, marginBottom: 5 }}>{item.heading}</div>
+                        <p style={{ margin: 0, fontSize: "var(--fs-read)", lineHeight: 1.8, opacity: 0.78 }}>{item.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* -- Company profile (FMP), with the share-dilution chart
+                     folded into the description column so it fills the gap
+                     that column leaves next to the (usually taller) stat-box
+                     column, instead of sitting in its own full-width section
+                     further down the page. Falls back to a standalone
+                     section when there's no profile to attach it to. -- */}
+              <div className="sp-slot sp-profile" data-reading-owner="a">
+                {profile ? (
+                  <CompanyProfile
+                    profile={profile}
+                    symbol={symbol}
+                    dividend={dividend}
+                    belowDescription={<DilutionHistory data={shareHistory} symbol={symbol} embedded />}
+                    belowStats={learnIndicatorsAside}
+                  />
+                ) : (
+                  <>
+                    <DilutionHistory data={shareHistory} symbol={symbol} />
+
+                    {/* -- Learn more (standalone fallback when no company
+                           profile is available to host it in the right column) -- */}
+                    <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                      <div style={sectionLabelStyle}>Learn More</div>
+                      <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
+                      {learnRows}
+                    </section>
+                  </>
+                )}
+              </div>
+
+              {/* -- Change stock — phones only (#563 COWORK #82: near the end, after the page's figures) -- */}
+              <div className="mobile-change-stock sp-slot sp-changestock" style={sideCardStyle()}>
+                <div style={sideCardHeaderStyle()}>
+                  <div style={{ fontSize: "var(--fs-label)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
+                  <div style={{ marginTop: 3, fontSize: "var(--fs-read)", opacity: 0.6, lineHeight: 1.5 }}>Search another ticker to view its stock analysis page.</div>
+                </div>
+                <div style={sideCardBodyStyle()}>
+                  <StockTickerJump currentSymbol={symbol} />
+                </div>
+              </div>
+
+              {/* -- Explore more ------------------------------------ */}
+              <section className="sp-slot sp-explore" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Explore More</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>More stock opportunities</h2>
+                <div className="explore-grid">
+                  {[
+                    { href: "/oversold-stocks-today", label: "Oversold Stocks", sub: "Potential rebound setups", dot: "#22c55e" },
+                    { href: "/overbought-stocks-today", label: "Overbought Stocks", sub: "Pullback watch", dot: "#ef4444" },
+                    { href: "/stocks-ready-to-break-out", label: "Breakout Stocks", sub: "Momentum expansion setups", dot: "#60a5fa" },
+                    { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day MA", sub: "Long-term level tests", dot: "#eab308" },
+                  ].map((item) => (
+                    <Link key={item.href} href={item.href} style={exploreCardStyle}>
+                      <span style={{ width: 7, height: 7, borderRadius: 999, background: item.dot, flex: "0 0 auto" }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: "0.8125rem" }}>{item.label}</div>
+                        <div style={{ fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6, marginTop: 2 }}>{item.sub}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+
+              {/* -- FAQ --------------------------------------------- */}
+              <section className="sp-slot sp-faq" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, paddingBottom: 40 }}>
+                <div style={sectionLabelStyle}>FAQ</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 18 }}>Common questions about {symbol}</h2>
+                <div style={{ display: "grid", gap: 16 }}>
+                  {[
+                    { q: "Is this page a buy or sell recommendation?", a: "No. This page is designed to help you review chart structure, momentum and technical context more quickly, but it is not personal financial advice." },
+                    { q: "Why can a stock look bullish and overbought at the same time?", a: "Strong trending stocks can still become stretched in the short term. That is why trend traders and dip buyers can read the same chart differently." },
+                    // HEDGED, NOT AN INSTRUCTION (#553 COWORK #54, #80 §2, step 5): the old
+                    // answer told the reader what to do next. It now describes what some
+                    // readers do; the "not a recommendation" answer above stays as it was.
+                    { q: "Where can I see this chart in more detail?", a: "Some readers may open the full dashboard to review the chart in more detail and compare other indicators. This page describes the chart; it does not suggest any action." },
+                  ].map((item) => (
+                    <div key={item.q}>
+                      <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>{item.q}</h3>
+                      <p style={{ margin: "6px 0 0", fontSize: "var(--fs-read)", lineHeight: 1.75, opacity: 0.75 }}>{item.a}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+            </div>{/* end main col */}
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        .stock-wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
+
+        .stock-page-layout {
+          display: grid;
+          grid-template-columns: 300px 1fr;
+          gap: 28px;
+          align-items: start;
+        }
+        .stock-page-main { min-width: 0; }
+        /* THE SIDEBAR SCROLLS WITH THE PAGE (owner ruling, #563 COWORK #86): it is
+           taller than a screen, and a sticky sidebar kept the Earnings snapshot out
+           of view until the end of the main column. */
+        .stock-page-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        /* Desktop: show sidebar change stock, hide inline one */
+        .mobile-change-stock { display: none; }
+        .sidebar-change-stock { display: block; }
+
+        @media (max-width: 900px) {
+          .stock-page-layout { grid-template-columns: minmax(0, 1fr) !important; gap: 0; }
+          /* PHONES, MOST USEFUL FIRST (#563 COWORK #82). The sidebar and the main
+             column step aside (display: contents), so their sections become one
+             column ordered below. Each section is in the DOM once; desktop and
+             tablet above 900px never read these rules. The phone-only Change
+             stock copy sits near the end of the DOM too, so reading order follows
+             what is seen; Key levels and the Earnings snapshot stay first in the
+             DOM (the sidebar), read before the chart by a screen reader. */
+          .stock-page-sidebar, .stock-page-main { display: contents; }
+          .stock-page-sidebar > *, .stock-page-main > * { order: 85; min-width: 0; }
+          .sp-performance { order: 5; }
+          .sp-chart { order: 10; }
+          .sp-confluence { order: 15; }
+          .sp-keylevels { order: 20; }
+          .sp-signals { order: 30; }
+          .sp-earnings { order: 40; }
+          .sp-valuation { order: 50; }
+          .sp-returns { order: 60; }
+          .sp-summary { order: 70; }
+          .sp-profile { order: 80; }
+          .sp-changestock { order: 90; }
+          .sp-explore { order: 95; }
+          .sp-faq { order: 99; }
+          .sp-confluence, .sp-keylevels, .sp-performance, .sp-earnings, .sp-changestock { margin-top: 24px; }
+          /* Mobile: show the inline change stock, hide the sidebar one */
+          .mobile-change-stock { display: block; }
+          .sidebar-change-stock { display: none !important; }
+        }
+
+        .stock-header-stats {
+          display: flex;
+          align-items: stretch;
+          flex-wrap: wrap;
+          gap: 0;
+          border-top: 1px solid rgba(255,255,255,0.10);
+          padding-top: 4px;
+          overflow: hidden;
+        }
+        .stock-stat-cell {
+          flex: 0.7 1 130px;
+          padding: 12px 14px;
+          border-right: 1px solid rgba(255,255,255,0.07);
+          border-bottom: 1px solid rgba(255,255,255,0.07);
+          min-width: 0;
+        }
+        .stock-stat-cell:last-child { border-right: none; }
+        .stock-stat-label { font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; opacity: 0.55; }
+        .stock-stat-value { font-size: 1.375rem; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; line-height: 1; }
+        .stock-stat-sub { font-size: var(--fs-label); opacity: 0.48; margin-top: 3px; }
+        /* THE SMALL TEXT OVER THE MINI-GRAPHICS (#563 COWORK #114): the cell's text paints above its
+           graphic (positioned, after it in the DOM; no z-index, no transform: the P/E cell holds A's
+           ReasonedValue), and the small lines carry a halo in the card's colour, so a line passing
+           behind never cuts a letter. */
+        .stock-stat-cell > :not(svg) { position: relative; }
+        .stock-stat-label, .stock-stat-sub, .hsRange { text-shadow: 0 0 2px #080d18, 0 0 2px #080d18, 0 0 4px #080d18; }
+        .stock-earnings-cell { flex: 2.2 1 0 !important; min-width: 180px; }
+
+        @media (max-width: 640px) {
+          .stock-header-stats {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            border-radius: 10px;
+          }
+          .stock-stat-cell {
+            flex: unset !important;
+            border-right: none !important;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+          }
+          .stock-stat-cell:nth-last-child(-n+2) { border-bottom: none; }
+          .stock-stat-value { font-size: 1.125rem !important; }
+          .stock-earnings-cell { grid-column: 1 / -1; border-bottom: none !important; }
+        }
+
+        .indicator-rows {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 0 32px;
+        }
+        .indicator-row {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 11px 0;
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .indicator-row:last-child { border-bottom: none; }
+        .indicator-row:nth-child(3) { border-bottom: none; }
+
+        @media (max-width: 640px) {
+          .indicator-rows { grid-template-columns: 1fr !important; }
+          .indicator-row:nth-child(3) { border-bottom: 1px solid rgba(255,255,255,0.06); }
+          .indicator-row:last-child { border-bottom: none; }
+          .indicator-row { flex-direction: column; align-items: flex-start; gap: 3px; }
+        }
+
+        .valuationGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 20px; }
+        .ratingBreakdownGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+
+        .factor-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+        .earningsMetricGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
+        .earningsDotGrid { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .yearlyEarningsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+        .learn-grid { display: grid; gap: 0; }
+        .explore-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        /* STACKED AT EVERY WIDTH (owner, #553 COWORK #6, 2026-09-23): the Daily
+           and Weekly returns cards sit one above the other at full width, so the
+           bars and their labels get the room a half-width card squeezed out.
+           Layout only -- the returns themselves are computed as before. */
+        .returns-charts-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+
+        a:hover { filter: brightness(1.06); transform: translateY(-1px); }
+
+        @media (max-width: 900px) {
+          .stock-wrap { padding: 0 16px; }
+          .factor-grid { grid-template-columns: 1fr !important; }
+          .explore-grid { grid-template-columns: 1fr !important; }
+          .earningsMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .valuationGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        }
+
+        @media (max-width: 640px) {
+          .stock-wrap { padding: 0 14px; }
+          .earningsMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .explore-grid { grid-template-columns: 1fr !important; }
+          .valuationGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        }
+      `}</style>
+    </main>
+  );
+}
+
+function chartLinkStyle(tone: "blue" | "red" | "green"): React.CSSProperties {
+  const map = { blue: { border: "rgba(59,130,246,0.28)", bg: "rgba(59,130,246,0.07)", color: "#bfdbfe" }, red: { border: "rgba(239,68,68,0.28)", bg: "rgba(239,68,68,0.07)", color: "#fecaca" }, green: { border: "rgba(34,197,94,0.28)", bg: "rgba(34,197,94,0.07)", color: "#bbf7d0" } };
+  const s = map[tone];
+  return { display: "inline-flex", alignItems: "center", padding: "7px 10px", borderRadius: 9, border: `1px solid ${s.border}`, background: s.bg, color: s.color, textDecoration: "none", fontWeight: 700, fontSize: "var(--fs-label)", whiteSpace: "nowrap" };
+}
+
+function learnDotStyle(tone: "blue" | "green" | "red"): React.CSSProperties {
+  const c = tone === "blue" ? "#60a5fa" : tone === "green" ? "#22c55e" : "#ef4444";
+  return { width: 7, height: 7, borderRadius: 999, background: c, flex: "0 0 auto", marginTop: 5 };
+}
+
+const learnRowStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 10, padding: "11px 0", borderBottom: "1px solid rgba(255,255,255,0.07)", textDecoration: "none", color: "#f1f5f9" };
+
+const exploreCardStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)", textDecoration: "none", color: "#f1f5f9" };
+
+// Blue hero box wrapping the ticker header — matches the /news and /earnings
+// page heroes (rounded, blue-tinted gradient panel) so the analysis page opens
+// with the same branded box the rest of the site starts with, incorporating
+// the H1 title, the one-line summary and the key stat strip.
+const stockHeroBoxStyle: React.CSSProperties = { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 24, padding: "22px 24px", background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 54px rgba(0,0,0,0.36)" };
+
+// "Stock Analysis" eyebrow pill — mirrors the NEWS DESK / EARNINGS DESK tags.
+const stockDeskTagStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))", color: "#dbeafe", fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase" };
+
+export type { EarningsPeriodSummary, EarningsYearSummary };

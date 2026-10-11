@@ -1,0 +1,1798 @@
+"use client";
+
+import { CRYPTO_MODE_ENABLED } from "@/lib/cryptoMode";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { holdOnAnalyser, scrollMotion, wantsAnalyser } from "@/lib/chartHref";
+import FiledEarningsChart, { FILED_EARNINGS_CSS } from "@/app/dashboard/FiledEarningsChart";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
+import TradingViewChartEmbed from "./TradingViewChartEmbed";
+import InteractiveChart from "./InteractiveChart";
+import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
+import DiscoveryStrip from "./DiscoveryStrip";
+import DashboardTicker from "./DashboardTicker";
+import TickerLogo from "@/app/components/TickerLogo";
+import { ETF_NAMES } from "@/lib/etfNames";
+import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
+import ConfluenceCard from "@/app/stock/[symbol]/ConfluenceCard";
+import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
+import { indicatorRead, INDICATOR_MANUAL, type ReadUnit } from "@/lib/indicatorRead";
+import { activeRowStyle } from "@/lib/listboxNav";
+import { useListboxNav } from "@/app/components/useListboxNav";
+import { breakdownChipValue } from "@/lib/breakdownChip";
+import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
+import type { CardArt } from "@/lib/server/news/art";
+import NewsCardArt from "@/app/components/NewsCardArt";
+import { utcDay, utcStamp } from "@/lib/utcDate";
+import { browserStorage, readWideChoice, WIDE_ARROW_LEFT, WIDE_ARROW_RIGHT, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
+
+export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; priceLabel?: string | null; };
+// `label`: Tiingo's partial bar only, "today so far (IEX), hh:mm ET" (step 3, #553 COWORK #57 §2).
+export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; label?: string; };
+type ChartInterval = "d" | "w" | "m";
+type ChartMode = "basic" | "interactive" | "tradingview";
+type SymbolResult = { symbol: string; name: string; exchange: string };
+type BenchItem = { key: string; label: string; symbol: string; date: string | null; time: string | null; close: number | null; prevClose: number | null; changePct: number | null; priceLabel?: string | null; };
+export type BenchPayload = { updatedAt: string; scope: string; items: BenchItem[]; provider?: "tiingo"; };
+// Mirrors lib/server/internalNews.ts. `art` is resolved SERVER-SIDE and arrives
+// as four strings: the bucket, the manifest and the no-repeat rule all stay out
+// of this bundle, and there is one implementation of the selection rule rather
+// than two that can drift.
+type InternalNewsCard = { title: string; source: string | null; pubDate: string | null; summary: string; image?: string | null; link?: string | null; art?: CardArt; };
+// trend and newsScoreLabel are null when they could not be established. This
+// card sits beside the Overview card fixed in #317 and was still rendering
+// "Neutral tone \u00b7 Mixed / range" from a different code path entirely.
+export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string | null; newsScoreLabel: string | null; newsScoreValue: number | null; cards: InternalNewsCard[]; ctaHref: string; changePct?: number | null; sparkPoints?: number[]; };
+// FROM THE SEC SNAPSHOT (lib/server/secEarningsSummary.ts) since 2026-09-23: the band label ("Good", "Mixed", "Weak", "Unavailable").
+export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: string; nextReport?: { text: string; estimated: boolean } | null; };
+// `provider`: whose bars `history` is, as /api/history reported it ("tiingo" drives the chart credit, #553 COWORK #103).
+type CachedSymbolData = { quote: Quote | null; history: Point[]; provider?: string | null; };
+type DivergenceState = "bullish" | "bearish" | "none";
+type OverviewItem = { key: string; label: string; tone: "green" | "yellow" | "orange" | "red" | "muted"; valueText: string; severity: number; order: number; };
+// `known` is false when the checks had no inputs to run against, not when
+// they ran and failed. A stock listed under ~9.5 months ago has no ma200, so
+// every check is null, and counting nulls as failures produced a red 0/4.
+type TrendScore = { total: number; passed: number; known: boolean; details: { name: string; ok: boolean | null }[]; };
+// `ran` is how many of the six checks had inputs. total stays 6 (the number of
+// checks that exist); ran is the number that actually executed. Reporting
+// "0/6 flagged" when six checks were skipped reads as "nothing is stretched",
+// which is a finding, not an absence. Same shape as TrendScore.known in #317,
+// except stretch degrades gradually: RSI needs 15 bars, Bollinger and EMA20 and
+// VWMA need 20, MA50 needs 50, so a 30-bar listing genuinely runs five of six.
+type StretchScore = { total: number; flagged: number; ran: number; oversold: number; overbought: number; details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[]; };
+type AssetType = "stock" | "crypto";
+/** What app/dashboard/page.tsx hands down for the landing (#563 COWORK #134). */
+export type DashboardLandingProps = {
+  market: React.ReactNode;
+  cards: React.ReactNode;
+  /** Stock pages on Bottlenecks, for the "Who depends on who" point; null hides the count. */
+  mapped: number | null;
+  /** Symbol → its Bottlenecks page slug, for the analyser's link. */
+  bottlenecks: Record<string, string>;
+  css: string;
+};
+type AnalyserTab = "chart" | "levels" | "zones" | "earnings" | "news";
+// THE ICON TABS (#563 COWORK #161, laid out by #164 D): an icon BESIDE the
+// short label on one line at 641 px and up, the icon stacked OVER it at 640 px
+// and under. The full name is the accessible name and the tooltip (aria-label
+// and title). On a phone a horizontal strip, never page sideways-scroll, if
+// 320 px still cannot fit them.
+const ANALYSER_TABS: { key: AnalyserTab; label: string; short: string; icon: string }[] = [
+  { key: "chart", label: "Chart", short: "Chart", icon: "M3 17l5-6 4 3 6-8M3 21h18" },
+  { key: "levels", label: "Key levels", short: "Levels", icon: "M3 6h18M3 12h18M3 18h18" },
+  { key: "zones", label: "Price zones", short: "Zones", icon: "M3 8h18v4H3zM3 15h18v3H3z" },
+  { key: "earnings", label: "Filed earnings", short: "Earnings", icon: "M5 20V11M10 20V6M15 20v-7M20 20V9" },
+  { key: "news", label: "News", short: "News", icon: "M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M8 9h5M8 13h5" },
+];
+/** The landing's hero and analyser styles (the server cards bring their own, LANDING_CSS). */
+const LANDING_CLIENT_CSS = `
+.dlHero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px;padding:20px 0 8px;align-items:stretch;}
+.dlHeroLeft{display:flex;flex-direction:column;justify-content:center;padding:26px;border:1px solid #1f2b44;border-radius:20px;background:linear-gradient(160deg,rgba(37,99,235,0.16),rgba(13,20,34,0.96) 55%,rgba(16,185,129,0.08));min-width:0;}
+.dlHeroLeft>.dlEyebrow{margin-top:0;}
+.dlH1{margin:8px 0 0;font-size:2.75rem;line-height:1.08;font-weight:800;letter-spacing:-0.02em;}
+.dlLead{margin:14px 0 0;font-size:1.0625rem;line-height:1.6;color:#cbd5e1;max-width:620px;}
+.dlSearch{margin-top:18px;height:56px;flex:0 0 auto;}
+.dlSearch input{font-size:1rem;min-width:0;}
+.dlSearch .msh-go{height:40px;padding:0 18px;font-size:var(--fs-read);}
+.dlTry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;}
+.dlTryLabel{font-size:var(--fs-label);color:#8a97ad;}
+.dlTryChip{padding:6px 12px;border-radius:999px;border:1px solid #222c40;background:#0f1624;color:#eaf0fa;font-weight:800;font-size:var(--fs-label);cursor:pointer;text-decoration:none;}
+.dlTryChip:hover{border-color:#27406f;}
+.dlAnalyser{scroll-margin-top:16px;margin:30px 0 14px;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;}
+.dlAnalyserCard{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;padding:18px;border:1px solid #222c40;border-radius:20px;background:#0a101c;min-width:0;}
+.dlAnalyserHead{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0;}
+.dlAnHeadRow{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;min-width:0;}
+.dlAnId{display:flex;align-items:center;gap:6px 12px;min-width:0;flex-wrap:wrap;}
+.dlAnSym{font-size:1.5rem;font-weight:900;line-height:1;letter-spacing:-0.01em;}
+.dlAnName{margin-top:3px;font-size:var(--fs-label);color:#8a97ad;max-width:min(30ch,100%);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dlAnPrice{font-size:1.5rem;font-weight:900;font-variant-numeric:tabular-nums;margin-left:6px;}
+.dlChange{flex:0 1 280px;height:42px;min-width:0;max-width:100%;box-sizing:border-box;}
+.dlAnId{flex:1 1 auto;}
+.dlChange input{font-size:var(--fs-read);min-width:0;}
+.dlVerdict{margin:0;font-size:1.125rem;line-height:1.6;color:#cbd5e1;max-width:900px;}
+.dlVerdict strong{color:#f1f5f9;}
+.dlChipsRow{display:flex;flex-wrap:wrap;gap:8px;}
+.dlInfoChip{display:inline-flex;gap:8px;align-items:baseline;padding:8px 12px;border:1px solid #222c40;border-radius:12px;background:#0f1624;color:#eaf0fa;font-size:var(--fs-read);font-weight:700;text-decoration:none;}
+.dlInfoLabel{font-size:var(--fs-label);color:#8a97ad;text-transform:uppercase;letter-spacing:.05em;font-weight:800;}
+.dlAnalyserCard .msh-grid,.dlAnalyserCard .msh-mobile-only{margin:0;}
+.dlTabs{display:flex;flex-wrap:nowrap;gap:8px;}
+.dlTab{flex:1 1 0;min-width:0;display:inline-flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;padding:9px 12px;border-radius:10px;border:1px solid #222c40;background:#0f1624;color:#cbd5e1;font-weight:800;font-size:var(--fs-label);white-space:nowrap;cursor:pointer;}
+.dlTab[aria-selected="true"]{border-color:#2f6bff;background:#13213f;color:#fff;}
+.dlTabIcon{display:block;width:18px;height:18px;flex:0 0 auto;}
+@media(max-width:640px){.dlTab{flex-direction:column;gap:4px;padding:8px 6px;}}
+@media(max-width:480px){.dlTabs{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;gap:4px;}.dlTabs::-webkit-scrollbar{display:none;}.dlTab{flex:1 0 auto;padding:6px 6px;gap:3px;}.dlTabIcon{width:16px;height:16px;}}
+@media(max-width:859px){.dlHero{grid-template-columns:minmax(0,1fr);}}
+/* THE CHART TOOLBAR ON A PHONE, TWO LINES (#563, after #164 put the chart inside the analyser card):
+   line 1 the mode switch, then + and − on the right; line 2 Indicator, line/candle, D/W/M.
+   Tighter gaps and padding; the groups shrink rather than stack. 640 px and under only:
+   the desktop toolbar is untouched. !important: the controls carry inline styles. */
+@media(max-width:640px){
+.dlTb{padding:10px!important;}
+.dlTbHead{gap:6px!important;flex-wrap:nowrap!important;}
+.dlTbTitle{display:none!important;}
+.dlTbRow{flex-wrap:nowrap!important;gap:5px!important;min-width:0;}
+.dlTbRow[data-tb-line="1"]{flex:1 1 auto;}
+.dlTbRow[data-tb-line="2"]{margin-top:8px!important;}
+.dlTbSeg{flex:0 1 auto!important;min-width:0;padding:2px!important;gap:2px!important;}
+.dlTbSegBtn{padding:6px 7px!important;min-width:0!important;}
+.dlTbZoom{margin-left:auto;gap:4px!important;}
+.dlTbBtn{padding:6px 9px!important;}
+.dlTbInd{flex:1 1 auto!important;min-width:0!important;}
+.dlTbIndBtn{padding:8px 9px!important;}
+.dlTbTf{flex:0 0 auto;}
+}
+/* Headroom on the narrowest phones (320 px and a little under). */
+@media(max-width:360px){.dlTbSegBtn{padding:6px 5px!important;}.dlTbBtn{padding:6px 7px!important;}.dlTbRow{gap:4px!important;}}
+@media(max-width:560px){.dlSearch{padding:0 8px;gap:6px;}.dlSearch .msh-go{padding:0 12px;}.dlHeroLeft{padding:18px;}.dlH1{font-size:2rem;}.dlVerdict{font-size:var(--fs-read);}.dlAnalyserCard{padding:12px;}.dlChange{flex:1 1 100%;}}
+`;
+/** The landing's Try chips (the brief's four). */
+const TRY_SYMBOLS = ["NVDA", "TSLA", "JPM", "AMZN"];
+
+function movingAverage(values: number[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null); let sum = 0;
+  for (let i = 0; i < values.length; i++) { sum += values[i]; if (i >= window) sum -= values[i - window]; if (i >= window - 1) out[i] = sum / window; }
+  return out;
+}
+function rollingStd(values: number[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  for (let i = window - 1; i < values.length; i++) { let mean = 0; for (let j = i - window + 1; j <= i; j++) mean += values[j]; mean /= window; let variance = 0; for (let j = i - window + 1; j <= i; j++) { const d = values[j] - mean; variance += d * d; } variance /= window; out[i] = Math.sqrt(variance); }
+  return out;
+}
+function bollinger(values: number[], window = 20, k = 2) {
+  const mid = movingAverage(values, window), sd = rollingStd(values, window);
+  return { upper: mid.map((m, i) => m == null || sd[i] == null ? null : m + k * sd[i]!), mid, lower: mid.map((m, i) => m == null || sd[i] == null ? null : m - k * sd[i]!) };
+}
+function ema(values: number[], period: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null); if (!values.length) return out;
+  const k = 2 / (period + 1); let emaPrev: number | null = null, sum = 0;
+  for (let i = 0; i < values.length; i++) { const v = values[i]; if (i < period) { sum += v; if (i === period - 1) { emaPrev = sum / period; out[i] = emaPrev; } continue; } emaPrev = emaPrev == null ? v : v * k + emaPrev * (1 - k); out[i] = emaPrev; }
+  return out;
+}
+function rsiWilder(values: number[], period = 14): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null); if (values.length < period + 1) return out;
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= period; i++) { const d = values[i] - values[i - 1]; if (d >= 0) gain += d; else loss -= d; }
+  let avgGain = gain / period, avgLoss = loss / period;
+  out[period] = 100 - 100 / (1 + (avgLoss === 0 ? Infinity : avgGain / avgLoss));
+  for (let i = period + 1; i < values.length; i++) { const d = values[i] - values[i - 1]; avgGain = (avgGain * (period - 1) + (d > 0 ? d : 0)) / period; avgLoss = (avgLoss * (period - 1) + (d < 0 ? -d : 0)) / period; out[i] = 100 - 100 / (1 + (avgLoss === 0 ? Infinity : avgGain / avgLoss)); }
+  return out;
+}
+function macd(values: number[], fast = 12, slow = 26, signal = 9) {
+  const emaFast = ema(values, fast), emaSlow = ema(values, slow);
+  const line: (number | null)[] = values.map((_, i) => { const f = emaFast[i], s = emaSlow[i]; if (typeof f !== "number" || !Number.isFinite(f) || typeof s !== "number" || !Number.isFinite(s)) return null; return f - s; });
+  const sig: (number | null)[] = Array(values.length).fill(null), hist: (number | null)[] = Array(values.length).fill(null);
+  const valid: { index: number; value: number }[] = [];
+  for (let i = 0; i < line.length; i++) { const v = line[i]; if (typeof v === "number" && Number.isFinite(v)) valid.push({ index: i, value: v }); }
+  if (valid.length < signal) return { line, signal: sig, hist };
+  let seed = 0; for (let i = 0; i < signal; i++) seed += valid[i].value;
+  let prev = seed / signal; sig[valid[signal - 1].index] = prev;
+  const k = 2 / (signal + 1);
+  for (let i = signal; i < valid.length; i++) { prev = valid[i].value * k + prev * (1 - k); sig[valid[i].index] = prev; }
+  for (let i = 0; i < line.length; i++) { const l = line[i], s = sig[i]; if (typeof l === "number" && Number.isFinite(l) && typeof s === "number" && Number.isFinite(s)) hist[i] = l - s; }
+  return { line, signal: sig, hist };
+}
+function vwma(values: number[], volumes: (number | undefined)[], window = 20): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  for (let i = 0; i < values.length; i++) { if (i < window - 1) continue; let pv = 0, v = 0; for (let j = i - window + 1; j <= i; j++) { const p = values[j], vol = volumes[j]; if (typeof p !== "number" || !Number.isFinite(p) || typeof vol !== "number" || !Number.isFinite(vol) || vol <= 0) continue; pv += p * vol; v += vol; } out[i] = v > 0 ? pv / v : null; }
+  return out;
+}
+function stochastic(points: Point[], kPeriod = 14, dPeriod = 3) {
+  const k: (number | null)[] = Array(points.length).fill(null);
+  for (let i = 0; i < points.length; i++) {
+    if (i < kPeriod - 1) continue; let hh = -Infinity, ll = Infinity;
+    for (let j = i - kPeriod + 1; j <= i; j++) { const h = points[j].high, l = points[j].low; if (typeof h !== "number" || !Number.isFinite(h)) { hh = NaN; break; } if (typeof l !== "number" || !Number.isFinite(l)) { ll = NaN; break; } if (h > hh) hh = h; if (l < ll) ll = l; }
+    if (!Number.isFinite(hh) || !Number.isFinite(ll)) continue; const d = hh - ll; if (d <= 0) continue; k[i] = ((points[i].close - ll) / d) * 100;
+  }
+  const d = movingAverage(k.map(v => typeof v === "number" ? v : 0), dPeriod).map((v, i) => k[i] == null ? null : v);
+  return { k, d };
+}
+function atr(points: Point[], period = 14): (number | null)[] {
+  const tr: (number | null)[] = Array(points.length).fill(null);
+  for (let i = 0; i < points.length; i++) { const h = points[i].high, l = points[i].low, cp = i > 0 ? points[i - 1].close : null; if (typeof h !== "number" || !Number.isFinite(h) || typeof l !== "number" || !Number.isFinite(l)) continue; const hl = h - l, hc = cp == null ? hl : Math.abs(h - cp), lc = cp == null ? hl : Math.abs(l - cp); tr[i] = Math.max(hl, hc, lc); }
+  const out: (number | null)[] = Array(points.length).fill(null); let sum = 0, count = 0, prev: number | null = null;
+  for (let i = 0; i < points.length; i++) { const v = tr[i]; if (v == null) { out[i] = prev; continue; } if (prev == null) { sum += v; count++; if (count === period) { prev = sum / period; out[i] = prev; } continue; } prev = (prev * (period - 1) + v) / period; out[i] = prev; }
+  return out;
+}
+function smaNullable(values: (number | null)[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null); if (window <= 0) return out;
+  for (let i = window - 1; i < values.length; i++) { let sum = 0, ok = true; for (let j = i - window + 1; j <= i; j++) { const v = values[j]; if (typeof v !== "number" || !Number.isFinite(v)) { ok = false; break; } sum += v; } out[i] = ok ? sum / window : null; }
+  return out;
+}
+function lastNum(arr: (number | null)[]) { return arr.length ? arr[arr.length - 1] : null; }
+function avg(values: number[]) { if (!values.length) return 0; return values.reduce((s, v) => s + v, 0) / values.length; }
+
+function aggregateWeeklyPoints(points: Point[]): Point[] {
+  const buckets = new Map<string, Point>();
+  for (const point of points) {
+    const date = new Date(`${point.date}T00:00:00Z`); if (Number.isNaN(date.getTime())) continue;
+    const day = date.getUTCDay(); date.setUTCDate(date.getUTCDate() + (day === 0 ? -6 : 1 - day));
+    const key = date.toISOString().slice(0, 10);
+    const high = typeof point.high === "number" && Number.isFinite(point.high) ? point.high : point.close;
+    const low = typeof point.low === "number" && Number.isFinite(point.low) ? point.low : point.close;
+    const volume = typeof point.volume === "number" && Number.isFinite(point.volume) ? point.volume : 0;
+    const existing = buckets.get(key);
+    if (!existing) { buckets.set(key, { date: key, open: typeof point.open === "number" && Number.isFinite(point.open) ? point.open : point.close, close: point.close, high, low, volume }); }
+    else { buckets.set(key, { date: key, open: existing.open, close: point.close, high: Math.max(existing.high ?? existing.close, high), low: Math.min(existing.low ?? existing.close, low), volume: (existing.volume ?? 0) + volume }); }
+  }
+  return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+type MacroZoneCandidate = SupportResistanceZone & { touches: number; distancePct: number; score: number; };
+
+function computeMacroSupportResistanceZones(points: Point[], lastClose: number | null): SupportResistanceZone[] {
+  if (typeof lastClose !== "number" || !Number.isFinite(lastClose) || lastClose <= 0) return [];
+  const weekly = aggregateWeeklyPoints(points).slice(-156); if (weekly.length < 35) return [];
+  type Pivot = { idx: number; price: number; kind: "support" | "resistance" };
+  const pivots: Pivot[] = []; const lr = 2;
+  for (let i = lr; i < weekly.length - lr; i++) {
+    const pt = weekly[i];
+    const high = typeof pt.high === "number" && Number.isFinite(pt.high) ? pt.high : pt.close;
+    const low = typeof pt.low === "number" && Number.isFinite(pt.low) ? pt.low : pt.close;
+    let isSH = true, isSL = true;
+    for (let o = 1; o <= lr; o++) { const l = weekly[i - o], r = weekly[i + o]; if (high < (l.high ?? l.close) || high < (r.high ?? r.close)) isSH = false; if (low > (l.low ?? l.close) || low > (r.low ?? r.close)) isSL = false; }
+    if (isSL && low > 0) pivots.push({ idx: i, price: low, kind: "support" });
+    if (isSH && high > 0) pivots.push({ idx: i, price: high, kind: "resistance" });
+  }
+  if (pivots.length < 2) return [];
+  const maxZ = 5.5; const candidates: MacroZoneCandidate[] = [];
+  for (const pivot of pivots) {
+    const sk = pivots.filter(c => c.kind === pivot.kind);
+    const members = sk.filter(c => { const mid = (c.price + pivot.price) / 2; if (mid <= 0) return false; return Math.abs(((c.price - pivot.price) / mid) * 100) <= maxZ; });
+    if (members.length < 2) continue;
+    const prices = members.map(m => m.price); const lower = Math.min(...prices), upper = Math.max(...prices), level = avg(prices);
+    const zwp = level > 0 ? ((upper - lower) / level) * 100 : 999; if (zwp > maxZ) continue;
+    const fi = Math.min(...members.map(m => m.idx)), li = Math.max(...members.map(m => m.idx)); const sw = li - fi; if (sw < 8) continue;
+    let dp: number;
+    if (pivot.kind === "support") { if (lastClose < lower * 0.97) continue; dp = lastClose >= upper ? ((lastClose - upper) / lastClose) * 100 : 0; if (dp > 40) continue; }
+    else { if (lastClose > upper * 1.03) continue; dp = lastClose <= lower ? ((lower - lastClose) / lastClose) * 100 : 0; if (dp > 40) continue; }
+    candidates.push({ kind: pivot.kind, lower, upper, touches: members.length, distancePct: dp, score: Math.min(members.length / 5, 1) * 40 + Math.max(0, 1 - dp / 40) * 34 + Math.min(sw / 80, 1) * 16 + Math.max(0, 1 - zwp / maxZ) * 10, label: `${pivot.kind === "support" ? "Macro support" : "Macro resistance"} (${members.length} touches)` });
+  }
+  if (!candidates.length) return [];
+
+  // Only one zone is ever drawn. Picking the best support AND the best
+  // resistance independently (as before) let each win purely on its own
+  // kind's score -- which could place a "resistance" zone below a
+  // "support" zone on the chart, reading as contradictory. Instead: pick
+  // the single strongest zone across both kinds, then label it support or
+  // resistance based on where price is sitting relative to that zone right
+  // now -- mirroring the same live-price-relative classification the
+  // picker backend's macro support/resistance computation already uses.
+  const deduped = candidates.filter((cluster, index, all) => {
+    const clusterMid = (cluster.lower + cluster.upper) / 2;
+    const dup = all.findIndex(c => {
+      if (c.kind !== cluster.kind) return false;
+      const mid = (c.lower + c.upper) / 2;
+      return clusterMid > 0 && Math.abs(((mid - clusterMid) / clusterMid) * 100) <= 1.2;
+    });
+    return dup === index;
+  });
+
+  const best = deduped.sort((a, b) => b.score - a.score || a.distancePct - b.distancePct)[0];
+  if (!best) return [];
+
+  let kind: "support" | "resistance";
+  if (lastClose < best.lower) {
+    kind = "resistance";
+  } else if (lastClose > best.upper) {
+    kind = "support";
+  } else {
+    // Price sits inside the zone -- ambiguous; break the tie using the
+    // previous few weekly bars (excluding the current one), falling back
+    // to the zone's original structural classification.
+    const level = (best.lower + best.upper) / 2;
+    const priorBars = weekly.slice(-4, -1);
+    let below = 0, above = 0;
+    for (const bar of priorBars) {
+      if (!Number.isFinite(bar.close)) continue;
+      if (bar.close < level) below++;
+      else if (bar.close > level) above++;
+    }
+    kind = below > above ? "resistance" : above > below ? "support" : best.kind;
+  }
+
+  return [{
+    kind,
+    lower: best.lower,
+    upper: best.upper,
+    label: `${kind === "support" ? "Macro support" : "Macro resistance"} (${best.touches} touches)`,
+  }];
+}
+
+function divStateForIndicator(div: ReturnType<typeof detectDivergenceFromHistory> | null, which: "rsi" | "macd"): DivergenceState {
+  if (!div) return "none"; if (which === "rsi" && !div.hasRsi) return "none"; if (which === "macd" && !div.hasMacd) return "none"; return div.kind;
+}
+function divergenceLabel(state: DivergenceState) { return state === "bullish" ? "Bullish" : state === "bearish" ? "Bearish" : "—"; }
+function divergenceTone(state: DivergenceState): OverviewItem["tone"] { return state === "bullish" ? "green" : state === "bearish" ? "red" : "muted"; }
+function toneToColor(tone: OverviewItem["tone"], isDark: boolean) {
+  if (tone === "green") return isDark ? "#22c55e" : "#16a34a"; if (tone === "yellow") return isDark ? "#eab308" : "#ca8a04";
+  if (tone === "orange") return isDark ? "#fb923c" : "#ea580c"; if (tone === "red") return isDark ? "#ef4444" : "#dc2626";
+  return isDark ? "rgba(241,245,249,0.45)" : "rgba(11,18,32,0.45)";
+}
+function toneRank(t: OverviewItem["tone"]) { if (t === "red") return 4; if (t === "orange") return 3; if (t === "yellow") return 2; if (t === "green") return 1; return 0; }
+function renderFlagsMeter(opts: { flagged: number; total: number; color: string; isDark: boolean }) {
+  const { flagged, total, color, isDark } = opts;
+  const st = Math.max(1, Math.min(20, Math.floor(total))), sf = Math.max(0, Math.min(st, Math.floor(flagged)));
+  return (<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{Array.from({ length: st }).map((_, i) => <span key={i} style={{ width: 14, height: 6, borderRadius: 999, background: i < sf ? color : isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)", border: isDark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(0,0,0,0.10)" }} />)}</div><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>{sf}/{st}</div></div>);
+}
+// ran === 0 means none of the checks executed. "Calm" is a real reading and the
+// intensity <= 1 arm would otherwise claim it from zero evidence -- the tag half
+// of the same bug as the 0/6 chip, and fixing only one would put an honest em
+// dash beside a chip still reading "Calm".
+// `ran` is REQUIRED, not defaulted. A default here would mean a future caller
+// that forgets it silently gets "assume at least one check ran" -- the same
+// unbacked claim `known: true` would have been in #317.
+function compositeToneFromCounts(ob: number, os: number, sp: number, ran: number) {
+  if (ran === 0) return { tone: "muted" as const, tag: "Not enough history yet" };
+  const net = ob - os, intensity = ob + os + sp;
+  if (intensity <= 1) return { tone: "yellow" as const, tag: "Calm" }; if (net >= 2) return { tone: intensity >= 5 ? "red" as const : "orange" as const, tag: "Overbought-leaning" };
+  if (net === 1) return { tone: "orange" as const, tag: "Slightly overbought" }; if (net <= -2) return { tone: intensity >= 5 ? "green" as const : "yellow" as const, tag: "Oversold-leaning" };
+  if (net === -1) return { tone: "yellow" as const, tag: "Slightly oversold" }; return { tone: intensity >= 5 ? "orange" as const : "yellow" as const, tag: "Mixed" };
+}
+function trendToneFromScore(ts: TrendScore | null): OverviewItem["tone"] {
+  // Not computable scores get the same muted tone as a missing score. Any of
+  // green/yellow/orange/red would only be choosing which false reading to show.
+  if (!ts || !ts.known) return "muted"; const r = ts.total > 0 ? ts.passed / ts.total : 0;
+  if (r >= 0.75) return "green"; if (r >= 0.5) return "yellow"; if (r >= 0.25) return "orange"; return "red";
+}
+function formatPctFromBase(last: number | null, base: number | null) {
+  if (typeof last !== "number" || typeof base !== "number" || !Number.isFinite(last) || !Number.isFinite(base) || base === 0) return null;
+  return ((last - base) / base) * 100;
+}
+function buildTrendScore(a: { lastClose: number | null; ma50: number | null; ma200: number | null; macdHist: number | null }): TrendScore {
+  const { lastClose, ma50, ma200, macdHist } = a;
+  const checks = [{ name: "Price > MA200", ok: typeof lastClose === "number" && typeof ma200 === "number" ? lastClose > ma200 : null }, { name: "Price > MA50", ok: typeof lastClose === "number" && typeof ma50 === "number" ? lastClose > ma50 : null }, { name: "MA50 > MA200", ok: typeof ma50 === "number" && typeof ma200 === "number" ? ma50 > ma200 : null }, { name: "MACD hist > 0", ok: typeof macdHist === "number" ? macdHist > 0 : null }];
+  return { total: 4, passed: checks.reduce((acc, c) => acc + (c.ok === true ? 1 : 0), 0), known: checks.every(c => c.ok !== null), details: checks };
+}
+function buildStretchScore(a: { lastClose: number | null; rsi14: number | null; stochK: number | null; bollUpper: number | null; bollLower: number | null; ema20: number | null; vwap: number | null; ma50: number | null }): StretchScore {
+  const { lastClose, rsi14, stochK, bollUpper, bollLower, ema20, vwap, ma50 } = a;
+  const details: StretchScore["details"] = []; let os = 0, ob = 0;
+  const checkRange = (val: number | null, lo: number, hi: number, name: string) => { if (typeof val === "number") { if (val <= lo) { os++; details.push({ name, state: "oversold" }); } else if (val >= hi) { ob++; details.push({ name, state: "overbought" }); } else details.push({ name, state: "neutral" }); } else details.push({ name, state: "na" }); };
+  checkRange(rsi14, 30, 70, "RSI"); checkRange(stochK, 20, 80, "Stoch");
+  if (typeof lastClose === "number" && typeof bollLower === "number" && typeof bollUpper === "number") { if (lastClose < bollLower) { os++; details.push({ name: "Bollinger", state: "oversold" }); } else if (lastClose > bollUpper) { ob++; details.push({ name: "Bollinger", state: "overbought" }); } else details.push({ name: "Bollinger", state: "neutral" }); } else details.push({ name: "Bollinger", state: "na" });
+  const checkPct = (val: number | null, ref: number | null, thresh: number, name: string) => { if (typeof lastClose === "number" && typeof val === "number" && typeof ref === "number" && ref > 0) { const p = (lastClose - ref) / ref; if (p <= -thresh) { os++; details.push({ name, state: "oversold" }); } else if (p >= thresh) { ob++; details.push({ name, state: "overbought" }); } else details.push({ name, state: "neutral" }); } else details.push({ name, state: "na" }); };
+  checkPct(vwap, vwap, 0.02, "VWMA dist"); checkPct(ema20, ema20, 0.05, "EMA20 dist"); checkPct(ma50, ma50, 0.05, "MA50 dist");
+  return { total: 6, flagged: os + ob, ran: details.filter(d => d.state !== "na").length, oversold: os, overbought: ob, details };
+}
+
+const PRESET_TICKERS: { symbol: string; name: string }[] = [
+  { symbol: "AAPL", name: "Apple Inc." }, { symbol: "ABBV", name: "AbbVie Inc." }, { symbol: "ABT", name: "Abbott Laboratories" }, { symbol: "ADBE", name: "Adobe Inc." }, { symbol: "AMZN", name: "Amazon.com Inc." }, { symbol: "AVGO", name: "Broadcom Inc." }, { symbol: "BAC", name: "Bank of America" }, { symbol: "BRK.B", name: "Berkshire Hathaway B" }, { symbol: "COST", name: "Costco Wholesale" }, { symbol: "CRM", name: "Salesforce Inc." }, { symbol: "CSCO", name: "Cisco Systems" }, { symbol: "CVX", name: "Chevron Corp." }, { symbol: "DIS", name: "Walt Disney Co." }, { symbol: "GOOGL", name: "Alphabet Inc. Class A" }, { symbol: "HD", name: "Home Depot" }, { symbol: "INTC", name: "Intel Corp." }, { symbol: "JNJ", name: "Johnson & Johnson" }, { symbol: "JPM", name: "JPMorgan Chase" }, { symbol: "KO", name: "Coca-Cola Co." }, { symbol: "LLY", name: "Eli Lilly & Co." }, { symbol: "MA", name: "Mastercard Inc." }, { symbol: "MCD", name: "McDonald's Corp." }, { symbol: "META", name: "Meta Platforms" }, { symbol: "MRK", name: "Merck & Co." }, { symbol: "MSFT", name: "Microsoft Corp." }, { symbol: "NFLX", name: "Netflix Inc." }, { symbol: "NVDA", name: "NVIDIA Corp." }, { symbol: "ORCL", name: "Oracle Corp." }, { symbol: "PEP", name: "PepsiCo Inc." }, { symbol: "PG", name: "Procter & Gamble" }, { symbol: "PYPL", name: "PayPal Holdings" }, { symbol: "QCOM", name: "Qualcomm Inc." }, { symbol: "SBUX", name: "Starbucks Corp." }, { symbol: "T", name: "AT&T Inc." }, { symbol: "TGT", name: "Target Corp." }, { symbol: "TSLA", name: "Tesla Inc." }, { symbol: "TXN", name: "Texas Instruments" }, { symbol: "UNH", name: "UnitedHealth Group" }, { symbol: "V", name: "Visa Inc." }, { symbol: "VZ", name: "Verizon Communications" }, { symbol: "WFC", name: "Wells Fargo" }, { symbol: "WMT", name: "Walmart Inc." }, { symbol: "XOM", name: "Exxon Mobil Corp." },
+  // The curated ETFs' names (#563 COWORK #142 §3): a fund's quote carries none.
+  ...Object.entries(ETF_NAMES).map(([symbol, name]) => ({ symbol, name })),
+].sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+const CRYPTO_PRESETS: { symbol: string; name: string }[] = [
+  { symbol: "BTCUSD", name: "Bitcoin" },
+  { symbol: "ETHUSD", name: "Ethereum" },
+  { symbol: "SOLUSD", name: "Solana" },
+  { symbol: "TRXUSD", name: "TRON" },
+];
+
+const DEFAULT_CRYPTO_SYMBOL = "BTCUSD";
+
+const TIMEFRAMES = [{ label: "D", interval: "d" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "W", interval: "w" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "M", interval: "m" as ChartInterval, fetchBars: 360, defaultVisibleBars: 75 }];
+const PRICE_OVERLAY_OPTIONS: Overlay[] = ["MA50", "MA200", "EMA20", "VWMA(20)", "Bollinger(20,2)", "Trend Helper (Smooth)", "Trend Helper (Fast)", "Support/Resistance"];
+const LOWER_OVERLAY_OPTIONS: Overlay[] = ["RSI(14)", "MACD(12,26,9)", "Stochastic(14,3)", "ATR(14)", "Volume"];
+const ALL_OVERLAY_OPTIONS: string[] = [...PRICE_OVERLAY_OPTIONS, ...LOWER_OVERLAY_OPTIONS];
+function isLowerOverlay(v: Overlay) { return LOWER_OVERLAY_OPTIONS.includes(v); }
+function fmtPrice(v: number) { return `$${v.toFixed(v >= 100 ? 0 : 2)}`; }
+
+// Icons for the Line / Candles toggle (inherit the button's currentColor).
+const LINE_ICON = (
+  <svg width="17" height="15" viewBox="0 0 17 15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1,11 5,6 9,8 15,2" /></svg>
+);
+const CANDLE_ICON = (
+  <svg width="17" height="15" viewBox="0 0 17 15" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <line x1="5" y1="1.5" x2="5" y2="13.5" /><rect x="3" y="4.5" width="4" height="5.5" rx="0.6" fill="currentColor" stroke="none" />
+    <line x1="12" y1="2.5" x2="12" y2="12.5" /><rect x="10" y="5.5" width="4" height="4.6" rx="0.6" />
+  </svg>
+);
+type ChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string; label: string };
+
+// Finds the offset (bars back from "now") that puts the bar nearest `iso`
+// at the left edge of the visible window (plus a small left margin), so a
+// deep-linked reference price/date (e.g. an all-time high) is guaranteed
+// visible without the user needing to manually zoom/pan.
+function computeFocusWindow(historyAll: Point[], iso: string, leftMargin = 15) {
+  if (!iso || !historyAll.length) return null;
+  const idx = historyAll.findIndex(p => p.date >= iso);
+  const anchor = idx >= 0 ? idx : 0;
+  const desiredStart = Math.max(0, anchor - leftMargin);
+  const bars = historyAll.length - desiredStart;
+  return { visibleBars: Math.min(historyAll.length, Math.max(bars, 30)), windowOffset: 0 };
+}
+
+// Same idea as computeFocusWindow but anchored to a *price* (a macro Support/
+// Resistance zone) rather than a date: grow the visible window back from the
+// latest bar until its price range covers the whole zone, so the S/R band sits
+// among the candles rather than floating off the top/bottom when the chart is
+// zoomed in too tight. Falls back to the full history if price never reached
+// the zone in the fetched window.
+function computeSrFocusWindow(historyAll: Point[], zone: { lower: number; upper: number } | null | undefined, minBars = 40) {
+  if (!historyAll.length || !zone) return null;
+  const lower = Math.min(zone.lower, zone.upper);
+  const upper = Math.max(zone.lower, zone.upper);
+  if (!Number.isFinite(lower) || !Number.isFinite(upper)) return null;
+  let lo = Infinity, hi = -Infinity, bars = 0;
+  for (let i = historyAll.length - 1; i >= 0; i--) {
+    const p = historyAll[i];
+    const h = typeof p.high === "number" && Number.isFinite(p.high) ? p.high : p.close;
+    const l = typeof p.low === "number" && Number.isFinite(p.low) ? p.low : p.close;
+    if (h > hi) hi = h;
+    if (l < lo) lo = l;
+    bars++;
+    if (lo <= lower && hi >= upper && bars >= minBars) break;
+  }
+  return { visibleBars: Math.min(historyAll.length, Math.max(bars, minBars)), windowOffset: 0 };
+}
+
+export default function DashboardClient({
+  defaultSymbol = "SPY",
+  initialQuote = null,
+  initialHistory = [],
+  initialSymbolName = "",
+  initialBenchmarks = null,
+  initialNews = null,
+  initialEarningsSummary = null,
+  pageToken = "",
+  tiingoCredit = null,
+  historyCredit = null,
+  initialHistoryProvider = null,
+  landing = null,
+}: {
+  defaultSymbol?: string;
+  initialQuote?: Quote | null;
+  initialHistory?: Point[];
+  initialSymbolName?: string;
+  initialBenchmarks?: BenchPayload | null;
+  initialNews?: NewsPayload | null;
+  initialEarningsSummary?: StockEarningsSummary | null;
+  // Short-lived signed token minted server-side (lib/server/quoteToken.ts) and
+  // echoed back on the /api/quote fetch below. Session-scoped, so it stays
+  // valid across chooseSymbol() switches. "" means unconfigured -> no header.
+  pageToken?: string;
+  // The linked "Market data from Tiingo.com", rendered by the server page when
+  // PRICE_PROVIDER_STOCK_PAGE=tiingo (step 4). Shown beside a Tiingo figure only.
+  tiingoCredit?: React.ReactNode;
+  // The linked "Market data from Tiingo.com" when PRICE_PROVIDER_HISTORY=tiingo (step 3).
+  historyCredit?: React.ReactNode;
+  // Whose bars `initialHistory` is ("tiingo", "fmp" or "none"); the credit
+  // shows only beside a series that is Tiingo's (#553 COWORK #103).
+  initialHistoryProvider?: string | null;
+  /**
+   * THE LANDING (#563 COWORK #134): /dashboard only. With it, the page leads
+   * with the hero, "Market right now" and the cards (server-rendered, passed
+   * in), and this analyser moves below them as "{SYM} at a glance". Without it
+   * (the home page), the layout is unchanged.
+   */
+  landing?: DashboardLandingProps | null;
+}) {
+  const router = useRouter(), searchParams = useSearchParams();
+  const [assetType, setAssetType] = useState<AssetType>("stock");
+  // Initial symbol resolution: URL -> remembered -> server default.
+  //
+  // The URL used to lose. `?symbol=` was only applied by an effect that runs
+  // AFTER mount, so initial state was localStorage regardless of the URL, and
+  // /pickers -> /dashboard?symbol=NVDA rendered the remembered symbol first and
+  // swapped once hydrated. An explicit symbol in the URL is a more specific
+  // instruction than a remembered one and should never lose to it.
+  //
+  // Note the server render was always correct -- app/dashboard/page.tsx already
+  // resolves `?symbol=` into `defaultSymbol` -- so this flash was purely the
+  // client disagreeing with the HTML it had just been sent.
+  //
+  // The remembered-symbol behaviour below is deliberately unchanged.
+  const initialSymbol = () => {
+    const fromUrl = cleanSymbol(searchParams.get("symbol"));
+    if (fromUrl) return fromUrl;
+    if (typeof window === "undefined") return defaultSymbol;
+    // readRememberedSymbol() reads the msh_sym COOKIE first, which is what
+    // app/dashboard/page.tsx resolved this render from, so the two agree and
+    // the server's seed payloads are usable instead of discarded. localStorage
+    // is still the fallback inside that helper. On "/" there is no
+    // cookie-aware server resolution (app/page.tsx is untouched), so this is
+    // simply the memory read it always was.
+    return readRememberedSymbol() || defaultSymbol;
+  };
+  // THE LANDMINE (claude/dashboard-homepage-perf-2026-08-20.md).
+  //
+  // The persist effect below used to be safe only by coincidence: `symbol` was
+  // seeded FROM localStorage, so a passive mount read X and wrote X back -- a
+  // no-op. Nothing said so. The moment the seed came from anywhere else, that
+  // same line overwrote the memory with whatever happened to render, on the
+  // first visit, destroying the thing it exists to keep. #294 hit exactly this:
+  // the Resume chip appeared once and never again, and it passed every
+  // single-session test because only a NEW browser session exposes it.
+  //
+  // This change moves the seed to the cookie, so the coincidence is gone and
+  // the invariant has to be made explicit: persist only what the visitor
+  // ACTUALLY CHOSE -- a chooseSymbol() call, or a ?symbol= deep link -- never
+  // what merely rendered. A passive visit now writes nothing at all.
+  const symbolWasChosenRef = useRef(
+    Boolean(cleanSymbol(searchParams.get("symbol")))
+  );
+
+  const [symbol, setSymbol] = useState(initialSymbol);
+  const [lastStockSymbol, setLastStockSymbol] = useState(initialSymbol);
+  // Server-rendered seed data (quote/history/benchmarks/news/earnings) only
+  // matches `symbol` when this render landed on the same symbol the server
+  // fetched for (the common case: a fresh visitor or crawler with no
+  // remembered "last symbol" in localStorage). A returning visitor whose
+  // localStorage points at a different symbol just falls through to the
+  // pre-existing client-fetch-on-mount behaviour for that symbol below --
+  // no regression, the seed is simply unused in that case.
+  const seedMatchesSymbol = symbol === defaultSymbol;
+  const [symbolName, setSymbolName] = useState(() => (seedMatchesSymbol ? initialSymbolName || ETF_NAMES[defaultSymbol.toUpperCase()] || "" : ""));
+  const [activeTimeframe, setActiveTimeframe] = useState("D");
+  const [visibleBars, setVisibleBars] = useState(75);
+  const [windowOffset, setWindowOffset] = useState(0);
+  const [chartInterval, setChartInterval] = useState<ChartInterval>("d");
+  const [indicator, setIndicator] = useState<Overlay>("None");
+  const [selectedIndicators, setSelectedIndicators] = useState<Overlay[]>([]);
+  const [chartType, setChartType] = useState<ChartType>("candles");
+  const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
+  const indicatorMenuRef = useRef<HTMLDivElement | null>(null);
+  const chartSectionRef = useRef<HTMLDivElement | null>(null);
+  const [highlightChart, setHighlightChart] = useState(false);
+  const [quote, setQuote] = useState<Quote | null>(() => (seedMatchesSymbol ? initialQuote : null));
+  const [historyAll, setHistoryAll] = useState<Point[]>(() => (seedMatchesSymbol ? initialHistory : []));
+  // Whose bars the chart is showing right now: the seed's, then each
+  // /api/history answer's `provider` (absent on the FMP path).
+  const [historyProvider, setHistoryProvider] = useState<string | null>(() => (seedMatchesSymbol ? initialHistoryProvider : null));
+  const [symbolCache, setSymbolCache] = useState<Record<string, CachedSymbolData>>(() => {
+    if (!seedMatchesSymbol || (!initialHistory.length && !initialQuote)) return {};
+    // Matches the cache-key shape the main data-loading effect below
+    // computes, for the "D" timeframe this component always starts on --
+    // seeding this lets that effect find a "hit" on first run and skip its
+    // own fetch entirely, using this server-fetched data instead.
+    const seedTf = TIMEFRAMES[0];
+    const key = `${defaultSymbol}:D:${seedTf.fetchBars}:${seedTf.interval}`;
+    return { [key]: { quote: initialQuote, history: initialHistory, provider: initialHistoryProvider } };
+  });
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [query, setQuery] = useState(symbol);
+  const [results, setResults] = useState<SymbolResult[]>([]);
+  const [open, setOpen] = useState(false);
+  // TWO SEARCH BOXES ON THE LANDING (#563 COWORK #164 D): the hero's and the
+  // analyser's "Change stock…". They share the one query and result list, so
+  // only the box last focused shows the query and its dropdown.
+  const [searchFrom, setSearchFrom] = useState<"hero" | "change">("hero");
+  const focusSearch = (from: "hero" | "change") => { if (from !== searchFrom) { setSearchFrom(from); setQuery(""); } setOpen(true); };
+  const searchBoxRef = useRef<HTMLDivElement>(null);
+  const mobileSearchBoxRef = useRef<HTMLDivElement>(null);
+  const [bench, setBench] = useState<BenchPayload | null>(initialBenchmarks);
+  const [news, setNews] = useState<NewsPayload | null>(() => (seedMatchesSymbol ? initialNews : null));
+  const [earningsSummary, setEarningsSummary] = useState<StockEarningsSummary | null>(() => (seedMatchesSymbol ? initialEarningsSummary : null));
+  const [expanded, setExpanded] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  // THE ANALYSER'S TABS AND ITS ANCHOR (#563 COWORK #134), landing mode only.
+  const [tab, setTab] = useState<AnalyserTab>("chart");
+  const analyserRef = useRef<HTMLElement>(null);
+  // WIDE CHART (#553 COWORK #27, layout only; lib/dashboardWide.ts). The chart
+  // spans both columns and the Overview + Breakdown cards sit below it, side
+  // by side. Remembered per viewer; renders normally without storage.
+  const [wideChart, setWideChart] = useState(false);
+  useEffect(() => { setWideChart(readWideChoice(browserStorage())); }, []);
+  function toggleWideChart() {
+    setWideChart((w) => {
+      writeWideChoice(browserStorage(), !w);
+      return !w;
+    });
+  }
+  // The desktop grid's width, measured, so the Basic chart can RE-MEASURE:
+  // its viewBox widens with the box (wideViewWidth) rather than the SVG
+  // scaling up. The grid div is stable across renders, unlike ChartPanel.
+  const deskGridRef = useRef<HTMLDivElement | null>(null);
+  const [deskGridWidth, setDeskGridWidth] = useState(0);
+  useEffect(() => {
+    const el = deskGridRef.current;
+    if (!el) return;
+    const measure = () => setDeskGridWidth(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const basicViewWidth = wideChart && !isMobile ? wideViewWidth(deskGridWidth) : undefined;
+  // Every engine re-measures on toggle: Interactive has its own ResizeObserver
+  // and TradingView autosizes, but both also listen for window resize, so one
+  // is dispatched after the layout has changed.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    return () => window.cancelAnimationFrame(id);
+  }, [wideChart]);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [externalZone, setExternalZone] = useState<SupportResistanceZone | null>(null);
+  const [chartFocus, setChartFocus] = useState<ChartFocus | null>(null);
+  // One-shot flags: skip the very first run of the corresponding fetch
+  // effect when server-seeded data for the current symbol is already
+  // sitting in state above. Each effect below flips its own flag back to
+  // false immediately after honouring it once, so every later
+  // symbol/asset-type change still fetches normally.
+  const seededSymbolNameRef = useRef(seedMatchesSymbol && Boolean(initialSymbolName));
+  const seededBenchRef = useRef(Boolean(initialBenchmarks));
+  const seededNewsRef = useRef(seedMatchesSymbol && Boolean(initialNews));
+  const seededEarningsRef = useRef(seedMatchesSymbol && Boolean(initialEarningsSummary));
+  // Three-way chart mode: "basic" (custom SVG chart, the only mode that shows
+  // picker deep-link drawings), "interactive" (KLineChart engine) and
+  // "tradingview" (TradingView Advanced Chart embed). This component owns the
+  // switch and renders each engine itself, so PriceChart runs Basic-only via
+  // hideSourceToggle. Defaults to "basic" so picker deep-links still land on
+  // the drawing-capable chart.
+  const [chartMode, setChartMode] = useState<ChartMode>("basic");
+  const isInteractive = chartMode === "interactive";
+  // True fullscreen (fill-viewport) overlay, available in every mode.
+  const [fullscreen, setFullscreen] = useState(false);
+  const fsOverlayRef = useRef<HTMLDivElement | null>(null);
+  // Short + landscape viewport (a phone rotated sideways in fullscreen): drives
+  // the single-row icon-only toolbar so the chart keeps its vertical space.
+  const [fsLandscape, setFsLandscape] = useState(false);
+  useEffect(() => {
+    if (!fullscreen) { setFsLandscape(false); return; }
+    const check = () => setFsLandscape(window.innerWidth > window.innerHeight && window.innerHeight <= 560);
+    check();
+    window.addEventListener("resize", check);
+    window.addEventListener("orientationchange", check);
+    return () => { window.removeEventListener("resize", check); window.removeEventListener("orientationchange", check); };
+  }, [fullscreen]);
+
+  // Leaving fullscreen while Interactive is active. On a phone the Interactive
+  // chart has no inline view -- the card collapses to an "Open Interactive
+  // Chart" placeholder -- so closing fullscreen used to dump the user on that
+  // dead placeholder instead of a chart. Exiting returns the card to Basic.
+  // Desktop keeps Interactive: the inline engine renders there for real.
+  const exitFullscreen = useCallback(() => {
+    setFullscreen(false);
+    setChartMode((m) => (isMobile && m === "interactive" ? "basic" : m));
+  }, [isMobile]);
+  // Read by the fullscreen effect below, which must not re-run (and so
+  // re-request native fullscreen) every time this callback's identity changes.
+  const exitFullscreenRef = useRef(exitFullscreen);
+  exitFullscreenRef.current = exitFullscreen;
+
+  function selectChartMode(next: ChartMode) {
+    setChartMode(next);
+    // On phones the Interactive chart is only usable at full size, so open it
+    // fullscreen straight away (it can then be viewed in portrait or landscape).
+    if (next === "interactive" && isMobile) setFullscreen(true);
+    // Switching back to Basic drops out of fullscreen — Basic has no fullscreen
+    // of its own, so returning to it should restore the normal dashboard view.
+    else if (next === "basic") setFullscreen(false);
+  }
+
+  const theme = "dark" as const;
+  const selectedTimeframe = useMemo(() => TIMEFRAMES.find(t => t.label === activeTimeframe) ?? TIMEFRAMES[0], [activeTimeframe]);
+  const COLORS = useMemo(() => ({ isDark: true, pageBg: "#0a0f1a", pageFg: "#eaf0fa", mutedFg: "#8a97ad", mutedFg2: "#5f6b80", cardBg: "#141b2b", cardFg: "#eaf0fa", cardBg2: "#0f1624", border: "#222c40", borderSoft: "#1a2336", controlBg: "#0f1624", controlBgSolid: "#0f1624", controlBorder: "#222c40", controlFg: "#eaf0fa", blue: "#2f6bff", blueSoft: "#13213f", blueBorder: "#27406f", green: "#16c784", greenSoft: "#0f2a23", greenBorder: "#1c4a3c", amber: "#f5a524", amberSoft: "#2c2310", amberBorder: "#3a2f10", red: "#f04444", yellowBorder: "rgba(234,179,8,0.38)", yellowBg: "rgba(234,179,8,0.10)", yellowText: "#fde68a" }), []);
+
+  // A CHART LINK LANDS ON THE ANALYSER (#563 COWORK #134, #151, #152):
+  // chartHref's #analyser, the older #chart, or a ?symbol= deep link. A layout
+  // effect, so the first jump lands before the first paint after hydration and
+  // the hero never flashes; holdOnAnalyser then keeps it there while the page
+  // settles (the router's own scroll, images, fonts) until the reader moves.
+  const deepSymbol = searchParams.get("symbol");
+  useLayoutEffect(() => {
+    if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;
+    return holdOnAnalyser(() => analyserRef.current);
+  }, [landing, deepSymbol]);
+  useEffect(() => { const r = () => setIsMobile(window.innerWidth <= 768); r(); window.addEventListener("resize", r); return () => window.removeEventListener("resize", r); }, []);
+  useEffect(() => { if (symbolName.trim()) return; const list = assetType === "crypto" ? CRYPTO_PRESETS : PRESET_TICKERS; const f = list.find(x => x.symbol.toUpperCase() === symbol.toUpperCase()); if (f?.name) setSymbolName(f.name); }, [symbol, symbolName, assetType]);
+  useEffect(() => { setChartInterval(selectedTimeframe.interval); setVisibleBars(selectedTimeframe.defaultVisibleBars); setWindowOffset(0); }, [symbol, selectedTimeframe]);
+  useEffect(() => {
+    const us = searchParams.get("symbol"); const cleaned = us ? us.trim().toUpperCase() : ""; if (!cleaned) return;
+    // A ?symbol= deep link is an explicit choice and must be remembered, even
+    // when it arrives by client-side navigation AFTER mount (/pickers ->
+    // /dashboard?symbol=NVDA). The ref is seeded from the URL at mount for the
+    // full-load case; this covers the soft-navigation one.
+    symbolWasChosenRef.current = true;
+    const tf = (searchParams.get("tf") || "").trim().toUpperCase();
+    const indi = (searchParams.get("indicator") || "").trim();
+    const indicatorsRaw = (searchParams.get("indicators") || "").trim();
+    setSymbol(cleaned); setQuery(cleaned); setResults([]); setOpen(false);
+    setActiveTimeframe(tf === "D" || tf === "W" || tf === "M" ? tf : "D");
+
+    // Deep-link support/resistance zone (from the /pickers Macro Support /
+    // Resistance category) -- an externally-supplied zone rather than the
+    // locally-computed one, merged in below.
+    const srLower = Number(searchParams.get("srLower"));
+    const srUpper = Number(searchParams.get("srUpper"));
+    const srKind = searchParams.get("srKind");
+    const hasExternalZone = Number.isFinite(srLower) && Number.isFinite(srUpper) && (srKind === "support" || srKind === "resistance");
+    setExternalZone(hasExternalZone ? { kind: srKind as "support" | "resistance", lower: Math.min(srLower, srUpper), upper: Math.max(srLower, srUpper), label: srKind === "support" ? "Macro support" : "Macro resistance" } : null);
+
+    // Deep-link reference line + auto-zoom (ATH breakout / down-20%-from-ATH
+    // / 3-month-high breakout picks from /pickers).
+    const athPrice = Number(searchParams.get("athPrice"));
+    const rangeHighPrice = Number(searchParams.get("rangeHighPrice"));
+    if (Number.isFinite(athPrice) && athPrice > 0) {
+      const date = (searchParams.get("athDate") || "").trim();
+      setChartFocus({ kind: "ath", price: athPrice, date, label: `All-time high ${fmtPrice(athPrice)}` });
+    } else if (Number.isFinite(rangeHighPrice) && rangeHighPrice > 0) {
+      const date = (searchParams.get("rangeHighDate") || "").trim();
+      setChartFocus({ kind: "rangeHigh", price: rangeHighPrice, date, label: `3-month high ${fmtPrice(rangeHighPrice)}` });
+    } else {
+      setChartFocus(null);
+    }
+
+    // Indicator selection: `indicators` (comma-separated) wins for
+    // multi-select deep links (e.g. Best Trend Score -> MA50,MA200);
+    // otherwise fall back to the single `indicator` param. Any value from
+    // the chart's own supported overlay/oscillator lists is accepted, not
+    // just the original 3 hardcoded ones.
+    const requested = indicatorsRaw
+      ? indicatorsRaw.split(",").map(s => s.trim()).filter(Boolean)
+      : indi
+        ? [indi]
+        : [];
+    const valid = requested.filter(v => ALL_OVERLAY_OPTIONS.includes(v)) as Overlay[];
+    if (hasExternalZone && !valid.includes("Support/Resistance")) valid.push("Support/Resistance");
+    if (valid.length) {
+      setSelectedIndicators(valid);
+      const preferredLower = valid.find(isLowerOverlay);
+      setIndicator(preferredLower ?? valid[0]);
+    } else {
+      setSelectedIndicators([]); setIndicator("None");
+    }
+
+    setIndicatorMenuOpen(false);
+    if (!Number.isFinite(athPrice) && !Number.isFinite(rangeHighPrice)) setWindowOffset(0);
+  }, [searchParams]);
+  useEffect(() => {
+    if (!chartFocus?.date) return;
+    const win = computeFocusWindow(historyAll, chartFocus.date);
+    if (!win) return;
+    setVisibleBars(win.visibleBars);
+    setWindowOffset(win.windowOffset);
+  }, [chartFocus, historyAll]);
+  // MIGRATION -- runs once, for visitors who had a remembered symbol before the
+  // cookie existed. See backfillSymbolCookie() for why this is NOT the landmine
+  // above: it copies an EXISTING remembered value into a second store, never a
+  // render-derived one, and writes nothing at all when localStorage is empty.
+  //
+  // Skipped when the URL carries ?symbol=, so a deep link's own explicit write
+  // is never raced by a backfill of a different symbol.
+  //
+  // Mount-only by design: the server has already rendered by the time this
+  // runs, so an existing visitor still discards ONCE and is correct from their
+  // next load on. No client-side scheme can do better -- the server cannot read
+  // localStorage, which is the reason the cookie exists.
+  useEffect(() => {
+    if (cleanSymbol(searchParams.get("symbol"))) return;
+    backfillSymbolCookie();
+    // Mount only: this is a one-time migration, not a sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const current = symbol.trim().toUpperCase();
+    if (!current) return;
+    // Stock-only, as before: the crypto symbol drives the toggle but is never
+    // the remembered "last stock symbol".
+    if (assetType !== "stock") return;
+    // Unconditional: this is session state for the stock/crypto toggle and is
+    // never persisted, so the landmine does not apply to it.
+    setLastStockSymbol(current);
+    // Persisted ONLY on an explicit choice -- see symbolWasChosenRef above.
+    if (!symbolWasChosenRef.current) return;
+    rememberSymbol(current);
+  }, [symbol, assetType]);
+  useEffect(() => { if (!expanded) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [expanded]);
+
+  // Fullscreen overlay: Escape closes it, and we best-effort request true
+  // browser fullscreen on desktop (harmless no-op where unsupported, e.g. iOS,
+  // where the fixed-position overlay already fills the screen). If the user
+  // exits native fullscreen (Esc / browser UI), keep our state in sync.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") exitFullscreenRef.current(); };
+    window.addEventListener("keydown", onKey);
+
+    const el = fsOverlayRef.current as (HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> }) | null;
+    const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
+    try {
+      if (el && !doc.fullscreenElement && !doc.webkitFullscreenElement) {
+        const p = el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen?.();
+        if (p && typeof (p as Promise<void>).catch === "function") (p as Promise<void>).catch(() => {});
+      }
+    } catch { /* noop */ }
+
+    const onFsChange = () => {
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement) exitFullscreenRef.current();
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    document.addEventListener("webkitfullscreenchange", onFsChange as EventListener);
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener("webkitfullscreenchange", onFsChange as EventListener);
+      try {
+        if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+          const q = doc.exitFullscreen ? doc.exitFullscreen() : doc.webkitExitFullscreen?.();
+          if (q && typeof (q as Promise<void>).catch === "function") (q as Promise<void>).catch(() => {});
+        }
+      } catch { /* noop */ }
+    };
+  }, [fullscreen]);
+  useEffect(() => { function h(e: MouseEvent) { if (!indicatorMenuRef.current) return; if (!indicatorMenuRef.current.contains(e.target as Node)) setIndicatorMenuOpen(false); } document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
+  // Close the ticker search results dropdown when the user clicks outside the search box.
+  // Both the desktop search box and the MobileHero search box share the single `open`
+  // state, so the handler must treat a click inside EITHER wrapper as "inside" --
+  // otherwise a tap on a mobile result reads as outside, closing the dropdown on
+  // mousedown before the click can run chooseSymbol (dead selection).
+  // Arrow keys, Enter, Escape and Tab in the hero search (#553 COWORK #36).
+  // One hook per input: both can be in the DOM at once, and each list needs
+  // its own ids.
+  const closeSearch = useCallback(() => setOpen(false), []);
+  const pickResult = (i: number) => { const r = results[i]; if (r?.symbol) chooseSymbol(r.symbol, r.name, assetType); };
+  const navDesk = useListboxNav({ count: Math.min(results.length, 8), open, onSelect: pickResult, onClose: closeSearch, resetKey: query });
+  const navMobile = useListboxNav({ count: Math.min(results.length, 8), open, onSelect: pickResult, onClose: closeSearch, resetKey: query });
+  useEffect(() => { function h(e: MouseEvent) { const t = e.target as Node; const inDesktop = !!searchBoxRef.current && searchBoxRef.current.contains(t); const inMobile = !!mobileSearchBoxRef.current && mobileSearchBoxRef.current.contains(t); if (!inDesktop && !inMobile) setOpen(false); } document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
+  useEffect(() => {
+    if (assetType === "crypto") { const p = CRYPTO_PRESETS.find(t => t.symbol === symbol); if (p) setSymbolName(p.name); return; }
+    const p = PRESET_TICKERS.find(t => t.symbol === symbol); if (p) { setSymbolName(p.name); return; }
+    if (seededSymbolNameRef.current) { seededSymbolNameRef.current = false; return; }
+    let c = false;
+    async function r() { try { const res = await fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`); if (!res.ok) throw new Error(""); const d = (await res.json()) as { results?: SymbolResult[] }; const rows = Array.isArray(d.results) ? d.results : []; const ex = rows.find(r => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase()); if (!c && ex?.name) setSymbolName(ex.name); } catch { } }
+    r(); return () => { c = true; };
+  }, [symbol, assetType]);
+  useEffect(() => {
+    let c = false;
+    async function load() {
+      const ck = `${symbol}:${activeTimeframe}:${selectedTimeframe.fetchBars}:${selectedTimeframe.interval}`; const hit = symbolCache[ck];
+      if (hit) { setErr(null); setQuote(hit.quote); setHistoryAll(hit.history); setHistoryProvider(hit.provider ?? null); setLoading(false); return; }
+      setLoading(true); setErr(null);
+      try {
+        const [qR, hR] = await Promise.all([fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined), fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${selectedTimeframe.fetchBars}&interval=${chartInterval}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined)]);
+        // 404 = no data for this ticker (no price, no FMP key: #553 COWORK #103), worded, not "Failed to load".
+        if (qR.status === 404) { if (c) return; setErr(`No data available for ${symbol.toUpperCase()}.`); setQuote(null); setHistoryAll([]); setHistoryProvider(null); return; }
+        if (!qR.ok) throw new Error("q"); if (!hR.ok) throw new Error("h");
+        const q = (await qR.json()) as Quote, h = (await hR.json()) as { points: any[]; provider?: string }; if (c) return; const prov = typeof h.provider === "string" ? h.provider : null;
+        const pts: Point[] = (Array.isArray(h.points) ? h.points : []).map((p: any) => ({ date: String(p?.date ?? ""), open: p?.open == null ? undefined : Number(p.open), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume), label: typeof p?.label === "string" ? p.label : undefined })).filter(p => p.date && Number.isFinite(p.close));
+        setQuote(q); setHistoryAll(pts); setHistoryProvider(prov); setSymbolCache(prev => ({ ...prev, [ck]: { quote: q, history: pts, provider: prov } }));
+      } catch { if (c) return; setErr("Failed to load data (try another ticker)."); setQuote(null); setHistoryAll([]); setHistoryProvider(null); }
+      finally { if (!c) setLoading(false); }
+    }
+    load(); return () => { c = true; };
+    // pageToken is a stable server-minted prop for the life of this render,
+    // so including it satisfies exhaustive-deps without causing a refetch.
+  }, [symbol, activeTimeframe, selectedTimeframe, chartInterval, symbolCache, pageToken]);
+  useEffect(() => {
+    let c = false; const q = query.trim(); if (!q) { setResults([]); return; }
+    // /api/symbols already returns results in relevance order (exact symbol >
+    // symbol prefix > name prefix > name word prefix). Do NOT re-sort here: a
+    // client-side alphabetical sort is what buried MSFT below MBOT/MCHP for
+    // the query "micro", and hid ARM behind ARMK/ARMP.
+    const t = setTimeout(async () => { try { const typeParam = assetType === "crypto" ? "&type=crypto" : ""; const r = await fetch(`/api/symbols?q=${encodeURIComponent(q)}${typeParam}`); const d = (await r.json()) as { results: SymbolResult[] }; if (c) return; setResults(Array.isArray(d.results) ? d.results : []); } catch { if (c) return; setResults([]); } }, 250);
+    return () => { c = true; clearTimeout(t); };
+  }, [query, assetType]);
+  useEffect(() => { let c = false; async function lb() { if (seededBenchRef.current) { seededBenchRef.current = false; return; } try { const scope = assetType === "crypto" ? "crypto" : "stock"; const r = await fetch(`/api/benchmarks?scope=${scope}`); if (!r.ok) throw new Error(""); const raw = (await r.json()) as any; if (!c) setBench({ updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(), scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks", items: Array.isArray(raw?.items) ? raw.items : [], ...(raw?.provider === "tiingo" ? { provider: "tiingo" as const } : {}) }); } catch { if (!c) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] }); } } lb(); return () => { c = true; }; }, [assetType]);
+  // The older #chart link: with a landing, holdOnAnalyser already keeps the analyser in view (#152).
+  useEffect(() => { const h = typeof window !== "undefined" ? window.location.hash : ""; if (h !== "#chart" || !historyAll.length || landing) return; const t = window.setTimeout(() => { chartSectionRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }); setHighlightChart(true); setTimeout(() => setHighlightChart(false), 1200); }, 80); return () => window.clearTimeout(t); }, [historyAll, symbol, landing]);
+  useEffect(() => { if (assetType === "crypto") { setNews(null); return; } if (seededNewsRef.current) { seededNewsRef.current = false; return; } let c = false; async function ln() { try { const r = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`); if (!r.ok) throw new Error(""); if (!c) setNews((await r.json()) as NewsPayload); } catch { if (!c) setNews(null); } } ln(); return () => { c = true; }; }, [symbol, assetType]);
+  useEffect(() => { if (assetType === "crypto") { setEarningsSummary(null); return; } if (seededEarningsRef.current) { seededEarningsRef.current = false; return; } let c = false; async function le() { setEarningsSummary(null); try { const r = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" }); if (!r.ok) throw new Error(""); if (!c) setEarningsSummary((await r.json()) as StockEarningsSummary); } catch { if (!c) setEarningsSummary(null); } } le(); return () => { c = true; }; }, [symbol, assetType]);
+
+  const totalPoints = historyAll.length, win = Math.max(visibleBars, 2), maxOffset = Math.max(totalPoints - win, 0), offset = Math.min(Math.max(windowOffset, 0), maxOffset);
+  const { displayStart, displayEnd, displayedHistory } = useMemo(() => { if (!historyAll.length) return { displayStart: 0, displayEnd: 0, displayedHistory: [] as Point[] }; const end = totalPoints - offset, start = Math.max(0, end - win); const slice = historyAll.slice(start, end); if (slice.length >= 2) return { displayStart: start, displayEnd: end, displayedHistory: slice }; return { displayStart: Math.max(totalPoints - 2, 0), displayEnd: totalPoints, displayedHistory: historyAll.slice(-2) }; }, [historyAll, totalPoints, offset, win]);
+
+  const closesAll = useMemo(() => historyAll.map(p => p.close), [historyAll]);
+  const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
+  const ma200Full = useMemo(() => movingAverage(closesAll, 200), [closesAll]);
+  const ema20Full = useMemo(() => ema(closesAll, 20), [closesAll]);
+  const bbFull = useMemo(() => bollinger(closesAll, 20, 2), [closesAll]);
+  const rsi14Full = useMemo(() => rsiWilder(closesAll, 14), [closesAll]);
+  const macdFull = useMemo(() => macd(closesAll, 12, 26, 9), [closesAll]);
+  const vwma20Full = useMemo(() => vwma(historyAll.map(p => p.close), historyAll.map(p => p.volume), 20), [historyAll]);
+  const stochFull = useMemo(() => stochastic(historyAll, 14, 3), [historyAll]);
+  const atr14Full = useMemo(() => atr(historyAll, 14), [historyAll]);
+  const ma50 = useMemo(() => ma50Full.slice(displayStart, displayEnd), [ma50Full, displayStart, displayEnd]);
+  const ma200 = useMemo(() => ma200Full.slice(displayStart, displayEnd), [ma200Full, displayStart, displayEnd]);
+  const ema20Arr = useMemo(() => ema20Full.slice(displayStart, displayEnd), [ema20Full, displayStart, displayEnd]);
+  const bollUpper = useMemo(() => bbFull.upper.slice(displayStart, displayEnd), [bbFull, displayStart, displayEnd]);
+  const bollMid = useMemo(() => bbFull.mid.slice(displayStart, displayEnd), [bbFull, displayStart, displayEnd]);
+  const bollLower = useMemo(() => bbFull.lower.slice(displayStart, displayEnd), [bbFull, displayStart, displayEnd]);
+  const rsi14Arr = useMemo(() => rsi14Full.slice(displayStart, displayEnd), [rsi14Full, displayStart, displayEnd]);
+  const macdLine = useMemo(() => macdFull.line.slice(displayStart, displayEnd), [macdFull, displayStart, displayEnd]);
+  const macdSignal = useMemo(() => macdFull.signal.slice(displayStart, displayEnd), [macdFull, displayStart, displayEnd]);
+  const macdHist = useMemo(() => macdFull.hist.slice(displayStart, displayEnd), [macdFull, displayStart, displayEnd]);
+  const vwma20Arr = useMemo(() => vwma20Full.slice(displayStart, displayEnd), [vwma20Full, displayStart, displayEnd]);
+  const stochK = useMemo(() => stochFull.k.slice(displayStart, displayEnd), [stochFull, displayStart, displayEnd]);
+  const stochD = useMemo(() => stochFull.d.slice(displayStart, displayEnd), [stochFull, displayStart, displayEnd]);
+  const atr14Arr = useMemo(() => atr14Full.slice(displayStart, displayEnd), [atr14Full, displayStart, displayEnd]);
+  const volumeFull = useMemo(() => historyAll.map(p => typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null), [historyAll]);
+  const volSma20Full = useMemo(() => smaNullable(volumeFull, 20), [volumeFull]);
+  const volumeArr = useMemo(() => volumeFull.slice(displayStart, displayEnd), [volumeFull, displayStart, displayEnd]);
+  const volSma20Arr = useMemo(() => volSma20Full.slice(displayStart, displayEnd), [volSma20Full, displayStart, displayEnd]);
+  const atrSma20Full = useMemo(() => smaNullable(atr14Full, 20), [atr14Full]);
+  const atrSma20Arr = useMemo(() => atrSma20Full.slice(displayStart, displayEnd), [atrSma20Full, displayStart, displayEnd]);
+
+  const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
+  const localSupportResistanceZones = useMemo(() => computeMacroSupportResistanceZones(historyAll, lastClose), [historyAll, lastClose]);
+  const supportResistanceZones = useMemo(() => {
+    // Only one zone is ever shown. The deep-linked zone (the exact zone
+    // that qualified this symbol for the Macro Support/Resistance picker
+    // category) takes full priority when present -- the locally-computed
+    // zone is dropped entirely rather than merged in, since showing both
+    // could again put a support zone and a resistance zone at conflicting
+    // price levels on the same chart.
+    if (externalZone) return [externalZone];
+    return localSupportResistanceZones.slice(0, 1);
+  }, [localSupportResistanceZones, externalZone]);
+
+  // When the Support/Resistance overlay is switched on, auto-zoom the chart out
+  // enough that the (macro) S/R band actually lands on screen -- anchor the
+  // visible window to the zone's price (same idea as the date-based focus for
+  // ATH deep-links above). A date focus still wins when one is present, and
+  // this only runs when the selection / zone / symbol changes, so it never
+  // fights the user's own manual zoom afterwards.
+  useEffect(() => {
+    if (chartFocus?.date) return;
+    if (!selectedIndicators.includes("Support/Resistance")) return;
+    const zone = supportResistanceZones[0];
+    if (!zone) return;
+    const win = computeSrFocusWindow(historyAll, zone);
+    if (!win) return;
+    setVisibleBars(win.visibleBars);
+    setWindowOffset(win.windowOffset);
+  }, [selectedIndicators, supportResistanceZones, historyAll, chartFocus]);
+
+  const referenceLines = useMemo(() => (chartFocus ? [{ price: chartFocus.price, label: chartFocus.label }] : []), [chartFocus]);
+  const lastMA50 = lastNum(ma50), lastMA200 = lastNum(ma200);
+  const ma50Pct = formatPctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
+  const ma200Pct = formatPctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
+  const ema20Pct = formatPctFromBase(lastClose, lastNum(ema20Arr));
+  const vwma20Pct = formatPctFromBase(lastClose, lastNum(vwma20Arr));
+  const bbUpperLast = lastNum(bollUpper), bbLowerLast = lastNum(bollLower), rsiLast = lastNum(rsi14Arr), stochLast = lastNum(stochK), macdHistLast = lastNum(macdHist), atrLast = lastNum(atr14Arr), atrSmaLast = lastNum(atrSma20Arr), volumeLast = lastNum(volumeArr), volumeSmaLast = lastNum(volSma20Arr);
+  const trendScore = useMemo(() => buildTrendScore({ lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null, macdHist: lastNum(macdHist) }), [lastClose, lastMA50, lastMA200, macdHist]);
+  const stretchScore = useMemo(() => buildStretchScore({ lastClose, rsi14: lastNum(rsi14Arr), stochK: lastNum(stochK), bollUpper: lastNum(bollUpper), bollLower: lastNum(bollLower), ema20: lastNum(ema20Arr), vwap: lastNum(vwma20Arr), ma50: typeof lastMA50 === "number" ? lastMA50 : null }), [lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwma20Arr, lastMA50]);
+  const divergence = useMemo(() => { const div = detectDivergenceFromHistory(historyAll, { lookbackBars: 60, leftRight: 2, minPriceSwingPct: 1.2, minRsiSwing: 4, macdStdMult: 0.35 }); return { div, rsi: divStateForIndicator(div, "rsi"), macd: divStateForIndicator(div, "macd") }; }, [historyAll]);
+  const overviewMeta = useMemo(() => {
+    const ti = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0, stretchScore.ran), tc = toneToColor(ti.tone, true);
+    // "Range / Mixed" is a real market state and must not be the default for a
+    // stock whose regime cannot be computed. null means not determinable.
+    let trend: string | null = null;
+    if (typeof lastClose === "number" && typeof lastMA50 === "number" && typeof lastMA200 === "number") { if (lastClose > lastMA50 && lastMA50 > lastMA200) trend = "Uptrend"; else if (lastClose < lastMA50 && lastMA50 < lastMA200) trend = "Downtrend"; else trend = "Range / Mixed"; }
+    const av = lastNum(atr14Arr), as_ = lastNum(atrSma20Arr); let vol = "Normal";
+    if (typeof av === "number" && typeof as_ === "number" && as_ > 0) { const r = av / as_; if (r >= 1.5) vol = "Elevated"; else if (r <= 0.85) vol = "Quiet"; }
+    return { toneColor: tc, toneTag: ti.tag, trend, vol };
+  }, [stretchScore, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
+
+  const customMode = selectedIndicators.length > 0;
+  function chartIndicatorLabel(v: Overlay[]) { return !v.length ? "Overview" : v.join(", "); }
+  function chooseSymbol(s: string, name?: string, nextAssetType?: AssetType) { const c = s.trim().toUpperCase(); if (!c) return; symbolWasChosenRef.current = true; if (nextAssetType) setAssetType(nextAssetType); setSymbol(c); setSymbolName(name?.trim() ? name.trim() : ""); setQuery(c); setResults([]); setOpen(false); setActiveTimeframe("D"); setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); }
+  // THE HERO'S SEARCH (#563 COWORK #134): the same chooseSymbol routing, then
+  // down to the analyser, where the answer is.
+  function pickFromHero(sym: string, name?: string) {
+    chooseSymbol(sym, name, "stock");
+    setTab("chart");
+    if (landing) requestAnimationFrame(() => analyserRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }));
+  }
+  function switchAssetType(next: AssetType) {
+    if (next === assetType) return;
+    if (next === "crypto") { chooseSymbol(DEFAULT_CRYPTO_SYMBOL, CRYPTO_PRESETS[0]?.name, "crypto"); return; }
+    chooseSymbol(lastStockSymbol || defaultSymbol, undefined, "stock");
+  }
+  function clearIndicatorSelection() { setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); setIndicatorMenuOpen(false); }
+  function getNextFocusedIndicator(v: Overlay[]) { const al = v.find(x => isLowerOverlay(x)); if (al) return al; if (v.length) return v[v.length - 1]; return "None" as Overlay; }
+  function toggleIndicatorSelection(next: Overlay) {
+    if (next === "None") { clearIndicatorSelection(); return; }
+    setSelectedIndicators(prev => { const on = prev.includes(next); let nv: Overlay[]; if (isLowerOverlay(next)) { nv = on ? prev.filter(v => v !== next) : [...prev.filter(v => !isLowerOverlay(v)), next]; } else { nv = on ? prev.filter(v => v !== next) : [...prev, next]; } setIndicator(getNextFocusedIndicator(nv)); return nv; });
+    setWindowOffset(0);
+  }
+  const chartIndicatorName = chartIndicatorLabel(selectedIndicators);
+
+  // One indicator selected: a live read computed from the plotted series, as of
+  // the last bar on screen, in the timeframe's units (#553 COWORK #38).
+  const readUnit: ReadUnit = activeTimeframe === "W" ? "week" : activeTimeframe === "M" ? "month" : "day";
+  const singleIndicator = selectedIndicators.length === 1 ? selectedIndicators[0] : null;
+  const singleRead = useMemo(() => {
+    if (!singleIndicator) return null;
+    if (!historyAll.length) return "There's no price history loaded for this chart yet, so there's nothing to read.";
+    return indicatorRead(singleIndicator, {
+      closes: closesAll, at: displayEnd - 1, unit: readUnit,
+      ma50: ma50Full, ma200: ma200Full, ema20: ema20Full, vwma20: vwma20Full, bb: bbFull, rsi: rsi14Full, macd: macdFull,
+      stochK: stochFull.k, stochD: stochFull.d, atr: atr14Full, atrAvg: atrSma20Full, volume: volumeFull, volumeAvg: volSma20Full,
+      zone: supportResistanceZones[0] ?? null,
+    });
+  }, [singleIndicator, historyAll, closesAll, displayEnd, readUnit, ma50Full, ma200Full, ema20Full, vwma20Full, bbFull, rsi14Full, macdFull, stochFull, atr14Full, atrSma20Full, volumeFull, volSma20Full, supportResistanceZones]);
+  const singleManual = singleIndicator ? INDICATOR_MANUAL[singleIndicator] ?? null : null;
+
+  const chartSummaryText = useMemo(() => {
+    if (singleRead) return singleRead;
+    if (!customMode) {
+      // null = the MAs this reads from do not exist yet. The custom-indicator
+      // branch below already says "needs more data" per indicator; this branch
+      // defaulted to "mixed structure" instead, which reads as a judgement.
+      let tt: string | null = null;
+      if (typeof lastClose === "number" && typeof lastMA50 === "number" && typeof lastMA200 === "number") { if (lastClose > lastMA50 && lastMA50 > lastMA200) tt = "stronger bullish structure"; else if (lastClose < lastMA50 && lastMA50 < lastMA200) tt = "weaker bearish structure"; else if (lastClose > lastMA50) tt = "mildly constructive structure"; else if (lastClose < lastMA50) tt = "softer short-term structure"; else tt = "mixed structure"; }
+      let st = "limited stretch signals"; if (stretchScore.overbought >= 3) st = "several overbought-style stretch signals"; else if (stretchScore.oversold >= 3) st = "several oversold-style stretch signals"; else if (stretchScore.flagged >= 2) st = "some mixed stretch signals";
+      let mt = ""; if (typeof rsiLast === "number") { if (rsiLast >= 70) mt = ` RSI is ${rsiLast.toFixed(1)} and overbought.`; else if (rsiLast <= 30) mt = ` RSI is ${rsiLast.toFixed(1)} and oversold.`; else mt = ` RSI is ${rsiLast.toFixed(1)} and neutral.`; }
+      let dt = ""; if (divergence.rsi === "bullish" || divergence.macd === "bullish") dt = " Bullish divergence is present."; else if (divergence.rsi === "bearish" || divergence.macd === "bearish") dt = " Bearish divergence is present.";
+      if (tt === null) return `${symbol} does not have enough price history yet to read its trend structure, but is showing ${st}.${mt}${dt}`;
+      return `${symbol} is showing ${tt} with ${st}.${mt}${dt}`;
+    }
+    const parts: string[] = [];
+    selectedIndicators.forEach(ind => {
+      if (ind === "MA50") parts.push(ma50Pct == null ? "MA50 needs more data." : `Price is ${ma50Pct >= 0 ? `${ma50Pct.toFixed(1)}% above` : `${Math.abs(ma50Pct).toFixed(1)}% below`} MA50.`);
+      if (ind === "MA200") parts.push(ma200Pct == null ? "MA200 needs more data." : `Price is ${ma200Pct >= 0 ? `${ma200Pct.toFixed(1)}% above` : `${Math.abs(ma200Pct).toFixed(1)}% below`} MA200.`);
+      if (ind === "EMA20") parts.push(ema20Pct == null ? "EMA20 needs more data." : `Price is ${ema20Pct >= 0 ? `${ema20Pct.toFixed(1)}% above` : `${Math.abs(ema20Pct).toFixed(1)}% below`} EMA20.`);
+      if (ind === "VWMA(20)") parts.push(vwma20Pct == null ? "VWMA(20) needs more data." : `Price is ${vwma20Pct >= 0 ? `${vwma20Pct.toFixed(1)}% above` : `${Math.abs(vwma20Pct).toFixed(1)}% below`} VWMA(20).`);
+      if (ind === "Bollinger(20,2)") { if (typeof lastClose === "number" && typeof bbUpperLast === "number" && typeof bbLowerLast === "number") { if (lastClose > bbUpperLast) parts.push("Price is above the upper Bollinger Band."); else if (lastClose < bbLowerLast) parts.push("Price is below the lower Bollinger Band."); else parts.push("Price is trading inside the Bollinger Bands."); } else parts.push("Bollinger Bands need more data."); }
+      if (ind === "RSI(14)") { if (typeof rsiLast === "number") { if (rsiLast >= 70) parts.push(`RSI is ${rsiLast.toFixed(1)} and overbought.`); else if (rsiLast <= 30) parts.push(`RSI is ${rsiLast.toFixed(1)} and oversold.`); else parts.push(`RSI is ${rsiLast.toFixed(1)} and neutral.`); } else parts.push("RSI needs more data."); }
+      if (ind === "MACD(12,26,9)") { if (typeof macdHistLast === "number") { if (macdHistLast > 0) parts.push("MACD momentum is bullish."); else if (macdHistLast < 0) parts.push("MACD momentum is bearish."); else parts.push("MACD momentum is flat."); } else parts.push("MACD needs more data."); }
+      if (ind === "Stochastic(14,3)") { if (typeof stochLast === "number") { if (stochLast >= 80) parts.push(`Stochastic is ${stochLast.toFixed(1)} and overbought.`); else if (stochLast <= 20) parts.push(`Stochastic is ${stochLast.toFixed(1)} and oversold.`); else parts.push(`Stochastic is ${stochLast.toFixed(1)} and neutral.`); } else parts.push("Stochastic needs more data."); }
+      if (ind === "ATR(14)") { if (typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0) parts.push(`ATR is running at ${(atrLast / atrSmaLast).toFixed(2)}× its 20-day average.`); else parts.push("ATR needs more data."); }
+      if (ind === "Volume") { if (typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0) parts.push(`Volume is running at ${(volumeLast / volumeSmaLast).toFixed(2)}× its 20-day average.`); else parts.push("Volume needs more data."); }
+    });
+    // Two or more: the per-indicator lines, led by the names (#553 COWORK #38).
+    const names = `Showing ${selectedIndicators.join(", ")}.`;
+    return parts.length ? `${names} ${parts.join(" ")}` : `${names} Custom indicator view is active.`;
+  }, [singleRead, customMode, symbol, selectedIndicators, lastClose, lastMA50, lastMA200, ma50Pct, ma200Pct, ema20Pct, vwma20Pct, bbUpperLast, bbLowerLast, rsiLast, stochLast, macdHistLast, atrLast, atrSmaLast, volumeLast, volumeSmaLast, stretchScore, divergence]);
+
+  const selectedBreakdownRows = useMemo(() => {
+    const rows: { label: string; tone: OverviewItem["tone"]; value: string }[] = [];
+    selectedIndicators.forEach(ind => {
+      if (ind === "MA50") rows.push({ label: "MA50 Distance", tone: typeof ma50Pct === "number" ? Math.abs(ma50Pct) >= 5 ? "red" : Math.abs(ma50Pct) >= 2 ? "orange" : "yellow" : "muted", value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%` });
+      if (ind === "MA200") rows.push({ label: "MA200 Distance", tone: typeof ma200Pct === "number" ? Math.abs(ma200Pct) >= 10 ? "red" : Math.abs(ma200Pct) >= 4 ? "orange" : "yellow" : "muted", value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%` });
+      if (ind === "EMA20") rows.push({ label: "EMA20 Distance", tone: typeof ema20Pct === "number" ? Math.abs(ema20Pct) >= 5 ? "red" : Math.abs(ema20Pct) >= 2 ? "orange" : "yellow" : "muted", value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%` });
+      if (ind === "VWMA(20)") rows.push({ label: "VWMA(20) Distance", tone: typeof vwma20Pct === "number" ? Math.abs(vwma20Pct) >= 5 ? "red" : Math.abs(vwma20Pct) >= 2 ? "orange" : "yellow" : "muted", value: vwma20Pct == null ? "—" : `${vwma20Pct >= 0 ? "+" : ""}${vwma20Pct.toFixed(2)}%` });
+      if (ind === "Bollinger(20,2)") { let value = "—"; let tone: OverviewItem["tone"] = "muted"; if (typeof lastClose === "number" && typeof bbUpperLast === "number" && typeof bbLowerLast === "number") { if (lastClose > bbUpperLast) { value = "Above upper band"; tone = "red"; } else if (lastClose < bbLowerLast) { value = "Below lower band"; tone = "green"; } else { value = "Inside bands"; tone = "yellow"; } } rows.push({ label: "Bollinger", tone, value }); }
+      if (ind === "RSI(14)") { rows.push({ label: "RSI", tone: typeof rsiLast === "number" ? rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow" : "muted", value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—" }); if (divergence.rsi !== "none") rows.push({ label: "RSI Div", tone: divergenceTone(divergence.rsi), value: divergenceLabel(divergence.rsi) }); }
+      if (ind === "MACD(12,26,9)") { rows.push({ label: "MACD Hist", tone: typeof macdHistLast === "number" ? macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow" : "muted", value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—" }); if (divergence.macd !== "none") rows.push({ label: "MACD Div", tone: divergenceTone(divergence.macd), value: divergenceLabel(divergence.macd) }); }
+      if (ind === "Stochastic(14,3)") rows.push({ label: "Stoch", tone: typeof stochLast === "number" ? stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow" : "muted", value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—" });
+      if (ind === "ATR(14)") { const r = typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0 ? atrLast / atrSmaLast : null; rows.push({ label: "ATR Ratio", tone: r == null ? "muted" : r >= 1.5 ? "orange" : "yellow", value: r == null ? "—" : `${r.toFixed(2)}×` }); }
+      if (ind === "Volume") { const r = typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0 ? volumeLast / volumeSmaLast : null; rows.push({ label: "Volume Ratio", tone: r == null ? "muted" : r >= 1.8 ? "orange" : "yellow", value: r == null ? "—" : `${r.toFixed(2)}×` }); }
+    });
+    return rows;
+  }, [selectedIndicators, ma50Pct, ma200Pct, ema20Pct, vwma20Pct, lastClose, bbUpperLast, bbLowerLast, rsiLast, stochLast, macdHistLast, atrLast, atrSmaLast, volumeLast, volumeSmaLast, divergence]);
+
+  const overviewItems = useMemo<OverviewItem[]>(() => {
+    const items: OverviewItem[] = []; let order = 0; const push = (it: Omit<OverviewItem, "order">) => items.push({ ...it, order: order++ });
+    const vwap = lastNum(vwma20Arr);
+    if (typeof lastClose === "number" && typeof vwap === "number" && vwap > 0) { const p = ((lastClose - vwap) / vwap) * 100; push({ key: "vwap", label: "VWMA(20)", tone: p >= 2 || p <= -2 ? (Math.abs(p) >= 5 ? "red" : "orange") : "yellow", valueText: `${p >= 0 ? "+" : ""}${p.toFixed(2)}%`, severity: Math.abs(p) }); } else push({ key: "vwap", label: "VWMA(20)", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof macdHistLast === "number") push({ key: "macd", label: "MACD", tone: macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow", valueText: macdHistLast > 0 ? "Bullish" : macdHistLast < 0 ? "Bearish" : "Flat", severity: Math.abs(macdHistLast) }); else push({ key: "macd", label: "MACD", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof rsiLast === "number") push({ key: "rsi", label: "RSI", tone: rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow", valueText: rsiLast >= 70 ? "Overbought" : rsiLast <= 30 ? "Oversold" : "Neutral", severity: rsiLast >= 70 ? rsiLast - 70 : rsiLast <= 30 ? 30 - rsiLast : 0 }); else push({ key: "rsi", label: "RSI", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof stochLast === "number") push({ key: "stoch", label: "Stoch", tone: stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow", valueText: stochLast >= 80 ? "Overbought" : stochLast <= 20 ? "Oversold" : "Neutral", severity: stochLast >= 80 ? stochLast - 80 : stochLast <= 20 ? 20 - stochLast : 0 }); else push({ key: "stoch", label: "Stoch", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof ma200Pct === "number") push({ key: "ma200", label: "MA200", tone: Math.abs(ma200Pct) >= 5 ? "red" : Math.abs(ma200Pct) >= 2 ? "orange" : "yellow", valueText: `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`, severity: Math.abs(ma200Pct) }); else push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0) { const r = volumeLast / volumeSmaLast; push({ key: "vol", label: "Volume", tone: r >= 1.8 ? "orange" : "yellow", valueText: r >= 1.8 ? `Spike ${r.toFixed(2)}×` : `Normal ${r.toFixed(2)}×`, severity: Math.max(0, r - 1) }); } else push({ key: "vol", label: "Volume", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0) { const r = atrLast / atrSmaLast; push({ key: "atr", label: "ATR", tone: r >= 1.5 ? "orange" : "yellow", valueText: r >= 1.5 ? `Spike ${r.toFixed(2)}×` : `Normal ${r.toFixed(2)}×`, severity: Math.max(0, r - 1) }); } else push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
+    if (assetType === "stock") { if (earningsSummary?.hasStructuredData && earningsSummary.tone) push({ key: "earnings", label: "Earnings", tone: earningsSummary.tone === "green" ? "green" : earningsSummary.tone === "red" ? "red" : "yellow", valueText: earningsSummary.toneLabel ?? "Neutral", severity: earningsSummary.tone === "red" ? 0.35 : earningsSummary.tone === "green" ? 0.25 : 0.1 }); else push({ key: "earnings", label: "Earnings", tone: "muted", valueText: "—", severity: 0 }); }
+    if (divergence.rsi !== "none") push({ key: "div_rsi", label: "RSI Div", tone: divergenceTone(divergence.rsi), valueText: divergenceLabel(divergence.rsi), severity: 100 });
+    if (divergence.macd !== "none") push({ key: "div_macd", label: "MACD Div", tone: divergenceTone(divergence.macd), valueText: divergenceLabel(divergence.macd), severity: 100 });
+    return items.sort((a, b) => { if (b.severity !== a.severity) return b.severity - a.severity; const tr = toneRank(b.tone) - toneRank(a.tone); if (tr !== 0) return tr; return a.order - b.order; });
+  }, [lastClose, vwma20Arr, macdHistLast, rsiLast, stochLast, ma200Pct, volumeLast, volumeSmaLast, atrLast, atrSmaLast, divergence, earningsSummary, assetType]);
+
+  function chipToneColor(t: OverviewItem["tone"]) { return toneToColor(t, true); }
+
+  function HelpTip(props: { text: string; isDark: boolean }) {
+    const [ot, setOt] = useState(false);
+    return (<span style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: "50%", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: 11, fontWeight: 900, cursor: "pointer", marginLeft: 6, flex: "0 0 auto", zIndex: 6 }} onMouseEnter={() => setOt(true)} onMouseLeave={() => setOt(false)} onClick={() => setOt(v => !v)}>?{ot ? <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 260, maxWidth: "min(260px, calc(100vw - 32px))", padding: 12, borderRadius: 12, backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", color: "#f1f5f9", fontSize: 12, lineHeight: 1.5, fontWeight: 600, zIndex: 80, boxShadow: "0 10px 24px rgba(0,0,0,0.28)", pointerEvents: "none", whiteSpace: "normal" }}>{props.text}</div> : null}</span>);
+  }
+  // D/W/M as a compact segmented toggle (matches the mode switch / Line-Candle
+  // toggle), so it can sit on the same line as the Basic/Interactive/TradingView
+  // switch.
+  function TimeframeToggle() {
+    return (
+      <div className="dlTbSeg" data-tb="timeframe" style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }} role="group" aria-label="Timeframe">
+        {TIMEFRAMES.map(t => (
+          <button key={t.label} type="button" className="dlTbSegBtn" onClick={() => setActiveTimeframe(t.label)} aria-pressed={activeTimeframe === t.label}
+            style={{ border: "none", borderRadius: 7, padding: isMobile ? "6px 10px" : "7px 13px", background: activeTimeframe === t.label ? COLORS.blue : "transparent", color: activeTimeframe === t.label ? "#fff" : COLORS.mutedFg, fontWeight: 800, fontSize: 12, cursor: "pointer", letterSpacing: "0.02em", minWidth: isMobile ? 30 : 34 }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  function AssetTypeToggle(props: { compact?: boolean }) {
+    const opts: { key: AssetType; label: string }[] = [{ key: "stock", label: "Stocks" }, { key: "crypto", label: "Crypto" }];
+    return (<div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3 }}>
+      {opts.map(o => (<button key={o.key} type="button" onClick={() => switchAssetType(o.key)} style={{ border: "none", borderRadius: 7, padding: props.compact ? "7px 12px" : "9px 16px", background: assetType === o.key ? "rgba(47,107,255,0.28)" : "transparent", color: assetType === o.key ? "#dbeafe" : COLORS.mutedFg, fontWeight: 800, fontSize: props.compact ? 12 : 13, cursor: "pointer", boxShadow: assetType === o.key ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{o.label}</button>))}
+    </div>);
+  }
+  function SectionCard(props: { title?: string; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties; bodyStyle?: React.CSSProperties; allowOverflow?: boolean; }) {
+    return (<section style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, color: COLORS.cardFg, overflow: props.allowOverflow ? "visible" : "hidden", minWidth: 0, ...props.style }}>{props.title || props.right ? <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div style={{ fontWeight: 800, fontSize: 14, color: COLORS.mutedFg }}>{props.title}</div>{props.right}</div> : null}<div style={{ padding: 16, ...props.bodyStyle }}>{props.children}</div></section>);
+  }
+  function BreakdownHelpButton() { return (<div style={{ display: "flex", alignItems: "center", gap: 10 }}><HelpTip text={customMode ? "This breakdown is showing the indicators you currently selected on the chart." : "Breakdown shows the main dashboard indicators including trend, momentum, stretch, volatility and divergence clues."} isDark={true} /><Link href="/learn" style={{ color: "#9cc0ff", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Learn more →</Link></div>); }
+  // Zoom + / − cluster. On Basic this now rides on the mode-switch line (line 1)
+  // rather than line 2, so the whole toolbar collapses to 2 lines on phone
+  // portrait. Pan (← →) lives as overlay arrows on the chart; the fit-all
+  // bracket button and the ⤢ expand button were removed to save space.
+  function ChartToolbar() {
+    const zBtn: React.CSSProperties = { padding: "7px 11px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, lineHeight: 1, fontSize: 14 };
+    return (<div className="dlTbZoom" data-tb="zoom" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", flex: "0 0 auto" }}>
+      <button type="button" className="dlTbBtn" onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" aria-label="Zoom in" style={zBtn}>+</button>
+      <button type="button" className="dlTbBtn" onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" aria-label="Zoom out" style={zBtn}>−</button>
+    </div>);
+  }
+
+  // Pan arrows overlaid on the left/right edge of the Basic chart (replaces the
+  // old ← → toolbar buttons). Fade out when there's nothing further to pan to.
+  function PanArrow({ dir, onClick, disabled }: { dir: "left" | "right"; onClick: () => void; disabled: boolean }) {
+    return (
+      <button type="button" onClick={onClick} disabled={disabled} aria-label={dir === "left" ? "Pan back in time" : "Pan forward in time"}
+        style={{
+          position: "absolute", top: "44%", transform: "translateY(-50%)",
+          left: dir === "left" ? 4 : undefined, right: dir === "right" ? 30 : undefined,
+          width: 34, height: 34, borderRadius: "50%", border: `1px solid ${COLORS.controlBorder}`,
+          background: "rgba(15,23,42,0.72)", color: COLORS.controlFg,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: disabled ? "default" : "pointer", opacity: disabled ? 0 : 0.92,
+          pointerEvents: disabled ? "none" : "auto", transition: "opacity 0.15s ease",
+          fontSize: 20, fontWeight: 800, lineHeight: 1, zIndex: 5, WebkitBackdropFilter: "blur(2px)", backdropFilter: "blur(2px)",
+        }}>
+        {dir === "left" ? "‹" : "›"}
+      </button>
+    );
+  }
+
+  function OverviewPanel() {
+    const tc = toneToColor(trendToneFromScore(trendScore), true), sc = toneToColor(compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0, stretchScore.ran).tone, true);
+    return (<SectionCard title={`${symbol} Overview`} allowOverflow right={assetType === "stock" ? <Link href={`/stock/${encodeURIComponent(symbol)}`} style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>Company Overview →</Link> : null}>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || (landing ? "" : "Name unavailable")}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 10 }}>
+          {/* Both scores now carry `known`. Stretch reports out of the number of
+              checks that actually ran, not out of six, and the tone tag it feeds is
+              guarded on the same count. See compositeToneFromCounts. */}
+          {([
+            { label: "Trend Score", color: tc, score: trendScore.passed, total: trendScore.total, flagged: trendScore.passed, known: trendScore.known, helpText: "Trend score checks price vs MA50/MA200 and MACD histogram direction." },
+            { label: "Stretch Score", color: sc, score: stretchScore.flagged, total: stretchScore.ran, flagged: stretchScore.flagged, known: stretchScore.ran > 0, helpText: `Stretch score checks RSI, Stoch, Bollinger, VWMA(20), EMA20 and MA50 extension.${stretchScore.ran < stretchScore.total ? ` ${stretchScore.total - stretchScore.ran} of ${stretchScore.total} need more price history than this stock has, so the score is out of ${stretchScore.ran}.` : ""}` },
+          ] as { label: string; color: string; score: number; total: number; flagged: number; known?: boolean; helpText: string }[]).map(s => (
+            <div key={s.label} style={{ background: COLORS.cardBg2, border: `1px solid ${COLORS.borderSoft}`, borderRadius: 12, padding: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: COLORS.mutedFg }}><span style={{ color: s.color }}>●</span>{s.label}<HelpTip text={s.helpText} isDark={true} /></div>
+              <div style={{ marginTop: 5, fontSize: 20, fontWeight: 800, color: s.color }}>{s.known === false ? "—" : `${s.score}/${s.total}`}</div>
+              {/* A meter with 0 of 4 pips lit reads as four failed checks, so it is
+                  omitted rather than drawn empty when the checks could not run. */}
+              {s.known === false ? <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Not enough history yet</div> : renderFlagsMeter({ flagged: s.flagged, total: s.total, color: s.color, isDark: true })}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{[{ label: `Regime: ${overviewMeta.trend ?? "Not enough history yet"}`, hi: false }, { label: `Volatility: ${overviewMeta.vol}`, hi: false }, { label: overviewMeta.toneTag, hi: true }].map(t => <span key={t.label} style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 9px", borderRadius: 7, background: t.hi ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${t.hi ? COLORS.amberBorder : COLORS.borderSoft}`, color: t.hi ? COLORS.amber : COLORS.mutedFg }}>{t.label}</span>)}</div>
+        <div style={{ background: customMode ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${customMode ? COLORS.amberBorder : COLORS.borderSoft}`, borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 1.55, color: customMode ? COLORS.amber : COLORS.mutedFg }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: customMode ? COLORS.amber : COLORS.cardFg, marginBottom: 5 }}>{customMode ? "Selected Indicator Summary" : "Chart Summary"}</div>{chartSummaryText}</div>
+        <div style={{ paddingTop: 10, borderTop: `1px solid ${COLORS.borderSoft}`, fontSize: 11, color: COLORS.mutedFg2, fontWeight: 600 }}>{/* Step 4 (#553 COWORK #56): a Tiingo quote says what its price is, and carries the linked credit. */}{quote?.priceLabel ? <>Price: {quote.priceLabel}{tiingoCredit ? <> · {tiingoCredit}</> : null}</> : <>As of {quote?.date ?? "—"} {quote?.time ?? ""}</>}{/* No fallback source name (2026-09-23, #553 COWORK #1): the "financialmodelingprep.com" default credited FMP even on an empty quote. */}{quote?.source ? ` · Source: ${quote.source}` : ""}</div>
+      </div>
+    </SectionCard>);
+  }
+
+  // What the selected indicator is and how people often read it (#553 COWORK #38).
+  function IndicatorManual({ name, text }: { name: string; text: string }) {
+    return (<div data-indicator-manual style={{ marginTop: 12, padding: 12, border: `1px solid ${COLORS.borderSoft}`, borderRadius: 10, background: COLORS.cardBg2 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: COLORS.cardFg, marginBottom: 5 }}>About {name}</div>
+      <div style={{ fontSize: 13, lineHeight: 1.55, color: COLORS.mutedFg }}>{text}</div>
+    </div>);
+  }
+
+  function BreakdownPanel() {
+    return (<SectionCard title={customMode ? "Selected Indicators" : "Breakdown"} right={<BreakdownHelpButton />} allowOverflow>
+      {/* repeat(2, minmax(0, 1fr)) + minWidth 0: a chip never widens the card
+          (#553 COWORK #39). A value that does not fit beside its label wraps
+          to its own line, right-aligned; only a value wider than the whole
+          chip is cut with an ellipsis (full text in the tooltip). */}
+      <div className="msh-breakdown-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+        {(customMode ? selectedBreakdownRows : overviewItems).map((item: any) => {
+          const v = breakdownChipValue(customMode ? item.value : item.valueText);
+          return (
+          <div key={customMode ? item.label : item.key} title={`${item.label}: ${v.full}`} style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", columnGap: 8, rowGap: 2, alignItems: "center", minWidth: 0, padding: "8px 10px", border: `1px solid ${COLORS.borderSoft}`, borderRadius: 10, background: COLORS.cardBg2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, maxWidth: "100%" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ fontWeight: 700, fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span></div>
+            <div style={{ color: COLORS.mutedFg, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", marginLeft: "auto" }}>{v.text}</div>
+          </div>
+          );
+        })}
+      </div>
+      {singleManual ? <IndicatorManual name={singleIndicator ?? ""} text={singleManual} /> : null}
+      {customMode ? <button type="button" onClick={clearIndicatorSelection} style={{ marginTop: 12, padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>← Back to Overview</button> : null}
+    </SectionCard>);
+  }
+
+  function MobileBreakdownAccordion() {
+    const items = customMode ? selectedBreakdownRows : overviewItems;
+    const bc = items.filter((i: any) => i.tone === "green").length, rc = items.filter((i: any) => i.tone === "red").length, nc = items.length - bc - rc;
+    const sl = customMode ? "Custom indicators" : `Mixed · ${bc} bullish · ${rc} bearish · ${nc} neutral`;
+    // ON THE LANDING, COLLAPSED BY DEFAULT AT EVERY WIDTH (#563 COWORK #164 D): "Breakdown ▸".
+    return (<section data-breakdown={breakdownOpen ? "open" : "collapsed"} style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, overflow: "hidden" }}>
+      <button type="button" aria-expanded={breakdownOpen} onClick={() => setBreakdownOpen(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "none", background: "none", color: COLORS.cardFg, cursor: "pointer", textAlign: "left" }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: COLORS.blueSoft, border: `1px solid ${COLORS.blueBorder}`, display: "grid", placeItems: "center", flex: "0 0 auto" }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9cc0ff" strokeWidth="2.2" strokeLinecap="round"><path d="M4 19V5M4 19h16M9 16V9M14 16V6M19 16v-4" /></svg></div>
+        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 14 }}>{landing ? <>Breakdown <span aria-hidden="true">{breakdownOpen ? "▾" : "▸"}</span></> : "Indicator Breakdown"}</div><div style={{ fontSize: 12, color: COLORS.mutedFg, marginTop: 1 }}>{sl}</div></div>
+        <div style={{ display: "flex", gap: 3, flex: "0 0 auto" }}>{Array.from({ length: Math.min(bc, 4) }).map((_, i) => <span key={`b${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.green }} />)}{Array.from({ length: Math.min(rc, 4) }).map((_, i) => <span key={`r${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.red }} />)}{Array.from({ length: Math.min(nc, 4) }).map((_, i) => <span key={`n${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.mutedFg2 }} />)}</div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={COLORS.mutedFg} strokeWidth="2.4" strokeLinecap="round" style={{ flex: "0 0 auto", transform: breakdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.25s ease" }}><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      {breakdownOpen ? <div style={{ borderTop: `1px solid ${COLORS.borderSoft}` }}>
+        <div style={{ display: "flex", gap: 5, padding: "10px 16px 0" }}>{items.map((item: any) => <span key={customMode ? item.label : item.key} style={{ flex: 1, height: 5, borderRadius: 99, background: chipToneColor(item.tone) }} />)}</div>
+        <div style={{ padding: "8px 16px 4px" }}>{items.map((item: any) => <div key={customMode ? item.label : item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${COLORS.borderSoft}` }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14 }}>{item.label}</span><span title={breakdownChipValue(customMode ? item.value : item.valueText).full} style={{ fontSize: 13, fontWeight: 700, color: chipToneColor(item.tone), minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{breakdownChipValue(customMode ? item.value : item.valueText).text}</span></div>)}</div>
+        <div style={{ padding: "8px 16px 14px" }}><Link href="/learn" style={{ fontSize: 13, fontWeight: 700, color: "#9cc0ff", textDecoration: "none" }}>Learn what these mean →</Link></div>
+        {singleManual ? <div style={{ padding: "0 16px 12px" }}><IndicatorManual name={singleIndicator ?? ""} text={singleManual} /></div> : null}
+        {customMode ? <div style={{ padding: "0 16px 14px" }}><button type="button" onClick={clearIndicatorSelection} style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>← Back to Overview</button></div> : null}
+      </div> : null}
+    </section>);
+  }
+
+  // Three-way Basic / Interactive / TradingView switch. Rendered both in the
+  // chart card header and in the fullscreen overlay.
+  function ChartModeSwitcher({ compact }: { compact?: boolean } = {}) {
+    const modes: { key: ChartMode; label: string }[] = [
+      { key: "basic", label: "Basic" },
+      { key: "interactive", label: "Interactive" },
+      { key: "tradingview", label: "TradingView" },
+    ];
+    return (
+      <div className="dlTbSeg" data-tb="mode" style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flexWrap: "nowrap" }} role="group" aria-label="Chart mode">
+        {modes.map(m => (
+          <button key={m.key} type="button" className="dlTbSegBtn" onClick={() => selectChartMode(m.key)} aria-pressed={chartMode === m.key}
+            style={{ border: "none", borderRadius: 7, padding: compact ? "6px 9px" : "7px 12px", background: chartMode === m.key ? "rgba(167,139,250,0.28)" : "transparent", color: chartMode === m.key ? "#ede9fe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartMode === m.key ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none", whiteSpace: "nowrap" }}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // WIDEN / BACK TO TWO COLUMNS. At the card's LEFT edge, in its header -- not
+  // on the plot, where the Basic chart's round "‹" pan arrow (Pan back in
+  // time) already sits. Desktop only: narrow widths are single-column already
+  // (hidden by .msh-widebtn below 961px and never rendered on the phone layout).
+  // A bold arrow (#553 COWORK #35): LEFT = extend the chart over the card
+  // column; RIGHT = back to two columns. 34px target, 20px icon.
+  function WideChartButton() {
+    const label = wideChart ? "Back to two columns" : "Widen chart";
+    return (
+      <button type="button" className="msh-widebtn" onClick={toggleWideChart} title={label} aria-label={label} aria-pressed={wideChart} data-wide-arrow={wideChart ? "right" : "left"}
+        style={{ alignItems: "center", justifyContent: "center", width: 34, height: 34, flex: "0 0 auto", borderRadius: 9, border: `1px solid ${wideChart ? "rgba(96,165,250,0.55)" : COLORS.controlBorder}`, background: wideChart ? "rgba(47,107,255,0.22)" : COLORS.controlBg, color: wideChart ? "#dbeafe" : COLORS.controlFg, cursor: "pointer", padding: 0 }}>
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d={wideChart ? WIDE_ARROW_RIGHT : WIDE_ARROW_LEFT} />
+        </svg>
+      </button>
+    );
+  }
+
+  function FullscreenButton() {
+    return (
+      <button type="button" onClick={() => setFullscreen(true)} title="Open chart fullscreen" aria-label="Open chart fullscreen"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 14, lineHeight: 1 }}>⛶</span> Fullscreen
+      </button>
+    );
+  }
+
+  // Renders the actual chart engine for the current mode. `full` = fullscreen
+  // overlay (fill the container, no inline footers). The Interactive engine
+  // never receives picker drawing props (support/resistance zones, reference
+  // lines) -- those belong to the Basic chart only.
+  function ChartEngine({ full, compact, trailing }: { full?: boolean; compact?: boolean; trailing?: React.ReactNode } = {}) {
+    if (chartMode === "interactive") {
+      return <InteractiveChart symbol={symbol} seed={historyAll} pageToken={pageToken} onProvider={setHistoryProvider} isMobile={isMobile} fill={full} height={full ? undefined : 520} compact={compact} trailing={trailing} onFullscreen={full ? undefined : () => setFullscreen(true)} />;
+    }
+    if (chartMode === "tradingview") {
+      const h = full ? (typeof window !== "undefined" ? Math.max(360, window.innerHeight - 108) : 720) : (isMobile ? 480 : 620);
+      return <TradingViewChartEmbed symbol={symbol} height={h} />;
+    }
+    return <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} viewWidth={full ? undefined : basicViewWidth} />;
+  }
+
+  // THE ANALYSER'S TABS TAKE THE CHART'S PLACE on the landing (#563 COWORK
+  // #134); everywhere else ChartPanel is the price chart, as before.
+  function ChartPanel() {
+    return landing ? AnalyserTabs() : <PriceChartPanel />;
+  }
+  function PriceChartPanel() {
+    const modeTitle = chartMode === "tradingview" ? `TradingView · ${symbol}` : chartMode === "interactive" ? `Interactive · ${symbol}` : `Price · ${chartIndicatorName}`;
+    return (<div id="chart" ref={chartSectionRef} style={{ scrollMarginTop: 24 }}>
+      <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
+        <div className="dlTb" data-chart-toolbar="" style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
+          <div className="dlTbHead" style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
+            {!isMobile ? <div className="dlTbTitle" style={{ display: "flex", alignItems: "center", gap: 10 }}><WideChartButton /><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div></div> : null}
+            <div className="dlTbRow" data-tb-line="1" style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
+              <ChartModeSwitcher compact={isMobile} />
+              {/* On Basic: the zoom + / − controls ride on this (mode-switch)
+                  line so the toolbar fits in 2 lines on phone portrait. D/W/M
+                  and the Indicator + Line/Candle controls sit on line 2 below.
+                  Fullscreen is hidden on Basic (no benefit); Interactive has it in its own toolbar. */}
+              {chartMode === "basic" ? <ChartToolbar /> : null}
+              {/* Interactive carries Fullscreen at the end of its own toolbar (#553 COWORK #28). */}
+              {chartMode === "tradingview" ? <FullscreenButton /> : null}
+            </div>
+          </div>
+          {chartMode === "basic" ? (
+            <div className="dlTbRow" data-tb-line="2" style={{ marginTop: 12, display: "flex", gap: isMobile ? 7 : 10, alignItems: "center", flexWrap: "wrap" }}>
+              <div className="dlTbInd" style={{ position: "relative", flex: isMobile ? "0 1 auto" : 1, minWidth: isMobile ? 116 : 160 }} ref={indicatorMenuRef}>
+                <button type="button" className="dlTbIndBtn" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator"}</span><span>▾</span></button>
+                {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? 250 : 300, maxWidth: "84vw", maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
+                  <button type="button" onClick={clearIndicatorSelection} style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Clear all · Overview</button>
+                  {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map(group => <div key={group.title}><div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>{group.opts.map(opt => (
+                    <label key={opt} onMouseDown={e => { e.stopPropagation(); e.preventDefault(); toggleIndicatorSelection(opt); }} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 13px", borderTop: `1px solid ${COLORS.borderSoft}`, cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                      <input type="checkbox" readOnly checked={selectedIndicators.includes(opt)} /><span>{opt}</span>
+                    </label>
+                  ))}</div>)}
+                </div> : null}
+              </div>
+              <div className="dlTbSeg" data-tb="type" style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" className="dlTbSegBtn" onClick={() => setChartType(type)} title={type === "line" ? "Line" : "Candles"} aria-label={type === "line" ? "Line" : "Candles"} aria-pressed={chartType === type} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 7, padding: "6px 11px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? LINE_ICON : CANDLE_ICON}</button>)}</div>
+              <div className="dlTbTf" style={{ flex: "0 0 auto" }}><TimeframeToggle /></div>
+            </div>
+          ) : null}
+        </div>
+        <div style={{ padding: 16 }}>
+          {isInteractive && isMobile ? (
+            <button type="button" onClick={() => setFullscreen(true)} style={{ width: "100%", padding: "38px 16px", borderRadius: 12, border: `1px dashed ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 800, fontSize: 15, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 28, lineHeight: 1 }}>⛶</span>
+              Open Interactive Chart
+              <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.mutedFg }}>Full screen · portrait or landscape</span>
+            </button>
+          ) : chartMode === "basic" ? (
+            <div style={{ position: "relative" }}>
+              <ChartEngine />
+              <PanArrow dir="left" onClick={() => setWindowOffset(o => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))} disabled={offset >= maxOffset} />
+              <PanArrow dir="right" onClick={() => setWindowOffset(o => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))} disabled={offset <= 0} />
+            </div>
+          ) : (
+            <ChartEngine />
+          )}
+          {chartMode !== "interactive" ? (
+            <>
+              <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Open in TradingView ↗</a>
+              </div>
+              <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
+                <div>{displayedHistory.length ? `${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}` : "No chart data"}</div>
+                <Link href="/platforms" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Compare platforms →</Link>
+              </div>
+            </>
+          ) : null}
+          {historyCredit && historyProvider === "tiingo" && chartMode !== "tradingview" ? (
+            // Step 3 (#553 COWORK #56/#92/#103): whose bars these are, and what the newest
+            // one is. Only while the series shown is Tiingo's (a miss falls back to FMP).
+            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
+              {historyAll.length && historyAll[historyAll.length - 1].label ? `Last bar: ${historyAll[historyAll.length - 1].label} · ` : null}{historyCredit}
+            </div>
+          ) : null}
+        </div>
+      </SectionCard>
+    </div>);
+  }
+
+  function BenchmarksPanel() {
+    const items = bench?.items ?? [];
+    const BenchCard = ({ it }: { it: BenchItem }) => {
+      const pct = typeof it.changePct === "number" ? it.changePct : null;
+      const isUp = typeof pct === "number" ? pct >= 0 : null;
+      const ac = isUp == null ? COLORS.mutedFg : isUp ? COLORS.green : COLORS.red;
+      const pt = pct == null ? null : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+      const pr = typeof it.close === "number" ? `$${it.close.toFixed(2)}` : "—";
+      const cs = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
+      return (
+        <button type="button" onClick={() => chooseSymbol(cs, undefined, assetType)}
+          style={{ border: `1px solid ${COLORS.border}`, borderRadius: 13, padding: "13px 14px", background: COLORS.cardBg2, color: COLORS.cardFg, textAlign: "left", cursor: "pointer", ...(isMobile ? { flex: "0 0 148px" } : { width: "100%" }) }}>
+          {/* #553 COWORK #32 §3: the ETF's name, its % change as the headline (it tracks the index closely), then its price. Never an index level. */}
+          <div style={{ fontWeight: 800, fontSize: isMobile ? 13 : 14 }}>{it.label}</div>
+          <div style={{ fontSize: isMobile ? 19 : 20, fontWeight: 800, marginTop: 9, fontVariantNumeric: "tabular-nums", color: ac, whiteSpace: "nowrap" }}>{pt != null ? `${isUp ? "▲" : "▼"} ${pt}` : "—"}</div>
+          <div style={{ marginTop: 6, display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{pr}</span>
+            <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{/* #553 COWORK #101 nit: the FMP tiles read "as of 3 Oct 2026, 00:12 UTC", not the raw "2026-10-03 00:12:06". */}{it.priceLabel ?? (it.date && it.time ? `as of ${utcStamp(`${it.date}T${it.time}Z`) ?? `${it.date} ${it.time}`}` : "—")}</span>
+          </div>
+        </button>
+      );
+    };
+    return (
+      <SectionCard title={assetType === "crypto" ? "Crypto Benchmarks" : "Market Benchmarks"} right={assetType === "stock" ? <Link href="/markets/spx" style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>S&P 500 Detail →</Link> : null}>
+        <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {(bench?.updatedAt && utcStamp(bench.updatedAt)) || "—"} · {bench?.scope ?? "Benchmarks"}{assetType === "stock" ? " · ETF prices, not index levels" : ""}{bench?.provider === "tiingo" && tiingoCredit ? <> · {tiingoCredit}</> : null}</div>
+        {isMobile ? (
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
+            {items.map(it => <BenchCard key={it.key} it={it} />)}
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+            {items.map(it => <BenchCard key={it.key} it={it} />)}
+          </div>
+        )}
+      </SectionCard>
+    );
+  }
+
+  function NewsPanel() {
+    if (assetType === "crypto") {
+      return (<SectionCard title="Latest Headlines">
+        <div style={{ padding: 12, borderRadius: 12, border: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg2, color: COLORS.mutedFg, fontSize: 13, lineHeight: 1.6 }}>
+          Crypto news briefings aren't available yet — this section is stock-only for now.
+        </div>
+      </SectionCard>);
+    }
+    return (<SectionCard title={news ? `Latest Headlines · ${news.symbol}` : "Latest Headlines"}>
+      {news ? (
+        <div style={{ display: "grid", gap: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>MyStockHarbor Briefing</div>
+              <div style={{ marginTop: 5, fontSize: isMobile ? 18 : 20, fontWeight: 800, lineHeight: 1.1 }}>Latest headlines on {news.symbol}</div>
+              <div style={{ marginTop: 6, fontSize: 13, color: COLORS.mutedFg }}>{news.companyName ? `${news.companyName} · ` : ""}{[news.newsScoreLabel ? `${news.newsScoreLabel} tone` : null, news.trend].filter(Boolean).join(" · ") || "Not enough data to summarise yet"}</div>
+            </div>
+            <Link href={news.ctaHref} style={{ textDecoration: "none", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>Open full {news.symbol} news page</Link>
+          </div>
+          {news.isInvalidTicker ? <div style={{ padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.18)", color: "#fecaca", fontSize: 13, lineHeight: 1.6 }}>This ticker does not have enough usable market data yet.</div> : null}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : news.cards.length >= 3 ? "repeat(3, 1fr)" : "repeat(2, 1fr)", gap: 12 }}>
+            {news.cards.map((item, idx) => (
+              <div key={`${item.title}-${idx}`} style={{ padding: 13, borderRadius: 13, border: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg2, display: "grid", gap: 9, alignContent: "start" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div><div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{(item.pubDate && utcDay(item.pubDate)) || "Recent"}</div></div>
+                {/*
+                  HIDDEN, NOT DELETED — publisher thumbnails passed through by
+                  FMP, who were never the rights holder. See
+                  lib/news-image-policy.ts for the reasoning and the flag.
+
+                  ── A BANNER, WHERE THE PUBLISHER THUMB WAS A 104px SQUARE ──
+                  Not a redesign: with the flag off this slot has rendered
+                  NOTHING since step 0, so there is no live layout being
+                  changed. The library art is 16:9, and object-fit cover in a
+                  square crops most of an illustration away — the old square
+                  existed to hold arbitrary publisher photos, which crop
+                  acceptably and these do not. Full card width is also what
+                  makes these LEAD cards rather than compact rows: each carries
+                  a headline, a four-line summary and a link, which is the lead
+                  shape, so it takes the lead treatment.
+                */}
+                {SHOW_PUBLISHER_IMAGES && item.image ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={item.image} alt="" loading="lazy" style={{ width: isMobile ? 52 : 104, height: isMobile ? 52 : 104, borderRadius: 8, objectFit: "cover", flexShrink: 0, background: "rgba(255,255,255,0.04)" }} />
+                ) : (
+                  <div style={{ borderRadius: 9, overflow: "hidden", background: "rgba(255,255,255,0.04)", lineHeight: 0 }}>
+                    <NewsCardArt
+                      plan={item.art ?? { kind: "generated", variant: "lead" }}
+                      symbol={news.symbol}
+                      changePct={news.changePct ?? null}
+                      points={news.sparkPoints ?? []}
+                      sizes={isMobile ? "100vw" : "33vw"}
+                      style={{ width: "100%", height: "auto", display: "block" }}
+                    />
+                  </div>
+                )}
+                <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
+                <div style={{ fontSize: 13, lineHeight: 1.6, color: COLORS.mutedFg, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{item.summary}</div>
+                {item.link ? <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ justifySelf: "start", color: "#9cc0ff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>Read full article ↗</a> : null}
+              </div>
+            ))}
+          </div>
+          {!news.cards.length ? <div style={{ opacity: 0.7, fontSize: 13 }}>No headline cards available for this ticker yet.</div> : null}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.06)", border: `1px solid ${COLORS.borderSoft}` }}><div className="msh-news-loading-bar" /></div>
+          <div style={{ fontSize: 13, color: COLORS.mutedFg }}>Building your latest headline briefing for this ticker…</div>
+        </div>
+      )}
+    </SectionCard>);
+  }
+
+  function InsightsPanel() {
+    return (<SectionCard><div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+      <div style={{ flex: 1, minWidth: 200 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.green }}>Fresh content</div><div style={{ marginTop: 7, fontSize: isMobile ? 18 : 20, fontWeight: 800, lineHeight: 1.15 }}>Read the latest stock market insights & trade ideas</div><div style={{ marginTop: 6, fontSize: 13, color: COLORS.mutedFg, lineHeight: 1.55 }}>Chart-based market insights, technical analysis write-ups and stock breakdowns from MyStockHarbor.</div></div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: "0 0 auto" }}><Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "12px 18px", borderRadius: 12, border: `1px solid ${COLORS.blueBorder}`, background: COLORS.blueSoft, color: "#eff6ff", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>Open Insights →</Link><Link href="/pickers" style={{ display: "inline-flex", alignItems: "center", padding: "12px 18px", borderRadius: 12, border: `1px solid ${COLORS.greenBorder}`, background: COLORS.greenSoft, color: "#dcfce7", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>Stock Pickers →</Link></div>
+    </div></SectionCard>);
+  }
+
+  // ── THE LANDING (#563 COWORK #134) ──────────────────────────────────────
+  // The hero's search is the header search's markup and handlers (one
+  // `query`, one result list), so its routing is unchanged; a pick then
+  // scrolls down to the analyser.
+  //
+  // CALLED AS A FUNCTION, NEVER MOUNTED AS <LandingHero /> (#563 COWORK #148
+  // §1). It is declared inside this component, so as a JSX element it would be
+  // a NEW component type on every render: each keystroke (setQuery) remounted
+  // the input and threw the focus out. Called directly, its elements are part
+  // of this component's own tree and the input keeps its identity.
+  // scripts/measure-dashboard-search.mjs types into it key by key.
+  function LandingHero() {
+    return (
+      <div className="dlHeroLeft">
+        <p className="dlEyebrow" style={{ color: "#93c5fd" }}>MyStockHarbor</p>
+        <h1 className="dlH1">Stock research from the filings, not the hype.</h1>
+        <p className="dlLead">Every figure traced to an SEC filing, every chart explained in plain English, with supply-chain maps you won&apos;t find elsewhere.</p>
+        <div className="msh-searchbox dlSearch" ref={searchBoxRef}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+          <input value={searchFrom === "hero" ? query : ""} onChange={e => { setSearchFrom("hero"); setQuery(e.target.value); setOpen(true); }} onFocus={() => focusSearch("hero")} {...navDesk.inputAria} aria-label="Search a ticker or company" onKeyDown={e => { if (navDesk.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) pickFromHero(f.symbol, f.name); } }} placeholder="Search a ticker or company… e.g. TSLA" />
+          <button className="msh-go" type="button" onClick={() => { if (results[0]) pickFromHero(results[0].symbol, results[0].name); }}>Analyse</button>
+          {open && searchFrom === "hero" && results.length > 0 ? <div {...navDesk.listProps} aria-label="Ticker search results" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navDesk.optionProps(i)} onClick={() => pickFromHero(r.symbol, r.name)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navDesk.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
+        </div>
+        <div className="dlTry">
+          <span className="dlTryLabel">Try:</span>
+          {TRY_SYMBOLS.map((t) => <button key={t} type="button" className="dlTryChip" onClick={() => pickFromHero(t)}>{t}</button>)}
+        </div>
+      </div>
+    );
+  }
+
+  /** The plain-English verdict over the Chart Summary: the regime, then how stretched. */
+  const verdictHead = (() => {
+    const t = overviewMeta.trend;
+    if (!t) return null;
+    const tw = t === "Uptrend" ? "In an uptrend" : t === "Downtrend" ? "In a downtrend" : "In a range";
+    const f = stretchScore.ran ? stretchScore.flagged : null;
+    return `${tw}${f === null ? "" : f === 0 ? ", not stretched" : f <= 2 ? ", slightly stretched" : ", stretched"}.`;
+  })();
+
+  // THE ANALYSER CARD'S HEAD (#563 COWORK #164 D): the symbol, its name and
+  // price, a compact "Change stock…" search (the landing's second search box,
+  // on the shared query: see searchFrom), then the plain-English verdict.
+  // Called, never mounted (its input must keep its identity, as the hero's).
+  function AnalyserHead() {
+    return (
+      <div className="dlAnalyserHead">
+        <div className="dlAnHeadRow">
+          <div className="dlAnId" data-analyser-id="">
+            <TickerLogo symbol={symbol} size={36} radius={9} />
+            <div style={{ minWidth: 0 }}>
+              <div className="dlAnSym">{symbol}</div>
+              {symbolName ? <div className="dlAnName" title={symbolName} data-fine-print="">{symbolName}</div> : null}
+            </div>
+            <div className="dlAnPrice" data-analyser-price="">{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div>
+          </div>
+          <div className="msh-searchbox dlChange" ref={mobileSearchBoxRef} data-change-stock="">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+            <input value={searchFrom === "change" ? query : ""} onChange={e => { setSearchFrom("change"); setQuery(e.target.value); setOpen(true); }} onFocus={() => focusSearch("change")} {...navMobile.inputAria} aria-label="Change stock" onKeyDown={e => { if (navMobile.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) chooseSymbol(f.symbol, f.name, "stock"); } }} placeholder="Change stock…" />
+            {open && searchFrom === "change" && results.length > 0 ? <div {...navMobile.listProps} aria-label="Ticker search results" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navMobile.optionProps(i)} onClick={() => chooseSymbol(r.symbol, r.name, "stock")} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navMobile.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
+          </div>
+        </div>
+        <p className="dlVerdict" data-verdict="">{verdictHead ? <strong>{verdictHead} </strong> : null}{chartSummaryText}</p>
+      </div>
+    );
+  }
+
+  /** The card's foot (#164 D): the next report, the Supply map and stock page links. */
+  function AnalyserFoot() {
+    const mapSlug = assetType === "stock" ? landing?.bottlenecks[symbol] ?? null : null;
+    const next = assetType === "stock" ? earningsSummary?.nextReport ?? null : null;
+    if (!next && !mapSlug && assetType !== "stock") return null;
+    return (
+      <div className="dlChipsRow" data-analyser-links="">
+        {next ? <span className="dlInfoChip" data-next-report=""><span className="dlInfoLabel">Next report</span> {next.text}{next.estimated ? " (estimated)" : ""}</span> : null}
+        {mapSlug ? <Link className="dlInfoChip" href={`/bottlenecks/${mapSlug}`} prefetch={false} data-bottlenecks-link=""><span className="dlInfoLabel">On Bottlenecks</span> Supply map →</Link> : null}
+        {assetType === "stock" ? <Link className="dlInfoChip" href={`/stock/${encodeURIComponent(symbol)}`} prefetch={false}><span className="dlInfoLabel">Full breakdown</span> {symbol} stock page →</Link> : null}
+      </div>
+    );
+  }
+
+  // The Key levels and Price zones tabs read DAILY bars, the stock page's
+  // cards on the same history this chart already loaded: no extra read.
+  const dailyKeyBars = useMemo(() => activeTimeframe !== "D" ? [] : historyAll
+    .filter((p) => [p.open, p.high, p.low, p.close].every((v) => typeof v === "number" && Number.isFinite(v)))
+    .map((p) => ({ date: p.date, open: p.open as number, high: p.high as number, low: p.low as number, close: p.close })), [historyAll, activeTimeframe]);
+
+  function AnalyserTabs() {
+    const needDaily = <SectionCard><p className="dlEmpty">Key levels and price zones read daily bars. Switch the chart to D to see them for {symbol}.</p></SectionCard>;
+    const macroSupport = supportResistanceZones.find((z) => z.kind === "support") ?? null;
+    let body: React.ReactNode;
+    if (tab === "chart") body = <PriceChartPanel />;
+    else if (tab === "levels") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <KeyLevelsCard bars={dailyKeyBars} lastPrice={lastClose} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
+    else if (tab === "zones") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <ConfluenceCard bars={dailyKeyBars} lastPrice={lastClose} ma50={typeof lastMA50 === "number" ? lastMA50 : null} ma200={typeof lastMA200 === "number" ? lastMA200 : null} macro={macroSupport ? { lower: macroSupport.lower, upper: macroSupport.upper } : null} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
+    // THE STOCK PAGE'S EARNINGS SNAPSHOT (#563 COWORK #160, replacing #154 §6's
+    // custom chart), fetched only while this tab is open.
+    // SectionCard is declared in this render, so it is CALLED, not mounted: mounted,
+    // it is a new component type each render and the chart would remount and refetch.
+    else if (tab === "earnings") body = SectionCard({
+      title: `${symbol} filed earnings`,
+      children: assetType !== "stock" ? <p className="dlEmpty" data-filed-empty="">Filed figures not available for {symbol}.</p>
+        : <FiledEarningsChart symbol={symbol} />,
+    });
+    else body = <NewsPanel />;
+    return (
+      <div className="msh-col dlTabbed">
+        <div className="dlTabs" role="tablist" aria-label={`${symbol} analyser views`}>
+          {ANALYSER_TABS.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} aria-label={t.label} title={t.label} data-tab={t.key} className="dlTab" onClick={() => setTab(t.key)}>
+              <svg className="dlTabIcon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={t.icon} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <span className="dlTabShort" aria-hidden="true">{t.short}</span>
+            </button>
+          ))}
+        </div>
+        <div role="tabpanel" aria-label={ANALYSER_TABS.find((t) => t.key === tab)?.label}>{body}</div>
+      </div>
+    );
+  }
+
+  function MobileHero() {
+    return (<section style={{ marginBottom: 14, border: `1px solid ${COLORS.border}`, borderRadius: 18, background: COLORS.cardBg, overflow: "hidden" }}>
+      <div style={{ padding: "16px 14px 14px", background: "linear-gradient(180deg, rgba(47,107,255,0.14), rgba(10,15,26,0))" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}><Link href="/" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", flex: "0 0 auto" }}><img src="/logo.png" alt="MyStockHarbor" style={{ height: 48, width: "auto", objectFit: "contain", display: "block" }} /></Link><div style={{ fontSize: 12, fontWeight: 700, color: COLORS.mutedFg, lineHeight: 1.35 }}>Educational stock dashboard and market research tools.</div></div>
+        <div style={{ fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "-0.02em" }}>Stock Analysis Tools, Stock Pickers & Market Insights</div>
+        <div style={{ marginTop: 7, color: COLORS.mutedFg, fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>Scan the market for ideas, or search any stock to open its full analysis page.</div>
+        {/* Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62). */}
+        {CRYPTO_MODE_ENABLED ? <div style={{ marginTop: 14 }}><AssetTypeToggle /></div> : null}
+        <button type="button" onClick={() => router.push("/pickers")} style={{ width: "100%", marginTop: 14, padding: "14px 16px", borderRadius: 14, border: "1px solid rgba(47,107,255,0.5)", background: "linear-gradient(135deg, rgba(47,107,255,0.28), rgba(22,199,132,0.14))", color: COLORS.controlFg, fontWeight: 800, fontSize: 16, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>🔎</span><span>Scan for Stock Ideas</span></span><span>→</span></button>
+        <div style={{ marginTop: 12 }} ref={mobileSearchBoxRef}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.mutedFg2, marginBottom: 6 }}>{assetType === "crypto" ? "Search Crypto (USD pairs)" : "Search Any Stock"}</div>
+          <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} {...navMobile.inputAria} onKeyDown={e => { if (navMobile.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (!f?.symbol) return; chooseSymbol(f.symbol, f.name, assetType); } }} placeholder={assetType === "crypto" ? "🔎 Search BTC, ETH, SOL, TRX…" : "🔎 Search ticker or company"} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, outline: "none", fontSize: 15, fontWeight: 700 }} />
+          {open && results.length > 0 ? <div {...navMobile.listProps} aria-label="Ticker search results" style={{ position: "relative", marginTop: 7, zIndex: 20, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navMobile.optionProps(i)} onClick={() => chooseSymbol(r.symbol, r.name, assetType)} style={{ width: "100%", textAlign: "left", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navMobile.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
+        </div>
+      </div>
+    </section>);
+  }
+
+  return (
+    <main style={{ padding: 0, fontFamily: "system-ui, -apple-system, Arial, sans-serif", background: "#05080f", color: COLORS.pageFg, minHeight: "100vh" }}>
+      <style>{`
+        .msh-wrap{width:min(1240px,calc(100% - 24px));margin:0 auto;padding:0 0 40px;}
+        .msh-hero{display:flex;align-items:center;gap:18px;padding:20px 0 16px;flex-wrap:wrap;}
+        .msh-hero-lead{flex:0 0 auto;max-width:260px;}
+        .msh-hero-lead h1{margin:0;font-size:18px;font-weight:800;line-height:1.2;}
+        .msh-hero-lead p{margin:4px 0 0;font-size:12px;color:#8a97ad;}
+        .msh-hero-actions{flex:1;display:flex;gap:10px;align-items:center;}
+        .msh-searchbox{flex:1;display:flex;align-items:center;gap:10px;background:#141b2b;border:1px solid #222c40;border-radius:12px;padding:0 13px;height:48px;transition:border-color .15s;position:relative;}
+        .msh-searchbox:focus-within{border-color:#2f6bff;}
+        .msh-searchbox input{flex:1;background:none;border:none;outline:none;color:#eaf0fa;font-size:15px;font-weight:700;}
+        .msh-searchbox input::placeholder{color:#5f6b80;font-weight:500;}
+        .msh-searchbox .msh-go{background:#2f6bff;color:#fff;border:none;height:32px;padding:0 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;}
+        .msh-scanbtn{flex:0 0 auto;display:flex;align-items:center;gap:8px;height:48px;padding:0 18px;border-radius:12px;background:#13213f;border:1px solid #27406f;color:#9cc0ff;font-weight:700;font-size:13.5px;cursor:pointer;white-space:nowrap;transition:background .15s;}
+        .msh-scanbtn:hover{background:#16294d;}
+        .msh-grid{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start;}
+        .msh-col{display:flex;flex-direction:column;gap:16px;}
+        .msh-grid-wide{grid-template-columns:1fr;}
+        .msh-wide-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+        .msh-widebtn{display:inline-flex;}
+        @media(max-width:960px){.msh-widebtn{display:none!important;}.msh-wide-cards{grid-template-columns:1fr;}}
+        .msh-lower{display:grid;gap:16px;margin-top:16px;}
+        .msh-news-loading-bar{width:36%;height:100%;border-radius:999px;background:linear-gradient(90deg,#2f6bff,#16c784);animation:mshLoad 1.15s ease-in-out infinite;}
+        @keyframes mshLoad{0%{transform:translateX(-120%);}100%{transform:translateX(320%);}}
+        @media(max-width:960px){.msh-grid{grid-template-columns:1fr;}}
+        @media(max-width:768px){.msh-hero{display:none;}.msh-wrap{width:calc(100% - 16px);padding-top:12px;}.msh-desktop-only{display:none!important;}}
+        @media(min-width:769px){.msh-mobile-only{display:none!important;}}
+      `}</style>
+
+
+      {landing ? <style>{landing.css + LANDING_CLIENT_CSS + FILED_EARNINGS_CSS}</style> : null}
+      <div className="msh-wrap">
+        {landing ? (
+          <div className="dlHero" data-landing="">
+            {LandingHero()}
+            {landing.market}
+          </div>
+        ) : null}
+        {!landing ? (<>
+        <div className="msh-hero">
+          <div className="msh-hero-lead"><h1>Analyze any stock</h1><p>Search a ticker for its full breakdown, or scan for fresh ideas.</p></div>
+          {/* Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62). */}
+          {CRYPTO_MODE_ENABLED ? <AssetTypeToggle compact /> : null}
+          <div className="msh-hero-actions">
+            <div className="msh-searchbox" ref={searchBoxRef}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+              <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} {...navDesk.inputAria} onKeyDown={e => { if (navDesk.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) chooseSymbol(f.symbol, f.name, assetType); } }} placeholder={assetType === "crypto" ? "Search BTC, ETH, SOL, TRX…" : "Search ANY ticker or company…"} />
+              <button className="msh-go" onClick={() => { if (results[0]) chooseSymbol(results[0].symbol, results[0].name, assetType); }}>Go</button>
+              {open && results.length > 0 ? <div {...navDesk.listProps} aria-label="Ticker search results" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navDesk.optionProps(i)} onClick={() => chooseSymbol(r.symbol, r.name, assetType)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navDesk.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
+            </div>
+            <button className="msh-scanbtn" onClick={() => router.push("/pickers")}>🔎 Scan for stock ideas</button>
+          </div>
+        </div>
+
+        <div className="msh-desktop-only">
+          <DiscoveryStrip />
+        </div>
+
+        <div className="msh-mobile-only">{isMobile ? MobileHero() : null}</div>
+        </>) : null}
+
+        {/* THE LIVE TICKER TAPE is gone from the landing (#563 COWORK #164 A): its top
+            item is the screens card's "Biggest mover" line. Elsewhere it stays. */}
+        {landing ? null : <DashboardTicker credit={tiingoCredit} />}
+
+        {landing ? landing.cards : null}
+
+        {(() => {
+          const errBox = err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null;
+          // On the landing the Breakdown is collapsed at every width (#164 D); elsewhere the desktop card stays.
+          const breakdown = landing ? <MobileBreakdownAccordion /> : <BreakdownPanel />;
+          const grids = (
+            <>
+              <div ref={deskGridRef} className={`msh-grid msh-desktop-only${wideChart ? " msh-grid-wide" : ""}`} data-wide-chart={wideChart ? "1" : "0"}>
+                {wideChart ? (
+                  <>
+                    <div className="msh-col msh-wide-chart"><ChartPanel /></div>
+                    <div className="msh-wide-cards"><OverviewPanel />{breakdown}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="msh-col"><OverviewPanel />{breakdown}</div>
+                    <div className="msh-col"><ChartPanel /></div>
+                  </>
+                )}
+              </div>
+              <div className="msh-mobile-only" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
+                <OverviewPanel />
+                <ChartPanel />
+                <MobileBreakdownAccordion />
+              </div>
+            </>
+          );
+          // D. "ANALYSE ANY STOCK" (#164 D): an H2, then ONE card holding the head, the
+          // tabs, the overview and the chart, the collapsed Breakdown and the links.
+          // #analyser is still every chartHref link's target.
+          return landing ? (
+            <section id="analyser" ref={analyserRef} className="dlAnalyser" aria-labelledby="dlAnalyserTitle">
+              <h2 id="dlAnalyserTitle" className="dlH2">Analyse any stock</h2>
+              <div className="dlAnalyserCard" data-analyser-card="">
+                {AnalyserHead()}
+                {errBox}
+                {grids}
+                {AnalyserFoot()}
+              </div>
+            </section>
+          ) : <>{errBox}{grids}</>;
+        })()}
+
+        {/* The landing's cards carry the news and the insight, and "Market today"
+            the benchmarks' figures (#164 A: the Market Benchmarks row is gone from
+            the landing); the analyser's own news is its News tab. */}
+        {landing ? null : (
+          <div className="msh-lower">
+            <BenchmarksPanel />
+            <NewsPanel />
+            <InsightsPanel />
+          </div>
+        )}
+      </div>
+
+      {expanded ? (
+        <div onClick={() => setExpanded(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "min(1280px, 100%)", maxHeight: "92vh", overflow: "auto", borderRadius: 18, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>Expanded Chart ({chartIndicatorName})</div>
+              <button type="button" onClick={() => setExpanded(false)} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 700 }}>✕</button>
+            </div>
+            <div style={{ padding: 16 }}>
+              <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 280 : 520} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {fullscreen ? (() => {
+        // In landscape on a phone, the Interactive chart has no room for a
+        // separate header row -- so we drop it and inject the mode switch +
+        // close button into the chart's own single toolbar line instead.
+        const injectToolbar = isInteractive && fsLandscape;
+        const closeBtn = (
+          <button key="fs-close" type="button" onClick={exitFullscreen} aria-label="Close fullscreen" title="Close" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: injectToolbar ? 30 : 34, height: injectToolbar ? 30 : 34, flex: "0 0 auto", borderRadius: 9, border: "1px solid rgba(240,68,68,0.45)", background: "rgba(127,29,29,0.22)", color: "#f87171", fontWeight: 800, fontSize: 16, lineHeight: 1, cursor: "pointer" }}>
+            ✕
+          </button>
+        );
+        const trailing = injectToolbar ? (<><ChartModeSwitcher compact />{closeBtn}</>) : undefined;
+        return (
+        <div ref={fsOverlayRef} style={{ position: "fixed", inset: 0, zIndex: 130, background: "#0b1220", display: "flex", flexDirection: "column" }}>
+          {!injectToolbar ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: isMobile ? "8px 10px" : "10px 14px", borderBottom: `1px solid ${COLORS.border}`, flexWrap: "nowrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: "1 1 auto", overflow: "hidden" }}>
+                <div style={{ fontWeight: 800, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: "0 1 auto" }}>{symbol}</div>
+                <ChartModeSwitcher compact />
+              </div>
+              {closeBtn}
+            </div>
+          ) : null}
+          <div style={{ flex: 1, minHeight: 0, padding: injectToolbar ? "6px 8px 4px" : isMobile ? 8 : 14, display: "flex", flexDirection: "column", overflow: isInteractive ? "hidden" : "auto" }}>
+            {/* Direct call (not <ChartEngine/>) so the fullscreen engine keeps
+                its props updated across re-renders (e.g. a phone rotation that
+                flips isMobile) instead of remounting and losing zoom/drawings. */}
+            {ChartEngine({ full: true, compact: fsLandscape, trailing })}
+          </div>
+        </div>
+        );
+      })() : null}
+
+      {loading ? <div style={{ position: "fixed", bottom: 20, right: 20, fontSize: 12, color: COLORS.mutedFg, background: COLORS.cardBg, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "8px 12px", fontWeight: 700 }}>Loading chart data…</div> : null}
+    </main>
+  );
+}

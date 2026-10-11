@@ -1,0 +1,256 @@
+// One small "last run" record per warm job, written by the job itself.
+//
+// The health page needs to answer "which warm job last failed, or silently did
+// nothing" (spec, "What good looks like") and today that question is only
+// answerable by reading Vercel logs by hand -- which is how the quote-stage
+// truncation went unnoticed for as long as it did.
+//
+// A LOG LINE IS NOT A HEALTH SIGNAL. Every one of these jobs already
+// console.logs its summary, and every failure on 22 Aug still went unnoticed,
+// because a log line is only seen by someone who goes looking in the right
+// window. This is the same summary written where something can read it back.
+//
+// Deliberately ONE key per job holding only the latest run: this is not a
+// history, and a page that has to page through run history is a page nobody
+// opens. The 8-day TTL means a job that has stopped running entirely disappears
+// rather than showing a stale green -- absence is reported by the page as
+// "never / expired", which is the honest reading
+// (claude/traps/absence-needs-the-producer-to-have-run.md).
+import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
+
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(PAGE_READ_CACHE)
+    : null;
+
+export const JOB_RUN_PREFIX = "msh:job-run:v1";
+// Comfortably longer than the slowest job's cadence (daily), so a job that ran
+// yesterday still shows, and short enough that one which stopped a week ago
+// reads as gone rather than as old-but-fine.
+const JOB_RUN_TTL_SECONDS = 60 * 60 * 24 * 8;
+
+/**
+ * The jobs the page reports on, and whether each one actually calls
+ * recordJobRun.
+ *
+ * `instrumented` EXISTS BECAUSE ITS ABSENCE WAS A LIE. The first version listed
+ * all six and only two recorded anything, so warm-price-pool -- which runs every
+ * three minutes -- rendered "never run, or older than the 8-day record TTL".
+ * That is an uninstrumented job reading exactly like a dead one: the precise
+ * failure this page was built to remove, reproduced inside the page itself.
+ *
+ * All six are instrumented now, so every flag is true. The field stays because
+ * the NEXT job added here will not be, and the honest default for it is "not
+ * measured" rather than "never ran"
+ * (claude/traps/absence-needs-the-producer-to-have-run.md).
+ *
+ * The flag is a declaration, so scripts/check-cache-health-page.mjs verifies it
+ * against reality: a job declared instrumented must have a matching
+ * recordJobRun("<key>") call somewhere in the tree. A declaration nothing checks
+ * is just a second thing that can be wrong.
+ */
+export const JOBS = {
+  "warm-fundamentals": { label: "Fundamentals (hourly, :22)", instrumented: true, cron: "22 * * * *" },
+  // MOVED 06:50 -> 07:50 so the delisting sweep reads bar stamps the SAME
+  // morning's warm-picker-universe (07:02) wrote, instead of yesterday's.
+  // scripts/check-bar-stamp-ordering.mjs asserts the ordering and the margin.
+  "warm-screener-fundamentals": { label: "Screener fundamentals (daily 07:50)", instrumented: true, cron: "50 7 * * *" },
+  "warm-price-pool": { label: "Price pool (every 5 min)", instrumented: true, cron: "*/5 * * * *" },
+  "warm-stock-data": { label: "Stock data (every 10 min, :07)", instrumented: true, cron: "7-57/10 * * * *" },
+  "warm-earnings": { label: "Earnings (daily 07:15)", instrumented: true, cron: "15 7 * * *" },
+  "warm-picker-universe": { label: "Picker universe (daily 07:02)", instrumented: true, cron: "2 7 * * *" },
+  // Relay B, 2026-09-23: the picker pages' SEC fundamentals. Reads stored fact
+  // sets only (no upstream call); 05:35 is after sec-facts' 04:20 refresh.
+  "warm-pickers-sec": { label: "Picker SEC fundamentals (daily 05:35)", instrumented: true, cron: "35 5 * * *" },
+  // 04:00 UTC, AND THE TIME IS THE POINT. EDGAR dissemination runs to 22:00 ET,
+  // so a date's daily index is not final until after that. 04:00 UTC is 00:00 ET
+  // on EDT and 23:00 ET on EST -- past the close in both, without needing the
+  // cron to move twice a year. Anything in the 07:00 UTC cluster would be fine
+  // too; 04:00 keeps it off the shoulder of six other jobs. The job bounds its
+  // own request to latestProcessableDate() regardless, so an early fire asks for
+  // a date that exists rather than 403ing on one that does not.
+  "sec-daily-index": { label: "SEC daily index (daily 04:00)", instrumented: true, cron: "0 4 * * *" },
+  // HOURLY AT :40, BUT IT ACTS ONLY WHEN runMode SAYS SO: every firing during
+  // the one-off catch-up, 04:40 and 16:40 daily, and every 2 hours in
+  // reporting season. :40 keeps it clear of sec-facts' :20 runs, so the two
+  // never split SEC's rate between them. See lib/server/secFilingJob.ts.
+  "sec-filings": { label: "SEC filings read from the filing (hourly :40, acts per schedule)", instrumented: true, cron: "40 * * * *" },
+  // TEMPORARY SECOND RUN AT 16:20 (added 2026-09-23). The re-read backlog
+  // stood at 751 after a label-version bump and one run a day drains ~64 of
+  // it, so a second pass halves the wait. 16:20 is clear of every other SEC
+  // job (04:00 / 04:20 / 04:40 / 05:10) for the per-requester pacing reason
+  // above. REMOVE IT -- back to "20 4 * * *" here AND in vercel.json -- once
+  // rewindowBacklog on /cache-health is under 50. vercel.json is strict JSON
+  // and cannot carry this note itself.
+  "sec-facts": { label: "SEC fact sets — reverify then populate (daily 04:20, TEMPORARY extra 16:20)", instrumented: true, cron: "20 4,16 * * *" },
+  // 04:40, AFTER sec-facts RATHER THAN BESIDE IT, and the gap is the rule.
+  // SEC's fair-access limit is per REQUESTER, not per endpoint: two jobs each
+  // politely pacing their own calls to 8/s would between them ask for 16/s and
+  // earn a block on the whole account. sec-facts paces 1,920 requests at 8/s,
+  // so it is done inside four minutes; twenty is comfortably clear of it and
+  // still well ahead of the 07:00 warm cluster.
+  "ipo-refresh": { label: "IPO filings window (daily 04:40)", instrumented: true, cron: "40 4 * * *" },
+  // 05:10, AFTER ipo-refresh, for the same per-requester SEC pacing reason.
+  // One-off: rewrites data/sec/report-dates-rewrite.json under the paired rule
+  // and then finds nothing to do. Delete it with the list once drained.
+  "sec-report-dates-rewrite": { label: "SEC report dates — pairing rewrite (daily 05:10)", instrumented: true, cron: "10 5 * * *" },
+  // Relay C (#563 COWORK #2): the capex page's "Who is receiving" lines, read
+  // from each company's latest annual filing. 05:50 is clear of every other SEC
+  // job (04:00 / 04:20 / 04:40 / 05:10, sec-filings at :40) for the
+  // per-requester pacing reason above.
+  "capex-receivers": { label: "Capex receivers from annual filings (daily 05:50)", instrumented: true, cron: "50 5 * * *" },
+  // Relay C (#563 D5): federal contract obligations per listed company, from
+  // USAspending. DAILY CRON, WEEKLY DATA: the route rebuilds only when its
+  // record is 6.5 days old, so this row's silence rule (cronIntervalSeconds
+  // reads minute and hour only) stays honest.
+  "capex-contracts": { label: "Capex federal contracts from USAspending (daily 06:10, rebuilds weekly)", instrumented: true, cron: "10 6 * * *" },
+  // Relay C (#563 D1): "Who is spending" -- capex, revenue and R&D by sector
+  // from A's stored fact sets. DAILY CRON, WEEKLY DATA, for the same silence
+  // rule as capex-contracts; 06:30 is after sec-facts (04:20).
+  "capex-spending": { label: "Capex spending by sector from SEC fact sets (daily 06:30, rebuilds weekly)", instrumented: true, cron: "30 6 * * *" },
+  // TIINGO (#553 COWORK #55 §2, #56, #57): the only two callers of the adapter.
+  // Quotes fire every 15 minutes on every day and act only inside the buffered market
+  // window, so weekend silence never reads as a fault. QUOTE_CADENCE_MINUTES in
+  // lib/server/marketData/jobs.ts is the knob; check-tiingo-step1 keeps it, this
+  // line and vercel.json in step.
+  "tiingo-quotes": { label: "Tiingo IEX quotes (every 15 min from :11, acts in market hours)", instrumented: true, cron: "11-59/15 * * * *" },
+  // 00:45 is after Tiingo's evening corrections; 02:45 retries a night whose
+  // date had not landed, and is one GET when the first run completed.
+  "tiingo-eod": { label: "Tiingo EOD history re-pull (daily 00:45, retry 02:45)", instrumented: true, cron: "45 0,2 * * *" },
+  // The stock-page cold fill (#553 COWORK #121/#123). Tiingo's supported-ticker
+  // list, the cold fill's admission set, daily after the EOD retry.
+  "tiingo-supported": { label: "Tiingo supported-ticker list (daily 03:25)", instrumented: true, cron: "25 3 * * *" },
+  // Fills symbols the cold fill queued (crawlers, capped visitors, timeouts),
+  // around the clock, so "it may take a few minutes" holds at night too.
+  "tiingo-cold-queue": { label: "Tiingo cold-fill queue (every 10 min from :03)", instrumented: true, cron: "3-59/10 * * * *" },
+} as const;
+
+/**
+ * Roughly how often a cron fires, in seconds. Coarse on purpose -- this exists
+ * to decide whether SILENCE IS ALARMING, and that only needs the order of
+ * magnitude.
+ *
+ * WHY IT IS NEEDED. "No run recorded" reads identically for a job that fires
+ * every three minutes and one that fires once a day, and the two mean opposite
+ * things. Confirmed live 2026-08-22: warm-picker-universe and warm-earnings both
+ * showed "no run recorded" on /cache-health, and the reason was neither failure
+ * nor a missing schedule -- recordJobRun reached those two routes at 19:18 UTC
+ * in #343, and their crons fire at 07:00 and 07:15. Neither had had an
+ * opportunity to record. The page was telling the truth and the truth read like
+ * a fault (claude/traps/absence-needs-the-producer-to-have-run.md).
+ */
+export function cronIntervalSeconds(cron: string): number {
+  const [minute, hour] = cron.trim().split(/\s+/);
+
+  // BOTH STEP FORMS, and the second one is not hypothetical. Jobs are offset off
+  // minute :00 using "lo-hi/step" (see vercel.json -- four crons used to start in
+  // the same minute and saturate the FMP calls/min ceiling). Matching only "*/N"
+  // would drop "7-57/10" through to the hourly default below, and the page would
+  // then treat ten minutes of silence from a ten-minute job as perfectly normal.
+  // That is this file's own failure mode: a declaration that reads fine and is
+  // wrong (claude/traps/absence-needs-the-producer-to-have-run.md).
+  const step = minute?.includes("/") ? Number(minute.split("/")[1]) : NaN;
+  if (Number.isFinite(step) && step > 0) return Math.max(60, step * 60);
+
+  if (hour === "*") return 60 * 60;
+  // "4,16" fires twice a day; judging it as daily would let a missed run pass.
+  if (hour?.includes(",")) return (60 * 60 * 24) / hour.split(",").length;
+  return 60 * 60 * 24;
+}
+
+/**
+ * The cadence, in words, for display beside a dataset on /cache-health.
+ *
+ * WHY THIS IS DERIVED AND NOT TYPED OUT. stalenessQueue.ts used to carry the
+ * cadence of each warm job as prose in its own DATASETS table -- "every 3 min",
+ * "daily 07:00" -- which made it a THIRD copy of the schedule after vercel.json
+ * and the JOBS registry above. Nothing checked it, and within an hour of the
+ * 2026-08-31 cron stagger (#374) both strings were lies: the page told a reader
+ * the price pool refreshes every three minutes and the history warm runs at
+ * 07:00, when neither had been true since the deploy.
+ *
+ * That is this file's documented failure mode reappearing one module over -- a
+ * declaration that reads fine and is wrong. The registry is the single source,
+ * so the words are computed from the same cron string the check script already
+ * asserts against vercel.json, and there is no longer a copy that CAN drift.
+ */
+export function describeCron(cron: string): string {
+  const [minute, hour] = cron.trim().split(/\s+/);
+
+  const step = minute?.includes("/") ? Number(minute.split("/")[1]) : NaN;
+  if (Number.isFinite(step) && step > 0) return `every ${step} min`;
+
+  const mm = (minute ?? "0").padStart(2, "0");
+  if (hour === "*") return `hourly at :${mm}`;
+  if (hour?.includes(",")) return `daily ${hour.split(",").map((h) => `${h.padStart(2, "0")}:${mm}`).join(" and ")}`;
+  return `daily ${(hour ?? "0").padStart(2, "0")}:${mm}`;
+}
+
+export type JobKey = keyof typeof JOBS;
+
+export type JobRun = {
+  at: number;
+  ok: boolean;
+  /** Small, flat, human-readable. Whatever the job's own summary already says. */
+  summary: Record<string, string | number | boolean | null>;
+};
+
+/**
+ * Record the outcome of a run. Fails open and silent: a job must never fail
+ * because its bookkeeping did.
+ */
+export async function recordJobRun(
+  job: JobKey,
+  ok: boolean,
+  summary: JobRun["summary"]
+): Promise<void> {
+  if (!redis) return;
+  try {
+    const payload: JobRun = { at: Date.now(), ok, summary };
+    await redis.set(`${JOB_RUN_PREFIX}:${job}`, payload, { ex: JOB_RUN_TTL_SECONDS });
+  } catch {
+    // bookkeeping -- never throws into the caller
+  }
+}
+
+export type JobRunView = {
+  job: JobKey;
+  label: string;
+  instrumented: boolean;
+  /** The vercel.json schedule this job is declared to run on. */
+  cron: string;
+  /** Coarse cadence, so the page can judge whether silence is alarming. */
+  intervalSeconds: number;
+  run: JobRun | null;
+};
+
+/** All jobs' latest runs, in one pipelined read. */
+export async function readJobRuns(): Promise<JobRunView[]> {
+  const keys = Object.keys(JOBS) as JobKey[];
+  const view = (job: JobKey, run: JobRun | null): JobRunView => ({
+    job,
+    label: JOBS[job].label,
+    instrumented: JOBS[job].instrumented,
+    cron: JOBS[job].cron,
+    intervalSeconds: cronIntervalSeconds(JOBS[job].cron),
+    run,
+  });
+  const empty = keys.map((job) => view(job, null));
+  if (!redis) return empty;
+  try {
+    const values = await redis.mget<(JobRun | null)[]>(
+      ...keys.map((j) => `${JOB_RUN_PREFIX}:${j}`)
+    );
+    return keys.map((job, i) => {
+      const raw = values?.[i];
+      const run =
+        raw && typeof raw === "object" && typeof (raw as JobRun).at === "number"
+          ? (raw as JobRun)
+          : null;
+      return view(job, run);
+    });
+  } catch {
+    return empty;
+  }
+}

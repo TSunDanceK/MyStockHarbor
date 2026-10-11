@@ -1,0 +1,502 @@
+# News adapter spec — build instructions (2026-09-13)
+
+Built on **measured verdicts**, not assumptions. The probe route that produced
+them (`app/api/debug/news-sources`) ran three times from `iad1` — two preview,
+one production — and was **deleted at step 7**, as this file said to do once the
+adapters shipped. Its verdicts are quoted throughout and are not re-derivable
+without rebuilding it.
+
+Context: `claude/news-as-stored-dataset-spec-2026-08-22.md` (the store, unchanged),
+`claude/image-policy-2026-09-13.md` (how images are served and why),
+`claude/stooq-inaccessible-sec-viable-2026-09-12.md` (the precedent — Stooq was the
+first source to refuse this site's IPs; Nasdaq is the second, so source viability is
+now measured from inside a function before anything is built on it).
+
+## Verdicts — build only on these
+
+| Source | Verdict | Evidence |
+|---|---|---|
+| **Google News RSS search** | **PASS — per-symbol primary** | 100 items / 95d (MU), 100 / 149d (PLAB), 100% precision (ASTS) |
+| **data.sec.gov submissions** | PASS | 1,001 filings, `sicDescription`; works with or without SEC_USER_AGENT |
+| **sec.gov/files/company_tickers.json** | PASS **with UA set** | 10,426 ticker→CIK entries, 798 KB |
+| **GlobeNewswire** | PASS | ticker in `<category>`, `dc:subject`, `dc:keyword` |
+| **PR Newswire** | PASS | `prn:industry`, `prn:subject`, `media:credit` = "PRNewswire" |
+| **MarketWatch** | PASS | `media:credit` = "Sean Rayford/Getty Images" |
+| **CNBC** | PASS | 30 items, `metadata:sponsored` flag |
+| **Nasdaq rssoutbound** | **BLOCKED — do not use** | 25s timeout, both attempts, every feed, preview **and** production |
+| **Business Wire** | dead feed token | dropped |
+
+**Nasdaq is not a fallback, a retry candidate, or a "try again later".** It answered
+fine from a residential network and refuses Vercel from both environments. Do not
+reintroduce it.
+
+Production and preview returned materially identical results for every other source,
+so preview is a fair proxy for future probing.
+
+## What does NOT change
+
+The August stored-dataset design survives intact and must be reused as-is:
+
+- Redis keys `msh:news:v1:<SYM>` and `msh:sector-news:v1:<SLUG>`
+- **Lazy population on first visit.** Never a warm cron. Do not add news to `vercel.json`
+- 6-hour overlap on incremental fetch, dedup by link/guid, hold ~40, cap and evict
+- The earnings pin (7-day backstop, replacement is the primary rule)
+- Page renders read Redis and make no upstream call
+
+Only the **adapter behind it** changes. If the plan seems to require touching the
+store, the plan is wrong.
+
+---
+
+# 0. FIRST — stop serving publisher images
+
+**Do this before any adapter work. It is the only urgent part of this project.**
+
+## Why it is not step 6
+
+The image question was never downstream of the FMP question. **FMP aggregated other
+people's articles and passed through other people's image URLs.** They were never the
+rights holder — no FMP plan at any price could have granted the right to display a
+Getty photograph, because FMP cannot sublicense what they do not own.
+
+The site is hotlinking publisher images **today**, supplied under a plan FMP have
+themselves said does not cover this usage. Hotlinked-with-attribution-and-a-link is
+the milder end of the spectrum, but it is running now and step 6 is weeks away.
+
+## Why it can ship first
+
+Nothing in it depends on the new adapters:
+
+| needs | already available? |
+|---|---|
+| hide the publisher image | yes — it is the `image` field on items we already store |
+| `sector-*` bucket selection | yes — sector is already known per symbol |
+| the generated data card | yes — ticker, price move and sparkline are already on the page |
+| `eventType` bucket selection | **no** — waits for the adapters |
+
+`eventType` only picks a *better* bucket. Sector art is a perfectly good default
+until step 6 refines it.
+
+## Scope
+
+1. **Hide the publisher image render.** Per the owner's standing convention: hide with
+   a code comment explaining why, do not delete. If a licensed source ever arrives it
+   is one flag, not an archaeology exercise.
+2. Wire the art cascade from §6 using what exists: **library art on the 5 lead cards,
+   generated data card on the 10 compact rows**, bucket chosen by sector.
+3. Ship `public/news-art/` (89 images, 20 buckets, `manifest.json`) alongside it.
+
+Nothing else. No adapter, no provider interface changes, no store changes.
+
+**SHIPPED 2026-09-13 — items 1 and 2. ITEM 3 IS OUTSTANDING AND IS THE OWNER'S.**
+
+- **1 (done, and wider than stated).** Four render sites were hotlinking, not one:
+  the stock news page (lead + compact), the sector news page (lead + compact),
+  `/headlines`, and the dashboard news strip. All four are now guarded by the single
+  `SHOW_PUBLISHER_IMAGES` flag in `lib/news-image-policy.ts`, render code left intact.
+  Hiding only the stock page would have left three quarters of the exposure running.
+- **2 (done).** `lib/server/news/art.ts` selects the bucket and the image;
+  `app/components/GeneratedNewsArt.tsx` draws the generated data card as an inline
+  SVG. Bucket selection reads the cached per-symbol `industry` first and falls back to
+  sector, because the bucket taxonomy is finer than the site's eleven sectors —
+  "technology" alone cannot choose between semiconductors and software, and roughly
+  half the library is unreachable from sector alone. It costs no extra call: the
+  industry is already beside the sector in `fundamentalsCache`.
+- **3 (NOT done — the images are not in the repo and cannot be produced here).**
+  `public/news-art/` ships with an **empty `manifest.json`**, so every card currently
+  draws the generated data card and nothing 404s. Dropping the 89 `.webp` files in and
+  raising the counts (they are recorded ready-to-paste in `public/news-art/README.md`)
+  is the only remaining step, and it needs no code change.
+  `scripts/check-news-art.mjs` fails if a manifest count has no file behind it, which
+  is the failure mode that would otherwise reach a live page as a broken image.
+
+The sector news page, `/headlines` and the dashboard strip now render **no** image:
+the generated card needs a per-item price move and sparkline that those pages do not
+load. Wiring art there is a follow-up, not part of step 0.
+
+## What this buys
+
+- The exposure stops this week instead of next month.
+- The pages do not go imageless in the meantime.
+- **The art system gets seen in real use while the library is still small enough to
+  change cheaply.** If four-per-bucket reads as repetitive on a real ticker page, that
+  is worth discovering now rather than after the remaining buckets are generated.
+
+---
+
+## Provider interface — the flick-back requirement
+
+Hard requirement from the owner: if FMP ever return with a reasonable offer, it must
+be a switch, not an unpick.
+
+```ts
+// lib/server/news/types.ts
+export type NewsProviderId = "gnews" | "wire" | "sec" | "fmp";
+
+export interface NewsProvider {
+  id: NewsProviderId;
+  /** Per-symbol news. sinceIso is the incremental watermark (newest stored − 6h). */
+  fetchForSymbol(
+    symbol: string,
+    companyName: string,
+    sinceIso: string | null
+  ): Promise<NewsItem[]>;
+  /** Market-wide. Feeds the headlines page AND seeds sector pages. */
+  fetchMarket(): Promise<NewsItem[]>;
+}
+```
+
+Selection by env, defaulting to free:
+
+```ts
+// NEWS_PROVIDER = "free" (default) | "fmp"
+const active = process.env.NEWS_PROVIDER === "fmp" ? [fmpProvider] : freeProviders;
+```
+
+The FMP adapter stays in the tree, compiling and tested, populating the same fields.
+It is not deleted, commented out, or gutted.
+
+## Item shape — additive only
+
+```ts
+type NewsItem = {
+  // unchanged — do not remove or rename
+  title: string;
+  link: string;
+  pubDate: string | null;
+  source: string | null;
+  description: string | null;
+  image?: string | null;
+
+  // additions
+  guid?: string | null;
+  tickers?: string[];
+  categories?: string[];
+  eventType?: "earnings" | "filing" | "analyst" | "deal" | "macro" | null;
+  art?: string | null;
+  imageVerdict?: "allow" | "deny" | null;
+  provider?: NewsProviderId;
+};
+```
+
+`tickers` is deliberately left unset by the FMP adapter in step 1 — FMP's symbols
+already arrive as `fmpSymbols`, which every consumer and every stored Redis record
+reads, and writing the same list under a second name would have changed stored bytes
+for no gain. **Resolve it in step 3, not later:** the Google News adapter populates
+`tickers`, and one read shim treats `fmpSymbols` as a legacy alias so existing
+records keep working. One place, not scattered — two names for one concept is exactly
+what this shape exists to prevent.
+
+## 1. Google News adapter — the per-symbol primary
+
+### Query construction, and why it matters
+
+Google News is a **plain text search with no notion of a ticker.** Measured:
+
+```
+q=MU                              86% precision  (Missouri Tigers football,
+                                                  a Ugandan BBC story,
+                                                  a college soccer box score)
+q="Micron Technology" stock       97-98% precision, 95-day span   <- USE THIS
+```
+
+```
+https://news.google.com/rss/search?q=<QUERY>&hl=en-US&gl=US&ceid=US:en
+QUERY = `"${cleanName}" stock`
+```
+
+The residual 2-3% are not junk — they are the same clickbait headlines each run
+("Not Nvidia, Not Palantir. This Might Be September's Most Important AI
+Infrastructure Stock"), which are genuinely about the company but withhold the name
+from the headline. The scorer only reads titles, so 97% is a floor.
+
+### The normaliser — CORRECTED 2026-09-13
+
+**An earlier version of this section was wrong and is recorded here so the mistake
+is not repeated.** It said: strip everything from `" - "` onward, then trailing
+corporate suffixes. That rule was generalised from a single example
+(`Micron Technology, Inc. - Common Stock`) and it fails on roughly **half** the
+universe, because half the directory joins the instrument clause with a plain space:
+
+```
+Micron Technology, Inc. - Common Stock     the shape the old rule assumed
+Chevron Corporation Common Stock           no dash at all
+Boeing Company (The) Common Stock          and a parenthetical in the way
+Nike, Inc. Common Stock
+GameStop Corporation Common Stock
+```
+
+A dash-only cut leaves `Chevron Corporation Common Stock` intact and sends it to
+Google News verbatim — precisely the failure the normaliser exists to prevent.
+**Testing against 155 real directory names is what caught it; invented fixtures all
+carry the assumed shape and would have hidden it.** Source real names for the
+fixture, commit them with provenance, and the test runs offline afterwards.
+
+**Reuse `lib/server/companyNames.ts`, do not write a new rule.** Its instrument-suffix
+handling has run against this same feed for months and already covers the
+space-joined form, the `(The)` parenthetical, ADR share-ratio clauses and the
+directory's self-repeating names. The order that works:
+
+1. the dash cut — still needed, it is the only thing that handles `" - Units"` and
+   `" - 7.875% Notes due 2028"`
+2. the existing `companyNames.ts` instrument rule
+3. corporate-suffix stripping
+
+Result: 105 of 155 produce a searchable term, and **all 55 symbols the site actually
+publishes on are correct** — MU → `Micron Technology`, BABA → `Alibaba`,
+VRT → `Vertiv`, WFC → `Wells Fargo`, QBTS → `D-Wave Quantum`.
+
+### Names that cannot be searched by name
+
+**48 of 155 are funds, notes or preferreds**, not companies — *Keeley Dividend ETF*,
+*NextEra … Junior Subordinated Debentures due March 1, 2079*. Their names are product
+descriptions. `assessCompanyName` returns `fund-or-note` and **they never reach a
+per-symbol query.** (Worth noting beyond news: 31% of the universe not being a
+company is a finding for the universe work too.)
+
+**Some real companies normalise to a common word.** MSTR → `Strategy`,
+POST → `Post`. Querying `"Strategy" stock` returns articles about strategy.
+
+**Handle this with the classification, not a hand-maintained alias list** — an alias
+table rots and nobody remembers to update it. Where `assessCompanyName` flags a name
+as generic, switch to the ticker-qualified shape:
+
+```
+QUERY = `"${cleanName}" (${symbol}) stock`
+```
+
+Measured at 96% for unambiguous names versus 98% — a small cost that only applies
+where it buys a lot. It also absorbs recent renames without maintenance: MSTR was
+MicroStrategy until recently and headlines still use both, and the ticker anchors
+both spellings.
+
+### Date filtering is not optional
+
+CYRX returned 55 items spanning **3,453 days** — one from 2017. Thin-coverage names
+backfill with ancient articles.
+
+- Drop anything older than **45 days** at display
+- Keep up to **120 days** in the store (the earnings pin may reach back)
+- Sort newest-first after filtering, never before
+
+### Fields available
+
+`title`, `link`, `guid`, `pubDate`, `source`. That is all.
+
+- **`source`** is a real element carrying the publisher — use it for `source`.
+  Do not parse the ` - Publisher` suffix off the title; `<source>` is authoritative.
+  Do strip that suffix from the displayed title.
+- **`link`** is a `news.google.com/rss/articles/CBMi...` redirect. **Leave it alone.**
+  Do not resolve it to the publisher URL — an extra request per item, fragile, and
+  the redirect still delivers the reader to the publisher.
+- **`guid`** is stable. Primary dedup key.
+- **There is no description.** See §5.
+
+## 2. Wire adapters — GlobeNewswire + PR Newswire
+
+The only leg where longer extracts and the source's own images are defensible,
+because releases are issued for republication.
+
+- **GlobeNewswire**: `<category>` carries the ticker, exchange-prefixed (`SWX:RO`,
+  `OTC Markets:RHHBY`). Split on `:`, take the symbol, match against the universe.
+  Ignore non-US listings rather than trying to map them.
+- **PR Newswire**: `prn:industry` and `prn:subject` map to sector and `eventType`
+  respectively — better structured than anything else in the set.
+- Both carry real `description` text. Use it.
+
+## 3. SEC adapter
+
+- `https://data.sec.gov/submissions/CIK##########.json` — 1,001 filings for MU,
+  with `tickers`, `exchanges` and `sicDescription`. Works with or without
+  `SEC_USER_AGENT`, but it is now set on Production and must stay set (fair-access
+  policy; ≤10 req/sec).
+- **`SEC_USER_AGENT` is Production-only.** That is why the two preview runs saw
+  `company_tickers.json` 403 while production returns it fine. Set it on Preview too,
+  or accept that preview probes will keep reporting a false block on `www.sec.gov`.
+- `sicDescription` is a free sector label. Compare against the existing taxonomy
+  before trusting either.
+- **Still commit the ticker→CIK map as a static file**, but for the real reason:
+  it is **798 KB** and changes rarely, so fetching it at runtime is waste, not a
+  workaround for a block. Fetch once, commit as `data/cik-map.json`, refresh by hand.
+  10,426 entries, shaped as `{index: {cik_str, ticker, title}}` — build the inverse
+  map at build time.
+- Render filings as items: `form` + `items` codes → a plain-English title
+  ("Form 8-K — Item 5.02, officer appointment"). These rows have no snippet by
+  nature; the template builders cover it.
+
+## 4. Headlines and sector pages
+
+- **Headlines**: MarketWatch + CNBC + both wires, merged, deduped, sorted. One
+  scheduled poll of a small fixed set.
+- **Sector**: union of the sector's constituent per-symbol stores, deduped. The
+  similarity dedup matters far more here — a market-wide story arrives once per
+  constituent. Verify the threshold behaves on that traffic rather than assuming it
+  carries over from single-symbol pages.
+- Filter CNBC items where `metadata:sponsored` is not `"false"`.
+
+## 5. The missing snippet — use what already exists
+
+Google News returns no description, so per-symbol cards lose their summary text.
+**Do not fill this with an AI call per item.** `lib/stock-news-templates.ts` already
+provides `buildWhyItMatters`, `buildBeyondHeadline` and `buildWhatItMeans`, and the
+page already renders the algorithmic fallback instantly with an optional AI upgrade
+on demand. That machinery was built for exactly this case — wire it to the new items
+and leave the on-demand AI path as-is.
+
+Wire items keep their real descriptions, so the page will be a mix. That is fine.
+
+## 6. Images — cascade, default deny
+
+Measured signals, live in the feeds:
+
+- PR Newswire `media:credit` = **"PRNewswire"** (self-credited → safe)
+- MarketWatch `media:credit` = **"Sean Rayford/Getty Images"** (agency → deny)
+
+```
+provider is wire AND media:credit is the wire itself   -> allow, use the image
+media:credit names an agency (Getty/Reuters/AP/AFP/…)  -> deny
+no image at all (all Google News items)                -> deny
+default                                                 -> deny
+```
+
+**No FMP-supplied image is ever allowed**, whatever its credit field says — FMP was
+never the rights holder. Step 0 hides that render entirely.
+
+### Library art goes on the LEAD CARDS ONLY
+
+The page renders **5 large cards and 10 compact rows**. Buckets currently hold
+**4 images** (6 for semiconductors, software, biotech, banks), because one prompt
+produced one kept image. Spread across 15 rows that repeats each image three or four
+times on a single page — visibly.
+
+So:
+
+```
+lead cards (5)    -> library art, or the generated data card if the bucket is empty
+compact rows (10) -> the generated data card, always
+```
+
+Four images across five leads barely repeats. And at 56px tall a generated card
+showing ticker, price move and sparkline is **legible**, which a shrunk illustration
+of a wafer is not — so this is the better product as well as the cheaper one. The
+`-sm.webp` 320×180 variants ship anyway and sit unused until buckets grow.
+
+### Selecting the art
+
+```
+art = eventType ? pick(`event-${eventType}`) : pick(`sector-${sectorSlug}`)
+pick(bucket) = `/news-art/${bucket}-${pad(hash(guid) % count(bucket))}.webp`
+```
+
+Counts come from `public/news-art/manifest.json` — never from counting files by hand.
+Hash the guid so an article always gets the same image: stable across renders,
+cache-friendly, no flicker. Re-hash on collision so no image repeats on one page.
+
+Five sector buckets are empty (staples, realestate, materials, aerospace, insurance).
+Any bucket absent from the manifest falls back to the generated card, so this ships
+incomplete and fills in later. **More images are being added over the coming days —
+the manifest is the only thing that needs updating when they land.**
+
+**Serve with a plain `<img srcset>`, never `next/image`**, and always set `width`
+and `height`. See `claude/image-policy-2026-09-13.md` for why.
+
+## 7. `eventType` derivation
+
+In priority order: SEC form type → `prn:subject` / `dc:subject` on wires → title
+keyword match. Keep the keyword list small and in one place.
+
+## 8. Build order
+
+0. **Art cascade against existing data, and hide the publisher image.** See §0. The only urgent step. Ships alone, needs no adapter.
+1. Provider interface + `NEWS_PROVIDER` flag, FMP behind it. **No behaviour change.** Ship and verify nothing moved.
+   **SHIPPED 2026-09-13.** `lib/server/news/` holds the interface (`types.ts`), the
+   flag (`index.ts`) and the FMP adapter (`fmpProvider.ts`); the text helpers and the
+   response-window reading moved out of `lib/stock-news-data.ts` with it, because the
+   adapters are called BY that file and importing them back would be a cycle.
+   `NEWS_PROVIDER` defaults to `"fmp"` until step 7 — that is the one place this file's
+   snippet above describes the end state rather than the current code. Verified: same
+   request URL and byte-identical `NewsItem[]` out of the adapter as out of the inline
+   fetch it replaced, cold and incremental; `scripts/check-news-feed.mjs` §8 pins the
+   default, the no-empty-provider-list rule and the adapter's continued existence.
+2. Company-name normaliser + unit tests against the real universe.
+   **SHIPPED 2026-09-13.** `lib/server/news/companyName.ts`, tested by
+   `scripts/check-company-name.mjs` against 155 verbatim directory names in
+   `scripts/fixtures/company-names.txt` (pulled through the relay — the sandbox is
+   refused `www.nasdaqtrader.com`). **§1's algorithm above is incomplete and the
+   fixture is what proved it:** only about half of real names use the ` - `
+   separator it says to cut at. `Chevron Corporation Common Stock` and
+   `Boeing Company (The) Common Stock` join the instrument clause with a space, so a
+   dash-only cut leaves it attached. The dash cut is kept (it is the only thing that
+   handles ` - Units` and ` - 7.875% Notes due 2028`) and the instrument clause is
+   then removed by `cleanName` in `lib/server/companyNames.ts`, which the screener
+   cards have used against this same feed for months — shared, not restated. The
+   suffix list is §1's plus `Incorporated`/`Limited`/`LLC`/`LP`/`Holding` and the
+   dotless forms, each justified by a named row in the fixture. All 55 symbols the
+   site publishes on normalise correctly; `MSTR -> "Strategy"` and `POST -> "Post"`
+   are the override candidates, and funds/notes/preferreds are detected rather than
+   searched.
+3. Google News adapter, per-symbol, with the date filter. Resolve `tickers`/`fmpSymbols` here.
+4. Wire adapters.
+5. SEC filings adapter + committed CIK map.
+6. `eventType` refinement of the art cascade — `event-*` buckets now that the adapters supply the classification.
+7. Flip the default to `free`.
+   **SHIPPED 2026-09-13.** `newsProviderMode()` defaults to `"free"`;
+   `NEWS_PROVIDER=fmp` still selects the FMP adapter, which stays in the tree
+   compiling and checked. Shipped so that rollback is an environment variable
+   rather than a revert: the variable was set in Production before the merge, so
+   the merge itself moved nothing and Preview was where the free stack got
+   exercised; removing it is the flip and re-adding it is the rollback.
+   **CORRECTED 2026-09-14 — what "an env var, not a revert" does and does not
+   buy.** It buys no revert commit and no code change. It does NOT buy an
+   instant rollback: `newsProviderMode()` reads `process.env.NEWS_PROVIDER`, and
+   an environment variable changed in the Vercel dashboard does not reach the
+   running deployment until a **production redeploy** (~2 min, no rebuild of
+   intent — same commit). The earlier wording here and on `/cache-health` said
+   "no deploy", which was wrong and would have cost minutes of confusion in the
+   exact moment a rollback is being reached for. The honest claim is: one env
+   var plus one redeploy, no code change.
+   `FREE_FEED_MAX_AGE_DAYS` engages here and narrows the feed from 90 days to 45
+   — the one visible content change, and deliberate (Google News backfills thin
+   names: CYRX returned 56 items spread over 3,453 days). `data/static-profile.json`
+   becomes load-bearing at this step and is now read by the stock news page, the
+   dashboard strip and the sector index; a symbol in neither the cache nor the
+   snapshot logs `[static-profile]` and degrades to the generated card. The
+   active provider is surfaced on `/cache-health`, per §8's own instruction
+   below. `app/api/debug/news-sources` deleted. Checked by
+   `scripts/check-provider-flip.mjs`.
+
+Each step ships on its own. Do not combine 1 and 3.
+
+**Surface the active provider on the cache-health page.** At step 7 the failure mode
+is that something fails to register and the site silently keeps calling FMP — the one
+thing this work exists to stop. A log line nobody reads is not enough; make it
+visible. See `claude/silent-failure-traps.md`.
+**DONE at step 7.** `/cache-health` now leads with a "News provider — active now"
+panel: the mode, the adapter ids actually returned by `activeNewsProviders()`, the
+feed window in force, and the snapshot's size and capture date. `fmp` renders amber
+with an explicit "rolled back by env var, with no code change" note, so the rollback
+state cannot be mistaken for the normal one; the `free` branch states the redeploy
+requirement rather than the earlier, wrong "no deploy". Both reads are synchronous — an
+environment lookup and a module-level array — so the panel costs no request.
+
+## 9. Do not
+
+- Do not reintroduce Nasdaq.
+- Do not add a warm cron for per-symbol news.
+- Do not resolve Google redirect links.
+- Do not delete or gut the FMP adapter.
+- Do not display an FMP-supplied image under any circumstances.
+- Do not rehost or cache any publisher image.
+- Do not put library art on the compact rows.
+- Do not build an alias list for ambiguous company names — use the classification.
+- Do not add a publisher denylist for filing churn. The one already in
+  `lib/stock-news-data.ts` named the offending publisher and still let 13 of 15
+  cards through, because a list matches a spelling. Shape rule only —
+  `lib/server/news/filingChurn.ts`. See
+  `claude/traps/precision-is-not-worth-reading.md`.
+- Do not measure a new source on precision alone. Precision was 96-100% on the
+  feed that shipped a page of 13F notices; nothing measured whether an item was
+  worth reading. Measure composition too.
+- Do not remove the image column — **hide it** with a code comment explaining why,
+  per the owner's standing convention, so it is not switched back on by accident.
+- Do not claim a bandwidth saving figure. Measure it after.

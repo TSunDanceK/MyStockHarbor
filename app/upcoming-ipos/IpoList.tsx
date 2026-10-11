@@ -1,0 +1,376 @@
+"use client";
+
+import type React from "react";
+import { useEffect, useState } from "react";
+import type { ConfirmedIpo } from "@/lib/server/ipoCalendar";
+
+type Props = {
+  ipos: ConfirmedIpo[];
+  emptyMessage: string;
+  dateColumnLabel: string;
+  /**
+   * Whether to render the Market Cap column at all.
+   *
+   * A PROP RATHER THAN A DELETION, and rather than this component reading the
+   * env var itself. Deleting the column would make restoring it a rewrite;
+   * reading `IPO_PROVIDER` here would put a server-only value in a "use client"
+   * file, where NEXT_PUBLIC_ is the only thing that reaches the bundle — and
+   * that inlines it at BUILD time, so a provider flip would need a rebuild to
+   * show. The page is a server component and already knows the provider, so it
+   * decides and passes a boolean.
+   */
+  showMarketCap: boolean;
+};
+
+function formatDate(dateStr: string) {
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function formatPriceRange(low: number | null, high: number | null) {
+  if (low === null && high === null) return "-";
+  if (low !== null && high !== null && low !== high) {
+    return `$${low.toFixed(2)} - $${high.toFixed(2)}`;
+  }
+  const single = low ?? high;
+  return single !== null ? `$${single.toFixed(2)}` : "-";
+}
+
+function formatShares(shares: number | null) {
+  if (shares === null) return "-";
+  return shares.toLocaleString("en-US");
+}
+
+function formatCompact(value: number | null) {
+  if (value === null) return "-";
+
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
+  return value.toLocaleString("en-US");
+}
+
+// Everything that isn't the row's identity (symbol, company) or its headline
+// (the date). On desktop these are seven columns; on a phone they're the
+// contents of the expanded panel.
+type FieldDef = {
+  key: string;
+  label: string;
+  format: (ipo: ConfirmedIpo) => string;
+  has: (ipo: ConfirmedIpo) => boolean;
+};
+
+// ── MARKET CAP IS HIDDEN ON THE SEC PATH, NOT DELETED ─────────────────────
+//
+// SOURCE AND DATE, as the brief asks: measured 2026-09-14, NO FREE SOURCE
+// CARRIES IT. Not SEC — market capitalisation is not a filed field, and a
+// company that has not listed has no market to capitalise. Not Nasdaq's own
+// feed either: absent from every bucket, and prohibited anyway on licence
+// terms (claude/nasdaq-licence-verdict-2026-09-14.md). FMP did carry it, which
+// is why the column exists at all.
+//
+// So on IPO_PROVIDER=sec every row's marketCap is null by construction
+// (ipoSecSource.toConfirmedIpo sets it so, deliberately, rather than guessing)
+// and the column would be a header over a solid line of dashes. Same convention
+// as the earnings hide list: hidden behind the flag, kept in the code, restored
+// by flipping one boolean if a licence-clean source ever appears.
+const FIELDS_ALL: FieldDef[] = [
+  {
+    key: "exchange",
+    label: "Exchange",
+    format: (i) => i.exchange ?? "-",
+    has: (i) => i.exchange !== null,
+  },
+  {
+    key: "priceRange",
+    label: "Price Range",
+    format: (i) => formatPriceRange(i.priceRangeLow, i.priceRangeHigh),
+    has: (i) => i.priceRangeLow !== null || i.priceRangeHigh !== null,
+  },
+  {
+    key: "sharesOffered",
+    label: "Shares Offered",
+    format: (i) => formatShares(i.sharesOffered),
+    has: (i) => i.sharesOffered !== null,
+  },
+  {
+    key: "dealSize",
+    label: "Deal Size",
+    format: (i) => formatCompact(i.dealSize),
+    has: (i) => i.dealSize !== null,
+  },
+  {
+    key: "marketCap",
+    label: "Market Cap",
+    format: (i) => formatCompact(i.marketCap),
+    has: (i) => i.marketCap !== null,
+  },
+];
+
+const fieldsFor = (showMarketCap: boolean) =>
+  showMarketCap ? FIELDS_ALL : FIELDS_ALL.filter((f) => f.key !== "marketCap");
+
+// IDENTITY IS THE CIK, NOT THE SYMBOL. This was `${ipo.symbol}-${ipo.date}`, and
+// once the upper table began carrying companies that have filed but not priced --
+// which have no ticker yet -- that key collided: every such row became
+// "null-<date>", so two companies amending on the same day produced DUPLICATE
+// REACT KEYS. React then reuses one row's state for the other, and the wrong
+// panel opens. A CIK is always present and is unique per filer.
+function rowKey(ipo: ConfirmedIpo) {
+  return `${ipo.cik}-${ipo.date}`;
+}
+
+// What to show where a ticker has not been assigned yet. An em dash, not an empty
+// cell: a blank reads as a loading state, the same reasoning as the narrow view's
+// "only the terms this deal actually has".
+const SYMBOL_FALLBACK = "—";
+
+// Desktop keeps the nine-column table. Below 720px the same rows render
+// full-width instead: symbol, company and the date, with a chevron that opens
+// the rest of the deal terms.
+//
+// Deliberately state + matchMedia rather than rendering both trees and hiding
+// one with CSS, matching /earnings-calendar (#260) and the screener (#258):
+// two copies of every listing in the DOM is duplicated content on a page that
+// is being indexed, and the listings are the whole reason it ranks. isNarrow
+// starts false, so the server render -- and therefore Googlebot -- always gets
+// the table, exactly as before this change.
+export default function IpoList({ ipos, emptyMessage, dateColumnLabel, showMarketCap }: Props) {
+  const fields = fieldsFor(showMarketCap);
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 720px)");
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
+
+  function toggleRow(key: string) {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  if (ipos.length === 0) {
+    return (
+      <div style={{ padding: 32, textAlign: "center", opacity: 0.75, fontSize: 15 }}>
+        {emptyMessage}
+      </div>
+    );
+  }
+
+  if (isNarrow) {
+    return (
+      <div className="ipoRows">
+        <p className="ipoRowsHint">Tap any listing for its full deal terms.</p>
+        {ipos.map((ipo) => {
+          const key = rowKey(ipo);
+          const open = expandedRows.has(key);
+          // Only the terms this deal actually has. A listing with no
+          // reported market cap has none to report -- a column of dashes reads
+          // like a loading state rather than an answer.
+          const rowFields = fields.filter((field) => field.has(ipo));
+          const priceRange = formatPriceRange(ipo.priceRangeLow, ipo.priceRangeHigh);
+          return (
+            <div key={key} className={open ? "ipoRow open" : "ipoRow"}>
+              {/* The whole collapsed row is one button and it only expands.
+                  Nothing here navigates: an upcoming listing has no stock page
+                  worth sending anyone to yet, so there is no second outcome to
+                  hit by accident. */}
+              <button
+                type="button"
+                className="ipoRowTop"
+                onClick={() => toggleRow(key)}
+                aria-expanded={open}
+                // ipo.company, not the symbol: a screen reader announcing "Show
+                // null deal terms" is worse than announcing a long name.
+                aria-label={
+                  open
+                    ? `Hide ${ipo.symbol ?? ipo.company} deal terms`
+                    : `Show ${ipo.symbol ?? ipo.company} deal terms`
+                }
+              >
+                <span className="ipoRowId">
+                  <span className="ipoRowSym">{ipo.symbol ?? SYMBOL_FALLBACK}</span>
+                  <span className="ipoRowName" title={ipo.company}>
+                    {ipo.company}
+                  </span>
+                </span>
+                <span className="ipoRowFigures">
+                  <span className="ipoRowLabel">{dateColumnLabel}</span>
+                  <span className="ipoRowValue">{formatDate(ipo.date)}</span>
+                  {priceRange !== "-" ? <span className="ipoRowSub">{priceRange}</span> : null}
+                </span>
+                <span className="ipoRowChev" aria-hidden="true">
+                  {open ? "▲" : "▼"}
+                </span>
+              </button>
+              {open ? (
+                <div className="ipoRowPanel">
+                  {rowFields.length ? (
+                    <div className="ipoRowFields">
+                      {rowFields.map((field) => (
+                        <div key={field.key} className="ipoRowField">
+                          <span className="ipoRowFieldLabel">{field.label}</span>
+                          <span className="ipoRowFieldValue">{field.format(ipo)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="ipoRowEmpty">
+                      No deal terms published for {ipo.symbol ?? ipo.company} yet.
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+
+        <style>{`
+          .ipoRows { display: grid; gap: 8px; padding: 12px; }
+          .ipoRowsHint {
+            margin: 0 2px 2px; font-size: 12px; font-weight: 700;
+            color: rgba(148,163,184,0.75);
+          }
+          .ipoRow {
+            border: 1px solid rgba(255,255,255,0.09); border-radius: 14px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+            overflow: hidden;
+          }
+          .ipoRow.open { border-color: rgba(96,165,250,0.4); }
+          .ipoRowTop {
+            display: flex; width: 100%; align-items: center; gap: 10px;
+            padding: 11px 12px; border: none; background: transparent;
+            font: inherit; color: inherit; cursor: pointer; text-align: left;
+          }
+          .ipoRowTop:active { background: rgba(255,255,255,0.03); }
+          .ipoRowId { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1 1 auto; }
+          .ipoRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #eaf2ff; }
+          .ipoRowName {
+            min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 12px; font-weight: 700; color: rgba(148,163,184,0.9);
+          }
+          .ipoRowFigures {
+            flex: 0 0 auto; display: flex; flex-direction: column;
+            align-items: flex-end; gap: 1px; text-align: right;
+          }
+          .ipoRowLabel {
+            font-size: 9px; font-weight: 900; letter-spacing: 0.05em;
+            text-transform: uppercase; color: rgba(148,163,184,0.62);
+          }
+          .ipoRowValue { font-size: 14.5px; font-weight: 900; color: #f1f5f9; white-space: nowrap; }
+          .ipoRowSub { font-size: 11.5px; font-weight: 800; white-space: nowrap; color: rgba(148,163,184,0.9); }
+          .ipoRowChev { flex: 0 0 auto; font-size: 10px; color: rgba(226,232,240,0.6); }
+          .ipoRow.open .ipoRowChev { color: #93c5fd; }
+
+          .ipoRowPanel { border-top: 1px solid rgba(255,255,255,0.08); padding: 4px 12px 12px; }
+          .ipoRowFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+          .ipoRowField {
+            display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+            padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.055); min-width: 0;
+          }
+          .ipoRowFieldLabel {
+            font-size: 11px; font-weight: 800; color: rgba(148,163,184,0.8);
+            min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          }
+          .ipoRowFieldValue {
+            flex: 0 0 auto; font-size: 12.5px; font-weight: 800;
+            color: rgba(226,232,240,0.94); white-space: nowrap;
+          }
+          .ipoRowEmpty { padding: 8px 0 2px; font-size: 12px; color: rgba(148,163,184,0.75); }
+
+          @media (max-width: 430px) {
+            /* Two columns of label+value stops fitting once "Shares Offered"
+               sits beside a nine-digit share count -- one column keeps every
+               value on the same line as its own label. */
+            .ipoRowFields { grid-template-columns: minmax(0, 1fr); }
+            .ipoRowName { font-size: 11.5px; }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table
+        className="ipoCalendarTable"
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: 14,
+          // Narrower by one column when Market Cap is hidden. Leaving 880 would
+          // force a horizontal scrollbar on a table that now fits.
+          minWidth: showMarketCap ? 880 : 780,
+        }}
+      >
+        <thead>
+          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
+            <th style={thStyle}>{dateColumnLabel}</th>
+            <th style={thStyle}>Symbol</th>
+            <th style={thStyle}>Company Name</th>
+            <th style={thStyle}>Exchange</th>
+            <th style={{ ...thStyle, textAlign: "right" }}>Price Range</th>
+            <th style={{ ...thStyle, textAlign: "right" }}>Shares Offered</th>
+            <th style={{ ...thStyle, textAlign: "right" }}>Deal Size</th>
+            {/* Hidden on the SEC path — see FIELDS_ALL for the source and date.
+                The narrow view drops it through `fields`; this table spells its
+                columns out, so it has to be dropped here too or desktop and
+                mobile would disagree about what the page even offers. */}
+            {showMarketCap ? (
+              <th style={{ ...thStyle, textAlign: "right" }}>Market Cap</th>
+            ) : null}
+          </tr>
+        </thead>
+        <tbody>
+          {ipos.map((ipo: ConfirmedIpo) => (
+            <tr key={rowKey(ipo)} style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <td style={tdStyle}>{formatDate(ipo.date)}</td>
+              <td style={{ ...tdStyle, fontWeight: 700 }}>{ipo.symbol ?? SYMBOL_FALLBACK}</td>
+              <td style={tdStyle}>{ipo.company}</td>
+              <td style={tdStyle}>{ipo.exchange ?? "-"}</td>
+              <td style={{ ...tdStyle, textAlign: "right" }}>
+                {formatPriceRange(ipo.priceRangeLow, ipo.priceRangeHigh)}
+              </td>
+              <td style={{ ...tdStyle, textAlign: "right" }}>{formatShares(ipo.sharesOffered)}</td>
+              <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.dealSize)}</td>
+              {showMarketCap ? (
+                <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.marketCap)}</td>
+              ) : null}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const thStyle: React.CSSProperties = {
+  textAlign: "left",
+  padding: "12px 16px",
+  fontSize: 12,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+  color: "#8a97ad",
+  whiteSpace: "nowrap",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "12px 16px",
+  whiteSpace: "nowrap",
+};

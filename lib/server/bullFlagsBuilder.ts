@@ -1,0 +1,1275 @@
+// lib/server/bullFlagsBuilder.ts
+//
+// Core data-building logic for /api/bull-flags, extracted so
+// app/plays/bull-flags/page.tsx can read the payload in-process via
+// getBullFlagsData() instead of doing an HTTP self-fetch to its own (now
+// BotID-guarded) /api/bull-flags route. That self-fetch carries no browser
+// BotID header and would otherwise itself be read as bot traffic and
+// 403'd -- the exact previously-proven failure mode documented in
+// claude/pickers-firewall-selfblock-2026-07-17.md. app/api/bull-flags/
+// route.ts's GET handler calls getBullFlagsData() too, so the public
+// endpoint and SSR share the same in-memory memo, Redis cache, and refresh
+// lock defined in this module and stay perfectly consistent.
+
+import { Redis } from "@upstash/redis";
+import { chartHref } from "@/lib/chartHref";
+import { BULK_READ_CACHE, PAGE_READ_CACHE } from "./redisCacheMode";
+import { REQUEST_BYTE_BUDGET, pctOfRequestLimit, trySetRequestBytes } from "./chunkByBytes";
+import { detectBullFlag, type BullFlagResult } from "../ta/bullFlag";
+import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
+import { playsTiingoHistory } from "./marketData/playsHistory";
+import { flushRedisReadMeter } from "./redisBandwidth";
+
+import { addToDynamicUniverse, readDynamicUniverse, ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
+import { getCompanyNameMap } from "./companyNames";
+import { PRESET_UNIVERSE } from "./presetUniverse";
+import { readMarketState } from "./marketState";
+
+type Point = {
+  date: string;
+  open?: number;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+};
+
+type MarketRow = {
+  symbol: string;
+  changePct: number | null;
+  rangePct: number | null;
+  last: number | null;
+  volume: number | null;
+};
+
+type MarketPayload = {
+  updatedAt: string;
+  topTraded: MarketRow[];
+  topMovers: MarketRow[];
+  topRanges: MarketRow[];
+  dynamicUniverseSize?: number;
+  dynamicSymbols?: string[];
+};
+
+type PlayTone = "green" | "yellow" | "orange" | "red";
+
+type PlayChartPoint = {
+  date: string;
+  open?: number;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+};
+
+type PlayItem = {
+  symbol: string;
+  companyName?: string;
+  play: "bullFlag";
+  timeframe: "M" | "ST" | "D" | "W";
+  score: number;
+  tone: PlayTone;
+  note: string;
+
+  poleStartPrice: number;
+  poleHighPrice: number;
+  latestClose: number;
+
+  poleGainPct: number;
+  flagRetracementPct: number;
+  distanceToBreakoutPct: number;
+
+  flagHigh: number;
+  flagLow: number;
+  flagBars: number;
+  poleBars: number;
+  flagDriftPct: number;
+
+  flagUpperStartPrice: number;
+  flagUpperEndPrice: number;
+  flagLowerStartPrice: number;
+  flagLowerEndPrice: number;
+  flagAngleDeg: number;
+
+  poleStartDate: string;
+  poleHighDate: string;
+  flagStartDate: string;
+
+  startDate: string;
+  endDate: string;
+
+  chartPoints: PlayChartPoint[];
+
+  dashboardHref: string;
+};
+
+type PlaySection = {
+  title: string;
+  description: string;
+  foundCount: number;
+  shownCount: number;
+  items: PlayItem[];
+};
+
+export type PlaysPayload = {
+  updatedAt: string;
+  universeSize: number;
+  dynamicUniverseCount: number;
+  dynamicUniversePreview: string[];
+  estimatedApiCalls: number;
+  /** Which provider the scan read (#553 B4), with the per-tier counts on Tiingo. */
+  history?: { provider: "tiingo" | "fmp"; memory?: number; cache?: number; fmpFallback?: number; missing?: number };
+  sections: PlaySection[];
+  debug?: unknown;
+  error?: string;
+};
+
+type CachedPlaysPayload = {
+  cachedAt: number;
+  data: PlaysPayload;
+};
+
+type AggregatedPoint = {
+  date: string;
+  open?: number;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+};
+
+
+// One shared constant, not a fourth copy. See dynamicUniverseCache.ts,
+// which also records why its own 700 is a different quantity.
+const UNIVERSE_CAP = ANALYSIS_UNIVERSE_CAP;
+const MAX_FRESH_HISTORY_FETCHES = 275;
+const HISTORY_DAYS = 1300;
+
+let memo:
+  | {
+      ts: number;
+      data: PlaysPayload;
+    }
+  | null = null;
+
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(PAGE_READ_CACHE)
+    : null;
+// The payload write is measured against the 5 MB request budget, so it takes
+// the 20 s deadline; reads and the lock stay on the page's 6 s (#553 COWORK #156).
+const bulkRedis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(BULK_READ_CACHE)
+    : null;
+
+const MEMORY_CACHE_MS = 60_000;
+const CACHE_SECONDS = 60 * 60;
+const STALE_SECONDS = 60 * 60;
+
+export const PLAYS_REDIS_KEY = "msh:bull-flags:v1:main";
+const PLAYS_REDIS_TTL_SECONDS = 60 * 60;
+const PLAYS_LOCK_KEY = "msh:bull-flags:v1:main:lock";
+const PLAYS_LOCK_TTL_SECONDS = 120;
+
+function startOfWeekUtc(dateStr: string) {
+  const [yearStr, monthStr, dayStr] = dateStr.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  const weekday = dt.getUTCDay();
+  const diffToMonday = weekday === 0 ? 6 : weekday - 1;
+
+  dt.setUTCDate(dt.getUTCDate() - diffToMonday);
+
+  const y = dt.getUTCFullYear();
+  const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(dt.getUTCDate()).padStart(2, "0");
+
+  return `${y}-${m}-${d}`;
+}
+
+function aggregateWeekly(points: Point[]): AggregatedPoint[] {
+  const bucketed: AggregatedPoint[] = [];
+  let currentKey = "";
+  let current: AggregatedPoint | null = null;
+
+  for (const point of points) {
+    const key = startOfWeekUtc(point.date);
+
+    if (!current || key !== currentKey) {
+      if (current) bucketed.push(current);
+
+      currentKey = key;
+      current = {
+        date: point.date,
+        open: typeof point.open === "number" ? point.open : point.close,
+        close: point.close,
+        high: point.high,
+        low: point.low,
+        volume: typeof point.volume === "number" ? point.volume : undefined,
+      };
+
+      continue;
+    }
+
+    current.date = point.date;
+    current.close = point.close;
+
+    if (typeof point.high === "number") {
+      current.high =
+        typeof current.high === "number"
+          ? Math.max(current.high, point.high)
+          : point.high;
+    }
+
+    if (typeof point.low === "number") {
+      current.low =
+        typeof current.low === "number"
+          ? Math.min(current.low, point.low)
+          : point.low;
+    }
+
+    if (typeof point.volume === "number") {
+      current.volume =
+        typeof current.volume === "number"
+          ? current.volume + point.volume
+          : point.volume;
+    }
+  }
+
+  if (current) bucketed.push(current);
+
+  return bucketed;
+}
+
+function pLimit(limit: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+
+  const next = () => {
+    active--;
+    const fn = queue.shift();
+    if (fn) fn();
+  };
+
+  return async function <T>(fn: () => Promise<T>): Promise<T> {
+    if (active >= limit) {
+      await new Promise<void>((resolve) => queue.push(resolve));
+    }
+
+    active++;
+
+    try {
+      return await fn();
+    } finally {
+      next();
+    }
+  };
+}
+
+function cleanSymbols(values: string[]) {
+  return Array.from(
+    new Set(
+      values
+        .map((x) => String(x).trim().toUpperCase())
+        .filter(Boolean)
+    )
+  );
+}
+
+function optionalNumberFrom(source: unknown, key: string) {
+  const value =
+    source && typeof source === "object"
+      ? (source as Record<string, unknown>)[key]
+      : undefined;
+
+  if (value == null) return undefined;
+
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
+function normalizeCachedPoints(points: Point[]) {
+  return points
+    .map((p) => ({
+      date: String(p?.date ?? ""),
+      open: optionalNumberFrom(p, "open"),
+      close: Number(p?.close),
+      high: p?.high == null ? undefined : Number(p.high),
+      low: p?.low == null ? undefined : Number(p.low),
+      volume: p?.volume == null ? undefined : Number(p.volume),
+    }))
+    .filter((p) => p.date && Number.isFinite(p.close))
+    .slice(-HISTORY_DAYS);
+}
+
+async function readPlaysCache() {
+  if (!redis) return null;
+
+  try {
+    const entry = await redis.get<CachedPlaysPayload>(PLAYS_REDIS_KEY);
+    if (!entry || typeof entry !== "object") return null;
+    if (!entry.data || typeof entry.data !== "object") return null;
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+async function writePlaysCache(data: PlaysPayload) {
+  if (!redis) return;
+
+  try {
+    const entry: CachedPlaysPayload = {
+      cachedAt: Date.now(),
+      data,
+    };
+
+    // MEASURED AND LOGGED (#553 COWORK #82). An over-limit write returns an
+    // error rather than truncating, and a bare catch here hid any rejection.
+    // The body is measured first; an over-budget one is refused loudly. The
+    // log carries sizes only.
+    const measured = trySetRequestBytes(PLAYS_REDIS_KEY, entry, PLAYS_REDIS_TTL_SECONDS);
+    if (measured && measured.bodyBytes > REQUEST_BYTE_BUDGET) {
+      console.error(
+        `[bull-flags] payload write ${measured.bodyBytes} bytes refused: over the ${REQUEST_BYTE_BUDGET}-byte budget (${pctOfRequestLimit(measured.bodyBytes)} of the limit)`
+      );
+      return;
+    }
+    const writeRedis = bulkRedis ?? redis;
+    await writeRedis.set(PLAYS_REDIS_KEY, entry, {
+      ex: PLAYS_REDIS_TTL_SECONDS,
+    });
+    console.log(`[bull-flags] payload write ${measured?.bodyBytes ?? "?"} bytes ok`);
+  } catch (error) {
+    // Still fail-open for the page, but never silent.
+    console.error(
+      `[bull-flags] payload write failed: ${error instanceof Error ? error.message.slice(0, 160) : "unknown"}`
+    );
+  }
+}
+
+async function acquirePlaysLock() {
+  if (!redis) return "no-redis";
+
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    const result = await redis.set(PLAYS_LOCK_KEY, token, {
+      nx: true,
+      ex: PLAYS_LOCK_TTL_SECONDS,
+    });
+
+    if (result === "OK") return token;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Budget for a lock loser waiting on the winner. Same shape and same figures as
+// pickersBuilder's PICKERS_WAIT_STEP_MS / PICKERS_MAX_WAIT_MS, which is where
+// this pattern comes from: a short poll against a bounded wait, then fall
+// through rather than block forever on a winner that never publishes.
+const PLAYS_WAIT_STEP_MS = 300;
+const PLAYS_MAX_WAIT_MS = 12_000;
+
+function playsSleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wait for whichever request won the build lock to publish its payload.
+ *
+ * PORTED FROM pickersBuilder.waitForPickersPayload (#377/#378), WHICH THIS FILE
+ * SHOULD HAVE HAD SINCE 2026-08-31. That fix was applied to the file the August
+ * outage was found in and never to this one or its two siblings, all of which
+ * had the identical lock-loser shape. See
+ * claude/plays-builders-missing-single-flight-2026-09-12.md and
+ * claude/traps/a-defect-found-in-one-file-lives-in-its-siblings.md.
+ *
+ * WHY WAITING BEATS BUILDING. Losing the lock WITH something cached is handled
+ * by the branch above, which serves it. The case this exists for is losing the
+ * lock with NOTHING cached -- right after PLAYS_REDIS_TTL_SECONDS lapses, after
+ * an eviction or outage, or after a cache-key version bump, when the key is
+ * absent for everyone at once. Every concurrent request then ran its own full
+ * build: ~700 single-symbol history reads, which is ~700 GETs plus ~4,200 billed
+ * instrumentation writes (recordRedisRead fires per symbol on the singular path
+ * and costs 6 commands a time), all of it redundant with the winner's. That is
+ * how one cold start became the 2026-08-27/28 command storm.
+ *
+ * THE POLL IS EXISTS, NOT GET, and the reason differs from the pickers version.
+ * There the concern was that readPickersCache re-hydrates off-payload chart
+ * series; readPlaysCache is a plain GET with no hydration. But the value is
+ * still the whole payload, so polling it would move those bytes on every pass.
+ * EXISTS is one command and no payload; the read happens once, on success.
+ */
+async function waitForPlaysPayload() {
+  if (!redis) return null;
+
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < PLAYS_MAX_WAIT_MS) {
+    await playsSleep(PLAYS_WAIT_STEP_MS);
+
+    try {
+      if (await redis.exists(PLAYS_REDIS_KEY)) return await readPlaysCache();
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function releasePlaysLock(token: string | null) {
+  if (!redis || !token || token === "no-redis") return;
+
+  try {
+    const current = await redis.get<string>(PLAYS_LOCK_KEY);
+    if (current === token) {
+      await redis.del(PLAYS_LOCK_KEY);
+    }
+  } catch {
+    // fail open
+  }
+}
+
+// Reads the discovery universe in-process instead of fetching this
+// deployment's own /api/market URL.
+//
+// That self-request had no browser BotID header and no session cookie, so the
+// Vercel firewall could challenge it on production and the SSO gate refused it
+// outright on every preview deployment. fetchJSON threw on the non-ok
+// response, and with a cold plays cache getBullFlagsData's catch returned
+// status 500 -- surfacing as "Failed to load chart plays" on a page whose data
+// was sitting in Redis the whole time. Same self-block already fixed in
+// claude/pickers-firewall-selfblock-2026-07-17.md and in this page's own SSR
+// path; the builder's market call was missed then.
+//
+// readMarketState never throws: a Redis miss degrades to empty rankings and
+// the universe falls back to readDynamicUniverse() + PRESET_UNIVERSE below,
+// rather than taking the page down.
+async function fetchMarket(_origin: string, _forceFresh = false): Promise<MarketPayload> {
+  return readMarketState();
+}
+
+async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
+  const pts = await getDailyHistory(symbol, { caller: "plays-bull-flags" });
+
+  return pts
+    .map((p) => ({
+      date: String(p?.date ?? ""),
+      open: optionalNumberFrom(p, "open"),
+      close: Number(p?.close),
+      high: p?.high == null ? undefined : Number(p.high),
+      low: p?.low == null ? undefined : Number(p.low),
+      volume: p?.volume == null ? undefined : Number(p.volume),
+    }))
+    .filter((p) => p.date && Number.isFinite(p.close))
+    .slice(-days);
+}
+
+function buildDashboardHref(symbol: string, timeframe: "M" | "ST" | "D" | "W") {
+  // Lands on the analyser (#563 COWORK #151).
+  return chartHref(symbol, { tf: timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe });
+}
+
+function toPlayItem(
+  symbol: string,
+  result: BullFlagResult,
+  sourcePoints: Point[],
+  itemTimeframe?: "M" | "ST" | "D" | "W"
+): PlayItem {
+  const displayTimeframe = itemTimeframe ?? result.timeframe;
+
+  const chartBars =
+    displayTimeframe === "M"
+      ? Math.min(260, Math.max(90, result.flagBars + result.poleBars + 18))
+      : displayTimeframe === "W"
+        ? Math.min(220, Math.max(52, result.flagBars + result.poleBars + 10))
+        : displayTimeframe === "D"
+          ? Math.min(360, Math.max(120, result.flagBars + result.poleBars + 35))
+          : Math.min(180, Math.max(45, result.flagBars + result.poleBars + 18));
+
+  const chartPoints = sourcePoints
+    .slice(-chartBars)
+    .map((point) => ({
+      date: point.date,
+      open:
+        typeof point.open === "number"
+          ? Number(point.open.toFixed(2))
+          : undefined,
+      close: Number(point.close.toFixed(2)),
+      high:
+        typeof point.high === "number"
+          ? Number(point.high.toFixed(2))
+          : undefined,
+      low:
+        typeof point.low === "number" ? Number(point.low.toFixed(2)) : undefined,
+      volume:
+        typeof point.volume === "number" && Number.isFinite(point.volume)
+          ? point.volume
+          : undefined,
+    }))
+    .filter((point) => point.date && Number.isFinite(point.close));
+
+  return {
+    symbol,
+    play: "bullFlag",
+    timeframe: displayTimeframe,
+    score: result.score,
+    tone: result.tone,
+    note: result.note,
+
+    poleStartPrice: result.poleStartPrice,
+    poleHighPrice: result.poleHighPrice,
+    latestClose: result.latestClose,
+
+    poleGainPct: result.poleGainPct,
+    flagRetracementPct: result.flagRetracementPct,
+    distanceToBreakoutPct: result.distanceToBreakoutPct,
+
+    flagHigh: result.flagHigh,
+    flagLow: result.flagLow,
+    flagBars: result.flagBars,
+    poleBars: result.poleBars,
+    flagDriftPct: result.flagDriftPct,
+
+    flagUpperStartPrice: result.flagUpperStartPrice,
+    flagUpperEndPrice: result.flagUpperEndPrice,
+    flagLowerStartPrice: result.flagLowerStartPrice,
+    flagLowerEndPrice: result.flagLowerEndPrice,
+    flagAngleDeg: result.flagAngleDeg,
+
+    poleStartDate: result.poleStartDate,
+    poleHighDate: result.poleHighDate,
+    flagStartDate: result.flagStartDate,
+
+    startDate: result.startDate,
+    endDate: result.endDate,
+
+    chartPoints,
+
+    dashboardHref: buildDashboardHref(symbol, displayTimeframe),
+  };
+}
+
+function buildSection(args: {
+  title: string;
+  description: string;
+  source: PlayItem[];
+  take: number;
+}): PlaySection {
+  const sorted = [...args.source].sort((a, b) => b.score - a.score);
+  const items = sorted.slice(0, args.take);
+
+  return {
+    title: args.title,
+    description: args.description,
+    foundCount: args.source.length,
+    shownCount: items.length,
+    items,
+  };
+}
+
+function isMacroBullFlagCandidate(result: BullFlagResult) {
+  const structureBars = result.flagBars + result.poleBars;
+
+  const hasLargePole = result.poleGainPct >= 18;
+  const hasEnoughDuration = structureBars >= 44;
+  const hasHealthyFlag =
+    result.flagRetracementPct >= 10 && result.flagRetracementPct <= 62;
+  const hasMeaningfulFlag = result.flagBars >= 8;
+
+  return hasLargePole && hasEnoughDuration && hasHealthyFlag && hasMeaningfulFlag;
+}
+
+function toMacroBullFlagResult(result: BullFlagResult) {
+  return {
+    ...result,
+    note: `Macro bull flag candidate: ${result.poleGainPct.toFixed(
+      1
+    )}% pole move, ${result.flagRetracementPct.toFixed(
+      1
+    )}% retracement, ${result.distanceToBreakoutPct.toFixed(
+      1
+    )}% below breakout area.`,
+  };
+}
+
+function toShortTermBullFlagResult(result: BullFlagResult) {
+  return {
+    ...result,
+    timeframe: "D" as const,
+    note: `Short-term bull flag candidate: ${result.poleGainPct.toFixed(
+      1
+    )}% pole move, ${result.flagRetracementPct.toFixed(
+      1
+    )}% retracement, ${result.distanceToBreakoutPct.toFixed(
+      1
+    )}% below breakout area.`,
+  };
+}
+
+function scoreResultForTimeframe(
+  result: BullFlagResult,
+  timeframe: "M" | "ST" | "D" | "W"
+) {
+  const structureBars = result.flagBars + result.poleBars;
+
+  const wideFlagBonus =
+    timeframe === "D"
+      ? Math.min(18, Math.max(0, result.flagBars - 18) * 0.45)
+      : timeframe === "M"
+        ? Math.min(12, Math.max(0, structureBars - 44) * 0.35)
+        : timeframe === "W"
+          ? Math.min(10, Math.max(0, result.flagBars - 10) * 0.35)
+          : 0;
+
+  return result.score + wideFlagBonus;
+}
+
+function bestFlagForWindows(
+  points: Point[],
+  timeframe: "M" | "ST" | "D" | "W",
+  windows: number[]
+): BullFlagResult | null {
+  const detectorTimeframe = timeframe === "M" || timeframe === "W" ? "W" : "D";
+
+  const minPoleGainPct =
+    timeframe === "M" ? 18 : timeframe === "W" ? 12 : timeframe === "ST" ? 7 : 10;
+
+  const minFlagBars =
+    timeframe === "M" ? 8 : timeframe === "W" ? 6 : timeframe === "ST" ? 4 : 18;
+
+  const maxFlagBars =
+    timeframe === "M" ? 70 : timeframe === "W" ? 52 : timeframe === "ST" ? 24 : 115;
+
+  const maxFlagRetracementPct =
+    timeframe === "M" ? 70 : timeframe === "W" ? 66 : timeframe === "ST" ? 52 : 72;
+
+  const maxDistanceToBreakoutPct =
+    timeframe === "M" ? 22 : timeframe === "W" ? 18 : timeframe === "ST" ? 9 : 16;
+
+  const minStructureBars =
+    timeframe === "M" ? 44 : timeframe === "W" ? 26 : timeframe === "D" ? 42 : 0;
+
+  const results = windows
+    .map((lookbackBars) =>
+      detectBullFlag(points, {
+        timeframe: detectorTimeframe,
+        lookbackBars,
+        minPoleGainPct,
+        minFlagBars,
+        maxFlagBars,
+        maxFlagRetracementPct,
+        maxDistanceToBreakoutPct,
+      })
+    )
+    .filter((result): result is BullFlagResult => result !== null)
+    .filter((result) => result.flagBars + result.poleBars >= minStructureBars)
+    .map((result) => {
+      if (timeframe === "M") return toMacroBullFlagResult(result);
+      if (timeframe === "ST") return toShortTermBullFlagResult(result);
+      return result;
+    });
+
+  if (!results.length) return null;
+
+  return [...results].sort(
+    (a, b) =>
+      scoreResultForTimeframe(b, timeframe) - scoreResultForTimeframe(a, timeframe)
+  )[0];
+}
+
+function debugFlagWindows(
+  points: Point[],
+  timeframe: "M" | "ST" | "D" | "W",
+  windows: number[]
+) {
+  const detectorTimeframe = timeframe === "M" || timeframe === "W" ? "W" : "D";
+
+  return windows.map((lookbackBars) => {
+    const result = bestFlagForWindows(points, timeframe, [lookbackBars]);
+
+    if (!result) {
+      return {
+        timeframe,
+        detectorTimeframe,
+        lookbackBars,
+        passed: false,
+        reason: "detector_returned_null",
+      };
+    }
+
+    return {
+      timeframe,
+      detectorTimeframe,
+      lookbackBars,
+      passed: true,
+      reason: "passed",
+      result: {
+        score: result.score,
+        adjustedScore: scoreResultForTimeframe(result, timeframe),
+        poleGainPct: result.poleGainPct,
+        flagRetracementPct: result.flagRetracementPct,
+        distanceToBreakoutPct: result.distanceToBreakoutPct,
+        flagBars: result.flagBars,
+        poleBars: result.poleBars,
+        structureBars: result.flagBars + result.poleBars,
+        flagHigh: result.flagHigh,
+        flagLow: result.flagLow,
+        flagAngleDeg: result.flagAngleDeg,
+        flagUpperStartPrice: result.flagUpperStartPrice,
+        flagUpperEndPrice: result.flagUpperEndPrice,
+        flagLowerStartPrice: result.flagLowerStartPrice,
+        flagLowerEndPrice: result.flagLowerEndPrice,
+        startDate: result.startDate,
+        endDate: result.endDate,
+      },
+    };
+  });
+}
+
+function addDebugMatch(debugSymbolScan: any, match: string) {
+  if (!debugSymbolScan) return;
+
+  if (!Array.isArray(debugSymbolScan.matched)) {
+    debugSymbolScan.matched = [];
+  }
+
+  debugSymbolScan.matched.push(match);
+}
+
+async function buildPlaysPayload(
+  origin: string,
+  forceFreshMarket = false,
+  debugSymbolInput: string | null = null
+): Promise<PlaysPayload> {
+  const market = await fetchMarket(origin, forceFreshMarket);
+
+  const topTraded = (market?.topTraded ?? [])
+    .map((x) => x.symbol)
+    .filter(Boolean);
+
+  const topMovers = (market?.topMovers ?? [])
+    .map((x) => x.symbol)
+    .filter(Boolean);
+
+  const topRanges = (market?.topRanges ?? [])
+    .map((x) => x.symbol)
+    .filter(Boolean);
+
+  const accumulatedDynamicUniverse = Array.isArray(market?.dynamicSymbols)
+    ? market.dynamicSymbols
+        .map((x) => String(x).trim().toUpperCase())
+        .filter(Boolean)
+    : [];
+
+  const rankedDynamicUniverse = cleanSymbols([
+    ...topTraded,
+    ...topMovers,
+    ...topRanges,
+  ]);
+
+  const sharedUniverseEntries = await readDynamicUniverse();
+
+  const sharedUniverseSymbols = sharedUniverseEntries.map(
+    (entry) => entry.symbol
+  );
+
+  const dynamicUniverse = cleanSymbols([
+    ...sharedUniverseSymbols,
+    ...accumulatedDynamicUniverse,
+    ...rankedDynamicUniverse,
+  ]);
+
+  await addToDynamicUniverse(
+    [...accumulatedDynamicUniverse, ...rankedDynamicUniverse],
+    "market",
+    1
+  );
+
+  const priorityUniverse = cleanSymbols([
+    ...rankedDynamicUniverse,
+    ...PRESET_UNIVERSE,
+    ...sharedUniverseSymbols,
+    ...accumulatedDynamicUniverse,
+  ]);
+
+  const normalizedDebugSymbol = debugSymbolInput
+    ? String(debugSymbolInput).trim().toUpperCase()
+    : "";
+
+  let universe = priorityUniverse.slice(0, UNIVERSE_CAP);
+
+  if (normalizedDebugSymbol && !universe.includes(normalizedDebugSymbol)) {
+    universe = cleanSymbols([normalizedDebugSymbol, ...universe]).slice(
+      0,
+      UNIVERSE_CAP
+    );
+  }
+
+  const debugSymbolScan: any = normalizedDebugSymbol
+    ? {
+        symbol: normalizedDebugSymbol,
+        priorityIndex: priorityUniverse.indexOf(normalizedDebugSymbol),
+        scanIndex: universe.indexOf(normalizedDebugSymbol),
+        inPriorityUniverse: priorityUniverse.includes(normalizedDebugSymbol),
+        inScanUniverse: universe.includes(normalizedDebugSymbol),
+        scanned: false,
+        cacheHadHistory: false,
+        cachedBars: 0,
+        freshFetchUsed: false,
+        freshFetchSkippedBecauseBudgetUsed: false,
+        dailyBars: 0,
+        weeklyBars: 0,
+        matched: [],
+        diagnostics: null,
+      }
+    : null;
+
+  const macroBullFlags: PlayItem[] = [];
+  const weeklyBullFlags: PlayItem[] = [];
+  const dailyBullFlags: PlayItem[] = [];
+
+  let freshHistoryFetchesUsed = 0;
+  const limit = pLimit(10);
+
+  async function getFmpHistoryForScan(symbol: string) {
+    const cachedPoints = await getCachedDailyHistory(symbol, "plays-bull-flags");
+
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.cacheHadHistory = cachedPoints.length > 0;
+      debugSymbolScan.cachedBars = cachedPoints.length;
+    }
+
+    if (cachedPoints.length) {
+      return normalizeCachedPoints(cachedPoints);
+    }
+
+    if (freshHistoryFetchesUsed >= MAX_FRESH_HISTORY_FETCHES) {
+      if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+        debugSymbolScan.freshFetchSkippedBecauseBudgetUsed = true;
+      }
+
+      return [] as Point[];
+    }
+
+    freshHistoryFetchesUsed++;
+
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.freshFetchUsed = true;
+    }
+
+    return fetchHistory(symbol, HISTORY_DAYS);
+  }
+
+  // ON STORED TIINGO BARS (#553 CODE-B #94 B4). PRICE_PROVIDER_PICKERS=tiingo
+  // scans the Tiingo history from the Data Cache (marketData/playsHistory.ts);
+  // the FMP path above then serves only symbols Tiingo has no history for, and
+  // only while FMP_API_KEY is set. A series is never spliced across providers.
+  const tiingoScan = await playsTiingoHistory(universe, getFmpHistoryForScan);
+
+  async function getHistoryForScan(symbol: string) {
+    if (!tiingoScan) return getFmpHistoryForScan(symbol);
+    const points = normalizeCachedPoints(tiingoScan.bySymbol.get(symbol) ?? []);
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.historyProvider = tiingoScan.fromTiingo.has(symbol) ? "tiingo" : points.length ? "fmp" : "none";
+      debugSymbolScan.cacheHadHistory = points.length > 0;
+      debugSymbolScan.cachedBars = points.length;
+    }
+    return points;
+  }
+
+  await Promise.all(
+    universe.map((symbol) =>
+      limit(async () => {
+        try {
+          const dailyPoints = await getHistoryForScan(symbol);
+
+          if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+            debugSymbolScan.scanned = true;
+            debugSymbolScan.dailyBars = dailyPoints.length;
+          }
+
+          if (dailyPoints.length < 80) return;
+
+          const weeklyPoints = aggregateWeekly(dailyPoints);
+
+          if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+            debugSymbolScan.weeklyBars = weeklyPoints.length;
+            debugSymbolScan.diagnostics = {
+              macro: debugFlagWindows(weeklyPoints, "M", [
+                104,
+                120,
+                140,
+                156,
+                180,
+                208,
+                249,
+              ]),
+              weekly: debugFlagWindows(weeklyPoints, "W", [
+                39,
+                52,
+                80,
+                104,
+                156,
+                208,
+              ]),
+              daily: debugFlagWindows(dailyPoints, "D", [
+                90,
+                120,
+                160,
+                220,
+                260,
+                320,
+              ]),
+            };
+          }
+
+          const macroFlag = bestFlagForWindows(weeklyPoints, "M", [
+            104,
+            120,
+            140,
+            156,
+            180,
+            208,
+            249,
+          ]);
+
+          if (macroFlag) {
+            addDebugMatch(debugSymbolScan, "macro");
+
+            macroBullFlags.push(
+              toPlayItem(symbol, macroFlag, weeklyPoints, "M")
+            );
+          }
+
+          const weeklyFlag = bestFlagForWindows(weeklyPoints, "W", [
+            39,
+            52,
+            80,
+            104,
+            156,
+            208,
+          ]);
+
+          if (weeklyFlag) {
+            addDebugMatch(debugSymbolScan, "weekly");
+
+            weeklyBullFlags.push(toPlayItem(symbol, weeklyFlag, weeklyPoints));
+
+            if (!macroFlag && isMacroBullFlagCandidate(weeklyFlag)) {
+              addDebugMatch(debugSymbolScan, "macro_from_weekly");
+
+              macroBullFlags.push(
+                toPlayItem(
+                  symbol,
+                  toMacroBullFlagResult(weeklyFlag),
+                  weeklyPoints,
+                  "M"
+                )
+              );
+            }
+          }
+
+          const dailyFlag = bestFlagForWindows(dailyPoints, "D", [
+            90,
+            120,
+            160,
+            220,
+            260,
+            320,
+          ]);
+
+          if (dailyFlag) {
+            addDebugMatch(debugSymbolScan, "daily");
+
+            dailyBullFlags.push(toPlayItem(symbol, dailyFlag, dailyPoints));
+          }
+        } catch {
+          // Skip bad symbols/data without failing the full plays page.
+        }
+      })
+    )
+  );
+
+  const bestBullFlags = [
+    ...macroBullFlags,
+    ...weeklyBullFlags,
+    ...dailyBullFlags,
+  ];
+
+  const sections = [
+    buildSection({
+      title: "Best Bull Flag Plays",
+      description:
+        "The strongest macro, weekly, daily, and short-term bull flag candidates, ranked by pole strength, flag quality, retracement, breakout proximity and structure age.",
+      source: bestBullFlags,
+      take: 24,
+    }),
+    buildSection({
+      title: "Macro Bull Flag Plays",
+      description:
+        "Large bull flag continuation structures built from wider weekly chart history. These are slower-forming macro setups that may span many months.",
+      source: macroBullFlags,
+      take: 24,
+    }),
+    buildSection({
+      title: "Weekly Bull Flag Plays",
+      description:
+        "Longer-term bull flag candidates built from weekly chart structure.",
+      source: weeklyBullFlags,
+      take: 24,
+    }),
+    buildSection({
+      title: "Daily Bull Flag Plays",
+      description:
+        "Medium-term daily bull flag candidates where price is consolidating after a prior upward pole move.",
+      source: dailyBullFlags,
+      take: 24,
+    }),
+  ];
+
+  // Best-effort company names for the card display line. Never blocks or
+  // breaks the page: any symbol that doesn't resolve just shows the ticker.
+  try {
+    const nameMap = await getCompanyNameMap();
+    if (nameMap.size) {
+      for (const section of sections) {
+        for (const item of section.items) {
+          const name = nameMap.get(item.symbol);
+          if (name) item.companyName = name;
+        }
+      }
+    }
+  } catch {
+    // names are optional
+  }
+
+  return {
+    updatedAt: new Date().toISOString(),
+    universeSize: universe.length,
+    dynamicUniverseCount:
+      typeof market?.dynamicUniverseSize === "number"
+        ? market.dynamicUniverseSize
+        : dynamicUniverse.length,
+    dynamicUniversePreview: dynamicUniverse.slice(0, 20),
+    estimatedApiCalls: freshHistoryFetchesUsed + 1,
+    history: tiingoScan ? { provider: "tiingo", ...tiingoScan.stats } : { provider: "fmp" },
+    sections,
+    debug: debugSymbolScan
+      ? {
+          symbolScan: debugSymbolScan,
+        }
+      : undefined,
+  };
+}
+
+export type BullFlagsDataOpts = {
+  forceRefresh?: boolean;
+  debugSymbol?: string | null;
+  // Set by the page during prerender. See the cacheOnly branch below.
+  cacheOnly?: boolean;
+};
+
+export type BullFlagsDataResult = {
+  data: PlaysPayload;
+  headers: Record<string, string>;
+  status?: number;
+};
+
+// Shares the memo/Redis-cache/lock defined above with /api/bull-flags's
+// GET handler (same module), so the public endpoint and SSR stay
+// perfectly consistent. See module header comment.
+export async function getBullFlagsData(
+  origin: string,
+  opts: BullFlagsDataOpts = {}
+): Promise<BullFlagsDataResult> {
+  const forceRefresh = !!opts.forceRefresh;
+  const debugSymbol = opts.debugSymbol ?? null;
+  const now = Date.now();
+
+  if (!forceRefresh && !debugSymbol && memo && now - memo.ts < MEMORY_CACHE_MS) {
+    return {
+      data: memo.data,
+      headers: {
+        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+      },
+    };
+  }
+
+  const cached = forceRefresh || debugSymbol ? null : await readPlaysCache();
+
+  if (!forceRefresh && !debugSymbol && cached?.data) {
+    memo = { ts: now, data: cached.data };
+
+    return {
+      data: cached.data,
+      headers: {
+        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+      },
+    };
+  }
+
+  // Read the cache but never trigger a build.
+  //
+  // These pages are prerendered now, and a full scan does not fit inside Next's
+  // 60s per-page static-generation budget: measured, all three timed out on
+  // three attempts each and FAILED THE BUILD outright against a cold cache.
+  // Leaving that in place would mean a deploy that breaks whenever the cron has
+  // not warmed Redis, which is a far worse failure than a stale page.
+  //
+  // Returning 503 rather than throwing is deliberate: the page already maps
+  // `status >= 400` to a null payload, and the client fetches /api/plays on
+  // mount regardless, so a miss degrades to the same shell a visitor would have
+  // seen anyway rather than to an error. The scan still happens -- via the API
+  // route and the warm cron -- just never inside a build.
+  if (opts.cacheOnly) {
+    // Say so out loud. A cacheOnly miss during prerender means the artefact for
+    // this page ships without data until the next revalidate, and a silent
+    // degradation is exactly the failure mode this project keeps re-learning
+    // (see the three verification rules in
+    // claude/picker-pages-isr-2026-08-20.md). In a build log this line is the
+    // signal that the cron had not warmed Redis before the deploy.
+    console.warn(
+      "[bull-flags] cacheOnly miss -- prerendering without data; page will fill in on the next revalidate"
+    );
+    return {
+      data: {} as PlaysPayload,
+      headers: { "X-Bull-Flags-Cache": "miss-cache-only" },
+      status: 503,
+    };
+  }
+
+  const lockToken = await acquirePlaysLock();
+
+  if (!lockToken) {
+    const fallbackCached = cached ?? (await readPlaysCache());
+
+    if (fallbackCached?.data && !debugSymbol) {
+      memo = { ts: now, data: fallbackCached.data };
+
+      return {
+        data: fallbackCached.data,
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "X-Plays-Cache": "lock-fallback",
+        },
+      };
+    }
+
+    // LOCK LOST WITH NOTHING TO SERVE. Wait for the winner instead of starting a
+    // second full build beside it -- see waitForPlaysPayload.
+    //
+    // GATED ON `!forceRefresh` AND `!debugSymbol` for the same reason the branch
+    // above is gated on debugSymbol: a forced run must actually refresh, and the
+    // winner it would be waiting on may be an ordinary request that is not
+    // refreshing history at all, so adopting that payload would let a forced warm
+    // report success having forced nothing. A forced run is one cron request, not
+    // a stampede, so it is not what this protects against. A debugSymbol run
+    // wants its own single-symbol trace, not a shared payload.
+    if (!forceRefresh && !debugSymbol) {
+      const published = await waitForPlaysPayload();
+
+      if (published?.data) {
+        memo = { ts: now, data: published.data };
+
+        return {
+          data: published.data,
+          headers: {
+            "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+            "X-Plays-Cache": "lock-wait",
+          },
+        };
+      }
+    }
+  }
+
+  try {
+    const data = await buildPlaysPayload(origin, forceRefresh, debugSymbol);
+    // FLUSH THE READ METER ONCE, HERE, rather than per symbol inside the loop.
+    // This build just made ~700 single-symbol history reads; each used to write a
+    // 6-command pipeline (~4,200 billed write commands to measure one build).
+    // recordRedisRead now accumulates in process and this is the flush. See the
+    // header of lib/server/redisBandwidth.ts.
+    //
+    // NOT IN A `finally`: a build that throws leaves its pending reads to
+    // METER_AUTOFLUSH_READS, which caps the loss at 249 reads rather than a whole
+    // build, and wrapping every return path to save those would trade real
+    // complexity for bookkeeping precision the page already reports as a floor.
+    // WRAPPED, because this call sits INSIDE the try/catch that decides whether
+    // the fresh payload is written. A throw here would fall through to the
+    // degraded-cache fallback: a healthy build silently discarded to record a
+    // statistic. scripts/check-forced-build-safety.mjs proved that live -- it
+    // executes this function against stubbed I/O, and an unresolvable meter
+    // turned "FORCED + healthy + good cache" from fresh-healthy into cached-good
+    // with zero writes. Exactly the failure this file's own meter warns about:
+    // "a meter that can break the thing it measures is worse than no meter."
+    try {
+      await flushRedisReadMeter();
+    } catch {
+      // bookkeeping -- never into a build path
+    }
+
+    if (!debugSymbol) {
+      memo = {
+        ts: now,
+        data,
+      };
+
+      await writePlaysCache(data);
+    }
+
+    return {
+      data,
+      headers: {
+        "Cache-Control":
+          forceRefresh || debugSymbol
+            ? "no-store"
+            : `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+      },
+    };
+  } catch (error) {
+    const fallbackCached = cached ?? (await readPlaysCache());
+
+    if (fallbackCached?.data && !debugSymbol) {
+      memo = { ts: now, data: fallbackCached.data };
+
+      return {
+        data: fallbackCached.data,
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "X-Plays-Cache": "error-fallback",
+        },
+      };
+    }
+
+    const message =
+      error instanceof Error ? error.message : "Unknown plays error";
+
+    return {
+      data: {
+        updatedAt: new Date().toISOString(),
+        universeSize: 0,
+        dynamicUniverseCount: 0,
+        dynamicUniversePreview: [],
+        estimatedApiCalls: 0,
+        sections: [],
+        error: message,
+      },
+      headers: {
+        "Cache-Control": "no-store",
+      },
+      status: 500,
+    };
+  } finally {
+    await releasePlaysLock(lockToken);
+  }
+}

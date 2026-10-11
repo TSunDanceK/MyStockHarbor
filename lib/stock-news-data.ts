@@ -1,0 +1,2875 @@
+import { keywordHits } from "@/lib/keywordMatch";
+import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
+import { fetchSymbolNewsWindow, feedMaxAgeDays, activeNewsProviders, newsProviderMode } from "@/lib/server/news";
+import { isFromActiveProvider } from "@/lib/server/news/provenance";
+import { isFilingChurn } from "@/lib/server/news/filingChurn";
+import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
+import {
+  cleanRssDescription,
+  containsHtmlMarkup,
+  decodeHtml,
+  stripHtmlTags,
+} from "@/lib/server/news/text";
+import type { NewsItem } from "@/lib/server/news/types";
+import { unstable_cache } from "next/cache";
+import { cachedOutsideText } from "@/lib/server/outsideFetch";
+import { fmpFetch } from "@/lib/server/fmpUsage";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
+import { beginTiming } from "./server/timing";
+import { readNewsTechHistory } from "./server/newsTechHistory";
+import {
+  getAiNewsBriefs,
+  getAiNewsInsight,
+  type AiNewsBrief, 
+  type AiNewsInsight, 
+} from "@/lib/ai-news-briefs";
+
+export type Quote = {
+  symbol: string;
+  price: number | null;
+  date: string | null;
+  time: string | null;
+  source: string;
+};
+
+export type Point = {
+  date: string;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+};
+
+export type ScoreTone = "green" | "yellow" | "red";
+
+export type NewsScoreResult = {
+  // `available` is false when there was nothing to score, not when the score
+  // came out neutral. Both cases previously returned 50/"Neutral", so a stock
+  // with no usable headlines rendered a full sentiment gauge with the needle at
+  // dead centre -- a specific reading derived from no input. Consumers should
+  // branch on this flag rather than sniffing label === "Neutral", which is also
+  // a real result.
+  available: boolean;
+  score: number;
+  tone: ScoreTone;
+  label: string;
+  reason: string;
+  positives: string[];
+  negatives: string[];
+  confidence: "Low" | "Medium" | "High";
+};
+
+export type EarningsScoreResult = {
+  score: number;
+  /**
+   * The standalone noun phrase: "Mixed earnings tone". For a chip or heading.
+   *
+   * NOT INTERCHANGEABLE WITH `word`, even though both are strings and both are
+   * "the tone". Dropping this into a sentence that has already said "earnings
+   * tone" produces "Earnings tone is currently mixed earnings tone", which is
+   * what shipped. See EARNINGS_TONE_BANDS.
+   */
+  label: string;
+  /**
+   * The bare adjective: "mixed". For prose that supplies its own noun.
+   *
+   * Null when no earnings headlines were found at all — that is not a tone of
+   * "mixed", it is the absence of a reading, and a caller must drop its clause
+   * rather than name a state that was never established.
+   */
+  word: string | null;
+  tone: ScoreTone;
+  reason: string;
+};
+
+export type StockNewsBaseData = {
+  symbol: string;
+  companyName: string;
+  quote: Quote | null;
+  history: Point[];
+  /** Where `history` came from: "tiingo" behind PRICE_PROVIDER_NEWS_TECH, else "yahoo". */
+  historySource: "tiingo" | "yahoo";
+  news: NewsItem[];
+  // null when the trend could not be established (see trendLabel below).
+  trend: string | null;
+  lastClose: number | null;
+  lastMA50: number | null;
+  lastMA200: number | null;
+  lastRsi: number | null;
+  priceVs50: number | null;
+  priceVs200: number | null;
+  recentHigh: number | null;
+  recentLow: number | null;
+  isInvalidTicker: boolean;
+  isDataUnavailable: boolean;
+  newsScore: NewsScoreResult;
+  earningsScore: EarningsScoreResult;
+  rankedNews: NewsItem[];
+  detailedNews: NewsItem[];
+  compactNews: NewsItem[];
+};
+
+export type StockNewsAiData = {
+  aiBriefs: AiNewsBrief[];
+  aiInsight: AiNewsInsight | null;
+  summaryByTitle: Record<string, string>;
+};
+
+export type StockNewsData = StockNewsBaseData & StockNewsAiData;
+
+type BuildOptions = {
+  maxDetailedItems?: number;
+  includeInsight?: boolean;
+};
+
+function parseRss(xml: string): NewsItem[] {
+  const items: NewsItem[] = [];
+  const blocks = xml.split("<item>").slice(1);
+
+  for (const block of blocks) {
+    const title =
+      block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] ??
+      block.match(/<title>(.*?)<\/title>/)?.[1] ??
+      "";
+
+    const link = block.match(/<link>(.*?)<\/link>/)?.[1] ?? "";
+    const pubDate = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] ?? null;
+    const source = block.match(/<source[^>]*>(.*?)<\/source>/)?.[1] ?? null;
+    const description =
+      block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ??
+      block.match(/<description>(.*?)<\/description>/)?.[1] ??
+      null;
+
+    if (title && link && !containsHtmlMarkup(title)) {
+      items.push({
+        title: stripHtmlTags(title.replace(/\s+-\s+Google News$/i, "").trim()),
+        link: link.trim(),
+        pubDate,
+        source: source ? decodeHtml(source.trim()) : null,
+        description: cleanRssDescription(description),
+      });
+    }
+  }
+
+  return items;
+}
+
+// Live quote: FMP only, and only until the FMP key goes (14 Oct). The Yahoo
+// quote fallback that sat here is removed (#563 COWORK #46, B13): Yahoo is not
+// a licensed source. The page's Last Price tile reads Tiingo first
+// (PRICE_PROVIDER_NEWS_HERO), then this, then says plainly that no price is
+// available -- never a figure from an unlicensed source.
+//
+// The path requires price > 0, not just a finite number: Stooq, an earlier
+// fallback, returned a literal "0" (not "N/D"/blank) for some tickers
+// instead of failing cleanly, which previously rendered as a real "$0.00"
+// price on the page (formatMoney only shows "-" for null/undefined, not
+// for an actual zero). Treating a non-positive price as "no data" avoids
+// that class of bug regardless of which upstream returns it.
+async function fetchQuote(symbol: string): Promise<Quote | null> {
+  // NO FMP QUOTE ON THE TIINGO HERO PATH (#553 COWORK #131/#132, spend cut 2).
+  // This ran on every base-data build (the news page, /api/internal-news,
+  // /api/discovery-strip), but with NEWS_HERO=tiingo the page shows the Tiingo
+  // price; FMP's was only the fallback for a Tiingo miss, which now reads
+  // "Price not available right now", as it will once the key is gone anyway.
+  if (priceProviderFor("NEWS_HERO") === "tiingo") return null;
+  return fetchFmpQuote(symbol);
+}
+
+// THE SPELLING THE VENDOR WANTS IS NOT THE SPELLING THE URL CARRIES.
+//
+// /stock/BRK.B/news passes its route parameter down here untouched, so this
+// asked FMP for "BRK.B" and FMP has no such row: its own screener spells share
+// classes with a DASH, which is why lib/server/historyCache.ts has converted
+// since it was written. The page showed LAST PRICE: DATA UNAVAILABLE beside a
+// title reading $502.01 -- the title's number comes through getDailyHistory,
+// which goes via buildFmpSymbol and therefore converts. One page, two paths,
+// one of them converting.
+//
+// CONVERTED HERE, AT THE VENDOR BOUNDARY, rather than at the top of the page.
+// Normalising the route parameter would rewrite what the reader typed and what
+// the page displays, and it would decide for EVERY vendor at once -- and the
+// vendors disagree: FMP wants the dash (measured), Yahoo's answer is a separate
+// question with its own probe. Each leg converting for itself keeps the symbol
+// the page shows equal to the symbol the reader asked for.
+//
+// toDashed rather than a local .replace: this repo found seven copies of the
+// dot/dash dance in one sweep, and lib/symbolSpellings.mjs exists to be the
+// eighth's replacement rather than its sibling.
+async function fetchFmpQuote(symbol: string): Promise<Quote | null> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(toDashed(symbol))}&apikey=${encodeURIComponent(apiKey)}`;
+    const res = await fmpFetch(url, {
+      next: { revalidate: 3600 },
+      headers: { accept: "application/json" },
+    });
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const row = Array.isArray(json) ? json[0] : json;
+    const price = typeof row?.price === "number" && Number.isFinite(row.price) ? row.price : null;
+    if (price == null || price <= 0) return null;
+
+    const timestampMs = typeof row?.timestamp === "number" ? row.timestamp * 1000 : Date.now();
+    const d = new Date(timestampMs);
+
+    return {
+      symbol,
+      price,
+      date: Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10),
+      time: Number.isNaN(d.getTime()) ? null : d.toISOString().slice(11, 19),
+      source: "FMP",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Yahoo Finance's unofficial "v8 chart" endpoint. No API key, widely used
+// (it's what the `yfinance` Python library and many other unofficial
+// integrations call under the hood). A realistic desktop-browser User-Agent
+// avoids the occasional 429 Yahoo returns to bare/no-UA requests. Kept as
+// the fallback after FMP; it tends to have quote/history for freshly-listed
+// tickers early -- it's not more authoritative than FMP, just quick to pick
+// up new listings including SPAC unit/warrant tickers.
+const YAHOO_FETCH_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  accept: "application/json",
+};
+
+// CONVERTED ON EVIDENCE, NOT BY SYMMETRY WITH FMP. The dot is what this leg
+// received before today, so if Yahoo had been the vendor that accepts it, a
+// conversion applied "for consistency" would have broken the one leg that
+// worked. Measured on a runner 2026-09-22 (Actions run 35794824846), since the
+// sandbox answers 403 CONNECT for this host:
+//
+//   AAPL    HTTP 200, $339.75          <- control: the endpoint is up
+//   BRK.B   HTTP 404, "No data found, symbol may be delisted"
+//   BRK-B   HTTP 200, $503.49, meta.symbol=BRK-B
+//
+// CONVERTED HERE RATHER THAN IN ITS CALLER: the Yahoo quote that once shared
+// this endpoint is gone (B13), and the history (fetchYahooHistory, the
+// NEWS_TECH fallback) is now its only reader.
+async function fetchYahooChart(
+  symbol: string,
+  range: string
+): Promise<any | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    toDashed(symbol)
+  )}?interval=1d&range=${range}`;
+
+  try {
+    // Bounded (lib/server/outsideFetch.ts, #553 COWORK #171): Next refreshed the
+    // old `next: { revalidate }` entry after the response with no deadline.
+    const json = JSON.parse(await cachedOutsideText(3600)(url, YAHOO_FETCH_HEADERS));
+    const result = json?.chart?.result?.[0];
+    return result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Daily history. Behind PRICE_PROVIDER_NEWS_TECH=tiingo, the stored Tiingo EOD
+// bars (#563 COWORK #31 (a): Yahoo is not a licensed source); otherwise, and on
+// any Tiingo miss, Yahoo Finance's chart endpoint, until the flip.
+async function fetchHistory(symbol: string): Promise<{ points: Point[]; source: "tiingo" | "yahoo" }> {
+  const tiingo = await readNewsTechHistory(symbol);
+  if (tiingo) return { points: tiingo, source: "tiingo" };
+  return { points: await fetchYahooHistory(symbol), source: "yahoo" };
+}
+
+async function fetchYahooHistory(symbol: string): Promise<Point[]> {
+  const result = await fetchYahooChart(symbol, "2y");
+  if (!result) return [];
+
+  const timestamps: number[] = Array.isArray(result.timestamp) ? result.timestamp : [];
+  const quote = result.indicators?.quote?.[0] ?? {};
+  const closes: (number | null)[] = Array.isArray(quote.close) ? quote.close : [];
+  const highs: (number | null)[] = Array.isArray(quote.high) ? quote.high : [];
+  const lows: (number | null)[] = Array.isArray(quote.low) ? quote.low : [];
+  const volumes: (number | null)[] = Array.isArray(quote.volume) ? quote.volume : [];
+
+  const points: Point[] = [];
+
+  for (let i = 0; i < timestamps.length; i++) {
+    const ts = timestamps[i];
+    const close = closes[i];
+
+    if (typeof ts !== "number" || typeof close !== "number" || !Number.isFinite(close) || close <= 0) {
+      continue;
+    }
+
+    const date = new Date(ts * 1000).toISOString().slice(0, 10);
+    const high = highs[i];
+    const low = lows[i];
+    const volume = volumes[i];
+
+    points.push({
+      date,
+      close,
+      high: typeof high === "number" && Number.isFinite(high) ? high : undefined,
+      low: typeof low === "number" && Number.isFinite(low) ? low : undefined,
+      volume: typeof volume === "number" && Number.isFinite(volume) ? volume : undefined,
+    });
+  }
+
+  return points.slice(-320);
+}
+
+async function fetchCompanyName(symbol: string): Promise<string> {
+  try {
+    // Bounded and cached daily by lib/server/outsideFetch.ts (#553 COWORK #171),
+    // the same entries lib/server/companyNames.ts reads.
+    const [nasdaqTxt, otherTxt] = await Promise.all([
+      cachedOutsideText(86400)("https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"),
+      cachedOutsideText(86400)("https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"),
+    ]);
+
+    const rows = `${nasdaqTxt}\n${otherTxt}`.split("\n");
+
+    for (const row of rows) {
+      const cols = row.split("|");
+      if ((cols[0] ?? "").trim().toUpperCase() === symbol.toUpperCase()) {
+        return (cols[1] ?? "").trim();
+      }
+    }
+
+    // LIVE FETCH SUCCEEDED AND THE SYMBOL WAS NOT IN IT. Falling through to the
+    // snapshot rather than returning "" is the point: this is the miss the
+    // dashed dual-class names hit every time, because the directory lists them
+    // under the dotted spelling only. See the note in lib/server/companyNames.ts.
+
+    return snapshotCompanyName(symbol);
+  } catch {
+    return snapshotCompanyName(symbol);
+  }
+}
+
+function articleMatchesRequestedSymbol(item: NewsItem, symbol: string) {
+  const target = symbol.trim().toUpperCase();
+  if (!target) return false;
+
+  if (item.fmpSymbolMatched) return true;
+
+  return (item.fmpSymbols ?? [])
+    .map((value) => String(value).trim().toUpperCase())
+    .some((value) => value === target);
+}
+
+/**
+ * The page-facing read: Redis first, and the active news provider only when the
+ * store is cold or due. Which provider that is belongs to NEWS_PROVIDER
+ * (lib/server/news/index.ts), not to this function -- it is FMP today.
+ *
+ * A RENDER MAKES NO UPSTREAM CALL inside the refresh window, which is the point.
+ * Population is lazy -- first view of a symbol populates it, later views read
+ * the store, and a symbol nobody views costs nothing. There is deliberately no
+ * cron behind this: warming 755 symbols of news hourly would dwarf every other
+ * consumer on the account.
+ *
+ * The store is given the pieces it must not own. The #343 similarity dedup and
+ * the earnings matcher live here and are shared with the sector feed and the
+ * scoring path, so they are passed in rather than reimplemented -- one
+ * implementation of a rule, not two that can disagree.
+ */
+async function fetchStoredSymbolNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+  // FMP-ERA ITEMS ARE PURGED, NOT LEFT TO AGE OUT (2026-09-23, #553 COWORK #5).
+  // lib/server/news/provenance.ts has the rule. Two places, both needed:
+  //   - the store's dedupe step runs over held + fetched before the record is
+  //     capped and rewritten, so filtering there DELETES FMP-era items from
+  //     msh:news:v1:<SYM> at the symbol's next refresh;
+  //   - the read below filters them for the up-to-an-hour a record is served
+  //     from cache before that refresh. A record nobody views is never
+  //     refreshed; it expires on the store's 8-day TTL instead.
+  const mode = newsProviderMode();
+  const activeIds = new Set<string>(activeNewsProviders().map((provider) => provider.id));
+  const fromActive = (item: NewsItem) => isFromActiveProvider(item, activeIds, mode);
+
+  const { items } = await readOrRefreshSymbolNews<NewsItem>(symbol, {
+    // WHICH PROVIDER THIS IS rests on NEWS_PROVIDER, not on this call site --
+    // see lib/server/news/index.ts. In step 1 it is always the FMP adapter, and
+    // the adapter is the code that used to sit inline here.
+    fetchWindow: (from) => fetchSymbolNewsWindow(symbol, companyName, from),
+    dedupe: (list) => dedupeNews(list.filter(fromActive)),
+    // The earnings pin. Once an article qualifies it survives eviction until a
+    // newer qualifying one replaces it, or 7 days pass -- which is the part
+    // only persistence makes possible. Today an earnings article vanishes the
+    // moment it leaves FMP's latest-N window regardless of relevance.
+    isEarnings: isEarningsNewsItem,
+    // WHAT ACTUALLY CONTRIBUTED, not what is registered. /cache-health said
+    // "gnews + wire + sec" for two days while GlobeNewswire was returning
+    // nothing at all, because a registered adapter and a working one render
+    // identically. activeNewsProviders() supplies the asked-for list so an
+    // adapter that answered with nothing still writes a zero.
+    attribution: {
+      activeIds: () => activeNewsProviders().map((provider) => provider.id),
+      providerOf: (item) => item.provider ?? null,
+    },
+  });
+
+  return items.filter(fromActive);
+}
+
+export function isVideoOrLowQualitySource(item: NewsItem) {
+  // THE IMAGE URL IS PART OF THE EVIDENCE, and leaving it out was a real miss.
+  // Reported live: a Motley Fool podcast held the third lead card on
+  // /stock/MU/news because the only place the word "Podcast" appeared was the
+  // article's IMAGE -- source, link and title were all clean. A filter that
+  // reads three of the four fields carrying the signal reads as "this is not a
+  // podcast" rather than "I did not look there"
+  // (claude/traps/measuring-the-wrong-layer.md).
+  //
+  // The cost, stated rather than discovered: a written article whose thumbnail
+  // happens to sit at a .../podcast-... path is now filtered too. That is the
+  // right side to err on for a lead card, and it is a small set.
+  const combined = `${item.source ?? ""} ${item.link} ${item.title} ${item.image ?? ""}`.toLowerCase();
+
+  // Substring, NOT keywordHits, and deliberately so. These are URL fragments,
+  // not English words: "youtube.com" and "podcasts.apple.com" have no useful
+  // word boundaries around them, and boundary-matching would stop catching
+  // both. keywordHits is for prose; this is for hosts and paths.
+  return [
+    "youtube.com",
+    "youtu.be",
+    "m.youtube.com",
+    "youtube",
+    "podcast",
+    "livestream",
+    "live stream",
+    "watch video",
+  ].some((term) => combined.includes(term));
+}
+
+/**
+ * Fallback source used only when FMP has nothing for a symbol (missing
+ * FMP_API_KEY, or thin coverage on a small/obscure ticker). FMP is the
+ * site's paid primary data source and is preferred because, unlike this
+ * Google News RSS feed, it returns article thumbnail images.
+ */
+async function fetchGoogleNewsFallback(
+  symbol: string,
+  companyName: string
+): Promise<NewsItem[]> {
+  const baseQuery = companyName ? `${companyName} ${symbol} stock` : `${symbol} stock`;
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
+    baseQuery
+  )}&hl=en-GB&gl=GB&ceid=GB:en`;
+
+  try {
+    // Bounded (lib/server/outsideFetch.ts, #553 COWORK #171).
+    const xml = await cachedOutsideText(1800)(url);
+    return parseRss(xml).slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The display feed, from an ALREADY-FETCHED store read.
+ *
+ * ── WHY THIS TAKES `stored` RATHER THAN FETCHING ───────────────────────────
+ * It used to call fetchStoredSymbolNews itself, and so did fetchEarningsNews,
+ * and buildStockNewsBaseData ran the two in a Promise.all. That is the same
+ * store read TWICE, CONCURRENTLY, per render. It was visible in production logs
+ * the whole time as a doubled line:
+ *
+ *   [gnews] MU q="\"Micron Technology\" stock" items=100
+ *   [gnews] MU q="\"Micron Technology\" stock" items=100
+ *
+ * The cost was two full adapter passes on a cold page -- Google News, both
+ * wires and SEC, twice -- but the REAL problem was correctness: two concurrent
+ * readOrRefresh passes on one Redis key, each reading the same pre-merge state
+ * and each writing its own merge back. Last write wins, so one pass's articles
+ * could be dropped by the other's write. A lost-update race, not a slow page.
+ *
+ * One read, passed to both consumers, removes both at once.
+ */
+function selectDisplayNews(stored: NewsItem[]): NewsItem[] {
+  const filtered = stored.filter((item) => !isVideoOrLowQualitySource(item));
+  return filtered.length ? mergeNewsPools([filtered]).slice(0, 50) : [];
+}
+
+/**
+ * The Google News fallback, kept as a SEPARATE step for the empty case only.
+ *
+ * It stays outside selectDisplayNews because it is a network call and that
+ * function is now pure -- the caller decides whether the fallback is worth a
+ * request, and on the free stack it almost never is: Google News is already the
+ * primary adapter, so an empty store means the search returned nothing and
+ * asking the same host a second question is unlikely to change that.
+ */
+async function fetchNewsFallback(symbol: string, companyName: string): Promise<NewsItem[]> {
+  const googleNews = await fetchGoogleNewsFallback(symbol, companyName);
+
+  return mergeNewsPools([
+    googleNews.filter((item) => !isVideoOrLowQualitySource(item)),
+  ]).slice(0, 50);
+}
+
+export function isEarningsNewsItem(item: NewsItem) {
+  const text = `${item.title} ${item.description ?? ""}`.toLowerCase();
+  return keywordHits(text, [
+    "earnings",
+    "eps",
+    "results",
+    "quarter",
+    "quarterly",
+    "revenue",
+    "guidance",
+    "profit",
+    "loss",
+    "margin",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+  ]);
+}
+
+/**
+ * How deep into the fetched list the surviving items actually came from.
+ *
+ * THIS EXISTS TO STOP A GUESS BEING ACTED ON. `limit=50` on
+ * /stable/news/stock is the single largest line on the FMP byte meter, and the
+ * obvious saving is to lower it. Obvious and unmeasured: nobody knows whether
+ * the earnings items that get displayed sit at indices 0-5 (in which case 50 is
+ * 45 wasted articles) or are scattered out to index 47 (in which case cutting
+ * the limit empties the section on exactly the symbols with the least
+ * coverage). The arithmetic reads the same either way, which is what makes it
+ * dangerous (claude/traps/measuring-the-wrong-layer.md).
+ *
+ * `maxIndex` is the number that decides it: it is the smallest `limit` that
+ * would have produced the same output for this symbol on this run.
+ *
+ * A LOG LINE, NOT A HEALTH SIGNAL, and the difference matters here. This is a
+ * one-off measurement taken to settle one decision, not something that needs
+ * reading back later -- so it does not belong in Redis beside the byte meter.
+ * If it turns out to be hard to catch in the log window, that is the moment to
+ * move it, not before.
+ */
+function logNewsDepth(label: string, symbol: string, fetched: number, kept: NewsItem[]): void {
+  const indices = kept
+    .map((item) => item.sourceIndex)
+    .filter((i): i is number => typeof i === "number")
+    .sort((a, b) => a - b);
+  console.log(
+    `[news-depth] ${label} ${symbol} fetched=${fetched} kept=${kept.length}` +
+      ` maxIndex=${indices.length ? indices[indices.length - 1] : "none"}` +
+      ` indices=[${indices.join(",")}]`
+  );
+}
+
+/** The earnings slice of the SAME store read — see selectDisplayNews. */
+function selectEarningsNews(stored: NewsItem[], symbol: string): NewsItem[] {
+  const fmpNews = stored;
+
+  const kept = mergeNewsPools([
+    fmpNews
+      .filter((item) => !isVideoOrLowQualitySource(item))
+      .filter(isEarningsNewsItem),
+  ]).slice(0, 30);
+
+  // Measured BEFORE anything is changed about `limit`. Note this reading only
+  // becomes meaningful once the word-boundary matcher is deployed -- against the
+  // old substring matcher the "earnings" items included every story containing
+  // "headquartered", so the depth it reported was the depth of a false positive
+  // rate, not of real earnings coverage.
+  logNewsDepth("earnings", symbol, fmpNews.length, kept);
+
+  return kept;
+}
+
+function movingAverage(values: number[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  let sum = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    if (i >= window) sum -= values[i - window];
+    if (i >= window - 1) out[i] = sum / window;
+  }
+
+  return out;
+}
+
+/**
+ * ── THIS SIDE STRIPS PUNCTUATION. THE HEADLINE SIDE DOES NOT. ─────────────
+ * The `[^\w\s]` below removes dots and hyphens, so "A.O. Smith" reduces to
+ * "a o smith". The headline is normalised by a DIFFERENT class in
+ * isClearlyAboutRequestedCompany — `[^\w\s:$.-]`, which KEEPS dots and hyphens
+ * — so the text there still reads "a.o. smith".
+ *
+ * The two never meet, and that asymmetry was invisible from either function
+ * alone: each is defensible on its own and the mismatch only exists between
+ * them. It cost AOS and SJM 56 of 60 and 82 of 89 items respectively, because
+ * the substring rule could never fire on a dotted name.
+ *
+ * IT IS SPANNED, NOT REMOVED. companyNameVariants generates the spellings a
+ * headline actually uses and matches on any of them. Removing the asymmetry
+ * instead — stripping dots on both sides — would lose the distinction between
+ * "a o smith" and "ao smith" as separate evidence, and would still leave the
+ * hyphen case. If you change the class below, read companyNameVariants and the
+ * note at the headline normaliser before deciding the other two are redundant.
+ */
+function getCleanCompanyName(companyName: string) {
+  return companyName
+    .toLowerCase()
+    .replace(/\b(inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|class b|common stock|ordinary shares|american depositary shares|ads|adr)\b/g, "")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The spellings a headline might use for one company.
+ *
+ * ── MEASURED BEFORE IT WAS WRITTEN ────────────────────────────────────────
+ * getCleanCompanyName strips ALL punctuation, so the four names it was asked
+ * about reduce like this:
+ *
+ *   FAST  "Fastenal Company - Common Stock"        -> "fastenal"
+ *   SNA   "Snap-On Incorporated Common Stock"      -> "snap on incorporated"
+ *   AOS   "A.O. Smith Corporation Common Stock"    -> "a o smith"
+ *   SJM   "The J.M. Smucker Company Common Stock"  -> "the j m smucker"
+ *
+ * and the two content rules in isClearlyAboutRequestedCompany then both die on
+ * the dotted pair:
+ *
+ *   RULE 2 wants the whole cleaned string as a CONTIGUOUS substring of the
+ *   headline. The headline normaliser KEEPS dots (its class is [^\w\s:$.-]),
+ *   so the text says "a.o. smith" or "a. o. smith" and never "a o smith".
+ *   The two sides are normalised differently, so they can never meet.
+ *
+ *   RULE 3 wants two words of four or more characters. "a o smith" offers
+ *   exactly one — "smith" — so the rule is switched off entirely.
+ *
+ * Only an explicit ticker signal was left, which is why SJM's "JM Smucker
+ * (SJM) Stock" survived and "J.M. Smucker Co. cuts outlook" did not. 56 of
+ * AOS's 60 items died here, before the churn filter and before the window.
+ *
+ * ── SO THE FIX IS ON THE NAME SIDE, NOT THE THRESHOLD ─────────────────────
+ * Lowering the minimum token length would let "a" and "o" match half the
+ * market — the same failure one level down. Instead the NAME is offered in the
+ * forms a real headline actually uses, and the length guard is kept exactly
+ * where it was, now applied to whole variants rather than to fragments.
+ *
+ * Every variant is >= 4 characters. That is the guard, unchanged.
+ */
+export function companyNameVariants(companyName: string): string[] {
+  const base = String(companyName ?? "")
+    .toLowerCase()
+    // Same suffix vocabulary as getCleanCompanyName, and deliberately the same
+    // list rather than a second one that can drift.
+    // `incorporated` is added to the list getCleanCompanyName uses, and it is
+    // the one addition here. Evidence, not plausibility: `inc` is already in
+    // that list, `incorporated` is the same legal form spelled out, and leaving
+    // it in is what kept SNA's variants as "snap-on incorporated" so that a
+    // real headline — "Snap on Tools parent beats estimates" — did not match.
+    // Longest-first, though the \b anchors already stop `inc` matching inside
+    // `incorporated`, so the ordering is defence in depth rather than the thing
+    // that protects it.
+    .replace(
+      /\b(incorporated|inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|class b|common stock|ordinary shares|american depositary shares|ads|adr)\b/g,
+      " "
+    )
+    // A leading "the" is never part of how a headline refers to the company,
+    // and leaving it in would break every substring match for "The J.M.
+    // Smucker Company". Substring matching handles its PRESENCE in the
+    // headline on its own.
+    .replace(/^\s*the\s+/, "")
+    // Keep dots and hyphens: they are the thing being varied.
+    .replace(/[^\w\s.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[\s.-]+$/, "")
+    .trim();
+
+  if (!base) return [];
+
+  const variants = new Set<string>([
+    base,                                   // a.o. smith      snap-on
+    base.replace(/\./g, ""),                // ao smith
+    base.replace(/\./g, " "),               // a o smith
+    base.replace(/\.\s*/g, ". "),            // a. o. smith
+    base.replace(/-/g, " "),                // snap on
+    base.replace(/-/g, ""),                 // snapon
+  ]);
+
+  return [...variants]
+    .map((v) => v.replace(/\s+/g, " ").trim())
+    // THE GUARD MEASURES DISTINCTIVENESS, NOT LENGTH — and it used to measure
+    // length, which let two bad needles through.
+    //
+    //   VFC  "V.F. Corporation Common Stock"  ->  "v. f"
+    //
+    // Four characters, so the old guard passed it, and as a substring it
+    // matches any text where a word ending in v precedes a period and a word
+    // starting with f — "Roe v. Ford". Two of those four characters are
+    // separators.
+    //
+    //   T    "AT&T Inc."  ->  "at t"
+    //
+    // which matches ordinary English: "what the", "that time", "flat tire".
+    //
+    // Counting ALPHANUMERICS rather than characters rejects both. This is the
+    // same measure lib/server/news/companyName.ts's assessCompanyName already
+    // uses for the QUERY side — `letters.length <= 2` — so the two sides now
+    // judge a name the same way instead of one counting letters and the other
+    // counting punctuation.
+    //
+    // IT IS A TIGHTENING, NOT A LOOSENING. Every variant that passed before on
+    // real alphanumerics still passes; only needles padded out by dots and
+    // spaces stop.
+    .filter((v) => v.replace(/[^a-z0-9]/gi, "").length >= 4);
+}
+
+/**
+ * The anchored fallback for a name too short to be a substring needle.
+ *
+ * ── THE POPULATION, MEASURED ──────────────────────────────────────────────
+ * 66 of the 2,610 committed names produce NO variant at all once cleanName has
+ * run over them: every candidate is under the four-character guard, `.some()`
+ * on an empty array is false by construction, and only an explicit ticker
+ * signal can match. MMM is the clearest case — the company is spelled "3M", the
+ * ticker is "MMM", they share no characters, and 88 fetched items yielded 2
+ * cards, both carrying a literal "(MMM)".
+ *
+ * 60 of the 66 are names that ARE their ticker (CSX, RTX, KKR, LKQ, EQT, XPO,
+ * PVH …), and produce an ALL-CAPS needle. The rest are short but different —
+ * 3M/MMM, HP/HPQ, F5/FFIV, KLA/KLAC, CGI/GIB, RPC/RES, V2X/VVX, AAR/AIR.
+ *
+ * THIS PARAGRAPH SAID 55 OF 2,592, and both halves moved for reasons worth
+ * separating. 2,592 -> 2,610 is real growth: the directory join was fixed to try
+ * every spelling and recovered 18 suffixed symbols it had been losing. 55 -> 66
+ * is not growth at all — it is the normaliser. 55 counted the RAW directory
+ * names ("Dow Inc. Common Stock"), 66 counts them after cleanName strips the
+ * instrument suffix, which is the form the live path hands the matcher. None of
+ * the 18 recovered rows is fallback-only.
+ *
+ * ── WHY NOT JUST LOWER THE GUARD ─────────────────────────────────────────
+ * A two- or three-character SUBSTRING matches half the market: "rh" inside
+ * "growth", "box" inside "boxing". The guard is right. What these names need is
+ * a different KIND of evidence, so this returns an ANCHORED, CASE-SENSITIVE
+ * pattern instead — and it is tested against the headline's ORIGINAL case
+ * rather than the lowercased text every other rule uses.
+ *
+ * ── CASING IS THE DISCRIMINATOR, AND IT COMES FROM THE DATA ──────────────
+ * The company's own name says which shape to demand. "CSX Corporation" is
+ * all-caps, so `\bCSX\b` is required in caps and ordinary prose cannot trip it.
+ * "Dow Inc." is a capitalised word, so `\bDow\b` is required capitalised, which
+ * separates the company from "a cardboard box" and "the dow was flat".
+ *
+ * No list is involved: COMMON_WORDS in lib/server/news/companyName.ts is a
+ * QUERY-quality list of business words (american, capital, energy) and does not
+ * contain box, dow or fox, so it is the wrong instrument here.
+ *
+ * ── THE RESIDUAL, NOW MEASURED RATHER THAN ESTIMATED ─────────────────────
+ * This paragraph used to say casing "cannot separate Dow Inc. from Dow Jones"
+ * and leave it there. Relay runs 77 and 78 measured it: ten real Google News
+ * pools, ~100 items each, fetched with the SAME query gnewsProvider builds, the
+ * publisher suffix stripped exactly as the adapter strips it, and scored by
+ * loading the real isClearlyAboutRequestedCompany twice — once as shipped, once
+ * with the `!variants.length` guard rewritten to `false` — so the number below
+ * is the set this fallback ADDS, not the set the feed keeps.
+ *
+ * That distinction reversed the first reading. DOW's raw admit rate was 85/100,
+ * which looks like a broken symbol; 26 of those 85 matched "dow stock"/"(dow)"
+ * with the anchor switched off, so the anchor's real contribution was 6 genuine
+ * Dow Inc. items against 57 index stories.
+ *
+ *   needle          adds  off-topic                         marginal precision
+ *   \bDow\b   (Cap)   63       57   Dow Jones, "the Dow", DJIA members   10%
+ *   \bBox\b   (Cap)   56       18   Jack in the Box, box office, Big Box  68%
+ *   \bGap\b   (Cap)   43       13   "Shares Gap Down", "Value Gap"        70%
+ *   \bRTX\b  (CAPS)   47        4   Nvidia's GPU line                     91%
+ *   \bFox\b   (Cap)   61        5   Fox Factory (FOXF), Michael J. Fox    92%
+ *   \bNOV\b  (CAPS)   47        1   Novatti Group, ASX:NOV                98%
+ *   \bAon\b   (Cap)   35        0                                        100%
+ *   \bAT\b   (CAPS)   37        0                                        100%
+ *   \bRH\b   (CAPS)   52        0                                        100%
+ *   \bCSX\b  (CAPS)   50        0                                        100%
+ *
+ * TWO GENERALISATIONS DIED HERE, and both are recorded because each would have
+ * shipped a worse rule:
+ *
+ *   "a capitalised-word needle is the dirty shape"  — Aon is 100% and Fox 92%.
+ *   "the month/preposition collisions are real"     — the month is written Nov
+ *                                                     and the preposition at,
+ *                                                     so \bNOV\b and \bAT\b
+ *                                                     never see them. Casing
+ *                                                     was already doing that
+ *                                                     work.
+ *
+ * DOW is not on a continuum with the rest — it is 10% against a floor of 68% —
+ * and the reason is specific: "Dow" is the everyday name of a market INDEX, so
+ * it appears in market-wide copy that is about no company at all. That is what
+ * INDEX_TOKENS below rejects. Everything else on this table ships as measured:
+ * Box and Gap at ~70% are a real residual, stated here with its number, and the
+ * dedup, the ranking and the churn filter still apply downstream.
+ *
+ * ── THE ALTERNATIVES, MEASURED AND REJECTED ──────────────────────────────
+ * Three grammatical rules were scored on the same 491 marginal items before
+ * settling on the index-name one, so the next reader need not re-derive them:
+ *
+ *   require a company-reference position  220 kept, 96% precise, 182 real lost
+ *     (\bN's\b, "N Inc", "N (", "N stock") — and it takes AT&T to ZERO, since
+ *     \bAT\b only ever matches inside "AT&T", never before " stock".
+ *   reject a longer phrase around the token  199 kept, 95%, 203 real lost
+ *   either of the two                        337 kept, 95%,  74 real lost
+ *   INDEX_TOKENS (this one)                  428 kept, 90%,   6 real lost
+ *
+ * The three grammatical rules buy 5 points of precision for between 74 and 203
+ * genuine articles. The index rule removes 57 of the 98 off-topic items for 6.
+ *
+ * ── STRICTLY ADDITIVE ────────────────────────────────────────────────────
+ * The caller reaches this ONLY when companyNameVariants returned nothing, so no
+ * symbol that matches today can change behaviour. That is asserted.
+ */
+/**
+ * Market-index names, which are not company references however they are cased.
+ *
+ * Deliberately a SET OF INDEX NAMES rather than a set of "words to avoid": the
+ * membership test has a reason that survives re-reading, so a later editor can
+ * tell whether a new entry belongs. "Box" and "Gap" are common words too and
+ * are deliberately NOT here — they were measured at 68% and 70% and kept.
+ */
+const INDEX_TOKENS = new Set([
+  "DOW", "NASDAQ", "FTSE", "DAX", "CAC", "NIKKEI", "HANG", "SENSEX", "NIFTY",
+  "RUSSELL", "STOXX", "IBEX",
+]);
+
+export function anchoredNameSignal(companyName: string): RegExp | null {
+  const base = String(companyName ?? "")
+    .replace(
+      /\b(incorporated|inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|class b|common stock|ordinary shares|american depositary shares|ads|adr)\b/gi,
+      " "
+    )
+    .replace(/^\s*the\s+/i, "")
+    .replace(/[^\w\s.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const token = base.split(/\s+/)[0] ?? "";
+  const alnum = token.replace(/[^A-Za-z0-9]/g, "");
+
+  // AN INDEX NAME IS NOT A COMPANY REFERENCE. Measured: \bDow\b admitted 63
+  // items beyond the explicit ticker signals and 57 of them were about the Dow
+  // Jones Industrial Average, its members, or S&P Dow Jones Indices — 10%
+  // precision against a floor of 68% for every other name tested.
+  //
+  // WHY THIS IS NOT THE KIND OF LIST THIS REPO REFUSES. The objection recorded
+  // in symbol-spellings.mjs is to a SNAPSHOT — a September 2026 table of
+  // companies that returns a wrong answer silently forever as the market
+  // changes. Index names are a closed, stable vocabulary: they do not list,
+  // delist, rename or get acquired. And it is a property of the TOKEN, not of
+  // the ticker — if a company named "Nasdaq" ever reached this fallback it
+  // would be caught by the same line. (NDAQ does not: "Nasdaq" is six
+  // characters, so companyNameVariants gives it a substring needle and this
+  // function never runs.)
+  //
+  // It costs DOW the 6 genuine items the anchor was adding. DOW is NOT blanked
+  // by this: the explicit ticker signals above already matched 26 of its 89,
+  // and they are the ones a reader wants.
+  if (INDEX_TOKENS.has(alnum.toUpperCase())) return null;
+
+  // TWO TO FOUR CHARACTERS. Below two there is no name left; at five or more
+  // companyNameVariants already has a usable substring needle and this never
+  // runs.
+  if (alnum.length < 2 || alnum.length > 4) return null;
+  // A proper noun or an acronym. A token with no capital is not a company name
+  // in a headline, and anchoring a lowercase word would be the substring
+  // problem again with extra steps.
+  if (!/[A-Z]/.test(token)) return null;
+
+  // TWO SPELLINGS, because the dots are load-bearing in one of them. VFC's name
+  // is "V.F.", whose alphanumerics are "VF" — and `\bVF\b` does not match the
+  // text "V.F. Corporation", since the letters are not adjacent there. Offering
+  // the punctuated token as well is what reaches it, and it is the same
+  // dotted/undotted pairing companyNameVariants already does one size up.
+  //
+  // The trailing boundary is only required when the token ends in a word
+  // character: `\bV\.F\.\b` can never match, because a boundary cannot follow a
+  // full stop that is already at the edge of a word.
+  const esc = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const forms = new Set<string>([`\\b${esc(alnum)}\\b`]);
+  if (token !== alnum) {
+    forms.add(`\\b${esc(token)}${/\w$/.test(token) ? "\\b" : ""}`);
+  }
+
+  return new RegExp([...forms].join("|"));
+}
+
+function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyName: string) {
+  if (articleMatchesRequestedSymbol(item, symbol)) {
+    return true;
+  }
+
+  const rawText = `${item.title} ${item.description ?? ""} ${item.source ?? ""}`.toLowerCase();
+  // ── THIS SIDE KEEPS DOTS AND HYPHENS. getCleanCompanyName DOES NOT. ──────
+  // `:$.-` are preserved here so the explicit ticker signals below can match
+  // ("$aos", "nasdaq: aos"). getCleanCompanyName normalises the COMPANY NAME
+  // with `[^\w\s]`, which strips them — so a name reduced to "a o smith" was
+  // being looked for in text that reads "a.o. smith", and never found.
+  //
+  // Neither class is wrong; the mismatch only exists between them, which is why
+  // it survived review of both. companyNameVariants spans it. If you widen or
+  // narrow this class, that function is the thing that depends on it.
+  const text = rawText.replace(/[^\w\s:$.-]/g, " ").replace(/\s+/g, " ");
+
+  const ticker = symbol.toLowerCase();
+  const cleanedCompany = getCleanCompanyName(companyName);
+  const companyWords = cleanedCompany.split(" ").filter((word) => word.length >= 4);
+
+  const explicitTickerSignals = [
+    `${ticker} stock`,
+    `${ticker} shares`,
+    `${ticker} earnings`,
+    `${ticker} revenue`,
+    `${ticker} investor`,
+    `${ticker} price target`,
+    `${ticker} class`,
+    `nyse ${ticker}`,
+    `nasdaq ${ticker}`,
+    `ticker ${ticker}`,
+    `$${ticker}`,
+    `(${ticker})`,
+  ];
+
+  if (explicitTickerSignals.some((term) => text.includes(term))) {
+    return true;
+  }
+
+  // ANY SPELLING THE HEADLINE MIGHT USE, not just the punctuation-stripped one.
+  // See companyNameVariants: the text normaliser keeps dots and the name
+  // normaliser removed them, so a dotted name could never match its own
+  // headline. The length guard is unchanged and now applies per variant.
+  const variants = companyNameVariants(companyName);
+  if (variants.some((variant) => text.includes(variant))) {
+    return true;
+  }
+
+  // THE SHORT-NAME FALLBACK, reached only when there is no usable variant — so
+  // this cannot change the answer for any name that already matches. Tested
+  // against the ORIGINAL case, because casing is the whole discriminator.
+  if (!variants.length) {
+    const anchored = anchoredNameSignal(companyName);
+    if (anchored && anchored.test(`${item.title} ${item.description ?? ""}`)) {
+      return true;
+    }
+  }
+
+  if (companyWords.length >= 2 && companyWords.every((word) => text.includes(word))) {
+    return true;
+  }
+
+  return false;
+}
+
+export function mergeNewsPools(pools: NewsItem[][]): NewsItem[] {
+  const merged: NewsItem[] = [];
+  const seenLinks = new Set<string>();
+
+  for (const pool of pools) {
+    for (const item of pool) {
+      const key = item.link.trim();
+      if (!key || seenLinks.has(key)) continue;
+      seenLinks.add(key);
+      merged.push(item);
+    }
+  }
+
+  return merged;
+}
+
+
+function rsiWilder(values: number[], period = 14): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (values.length < period + 1) return out;
+
+  let gain = 0;
+  let loss = 0;
+
+  for (let i = 1; i <= period; i++) {
+    const diff = values[i] - values[i - 1];
+    if (diff >= 0) gain += diff;
+    else loss += -diff;
+  }
+
+  let avgGain = gain / period;
+  let avgLoss = loss / period;
+  const rs0 = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+  out[period] = 100 - 100 / (1 + rs0);
+
+  for (let i = period + 1; i < values.length; i++) {
+    const diff = values[i] - values[i - 1];
+    const g = diff > 0 ? diff : 0;
+    const l = diff < 0 ? -diff : 0;
+
+    avgGain = (avgGain * (period - 1) + g) / period;
+    avgLoss = (avgLoss * (period - 1) + l) / period;
+
+    const rs = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+    out[i] = 100 - 100 / (1 + rs);
+  }
+
+  return out;
+}
+
+function lastNum(arr: (number | null)[]) {
+  return arr.length ? arr[arr.length - 1] : null;
+}
+
+function pctFromBase(last: number | null, base: number | null) {
+  if (
+    typeof last !== "number" ||
+    typeof base !== "number" ||
+    !Number.isFinite(last) ||
+    !Number.isFinite(base) ||
+    base === 0
+  ) {
+    return null;
+  }
+
+  return ((last - base) / base) * 100;
+}
+
+function trendLabel(lastClose: number | null, ma50: number | null, ma200: number | null) {
+  if (
+    typeof lastClose === "number" &&
+    typeof ma50 === "number" &&
+    typeof ma200 === "number"
+  ) {
+    if (lastClose > ma50 && ma50 > ma200) return "Bullish trend";
+    if (lastClose < ma50 && ma50 < ma200) return "Bearish trend";
+    if (lastClose > ma200 && lastClose < ma50) return "Pullback in larger uptrend";
+    if (lastClose < ma200 && lastClose > ma50) return "Counter-trend bounce";
+    return "Mixed / range";
+  }
+
+  // Not determinable: a stock under ~200 bars has no MA200, so none of the five
+  // states above can be established. "Mixed / range" is one of those five real
+  // states and must not double as the value returned when nothing was measured.
+  return null;
+}
+
+// The word-boundary matcher, in lib/keywordMatch.ts. Re-exported here because
+// lib/news-scoring.ts and a dozen call sites already import it from this
+// module; the implementation moved, the import surface did not.
+export { keywordHits };
+
+// Benzinga and Zacks publish a lot of low-value SEO content ("stock price
+// today", "price prediction"), but they are also two of the most prolific
+// real earnings-result wire sources (e.g. "PLTR Q2 Earnings: Beats
+// Estimates"). isLowValueNewsItem and the main-feed source gate both need
+// to recognize this same pair of sources, so it's a shared constant rather
+// than two independent literal arrays that could drift out of sync.
+const EARNINGS_EXCEPTION_SOURCES = ["benzinga", "zacks"];
+
+export function isEarningsExceptionSource(item: NewsItem) {
+  const source = (item.source ?? "").toLowerCase();
+  return EARNINGS_EXCEPTION_SOURCES.some((entry) => source.includes(entry));
+}
+
+export function isLowValueNewsItem(item: NewsItem) {
+  const title = item.title.toLowerCase();
+  const source = (item.source ?? "").toLowerCase();
+
+  const lowValuePatterns = [
+    "stock price",
+    "share price",
+    "stock quote",
+    "stock chart",
+    "price today",
+    "price prediction",
+    "forecast for",
+    "technical analysis",
+    "live price",
+    "market cap",
+    "52-week",
+    "research report",
+    "stock overview",
+    "stocks to watch",
+    "stock analysis",
+  ];
+
+  const lowValueSources = [
+    "etfdailynews",
+    "marketbeat",
+    "defense world",
+    "ticker report",
+    "best stocks",
+    // Google News RSS occasionally attributes thin-coverage tickers'
+    // auto-generated search-result snippets (stock-quote-page titles, not
+    // real editorial articles) to "TradingView" as the source.
+    "tradingview",
+  ];
+
+  // A blanket source block was silently dropping genuine earnings coverage
+  // from Benzinga/Zacks. Only treat them as low value when the headline
+  // isn't an actual earnings result -- see EARNINGS_EXCEPTION_SOURCES above.
+  if (keywordHits(title, lowValuePatterns)) return true;
+  if (lowValueSources.some((entry) => source.includes(entry))) return true;
+  if (isEarningsExceptionSource(item) && !isActualEarningsResultNews(item)) {
+    return true;
+  }
+
+  return false;
+}
+
+// Small set of top-tier wire sources (matches the highest-quality tier
+// scoreNewsItem already recognizes) that, together with FMP's own
+// unattributed items, are allowed to compete for the "What's happening"
+// main feed slots. FMP's stock-news endpoint aggregates dozens of smaller
+// aggregator/opinion-blog publishers (Motley Fool, 247wallst, Investorplace,
+// Finbold, non-earnings Zacks/Benzinga, etc.); when several of them cover
+// the same theme at once it reads as duplicate coverage even though each
+// headline is technically distinct. Those are routed to the lighter feed
+// instead, alongside older items -- see mainFeedNews below.
+/**
+ * Publisher tiers, in one table, matched on WORD BOUNDARIES.
+ *
+ * TWO BUGS LIVED IN THE TWO COPIES THIS REPLACES.
+ *
+ * 1. THE LIST WAS TOO SHORT, and the gate and the scorer disagreed about it.
+ *    isMajorWireSource accepted only reuters/bloomberg/ap, so CNBC, the WSJ,
+ *    the FT, Barron's, MarketWatch, Dow Jones, Business Wire and PR Newswire
+ *    were all excluded from the lead feed -- while scoreNewsItem, ten lines
+ *    away in the same file, already scored several of them as second-tier
+ *    quality. The same file rated CNBC highly and then refused to lead with it.
+ *    Confirmed live on /stock/MU/news: all three lead cards were fool.com while
+ *    a CNBC interview sat in the lighter feed.
+ *
+ * 2. THE MATCH WAS A SUBSTRING, which is the keywordHits bug again in a
+ *    different file. `source.includes("ap")` makes capital.com and AppleInsider
+ *    major wires; `source.includes("ft")` makes Microsoft, software and draft
+ *    ones too. Two-letter publisher codes cannot be matched by substring, and
+ *    "ap" and "ft" are both real, correct entries -- so the fix is the matcher,
+ *    not the list.
+ */
+const WIRE_TIERS: Array<{ score: number; names: string[] }> = [
+  // Top-tier wires. Dow Jones and Associated Press spelled out alongside their
+  // codes, because FMP attributes both ways.
+  { score: 8, names: ["reuters", "bloomberg", "ap", "associated press", "dow jones"] },
+  // The publishers that actually carry market news. These were the ones missing
+  // from the gate entirely.
+  {
+    score: 5,
+    names: [
+      "cnbc",
+      "wsj",
+      "wall street journal",
+      "ft",
+      "financial times",
+      "barron's",
+      "barrons",
+      "marketwatch",
+      "market watch",
+      "business wire",
+      "businesswire",
+      "pr newswire",
+      "prnewswire",
+      "globenewswire",
+    ],
+  },
+  { score: 2, names: ["yahoo"] },
+];
+
+const wireCache = new Map<string, RegExp>();
+
+function sourceMatches(source: string, name: string): boolean {
+  let re = wireCache.get(name);
+  if (!re) {
+    // No inflection allowance, unlike keywordHits: a publisher name is a proper
+    // noun, and "aps"/"aped" are not variants of "AP".
+    re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    wireCache.set(name, re);
+  }
+  return re.test(source);
+}
+
+/** The publisher tier score for a source string, or 0 if it is in no tier. */
+export function sourceTierScore(source: string): number {
+  for (const tier of WIRE_TIERS) {
+    if (tier.names.some((name) => sourceMatches(source, name))) return tier.score;
+  }
+  return 0;
+}
+
+/**
+ * Is this item from a publisher good enough to lead with?
+ *
+ * Tier 5 and above -- the top wires plus the market-news publishers. Tier 2
+ * (Yahoo, an aggregator) is deliberately below the bar: it scores as better
+ * than nothing without being lead material.
+ */
+export function isMajorWireSource(item: NewsItem) {
+  const source = (item.source ?? "").toLowerCase();
+
+  // FMP's own generic label when the underlying item has no specific
+  // publisher attached -- treat it the same as a major wire rather than
+  // routing it to the lighter feed by default.
+  if (source === "fmp news") return true;
+
+  return sourceTierScore(source) >= 5;
+}
+
+export function scoreNewsItem(item: NewsItem) {
+  const title = item.title.toLowerCase();
+  const source = (item.source ?? "").toLowerCase();
+  let score = 0;
+
+  if (
+    keywordHits(title, [
+      "earnings",
+      "guidance",
+      "results",
+      "revenue",
+      "profit",
+      "forecast",
+      "partnership",
+      "deal",
+      "agreement",
+      "joins",
+      "project",
+      "contract",
+      "funding",
+      "investment",
+      "acquisition",
+      "merger",
+      "lawsuit",
+      "probe",
+      "investigation",
+      "recall",
+    ])
+  ) {
+    score += 6;
+  }
+
+  if (
+    keywordHits(title, [
+      "beats",
+      "misses",
+      "raises",
+      "cuts",
+      "surge",
+      "plunge",
+      "slump",
+      "record",
+      "warning",
+      "growth",
+      "demand",
+    ])
+  ) {
+    score += 4;
+  }
+
+  if (
+    keywordHits(title, [
+      "elon",
+      "musk",
+      "tesla",
+      "spacex",
+      "xai",
+      "openai",
+      "nvidia",
+      "amd",
+      "tsmc",
+      "amazon",
+      "microsoft",
+      "google",
+      "meta",
+      "government",
+      "pentagon",
+      "white house",
+      "chips act",
+    ])
+  ) {
+    score += 6;
+  }
+
+  if (
+    keywordHits(title, ["partnership", "joins", "deal", "project"]) &&
+    keywordHits(title, ["ai", "chip", "factory", "data center"])
+  ) {
+    score += 5;
+  }
+
+  // The same tier table the lead-feed gate uses. It was two separate lists that
+  // disagreed: this one already rated CNBC/MarketWatch/Barron's/WSJ/FT as
+  // second tier while isMajorWireSource excluded them from the feed outright.
+  score += sourceTierScore(source);
+
+  if (item.pubDate) {
+    const ageHours = Math.max(0, (Date.now() - new Date(item.pubDate).getTime()) / 36e5);
+
+    if (ageHours <= 12) score += 6;
+    else if (ageHours <= 24) score += 5;
+    else if (ageHours <= 72) score += 3;
+    else if (ageHours <= 168) score += 1;
+  }
+
+  if (item.description && item.description.length > 80) {
+    score += 1;
+  }
+
+  if (isLowValueNewsItem(item)) {
+    score -= 8;
+  }
+
+  return score;
+}
+
+function normaliseTitleForDedupe(title: string) {
+  return title
+    .toLowerCase()
+    .replace(/&amp;/g, " and ")
+    .replace(/[^\w\s]/g, " ")
+    .replace(
+      /\b(the|a|an|and|or|for|to|of|in|on|with|from|at|by|stock|stocks|share|shares|company|inc|corp|ltd|plc|says|said|report|reports)\b/g,
+      " "
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The meaningful words of a headline, as a set.
+ *
+ * REPLACES A CURATED THEME-WORD LIST. storySignature used to keep only words
+ * appearing in a hardcoded list of ~25 themes ("chip", "ai", "earnings",
+ * "musk", ...) and treat two items sharing two of them as the same story. That
+ * is the same maintenance-forever problem as the publisher allowlist, and it
+ * deduped badly in both directions: two unrelated stories that both said "ai"
+ * and "chip" collapsed into one, while two reports of the SAME story collapsed
+ * only if their shared words happened to be on the list.
+ *
+ * Token overlap needs no list. It compares what the headlines actually say.
+ */
+function titleTokens(item: NewsItem): Set<string> {
+  return new Set(
+    normaliseTitleForDedupe(item.title)
+      .split(" ")
+      .filter((word) => word.length > 2)
+  );
+}
+
+/**
+ * Overlap coefficient: shared tokens over the SMALLER set.
+ *
+ * Not Jaccard, deliberately. Wire services and aggregators run the same story
+ * at wildly different headline lengths ("Micron beats on revenue" vs "Micron
+ * Technology tops Q3 revenue estimates as memory demand accelerates, shares
+ * rise"), and Jaccard punishes that difference as if it were a difference in
+ * subject. Dividing by the smaller set asks "is the shorter headline contained
+ * in the longer one", which is the question.
+ */
+function titleOverlap(a: Set<string>, b: Set<string>): number {
+  const smaller = a.size <= b.size ? a : b;
+  const larger = smaller === a ? b : a;
+  if (!smaller.size) return 0;
+  let shared = 0;
+  for (const token of smaller) if (larger.has(token)) shared += 1;
+  return shared / smaller.size;
+}
+
+/**
+ * Two headlines are the same story at this much overlap.
+ *
+ * 0.6 by eyeball, and it is meant to stay eyeball-able: at 0.6 a four-word
+ * shared core out of a six-word headline is a duplicate, and two genuinely
+ * different stories about the same company on the same day are not. Raise it if
+ * real duplicates get through; lower it if distinct stories vanish.
+ */
+const STORY_OVERLAP_THRESHOLD = 0.6;
+
+/**
+ * Drop repeats of the same story, keeping the first occurrence.
+ *
+ * Callers pass items in the order they want preferred -- newest first, or
+ * highest-scoring first -- and the first of a duplicate group wins. That makes
+ * "drop the weaker duplicate" a property of the caller's sort rather than a
+ * second ranking rule hidden in here.
+ *
+ * O(n * kept) with kept bounded by the pools this runs on (<= ~120). Compared
+ * against every kept item rather than a hash bucket, because near-duplicates by
+ * definition do not share a key.
+ */
+export function dedupeNews(items: NewsItem[]): NewsItem[] {
+  const seenLinks = new Set<string>();
+  const deduped: NewsItem[] = [];
+  const keptTokens: Set<string>[] = [];
+
+  for (const item of items) {
+    const linkKey = item.link.trim();
+    if (!linkKey || seenLinks.has(linkKey)) continue;
+
+    const tokens = titleTokens(item);
+    // A headline with nothing left after normalisation cannot be compared, so
+    // it is kept rather than silently dropped -- the link check already stops
+    // exact repeats.
+    if (tokens.size && keptTokens.some((kept) => titleOverlap(tokens, kept) >= STORY_OVERLAP_THRESHOLD)) {
+      continue;
+    }
+
+    seenLinks.add(linkKey);
+    keptTokens.push(tokens);
+    deduped.push(item);
+  }
+
+  return deduped;
+}
+
+/**
+ * What a ranking run is ABOUT. There is no default, and that is the fix.
+ *
+ * `rankNews(news, symbol = "", companyName = "")` let the stock page acquire
+ * MARKET scope by omitting two arguments, which is how the score panel and the
+ * card feed ended up computing over different sets in the same render while
+ * both looked correct at their call sites. A caller now has to say which it
+ * wants, so market scope is something you ask for rather than something you
+ * fall into.
+ *
+ * Both scopes are legitimate — lib/sector-news-data.ts has no symbol to be
+ * about — so the defect was never that the no-symbol path exists. It was that
+ * it was reachable by forgetting.
+ */
+export type NewsScope =
+  | { kind: "symbol"; symbol: string; companyName: string }
+  | { kind: "market" };
+
+export const MARKET_NEWS_SCOPE: NewsScope = { kind: "market" };
+
+function rankNews(news: NewsItem[], scope: NewsScope) {
+  // ── THE EXCLUSIVE SYMBOL-CONFIRMED BRANCH IS GONE ───────────────────────
+  // It read:
+  //
+  //   const relevantNews = symbolConfirmedNews.length ? symbolConfirmedNews : …
+  //
+  // — if ANY item was symbol-confirmed, only those survived. That is a
+  // PREFERENCE EXPRESSED AS A FILTER, and it deletes everything that cannot
+  // express the preference (claude/traps/a-preference-that-filters.md).
+  //
+  // articleMatchesRequestedSymbol reads fmpSymbolMatched / fmpSymbols, and only
+  // lib/server/news/fmpProvider.ts ever writes them. After the provider flip no
+  // live item can carry them, so the branch selected EXACTLY the pre-flip
+  // records still in the persistent store and discarded the whole free-stack
+  // feed: FAST rendered 2 cards from 86 fetched items, both five weeks old,
+  // while its own score panel counted 14 headlines from the last 14 days.
+  //
+  // NOTHING IS LOST BY REMOVING IT, because the confirmed set was never adding
+  // members: isClearlyAboutRequestedCompany returns true for a symbol-confirmed
+  // item on its first line, so confirmed ⊆ text-relevant, always. The branch
+  // only ever removed things.
+  //
+  // ── AND IT IS NOT REPLACED BY A SORT KEY, YET ───────────────────────────
+  // Promoting rather than excluding is the right shape and is what makes it
+  // safe for any adapter to stamp the field — which is exactly what
+  // secProvider.ts currently has to refuse. But promoting on fmpSymbolMatched
+  // TODAY would promote STALENESS: nothing live writes it, so every item
+  // carrying it predates the flip by construction, and a sort key that orders
+  // old before new while looking like it orders relevant before irrelevant is
+  // the same bug in a better hat.
+  //
+  // So it is INERT while no live adapter writes the field, and
+  // scripts/check-news-relevance-scope.mjs asserts both halves: that rankNews
+  // does not branch or sort on it, AND that no active adapter stamps it. The
+  // day one does, that assertion fails and says to reconsider promotion — the
+  // tripwire points both ways on purpose.
+  const relevantNews =
+    scope.kind === "market"
+      ? news
+      : (() => {
+          const textRelevant = news.filter((item) =>
+            isClearlyAboutRequestedCompany(item, scope.symbol, scope.companyName)
+          );
+          // The empty case is unchanged: a symbol whose feed matches nothing
+          // still gets its feed rather than a blank page.
+          return textRelevant.length ? textRelevant : news;
+        })();
+
+  return dedupeNews(
+    [...relevantNews].sort((a, b) => {
+      const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
+      if (scoreDiff !== 0) return scoreDiff;
+
+      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return bTime - aTime;
+    })
+  );
+}
+
+/**
+ * How recent a headline has to be to count toward the news tone.
+ *
+ * THE SCORE HAD NO TIME WINDOW AT ALL. scoreNews took `.slice(0, 5)` of
+ * rankNews output, and rankNews sorts by scoreNewsItem with date only as a
+ * TIEBREAK -- so the five headlines being scored were the most dramatic ever
+ * returned for the ticker, not the most recent. A six-month-old headline could
+ * take the 1.35x first-position weight, and did. Meanwhile the page says the
+ * tone reads "right now".
+ *
+ * 14 days is the starting value, chosen to be short enough that "right now" is
+ * true and long enough that a normal ticker clears the minimum. It is a
+ * constant rather than a literal so moving it is one edit and one number to
+ * argue about.
+ */
+const NEWS_SCORE_WINDOW_DAYS = 14;
+/** Lighter feed size, below the large cards. */
+const MAX_COMPACT_NEWS_ITEMS = 10;
+/**
+ * Below this many in-window headlines, the honest answer is that there is not
+ * enough recent coverage -- NOT a score built by reaching further back. Reaching
+ * back is what produced "High confidence" on five emotive articles from last
+ * spring while a page with genuinely fresh news read "Low".
+ */
+const NEWS_SCORE_MIN_ITEMS = 3;
+/** How many of the in-window headlines are scored, most recent first. */
+const NEWS_SCORE_MAX_ITEMS = 8;
+
+/**
+ * Recency weight: 1.0 for something published now, decaying linearly to 0.35 at
+ * the window edge.
+ *
+ * REPLACES POSITION WEIGHT. The old weights (1.35 / 1.18 / 1.02 / 0.9) keyed off
+ * an item's index in a list sorted by dramatic-ness, so the loudest headline got
+ * the biggest multiplier regardless of when it was published. Weighting by age
+ * means the multiplier answers the question the label claims to answer.
+ *
+ * The 0.35 floor is deliberate: a 13-day-old headline still counts, just less.
+ * A weight decaying to zero would make the window edge a cliff, where one day's
+ * drift swings the score.
+ */
+function recencyWeight(pubDate: string | null, nowMs: number): number {
+  if (!pubDate) return 0;
+  const t = new Date(pubDate).getTime();
+  if (!Number.isFinite(t)) return 0;
+  const ageDays = Math.max(0, (nowMs - t) / 86_400_000);
+  if (ageDays > NEWS_SCORE_WINDOW_DAYS) return 0;
+  return 0.35 + 0.65 * (1 - ageDays / NEWS_SCORE_WINDOW_DAYS);
+}
+
+export function scoreNews(
+  news: NewsItem[],
+  scope: NewsScope,
+  nowMs = Date.now()
+): NewsScoreResult {
+  if (!news.length) {
+    return {
+      available: false,
+      score: 50,
+      tone: "yellow",
+      label: "Neutral",
+      reason:
+        "There are not enough fresh headlines here to lean clearly bullish or bearish, so the score stays neutral.",
+      positives: [],
+      negatives: [],
+      confidence: "Low",
+    };
+  }
+
+  // THE CALLER'S SCOPE, NOT A SCOPE CHOSEN HERE. This was the second half of the
+  // divergence: the score used to pass MARKET_NEWS_SCOPE unconditionally, so on
+  // a stock page it scored over every stored item — including the ones the feed
+  // beside it had just rejected as not about the company. The two numbers were
+  // computed over different SETS while sitting in the same render.
+  //
+  // They are now guaranteed to differ only in their WINDOW — 14 days here, 45
+  // on the feed — which is a difference that should exist. The relevance set is
+  // the same one, because it is the same scope object: getStockNewsData hands
+  // the identical `{ kind: "symbol", symbol: upper, companyName }` to rankNews
+  // and to this function, two lines apart.
+  //
+  // Market scope is still reachable and still legitimate — lib/sector-news-data
+  // has no symbol to be about — but it is now something a caller ASKS for
+  // rather than something this function imposes on every caller.
+  const ranked = rankNews(news, scope);
+  // CHURN IS EXCLUDED FROM THE SCORE THOUGH IT IS ONLY CAPPED ON THE PAGE, and
+  // the two treatments differ for a reason rather than by oversight. "Chokshi &
+  // Queen Wealth Advisors Inc Takes Position in Micron Technology" is worth a
+  // reader's glance -- institutions are accumulating -- so a couple stay on the
+  // page. It carries no TONE: reading it as bullish is inventing sentiment out
+  // of a 13F filing, and the reported page scored "59/100, slightly bullish"
+  // over a pool that was mostly these. capNews already bounds how many reach
+  // here; this stops the survivors being read as a market opinion.
+  const highValue = ranked.filter(
+    (item) => !isLowValueNewsItem(item) && !isFilingChurn(item.title)
+  );
+  // THE FALLBACK EXCLUDES CHURN TOO, and that is the half a first pass missed.
+  // `highValue.length ? highValue : ranked` exists so a symbol covered only by
+  // low-value sources still gets a reading rather than a blank. Reaching past it
+  // to the RAW list means a pool of nothing but holding notices comes back
+  // "balanced, neutral" — a tone read off 13F paperwork, which is the reported
+  // bug in its purest form. A symbol with no scorable coverage should say so.
+  const scorable = ranked.filter((item) => !isFilingChurn(item.title));
+  const pool = highValue.length ? highValue : scorable;
+
+  // THE WINDOW, applied before anything else. An item with no publish date is
+  // excluded rather than assumed recent: it cannot be SHOWN to be inside the
+  // window, and assuming it is would reintroduce exactly the bug this fixes
+  // (claude/traps/absence-needs-the-producer-to-have-run.md).
+  const inWindow = pool.filter((item) => recencyWeight(item.pubDate, nowMs) > 0);
+
+  if (inWindow.length < NEWS_SCORE_MIN_ITEMS) {
+    return {
+      available: false,
+      score: 50,
+      tone: "yellow",
+      label: "Neutral",
+      reason:
+        `Only ${inWindow.length} of ${pool.length} usable headline${pool.length === 1 ? "" : "s"} ` +
+        `${inWindow.length === 1 ? "was" : "were"} published in the last ${NEWS_SCORE_WINDOW_DAYS} days, ` +
+        `which is not enough recent coverage to read a current tone from.`,
+      positives: [],
+      negatives: [],
+      confidence: "Low",
+    };
+  }
+
+  // MOST RECENT FIRST, not most dramatic first. This is the other half of the
+  // fix: the window decides what is eligible, and recency decides which of the
+  // eligible ones are actually read.
+  const candidates = [...inWindow]
+    .sort((a, b) => {
+      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, NEWS_SCORE_MAX_ITEMS);
+
+  const positiveTitles: string[] = [];
+  const negativeTitles: string[] = [];
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+  let signalCount = 0;
+
+  for (const item of candidates) {
+    const title = item.title.toLowerCase();
+
+    // Age, not rank. See recencyWeight.
+    const weight = recencyWeight(item.pubDate, nowMs);
+    let itemScore = 0;
+
+    const strongPositive = [
+      "beat",
+      "beats",
+      "strong",
+      "surge",
+      "record",
+      "upgrade",
+      "buy rating",
+      "top pick",
+      "price target raised",
+      "raises guidance",
+      "growth",
+      "expansion",
+      "partnership",
+      "wins",
+      "rebound",
+      "demand",
+      "momentum",
+      "profit jump",
+    ];
+
+    const moderatePositive = [
+      "launch",
+      "production",
+      "deliveries",
+      "delivery",
+      "analyst",
+      "bullish",
+      "margin",
+      "forecast",
+      "outlook",
+      "sec filing",
+      "insider buy",
+    ];
+
+    const strongNegative = [
+      "miss",
+      "misses",
+      "warning",
+      "downgrade",
+      "sell rating",
+      "price target cut",
+      "lawsuit",
+      "probe",
+      "investigation",
+      "recall",
+      "delay",
+      "cuts guidance",
+      "weak",
+      "slump",
+      "plunge",
+      "loss",
+    ];
+
+    const moderateNegative = [
+      "falls",
+      "drop",
+      "soft",
+      "tariff",
+      "concern",
+      "pressure",
+      "decline",
+      "headwinds",
+      "insider sale",
+      "tax-driven share sale",
+    ];
+
+    if (keywordHits(title, strongPositive)) itemScore += 3.2;
+    if (keywordHits(title, moderatePositive)) itemScore += 1.4;
+
+    if (keywordHits(title, strongNegative)) itemScore -= 3.2;
+    if (keywordHits(title, moderateNegative)) itemScore -= 1.4;
+
+    if (
+      keywordHits(title, ["earnings", "results", "revenue", "guidance", "quarter"]) &&
+      keywordHits(title, ["beat", "beats", "strong", "raises", "growth", "record"])
+    ) {
+      itemScore += 2.2;
+    }
+
+    if (
+      keywordHits(title, ["earnings", "results", "revenue", "guidance", "quarter"]) &&
+      keywordHits(title, ["miss", "warning", "cuts", "weak", "loss"])
+    ) {
+      itemScore -= 2.2;
+    }
+
+    if (
+      keywordHits(title, ["insider", "cfo", "director", "executive"]) &&
+      keywordHits(title, ["tax-driven", "rsu", "vesting"])
+    ) {
+      itemScore += 0.5;
+    }
+
+    if (itemScore > 0.75) {
+      positiveTitles.push(item.title);
+      signalCount += 1;
+    } else if (itemScore < -0.75) {
+      negativeTitles.push(item.title);
+      signalCount += 1;
+    }
+
+    weightedSum += itemScore * weight;
+    totalWeight += weight;
+  }
+
+  if (!totalWeight) {
+    return {
+      available: false,
+      score: 50,
+      tone: "yellow",
+      label: "Neutral",
+      reason:
+        "There is not enough usable headline detail here to push sentiment strongly either way.",
+      positives: [],
+      negatives: [],
+      confidence: "Low",
+    };
+  }
+
+  const avg = weightedSum / totalWeight;
+
+  let rawScore = 50 + avg * 11;
+
+  if (signalCount >= 3) rawScore += avg > 0 ? 4 : avg < 0 ? -4 : 0;
+  if (signalCount >= 4) rawScore += avg > 0 ? 2 : avg < 0 ? -2 : 0;
+
+  const score = Math.max(0, Math.min(100, Math.round(rawScore)));
+
+  let tone: ScoreTone = "yellow";
+  let label = "Neutral";
+
+  if (score >= 66) {
+    tone = "green";
+    label = "Bullish";
+  } else if (score <= 34) {
+    tone = "red";
+    label = "Bearish";
+  } else if (score >= 58) {
+    tone = "green";
+    label = "Slightly Bullish";
+  } else if (score <= 42) {
+    tone = "red";
+    label = "Slightly Bearish";
+  }
+
+  // CONFIDENCE IS ABOUT COVERAGE, NOT DRAMA. It used to count signalCount --
+  // how many of the scored headlines tripped a keyword hard enough to register
+  // as positive or negative -- so five emotive articles from last spring read
+  // "High" while a ticker with genuinely fresh but measured coverage read
+  // "Low". It now reports how much RECENT coverage there is, which is what a
+  // reader takes it to mean.
+  const confidence: "Low" | "Medium" | "High" =
+    inWindow.length >= 8 ? "High" : inWindow.length >= 5 ? "Medium" : "Low";
+
+  const windowNote = ` Based on ${candidates.length} of ${inWindow.length} headline${inWindow.length === 1 ? "" : "s"} from the last ${NEWS_SCORE_WINDOW_DAYS} days.`;
+
+  let reason =
+    "The current headline mix looks balanced, so the overall news tone reads neutral right now.";
+
+  if (label === "Bullish") {
+    reason =
+      "Higher-value headlines lean meaningfully positive, with stronger signals around growth, upgrades, guidance, or demand.";
+  } else if (label === "Slightly Bullish") {
+    reason =
+      "There is a mild positive lean in the higher-value headlines, though the setup is not strong enough to call decisively bullish.";
+  } else if (label === "Bearish") {
+    reason =
+      "Higher-value headlines lean clearly negative, with stronger signals around downgrades, warnings, weak results, or other pressure points.";
+  } else if (label === "Slightly Bearish") {
+    reason =
+      "There is a mild negative lean in the higher-value headlines, though the setup is not strong enough to call decisively bearish.";
+  }
+
+  return {
+    available: true,
+    score,
+    tone,
+    label,
+    // The window is stated in the reason rather than left implicit. A tone that
+    // claims to read "right now" should say what "now" it means.
+    reason: reason + windowNote,
+    positives: positiveTitles.slice(0, 3),
+    negatives: negativeTitles.slice(0, 3),
+    confidence,
+  };
+}
+
+
+export function scoreToTone(score: number): ScoreTone {
+  if (score >= 58) return "green";
+  if (score <= 42) return "red";
+  return "yellow";
+}
+
+export function scoreToNewsLabel(score: number) {
+  if (score >= 66) return "Bullish";
+  if (score >= 58) return "Slightly Bullish";
+  if (score <= 34) return "Bearish";
+  if (score <= 42) return "Slightly Bearish";
+  return "Neutral";
+}
+
+/**
+ * ── THE EARNINGS TONE BANDS: THRESHOLD, WORD, LABEL AND COLOUR, IN ONE TABLE ─
+ *
+ * ── WHY THIS IS A TABLE AND NOT THREE FUNCTIONS ───────────────────────────
+ * The thresholds and the three label strings existed TWICE — here, and again
+ * as an inline if/else chain inside scoreEarnings() 700 lines below, which
+ * reached the same verdict by the same numbers in its own words. They agreed,
+ * which is the only reason nobody noticed; two copies of a threshold agree
+ * right up until someone moves one of them
+ * (claude/traps/two-validators-for-one-value.md). scoreEarnings now reads this
+ * table for its label and tone, and keeps only its `reason`, which genuinely
+ * differs per branch because it depends on which drivers were found.
+ *
+ * ── AND WHY EACH BAND CARRIES A BARE `word` AS WELL AS A `label` ──────────
+ * A rendering defect the owner found on /stock/AAPL/news, and it was on every
+ * symbol and every band: the lead paragraph read
+ *
+ *     "Earnings tone is currently mixed earnings tone."
+ *
+ * The sentence is `Earnings tone is currently ${label.toLowerCase()}.` and the
+ * label is a complete noun phrase. It reads correctly as a chip on the sector
+ * page, and it reads as a stammer in a sentence that has already said the noun.
+ *
+ * THE ASYMMETRY THAT HID IT: the FIRST half of that same sentence interpolates
+ * scoreToNewsLabel, which returns a bare adjective ("Bullish"), so
+ * "a bullish headline tone" is correct and the template looked sound. The two
+ * scorers returned different PARTS OF SPEECH under the same name, `label`, and
+ * nothing in the types could say so.
+ *
+ * So the band owns both forms. `word` goes in prose, `label` is the standalone
+ * chip, and neither is derived from the other by string surgery at a call site.
+ */
+export const EARNINGS_TONE_BANDS: {
+  from: number;
+  word: string;
+  label: string;
+  tone: ScoreTone;
+}[] = [
+  { from: 64, word: "positive", label: "Positive earnings tone", tone: "green" },
+  { from: 37, word: "mixed", label: "Mixed earnings tone", tone: "yellow" },
+  { from: 0, word: "weak", label: "Weak earnings tone", tone: "red" },
+];
+
+/** The band a score falls in. Ordered high-to-low, so the first hit wins. */
+export const earningsBand = (score: number) =>
+  EARNINGS_TONE_BANDS.find((b) => score >= b.from) ?? EARNINGS_TONE_BANDS[EARNINGS_TONE_BANDS.length - 1];
+
+/** The standalone noun phrase, for a chip or a heading. */
+export function scoreToEarningsLabel(score: number) {
+  return earningsBand(score).label;
+}
+
+/**
+ * The bare adjective, for prose that has already supplied the noun.
+ *
+ * Use this anywhere the surrounding sentence says "earnings tone"; use
+ * scoreToEarningsLabel where the phrase has to stand on its own.
+ */
+export function scoreToEarningsWord(score: number) {
+  return earningsBand(score).word;
+}
+
+export function getEarningsQualityGuardrails(items: NewsItem[]) {
+  const cleaned = items.filter((item) => !isLowValueNewsItem(item));
+  const actualResults = cleaned
+    .filter((item) => isActualEarningsResultNews(item))
+    .slice(0, 8);
+  const routineAnnouncements = cleaned.filter((item) => isRoutineEarningsAnnouncement(item));
+
+  let positiveActualResults = 0;
+  let strongPositiveActualResults = 0;
+  let negativeActualResults = 0;
+  let severeNegativeActualResults = 0;
+
+  for (const item of actualResults) {
+    const text = headlineText(item);
+
+    const positive = containsFreshPositiveEarningsResult(text);
+    const strongPositive =
+      containsAny(text, [
+        "beat and raise",
+        "beat and raised",
+        "beats and raises",
+        "beat estimates and raised guidance",
+        "beats estimates and raises guidance",
+        "revenue beat",
+        "eps beat",
+        "guidance above",
+        "outlook above",
+        "raises guidance",
+        "raised guidance",
+      ]) ||
+      containsAll(text, [
+        ["beat", "beats", "above estimates", "better than expected", "better-than-expected"],
+        ["raises guidance", "raised guidance", "guidance above", "outlook above"],
+      ]);
+
+    const negative = containsNegativeEarningsResult(text);
+    const severeNegative = containsSevereNegativeEarningsResult(text);
+
+    if (positive) positiveActualResults += 1;
+    if (strongPositive) strongPositiveActualResults += 1;
+    if (negative) negativeActualResults += 1;
+    if (severeNegative) severeNegativeActualResults += 1;
+  }
+
+  const newestActualTime = actualResults.reduce(
+    (latest, item) => Math.max(latest, newsItemTime(item)),
+    0
+  );
+  const newestRoutineTime = routineAnnouncements.reduce(
+    (latest, item) => Math.max(latest, newsItemTime(item)),
+    0
+  );
+  const newestActualAgeDays = ageInDays(newestActualTime);
+  const newerRoutineAnnouncementExists =
+    newestRoutineTime > 0 && (!newestActualTime || newestRoutineTime > newestActualTime);
+
+  // If the latest earnings-related item is only an upcoming earnings date/call,
+  // the previous earnings result should not keep driving a bullish/weak earnings tone.
+  // In that case, treat earnings as stale/no clear current read.
+  const staleActualResults =
+    !actualResults.length ||
+    (typeof newestActualAgeDays === "number" && newestActualAgeDays > 75) ||
+    newerRoutineAnnouncementExists;
+
+  let earningsCap: number | null = null;
+  let earningsFloor: number | null = null;
+
+  if (!actualResults.length) {
+    earningsCap = 55;
+  } else if (staleActualResults) {
+    earningsCap = 55;
+  } else if (severeNegativeActualResults >= 2) {
+    earningsCap = 45;
+  } else if (severeNegativeActualResults >= 1 && positiveActualResults >= 1) {
+    earningsCap = 55;
+  } else if (negativeActualResults >= 2 && positiveActualResults <= 1) {
+    earningsCap = 50;
+  } else if (negativeActualResults >= 1 && positiveActualResults === 0) {
+    earningsCap = 42;
+  }
+
+  if (!staleActualResults && negativeActualResults === 0 && severeNegativeActualResults === 0) {
+    if (strongPositiveActualResults >= 1 || positiveActualResults >= 2) {
+      earningsFloor = 72;
+    } else if (positiveActualResults >= 1) {
+      earningsFloor = 64;
+    }
+  }
+
+  return {
+    earningsCap,
+    earningsFloor,
+    actualEarningsResultCatalysts: staleActualResults ? 0 : actualResults.length,
+    rawActualEarningsResultCatalysts: actualResults.length,
+    positiveActualResults,
+    strongPositiveActualResults,
+    negativeActualResults,
+    severeNegativeActualResults,
+    staleActualResults,
+    newerRoutineAnnouncementExists,
+    newestActualAgeDays,
+  };
+}
+
+function applyScoreCap(score: number, cap: number | null) {
+  if (typeof cap !== "number") return score;
+  return Math.min(score, cap);
+}
+
+function headlineText(item: NewsItem) {
+  return `${item.title} ${item.description ?? ""}`.toLowerCase();
+}
+
+function newsItemTime(item: NewsItem) {
+  if (!item.pubDate) return 0;
+  const time = new Date(item.pubDate).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function ageInDays(time: number) {
+  if (!time) return null;
+  return (Date.now() - time) / (1000 * 60 * 60 * 24);
+}
+
+function containsAll(text: string, groups: string[][]) {
+  return groups.every((group) => containsAny(text, group));
+}
+
+function containsFreshPositiveEarningsResult(text: string) {
+  return containsAny(text, [
+    "beat",
+    "beats",
+    "tops estimates",
+    "top estimates",
+    "above estimates",
+    "better than expected",
+    "better-than-expected",
+    "revenue beat",
+    "eps beat",
+    "raises guidance",
+    "raised guidance",
+    "guidance above",
+    "outlook above",
+    "forecast above",
+    "strong earnings",
+    "solid earnings",
+    "positive earnings",
+    "profit jumps",
+    "loss narrowed",
+  ]);
+}
+
+function containsNegativeEarningsResult(text: string) {
+  return containsAny(text, [
+    "miss",
+    "misses",
+    "missed estimates",
+    "below estimates",
+    "below guidance",
+    "cuts guidance",
+    "cut guidance",
+    "guidance cut",
+    "guidance below",
+    "weak guidance",
+    "warning",
+    "disappointing guidance",
+    "revenue fell",
+    "revenue declined",
+    "revenue decline",
+    "declining revenue",
+    "sales fell",
+    "sales declined",
+    "net loss",
+    "big loss",
+    "wider loss",
+    "loss widened",
+    "losses remain",
+    "subscriber decline",
+    "subscribers declined",
+    "users declined",
+    "demand pressure",
+    "weak demand",
+    "softening demand",
+    "competition pressure",
+    "margin pressure",
+  ]);
+}
+
+function containsSevereNegativeEarningsResult(text: string) {
+  return containsAny(text, [
+    "revenue fell",
+    "revenue declined",
+    "revenue decline",
+    "declining revenue",
+    "net loss",
+    "big loss",
+    "wider loss",
+    "loss widened",
+    "below guidance",
+    "cuts guidance",
+    "weak guidance",
+    "subscriber decline",
+    "subscribers declined",
+    "weak demand",
+    "softening demand",
+  ]);
+}
+
+function containsAny(text: string, words: string[]) {
+  return words.some((word) => text.includes(word));
+}
+
+function isRoutineEarningsAnnouncement(item: NewsItem) {
+  const text = headlineText(item);
+
+  return containsAny(text, [
+    "announces date",
+    "conference call",
+    "earnings call",
+    "webcast",
+    "release date",
+    "to report",
+    "will report",
+    "scheduled",
+    "upcoming earnings",
+  ]);
+}
+
+function isAnalystOrPreviewEarningsItem(item: NewsItem) {
+  const text = headlineText(item);
+
+  return containsAny(text, [
+    "analyst",
+    "price target",
+    "upside",
+    "projection",
+    "preview",
+    "estimate",
+    "estimates for",
+    "expectations for",
+    "what to expect",
+    "before earnings",
+    "ahead of earnings",
+  ]);
+}
+
+export function isActualEarningsResultNews(item: NewsItem) {
+  const text = headlineText(item);
+
+  if (isRoutineEarningsAnnouncement(item)) return false;
+
+  const hasEarningsContext = containsAny(text, [
+    "earnings",
+    "financial results",
+    "quarterly results",
+    "results",
+    "revenue",
+    "eps",
+    "profit",
+    "loss",
+    "net loss",
+    "guidance",
+    "outlook",
+    "adjusted ebitda",
+    "margin",
+    "fiscal",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+  ]);
+
+  const hasActualResultSignal = containsAny(text, [
+    "reports",
+    "reported",
+    "announces financial results",
+    "announced financial results",
+    "posts",
+    "posted",
+    "beat",
+    "beats",
+    "miss",
+    "misses",
+    "tops estimates",
+    "above estimates",
+    "below estimates",
+    "better than expected",
+    "better-than-expected",
+    "raises guidance",
+    "raised guidance",
+    "cuts guidance",
+    "guidance above",
+    "guidance below",
+    "revenue fell",
+    "revenue declined",
+    "revenue rose",
+    "revenue growth",
+    "loss narrowed",
+    "net loss",
+    "profit jumps",
+    "adjusted ebitda",
+    "full-year outlook",
+  ]);
+
+  if (!hasEarningsContext || !hasActualResultSignal) return false;
+
+  const isOnlyMarketReaction =
+    containsAny(text, ["shares jump", "shares surge", "stock jumps", "stock surges", "rallies after"]) &&
+    !containsAny(text, [
+      "reported",
+      "reports",
+      "financial results",
+      "revenue",
+      "eps",
+      "guidance",
+      "beat",
+      "beats",
+      "miss",
+      "misses",
+      "net loss",
+      "profit",
+      "margin",
+      "adjusted ebitda",
+    ]);
+
+  if (isOnlyMarketReaction) return false;
+
+  if (
+    isAnalystOrPreviewEarningsItem(item) &&
+    !containsAny(text, [
+      "reported",
+      "reports",
+      "financial results",
+      "revenue fell",
+      "revenue declined",
+      "net loss",
+      "beat",
+      "beats",
+      "miss",
+      "misses",
+      "raises guidance",
+      "raised guidance",
+      "cuts guidance",
+    ])
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+export function rankEarningsNews(news: NewsItem[]) {
+  return dedupeNews(
+    [...news].sort((a, b) => {
+      const aActual = isActualEarningsResultNews(a) ? 1 : 0;
+      const bActual = isActualEarningsResultNews(b) ? 1 : 0;
+      if (aActual !== bActual) return bActual - aActual;
+
+      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      if (aTime !== bTime) return bTime - aTime;
+
+      return scoreNewsItem(b) - scoreNewsItem(a);
+    })
+  );
+}
+
+function getCatalystFloors(items: NewsItem[]) {
+  const relevant = items.filter((item) => !isLowValueNewsItem(item)).slice(0, 8);
+
+  let bullishCatalysts = 0;
+  let bearishCatalysts = 0;
+  let bullishEarningsCatalysts = 0;
+  let bearishEarningsCatalysts = 0;
+
+  const bullishTerms = [
+    "beat",
+    "beats",
+    "tops estimates",
+    "top estimates",
+    "above estimates",
+    "better than expected",
+    "better-than-expected",
+    "strong earnings",
+    "good earnings",
+    "solid earnings",
+    "revenue beat",
+    "eps beat",
+    "raises guidance",
+    "guidance above",
+    "outlook above",
+    "forecast above",
+    "shares jump",
+    "shares surge",
+    "stock jumps",
+    "stock surges",
+    "rallies after",
+    "strategic win",
+    "major deal",
+    "customer win",
+    "confirmed partnership",
+    "major partnership",
+    "supply deal",
+    "chip deal",
+    "ai chip deal",
+    "terafab",
+    "launch of",
+    "launches",
+    "joining the project",
+    "joins the project",
+    "joins terafab",
+    "applied materials joining",
+    "intel joining",
+    "ai demand",
+    "data center demand",
+    "foundry ambitions",
+  ];
+
+  const bearishTerms = [
+    "misses estimates",
+    "missed estimates",
+    "below estimates",
+    "cuts guidance",
+    "guidance cut",
+    "warning",
+    "weak guidance",
+    "shares plunge",
+    "stock plunges",
+    "downgrade",
+    "investigation",
+    "probe",
+    "lawsuit",
+    "recall",
+    "insider resale",
+    "insider sale",
+    "stock sale",
+    "share sale",
+    "10b5-1",
+    "softening demand",
+    "weak demand",
+    "competition",
+  ];
+
+  const earningsTerms = [
+    "earnings",
+    "results",
+    "revenue",
+    "guidance",
+    "quarter",
+    "eps",
+    "profit",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+  ];
+
+  for (const item of relevant) {
+    const text = headlineText(item);
+    const isEarnings = isActualEarningsResultNews(item);
+    const speculative = containsAny(text, ["speculation", "speculative", "rumor", "rumour", "may ", "could ", "might ", "potential", "possible"]);
+    const analystOnly = containsAny(text, ["analyst", "price target", "upside", "projected upside", "rating"]);
+    const bullish = containsAny(text, bullishTerms) && !speculative && !analystOnly;
+    const bearish = containsAny(text, bearishTerms);
+
+    if (bullish) bullishCatalysts += 1;
+    if (bearish) bearishCatalysts += 1;
+
+    if (isEarnings && bullish) bullishEarningsCatalysts += 1;
+    if (isEarnings && bearish) bearishEarningsCatalysts += 1;
+  }
+
+  let newsFloor: number | null = null;
+  let earningsFloor: number | null = null;
+
+  if (bullishCatalysts >= 2 && bearishCatalysts === 0) newsFloor = 78;
+  else if (bullishCatalysts >= 1 && bearishCatalysts === 0) newsFloor = 72;
+  else if (bullishCatalysts >= 2 && bearishCatalysts <= 1) newsFloor = 74;
+  else if (bullishCatalysts >= 1 && bearishCatalysts <= 1) newsFloor = 68;
+  else if (bullishCatalysts >= 1 && bearishCatalysts <= 2) newsFloor = 64;
+
+  if (bullishEarningsCatalysts >= 2 && bearishEarningsCatalysts === 0) earningsFloor = 78;
+  else if (bullishEarningsCatalysts >= 1 && bearishEarningsCatalysts === 0) earningsFloor = 72;
+  else if (bullishEarningsCatalysts >= 1 && bearishEarningsCatalysts <= 1) earningsFloor = 64;
+
+  return { newsFloor, earningsFloor };
+}
+
+function applyCatalystFloor(score: number, floor: number | null) {
+  if (typeof floor !== "number") return score;
+  return Math.max(score, floor);
+}
+
+export function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
+  const ranked = rankEarningsNews(news);
+  const earningsItems = ranked.filter((item) => isActualEarningsResultNews(item));
+
+  if (!earningsItems.length) {
+    return {
+      score: 50,
+      label: "No clear earnings read",
+      // NULL, NOT "mixed". There is no tone word because no tone was
+      // established -- see the `word` field on EarningsScoreResult.
+      word: null,
+      tone: "yellow",
+      reason: "There are no clear recent earnings-result headlines in the dedicated earnings feed.",
+    };
+  }
+
+  let signal = 0;
+  const positiveDrivers: string[] = [];
+  const negativeDrivers: string[] = [];
+
+  for (const item of earningsItems.slice(0, 5)) {
+    const text = headlineText(item);
+
+    const positive = containsAny(text, [
+      "beat",
+      "beats",
+      "tops estimates",
+      "top estimates",
+      "above estimates",
+      "better than expected",
+      "better-than-expected",
+      "good earnings",
+      "strong earnings",
+      "solid earnings",
+      "revenue beat",
+      "eps beat",
+      "raises guidance",
+      "guidance above",
+      "outlook above",
+      "forecast above",
+      "shares jump",
+      "shares surge",
+      "stock jumps",
+      "stock surges",
+      "rallies after",
+      "growth",
+      "record",
+    ]);
+
+    const negative = containsAny(text, [
+      "miss",
+      "misses",
+      "missed estimates",
+      "below estimates",
+      "cuts guidance",
+      "guidance cut",
+      "weak guidance",
+      "warning",
+      "slump",
+      "plunge",
+      "revenue fell",
+      "revenue declined",
+      "declining revenue",
+      "big loss",
+      "net loss",
+      "subscriber decline",
+      "subscribers declined",
+      "below guidance",
+    ]);
+
+    if (positive) {
+      signal += 2.5;
+      positiveDrivers.push(item.title);
+    }
+
+    if (negative) {
+      signal -= 2.5;
+      negativeDrivers.push(item.title);
+    }
+
+    // Losses or restructuring should only be a heavy negative when they are not paired with
+    // a positive earnings catalyst in the same headline/description.
+    if (!positive && containsAny(text, ["loss", "losses", "layoffs", "restructuring"])) {
+      signal -= 1;
+    }
+  }
+
+  let score = Math.max(0, Math.min(100, Math.round(50 + signal * 7)));
+
+  const earningsQualityGuardrails = getEarningsQualityGuardrails(ranked);
+  score = applyScoreCap(
+    applyCatalystFloor(score, earningsQualityGuardrails.earningsFloor),
+    earningsQualityGuardrails.earningsCap
+  );
+
+  // LABEL AND TONE COME FROM THE BAND TABLE, not from a second if/else chain
+  // with the same numbers in it. Only `reason` is decided here, because it is
+  // the one part that depends on WHICH drivers were found rather than on where
+  // the score landed. See EARNINGS_TONE_BANDS.
+  const band = earningsBand(score);
+  let reason =
+    "Recent earnings-linked headlines are mixed, so the score stays close to the middle.";
+
+  if (band.word === "positive") {
+    reason = positiveDrivers.length
+      ? "Recent earnings-linked headlines look constructive, with stronger signals around beats, guidance, revenue, or share-price reaction."
+      : "The earnings-linked headlines look more constructive than negative, which may help support confidence in the next leg of the story.";
+  } else if (band.word === "weak") {
+    reason = negativeDrivers.length
+      ? "Recent earnings-linked headlines look pressured, with weaker signals around misses, guidance cuts, or disappointing results."
+      : "The earnings-linked headlines look more pressured than supportive, which can weigh on sentiment until the business story improves again.";
+  }
+
+  return {
+    score,
+    label: band.label,
+    word: band.word,
+    tone: band.tone,
+    reason,
+  };
+}
+
+/**
+ * Newest-first by pubDate. Lifted from inside buildStockNewsBaseData to module
+ * scope (2026-08-07) so the sector news builder can reuse the exact same feed
+ * shaping rather than growing a second, drifting copy. Body unchanged.
+ */
+export const newestFirst = (items: NewsItem[]) =>
+  [...items].sort((a, b) => {
+    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+
+    return bTime - aTime;
+  });
+
+/**
+ * Collapses a feed to one article per calendar date. Lifted to module scope
+ * alongside newestFirst above; body unchanged.
+ */
+// oneArticlePerDate is gone. Its real goal was never "one per day" -- it was
+// "don't show the same story twice", and a date is a bad proxy for that in both
+// directions: too strict, since two genuinely different stories on the same
+// Thursday collapsed into one (which is why actual earnings results needed a
+// special exemption from it); and too loose, since the same story reported
+// Thursday and Friday sailed through as two. dedupeNews compares what the
+// headlines say instead, which needs no exemption and no calendar.
+
+async function buildStockNewsBaseData(
+  symbol: string,
+  options: BuildOptions
+): Promise<StockNewsBaseData> {
+  const upper = symbol.trim().toUpperCase();
+  // 5 large cards by default, up from 3. The feed can now walk back to fill
+  // them (see NEWS_FEED_MAX_AGE_DAYS), so the old cap of 3 was a limit set by
+  // how little the source gate used to clear, not by what the page wants.
+  // Callers wanting fewer -- the discovery strip, internal news -- still pass
+  // their own value.
+  const maxDetailedItems = Math.max(1, Math.min(options.maxDetailedItems ?? 5, 5));
+
+  const [quote, { points: history, source: historySource }, companyName] = await Promise.all([
+    fetchQuote(upper),
+    fetchHistory(upper),
+    fetchCompanyName(upper),
+  ]);
+
+  // ONE STORE READ, TWO CONSUMERS. This was `Promise.all([fetchNews(...),
+  // fetchEarningsNews(...)])` and each of those fetched the store itself, so
+  // every render ran the whole adapter fan-out twice and raced two writes on
+  // one Redis key. See the note on selectDisplayNews.
+  const storedNews = await fetchStoredSymbolNews(upper, companyName);
+  const displayNews = selectDisplayNews(storedNews);
+  const news = displayNews.length ? displayNews : await fetchNewsFallback(upper, companyName);
+  const earningsNews = selectEarningsNews(storedNews, upper);
+
+  const closes = history.map((point) => point.close);
+  const ma50 = movingAverage(closes, 50);
+  const ma200 = movingAverage(closes, 200);
+  const rsi = rsiWilder(closes, 14);
+
+  const lastClose = history.length ? history[history.length - 1].close : null;
+  const lastMA50 = lastNum(ma50);
+  const lastMA200 = lastNum(ma200);
+  const lastRsi = lastNum(rsi);
+
+  const trend = trendLabel(lastClose, lastMA50, lastMA200);
+  const hasNoQuote = !quote || quote.price == null;
+  const hasNoHistory = !history || history.length === 0;
+
+  const isInvalidTicker = false;
+  const isDataUnavailable = hasNoQuote && hasNoHistory;
+  const priceVs50 = pctFromBase(lastClose, lastMA50);
+  const priceVs200 = pctFromBase(lastClose, lastMA200);
+
+  const trailing = history.slice(-20);
+  const recentHigh = trailing.length
+    ? Math.max(...trailing.map((point) => point.high ?? point.close))
+    : null;
+  const recentLow = trailing.length
+    ? Math.min(...trailing.map((point) => point.low ?? point.close))
+    : null;
+
+  const newsScope: NewsScope = { kind: "symbol", symbol: upper, companyName };
+  const rankedNews = rankNews(news, newsScope);
+  const rankedEarningsNews = rankEarningsNews(earningsNews);
+
+  // THE SAME SCOPE OBJECT rankNews got two lines up. Passing a freshly built
+  // one would work today and drift tomorrow; this cannot disagree with the feed.
+  const keywordNewsScore = scoreNews(news, newsScope);
+  const keywordEarningsScore = scoreEarnings(earningsNews);
+
+  const earningsQualityGuardrails = getEarningsQualityGuardrails(rankedEarningsNews);
+
+  const fallbackNewsScoreValue = keywordNewsScore.score;
+  const hasActualEarningsHeadlines =
+    earningsQualityGuardrails.actualEarningsResultCatalysts > 0;
+  const fallbackEarningsScoreValue = hasActualEarningsHeadlines
+    ? keywordEarningsScore.score
+    : 50;
+
+  const newsScore = {
+    ...keywordNewsScore,
+    score: fallbackNewsScoreValue,
+    tone: scoreToTone(fallbackNewsScoreValue),
+    label: scoreToNewsLabel(fallbackNewsScoreValue),
+    reason: news.length
+      ? keywordNewsScore.reason
+      : "FMP did not return recent stock-specific headlines for this ticker.",
+  };
+
+  const earningsScore = {
+    ...keywordEarningsScore,
+    score: fallbackEarningsScoreValue,
+    tone: scoreToTone(fallbackEarningsScoreValue),
+    label: hasActualEarningsHeadlines
+      ? scoreToEarningsLabel(fallbackEarningsScoreValue)
+      : "No clear earnings read",
+    word: hasActualEarningsHeadlines
+      ? scoreToEarningsWord(fallbackEarningsScoreValue)
+      : null,
+    reason: hasActualEarningsHeadlines
+      ? keywordEarningsScore.reason
+      : "FMP did not return recent earnings-specific headlines. Use the structured earnings snapshot instead.",
+  };
+
+  // ---------------------------------------------------------------------------
+  // THE FEED, after the source gate was removed (owner's call, 2026-08-22).
+  //
+  // WHAT WENT, AND WHY. There used to be a two-tier pool, a curated wire
+  // allowlist, an earnings exemption for two named publishers, and a
+  // gate-then-backfill split. Between them they produced the INVERSE of their
+  // intent: the gate was narrow enough that most tickers cleared nothing, so
+  // the backfill -- which ignored the gate entirely -- became the normal path
+  // and filled the lead slots with exactly the publishers the gate existed to
+  // exclude. Confirmed live on /stock/MU/news: three fool.com lead cards, one a
+  // podcast, while a CNBC interview sat in the lighter feed.
+  //
+  // Widening the allowlist would have fixed that day's symptom and left the
+  // shape: a curated publisher list maintained forever against a feed nobody
+  // controls, with a fallback path that silently disagrees with it. Simple and
+  // predictable beats a sorting rule that has been quietly inverted.
+  //
+  // WHAT IS LEFT is one ordered pass: drop junk, drop repeats, take the newest.
+  // Two filters survive, and both fail visibly rather than silently --
+  // isVideoOrLowQualitySource (podcasts and video, now including the article
+  // image) and isLowValueNewsItem (SEO stock-quote pages). Neither is a
+  // publisher allowlist; both are pattern blocklists, and a miss shows up as an
+  // obviously wrong card rather than as an absence nobody can see.
+  const displayNewsPool = rankedNews.length ? rankedNews : dedupeNews(news);
+
+  // One pool, newest first, junk removed, repeats collapsed by title similarity
+  // (see dedupeNews). No tiers: position in this list is the only ranking.
+  const feedPool = dedupeNews(
+    newestFirst(displayNewsPool.filter((item) => !isLowValueNewsItem(item)))
+  );
+
+  // OPEN-ENDED BACKFILL, with a floor. The old rule was one article per DATE,
+  // which was a bad proxy for "don't show the same story twice" in both
+  // directions -- too strict (two genuinely different Thursday stories became
+  // one) and too loose (the same story reported Thursday and Friday became two).
+  // Similarity dedup does that job properly, so the feed can simply walk back
+  // until it is full.
+  //
+  // The floor is bounded rather than open-ended: past a quarter a headline is
+  // not news, and a card claiming to be part of the current picture should not
+  // be from another one. Running short is the correct outcome for a thin
+  // ticker -- fewer cards is honest, padding with year-old stories is not.
+  //
+  // THE WINDOW IS THE PROVIDER'S, so it lives beside the flag that picks it --
+  // see feedMaxAgeDays in lib/server/news/index.ts. 90 days on FMP, 45 on free.
+  const feedWindowDays = feedMaxAgeDays();
+  const oldestAllowedMs = Date.now() - feedWindowDays * 86_400_000;
+  const withinFeedWindow = feedPool.filter((item) => {
+    if (!item.pubDate) return false;
+    const t = new Date(item.pubDate).getTime();
+    return Number.isFinite(t) && t >= oldestAllowedMs;
+  });
+
+  const detailedNews = withinFeedWindow.slice(0, maxDetailedItems);
+  const compactNews = withinFeedWindow.slice(
+    maxDetailedItems,
+    maxDetailedItems + MAX_COMPACT_NEWS_ITEMS
+  );
+
+  // Short of target is a real state and worth being able to see, since it is now
+  // the only way the feed can under-deliver -- there is no gate left to blame.
+  console.log(
+    `[news-feed] ${upper} pool=${displayNewsPool.length} afterFilters=${feedPool.length}` +
+      ` within${feedWindowDays}d=${withinFeedWindow.length}` +
+      ` lead=${detailedNews.length}/${maxDetailedItems} compact=${compactNews.length}/${MAX_COMPACT_NEWS_ITEMS}`
+  );
+
+  return {
+    symbol: upper,
+    companyName,
+    quote,
+    history,
+    historySource,
+    news,
+    trend,
+    lastClose,
+    lastMA50,
+    lastMA200,
+    lastRsi,
+    priceVs50,
+    priceVs200,
+    recentHigh,
+    recentLow,
+    isInvalidTicker,
+    isDataUnavailable,
+    newsScore,
+    earningsScore,
+    rankedNews,
+    detailedNews,
+    compactNews,
+  };
+}
+
+export async function getStockNewsAiData(
+  baseData: StockNewsBaseData,
+  options: BuildOptions = {}
+): Promise<StockNewsAiData> {
+  const includeInsight = options.includeInsight ?? true;
+
+  const {
+    symbol,
+    companyName,
+    newsScore,
+    earningsScore,
+    detailedNews,
+    isInvalidTicker,
+  } = baseData;
+
+  const aiBriefsPromise = isInvalidTicker
+    ? Promise.resolve([])
+    : getAiNewsBriefs({
+        // Non-price inputs only (#563 COWORK #31 (b)): no trend, RSI, MA distance or range.
+        symbol,
+        companyName,
+        newsScoreLabel: newsScore.label,
+        items: detailedNews.map((item) => ({
+          title: item.title,
+          source: item.source,
+          pubDate: item.pubDate,
+          description: item.description,
+        })),
+      });
+
+  const aiInsightPromise =
+    isInvalidTicker || !includeInsight
+      ? Promise.resolve(null)
+      : getAiNewsInsight({
+          symbol,
+          companyName,
+          newsScoreLabel: newsScore.label,
+          newsScoreValue: newsScore.score,
+          earningsTone: earningsScore.label,
+          items: detailedNews.map((item) => ({
+            title: item.title,
+            source: item.source,
+            pubDate: item.pubDate,
+            description: item.description,
+            summary: item.description ?? null,
+            whyItMatters: null,
+          })),
+        });
+
+  const [aiBriefs, aiInsight] = await Promise.all([
+    aiBriefsPromise,
+    aiInsightPromise,
+  ]);
+
+  const summaryByTitle = Object.fromEntries(
+    detailedNews.map((item) => [item.title, item.description ?? ""])
+  );
+
+  return {
+    aiBriefs,
+    aiInsight,
+    summaryByTitle,
+  };
+}
+
+const getCachedStockNewsBaseData = unstable_cache(
+  async (key: string) => {
+    const parsed = JSON.parse(key) as {
+      symbol: string;
+      options: BuildOptions;
+    };
+
+    return buildStockNewsBaseData(parsed.symbol, parsed.options);
+  },
+  // v29 (2026-09-23): v28 entries may hold FMP-era items; a new key means none
+  // is served for up to an hour after deploy.
+  ["msh-stock-news-base-data-v29-no-fmp-era-items"],
+  {
+    revalidate: 3600,
+  }
+);
+
+export async function getStockNewsBaseData(
+  symbol: string,
+  options: BuildOptions = {}
+): Promise<StockNewsBaseData> {
+  const endTiming = beginTiming("news", "getStockNewsBaseData");
+  try {
+    return await getStockNewsBaseDataInner(symbol, options);
+  } finally {
+    endTiming();
+  }
+}
+
+async function getStockNewsBaseDataInner(
+  symbol: string,
+  options: BuildOptions = {}
+): Promise<StockNewsBaseData> {
+  const safeSymbol = symbol.trim().toUpperCase();
+
+  return getCachedStockNewsBaseData(
+    JSON.stringify({
+      symbol: safeSymbol,
+      options: {
+        maxDetailedItems: options.maxDetailedItems ?? 3,
+      },
+    })
+  );
+}
+
+export async function getStockNewsData(
+  symbol: string,
+  options: BuildOptions = {}
+): Promise<StockNewsData> {
+  const baseData = await getStockNewsBaseData(symbol, options);
+  const aiData = await getStockNewsAiData(baseData, options);
+
+  return {
+    ...baseData,
+    ...aiData,
+  };
+}

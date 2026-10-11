@@ -1,0 +1,1125 @@
+// MARKET CAP AND P/E, WITH THEIR NUMERATORS TAKEN FROM THE FILINGS.
+//
+// Both figures are one SEC quantity multiplied or divided by one price:
+//
+//   market cap = shares outstanding x price
+//   P/E        = price / diluted EPS over twelve months
+//
+// The price half is not this module's business. What is, is that the SEC half
+// is either RIGHT or ABSENT — never approximate, never assembled from periods
+// that do not add up to what the label claims.
+//
+// ── WHY THIS IS NOT A PAIR OF ONE-LINERS ──────────────────────────────────
+//
+// Every failure available here produces a plausible number rather than an
+// error, and a plausible P/E is worse than a missing one: a reader has no way
+// to tell a 14 built from four real quarters from a 19 built from three.
+//
+//   - THREE QUARTERS SUMMED AND CALLED A YEAR understates by a quarter. After
+//     D1b, Q4 EPS is legitimately null for many filers, so the three-quarter
+//     case is the COMMON one rather than an edge.
+//   - FOUR QUARTERS THAT SKIP ONE are not twelve months. A filer missing Q2
+//     yields Q1, Q3, Q4, Q1-prior — four values, four rows, one year apart at
+//     the ends, and fifteen months of trading inside.
+//   - A FISCAL YEAR PLUS NINE MONTHS is the analyst's rolling-TTM construction
+//     (FY + current 9M - prior 9M) and it mixes three periods from two fiscal
+//     years. It is explicitly not built here. Two bases are admitted and they
+//     are never combined.
+//   - A MULTI-CLASS SHARE COUNT CANNOT BE PICKED. companyfacts publishes the
+//     default-context series only, so a multi-class filer's rows arrive with
+//     the same end, the same accession and nothing to tell the classes apart.
+//     The extractor already refuses to choose and records both candidates;
+//     multiplying either one by a price is the BRK.B share-count bug wearing
+//     a market cap.
+//
+// ── REFUSALS ARE NAMED, NOT BLANK ─────────────────────────────────────────
+//
+// Each result carries WHY it is absent, because "P/E: —" invites the reader to
+// assume the company has no earnings, which is a claim about the company. The
+// true claim is almost always about the filing.
+import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
+import { balanceSheetInstant, valueOf } from "./secFactCodec";
+import { isConsecutive, revenueLineIncomplete } from "./secEarningsView";
+import { DEADLINE_FALLBACK } from "./secReportDates";
+import { annualOnlyForm } from "./annualOnly";
+import { splitAdjusted } from "./secSplitAdjust";
+import { derivedParentEquity, enterpriseValueOf, readableDate, type Estimate } from "./secEstimates";
+
+/** Why a numerator could not be supplied. Rendered, never swallowed. */
+export type ValuationRefusal =
+  | "no-cover-share-count"
+  | "multi-class-share-count-is-ambiguous"
+  | "ads-ratio-makes-shares-incomparable"
+  | "ads-ratio-makes-eps-incomparable"
+  | "ticker-is-a-debt-security"
+  | "share-count-is-stale"
+  | "no-twelve-month-eps"
+  | "eps-period-is-stale"
+  | "share-basis-changed"
+  | "eps-is-zero-or-negative"
+  | "eps-near-zero"
+  | "no-twelve-month-revenue"
+  | "revenue-line-incomplete"
+  | "no-balance-sheet-equity"
+  | "equity-tagged-only-incl-nci"
+  | "equity-is-zero-or-negative"
+  | "equity-too-small-for-pb"
+  | "enterprise-value-input-missing"
+  | "ebitda-is-zero-or-negative";
+
+export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
+  "no-cover-share-count":
+    "the filer's cover page does not state a share count",
+  "multi-class-share-count-is-ambiguous":
+    "this filer has more than one share class and the SEC feed does not name them",
+  "ads-ratio-makes-shares-incomparable":
+    "this company files its share count in ordinary shares and trades here as depositary shares, which are not the same unit",
+  "ads-ratio-makes-eps-incomparable":
+    "this company files earnings per ordinary share and trades here as depositary shares, which are not the same unit",
+  "share-count-is-stale":
+    "the most recent share count this company has filed is too old to value it with",
+  "no-twelve-month-eps":
+    "twelve months of diluted EPS are not on file",
+  "eps-period-is-stale":
+    "the latest twelve months of EPS on file ended more than 15 months ago",
+  // NEUTRAL ABOUT THE CAUSE (#552 COWORK #51): for BABA the likely cause is
+  // our cover read, not a corporate action, so no cause is suggested.
+  "share-basis-changed":
+    "the share count on file differs by more than a fifth from the one behind the EPS, so these figures aren't comparable",
+  "eps-near-zero":
+    "trailing EPS is close to zero, so a P/E is not meaningful",
+  "eps-is-zero-or-negative":
+    "diluted EPS over the last twelve months is not positive, so a P/E is not meaningful",
+  "no-twelve-month-revenue":
+    "twelve months of revenue are not on file",
+  "revenue-line-incomplete":
+    "not meaningful — this filer's revenue line is incomplete in its tagged data",
+  "ticker-is-a-debt-security":
+    "this ticker is not the issuer's common stock (it is notes, debentures or units), so equity multiples do not apply",
+  "no-balance-sheet-equity":
+    "the latest balance sheet on file states no shareholders' equity",
+  // NEVER "no shareholders' equity" when an equity figure IS on file (#552 COWORK #54).
+  "equity-tagged-only-incl-nci":
+    "equity is tagged only including noncontrolling interests, so a P/B for shareholders is not computed",
+  "equity-is-zero-or-negative":
+    "shareholders' equity on the latest balance sheet is not positive, so a P/B is not meaningful",
+  // GDDY's P/B 1,813 (#552 COWORK #86b): arithmetically right, meaningless.
+  "equity-too-small-for-pb":
+    "book equity is under 1% of market cap, so a P/B is not meaningful",
+  "enterprise-value-input-missing":
+    "one of the enterprise-value or EBITDA inputs is not on file",
+  "ebitda-is-zero-or-negative":
+    "EBITDA over the last twelve months is not positive, so EV/EBITDA is not meaningful",
+};
+
+/**
+ * THE WORD A CELL SHOWS IN PLACE OF A DASH (#552 COWORK #98 §1, matching
+ * Pickers, #553 COWORK #94): a figure that exists but means nothing reads as a
+ * word, with REFUSAL_WORDS as its hover/tap reason. Every refusal not listed
+ * here is a gap in the data and stays "—" (with its reason).
+ */
+export const REFUSAL_CELL_WORD: Partial<Record<ValuationRefusal, string>> = {
+  "eps-is-zero-or-negative": "Loss",
+  "eps-near-zero": "Not meaningful",
+  "ebitda-is-zero-or-negative": "Not meaningful",
+  "revenue-line-incomplete": "Not meaningful",
+  "equity-is-zero-or-negative": "Neg.",
+  "equity-too-small-for-pb": "Not meaningful",
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOW OLD A SHARE COUNT MAY BE, AND WHY THERE HAS TO BE A BOUND
+//
+// MEASURED (relay 35620148960, claude/multiclass-shares-not-computable-2026-09-21):
+// the newest dei:EntityCommonStockSharesOutstanding companyfacts holds for
+// Berkshire Hathaway is dated 2011-04-29 and Fox's is 2010-01-29 -- fifteen and
+// sixteen years old. Nothing rejected them. `valuationInputs` accepted any row
+// with `val > 0` and any `asOf` at all, so that 2011 figure was multiplied by
+// today's close and rendered as a market cap.
+//
+// IT IS NOT A NEAR MISS. Berkshire's 941,481 is the CLASS A count; BRK.B has
+// roughly 1.3 billion shares. Pricing one against the other is wrong by about
+// 2,400x. The only mercy is that it lands nowhere plausible -- the usual danger
+// on this page is the opposite.
+//
+// priceIsCurrent (secPresentation) already bounds the OTHER half of the same
+// product for exactly this reason, and had no counterpart here. A market cap is
+// shares x price; bounding one operand and not the other bounds nothing.
+//
+// ── THE BOUND IS DERIVED, NOT PICKED ──────────────────────────────────────
+// A company that still files states a fresh count on every periodic report. The
+// slowest lawful cadence is annual, and the slowest annual deadline in the table
+// this repo already verified against 17 CFR 240.13a-1 is DEADLINE_FALLBACK.annual.
+// So the oldest cover a COMPLIANT annual-only filer can present is one year of
+// cadence plus one deadline's lateness:
+//
+//   365 + 90 = 455 days
+//
+// Past that the filer has missed a required report, and its share count is not a
+// fact about the company today. The figure is IMPORTED rather than copied, so a
+// correction to the statutory table moves this bound with it -- the trap recorded
+// in claude/traps/two-validators-for-one-value.md, which is what the report-date
+// reconciliation (#484) was about.
+//
+// DELIBERATELY GENEROUS. The cost of a bound slightly too loose is a share count
+// a few months stale, which moves a market cap by the buyback rate. The cost of
+// one too tight is refusing a figure a company did file. The error this exists to
+// stop is measured in DECADES, so it is caught by any bound in this region.
+export const COVER_SHARES_MAX_AGE_DAYS = 365 + DEADLINE_FALLBACK.annual;
+
+/**
+ * Whether a cover-page share count is recent enough to value a company with.
+ *
+ * `today` is passed in rather than read from the clock, for the reason
+ * priceIsCurrent gives: a bound that can only be exercised by waiting is a
+ * bound nobody exercises.
+ */
+export function coverIsCurrent(asOf: string | null | undefined, today: string): boolean {
+  if (!asOf) return false;
+  const t = Date.parse(today);
+  const a = Date.parse(asOf);
+  if (!Number.isFinite(t) || !Number.isFinite(a)) return false;
+  // A COUNT DATED AFTER TODAY IS NOT FRESH, IT IS WRONG -- the same rule, and
+  // the same reasoning, as priceIsCurrent's future-date guard.
+  if (a > t) return false;
+  return (t - a) / 86400000 <= COVER_SHARES_MAX_AGE_DAYS;
+}
+
+/**
+ * THE SHARE COUNT AND ITS OWN AS-OF DATE.
+ *
+ * The cover date sits two to four weeks AFTER the period end, and that is not
+ * a defect to correct — it is the most recent count the filer has stated, and
+ * it is the right one to multiply a price by. But it is a different date from
+ * the EPS period, so it is carried separately and labelled separately rather
+ * than folded into one "as of" the page would have to pick a meaning for.
+ */
+export type SharesBasis = {
+  val: number;
+  asOf: string;
+  /** Set when `val` is ADS-equivalents: the cited ordinary shares per ADS it was divided by. */
+  adsRatio?: number;
+  /** The map row's kind: "ordinary" is a direct listing (ratio 1), worded as plain shares. */
+  adsKind?: "ads" | "ordinary";
+};
+
+/**
+ * TWELVE MONTHS OF DILUTED EPS, AND WHICH TWELVE.
+ *
+ * `basis` is not decoration: "four quarters" and "fiscal year" are different
+ * claims about the same number, and a filer that has just changed its year-end
+ * can produce both with different values.
+ */
+export type EpsBasis = {
+  val: number;
+  basis: "four-quarters" | "fiscal-year" | "year-to-date";
+  /** The newest period end the figure covers. */
+  periodEnd: string;
+  /**
+   * Only on "four-quarters": the fiscal Q4 inside the window had no filed EPS
+   * (it sits inside the 10-K), so its EPS is the fiscal year's diluted EPS
+   * minus Q1-Q3's, and this is that Q4's period end. See derivedQ4Eps.
+   */
+  derivedQ4?: string;
+  /** Only on "fiscal-year": the fiscal year it is, for the "P/E (FY2025)" label. */
+  fiscalYear?: number | null;
+  /**
+   * Only on "year-to-date" (#552 COWORK #33): the fiscal year's end and the
+   * year-to-date's length in months, for "fiscal year to X plus N months to Y,
+   * less the same N months a year earlier". See secInstanceEps.
+   */
+  ytd?: { yearEnd: string; months: number };
+  /** "basic" only for a filer that states no diluted EPS at all (BRK). Absent = diluted. */
+  kind?: "basic";
+  /** Set when `val` is per ADS, converted from per ordinary share by this cited ratio. */
+  adsRatio?: number;
+  /** The map row's kind, as on SharesBasis. */
+  adsKind?: "ads" | "ordinary";
+};
+
+export type ValuationInputs = {
+  shares: SharesBasis | null;
+  eps: EpsBasis | null;
+  /** Set when EPS was withheld as stale: the period end it would have used. */
+  staleEpsEnd?: string;
+  /** True when that period was a fiscal year (the wording names a year, not twelve months). */
+  staleEpsYear?: boolean;
+  /** Every refusal that applies, in the order they were decided. */
+  refusals: ValuationRefusal[];
+  /** Set when the ticker is notes, debentures or units on a shared CIK (secPrimaryListing). */
+  debtListing?: { cls: string; primary: string };
+  /**
+   * THE LATEST FULL YEAR, where twelve months of EPS are refused
+   * ("no-twelve-month-eps") and that year is not stale (#552 COWORK #98 §2).
+   * Never folded into `eps`: the P/E built on it is labelled "FY", so it can't
+   * be read as trailing (the NVDA defect, #552 COWORK #8). See fyPeRatio.
+   */
+  fyEps?: EpsBasis;
+  /** FilerFacts.sic, carried for the estimate layer's bank gate. Absent = unknown = no estimate. */
+  sic?: string | null;
+};
+
+/**
+ * FOUR CONSECUTIVE QUARTERS, ALL PRESENT, OR NOTHING.
+ *
+ * `ttm()` in secFactCodec already enforces "all four or null". It does NOT
+ * enforce CONSECUTIVE, because it walks the newest four entries of a list. For
+ * a filer with a hole in its quarterly series that is four real values spanning
+ * fifteen months, summed and presented as a year.
+ *
+ * This is the same rule plus the gap test, and it lives here rather than being
+ * pushed into `ttm()` because `ttm` is also used where the caller has already
+ * established the run — and widening it would silently shorten tables that are
+ * correct today.
+ */
+function fourConsecutiveQuarters(set: Pick<StoredFactSet, "quarters" | "years" | "cur">): EpsBasis | null {
+  const four = set.quarters.slice(0, 4);
+  if (four.length < 4) return null;
+  for (let i = 1; i < four.length; i++) {
+    if (!isConsecutive(four[i - 1], four[i])) return null;
+  }
+  let derivedQ4: string | undefined;
+  const vals = four.map((q) => {
+    const filed = valueOf(q, "epsDiluted");
+    if (filed !== null) return filed;
+    const d = derivedQ4Eps(set, q);
+    if (d !== null) derivedQ4 = q.e;
+    return d;
+  });
+  if (vals.some((v) => v === null)) return null;
+  return {
+    val: (vals as number[]).reduce((a, b) => a + b, 0),
+    basis: "four-quarters",
+    periodEnd: four[0].e,
+    ...(derivedQ4 ? { derivedQ4 } : {}),
+  };
+}
+
+/**
+ * HOW FAR A QUARTER'S DILUTED SHARE COUNT MAY SIT FROM ITS FISCAL YEAR'S before
+ * the year is treated as spanning a split, a reverse split or a share-class
+ * change. A year's weighted count is the average of its quarters', so an
+ * ordinary buyback or issuance moves a quarter a few percent from it; a 2:1
+ * split moves the pre-split quarters by half, and a 1:20 reverse split by 95%.
+ */
+export const Q4_SHARE_BASIS_TOLERANCE = 0.2;
+
+/**
+ * FISCAL Q4 DILUTED EPS, DERIVED: the fiscal year's diluted EPS minus Q1, Q2
+ * and Q3's (#552 COWORK #8, method (a)).
+ *
+ * WHY IT IS NEEDED. A 10-K reports the year, not its fourth quarter, so Q4 EPS
+ * is not on file for any 10-Q filer, and before this every such filer whose
+ * newest quarter was Q1-Q3 fell back to LAST fiscal year's EPS (NVDA 4.90 on
+ * a TTM of about 7.97). Q4 net income is already differenced the same way;
+ * EPS was left null because a per-share figure only subtracts cleanly when
+ * the share basis held still, so that is what is checked.
+ *
+ * REFUSED (null) unless ALL hold:
+ *   - the fiscal year row is the SAME fiscal year and ends on Q4's own end;
+ *   - Q1, Q2 and Q3 of that year are stored, consecutive, each with EPS;
+ *   - every quarter's diluted share count is within Q4_SHARE_BASIS_TOLERANCE
+ *     of the year's: a split or share-class change inside the year puts the
+ *     quarters and the year on different share bases, and the difference
+ *     would be an artefact of the split, not a quarter's earnings. A filer
+ *     that states NO diluted count for any of the four periods is compared on
+ *     its basic counts instead (XOM tags only basic since 2013: it has no
+ *     dilutive securities). The two kinds are never mixed, and the count is
+ *     only this test's input, never part of the EPS;
+ *   - the set is in USD as filed: a converted set carries each period at its
+ *     own rate, and a year minus three quarters would mix four rates.
+ */
+export function derivedQ4Eps(
+  set: Pick<StoredFactSet, "quarters" | "years" | "cur">,
+  q4: StoredPeriod,
+): number | null {
+  if (q4.fp !== "Q4" || q4.fy == null) return null;
+  if (set.cur && set.cur !== "USD") return null;
+  const year = set.years.find((y) => y.fy === q4.fy && y.e === q4.e);
+  if (!year) return null;
+  const yearEps = valueOf(year, "epsDiluted");
+  if (yearEps === null) return null;
+  const q = (fp: string) => set.quarters.find((p) => p.fy === q4.fy && p.fp === fp);
+  const q3 = q("Q3"), q2 = q("Q2"), q1 = q("Q1");
+  if (!q1 || !q2 || !q3) return null;
+  if (!isConsecutive(q4, q3) || !isConsecutive(q3, q2) || !isConsecutive(q2, q1)) return null;
+  const periods = [year, q1, q2, q3];
+  const shareKey = periods.every((p) => valueOf(p, "sharesDiluted") !== null) ? "sharesDiluted"
+    : periods.every((p) => valueOf(p, "sharesDiluted") === null && valueOf(p, "sharesBasic") !== null) ? "sharesBasic"
+      : null;
+  if (!shareKey) return null;
+  const yearShares = valueOf(year, shareKey) as number;
+  if (yearShares <= 0) return null;
+  let sum = 0;
+  for (const p of [q1, q2, q3]) {
+    const eps = valueOf(p, "epsDiluted");
+    const shares = valueOf(p, shareKey);
+    if (eps === null || shares === null) return null;
+    if (Math.abs(shares / yearShares - 1) > Q4_SHARE_BASIS_TOLERANCE) return null;
+    sum += eps;
+  }
+  return yearEps - sum;
+}
+
+/**
+ * THE NEWEST FISCAL YEAR'S DILUTED EPS.
+ *
+ * Admitted as a second basis because an annual-only filer — RYAAY and ABEV
+ * among them — has no quarters to sum and a fiscal year IS twelve months. It
+ * is not a fallback for a filer whose quarters merely failed the test above:
+ * quarters are preferred when they qualify because they are newer, and when
+ * they do not qualify the year is used because it is whole, not because it is
+ * close enough.
+ */
+function newestFiscalYear(years: StoredPeriod[]): EpsBasis | null {
+  const y = years[0];
+  if (!y) return null;
+  const val = valueOf(y, "epsDiluted");
+  if (val === null) return null;
+  return { val, basis: "fiscal-year", periodEnd: y.e, fiscalYear: y.fy };
+}
+
+/**
+ * TWELVE MONTHS OF DILUTED EPS for a stored set, or null. The rule is stated
+ * above valuationInputs' call; it is its own function because the READERS ask
+ * the same question before paying for the filing read (secInstanceEps), and
+ * two copies of it would drift.
+ *
+ * LAST, THE FILINGS' OWN FIGURE (#552 COWORK #33): fiscal year + year-to-date
+ * - the prior year-to-date, read from the 10-K and 10-Q XBRL, where the set's
+ * quarters and year cannot give twelve months. Only when it runs to the
+ * newest stored quarter or later: an older one is not trailing.
+ */
+export function ttmEpsFromSet(
+  set: Pick<StoredFactSet, "quarters" | "years" | "cur" | "te">,
+  filer: FilerFacts,
+  today: string,
+): EpsBasis | null {
+  const annualOnly = annualOnlyForm(filer.annualForm, set, today) !== null;
+  const newestQuarter = set.quarters[0]?.e ?? null;
+  const year = newestFiscalYear(set.years);
+  if (annualOnly) return year;
+  const fromSet = fourConsecutiveQuarters(set) ??
+    (year && (newestQuarter === null || year.periodEnd >= newestQuarter) ? year : null);
+  if (fromSet) return fromSet;
+  const te = set.te;
+  if (!te || (set.cur && set.cur !== "USD") || (newestQuarter !== null && te.periodEnd < newestQuarter)) return null;
+  return {
+    val: te.val,
+    basis: "year-to-date",
+    periodEnd: te.periodEnd,
+    ytd: { yearEnd: te.yearEnd, months: Math.round(te.ytdDays / 30.4) },
+    ...(te.kind === "basic" ? { kind: "basic" as const } : {}),
+  };
+}
+
+/**
+ * What the two valuation figures can be built from, for this stored set.
+ *
+ * THE TWO LEGS ARE INDEPENDENT. A filer can have an unusable share count and a
+ * perfectly good EPS, and suppressing the P/E because the market cap failed
+ * would be hiding a figure that is on file. Each is decided on its own inputs
+ * and each carries its own refusal.
+ */
+// ─────────────────────────────────────────────────────────────────────────────
+// FOREIGN PRIVATE ISSUERS: THE SHARE COUNT AND THE PRICE ARE IN DIFFERENT UNITS
+//
+// A foreign private issuer files its cover-page share count in ORDINARY SHARES,
+// because that is what it has issued. What trades on a US exchange -- and what
+// every price on this site is a price OF -- is an AMERICAN DEPOSITARY SHARE,
+// which represents some ratio of those ordinary shares. The ratio is set by the
+// depositary bank and is not in the filing.
+//
+//   TSM: 1 ADS = 5 ordinary shares.
+//
+// So `shares x price` multiplies a count of one instrument by the price of a
+// different one. For TSM that overstates the market cap FIVE TIMES OVER. The
+// number is not noisy or slightly stale -- it is a category error, and it lands
+// in the plausible range, which is what makes it dangerous. A reader cannot
+// see that it is wrong; it looks exactly like a market cap.
+//
+// WHY A LIST AND NOT A DETECTOR. There is no field in companyfacts that says
+// "this is an ADS" and none that carries the ratio. The honest options were a
+// named list or a wrong number, and a wrong number is not an option. The list
+// is the five FPIs in the analysis universe, checked by hand against their
+// filings. It is deliberately conservative: a name absent from it gets a cap
+// computed the ordinary way, which is correct for a domestic filer.
+//
+// WHEN TO EXTEND IT. Any 20-F filer admitted to the universe belongs here.
+// `data/static-profile.json` is not a source for this -- the flaw is in the
+// UNIT, not in any figure, so a profile field could not express it.
+//
+// THE COMPANIES STAY IN EVERY LIST THEY BELONG TO. This suppresses a FIGURE,
+// not a company. TSM and BABA are among the largest listed companies on earth
+// and dropping them from a page because one column cannot be computed would be
+// a far bigger lie than the column's absence.
+const ADS_FILERS_WITHOUT_A_STATED_RATIO = new Set([
+  "HDB",  // HDFC Bank
+  "IBN",  // ICICI Bank
+  "TSM",  // Taiwan Semiconductor -- 1 ADS = 5 ordinary
+  "BABA", // Alibaba
+  "ASML", // ASML Holding
+]);
+
+/**
+ * Whether this filer's cover-page share count is denominated in a different
+ * instrument from the price this site quotes. Exported so the check suite can
+ * assert the membership rather than re-declaring it.
+ */
+export function sharesAreIncomparableToPrice(symbol: string): boolean {
+  return ADS_FILERS_WITHOUT_A_STATED_RATIO.has(String(symbol).trim().toUpperCase());
+}
+
+/**
+ * WHAT THE REGISTRANT FILES ANNUALLY, from data/sec/registrants.json.
+ *
+ * ── THE LIST ABOVE WAS FIVE NAMES; THE RULE IT STATES COVERS 342 ─────────
+ * "Any 20-F filer admitted to the universe belongs here" was a rule nobody
+ * could apply, because nothing recorded who files a 20-F. The sec-registrants
+ * run (2026-09-22) does: 342 of 2,609 profiled symbols. ABVX and AZN were not
+ * on the list — AZN's ADS is half an ordinary share, so its cap was HALF the
+ * true figure and its P/E twice it (brief 2026-09-22 §2.6).
+ *
+ * NOT DETECTED FROM THE SECURITY NAME. Measured against the Nasdaq Trader
+ * names: TSM (1 ADS = 5 shares) is listed with no instrument word at all, and
+ * HDB, IBN and NVS as "Common Stock". A name test would have passed all four.
+ *
+ * Optional, so every existing caller reads exactly as before; absent means
+ * "not known", and only the named list then applies.
+ */
+export type FilerFacts = {
+  annualForm?: string | null;
+  /**
+   * THE CITED ADS RATIO (#552 COWORK #22 §1), from data/sec/ads-ratios.json
+   * via secAdsMap.adsRatioFor — passed in, so this module stays free of JSON
+   * imports. Present only where the filer's own 20-F or F-6 states it; absent
+   * keeps the depositary-share refusal exactly as before. Never defaulted.
+   */
+  ads?: { ordinaryPerAds: number; source: string; kind?: "ads" | "ordinary" } | null;
+  /**
+   * A DEBT TICKER on a shared CIK (#552 COWORK #48, secPrimaryListing): BIPI is
+   * Brookfield Infrastructure's "5.125% Perpetual Subordinated Notes". The
+   * filer's figures are the equity's, so a cap or P/E under a note's ticker is
+   * refused, naming the class and the equity's own listing. Passed in, like `ads`.
+   */
+  nonEquity?: { cls: string; primary: string } | null;
+  /**
+   * A COVER COUNT CITED FROM THE FILER'S OWN LATEST 20-F COVER
+   * (secPrimaryListing.citedCoverFor, #552 COWORK #56): used instead of the
+   * stored dei count only when it is NEWER. BIP's dei count is as of 2020.
+   */
+  citedCover?: { val: number; asOf: string; source: string } | null;
+  /** The registrant's SIC (data/sec/registrants.json), for the estimate layer's bank gate (secEstimates). */
+  sic?: string | null;
+};
+
+/** How far the filer's own EPS identity may sit from 1 or from the ratio. */
+export const ADS_EPS_UNIT_TOLERANCE = 0.03;
+
+/**
+ * WHICH UNIT THE FILED EPS IS IN, from the filer's own arithmetic on one
+ * period: epsDiluted x sharesDiluted / netIncome is ~1 when EPS is per
+ * ordinary share (the diluted count is of ordinary shares) and ~ratio when it
+ * is per ADS. Measured this way before (scripts/ads-eps-unit-probe.mjs: HDB,
+ * TSM, BABA, ASML all ~1). Anything else is refused, never guessed.
+ */
+export function epsUnitOf(p: StoredPeriod | null | undefined, ordinaryPerAds: number): "ordinary" | "ads" | null {
+  const eps = valueOf(p, "epsDiluted"), sh = valueOf(p, "sharesDiluted"), ni = valueOf(p, "netIncome");
+  if (eps === null || sh === null || ni === null || ni === 0 || sh <= 0) return null;
+  const u = (eps * sh) / ni;
+  if (Math.abs(u - 1) <= ADS_EPS_UNIT_TOLERANCE) return "ordinary";
+  if (ordinaryPerAds !== 1 && Math.abs(u / ordinaryPerAds - 1) <= ADS_EPS_UNIT_TOLERANCE) return "ads";
+  return null;
+}
+
+export function valuationInputs(
+  set: StoredFactSet,
+  today: string,
+  filer: FilerFacts = {}
+): ValuationInputs {
+  // TTM EPS ON TODAY'S SHARE BASIS (#552 COWORK #187 §1): a trailing year that
+  // straddles a proven split would otherwise add pre- and post-split quarters.
+  set = splitAdjusted(set);
+  const refusals: ValuationRefusal[] = [];
+  // A NOTE'S TICKER HAS NO SHARE COUNT OR EPS OF ITS OWN: refused outright.
+  if (filer.nonEquity) {
+    return { shares: null, eps: null, refusals: ["ticker-is-a-debt-security"],
+      debtListing: filer.nonEquity };
+  }
+
+  // BEFORE THE COVER PAGE IS EVEN READ. This is a fact about the UNIT the
+  // count is in, so it holds whatever the cover page turns out to say -- a
+  // perfectly clean, unambiguous, single-class ordinary-share count is exactly
+  // the case this refusal exists for.
+  const ads = filer.ads && Number.isFinite(filer.ads.ordinaryPerAds) && filer.ads.ordinaryPerAds > 0 ? filer.ads : null;
+  if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {
+    // TWO REFUSALS, NOT ONE, because they are two different claims about two
+    // different figures and only one of them was ever assumed. The share-count
+    // one is true by definition: a cover-page count is a count of ordinary
+    // shares. The EPS one is a fact about what the filer CHOSE to state, and it
+    // was measured rather than inferred from the first -- see the note above
+    // ADS_FILERS_WITHOUT_A_STATED_RATIO. Collapsing them into one refusal would
+    // make a measured finding look like a restatement of a definition.
+    refusals.push("ads-ratio-makes-shares-incomparable");
+    refusals.push("ads-ratio-makes-eps-incomparable");
+  }
+
+  let shares: SharesBasis | null = null;
+  // THE NEWER OF THE STORED dei COUNT AND A CITED 20-F COVER COUNT. Never the
+  // older: a cited count as of 2025 beats a dei count as of 2020, and a dei
+  // count filed after the cited one keeps its place. A multi-class set
+  // (candidates) is left to its own refusal below.
+  const cited = filer.citedCover && filer.citedCover.val > 0 ? filer.citedCover : null;
+  const cover = cited && !set.cover?.candidates?.length && (!set.cover?.asOf || cited.asOf > set.cover.asOf)
+    ? { ...set.cover, val: cited.val, asOf: cited.asOf }
+    : set.cover;
+  if (cover?.candidates?.length) {
+    // THE EXTRACTOR ALREADY REFUSED TO PICK. Picking here would route around
+    // that decision from the other end of the pipeline.
+    refusals.push("multi-class-share-count-is-ambiguous");
+  } else if (typeof cover?.val === "number" && cover.val > 0 && cover.asOf) {
+    // AGE IS CHECKED AFTER THE VALUE IS KNOWN GOOD, so a stale row is refused
+    // for BEING STALE rather than folded into "no cover share count". The two
+    // are different facts about the filer -- one has never stated a count, the
+    // other stated one and stopped -- and a reader sent to EDGAR by the wrong
+    // one of those goes looking for something that is there.
+    if (coverIsCurrent(cover.asOf, today)) {
+      shares = { val: cover.val, asOf: cover.asOf };
+    } else {
+      refusals.push("share-count-is-stale");
+    }
+  } else {
+    refusals.push("no-cover-share-count");
+  }
+
+  // ANNUAL-ONLY FILERS (#548's rule, imported, not copied) keep the fiscal
+  // year: their quarters live in 6-K releases outside the structured data, and
+  // no Q4 is derived or TTM built from IFRS partials (#552 COWORK #9).
+  //
+  // QUARTERLY FILERS get four quarters, Q4 derived where it is not on file.
+  // The fiscal year is their basis only when it IS their latest twelve months
+  // (the newest stored quarter is its Q4, or none is stored): a year older
+  // than their newest quarter is not "trailing", and falling back to it is
+  // the NVDA defect (#552 COWORK #8) -- refused instead.
+  let eps = ttmEpsFromSet(set, filer, today);
+  if (!eps) refusals.push("no-twelve-month-eps");
+
+  // ── A STALE EPS YEAR IS NOT A TRAILING P/E (#552 COWORK #45, every filer) ──
+  // TSM's newest year on file ended 2024-12-31: dividing today's price by it
+  // printed 66.5x beside a "TTM"-sounding label. Past EPS_MAX_AGE_MONTHS from
+  // the period end to today (the price date: a stale price is refused on its
+  // own, see priceIsCurrent), the figure is withheld and the date is said.
+  let staleEpsEnd: string | undefined;
+  let staleEpsYear = false;
+  if (eps && epsIsStale(eps.periodEnd, today)) {
+    staleEpsEnd = eps.periodEnd;
+    staleEpsYear = eps.basis === "fiscal-year";
+    eps = null;
+    refusals.push("eps-period-is-stale");
+  }
+
+  // ── A CITED ADS RATIO: EVERYTHING IN THE PRICE'S UNIT (#552 COWORK #22 §1) ──
+  // The spec is "ordinary-share price = ADS price / ratio, against the
+  // per-ordinary figures". Every caller multiplies or divides by the quoted
+  // ADS price, so the same arithmetic is done once here instead: the share
+  // count becomes ADS-equivalents (ordinary / ratio), so cap = ADS price x
+  // that = (ADS price / ratio) x ordinary; and EPS becomes per ADS (x ratio,
+  // only when the filer's own identity says it is per ordinary share), so
+  // P/E = ADS price / EPS per ADS = (ADS price / ratio) / EPS per ordinary.
+  if (ads) {
+    // ── NOT ACROSS A SPLIT, BONUS ISSUE OR RATIO CHANGE (COWORK #45 §3) ──
+    // The EPS period's own diluted share count against today's cover count,
+    // both ORDINARY shares: more than SHARE_BASIS_MAX_MOVE apart and the
+    // per-share bases differ, so the P/E is refused rather than computed.
+    //
+    // ── AND THE MARKET CAP WITH IT (#552 COWORK #49 §1) ─────────────────────
+    // BABA published a $25.73B cap beside a P/E refused on exactly this
+    // ground: 1,858,037,427 ÷ 8 is about a tenth of its real ADS-equivalents.
+    // A count that fails the basis test is not a count to multiply by a price
+    // either, so both figures are withheld with the one reason. The test runs
+    // whether or not an EPS survived: with none (stale, TSM), the newest
+    // period that states diluted shares is the comparison.
+    if (shares) {
+      const all = [...set.quarters, ...set.years];
+      const basisEnd = eps?.periodEnd ??
+        all.filter((x) => valueOf(x, "sharesDiluted") !== null).map((x) => x.e).sort().at(-1) ?? null;
+      const p = basisEnd ? all.find((x) => x.e === basisEnd) ?? null : null;
+      const dil = valueOf(p, "sharesDiluted");
+      if (dil !== null && dil > 0 && Math.abs(shares.val / dil - 1) > SHARE_BASIS_MAX_MOVE) {
+        eps = null;
+        shares = null;
+        refusals.push("share-basis-changed");
+      }
+    }
+    const adsKind = ads.kind ?? "ads";
+    if (shares) shares = { ...shares, val: shares.val / ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds, adsKind };
+    if (eps) {
+      const periodEnd = eps.periodEnd;
+      const unitPeriod = [...set.quarters, ...set.years].find((p) => p.e === periodEnd) ?? null;
+      const unit = epsUnitOf(unitPeriod, ads.ordinaryPerAds);
+      if (unit === "ordinary") eps = { ...eps, val: eps.val * ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds, adsKind };
+      else if (unit === "ads") eps = { ...eps, adsRatio: ads.ordinaryPerAds, adsKind };
+      else { eps = null; refusals.push("ads-ratio-makes-eps-incomparable"); }
+    }
+  }
+
+  // THE FY FALLBACK (#552 COWORK #98 §2): only for a plain "not on file",
+  // never across a stale year, an ADS unit or a share-basis change.
+  const fyYear = !ads && refusals.length === 1 && refusals[0] === "no-twelve-month-eps" ? newestFiscalYear(set.years) : null;
+  const fyEps = fyYear && !epsIsStale(fyYear.periodEnd, today) ? fyYear : null;
+
+  return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}), ...(fyEps ? { fyEps } : {}), ...(filer.sic ? { sic: filer.sic } : {}) };
+}
+
+/** The P/E label on the FY fallback: "P/E (FY2025)" (#552 COWORK #98 §2; one copy for every surface, #117). */
+export function fyPeLabel(eps: EpsBasis): string {
+  return eps.fiscalYear ? `P/E (FY${eps.fiscalYear})` : "P/E (FY)";
+}
+
+/** The note under or behind an FY-basis P/E. */
+export function fyPeNote(eps: EpsBasis): string {
+  return `Twelve months of diluted EPS aren't on file, so this P/E uses the latest full year (to ${readableDate(eps.periodEnd)}).`;
+}
+
+/**
+ * P/E ON THE LATEST FULL YEAR, where the trailing P/E is refused only because
+ * twelve months are not on file (#552 COWORK #98 §2). The same rules as
+ * peRatio (loss, near zero) on the year's EPS. Null when there is no such year.
+ */
+export function fyPeRatio(inputs: ValuationInputs, price: number | null): ValuationFigure | null {
+  if (!inputs.fyEps) return null;
+  return peRatio({ ...inputs, eps: inputs.fyEps, refusals: [] }, price);
+}
+
+/** Shown under a P/B computed on NCI-inclusive equity (#552 COWORK #54). */
+export const PB_INCL_NCI_NOTE = "Book value incl. noncontrolling interests (the only equity figure the filer tags)";
+
+/** Positive trailing EPS below this (in the price's unit, per share or per ADS) gives no P/E. */
+export const PE_MIN_EPS = 0.05;
+
+/**
+ * POSITIVE BOOK EQUITY BELOW THIS SHARE OF MARKET CAP GIVES NO P/B (#552
+ * COWORK #86b). GDDY printed 1,813x: tiny positive equity, so the division is
+ * right and the figure tells a reader nothing. The census (CODE-A #112, 577
+ * P/Bs shown): 1% refuses 8, all over 100x (buyback-shrunk or accumulated-
+ * deficit equity: CL, CLX, MTD, LYV, RBLX, AXSM, ONC, GDDY); 2% would reach
+ * MA, FTNT and CRWD, whose high P/B is still a figure. The words say "1%", so
+ * a change here changes REFUSAL_WORDS too (check-sec-valuation pins both).
+ */
+export const PB_MIN_EQUITY_SHARE = 0.01;
+
+/** A debt ticker's refusal, naming its class and the equity's listing (#552 COWORK #48). */
+export function debtRefusal(d: { cls: string; primary: string }): ValuationFigure {
+  return { ok: false, why: "ticker-is-a-debt-security",
+    detail: `this ticker is the issuer's ${d.cls}, not its common stock; the common stock trades as ${d.primary}, so equity multiples do not apply here` };
+}
+
+/** P/E is withheld when its EPS period ended more than this long before today. */
+export const EPS_MAX_AGE_MONTHS = 15;
+/** More than this relative move between the EPS period's diluted shares and today's cover count is a basis change. */
+export const SHARE_BASIS_MAX_MOVE = 0.2;
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function dayMonthYearOf(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${Number(m[3])} ${MONTH_ABBR[Number(m[2]) - 1]} ${m[1]}` : iso;
+}
+
+export function epsIsStale(periodEnd: string, today: string): boolean {
+  const end = new Date(`${periodEnd}T00:00:00Z`);
+  if (Number.isNaN(end.getTime())) return false;
+  const limit = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + EPS_MAX_AGE_MONTHS, end.getUTCDate());
+  return Date.parse(`${today}T00:00:00Z`) > limit;
+}
+
+// ── HOW THE BASIS IS WORDED (#552 COWORK #49 §2) ────────────────────────
+// A direct listing (map kind "ordinary", ratio 1) is ordinary shares traded
+// as they are: calling them "ADS-equivalent" or "per ADS (1 ordinary shares
+// each)" described a depositary that does not exist (ASML, AZN, SPOT).
+
+/** "each ADS = 1 ordinary share" / "each ADS = 5 ordinary shares". */
+export function adsEqualsWords(ordinaryPerAds: number): string {
+  return `each ADS = ${ordinaryPerAds} ordinary share${ordinaryPerAds === 1 ? "" : "s"}`;
+}
+
+/** The noun after the share count: "shares", or "ADS-equivalent shares (each ADS = 5 ordinary shares)". */
+export function sharesBasisWords(shares: Pick<SharesBasis, "adsRatio" | "adsKind">): string {
+  return shares.adsRatio && shares.adsKind !== "ordinary"
+    ? `ADS-equivalent shares (${adsEqualsWords(shares.adsRatio)})`
+    : "shares";
+}
+
+/** What follows "diluted EPS": "", " per share" (direct listing), " per ADS (each ADS = 5 ordinary shares)". */
+export function epsUnitWords(eps: Pick<EpsBasis, "adsRatio" | "adsKind">): string {
+  if (!eps.adsRatio) return "";
+  return eps.adsKind === "ordinary" ? " per share" : ` per ADS (${adsEqualsWords(eps.adsRatio)})`;
+}
+
+export type ValuationFigure =
+  /** `note`: what the figure is, where it is not the plain one (P/B on NCI-inclusive equity). */
+  | { ok: true; val: number; note?: string;
+      /** An estimated or derived figure (secEstimates): never rendered without its marker, note and key. */
+      est?: Estimate }
+  /** `detail`: the refusal in words with its own date, where one exists (stale EPS). */
+  | { ok: false; why: ValuationRefusal; detail?: string };
+
+/**
+ * MARKET CAP — shares x price, or a named refusal.
+ *
+ * `price` null is not a refusal REASON this module owns: the caller knows
+ * whether bars were unavailable, and inventing a share-count reason for a
+ * missing price would misattribute the gap.
+ */
+export function marketCap(
+  inputs: ValuationInputs,
+  price: number | null
+): ValuationFigure | null {
+  // FIRST, AND BEFORE THE SHARE COUNT IS CONSULTED. An ADS filer usually HAS a
+  // clean share count -- that is the trap. Ordering this after the `!shares`
+  // guard would let a well-behaved cover page produce a five-times-wrong cap.
+  //
+  // It is also the more specific answer when both apply: a multi-class ADS
+  // filer is refused for the unit mismatch, which is certain, rather than for
+  // the class ambiguity, which is merely also true.
+  if (inputs.debtListing) return debtRefusal(inputs.debtListing);
+  if (inputs.refusals.includes("ads-ratio-makes-shares-incomparable")) {
+    return { ok: false, why: "ads-ratio-makes-shares-incomparable" };
+  }
+  if (!inputs.shares) {
+    const why = inputs.refusals.find(
+      (r) =>
+        r === "multi-class-share-count-is-ambiguous" ||
+        r === "share-basis-changed" ||
+        r === "share-count-is-stale" ||
+        r === "no-cover-share-count"
+    );
+    return why ? { ok: false, why } : null;
+  }
+  if (price === null || !Number.isFinite(price) || price <= 0) return null;
+  return { ok: true, val: inputs.shares.val * price };
+}
+
+/**
+ * P/E — price divided by twelve months of diluted EPS, or a named refusal.
+ *
+ * ── MEASURED, AND THE ANSWER WAS NOT SYMMETRY (2026-09-21) ───────────────
+ * #489 left this OPEN rather than assuming the share-count rule extended to
+ * EPS. It does, and the measurement is the reason that is a fact here rather
+ * than a guess: relay run 35588547888 computed, from each filer's own
+ * arithmetic, `epsDiluted x sharesDiluted / netIncome` over every period where
+ * all three came from the SAME accession.
+ *
+ *   HDB   us-gaap     1.0000  over 47 periods   per ordinary share
+ *   TSM   ifrs-full   0.9999  over 11 periods   per ordinary share
+ *   BABA  us-gaap     0.9984  over 47 periods   per ordinary share
+ *   ASML  us-gaap     1.0002  over 51 periods   per ordinary share
+ *   IBN   --          no XBRL companyfacts at all (6-K and 20-F only)
+ *
+ * A ratio of 1 means EPS is in the same unit as the ordinary share count and a
+ * DIFFERENT unit from the ADS price, so the P/E is wrong by the ADS ratio --
+ * five times over for TSM, printed beside the cap that already refuses.
+ *
+ * TWO THINGS THE FIRST PROBE GOT WRONG AND SAID SO, worth keeping because both
+ * would have produced a confident wrong answer:
+ *   - It read `us-gaap` only, so TSM came back {0, 0, 0} -- not a filer missing
+ *     three tags but one with no us-gaap facts at all. It reported "cannot be
+ *     judged" instead of resolving three zeroes into a verdict. TSM reports
+ *     under `ifrs-full`, which secFields.ts already reads.
+ *   - IBN's 404 was ambiguous until submissions was asked too: the filer
+ *     exists and publishes NO XBRL, so nothing can be extracted for it at all.
+ *     Its suppression is therefore vacuous today and kept anyway, because the
+ *     rule should already be in place if it ever starts filing XBRL.
+ *
+ * A NON-POSITIVE EPS IS REFUSED RATHER THAN DIVIDED. A loss-making company has
+ * a negative P/E arithmetically and no P/E in any sense a reader uses the
+ * number for; printing -8.4 reads as a small positive multiple to anyone
+ * skimming. The page already has this convention for growth across zero —
+ * see PctCrossing in secEarningsView — and this is the same refusal.
+ */
+export function peRatio(
+  inputs: ValuationInputs,
+  price: number | null
+): ValuationFigure | null {
+  // FIRST, for the same reason the cap's guard is first: these filers usually
+  // HAVE a clean twelve months of EPS on file. The figure is present, well
+  // formed and in the wrong unit, so nothing downstream of `!inputs.eps` can
+  // catch it.
+  if (inputs.debtListing) return debtRefusal(inputs.debtListing);
+  if (inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {
+    return { ok: false, why: "ads-ratio-makes-eps-incomparable" };
+  }
+  if (inputs.refusals.includes("share-basis-changed")) return { ok: false, why: "share-basis-changed" };
+  if (inputs.refusals.includes("eps-period-is-stale")) {
+    return { ok: false, why: "eps-period-is-stale",
+      ...(inputs.staleEpsEnd ? { detail: `the latest ${inputs.staleEpsYear ? "fiscal year" : "twelve months"} on file ended ${dayMonthYearOf(inputs.staleEpsEnd)}` } : {}) };
+  }
+  if (!inputs.eps) {
+    return inputs.refusals.includes("no-twelve-month-eps")
+      ? { ok: false, why: "no-twelve-month-eps" }
+      : null;
+  }
+  if (inputs.eps.val <= 0) return { ok: false, why: "eps-is-zero-or-negative" };
+  // NEAR-ZERO EPS IS NOT A P/E (#552 COWORK #49): AXTI's $75.90 / $0.01 printed
+  // 7590.0, arithmetically true and falsely precise. Below the floor the figure
+  // is withheld with the EPS said. EPS-based, not "P/E above N": a very high
+  // P/E on real earnings is still a real figure.
+  if (inputs.eps.val > 0 && inputs.eps.val < PE_MIN_EPS) {
+    return { ok: false, why: "eps-near-zero", detail: `Not meaningful: trailing EPS is close to zero ($${inputs.eps.val.toFixed(2)})` };
+  }
+  if (price === null || !Number.isFinite(price) || price <= 0) return null;
+  return { ok: true, val: price / inputs.eps.val };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE FOUR MULTIPLES ON /stock/[symbol], FROM THE FILINGS
+//
+// The "Valuation multiples (TTM)" section and the hero P/E tile read
+// /api/stock-valuation, which called FMP's ratios-ttm, key-metrics-ttm, quote
+// and income-statement. Owner addendum to brief 2026-09-22 PR 2 moves them here:
+//
+//   P/E        peRatio() above — unchanged, so the earnings page and this one
+//              cannot disagree.
+//   P/S        market cap ÷ twelve months of revenue
+//   P/B        market cap ÷ the latest balance sheet's stockholders' equity
+//   EV/EBITDA  (cap + short-term debt + long-term debt − cash)
+//              ÷ twelve months of (operating income + D&A)
+//
+// THE PERIOD RULE IS EPS'S RULE: four CONSECUTIVE quarters with every input
+// present, else the newest fiscal year with every input present — never a mix.
+// A multiple whose inputs span two bases is a number describing no period.
+//
+// EV/EBITDA IS APPROXIMATED IN ONE TESTED CASE ONLY (#552 COWORK #112): an
+// untagged short-term debt line counts as zero, marked "≈" (secEstimates, M2,
+// back-tested). Any other missing debt or cash line, or a missing D&A, is a
+// refusal. EBITDA here is operating income plus D&A as filed — the
+// conventional construction, stated rather than implied.
+//
+// THE 20-F RULE APPLIES TO ALL FOUR. Every one of them divides a market cap or
+// a price by a filed per-share or company figure; for a depositary-share filer
+// the cap is in the wrong unit, so the cap's refusal carries through, and P/E
+// refuses on its own ADS rule.
+
+/** A twelve-month sum of several fields, from ONE basis. */
+export type TwelveMonths = {
+  vals: Record<string, number>;
+  basis: "four-quarters" | "fiscal-year";
+  periodEnd: string;
+};
+
+/** All of `keys` over four consecutive quarters, else the newest year, else null. */
+export function twelveMonthsOf(set: StoredFactSet, keys: string[]): TwelveMonths | null {
+  const four = set.quarters.slice(0, 4);
+  const consecutive =
+    four.length === 4 && four.every((q, i) => i === 0 || isConsecutive(four[i - 1], q));
+  if (consecutive) {
+    const vals: Record<string, number> = {};
+    let complete = true;
+    for (const k of keys) {
+      const parts = four.map((q) => valueOf(q, k));
+      if (parts.some((v) => v === null)) { complete = false; break; }
+      vals[k] = (parts as number[]).reduce((a, b) => a + b, 0);
+    }
+    if (complete) return { vals, basis: "four-quarters", periodEnd: four[0].e };
+  }
+  const y = set.years[0];
+  if (!y) return null;
+  const vals: Record<string, number> = {};
+  for (const k of keys) {
+    const v = valueOf(y, k);
+    if (v === null) return null;
+    vals[k] = v;
+  }
+  return { vals, basis: "fiscal-year", periodEnd: y.e };
+}
+
+/** The filed inputs the three new multiples need, read once from the set. */
+export type MultipleInputs = {
+  revenue: TwelveMonths | null;
+  /**
+   * TRUE when any period inside the revenue's twelve months fails
+   * revenueLineIncomplete — P/S is then refused by name, the same guard as the
+   * margins (#535 COWORK #8). Optional: absent reads as false.
+   */
+  revenueIncomplete?: boolean;
+  ebitda: TwelveMonths | null;
+  /** Which EBITDA inputs have no twelve months on file, when `ebitda` is null (#552 COWORK #54). */
+  ebitdaMissing?: string[];
+  balanceSheet: {
+    asOf: string;
+    equity: number | null;
+    /** `equity` is the NCI-inclusive total: no parent-only figure is tagged and no NCI is (#552 COWORK #54). */
+    equityIncludesNci?: boolean;
+    /** Only an NCI-inclusive total is tagged AND the filer reports a non-zero NCI: P/B refused by name. */
+    equityOnlyInclNci?: boolean;
+    /**
+     * Shareholders' equity DERIVED as total equity less the filed NCI
+     * (secEstimates, M6a), beside `equity`, which keeps today's figure or
+     * refusal. Used only by a caller that renders the "derived" mark.
+     */
+    derivedEquity?: { val: number; est: Estimate };
+    shortTermDebt: number | null;
+    longTermDebt: number | null;
+    cash: number | null;
+    /** Cash incl. restricted at the same date, for EV's B1 estimate only (secEstimates). */
+    cashIncludingRestricted?: number | null;
+  } | null;
+};
+
+/**
+ * BANKS WHOSE REVENUE LINE IS FEE INCOME ONLY (#552 COWORK #86b, ruled COWORK
+ * #92): ZION showed P/S 16.79. Measured from the R2 archive (CODE-A #113): for
+ * each Pickers filer with SIC 6000-6299 that showed a P/S, the concept that
+ * fills revenue in its newest annual period. These 8 fill it with ASC 606
+ * "revenue from contracts with customers" while also tagging interest income,
+ * so the line is fee income and the net interest income is missing -- a P/S on
+ * it overstates the multiple several-fold. (NTRS even tags a total Revenues,
+ * which the chain ranks after 606.) Their revenue is treated as incomplete,
+ * so P/S and Pickers' Revenue cell take the existing refusal. Asset managers
+ * and exchanges filing 606 with no interest income (BLK, TROW, ICE, NDAQ, BEN,
+ * JEF) and banks whose revenue comes from a total concept keep theirs.
+ * INTERIM, 3 Oct 2026: retire it when the bank-revenue chain (COWORK #81/#83)
+ * reads the total, and re-measure then.
+ */
+export const BANK_REVENUE_IS_FEES_ONLY: ReadonlySet<string> = new Set(["AXP", "CFG", "CFR", "COF", "KEY", "NTRS", "SOFI", "ZION"]);
+
+/**
+ * BOOK EQUITY FOR P/B (#552 COWORK #54, AVAV).
+ *
+ * Parent-only StockholdersEquity when tagged. Where it is not, the NCI-inclusive
+ * total, but only when the filer reports no noncontrolling interest: AVAV tags
+ * only the inclusive total ($4.40B) and no NCI, and P/B read "no shareholders'
+ * equity" beside an equity figure the earnings page shows.
+ *
+ * WHICH NCI: no balance-sheet NCI line is stored (adding a field would move
+ * secFieldsHash), so the test is the NCI the filer tags on the income statement
+ * for the period that closes at this balance-sheet date. Non-zero there, and
+ * the inclusive total is not shareholders' book value: refused by name.
+ */
+export function bookEquityAt(set: StoredFactSet, b: StoredPeriod): { equity: number | null; equityIncludesNci: boolean; equityOnlyInclNci: boolean; derivedEquity?: { val: number; est: Estimate } } {
+  const parent = valueOf(b, "stockholdersEquity");
+  if (parent !== null) return { equity: parent, equityIncludesNci: false, equityOnlyInclNci: false };
+  const total = valueOf(b, "totalEquity");
+  if (total === null) return { equity: null, equityIncludesNci: false, equityOnlyInclNci: false };
+  const closing = [...set.quarters, ...set.years].filter((p) => p.e === b.e);
+  const nciTagged = closing.some((p) => { const n = valueOf(p, "netIncomeToNoncontrollingInterest"); return n !== null && n !== 0; });
+  const today = nciTagged
+    ? { equity: null, equityIncludesNci: false, equityOnlyInclNci: true }
+    : { equity: total, equityIncludesNci: true, equityOnlyInclNci: false };
+  // THE FILED BALANCE-SHEET NCI, WHERE THE SET CARRIES IT (#552 COWORK #112,
+  // M6a): shareholders' equity is the total less it, marked "derived". Carried
+  // BESIDE today's answer, which stays as it was for every other caller. A
+  // zero NCI derives nothing new.
+  const derived = derivedParentEquity(total, set.nci, b.e);
+  return derived && derived.equity !== total
+    ? { ...today, derivedEquity: { val: derived.equity, est: derived.est } }
+    : today;
+}
+
+export function multipleInputs(set: StoredFactSet): MultipleInputs {
+  const b = balanceSheetInstant(set);
+  const revenue = twelveMonthsOf(set, ["revenue"]);
+  const periods = revenue?.basis === "four-quarters" ? set.quarters.slice(0, 4) : set.years.slice(0, 1);
+  return {
+    revenue,
+    revenueIncomplete: Boolean(revenue && (periods.some((p) => revenueLineIncomplete(p)) || BANK_REVENUE_IS_FEES_ONLY.has(set.symbol))),
+    ebitda: twelveMonthsOf(set, ["operatingIncome", "depreciationAndAmortization"]),
+    ebitdaMissing: [
+      ...(twelveMonthsOf(set, ["operatingIncome"]) ? [] : ["operating income"]),
+      ...(twelveMonthsOf(set, ["depreciationAndAmortization"]) ? [] : ["depreciation & amortization"]),
+    ],
+    balanceSheet: b
+      ? {
+          asOf: b.e,
+          ...bookEquityAt(set, b),
+          shortTermDebt: valueOf(b, "shortTermDebt"),
+          longTermDebt: valueOf(b, "longTermDebt"),
+          cash: valueOf(b, "cash"),
+          // THE SAME INSTANT `b`, never another date (#552 COWORK #162 §3).
+          cashIncludingRestricted: valueOf(b, "cashIncludingRestricted"),
+        }
+      : null,
+  };
+}
+
+export type ValuationMultiples = {
+  pe: ValuationFigure | null;
+  ps: ValuationFigure | null;
+  pb: ValuationFigure | null;
+  evEbitda: ValuationFigure | null;
+};
+
+/**
+ * All four, or each one's refusal. `null` for a figure means the PRICE was
+ * missing — not this module's reason to name (see marketCap).
+ */
+export function valuationMultiples(
+  inputs: ValuationInputs,
+  m: MultipleInputs,
+  price: number | null,
+  /**
+   * OPT-IN, PER SURFACE (#552 COWORK #94): an estimated or derived figure may
+   * only render with its mark, note and key (app/components/EstimatedValue).
+   * A caller that does not render them yet gets today's refusals instead, so a
+   * surface can never show an estimate unmarked between two PRs.
+   */
+  opts: { withEstimates?: boolean } = {}
+): ValuationMultiples {
+  const cap = marketCap(inputs, price);
+  const pe = peRatio(inputs, price);
+  if (!cap || !cap.ok) {
+    // THE CAP'S REFUSAL IS EACH MULTIPLE'S REFUSAL — including the ADS one —
+    // because every one of them has the cap as its numerator.
+    const same = cap ?? null;
+    return { pe, ps: same, pb: same, evEbitda: same };
+  }
+
+  const ps: ValuationFigure = m.revenueIncomplete
+    ? { ok: false, why: "revenue-line-incomplete" }
+    : m.revenue && m.revenue.vals.revenue > 0
+      ? { ok: true, val: cap.val / m.revenue.vals.revenue }
+      : { ok: false, why: "no-twelve-month-revenue" };
+
+  // THE DERIVED EQUITY ONLY FOR A CALLER THAT MARKS IT; a non-positive derived
+  // figure is refused exactly like a filed one ("Neg."), so the two never
+  // disagree about what a cell shows.
+  const derivedEq = opts.withEstimates ? m.balanceSheet?.derivedEquity ?? null : null;
+  const equity = derivedEq ? derivedEq.val : m.balanceSheet?.equity ?? null;
+  const pb: ValuationFigure =
+    equity === null
+      ? { ok: false, why: m.balanceSheet?.equityOnlyInclNci ? "equity-tagged-only-incl-nci" : "no-balance-sheet-equity" }
+      : equity <= 0
+        ? { ok: false, why: "equity-is-zero-or-negative" }
+        // THE 1% FLOOR (#691) APPLIES TO WHICHEVER EQUITY WAS CHOSEN, the
+        // derived one included (#552 COWORK #113).
+        : equity < cap.val * PB_MIN_EQUITY_SHARE
+          ? { ok: false, why: "equity-too-small-for-pb" }
+          : { ok: true, val: cap.val / equity,
+            ...(!derivedEq && m.balanceSheet?.equityIncludesNci ? { note: PB_INCL_NCI_NOTE } : {}),
+            ...(derivedEq ? { est: derivedEq.est } : {}) };
+
+  const bs = m.balanceSheet;
+  let evEbitda: ValuationFigure;
+  // NAME WHAT IS MISSING (#552 COWORK #54), and a known non-positive EBITDA is
+  // "not meaningful" before it is "not on file": EV cannot rescue it.
+  // EV FROM THE ONE LAYER (secEstimates): filed, or the M2 estimate when only
+  // short-term debt is untagged; any other missing line is still refused.
+  const evAny = enterpriseValueOf(cap.val, bs, inputs.sic);
+  const ev = evAny.val !== null && evAny.est && !opts.withEstimates
+    ? { val: null, missing: evAny.missing ?? ["short-term debt"] }
+    : evAny;
+  const missing = [
+    ...(ev.val === null ? ev.missing : []),
+    ...(m.ebitda ? [] : (m.ebitdaMissing?.length ? m.ebitdaMissing : ["twelve months of EBITDA"]).map((x) => `${x} (twelve months)`)),
+  ];
+  const knownEbitda = m.ebitda ? m.ebitda.vals.operatingIncome + m.ebitda.vals.depreciationAndAmortization : null;
+  if (knownEbitda !== null && knownEbitda <= 0) {
+    evEbitda = { ok: false, why: "ebitda-is-zero-or-negative" };
+  } else if (ev.val === null || knownEbitda === null) {
+    evEbitda = { ok: false, why: "enterprise-value-input-missing",
+      detail: `not on file: ${missing.join(", ")}` };
+  } else {
+    evEbitda = { ok: true, val: ev.val / knownEbitda, ...(evAny.val !== null && evAny.est ? { est: evAny.est } : {}) };
+  }
+  return { pe, ps, pb, evEbitda };
+}

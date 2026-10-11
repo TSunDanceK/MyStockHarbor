@@ -1,0 +1,101 @@
+// Daily: the picker pages' SEC fundamentals (lib/server/pickersSecFundamentals.ts).
+//
+// 05:35 UTC, after sec-facts' 04:20 refresh of the fact sets it reads and clear
+// of the other SEC jobs (04:00 / 04:20 / 04:40 / 05:10). It makes NO upstream
+// call -- it reads the stored fact sets and writes one Redis hash -- so it does
+// not need FMP_API_KEY and keeps working when that key is gone.
+//
+// COST: ~2,630 Redis commands a run (one GET per symbol over ~2,600 symbols,
+// one HSET per 100, one EXPIRE, +1 GET for the universe), hard-capped by
+// MAX_SYMBOLS_PER_RUN; the first write error stops it.
+import { NextRequest, NextResponse } from "next/server";
+import { recordJobRun } from "../../../../lib/server/jobRuns";
+import { guardCommandsLeft, guardJob } from "../../../../lib/server/jobGuard";
+import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
+import { readTiingoUniverseSymbols } from "../../../../lib/server/tiingoUniverse";
+import { warmPickersSec } from "../../../../lib/server/pickersSecFundamentals";
+import { registrantFor } from "../../../../lib/server/stockProfile";
+import { adsRatioFor } from "../../../../lib/server/secAdsMap";
+import { citedCoverFor, nonEquityListingOf } from "../../../../lib/server/secPrimaryListing";
+import { admittedForSec } from "../../../../lib/server/secSeedGate";
+import { cikForSymbol } from "../../../../lib/server/secColdFetch";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+function isAuthorized(req: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return true;
+  const auth = req.headers.get("authorization") || "";
+  return auth === `Bearer ${secret}`;
+}
+
+async function handleGET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
+
+  try {
+    const { symbols: warm } = await getWarmTargetSymbols(base);
+    // PLUS THE TIINGO UNIVERSE (#553 COWORK #110, 2026-10-03): the pool overlay
+    // (earnings calendar, sector weights) caps a row from this hash only, so it
+    // must hold every symbol the overlay prices. Warm targets first, so the run
+    // cap can never drop a Pickers symbol. +1 GET for the universe key.
+    const universe = [...new Set([...warm, ...(await readTiingoUniverseSymbols())])];
+    // THE SEC SEED GATE (#552 COWORK #148): a preferred, warrant, note or ETF
+    // gets no SEC picker row, even where a set is stored under its ticker from
+    // before the gate (it would carry the PARENT's figures). Dropped before any
+    // read, so its old row is pruned like any symbol that left the universe.
+    // Committed files only: no Redis cost.
+    const gate = admittedForSec(universe, cikForSymbol);
+    const symbols = gate.admitted;
+    // The cited ADS ratio (#553 COWORK #44), as the stock and earnings pages
+    // pass it: absent keeps the depositary-share refusal. A committed file, so
+    // no Redis cost. And A's non-common listings (#553 COWORK #67): a note,
+    // preferred or unit ticker on a common filer's CIK (SOMN, CCZ, STRK...) is
+    // refused a cap and P/E, naming the common stock, as on the stock page.
+    const result = await warmPickersSec(symbols, (s) => ({
+      annualForm: registrantFor(s)?.annualForm ?? null,
+      ads: adsRatioFor(s),
+      nonEquity: nonEquityListingOf(s),
+      // The filer's SIC for A's bank gate on the ≈ Ent. Value (#553 COWORK
+      // #102), as the earnings snapshot passes it. A committed file, no Redis cost.
+      sic: registrantFor(s)?.sic ?? null,
+      // A's cited 20-F / 40-F cover counts (#552 COWORK #86b, #92 Q2), as the
+      // stock and earnings pages pass them; used only when newer than dei.
+      citedCover: citedCoverFor(s),
+    }), Date.now(), undefined, {
+      // Stop short of the job guard's ceiling, so a stop still flushes, sets
+      // the EXPIRE and logs stoppedEarly: "command-budget" (#553 COWORK #124).
+      commandsLeft: guardCommandsLeft,
+    });
+    // durationMs (#553 COWORK #113/#114): the run's own time, beside its
+    // stoppedEarly ("time-budget" when WARM_PICKERS_SEC_BUDGET_MS ran out).
+    console.log("[warm-pickers-sec]", `durationMs=${result.durationMs ?? null}`, JSON.stringify(result));
+    const gateRefused = Object.fromEntries(Object.entries(gate.refused).map(([why, syms]) => [why, syms.length]));
+    console.log("[warm-pickers-sec] seed gate refused", JSON.stringify(gateRefused));
+    await recordJobRun("warm-pickers-sec", result.ok, {
+      durationMs: result.durationMs ?? null,
+      targets: result.symbols,
+      written: result.written,
+      noFactSet: result.noFactSet,
+      gateRefused: JSON.stringify(gateRefused),
+      stoppedEarly: result.stoppedEarly,
+      commands: result.commands,
+      pruned: result.pruned ?? null,
+      pruneSkipped: result.pruneSkipped ?? null,
+    });
+    return NextResponse.json(result, { status: result.ok ? 200 : 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await recordJobRun("warm-pickers-sec", false, { error: message.slice(0, 200) });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}
+
+// RUNAWAY-COST GUARD (#553 COWORK #51 item 3): kill switch, daily circuit
+// breaker, per-run command budget, stop on Redis errors. See lib/server/jobGuard.ts.
+export const GET = guardJob("warm-pickers-sec", handleGET);
