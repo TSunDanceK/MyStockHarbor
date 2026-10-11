@@ -69,6 +69,41 @@ const config: PickerResultConfig = {
   kind: "buySignals",
   presetFilters: ["hasBuySignal"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "A count of rule conditions, not a recommendation",
+      paragraphs: [
+        "Despite the name, Top Stocks With Buy Signals is a tally. Each stock is checked against a fixed set of technical conditions, and the page lists those that meet enough of them. Nothing here is advice, and a high count is not a judgment on the stock’s merits.",
+        "The count starts with one gate: if the latest daily close is not above the 200-day simple moving average, the score is zero and the stock is not listed. Above that line, the tracked conditions are: above the 200-day average, oversold, down 20% from its high, a breakout, a volume spike of at least 1.8 times the 20-day average, an ATR spike (an unusually wide daily range measured against ATR(14)), above the 50-day average, a bullish RSI divergence and a bullish MACD divergence. A stock needs at least three, which means the 200-day condition plus at least two others.",
+      ],
+    },
+    {
+      heading: "Reading the counts",
+      paragraphs: [
+        "Rows are ordered by the number of conditions met, then A–Z. It may help to look at which conditions make up a count, not just its size, because they can point in different directions: being oversold and breaking out describe very different charts, yet each adds one to the total.",
+        "Some conditions also overlap. A stock above its 50-day and 200-day averages scores two points from what is largely one uptrend, so a count of four is not necessarily four independent pieces of evidence.",
+      ],
+    },
+    {
+      heading: "What the tally leaves out",
+      paragraphs: [
+        "Every condition is built from end-of-day prices, and the newest bar is the previous session’s close. The tally knows nothing about valuation, earnings or news, and the page rebuilds hourly, so it can trail fast-moving stocks. Counts can rise and fall from one session to the next as individual conditions switch on and off.",
+      ],
+    },
+    {
+      heading: "One row, counted out",
+      paragraphs: [
+        "Take a hypothetical stock closing 3% above its 200-day average and 2% above its 50-day average, with the day’s volume at 2.1 times its 20-day average. That makes three conditions: above the 200-day, above the 50-day, and a volume spike. It is listed with a count of three. Had volume been 1.7 times the average, the count would fall to two and the stock would drop off, which shows how one threshold can decide membership.",
+        "The 200-day gate also hides some combinations entirely. A stock 1% under its 200-day line with an oversold reading, a bullish RSI divergence and a volume spike scores zero here, however many other conditions it meets. Top Stocks With Sell Signals is a separate tally built from different conditions rather than a mirror image, so a stock can appear on both pages or on neither, and the two are not meant to be read as opposites.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/top-stocks-with-sell-signals", label: "Top Stocks With Sell Signals (rule count)" },
+    { href: "/breakout-signal-stocks", label: "Breakout signal stocks" },
+    { href: "/bullish-rsi-divergence-stocks", label: "Bullish RSI divergence stocks" },
+    { href: "/stocks-trading-above-200-day-moving-average", label: "Stocks above the 200-day moving average" },
+  ],
 };
 
 export default function Page() {

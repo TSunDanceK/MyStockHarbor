@@ -370,6 +370,19 @@ export default async function EarningsCalendarPage({
           </div>
 
           <section className="earnCalIntroCard">
+            {/* THE HERO IMAGE (#552 COWORK #202 item 1): the insight heroes'
+                treatment (image + dark shade), mirrored here because
+                InsightPage.tsx keeps its styles inline and is not A's. Its own
+                clipped layer, NOT overflow:hidden on the card, so the ticker
+                search's dropdown is never cut off. Library art from the news
+                set (any-earnings-02, the hourglass); decorative, so alt="". */}
+            <div className="earnCalHero" aria-hidden="true">
+              {/* eslint-disable-next-line @next/next/no-img-element -- as the insight hero: a static library file with its own srcSet */}
+              <img className="earnCalHeroImg" src="/news-art/any-earnings-02.webp"
+                srcSet="/news-art/any-earnings-02-sm.webp 320w, /news-art/any-earnings-02.webp 1200w"
+                sizes="(max-width: 1160px) 100vw, 1160px" width={1200} height={675} alt="" loading="eager" decoding="async" />
+              <div className="earnCalHeroShade" />
+            </div>
             <div className="earnCalEyebrow">Earnings</div>
             <h1 className="earnCalTitle">Earnings this week</h1>
             <p className="earnCalLede">
@@ -423,7 +436,12 @@ export default async function EarningsCalendarPage({
           .earnCalMain { min-height: 100vh; background: #06080d; color: #f1f5f9; font-family: system-ui, Arial; padding: 40px 20px; overflow-x: hidden; }
           .earnCalWrap { max-width: 1160px; margin: 0 auto; }
           .earnCalBack { color: #93c5fd; text-decoration: none; font-weight: 700; font-size: var(--fs-label); }
-          .earnCalIntroCard { background: #0b1220; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 24px; box-shadow: 0 12px 30px rgba(0,0,0,0.28); margin-bottom: 24px; }
+          .earnCalIntroCard { position: relative; z-index: 2; background: #0b1220; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 24px; box-shadow: 0 12px 30px rgba(0,0,0,0.28); margin-bottom: 24px; }
+          .earnCalIntroCard > :not(.earnCalHero) { position: relative; }
+          .earnCalHero { position: absolute; inset: 0; z-index: -1; border-radius: inherit; overflow: hidden; }
+          .earnCalHeroImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 85% 50%; }
+          /* Text sits on the left ~65% on a wide card, so the shade lifts only past it; a phone's text runs the full width and keeps it dark. Measured worst-pixel contrast is in the PR. */
+          .earnCalHeroShade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(6,8,13,0.92) 0%, rgba(6,8,13,0.82) 62%, rgba(6,8,13,0.35) 100%); }
           .earnCalEyebrow { font-size: var(--fs-label); font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: #93c5fd; }
           .earnCalTitle { margin: 6px 0 10px; font-size: 2.125rem; line-height: 1.1; font-weight: 900; }
           .earnCalLede { font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(226,232,240,0.9); margin: 0 0 18px; }
@@ -437,6 +455,8 @@ export default async function EarningsCalendarPage({
           @media (max-width: 640px) {
             .earnCalMain { padding: 24px 14px; }
             .earnCalIntroCard { padding: 18px; }
+            .earnCalHeroImg { object-position: 70% 50%; }
+            .earnCalHeroShade { background: linear-gradient(90deg, rgba(6,8,13,0.90) 0%, rgba(6,8,13,0.80) 55%, rgba(6,8,13,0.66) 100%); }
             .earnCalTitle { font-size: 1.625rem; }
           }
         `}</style>

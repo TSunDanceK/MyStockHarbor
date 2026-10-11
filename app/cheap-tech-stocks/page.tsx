@@ -102,6 +102,11 @@ const config: PickerResultConfig = {
       ],
     },
   ],
+  relatedScreens: [
+    { href: "/semiconductor-stocks", label: "Semiconductor stocks" },
+    { href: "/low-pe-stocks", label: "Low P/E stocks" },
+    { href: "/stocks-with-strong-earnings-growth", label: "Stocks with strong earnings growth" },
+  ],
 };
 
 export default function Page() {

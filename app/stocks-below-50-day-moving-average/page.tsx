@@ -57,6 +57,41 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["belowMA50"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "Two very different stories under one line",
+      paragraphs: [
+        "Every stock here closed its latest session strictly below its 50-day simple moving average, the average of its last 50 daily closes. That sounds like a single condition, but it covers at least two quite different situations. One is a short dip in a stock that remains in a longer advance. The other is a stock that has been drifting lower for months and simply stays under the line.",
+        "The screen does not separate them. It checks one close against one average, with no cross, no confirmation period, and no depth threshold, so a stock half a percent below qualifies exactly as one twenty percent below does.",
+      ],
+    },
+    {
+      heading: "Telling the cases apart",
+      paragraphs: [
+        "The 200-day average is the quickest clue. A stock below its 50-day yet still above its 200-day may be pulling back within an uptrend, while one under both is more often in a broader decline. The screener’s columns and the related pages for the 200-day can help sort that out.",
+        "The list follows conditions met, a count of tracked screener conditions per stock, so oversold or divergence flags may lift a stock higher in the order. Looking at RSI alongside can show whether a drop has been sharp or gradual.",
+      ],
+    },
+    {
+      heading: "Limits worth keeping in mind",
+      paragraphs: [
+        "Being below a moving average describes where price has been; it may or may not persist. Because the 50-day line reacts fairly quickly, names hovering near it can enter and leave the list from one session to the next, and a single weak close is enough to add a stock that recovers the following day.",
+        "The screen has no view of the cause. A company-specific setback, a sector-wide slump and a market-wide pullback all look the same here. Prices come from end-of-day bars, the newest being the previous session’s close, and the page is rebuilt hourly, so intraday moves only show up after the next daily bar lands.",
+      ],
+    },
+    {
+      heading: "An example row and a near miss",
+      paragraphs: [
+        "Consider a stock with a 50-day average of 80.00 that closed at 78.40, 2% under the line. It is listed. Had it closed at exactly 80.00 it would not be, because the rule wants a close strictly below; a close equal to the average lands on neither this page nor its above-the-line counterpart. If the following session ends at 81.00, the stock leaves without any notice, so a name seen here yesterday can simply be missing today.",
+        "This page differs from the oversold screen in an important way. Oversold requires RSI(14), a 14-day momentum gauge, at or under 30 plus another stretched reading, so it tends to catch sharp, fast drops. Sitting under the 50-day needs no momentum reading at all, which means slow, quiet declines are included here even when they never register as oversold.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-above-50-day-moving-average", label: "Above the 50-day average" },
+    { href: "/stocks-below-200-day-moving-average", label: "Below the 200-day average" },
+    { href: "/oversold-stocks-today", label: "Oversold stocks today" },
+  ],
 };
 
 export default function Page() {

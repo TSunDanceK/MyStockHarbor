@@ -22,6 +22,7 @@ import { liveBars } from "@/lib/ta/sessionBar";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
 import type { ProfileDividend } from "@/lib/server/secDividend";
 import { isRetiredBlock } from "./retiredBlocks";
+import { ValuationBandsCard, type ValuationBandView } from "./ValuationBands";
 import CompanyProfile, {
   type CompanyProfile as CompanyProfileData,
 } from "@/app/components/CompanyProfile";
@@ -95,6 +96,8 @@ type StockValuationData = {
   words?: Partial<Record<ValuationKey, string | null>>;
   /** The estimate/derived mark on a figure (lib/server/secEstimates); absent on a filed figure. */
   estimates?: Partial<Record<ValuationKey, EstimateMark | null>>;
+  /** Low / Fair / Rich vs the sector, per multiple (lib/valuationBands.ts); null for no bar. */
+  bands?: Partial<Record<ValuationKey, ValuationBandView | null>>;
 };
 type ValuationKey = "peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda";
 
@@ -254,6 +257,9 @@ function trendLabel(args: { lastClose: number | null; ma50: number | null; ma200
   // asserted for a stock whose trend cannot be computed yet.
   return null;
 }
+
+/** The valuation card as Low / Fair / Rich bars (#552 COWORK #202 item 3); false restores the four tiles. */
+const SHOW_VALUATION_BANDS = true;
 
 function formatValuationMultiple(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
@@ -1219,6 +1225,35 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               {/* -- Valuation multiples (SEC filings, TTM) ----------- */}
               <section className="sp-slot sp-valuation" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Valuation</div>
+                {SHOW_VALUATION_BANDS ? (
+                  // LOW / FAIR / RICH BARS (#552 COWORK #202 item 3), replacing the four tiles below.
+                  <>
+                    <h2 style={{ ...sectionHeadingStyle, marginBottom: 6 }}>{symbol} valuation multiples: low, fair or rich?</h2>
+                    <p style={{ margin: "0 0 8px", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.78)" }}>
+                      Lower may mean cheaper, but compare against the company&apos;s own history and its sector.
+                    </p>
+                    <ValuationBandsCard rows={([
+                      { key: "peRatio", short: "P/E", long: "Price / earnings", basis: valuation?.peBasis ?? "TTM", how: valuation?.peRatio != null ? valuation?.peBasisNote ?? null : null },
+                      { key: "priceToSalesRatio", short: "P/S", long: "Price / sales (revenue)", basis: null, how: valuation?.priceToSalesRatio != null ? valuation?.reasons?.priceToSalesRatio ?? null : null },
+                      { key: "priceToBookRatio", short: "P/B", long: "Price / book value", basis: null, how: valuation?.priceToBookRatio != null ? valuation?.reasons?.priceToBookRatio ?? null : null },
+                      { key: "evToEbitda", short: "EV/EBITDA", long: "Enterprise value / EBITDA", basis: null, how: valuation?.evToEbitda != null ? valuation?.reasons?.evToEbitda ?? null : null },
+                    ] as { key: ValuationKey; short: string; long: string; basis: string | null; how: string | null }[]).map((r) => {
+                      const value = valuation?.[r.key];
+                      return {
+                        ...r,
+                        value,
+                        text: value != null ? formatValuationMultiple(value) : null,
+                        word: valuation?.words?.[r.key],
+                        reason: valuation?.reasons?.[r.key],
+                        est: r.key === "peRatio" ? null : valuation?.estimates?.[r.key as Exclude<ValuationKey, "peRatio">] ?? null,
+                        band: valuation?.bands?.[r.key] ?? null,
+                      };
+                    })} />
+                  </>
+                ) : null}
+                {/* HIDDEN, NOT REMOVED (2026-10-11, #552 COWORK #202 item 3): the four
+                    plain tiles the bars replaced. Flip SHOW_VALUATION_BANDS to restore. */}
+                {SHOW_VALUATION_BANDS ? null : <>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>{symbol} valuation multiples (TTM)</h2>
                 <div className="valuationGrid">
                   {([
@@ -1249,6 +1284,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                     </div>
                   ))}
                 </div>
+                </>}
                 <div data-reading-owner="a" style={{ display: "contents" }}><EstimateKey
                   marks={[valuation?.estimates?.priceToSalesRatio, valuation?.estimates?.priceToBookRatio, valuation?.estimates?.evToEbitda]}
                   style={{ marginTop: 12 }}

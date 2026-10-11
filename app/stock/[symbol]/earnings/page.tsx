@@ -965,6 +965,9 @@ export default async function StockEarningsPage({ params }: Props) {
         .rdsReadout { font-size: var(--fs-read); color: #e2e8f0; overflow-wrap: anywhere; }
         .rdsTo { color: #94a3b8; font-size: var(--fs-label); }
         .rdsMarket { color: #94a3b8; font-size: var(--fs-label); }
+        /* THE STOCK'S % ONLY (#552 COWORK #202 item 2): the shared up/down tones; S&P stays neutral above. */
+        .rdsPct[data-dir="up"] { color: ${toneColor("good")}; }
+        .rdsPct[data-dir="down"] { color: ${toneColor("weak")}; }
         .rdsBar { position: relative; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.05); }
         .rdsZero { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: rgba(226,232,240,0.5); }
         .rdsFill { position: absolute; top: 0; bottom: 0; border-radius: 3px; }

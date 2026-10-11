@@ -9,6 +9,16 @@ import { useState } from "react";
 import { REACTION_SLIDER_PRESETS, type ReactionDayRow } from "./reactionDays";
 
 const dayPctText = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+/**
+ * THE STOCK'S MOVE CARRIES ITS DIRECTION (#552 COWORK #202 item 2): page.tsx
+ * colours it from the shared up/down tones; the S&P figure stays neutral so
+ * the two never read as one. Judged on the figure as PRINTED: one that rounds
+ * to 0.0% is flat, not green. The sign stays, so colour is never the only cue.
+ */
+const dayDir = (v: number): "up" | "down" | "flat" => {
+  const shown = Number(v.toFixed(1));
+  return shown > 0 ? "up" : shown < 0 ? "down" : "flat";
+};
 const dayLongDate = (iso: string) => {
   const d = new Date(`${iso}T12:00:00Z`);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -56,7 +66,7 @@ export function ReactionDaySlider({ rows }: { rows: ReactionDayRow[] }) {
                   onChange={(e) => setRow(i, Number(e.target.value))}
                   aria-label={`${r.label}: trading days after the report`} aria-valuetext={`Day ${d}`} />
                 <div className="rdsReadout" aria-live="polite" data-readout="">
-                  <strong>{`Day ${d}${latest ? " (latest)" : ""}: `}{v === null ? "—" : dayPctText(v)}</strong>
+                  <strong>{`Day ${d}${latest ? " (latest)" : ""}: `}{v === null ? "—" : <span className="rdsPct" data-dir={dayDir(v)}>{dayPctText(v)}</span>}</strong>
                   {r.dayDates[d - 1] ? <span className="rdsTo"> to {r.dayDates[d - 1]}</span> : null}
                   {m !== null ? <span className="rdsMarket"> · S&amp;P {dayPctText(m)}</span> : null}
                 </div>

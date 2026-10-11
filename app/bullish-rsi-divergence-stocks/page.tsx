@@ -85,6 +85,11 @@ const config: PickerResultConfig = {
       ],
     },
   ],
+  relatedScreens: [
+    { href: "/bearish-rsi-divergence-stocks", label: "Bearish RSI divergence stocks" },
+    { href: "/bullish-macd-divergence-stocks", label: "Bullish MACD divergence stocks" },
+    { href: "/oversold-stocks-today", label: "Oversold stocks today" },
+  ],
   relatedGuide: {
     href: "/bullish-divergence-explained",
     label: "bullish divergence explained",
