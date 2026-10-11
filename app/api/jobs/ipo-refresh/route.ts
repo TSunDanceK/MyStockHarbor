@@ -120,6 +120,8 @@ function profileFields(res: Awaited<ReturnType<typeof profileStep>>): Record<str
     profilesFailed: res.failed,
     profilesDeferred: res.deferred,
     profileFeeExhibits: res.feeFound,
+    profileAboutFound: res.aboutFound,
+    profileAboutOmitted: res.aboutOmitted,
     profilesThrottled: res.throttled,
     profileSecRequests: res.secRequests,
     profileRedisCommands: res.redisCommands,
