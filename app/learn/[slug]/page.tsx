@@ -1,7 +1,7 @@
 // app/learn/[slug]/page.tsx
 import Link from "next/link";
 import type { LessonImage } from "../lessons";
-import { ALL_LESSONS, getLesson, getNextLesson } from "../all-lessons";
+import { ALL_LESSONS, categoryLabel, getLesson, getNextLesson } from "../all-lessons";
 import LearnShell from "../LearnShell";
 
 // Lesson content is a static TS module (ALL_LESSONS) -- no fetch, no Redis, no
@@ -271,7 +271,7 @@ export default async function LessonPage({ params }: Props) {
             textTransform: "uppercase",
           }}
         >
-          {lesson.category}
+          {categoryLabel(lesson.category)}
         </div>
 
         <h1
