@@ -109,8 +109,11 @@ export default function MarketMoodCard({ view, credit, variant = "thermometer" }
     </FlowPanel>
   );
   if (variant === "gauge") {
-    // The dashboard's compact reading (#164 A): no card of its own, no sparkline;
-    // the same tap note. The page's credit line sits under the whole Market today card.
+    // The dashboard's compact reading (#164 A), laid out to the owner's
+    // reference (#563 COWORK #166 b): the half-gauge on the left; beside it the
+    // large score, the mood word in the mood's colour, and the reading's date;
+    // "What goes into it?" top right. No card of its own, no box, no sparkline;
+    // the same tap note. The credit sits at the foot of the whole Market today card.
     return (
       <div className="moodCompact" data-mood-gauge="" style={{ position: "relative", minWidth: 0 }}>
         <div ref={head} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
@@ -118,14 +121,14 @@ export default function MarketMoodCard({ view, credit, variant = "thermometer" }
           <span style={{ fontSize: "var(--fs-read)", color: "rgba(203,213,225,0.72)" }}><NoteButton note={note}>What goes into it?</NoteButton></span>
         </div>
         {tapNote}
-        <div style={{ marginTop: 8, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ marginTop: 8, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
           <MoodGauge r={day.r} />
           <div style={{ minWidth: 0 }}>
-            <div className="moodValue" style={{ fontSize: "2rem", lineHeight: 1, fontWeight: 950, letterSpacing: "-0.04em" }}>
-              {day.r}<span style={{ fontSize: "0.9375rem", fontWeight: 700, opacity: 0.7, letterSpacing: 0 }}>/100</span>
+            <div className="moodValue" style={{ fontSize: "2.5rem", lineHeight: 1, fontWeight: 950, letterSpacing: "-0.04em" }}>
+              {day.r}<span style={{ fontSize: "1rem", fontWeight: 700, opacity: 0.7, letterSpacing: 0 }}>/100</span>
             </div>
-            <div className="moodLabel" style={{ marginTop: 4, fontSize: "1.0625rem", fontWeight: 900, color: t.text }}>{label}</div>
-            <div className="moodDate" data-fine-print style={{ marginTop: 4, fontSize: "var(--fs-fine)", color: "rgba(203,213,225,0.72)" }}>Reading for {dayWords(day.d)}</div>
+            <div className="moodLabel" data-mood-word="" style={{ marginTop: 6, fontSize: "1.0625rem", fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase", color: t.text }}>{label}</div>
+            <div className="moodDate" data-fine-print style={{ marginTop: 4, fontSize: "var(--fs-fine)", color: "rgba(203,213,225,0.72)" }}>Reading: {dayWords(day.d)}</div>
           </div>
         </div>
       </div>

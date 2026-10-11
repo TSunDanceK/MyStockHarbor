@@ -18,6 +18,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+
+/** Impact.com's site verification ID (#563 COWORK #167); scripts/check-impact-verification.mjs holds the tag to it. */
+const IMPACT_SITE_VERIFICATION = "9aa5dfcb-1339-4383-b1e8-7c2ac0ab674b";
 export const metadata: Metadata = {
   title: "MyStockHarbor — Stock Screeners, Swing Trade Setups & Daily Market Insights",
   description:
@@ -192,6 +195,10 @@ export default async function RootLayout({
   return (
     <html lang="en-GB">
       <head>
+        {/* Impact.com site verification (#563 COWORK #167). A raw tag, NOT the
+            metadata API: Impact reads the attribute `value`, and metadata.other
+            renders `content`. A public verification ID, not a secret. */}
+        <meta name="impact-site-verification" {...{ value: IMPACT_SITE_VERIFICATION }} />
         <script
           async
           src="https://www.googletagmanager.com/gtag/js?id=G-V2BD40X7H2"

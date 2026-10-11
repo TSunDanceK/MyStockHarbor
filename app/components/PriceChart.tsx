@@ -225,36 +225,39 @@ type Props = {
 /** The price plot's horizontal inset in viewBox units: a control lining up with the x-axis uses these. */
 export const PRICE_CHART_PAD = { left: 34, right: 54, width: 760 } as const;
 
-// Fixed, non-interactive brand watermark rendered on top of the chart
-// area (SVG or TradingView embed). Positioned via CSS against the
-// chart's own fixed-height wrapper -- not against any data-derived SVG
-// coordinate -- so it never shifts when the user zooms, pans, or changes
-// the visible bar count; only the chart content underneath it changes.
-// Sits right at the top edge of the chart box, horizontally, out of the
-// way of the price action below. Opacity is kept low so it reads as a
-// background mark rather than interfering with the data.
+// Fixed, non-interactive brand watermark (#563 COWORK #166 d): IN ITS OWN
+// STRIP above the plot, never over it. It used to sit 2 px from the top of the
+// chart box, but the SVG scales with its width, so its 24-unit top padding is
+// about 9 px on a phone: the text crossed the top price gridline (and could
+// cross a high candle). The strip is fixed in CSS px, not viewBox units, so it
+// is the same at every width and timeframe (D, W, M), whatever is drawn below,
+// and over the TradingView embed too. Opacity stays low: a mark, not a label.
+export const WATERMARK_STRIP_PX = 20;
 function ChartWatermark() {
   return (
     <div
       aria-hidden="true"
+      data-chart-watermark=""
       style={{
         position: "absolute",
-        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        height: WATERMARK_STRIP_PX,
         display: "flex",
-        alignItems: "flex-start",
+        alignItems: "center",
         justifyContent: "center",
-        paddingTop: 2,
         pointerEvents: "none",
         userSelect: "none",
         overflow: "hidden",
-        zIndex: 2,
       }}
     >
       <span
         style={{
-          fontSize: "clamp(13px, 3vw, 22px)",
+          fontSize: "clamp(11px, 2.4vw, 15px)",
+          lineHeight: 1,
           fontWeight: 800,
-          color: "rgba(148,163,184,0.20)",
+          color: "rgba(148,163,184,0.32)",
           letterSpacing: "0.04em",
           whiteSpace: "nowrap",
         }}
@@ -708,7 +711,7 @@ export default function PriceChart(props: Props) {
 
   return (
     <div style={{ width: "100%" }}>
-      <div style={{ position: "relative", width: "100%" }}>
+      <div data-chart-box="" style={{ position: "relative", width: "100%", paddingTop: WATERMARK_STRIP_PX }}>
       {showTradingView ? (
         <TradingViewChartEmbed symbol={symbol} height={Math.max(height, 480)} />
       ) : (
