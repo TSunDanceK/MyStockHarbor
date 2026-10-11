@@ -285,7 +285,7 @@ const LANDING_MUTANTS = [
   ["A: the meter lights every cell", "data-on={i < lit ? \"\" : undefined}", "data-on=\"\""],
   ["A: the \"As of\" date dropped", '{asOf ? <span className="dlAsOf" data-as-of="" data-fine-print="">As of {day(asOf)}</span> : null}', ""],
   ["A: the performance line boxed", ".dlPerf{display:flex;flex-wrap:wrap;", ".dlPerf{border:1px solid #222c40;display:flex;flex-wrap:wrap;"],
-  ["A: the credit back to the long inline line", '<span className="dlPowered" data-fine-print="" data-credit="tiingo"><TiingoLink /></span>', '<span className="dlPowered" data-fine-print="" data-credit="tiingo">{credit}</span>'],
+  ["A: the credit back to the long inline line", '<span className="dlPowered" data-fine-print="" data-credit="tiingo"><TiingoLink /></span>', '<span className="dlPowered" data-fine-print="" data-credit="tiingo"><a href="https://www.tiingo.com/">Market data from Tiingo.com</a></span>'],
   ["A: the credit not at the right", ".dlPowered{flex:0 0 auto;margin-left:auto;", ".dlPowered{flex:0 0 auto;"],
   ["A: the mover's colour dropped", '<span className="dlMoverMove" data-tone={c.pickers.mover.changePct >= 0 ? "up" : "down"}>', '<span className="dlMoverMove">'],
   ["A: the mover's up/down word dropped (colour the only cue)", "export const moverMove = (m: Mover) => `${m.changePct >= 0 ? \"up\" : \"down\"} ${", "export const moverMove = (m: Mover) => `${"],

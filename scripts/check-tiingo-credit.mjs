@@ -20,7 +20,9 @@
 //      fine print. A page counts as crediting Tiingo when it renders the old
 //      linked {TIINGO_CREDIT} or <TiingoCredit /> / <TiingoLink />. The Pickers
 //      result pages and the hub render <TiingoCredit /> under their switch.
-//   6. Mutants: each rule broken once, and caught.
+//   6. C's surfaces (dashboard page and landing, insight page, bottleneck
+//      page) credit Tiingo with <TiingoLink /> only (#563 COWORK #171).
+//   7. Mutants: each rule broken once, and caught.
 //
 //   node scripts/check-tiingo-credit.mjs
 import fs from "node:fs";
@@ -54,6 +56,9 @@ const COMPONENT = "app/components/TiingoCredit.tsx";
 // The calendar's Price column reads the pool, so POOL=tiingo makes it a
 // Tiingo surface too (#552 COWORK #108).
 const CALENDAR = "app/earnings-calendar/page.tsx";
+// C's surfaces on the site-wide link (#563 COWORK #171): no older "Market data
+// from Tiingo.com" link left in them; each credit is <TiingoLink />.
+const C_SURFACES = [DASHBOARD, "app/dashboard/DashboardLanding.tsx", "app/insights/[slug]/InsightPage.tsx", "app/bottlenecks/[ticker]/BottleneckView.tsx"];
 
 /** The rules over a {file: source} map. Returns failure labels. */
 function rules(srcs) {
@@ -69,10 +74,11 @@ function rules(srcs) {
   // quote credit, step 3's chart credit) renders a linked credit for each one.
   for (const f of [STOCK_PAGE, DASHBOARD]) {
     const props = new Set([...(code[f] ?? "").matchAll(/\b(tiingoCredit|historyCredit)=\{/g)].map((m) => m[1]));
-    // The old linked constant, or B's <TiingoLink /> (#552 COWORK #205: A's stock page moved to it).
+    // The old linked constant, or B's <TiingoLink /> (A's stock page, #552 COWORK #205; C's dashboard, #563 COWORK #171): the same link.
     const links = ((code[f] ?? "").match(/<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>|<TiingoLink\b[^>]*\/>/g) ?? []).length;
     want(`${f} renders a linked credit for each credit it passes (${links} for ${props.size})`, props.size > 0 && links >= props.size);
   }
+  for (const f of C_SURFACES) want(`${f} credits Tiingo with <TiingoLink /> only (#563 COWORK #171)`, /<TiingoLink \/>/.test(code[f] ?? "") && !/\{TIINGO_CREDIT\}/.test(code[f] ?? ""));
   want("the calendar switches its credit on the POOL provider", /priceProviderFor\("POOL"\) === "tiingo"/.test(code[CALENDAR] ?? ""));
 
   // 2. every rendered {TIINGO_CREDIT} is inside a link to TIINGO_URL
@@ -122,7 +128,8 @@ const MUTANTS = [
   ["the corner line is not fine print", COMPONENT, /\s+data-fine-print/, ""],
   ["a page hand-types the new credit", HUB, /priceProviderFor\("PICKERS"\) === "tiingo" \? <TiingoCredit\b[^>]*\/> : null/, 'priceProviderFor("PICKERS") === "tiingo" ? <TiingoCredit /> : <p>powered by Tiingo</p>'],
   ["the stock page drops its chart credit (step 3)", STOCK_PAGE, /<TiingoLink \/>/, "null"],
-  ["the dashboard's chart credit loses its link (step 3)", DASHBOARD, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "<span>{TIINGO_CREDIT}</span>"],
+  ["the dashboard's chart credit loses its link (step 3)", DASHBOARD, /<TiingoLink \/>/, "<span>{TIINGO_CREDIT}</span>"],
+  ["the insight page back on the older credit", "app/insights/[slug]/InsightPage.tsx", /<TiingoLink \/>/g, '<a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a>'],
   ["a page hand-types the credit unlinked", HUB, /priceProviderFor\("PICKERS"\) === "tiingo" \? <TiingoCredit\b[^>]*\/> : null/, '"Market data from Tiingo.com"'],
   ["the calendar drops its credit", CALENDAR, /<TiingoLink \/>/, ""],
   ["the calendar's credit is unlinked", CALENDAR, /<TiingoLink \/>/, "<span>powered by Tiingo</span>"],

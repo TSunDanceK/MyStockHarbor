@@ -17,13 +17,12 @@ import { INDEX_ROW } from "@/lib/dashboardIndexRow";
 import TickerLogo from "@/app/components/TickerLogo";
 import { TiingoLink } from "@/app/components/TiingoCredit";
 import { formatHeatPct } from "@/lib/sectorHeatmap";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import type { CapexBar, DashboardCards, DashboardMarket, Mover } from "@/lib/server/dashboardCards";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const day = (d: string) => { const [y, m, dd] = d.slice(0, 10).split("-").map(Number); return y && m && dd ? `${dd} ${MONTHS[m - 1]} ${y}` : d; };
 const signed = (v: number, dp = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(dp)}%`;
-const credit = <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a>;
+const credit = <TiingoLink />;
 
 /** Empty-state words, one per card; scripts/check-dashboard-landing.mjs holds the page to them. */
 export const EMPTY = {

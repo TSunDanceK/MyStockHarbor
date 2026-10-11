@@ -24,7 +24,7 @@ import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
 import { epsVsYearAgo, marginVsYearAgo, VS_TINT, type Vs } from "@/lib/snapshotVsYearAgo";
 import InsightChart from "./InsightChart";
 import InsightVote from "./InsightVote";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import { screenMembersFor, type InsightPageData, type MoreCard, type ScreenMember } from "@/lib/server/insightPage";
 import type { ScreenFlag } from "@/lib/insightScreens";
 import { dayWords, outcomeWords, pctWords, ptsWords } from "@/lib/insightView";
@@ -169,7 +169,7 @@ export default function InsightPage({ d, html, thumb, hasFiledEarnings = false }
               {d.since.level ? <Stat label={`Now vs the ${d.since.level.name}`} value={pctWords(d.since.level.nowPct)} tone={tone(d.since.level.nowPct)} sub={`${d.since.level.nowPct >= 0 ? "above" : "below"} ${money(d.since.level.nowValue)}`} /> : null}
               {d.since.vsSpxPts !== null ? <Stat label="Vs the S&P 500" value={ptsWords(d.since.vsSpxPts)} tone={tone(d.since.vsSpxPts)} sub="vs SPY, same dates" /> : null}
             </div>
-            <p className="inFine" data-fine-print="">{d.since.sessions} daily close{d.since.sessions === 1 ? "" : "s"} since publication, {dayWords(d.since.thenDate)} to {dayWords(d.since.nowDate)}. {d.onTiingo ? <>Prices: <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a></> : null}</p>
+            <p className="inFine" data-fine-print="">{d.since.sessions} daily close{d.since.sessions === 1 ? "" : "s"} since publication, {dayWords(d.since.thenDate)} to {dayWords(d.since.nowDate)}.{d.onTiingo ? <> · <TiingoLink /></> : null}</p>
           </section>
         ) : null}
 
@@ -213,7 +213,7 @@ export default function InsightPage({ d, html, thumb, hasFiledEarnings = false }
             {/* LEVELS TODAY (#563 COWORK #139): the Key levels pole, with the post's level as its own gold tick. */}
             {d.railBars.length ? (
               <div className="inRailPole" data-insight-levels="">
-                <KeyLevelsCard bars={d.railBars} discussed={d.discussed} credit={d.onTiingo ? <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a> : undefined} />
+                <KeyLevelsCard bars={d.railBars} discussed={d.discussed} credit={d.onTiingo ? <TiingoLink /> : undefined} />
                 <p className="inFine" data-fine-print="">Zones are where several levels sit close together. <Link href={`/stock/${sym}`}>All levels on the {sym} page →</Link></p>
               </div>
             ) : null}
