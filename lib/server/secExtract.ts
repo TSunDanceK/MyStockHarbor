@@ -1129,28 +1129,39 @@ export function unitSlipFactor(netIncome: number, eps: number, shares: number): 
  *      quarters, AND the filer's own `Revenues` total (or
  *      `RevenuesNetOfInterestExpense`), differenced the same way, gives a Q4
  *      at or above that floor of ITS quarters' mean — the total says the year
- *      had a normal fourth quarter, so the line's collapse is a scope artefact.
- * With no second total, or one that also collapses, the Q4 stands as filed
- * arithmetic: that keeps the true small quarters.
+ *      had a normal fourth quarter, so the line's collapse is a scope artefact;
+ *   3. it is under that floor AND the nine months it was differenced from do
+ *      not add up to the three quarters shown beside it (off by more than
+ *      NINE_MONTHS_TOLERANCE) — the quarters were restated to a different
+ *      scope than the year-to-date figure, so FY − 9M is not this year's Q4
+ *      on the quarters' basis. OXY FY2025: the census found no `Revenues`
+ *      total, and its nine months disagree with its own three quarters.
+ * With no such proof, the Q4 stands as filed arithmetic: that keeps the true
+ * small quarters and the seasonal ones (MTN, SR, SMG, BATRA in the census).
  *
  * PURE, so check-q4-revenue-scope can drive it with plain numbers.
  */
 export const DERIVED_Q4_FLOOR = 0.4;
-export type Q4ScopeVerdict = "negative" | "scope" | null;
+export const NINE_MONTHS_TOLERANCE = 0.02;
+export type Q4ScopeVerdict = "negative" | "scope" | "quarters" | null;
 export function q4RevenueScope(
   q4: number,
   siblings: number[],
   total?: { q4: number; siblings: number[] } | null,
+  /** The nine-month figure Q4 was differenced from (FY − Q4), or null. */
+  nine?: number | null,
 ): Q4ScopeVerdict {
   if (!Number.isFinite(q4)) return null;
   if (q4 < 0) return "negative";
   const mean = (xs: number[]) => (xs.length === 3 && xs.every(Number.isFinite) ? (xs[0] + xs[1] + xs[2]) / 3 : null);
   const m = mean(siblings);
   if (m == null || !(m > 0) || q4 >= DERIVED_Q4_FLOOR * m) return null;
-  if (!total || !Number.isFinite(total.q4)) return null;
-  const tm = mean(total.siblings);
-  if (tm == null || !(tm > 0)) return null;
-  return total.q4 >= DERIVED_Q4_FLOOR * tm ? "scope" : null;
+  if (total && Number.isFinite(total.q4)) {
+    const tm = mean(total.siblings);
+    if (tm != null && tm > 0 && total.q4 >= DERIVED_Q4_FLOOR * tm) return "scope";
+  }
+  if (nine != null && Number.isFinite(nine) && nine > 0 && Math.abs(nine - 3 * m) > NINE_MONTHS_TOLERANCE * nine) return "quarters";
+  return null;
 }
 
 /** The contract-revenue tag the total-over-contract rule compares against. */
@@ -1519,13 +1530,20 @@ function extractCompanyFactsWith(
       const total = fb && fb.val != null && `${fb.ns}|${fb.tag}` !== `${q4.ns}|${q4.tag}`
         ? { q4: fb.val, siblings: siblingsOf(fbQuarter, fb) }
         : null;
-      const verdict = q4RevenueScope(q4.val, siblingsOf(quarterCells, q4), total);
+      // The nine months, recovered from the year it was differenced against —
+      // only when the year is the SAME concept, so it is the same subtraction.
+      const fy = yearCells.get(end)?.get("revenue");
+      const nine = fy && fy.val != null && `${fy.ns}|${fy.tag}` === `${q4.ns}|${q4.tag}` ? fy.val - q4.val : null;
+      const siblings = siblingsOf(quarterCells, q4);
+      const verdict = q4RevenueScope(q4.val, siblings, total, nine);
       if (!verdict) continue;
       m.set("revenue", { ...q4, val: null, derived: "withheld" });
       notes.push(
         verdict === "negative"
           ? `revenue ${end}: derived Q4 ${q4.val} is negative; withheld`
-          : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
+          : verdict === "scope"
+            ? `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
+            : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters and the nine months ${nine} differ from those quarters' sum ${siblings.reduce((a, b) => a + b, 0)}; withheld (scope mismatch)`
       );
     }
   }

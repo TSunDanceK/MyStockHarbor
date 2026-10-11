@@ -222,7 +222,7 @@ export function derivationNote(
     // null; this is the tap note under "Not reported". Hedged: the filings
     // show the mismatch, they do not say why.
     case "withheld":
-      return "Not shown: Q4 is not filed on its own, and the full-year figure minus the first nine months gives a result that does not match this company\u2019s other quarters or its own total revenue. The annual and quarterly revenue lines appear to cover different scopes.";
+      return "Not shown: Q4 is not filed on its own, and the full-year figure minus the first nine months gives a result that does not fit this company\u2019s other quarters. The filed figures suggest the annual and quarterly revenue lines cover different scopes.";
     default:
       return null;
   }
