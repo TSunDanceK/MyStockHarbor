@@ -11,7 +11,7 @@ import DashboardClient, {
 import StockPagesBottomNav from "@/app/components/StockPagesBottomNav";
 import { getCachedDailyHistory, getDailyHistory } from "@/lib/server/historyCache";
 import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
 import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
@@ -220,7 +220,7 @@ export default async function DashboardPage({ searchParams }: Props) {
   // Step 5 (#553 COWORK #98): also when the ticker's movers are Tiingo's (POOL).
   const tiingoCredit =
     priceProviderFor("STOCK_PAGE") === "tiingo" || priceProviderFor("POOL") === "tiingo" ? (
-      <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+      <TiingoLink />
     ) : null;
 
   return (
@@ -248,7 +248,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           // "tiingo": the seed's below, then each refetch's.
           historyCredit={
             historyOnTiingo("HISTORY") ? (
-              <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+              <TiingoLink />
             ) : null
           }
           initialHistoryProvider={rawHistory.provider}

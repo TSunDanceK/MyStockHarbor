@@ -7,7 +7,7 @@
 import Link from "next/link";
 import TickerLogo from "@/app/components/TickerLogo";
 import { chartHref } from "@/lib/chartHref";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import type { BottleneckCompany, BottleneckPost } from "@/lib/bottlenecks";
 import type { BottleneckPageData, Move } from "@/lib/server/bottleneckPage";
 import { GRADE_WORDS, initials, mapSide, unlistedWords, type FaqItem, type Meter } from "@/lib/bottleneckPage";
@@ -172,7 +172,7 @@ export default function BottleneckView({ post, name, data: d, supplierMeter, cus
               </li>
             ))}
           </ul>
-          <p className="bnFine" data-fine-print="">Latest daily close vs the one before. Prices: <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a></p>
+          <p className="bnFine" data-fine-print="">Latest daily close vs the one before · <TiingoLink /></p>
         </section>
         {d.filed ? (
           <section className="bnCard" data-filed="">
