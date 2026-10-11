@@ -55,7 +55,7 @@ for (const symbol of (process.env.SYMBOLS || "KB").split(/[\s,]+/).filter(Boolea
   const r = extractForSymbol(symbol, json);
   const keys = ["revenue", "operatingIncome", "preTaxIncome", "netIncome"];
   console.log(`  quarters ${r.quarters.length} · years ${r.years.length} · untagged: ${(r.untagged ?? []).filter((k) => keys.includes(k)).join(",") || "none of these"}`);
-  for (const p of r.years.slice(-4)) {
+  for (const p of [...r.years].sort((a, b) => (a.end < b.end ? 1 : -1)).slice(0, 4)) {
     console.log(`  ${p.end} FY${p.fy}: ` + keys.map((k) => { const c = p.values?.[SEC_FIELD_INDEX[k]]; return `${k}=${c ? `${B(c.val)} ${c.ns ?? ""}:${c.tag ?? ""}` : "—"}`; }).join(" · "));
   }
   console.log(`  notes mentioning revenue: ${r.notes.filter((n) => /revenue/i.test(n)).slice(0, 8).join(" | ") || "none"}`);
