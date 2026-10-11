@@ -180,6 +180,20 @@ const RULES = {
       /<MarketMoodCard view=\{mood\} credit=\{<a href=\{TIINGO_URL\}[^\n]*>\{TIINGO_CREDIT\}<\/a>\} \/>/.test(src.pageCode) &&
       none.replace(/<[^>]+>/g, "").includes("Market Mood will appear after tonight&#x27;s update.") && !/problem on our side|\b50\b/.test(none.replace(/<[^>]+>/g, ""));
   },
+  // #563 COWORK #166 b: the dashboard's compact gauge, laid out to the owner's reference.
+  "the compact gauge: half-gauge left, a large score, the mood word in its colour, \"Reading: <date>\", \"What goes into it?\" top right": ({ M }) => {
+    const view = M.moodView(M.computeMarketMood(WITH_LQD));
+    const html = renderToStaticMarkup(React.createElement(M.MarketMoodCard, { view, variant: "gauge" }));
+    const text = html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
+    const tone = { green: "#86efac", amber: "#fde68a", red: "#fecaca" }[M.moodTone(view.day.r)];
+    const word = html.match(/<div class="moodLabel" data-mood-word="" style="([^"]*)">([^<]*)<\/div>/);
+    return /data-mood-gauge=""/.test(html) && !/moodThermo|moodSpark|border:/.test(html) &&
+      html.indexOf('class="moodGauge"') > -1 && html.indexOf('class="moodGauge"') < html.indexOf('class="moodValue"') &&
+      /class="moodValue" style="font-size:2\.5rem;/.test(html) && text.includes(`${view.day.r} /100`) &&
+      !!word && word[2] === view.label && /text-transform:uppercase/.test(word[1]) && word[1].includes(`color:${tone}`) &&
+      text.includes("Reading: Fri 2 Oct 2026") && !text.includes("Reading for") &&
+      /<div style="display:flex;justify-content:space-between;[^"]*"><h3[^>]*>Market Mood<\/h3><span[^>]*>.*What goes into it\?/.test(html);
+  },
   "nothing in the card or the hero can push the page sideways at 320–430 px": ({ src }) => {
     const c = code(src.card, F.card);
     return /minWidth: 0, boxSizing: "border-box"/.test(c) && /width="100%"/.test(c) && !/nowrap/.test(c) && !/width: \d{3,}/.test(c) &&
@@ -231,8 +245,12 @@ const MUTANTS = [
   [R[10], "card", (s) => s.replaceAll("Reading for {dayWords(day.d)}", "Latest reading")],
   [R[10], "card", (s) => s.replace('backgroundSize: `100% ${(100 * 100) / fillPct}%`, backgroundPosition: "bottom", ', "")],
   [R[10], "card", (s) => s.replace("Market Mood will appear after tonight&apos;s update.", "Market Mood isn&apos;t available just now. This is a problem on our side.")],
-  [R[11], "card", (s) => s.replace("minWidth: 0, boxSizing: \"border-box\", position: \"relative\"", "minWidth: 320, boxSizing: \"border-box\", position: \"relative\"")],
-  [R[11], "page", (s) => s.replace("          .spxHeroGrid { grid-template-columns: minmax(0, 1fr) !important; }\n", "")],
+  // #166 b: the compact gauge's layout.
+  [R[11], "card", (s) => s.replace("Reading: {dayWords(day.d)}", "Reading for {dayWords(day.d)}")],
+  [R[11], "card", (s) => s.replace('letterSpacing: "0.08em", textTransform: "uppercase", color: t.text }}>{label}', 'letterSpacing: "0.08em", color: t.text }}>{label}')],
+  [R[11], "card", (s) => s.replace("          <MoodGauge r={day.r} />\n          <div style={{ minWidth: 0 }}>\n            <div className=\"moodValue\" style={{ fontSize: \"2.5rem\"", "          <div style={{ minWidth: 0 }}>\n            <div className=\"moodValue\" style={{ fontSize: \"1.25rem\"")],
+  [R[12], "card", (s) => s.replace("minWidth: 0, boxSizing: \"border-box\", position: \"relative\"", "minWidth: 320, boxSizing: \"border-box\", position: \"relative\"")],
+  [R[12], "page", (s) => s.replace("          .spxHeroGrid { grid-template-columns: minmax(0, 1fr) !important; }\n", "")],
 ];
 console.log("\n=== Mutants: each must FAIL its rule ===");
 for (const [label, where, mutate] of MUTANTS) {

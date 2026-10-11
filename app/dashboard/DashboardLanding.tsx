@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 import MarketMoodCard from "@/app/markets/spx/MarketMoodCard";
 import { INDEX_ROW } from "@/lib/dashboardIndexRow";
 import TickerLogo from "@/app/components/TickerLogo";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import { formatHeatPct } from "@/lib/sectorHeatmap";
 import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import type { CapexBar, DashboardCards, DashboardMarket, Mover } from "@/lib/server/dashboardCards";
@@ -47,26 +48,46 @@ function Card({ id, eyebrow, tone, title, children, more, empty }: { id: string;
   );
 }
 
-// ── MARKET TODAY (#164 A) ───────────────────────────────────────────────────
+// ── MARKET TODAY (#164 A; laid out to the owner's reference, #166 b) ───────
 // One card merges what were three places: the Market Mood reading as a compact
-// half-gauge, the four index ETFs' moves on the close, and one line with the
-// trend score and the best sector. The old S&P / Trend / Best-sector tiles and
-// the analyser's "Market Benchmarks" row are gone; their figures live here.
+// half-gauge, the four index ETFs' moves on the close, and the performance
+// line (the trend score on a segmented meter, and the best sector). Only the
+// four ETF tiles are boxed; the rest sits on the card itself, in the existing
+// hues. The old S&P / Trend / Best-sector tiles and the analyser's "Market
+// Benchmarks" row are gone; their figures live here.
 
-/** "Trend score 85/100, a strong uptrend · Best sector YTD: Technology +56%" (either half alone when the other is missing). */
+/** The trend score's tone: the index tiles' green / amber / red, on trendWords' bands. */
+export const trendTone = (score: number) => (score >= 56 ? "up" : score > 44 ? "flat" : "down");
+/** Segments in the trend meter; one per 10 points. */
+export const TREND_SEGMENTS = 10;
+
+/** "Trend Score 85/100 Strong uptrend · Best sector YTD Technology +56%" (either half alone when the other is missing): the line as read. */
 export function marketLine(m: Pick<DashboardMarket, "trend" | "bestSector">): string | null {
   const parts: string[] = [];
-  if (m.trend) parts.push(`Trend score ${m.trend.score}/100, ${/^[aeiou]/i.test(m.trend.words) ? "an" : "a"} ${m.trend.words.charAt(0).toLowerCase()}${m.trend.words.slice(1)}`);
-  if (m.bestSector) parts.push(`Best sector YTD: ${m.bestSector.name} ${m.bestSector.ytd >= 0 ? "+" : "−"}${Math.round(Math.abs(m.bestSector.ytd))}%`);
+  if (m.trend) parts.push(`Trend Score ${m.trend.score}/100 ${m.trend.words}`);
+  if (m.bestSector) parts.push(`Best sector YTD ${m.bestSector.name} ${m.bestSector.ytd >= 0 ? "+" : "−"}${Math.round(Math.abs(m.bestSector.ytd))}%`);
   return parts.length ? parts.join(" · ") : null;
 }
 
+/** The trend score as a segmented bar: TREND_SEGMENTS cells, the first round(score / 10) lit. Decorative; the number carries it. */
+function TrendMeter({ score }: { score: number }) {
+  const lit = Math.max(0, Math.min(TREND_SEGMENTS, Math.round(score / (100 / TREND_SEGMENTS))));
+  return (
+    <span className="dlMeter" data-meter={lit} data-tone={trendTone(score)} aria-hidden="true">
+      {Array.from({ length: TREND_SEGMENTS }, (_, i) => <i key={i} data-on={i < lit ? "" : undefined} />)}
+    </span>
+  );
+}
+
 export function MarketToday({ m }: { m: DashboardMarket }) {
-  const line = marketLine(m);
-  const shown = m.indices.length > 0 || !!m.mood || !!line;
+  const shown = m.indices.length > 0 || !!m.mood || !!m.trend || !!m.bestSector;
+  const asOf = m.indices[0]?.date ?? m.spx?.date ?? m.mood?.day.d ?? null;
   return (
     <section className="dlMarket" data-market-now="" aria-labelledby="dlMarketTitle">
-      <h2 id="dlMarketTitle" className="dlEyebrow" style={{ color: "#93c5fd" }}>Market today</h2>
+      <div className="dlMarketHead">
+        <h2 id="dlMarketTitle" className="dlEyebrow" style={{ color: "#93c5fd" }}>Market today</h2>
+        {asOf ? <span className="dlAsOf" data-as-of="" data-fine-print="">As of {day(asOf)}</span> : null}
+      </div>
       {m.mood ? <MarketMoodCard view={m.mood} variant="gauge" /> : null}
       {m.indices.length ? (
         <ul className="dlIdx" data-index-row="">
@@ -86,9 +107,37 @@ export function MarketToday({ m }: { m: DashboardMarket }) {
           })}
         </ul>
       ) : null}
-      {line ? <p className="dlMarketLine" data-market-line="">{line}</p> : null}
+      {m.trend || m.bestSector ? (
+        <div className="dlPerf" data-market-line="">
+          {m.trend ? (
+            <div className="dlPerfItem" data-trend={m.trend.score}>
+              <span className="dlPerfLabel">Trend Score</span>
+              <span className="dlPerfVal">
+                <strong className="dlPerfNum">{m.trend.score}/100</strong>
+                <TrendMeter score={m.trend.score} />
+                <span className="dlPerfWords" data-tone={trendTone(m.trend.score)}>{m.trend.words}</span>
+              </span>
+            </div>
+          ) : null}
+          {m.bestSector ? (
+            <div className="dlPerfItem" data-best-sector="">
+              <span className="dlPerfLabel">Best sector YTD</span>
+              <span className="dlPerfVal">
+                <strong className="dlPerfNum">{m.bestSector.name}</strong>
+                <strong className="dlPerfNum" data-tone={m.bestSector.ytd >= 0 ? "up" : "down"}>{m.bestSector.ytd >= 0 ? "+" : "−"}{Math.round(Math.abs(m.bestSector.ytd))}%</strong>
+              </span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {!shown ? <p className="dlEmpty" data-card="market" data-empty="">{EMPTY.market}</p> : null}
-      {m.indices.length || m.trend ? <p className="dlFine" data-fine-print="">ETF moves on the close of {day(m.indices[0]?.date ?? m.spx?.date ?? "")} against the close before; ETF prices, not index levels. Trend score from SPY&apos;s daily closes. {credit}</p> : null}
+      {m.indices.length || m.trend ? (
+        <div className="dlMarketFoot">
+          <p className="dlFine" data-fine-print="">ETF moves on the close of {day(m.indices[0]?.date ?? m.spx?.date ?? "")} against the close before; ETF prices, not index levels. Trend score from SPY&apos;s daily closes.</p>
+          {/* THE CREDIT (#166 b): small, bottom right, B's site-wide link (#553 COWORK #200). */}
+          <span className="dlPowered" data-fine-print="" data-credit="tiingo"><TiingoLink /></span>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -208,11 +257,16 @@ function SectorBars({ rows, spx }: { rows: { name: string; slug: string; ytd: nu
   );
 }
 
-/** "Biggest mover today: NVDA, up 4.2%"; the close it is on when that is not today's. Facts only, no signal words. */
-export function moverLine(m: Mover): string {
-  const pct = `${Math.abs(m.changePct).toFixed(1)}%`;
+/** "Biggest mover today: NVDA"; the close it is on when that is not today's. Facts only, no signal words. */
+export function moverLead(m: Mover): string {
   const when = m.label ? m.label.replace(/^Last close\s*·\s*/i, "") : null;
-  return `${when ? `Biggest mover on the last close (${when})` : "Biggest mover today"}: ${m.symbol}, ${m.changePct >= 0 ? "up" : "down"} ${pct}`;
+  return `${when ? `Biggest mover on the last close (${when})` : "Biggest mover today"}: ${m.symbol}`;
+}
+/** "up 4.2%" / "down 3.2%": the word stays, so colour is never the only cue (#166 a). */
+export const moverMove = (m: Mover) => `${m.changePct >= 0 ? "up" : "down"} ${Math.abs(m.changePct).toFixed(1)}%`;
+/** The whole line as read: "Biggest mover today: NVDA, up 4.2%". */
+export function moverLine(m: Mover): string {
+  return `${moverLead(m)}, ${moverMove(m)}`;
 }
 
 /** The sectors card's rows (#164 B): the top 5 and the bottom 1 on the shared axis. */
@@ -288,7 +342,10 @@ export function LandingCards({ c, hasFiledEarnings }: { c: DashboardCards; hasFi
                 {c.pickers.mover ? (
                   <div className="dlMover" data-mover="">
                     <TickerLogo symbol={c.pickers.mover.symbol} size={20} radius={5} alt="" />
-                    <Link href={`/stock/${encodeURIComponent(c.pickers.mover.symbol)}`} prefetch={false}>{moverLine(c.pickers.mover)}</Link>
+                    <Link href={`/stock/${encodeURIComponent(c.pickers.mover.symbol)}`} prefetch={false}>
+                      {moverLead(c.pickers.mover)},{" "}
+                      <span className="dlMoverMove" data-tone={c.pickers.mover.changePct >= 0 ? "up" : "down"}><span aria-hidden="true">{c.pickers.mover.changePct >= 0 ? "▲" : "▼"} </span>{moverMove(c.pickers.mover)}</span>
+                    </Link>
                   </div>
                 ) : null}
                 <p className="dlFine" data-fine-print="">Out of {c.pickers.universe.toLocaleString("en-US")} stocks. A screen that finds nothing says &quot;none today&quot;.</p>
@@ -406,8 +463,26 @@ export const LANDING_CSS = `
 .dlIdxName{font-size:var(--fs-label);color:#8a97ad;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .dlIdxMove{font-weight:900;font-size:1.125rem;font-variant-numeric:tabular-nums;}
 .dlIdxMove[data-tone="up"]{color:#86efac;}.dlIdxMove[data-tone="down"]{color:#fca5a5;}.dlIdxMove[data-tone="flat"]{color:#cbd5e1;}
-.dlMarketLine{margin:0;font-size:var(--fs-read);line-height:1.5;color:#cbd5e1;font-weight:700;}
-.dlMarket .dlFine{margin-top:auto;}
+.dlMarketHead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.dlAsOf{font-size:var(--fs-fine);color:#8a97ad;}
+.dlPerf{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;}
+.dlPerfItem{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:var(--fs-read);line-height:1.4;}
+.dlPerfVal{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0;}
+.dlPerfLabel{color:#8a97ad;font-size:var(--fs-label);font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+.dlPerfNum{color:#eaf0fa;font-weight:900;font-variant-numeric:tabular-nums;}
+.dlPerfNum[data-tone="up"],.dlPerfWords[data-tone="up"]{color:#86efac;}
+.dlPerfNum[data-tone="down"],.dlPerfWords[data-tone="down"]{color:#fca5a5;}
+.dlPerfWords{font-weight:800;}
+.dlPerfWords[data-tone="flat"]{color:#fde68a;}
+.dlMeter{display:inline-grid;grid-template-columns:repeat(10,6px);gap:2px;align-items:center;}
+.dlMeter i{display:block;height:10px;border-radius:2px;background:#222c40;}
+.dlMeter[data-tone="up"] i[data-on]{background:#22c55e;}
+.dlMeter[data-tone="flat"] i[data-on]{background:#eab308;}
+.dlMeter[data-tone="down"] i[data-on]{background:#ef4444;}
+.dlMarketFoot{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;gap:6px 14px;flex-wrap:wrap;}
+.dlMarketFoot .dlFine{flex:1 1 220px;min-width:0;}
+.dlPowered{flex:0 0 auto;margin-left:auto;font-size:var(--fs-fine);color:#8a97ad;text-decoration:none;white-space:nowrap;}
+.dlPowered a:hover{color:#cbd5e1;}
 .dlSection{margin:30px 0 8px;display:grid;gap:16px;}
 .dlSectionHead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;}
 .dlSectionHead .dlFine{margin:0;}
@@ -438,6 +513,9 @@ export const LANDING_CSS = `
 .dlPeek{display:inline-flex;gap:3px;}
 .dlMover{display:flex;align-items:center;gap:8px;margin:4px 0 0;padding:10px 12px;border-radius:12px;background:#0f1624;border:1px solid #1a2336;font-size:var(--fs-read);font-weight:700;}
 .dlMover a{color:#eaf0fa;text-decoration:none;min-width:0;}
+.dlMoverMove{white-space:nowrap;font-weight:900;}
+.dlMoverMove[data-tone="up"]{color:#86efac;}
+.dlMoverMove[data-tone="down"]{color:#fca5a5;}
 .dlCapexChart{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:end;}
 .dlCx{min-width:0;}
 .dlCx .dlColHead{min-height:2.7em;}
@@ -490,6 +568,7 @@ export const LANDING_CSS = `
 @media(max-width:1023px){.dlOpenRow{grid-template-columns:minmax(0,1fr);gap:28px;}}
 @media(max-width:860px){.dlRow3{grid-template-columns:minmax(0,1fr);}}
 @media(max-width:640px){.dlRow2{grid-template-columns:minmax(0,1fr);}}
+@media(max-width:640px){.dlHub .dlWeb{display:block;margin-inline:auto;}}
 @media(max-width:560px){.dlIdx{grid-template-columns:repeat(2,minmax(0,1fr));}.dlCard{padding:14px;}.dlMarket{padding:16px;}.dlH2{font-size:1.375rem;}}
 /* THE STACKED STAR (#154 §1), last so it outranks the star's own rules. */
 @container (max-width:27em){.dlCx .dlColHead{min-height:0;}.dlCapexChart{grid-template-columns:minmax(0,1fr);}.dlCxNode{display:flex;justify-content:center;}.dlCxSize,.dlCxLines,.dlCxHub{display:none;}.dlCxStar{height:auto!important;}.dlCxNodeLabel{position:static;transform:none;background:none;}.dlCxNodeLabel::before{content:"↓ ";}.dlCxNodeLabel::after{content:" ↓";}}
