@@ -1416,6 +1416,8 @@ const TASKS = {
   "write-redis-bandwidth-reading": { script: "scripts/redis-bandwidth-reading.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-insight-factset-probe": { script: "scripts/insight-factset-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-revenue-trace": { script: "scripts/cap-reason-trace.mjs", args: () => [], needsTypescript: true, writes: true, env: { NAMED: "OXY PSX NVDA JPM", SHOW_REVENUE: "1" } },
+  // READS ONLY (#553 COWORK #198 item 2): the five dividend cells through the page's own calls.
+  "write-dividend-cells": { script: "scripts/cap-reason-trace.mjs", args: () => [], needsTypescript: true, writes: true, env: { NAMED: "NSC PGR FMC BKNG KHC", SHOW_DIV: "1" } },
 };
 
 const argv = process.argv.slice(2);

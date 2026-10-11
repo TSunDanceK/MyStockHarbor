@@ -35,7 +35,7 @@ const redis = (await import("@upstash/redis")).Redis.fromEnv();
 const F = await import("../lib/server/pickersSecFundamentals.ts");
 const { cellWhyWords } = await import("../lib/pickerCellWhy.ts");
 const { TIINGO_EOD_LAST_KEY } = await import("../lib/server/marketData/keys.ts");
-const { toDashed } = await import("../lib/symbolSpellings.mjs");
+const { toDashed, symbolSpellings } = await import("../lib/symbolSpellings.mjs");
 const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);
 
 const NAMED = (process.env.NAMED || "BBVA NMR NVMI BABA RIO AFRM HRL TPG ZM MFG MKC-V RCI GFL").split(/\s+/);
@@ -59,7 +59,7 @@ const lastBy = new Map(NAMED.map((s, i) => [s, last ? last[toDashed(s)] ?? last[
 
 console.log("symbol | in universe | record today | row | cap shown | cap code | cell word | tap note");
 for (const s of NAMED) {
-  const field = [s, s.replace(/-/g, "."), s.replace(/\./g, "-")].find((x) => all[x] !== undefined);
+  const field = [s, ...symbolSpellings(s)].find((x) => all[x] !== undefined);
   const rec = recBy.get(toDashed(s));
   const head = `${s} | ${universe.has(toDashed(s)) ? "yes" : "no"} | ${rec ? "yes" : "no"}`;
   if (!field) { console.log(`${head} | no SEC row | – | – | – | –`); continue; }
@@ -70,6 +70,8 @@ for (const s of NAMED) {
   const why = F.secPickerWhy(row, price, figures, earnings, rec?.industry ?? null);
   const words = F.secPickerWords(why);
   const code = why.marketCap ?? null;
+  // THE DIV CELLS (#553 COWORK #198 item 2): shown or not, and the cut/special/ifrs mark. Figures are filed DPS; the yield needs the close, so only shown/not.
+  if (process.env.SHOW_DIV) console.log(`  ${s} div: Div ($) ${figures.divPerShare === null ? "–" : `$${figures.divPerShare.toFixed(2)}`} · yield ${figures.divYield === null ? "–" : "shown"} · growth ${figures.divGrowth === null ? "–" : `${figures.divGrowth.toFixed(1)}%`} · payout ${earnings?.payoutRatio == null ? `– (${earnings?.payoutBasis ?? why.payoutRatio ?? "no basis"})` : `${earnings.payoutRatio.toFixed(1)}% (${earnings.payoutBasis})`} · mark ${row.div ? JSON.stringify(row.div) : "none"} · row built ${new Date(row.at).toISOString()}`);
   if (process.env.SHOW_REVENUE) console.log(`  ${s} revenue: shown ${figures.revenue === null ? "no" : "yes"} · why ${why.revenue ?? "–"} · row has m.revenue ${row.m?.revenue?.vals?.revenue != null} · incomplete ${row.m?.revenueIncomplete === true} · unit ${JSON.stringify(row.unit)}`);
   console.log(`${head} | "${field}" | ${figures.marketCap === null ? "no" : "yes"} | ${code ?? "–"} | ${words.marketCap ?? "–"} | ${code ? cellWhyWords(code) : "–"}${price === null ? " (no stored close)" : ""}`);
 }
