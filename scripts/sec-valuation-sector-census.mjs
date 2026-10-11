@@ -69,7 +69,7 @@ for (const [sym, value] of Object.entries(rawRows)) {
   const group = groupOf(sym);
   if (!group) { noGroup++; continue; }
   const inputs = { shares: row.inputs.shares, eps: null, refusals: row.inputs.refusals, sic: row.inputs.sic ?? null };
-  const mult = valuationMultiples(inputs, row.m, last.c, { withEstimates: true });
+  const mult = valuationMultiples(inputs, row.m, last.c); // FILED ONLY (round 2): as the shipped benchmarks
   const pe = secCapAndPe(toSecCapRow(row), last.c).pe;
   const got = { pe: typeof pe === "number" ? { ok: true, val: pe } : { ok: false, why: "pe-refused-or-loss" }, ps: mult.ps, pb: mult.pb, evEbitda: mult.evEbitda };
   per[sym] = { group };
