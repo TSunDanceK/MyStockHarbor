@@ -164,10 +164,24 @@ const RULES = {
     const fx = M.hub.buildThemes(M.hub.buildHubCompanies(FIX), { AMZN: "cloud", GOOGL: "cloud" }).find((x) => x.id === "cloud");
     return ids === "Chip foundry|Memory|AI accelerators|Cloud hosting|Payment networks|Big customers" && t.every((x) => x.line && x.top.length === 3 && x.pageCount > 0) &&
       cloud.pageCount === cloudPages.size && cloud.pageCount < cloud.top.reduce((a, c) => a + c.count, 0) && fx.pageCount === 4 &&
-      t.every((x) => themesHtml.includes(`${x.pageCount} mapped stocks name a company here`)) && (themesHtml.match(/class="bnThemeCard"/g) ?? []).length === 6;
+      t.every((x) => themesHtml.includes(`>${x.pageCount} mapped stocks</span>`) && themesHtml.includes(`title="${x.pageCount} mapped stocks name a company in this theme"`)) && (themesHtml.match(/class="bnThemeCard"/g) ?? []).length === 6;
   },
   "the hub link card 'Follow the money: AI and data-centre capex' → /bottlenecks/capex, on the page": ({ themesHtml, page }) =>
     /<a (?=[^>]*class="bnCapexCard")(?=[^>]*href="\/bottlenecks\/capex")[^>]*>[\s\S]*?Follow the money: AI and data-centre capex[\s\S]*?<\/a>/.test(themesHtml) && /<BottleneckThemes themes=\{hub\.themes\} \/>/.test(page),
+  // #563 COWORK #166 h: "Choke points by theme", compact: no outline, tighter, one footer line.
+  "the theme cards are compact: no outline or fill, 20 px logos, then the tickers and \"N mapped stocks\" on one footer line": ({ themesHtml, srcs }) => {
+    const css = srcs.themes;
+    const card = css.match(/\.bnThemeCard \{([^}]*)\}/)?.[1] ?? "";
+    const cards = themesHtml.split('class="bnThemeCard"').slice(1);
+    return /padding: 9px 0;/.test(card) && /\.bnThemeLine \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis; \}/.test(css) && !/(^|;)\s*border:|border-radius|background/.test(card) && /\.bnThemeFoot \{ display: flex; align-items: center;/.test(css) &&
+      cards.length === 6 && cards.every((c) => {
+        const f = c.slice(c.indexOf('<div class="bnThemeFoot">'));
+        const at = (k) => f.indexOf(k);
+        return at('<div class="bnThemeFoot">') === 0 && (f.match(/width:20px;height:20px/g) ?? []).length === 3 &&
+          at('class="bnThemeLogos"') > 0 && at('class="bnThemeLogos"') < at('class="bnThemeNames"') && at('class="bnThemeNames"') < at('class="bnThemeCount"') && !/<\/?div/.test(f.slice(at('class="bnThemeNames"'), at('class="bnThemeCount"'))) &&
+          /<span class="bnThemeCount" data-fine-print="" title="\d+ mapped stocks name a company in this theme">\d+ mapped stocks<\/span><\/div><\/div>/.test(f);
+      });
+  },
   "the hero: eyebrow, the one-line title in the h1, three stat tiles, the reworded search, the source note": ({ heroHtml, hub }) =>
     /<h1[^>]*><span[^>]*text-transform:uppercase[^>]*>Stock Bottlenecks<\/span><span[^>]*>Which companies the market can&#x27;t easily do without<\/span><\/h1>/.test(heroHtml) &&
     new RegExp(`>${hub.stats.stocksMapped}</div><div[^>]*>stocks mapped</div>`).test(heroHtml) && new RegExp(`>about </span>${hub.stats.companiesNamed}</div><div[^>]*>companies named</div>`).test(heroHtml) &&
@@ -287,7 +301,11 @@ const MUTANTS = [
   ["sizes from rem", "hero", (s) => s.replace('const tileLabel: React.CSSProperties = { marginTop: 4, fontSize: "var(--fs-label)"', 'const tileLabel: React.CSSProperties = { marginTop: 4, fontSize: 13')],
   ["sizes from rem", "hero", (s) => s.replace("<p data-fine-print style=", "<p style=")],
   ["sizes from rem", "board", (s) => s.replace(".bnLbBar > span { display: block; height: 100%; }", ".bnLbBar > span { display: block; height: 100%; transform: scaleX(1); }")],
-  ["sizes from rem", "themes", (s) => s.replace('<h3 style={{ margin: 0, fontSize: "1.0625rem"', '<h3 style={{ margin: 0, fontSize: "15px"')],
+  ["sizes from rem", "themes", (s) => s.replace(".bnThemeTitle { margin: 0; font-size: 1rem;", ".bnThemeTitle { margin: 0; font-size: 15px;")],
+  // #166 h: the cards back in an outline; the footer split over lines; big logos.
+  ["the theme cards are compact", "themes", (s) => s.replace(".bnThemeCard { min-width: 0; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }", ".bnThemeCard { min-width: 0; padding: 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); background: #0b1220; }")],
+  ["the theme cards are compact", "themes", (s) => s.replace('<span className="bnThemeCount" data-fine-print="" title=', '</div><div><span className="bnThemeCount" data-fine-print="" title=')],
+  ["the theme cards are compact", "themes", (s) => s.replace("size={20} radius={5}", "size={28} radius={7}")],
   ["describes, never advises", "hero", (s) => s.replace("These are the companies those pages name most often.", "These are the companies you should buy before they run.")],
   ["the workflow doc", "doc", (s) => s.replace(/NAME_ALIASES/g, "the aliases")],
 ];

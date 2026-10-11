@@ -57,7 +57,6 @@ function DepRow({ c, side, i, d, hasFiledEarnings }: { c: BottleneckCompany; sid
         </div>
         <div className="bnShare"><span>~{c.pct}%</span><span className="bnShareBar" aria-hidden="true"><i style={{ width: `${Math.min(100, c.pct)}%` }} data-grade={c.grade} /></span></div>
       </div>
-      {c.blurb ? <p className="bnWhy">{c.blurb}</p> : null}
       <div className="bnDepLinks">
         {t ? (
           <>
@@ -69,6 +68,15 @@ function DepRow({ c, side, i, d, hasFiledEarnings }: { c: BottleneckCompany; sid
           </>
         ) : <span className="bnUnlisted">{unlistedWords(c.name, c.blurb)}</span>}
       </div>
+      {/* THE LONG DESCRIPTION, ONE TAP DEEPER (#563 COWORK #166 f): a native
+          disclosure, closed on arrival. Server-rendered, so the text stays in
+          the HTML (indexable); the title, grade, share and listed line stay up front. */}
+      {c.blurb ? (
+        <details className="bnMore" data-dep-more="">
+          <summary>Read more</summary>
+          <p className="bnWhy">{c.blurb}</p>
+        </details>
+      ) : null}
     </li>
   );
 }
