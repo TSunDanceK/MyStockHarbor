@@ -24,13 +24,9 @@ import path from "node:path";
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const MIN_WORDS = 400;
-const KEEPERS_WITHOUT_COPY = [
-  "/all-time-high-breakout-stocks",
-  "/bullish-bearish-divergence-stocks",
-  "/oversold-stocks-today",
-  "/stock-screener",
-  "/stocks-near-200-day-moving-average",
-];
+// EMPTY SINCE #553 COWORK #200 (2026-10-11): all five keepers now carry a
+// write-up of 400+ words. The list stays as the shrink-only gate it was.
+const KEEPERS_WITHOUT_COPY = [];
 const BATCH_1 = [
   "/cheap-tech-stocks",
   "/overbought-stocks-today",
@@ -109,7 +105,9 @@ console.log("\n2. Planted mutants");
 const strip = (src) => src.replace(/\n  \/\/ WRITE-UP[\s\S]*?\n  bodySections: \[[\s\S]*?\n  \],/, "");
 const MUTANTS = [
   ["an unblocked page loses its write-up", () => ({ ...real, files: { ...files, "app/volume-spike-stocks/page.tsx": strip(files["app/volume-spike-stocks/page.tsx"]) } })],
-  ["a page is unblocked with no write-up", () => ({ ...real, noindexSrc: real.noindexSrc.replace('  "/atr-spike-stocks",\n', "") })],
+  // Since #553 COWORK #202 every live picker page is unblocked: the same
+  // mutant now strips the write-up from one released on 11 Oct.
+  ["a page is unblocked with no write-up", () => ({ ...real, files: { ...files, "app/atr-spike-stocks/page.tsx": files["app/atr-spike-stocks/page.tsx"].replace(/\n  bodySections: \[[\s\S]*?\n  \],/, "") } })],
   ["the keepers list grows to hide a page", () => ({ ...real, keepers: [...KEEPERS_WITHOUT_COPY, "/volume-spike-stocks"] })],
   ["a write-up cut below 400 words", () => ({ ...real, files: { ...files, "app/overbought-stocks-today/page.tsx": files["app/overbought-stocks-today/page.tsx"].replace(/(paragraphs: \[\n)((?:\s+"[^\n]*",\n)+)/g, (m, a, b) => a + b.split("\n").slice(0, 1).join("\n") + "\n") } })],
   ["a batch-1 page back on the noindex list", () => ({ ...real, noindexSrc: real.noindexSrc.replace('export const NOINDEX_PICKER_PAGES = [\n', 'export const NOINDEX_PICKER_PAGES = [\n  "/cheap-tech-stocks",\n') })],

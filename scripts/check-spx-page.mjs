@@ -72,7 +72,7 @@ const RULES = {
   "every live card says it is SPY and carries the Tiingo credit": ({ page }) =>
     /const liveLabel = onSpy \? "Shown on SPY, the ETF that tracks the S&P 500" : "Shown on the S&P 500 index";/.test(page) &&
     (page.match(/\{liveLabel\}/g) ?? []).length === 6 &&
-    /<ReturnsToggleCard [^>]*\/>\s*<\/div>\s*\{credit \? <p data-fine-print style=\{small\}>Daily prices: \{credit\}<\/p> : null\}/.test(page) &&
+    /<ReturnsToggleCard [^>]*\/>\s*<\/div>\s*\{credit \? <TiingoCredit \/> : null\}/.test(page) &&
     /<PerformanceStrip strip=\{strip\} credit=\{credit\} \/>/.test(page) && /<StockPriceChart [^>]*credit=\{credit \?\? null\} \/>/.test(page) &&
     /<ConfluenceCard [^>]*credit=\{credit\} \/>/.test(page) && /<KeyLevelsCard [^>]*credit=\{credit\} \/>/.test(page) &&
     /<LevelsSignals[\s\S]*?credit=\{credit\}\s*\/>/.test(page) &&

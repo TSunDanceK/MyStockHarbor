@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { closeDayLabel, lastCloseLabel } from "@/lib/server/marketData/eodLast";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 
 import { SECTORS, getSectorBySlug, sectorNewsPath } from "@/lib/sectors";
 import { getSectorNewsBaseData, type SectorNewsBaseData } from "@/lib/sector-news-data";
@@ -261,7 +261,7 @@ export default async function SectorNewsPage({ params }: Props) {
   // figure shows (PRICE_PROVIDER_POOL=tiingo).
   const tiingoCredit =
     priceProviderFor("POOL") === "tiingo" ? (
-      <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+      <TiingoLink />
     ) : null;
 
   const leadSummary = buildSectorLead({

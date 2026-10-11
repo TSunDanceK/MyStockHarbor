@@ -96,6 +96,11 @@ const config: PickerResultConfig = {
       ],
     },
   ],
+  relatedScreens: [
+    { href: "/cash-rich-value-stocks", label: "Cash-rich value stocks" },
+    { href: "/cheap-tech-stocks", label: "Cheap tech stocks" },
+    { href: "/stocks-with-strong-earnings-growth", label: "Stocks with strong earnings growth" },
+  ],
 };
 
 export default function Page() {

@@ -79,6 +79,40 @@ const config: PickerResultConfig = {
   // the flip, newest first, ties A to Z (pickersBuilder).
   rankedBy: { label: "most recent weekly Trend Helper flip, newest first", short: "newest flip" },
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "A slower version of the same turn",
+      paragraphs: [
+        "This page applies the Trend Helper Slow rule to weekly bars instead of daily ones. The line is a 55-period Hull moving average, a responsive kind of average, so on a weekly chart it spans a little over a year of trading. A bullish state confirms when two consecutive weekly closes finish above the line while it slopes upward; a flat line confirms neither side.",
+        "Only closed weeks count. The week currently in progress is dropped before the rule runs, so a stock cannot appear midweek and then disappear by Friday’s close. The flip must have confirmed within the last three weeks, and a stock’s first-ever confirmed state is excluded because there was no prior trend to reverse.",
+      ],
+    },
+    {
+      heading: "Timing and what the dates mean",
+      paragraphs: [
+        "Each row names the week the flip confirmed in, and the list is ordered by recency, newest first, with ties sorted A–Z. A finished week usually shows up after the next session’s data has loaded, so there is roughly a day’s lag after the week ends. The page rebuilds hourly, but membership tends to change only when a new week closes.",
+        "Because two weekly closes are needed, a stock has often been rising for several weeks before it is listed. That makes this screen better suited to reading the broader trend condition than to timing anything precise. Comparing it with the daily bullish flip page may show whether the shorter timeframe agreed earlier or is already turning back.",
+      ],
+    },
+    {
+      heading: "What it cannot tell you",
+      paragraphs: [
+        "Weekly flips are rare and slow, and a strong move can be partly over by the time it confirms. The rule also ignores fundamentals, news and volume. A week that closes just above the line counts the same as one that clears it decisively, so the chart can help judge how convincing the turn may be. Stocks whose flip is more than three weeks old drop off, even if the new trend is still intact.",
+      ],
+    },
+    {
+      heading: "An example across several weeks",
+      paragraphs: [
+        "Imagine a stock whose weekly Slow line bottomed out a couple of months ago and has since begun to rise. In one week it finishes above the line; the following week it finishes above again, and that second Friday close is the confirmation. Once the next session’s data loads, the row would likely appear, dated to the confirming week, and it can stay for that week plus the three closed weeks after it.",
+        "Edge cases are easy to miss. Two weekly closes above a line that is still flat would not register, and a confirmation forming during the unfinished week stays invisible until that week closes and loads. Unlike the daily bullish flip page, which can react within days, this one may skip short rallies entirely, which is largely the point of using weekly bars.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-with-bullish-trend-flip", label: "Daily bullish trend flips" },
+    { href: "/stocks-with-weekly-bearish-trend-flip", label: "Weekly bearish trend flips" },
+    { href: "/stocks-near-weekly-200-day-moving-average", label: "Stocks near the 200-week moving average" },
+  ],
 };
 
 export default function Page() {

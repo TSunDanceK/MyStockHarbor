@@ -71,6 +71,35 @@ const config: PickerResultConfig = {
   signalsFrom: "trend",
   sectionIncludes: ["best trend score"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "Four checks that make up the score",
+      paragraphs: [
+        "The trend score is a simple tally from 0 to 4. Each point comes from one check on daily closes: the close is above the 200-day simple moving average (SMA200), the close is above the 50-day average (SMA50), the 50-day average is above the 200-day, and the MACD histogram is above zero. The histogram is the gap between the MACD line and its signal line using 12/26/9 settings; a positive value suggests short-term momentum is pointing the same way as the trend.",
+        "A stock needs at least 220 closes before it is scored, so recent listings are left out. Candidates must pass three or more of the four checks. They are then ranked by the number of checks passed, adjusted by weights and by liquidity, and only the top 20 are shown.",
+      ],
+    },
+    {
+      heading: "Reading a 3 versus a 4",
+      paragraphs: [
+        "The Signals column on this page lists which trend checks fired for each row, so it is easy to see which one is missing from a 3. A stock missing only the MACD check may be in a pause within a longer advance, while one that has slipped under its 50-day average might be showing early wear. Neither is necessarily a problem, but they tell different stories.",
+        "Consider a hypothetical stock closing at $120, with its 50-day average at $112 and its 200-day at $115. It clears the first two checks, but with the 50-day still beneath the 200-day it fails the third; a positive histogram brings it to 3, so it stays eligible. A chart in that shape is often recovering from a dip before the slower averages have caught up.",
+        "Because liquidity feeds the ranking, heavily traded names tend to sit higher than thinly traded ones with the same tally. Comparing the distance between price and each average on the chart can show whether a strong score comes from a steady climb or from a stretched run that has moved far from its averages.",
+      ],
+    },
+    {
+      heading: "What the score leaves out",
+      paragraphs: [
+        "All four checks are backward-looking. Moving averages lag, so the score can stay high for a while after a trend has started to turn, and it says nothing about valuation, earnings or news. The data are end-of-day bars, the newest being the previous session’s close, rebuilt hourly. A high score describes the structure of the chart today, not where the trend might go.",
+        "Each check is all-or-nothing, so a close a few cents under the 50-day costs a full point, exactly as a close far below it would. The trend flip screens take a different angle: they flag the moment one smoothed line changes direction, whereas this score tends to reward trends already established across several measures.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-trading-above-200-day-moving-average", label: "Stocks above the 200-day moving average" },
+    { href: "/stocks-above-50-day-moving-average", label: "Stocks above the 50-day moving average" },
+    { href: "/stocks-with-bullish-trend-flip", label: "Bullish trend flip stocks" },
+  ],
   relatedGuide: {
     href: "/how-to-identify-stock-trends",
     label: "our guide to identifying stock trends",
