@@ -409,6 +409,11 @@ export function CellValue(
   // lets a caller that KNOWS the reason say it (see revenueEmpty).
   // THE SHORT WORD, ITS REASON ON TAP (#552 COWORK #124): never a sentence
   // in the cell, and never a dotted word that opens nothing.
+  // A WITHHELD DERIVED Q4 (#552 COWORK #196/#200): "Not reported", and the
+  // reason it was withheld on tap, whatever the caller's default empty text.
+  if (cell.val == null && cell.derived === "withheld" && cell.derivedNote) {
+    return <ReasonedValue text={NOT_REPORTED} reason={cell.derivedNote} style={MUTED_VALUE} />;
+  }
   if (cell.val == null) {
     // NO SENTENCE EVER PRINTS IN THE VALUE COLUMN (#552 COWORK #137 §1): one
     // with no short form reads "Not reported", the sentence its tap note.

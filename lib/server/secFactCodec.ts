@@ -42,7 +42,8 @@ export type StoredPeriod = {
   v: (number | null)[];
   /**
    * Derivation codes, positional, ONE CHARACTER EACH, joined into one string.
-   * "F" as-filed · "D" differenced · "C" computed · "A" ambiguous · "-" absent.
+   * "F" as-filed · "D" differenced · "C" computed · "A" ambiguous ·
+   * "W" withheld (a derived Q4 that crosses scopes, value null) · "-" absent.
    *
    * A STRING, NOT AN ARRAY: 46 one-character array entries cost ~230 bytes of
    * JSON per period against 46. The page needs this on every cell it renders --
@@ -262,10 +263,10 @@ export type StoredFactSet = {
 };
 
 const CODE: Record<string, string> = {
-  "as-filed": "F", differenced: "D", computed: "C", ambiguous: "A",
+  "as-filed": "F", differenced: "D", computed: "C", ambiguous: "A", withheld: "W",
 };
-export const DERIVATION_OF: Record<string, "as-filed" | "differenced" | "computed" | "ambiguous" | null> = {
-  F: "as-filed", D: "differenced", C: "computed", A: "ambiguous", "-": null,
+export const DERIVATION_OF: Record<string, "as-filed" | "differenced" | "computed" | "ambiguous" | "withheld" | null> = {
+  F: "as-filed", D: "differenced", C: "computed", A: "ambiguous", W: "withheld", "-": null,
 };
 
 export function encodePeriod(p: PeriodRecord): StoredPeriod {
@@ -375,7 +376,7 @@ const INDEX_OF = new Map(SEC_FIELD_KEYS.map((k, i) => [k, i]));
 /** One cell: the value and how it came to be. */
 export type Cell = {
   val: number | null;
-  derived: "as-filed" | "differenced" | "computed" | "ambiguous" | null;
+  derived: "as-filed" | "differenced" | "computed" | "ambiguous" | "withheld" | null;
 };
 
 /**
