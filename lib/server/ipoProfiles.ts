@@ -198,6 +198,18 @@ const OVERVIEW_HEADING = /^(overview|general|our company|company overview|busine
  * cut by a page break all read as "prose" in SPAC summaries.
  */
 const DESCRIBES = /\b(is|are|was) (a|an)\b|\b(we|[A-Z][\w.&’'-]*) (develops?|designs?|builds?|provides?|operates?|offers?|makes?|sells?|manufactures?|owns?|focus(es)?|speciali[sz]es?)\b/;
+/** ...within its opening words (not "...whether a target business is an appropriate business"). */
+const DESCRIBES_WITHIN_WORDS = 8;
+/** ...about the company, not a person: a SPAC summary's director biographies read like descriptions. */
+const PERSON_SUBJECT = /^(Mr|Ms|Mrs|Dr)\.|^(He|She)\b/;
+/** Only the summary's opening paragraphs are the company describing itself. */
+const ABOUT_SCAN_PARAGRAPHS = 4;
+
+/** True when a sentence opens with the company saying what it is or does. */
+export function describesCompany(sentence: string): boolean {
+  const opening = sentence.split(/\s+/).slice(0, DESCRIBES_WITHIN_WORDS).join(" ");
+  return DESCRIBES.test(opening) && !PERSON_SUBJECT.test(sentence);
+}
 const END_OF_SECTION = /^(the offering|risk factors|summary risk factors|summary of risk factors|risks? associated with our business|corporate information|implications of being an emerging growth company|summary (consolidated )?(historical )?financial (and other )?data)$/i;
 const PREAMBLE = /this summary highlights|summary highlights (selected )?information|does not contain all (of )?the information|you should read the (entire|following)|unless (otherwise indicated|the context)|as used in this prospectus|throughout this prospectus|references in this prospectus|in this prospectus,? (unless|references|we|the terms)|we use the terms?|references to [“"]/i;
 const BAD_SENTENCE = /emerging growth company|smaller reporting company|forward-looking|risk factors|this prospectus|you should|unless the context|references to|[“"](we|us|our)[,”"]|\[\s*[•●]?\s*\]|[•●]|\.{4,}|\|/i;
@@ -264,7 +276,9 @@ export function trimToSentences(paragraphs: string[]): string | null {
  * is tried. Within it, reading starts after "Overview" (or "General") when
  * that heading comes first, and the extract starts at the first paragraph
  * whose opening sentence describes the company (DESCRIBES); that paragraph and
- * the one after it are trimmed to two or three sentences.
+ * the one after it are trimmed to two or three sentences. Only the first
+ * ABOUT_SCAN_PARAGRAPHS prose paragraphs are looked at: further in, a SPAC's
+ * summary is its team's biographies and conflicts, never what it does.
  */
 export function extractAbout(html: string): string | null {
   const blocks = htmlBlocks(html);
@@ -282,7 +296,7 @@ export function extractAbout(html: string): string | null {
       if (isProse(b) && !PREAMBLE.test(b)) prose.push(b);
     }
     if (!prose.length) continue; // a contents line, not the summary
-    const start = prose.findIndex((b) => DESCRIBES.test(splitSentences(b)[0] ?? ""));
+    const start = prose.slice(0, ABOUT_SCAN_PARAGRAPHS).findIndex((b) => describesCompany(splitSentences(b)[0] ?? ""));
     return start < 0 ? null : trimToSentences(prose.slice(start, start + 2));
   }
   return null;

@@ -108,7 +108,7 @@ const PROSPECTUS = `<html><body>
 const PROSPECTUS_TABLE_ONLY = `<p>PROSPECTUS SUMMARY</p><table><tr><td>Acme Robotics Inc. builds autonomous warehouse robots for retailers across the country today. Our robots pick, pack and sort goods without changes to shelving.</td></tr></table><p>The Offering</p>`;
 const PROSPECTUS_BOILERPLATE = `<p>Prospectus Summary</p><p>This summary highlights information contained elsewhere in this prospectus and does not contain all of the information you should consider.</p><p>Overview</p><p>We are an emerging growth company as defined in the JOBS Act and may take advantage of reduced reporting requirements. We are offering [&#9679;] shares of our common stock in this offering at a price to be set.</p><p>The Offering</p>`;
 const PROSPECTUS_SHORT = `<p>Summary</p><p>Overview</p><p>Acme makes robots for many large warehouses and small depots in the whole world.</p><p>The Offering</p>`;
-const PROSPECTUS_SPAC = `<p>SUMMARY</p><p>This summary highlights selected information about Gamma, which is a newly organized blank check company, and its offering of units.</p><p>We are a newly incorporated blank check company incorporated as a Cayman Islands exempted company for the purpose of effecting a merger, share exchange or similar business combination with one or more businesses. We have not selected any business combination target. Our sponsor is Gamma Sponsor LLC, a Delaware limited liability company.</p><p>The Offering</p>`;
+const PROSPECTUS_SPAC = `<p>SUMMARY</p><p>This summary highlights Gamma, which is a blank check company, and its offering of units to the public.</p><p>We are a newly incorporated blank check company incorporated as a Cayman Islands exempted company for the purpose of effecting a merger, share exchange or similar business combination with one or more businesses. We have not selected any business combination target. Our sponsor is Gamma Sponsor LLC, a Delaware limited liability company.</p><p>The Offering</p>`;
 const ABOUT_ACME = "Acme Robotics Inc. builds autonomous warehouse robots for U.S. retailers. Our robots pick, pack and sort goods without changes to a customer\u2019s shelving or software. We sold to 40 customers across 12 states in 2025.";
 
 const INDEX_WITH = { directory: { item: [{ name: "s1a2.htm" }, { name: "ex1-1.htm" }, { name: "ex107.htm" }, { name: "R1.htm" }] } };
@@ -155,6 +155,9 @@ function aboutRules(S) {
   const spac = S.extractAbout(PROSPECTUS_SPAC);
   want("a SPAC's summary without an \"Overview\" heading still reads", typeof spac === "string" && spac.startsWith("We are a newly incorporated blank check company") && /Gamma Sponsor LLC, a Delaware limited liability company\.$/.test(spac), spac);
   want("an opening that does not describe the company (team biographies, a risk, a fragment cut by a page break): omitted", S.extractAbout("<p>Summary</p><p>The members of our team have extensive experience with special purpose acquisition companies and serve as officers and directors of several prior blank check companies listed in the United States.</p><p>interest to pay dissolution expenses, which is a cost borne by the trust account, divided by the number of public shares outstanding.</p><p>The Offering</p>") === null);
+  want("a director's biography is not the company", !S.describesCompany("Mr. Hendrix is an Operating Executive at a private equity firm.") && S.describesCompany("Orion180 is a founder-led specialty insurance group."));
+  want("the self-description must open the sentence", !S.describesCompany("Members of our management team may have a conflict in determining whether a target business is an appropriate business."));
+  want("only the summary's opening paragraphs are read", S.extractAbout("<p>Summary</p>" + "<p>Our sponsor and its affiliates have sponsored several prior special purpose acquisition companies over many years.</p>".repeat(4) + "<p>We are a blank check company formed to pursue a business combination with a technology business in North America, with offices in New York.</p><p>The Offering</p>") === null);
   want("no summary heading at all: omitted", S.extractAbout("<p>Overview</p><p>Acme Robotics Inc. builds autonomous warehouse robots for many retailers in the country. Our robots pick, pack and sort goods without changes.</p>") === null);
   return fails;
 }
@@ -309,7 +312,10 @@ try {
     ["no word or sentence limit", "    if (picked.length >= 3) break;", ""],
     ["a too-short extract shown", "  if (!picked.length || words < ABOUT_MIN_WORDS) return null;", "  if (!picked.length) return null;"],
     ["\"Overview\" not looked for", "      if (OVERVIEW_HEADING.test(strip(blocks[k]))) { from = k + 1; break; }", ""],
-    ["any prose taken as the description", "    const start = prose.findIndex((b) => DESCRIBES.test(splitSentences(b)[0] ?? \"\"));", "    const start = 0;"],
+    ["any prose taken as the description", "    const start = prose.slice(0, ABOUT_SCAN_PARAGRAPHS).findIndex((b) => describesCompany(splitSentences(b)[0] ?? \"\"));", "    const start = 0;"],
+    ["the self-description anywhere in the sentence", "  const opening = sentence.split(/\\s+/).slice(0, DESCRIBES_WITHIN_WORDS).join(\" \");", "  const opening = sentence;"],
+    ["a person taken for the company", "  return DESCRIBES.test(opening) && !PERSON_SUBJECT.test(sentence);", "  return DESCRIBES.test(opening);"],
+    ["the whole summary scanned", "prose.slice(0, ABOUT_SCAN_PARAGRAPHS).findIndex", "prose.findIndex"],
     ["a fragment cut by a page break read as prose", "!/^[\"“(]?[A-Z0-9]/.test(b) || ", ""],
     ["no prospectus fetch", "        if (reg.doc && now() <= opts.deadlineMs) {", "        if (false) {"],
     ["a failed fetch recorded as no extract (never retried)", "          } catch (err) {\n            if (err instanceof SecThrottled) throw err;\n          }", "          } catch (err) {\n            if (err instanceof SecThrottled) throw err;\n            profile.about = null;\n          }"],
