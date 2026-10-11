@@ -14,7 +14,7 @@ import { resolveCalendarDay, dayStateMessage, easternDate } from "@/lib/server/c
 import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { readTiingoEodLast } from "@/lib/server/marketData/read";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import { scaledAmount } from "@/lib/server/secPresentation";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import {
@@ -399,8 +399,9 @@ export default async function EarningsCalendarPage({
             // AN INTERNAL CONTROL (#552 COWORK #174): off on production; a
             // preview keeps it for the owner. The route behind it stays keyed.
             backfill={!isProductionDeployment()}
+            // B's site-wide "powered by Tiingo" link (#552 COWORK #205).
             credit={priceProviderFor("POOL") === "tiingo" && weekDaysView.some((d) => d.rows.length > 0) ? (
-              <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer">{TIINGO_CREDIT}</a>
+              <TiingoLink />
             ) : null}
           />
 

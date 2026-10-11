@@ -8,7 +8,7 @@ import { historyForSurface, historyOnTiingo, readTiingoHistoryPoints } from "@/l
 import { performanceStrip } from "@/lib/ta/performance";
 import { strengthBadge } from "@/lib/strengthBadge";
 import { earningsBadgeInput } from "@/lib/earningsBadge";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import { searchSymbols } from "@/lib/server/symbolSearch";
 import {
   getStockPageSecFacts,
@@ -935,10 +935,11 @@ export default async function StockPage({ params }: Props) {
         renderedAt={Date.now()}
         initialQuote={quote}
         // Step 4 (#553 COWORK #71/#92): the linked credit, shown by the client
-        // under the header stats whenever the quote is a Tiingo one.
+        // under the header stats whenever the quote is a Tiingo one. B's
+        // site-wide "powered by Tiingo" link since #552 COWORK #205.
         tiingoCredit={
           priceProviderFor("STOCK_PAGE") === "tiingo" ? (
-            <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+            <TiingoLink />
           ) : null
         }
         // Step 3 (#553 COWORK #71/#92/#103): the linked credit under the chart.
@@ -947,7 +948,7 @@ export default async function StockPage({ params }: Props) {
         // shows it only beside a series whose provider is "tiingo".
         historyCredit={
           historyResult.provider === "tiingo" || historyOnTiingo("HISTORY") ? (
-            <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+            <TiingoLink />
           ) : null
         }
         // Proves to /api/quote that this client rendered a real page. Empty

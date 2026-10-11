@@ -45,7 +45,8 @@ const RULES = {
   "the title's price follows the gate": (p) => /historyForSurface\("CHARTS", clean, \(\) => getDailyHistory\(clean, \{ caller: "stock-earnings-meta" \}\)\)/.test(p),
   "the linked credit shows whenever a figure is Tiingo's":
     (p) => /const pricesFromTiingo = chartHistory\.provider === "tiingo" \|\| \(onTiingo && surfacePrice !== null\);/.test(p)
-      && /\{data\.pricesFromTiingo \? \(\s*<p[^>]*>\s*Prices: <a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(p),
+      // B's linked "powered by Tiingo" (#552 COWORK #205), not hand-typed text.
+      && /\{data\.pricesFromTiingo \? \(\s*<p[^>]*>\s*Prices <TiingoLink \/>/.test(p),
 };
 for (const [name, rule] of Object.entries(RULES)) check(name, rule(P, C));
 
@@ -56,6 +57,7 @@ const MUTANTS = [
   ["an IEX trade printed as a \"close\"", CARD, "${priceLabel ?? `close${priceAsOf ? `, ${readableDate(priceAsOf)}` : \"\"}`}", "close${priceAsOf ? `, ${readableDate(priceAsOf)}` : \"\"}"],
   ["the title off the gate", PAGE, "historyForSurface(\"CHARTS\", clean, () => getDailyHistory(clean, { caller: \"stock-earnings-meta\" }))", "getDailyHistory(clean, { caller: \"stock-earnings-meta\" }).then((p) => ({ points: p }))"],
   ["the credit only for the chart", PAGE, " || (onTiingo && surfacePrice !== null)", ""],
+  ["the credit printed as plain text", PAGE, "Prices <TiingoLink />", "Prices from Tiingo"],
 ];
 for (const [label, file, from, to] of MUTANTS) {
   const p = file === PAGE ? once(P, from, to) : P;
