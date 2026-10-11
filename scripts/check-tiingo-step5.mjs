@@ -553,7 +553,7 @@ function staticRules(srcs) {
 
   // credit (rule 1 itself is check-tiingo-credit's)
   want("both sector pages render the linked credit on POOL=tiingo",
-    [FILES.sectorIndex, FILES.sectorNews].every((f) => /priceProviderFor\("POOL"\) === "tiingo"/.test(code[f]) && /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(code[f])));
+    [FILES.sectorIndex, FILES.sectorNews].every((f) => /priceProviderFor\("POOL"\) === "tiingo"/.test(code[f]) && /<TiingoCredit \/>|<TiingoLink \/>/.test(code[f])));
   want("the Pickers footer credits Tiingo when POOL is switched", /const tiingoPrices = priceProviderFor\("PICKERS"\) === "tiingo" \|\| priceProviderFor\("POOL"\) === "tiingo";/.test(code[FILES.pickerPage]));
   want("...and labels the volume \"as of last close\"", /priceWindow && volumeLabel \? `\$\{priceWindow\} · volume \$\{volumeLabel\}`/.test(code[FILES.pickerPage]));
   want("the dashboard credit covers the ticker's Tiingo movers", /priceProviderFor\("STOCK_PAGE"\) === "tiingo" \|\| priceProviderFor\("POOL"\) === "tiingo"/.test(code[FILES.dashPage]) && /<DashboardTicker credit=\{tiingoCredit\} \/>/.test(srcs["app/components/DashboardClient.tsx"]));
@@ -573,7 +573,7 @@ const S_MUTANTS = [
   ["/api/market keeps spending on Tiingo", FILES.market, /if \(priceProviderFor\("POOL"\) === "tiingo"\) \{/, "if (false) {"],
   ["the ticker says \"today\" for a last close", FILES.ticker, /% \$\{row\.label \?\? "today"\}`/, "% today`"],
   ["the ticker keeps FMP's movers on Tiingo", FILES.builder, /topMovers: tiingoTickerMovers \?\? topMoversForTicker,/, "topMovers: topMoversForTicker,"],
-  ["a sector page without the credit", FILES.sectorNews, /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "null"],
+  ["a sector page without the credit", FILES.sectorNews, /<TiingoLink \/>/, "null"],
   ["the Pickers credit on PICKERS only", FILES.pickerPage, / \|\| priceProviderFor\("POOL"\) === "tiingo";/, ";"],
 ];
 for (const [label, file, from, to] of S_MUTANTS) {

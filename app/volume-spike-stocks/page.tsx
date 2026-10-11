@@ -86,6 +86,11 @@ const config: PickerResultConfig = {
       ],
     },
   ],
+  relatedScreens: [
+    { href: "/atr-spike-stocks", label: "ATR spike stocks" },
+    { href: "/breakout-signal-stocks", label: "Breakout signal stocks" },
+    { href: "/3-month-high-breakout-stocks", label: "3-month high breakout stocks" },
+  ],
   relatedGuide: {
     href: "/learn/volume",
     label: "our lesson on volume",

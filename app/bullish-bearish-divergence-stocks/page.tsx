@@ -71,6 +71,38 @@ const config: PickerResultConfig = {
   presetFilters: ["divergencePick"],
   sectionIncludes: ["divergence"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "Divergence, in plain terms",
+      paragraphs: [
+        "A divergence is a disagreement between price and a momentum indicator. When price sets a lower low but momentum sets a higher one, it is called bullish divergence, because selling may be losing force. When price sets a higher high while momentum weakens, it is bearish divergence. This page gathers both kinds from two indicators, RSI(14) and the MACD line.",
+        "Swing points are found on closing prices, using pivots with two bars on either side. On daily charts the detector looks back 45 bars, needs a price swing of at least 1.6%, and the second pivot must be no more than 16 bars old. On weekly charts it looks back 30 bars, needs a 2.0% swing, and the second pivot must be within 10 bars.",
+        "The MACD version uses the line itself (the 12-period EMA minus the 26-period EMA), not the histogram, and its swing must be meaningful: at least 0.5 times its standard deviation on daily, 0.35 on weekly. For bearish RSI divergence, RSI must fall at least 6 points between the pivots on daily, or 5 on weekly.",
+      ],
+    },
+    {
+      heading: "How the twenty are chosen",
+      paragraphs: [
+        "Only the 20 strongest divergences across the universe appear, one per stock. Each is scored on six parts: timeframe 30%, with weekly signals weighted above daily; duration 20%; structure 20%; magnitude 15%; distance to the 200-day average 10%; and reaction 5%.",
+        "Penalties apply for thin liquidity, for price swings under 2.5%, and for pivots spanning fewer than 4 bars, which tends to push small or crowded patterns down the list.",
+        "Each card notes which indicator produced the signal and which way it leans. Weekly patterns cover far more history than daily ones, so the two may deserve different weight. The chart link can help check by eye whether the two pivots look meaningful and where price sits relative to its 200-day average.",
+      ],
+    },
+    {
+      heading: "Limits worth keeping in mind",
+      paragraphs: [
+        "Divergence describes momentum, not direction. Price can keep falling through a bullish divergence, or keep rising through a bearish one, sometimes forming several divergences in a row before anything changes. The pattern tends to be more informative alongside support, resistance and the broader trend than on its own.",
+        "A pivot only confirms once two later bars exist, so every signal is at least a couple of bars old when it appears. The data is daily bars of end-of-day prices, with the newest bar being the previous session’s close, and the page rebuilds hourly.",
+        "Because only one divergence is kept per stock and only 20 are listed, a stock can carry another signal that does not show here. The dedicated RSI and MACD divergence pages keep their own lists and might show it.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/bullish-rsi-divergence-stocks", label: "Bullish RSI divergence stocks" },
+    { href: "/bearish-rsi-divergence-stocks", label: "Bearish RSI divergence stocks" },
+    { href: "/bullish-macd-divergence-stocks", label: "Bullish MACD divergence stocks" },
+    { href: "/bearish-macd-divergence-stocks", label: "Bearish MACD divergence stocks" },
+  ],
   relatedGuide: {
     href: "/bullish-divergence-explained",
     label: "bullish divergence explained",
