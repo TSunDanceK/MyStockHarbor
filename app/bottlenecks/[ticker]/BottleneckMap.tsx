@@ -3,7 +3,8 @@
 // customers on the right. Link thickness is the share; box borders and link
 // colour follow the grade. At most 6 a side, the rest as "+N more". Each box
 // links to its card below. A vertical version (suppliers, the company, then
-// customers) replaces it at 640 px and under. Server-drawn; no client code.
+// customers, each group under its own label) replaces it at 640 px and
+// under. Server-drawn; no client code.
 import { GRADE_TONE, GRADE_WORDS, type MapNode } from "@/lib/bottleneckPage";
 
 const NEUTRAL = "#64748b";
@@ -32,8 +33,9 @@ export default function BottleneckMap({ symbol, name, left, right, describe }: {
   const yOf = (i: number, n: number) => 12 + (H - 24 - (n * BH + (n - 1) * GAP)) / 2 + i * (BH + GAP);
   const hrefOf = (n: MapNode, side: "s" | "c") => ("more" in n ? `#${side === "s" ? "suppliers" : "customers"}` : `#${n.anchor}`);
   // ── NARROW: 360 wide, stacked ──
-  const NW = 360, NB = 300, NBH = 44, NG = 8, NCH = 56;
-  const topH = left.length * (NBH + NG), botY0 = topH + 28 + NCH + 28;
+  // Each group carries its own SUPPLIERS / CUSTOMERS label on a phone (#166 g).
+  const NW = 360, NB = 300, NBH = 44, NG = 8, NCH = 56, LBL = left.length ? 26 : 0, RLBL = right.length ? 26 : 0;
+  const topH = LBL + left.length * (NBH + NG), botY0 = topH + 28 + NCH + 28 + RLBL;
   const NH = botY0 + right.length * (NBH + NG) + 4;
   const ncy = topH + 28 + NCH / 2;
   return (
@@ -57,17 +59,19 @@ export default function BottleneckMap({ symbol, name, left, right, describe }: {
       </svg>
       <svg className="bnMapNarrow" viewBox={`0 0 ${NW} ${NH}`} width="100%" aria-hidden="true" focusable="false">
         {left.map((n, i) => {
-          const y = i * (NBH + NG) + NBH / 2;
+          const y = LBL + i * (NBH + NG) + NBH / 2;
           return <path key={`nl${n.key}`} d={`M${(NW + NB) / 2} ${y} C ${NW - 8} ${y}, ${NW - 8} ${ncy - NCH / 2 - 6}, ${NW / 2 + 40} ${ncy - NCH / 2}`} fill="none" stroke={tone(n)} strokeOpacity={0.55} strokeWidth={Math.max(1.5, width(n.pct) * 0.6)} />;
         })}
         {right.map((n, i) => {
           const y = botY0 + i * (NBH + NG) + NBH / 2;
           return <path key={`nr${n.key}`} d={`M${NW / 2 - 40} ${ncy + NCH / 2} C 8 ${ncy + NCH / 2 + 6}, 8 ${y}, ${(NW - NB) / 2} ${y}`} fill="none" stroke={tone(n)} strokeOpacity={0.55} strokeWidth={Math.max(1.5, width(n.pct) * 0.6)} />;
         })}
-        {left.map((n, i) => <Box key={`nb${n.key}`} n={n} x={(NW - NB) / 2} y={i * (NBH + NG)} w={NB} h={NBH} href={hrefOf(n, "s")} />)}
+        {left.length ? <text x={(NW - NB) / 2} y={16} fontSize={14} fontWeight={800} fill="#93c5fd" letterSpacing="0.08em" data-map-label="suppliers">SUPPLIERS</text> : null}
+        {left.map((n, i) => <Box key={`nb${n.key}`} n={n} x={(NW - NB) / 2} y={LBL + i * (NBH + NG)} w={NB} h={NBH} href={hrefOf(n, "s")} />)}
         <rect x={NW / 2 - 90} y={ncy - NCH / 2} width={180} height={NCH} rx={14} fill="#13213f" stroke="#5fd4c7" strokeWidth={2} />
         <text x={NW / 2} y={ncy - 2} textAnchor="middle" fontSize={16} fontWeight={900} fill="#f8fafc">{symbol}</text>
         <text x={NW / 2} y={ncy + 15} textAnchor="middle" fontSize={11.5} fill="#cbd5e1">{clip(name, 26)}</text>
+        {right.length ? <text x={(NW - NB) / 2} y={botY0 - 10} fontSize={14} fontWeight={800} fill="#5fd4c7" letterSpacing="0.08em" data-map-label="customers">CUSTOMERS</text> : null}
         {right.map((n, i) => <Box key={`nc${n.key}`} n={n} x={(NW - NB) / 2} y={botY0 + i * (NBH + NG)} w={NB} h={NBH} href={hrefOf(n, "c")} />)}
       </svg>
       <figcaption className="bnFine" data-fine-print="">Link thickness is the estimated share; colour is the grade (red: hard to replace, amber: some alternatives, green: spread out).</figcaption>

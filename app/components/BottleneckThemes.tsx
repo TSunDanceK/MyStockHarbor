@@ -14,24 +14,20 @@ export default function BottleneckThemes({ themes }: { themes: HubTheme[] }) {
   return (
     <section className="bnThemes" style={{ marginBottom: 24 }}>
       <h2 style={{ margin: "0 0 12px", fontSize: "1.25rem", fontWeight: 850 }}>Choke points by theme</h2>
+      {/* COMPACT (#563 COWORK #166 h): no card outline, tighter spacing, and the
+          logos, tickers and "N mapped" on one line; about half the old height. */}
       <div className="bnThemeGrid">
         {themes.map((t) => (
-          <div key={t.id} className="bnThemeCard">
-            <h3 style={{ margin: 0, fontSize: "1.0625rem", fontWeight: 850, color: "#f1f5f9" }}>{t.title}</h3>
-            <p style={{ margin: "6px 0 0", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.78)" }}>{t.line}</p>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, minWidth: 0 }}>
-              {t.top.map((c) => (
-                <span key={c.key} title={c.name} style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                  <TickerLogo symbol={c.ticker} name={c.name} size={28} radius={7} alt={c.name} />
-                </span>
-              ))}
-              <span className="bnThemeNames" style={{ minWidth: 0, fontSize: "var(--fs-label)", color: "rgba(241,245,249,0.65)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {t.top.map((c) => c.ticker ?? c.name).join(" · ")}
-              </span>
+          <div key={t.id} className="bnThemeCard" data-theme={t.id}>
+            <h3 className="bnThemeTitle">{t.title}</h3>
+            <p className="bnThemeLine" title={t.line}>{t.line}</p>
+            <div className="bnThemeFoot">
+              <div className="bnThemeLogos" aria-hidden="true">
+                {t.top.map((c) => <TickerLogo key={c.key} symbol={c.ticker} name={c.name} size={20} radius={5} alt="" />)}
+              </div>
+              <span className="bnThemeNames" title={t.top.map((c) => c.name).join(", ")}>{t.top.map((c) => c.ticker ?? c.name).join(" · ")}</span>
+              <span className="bnThemeCount" data-fine-print="" title={`${t.pageCount} mapped stocks name a company in this theme`}>{t.pageCount} mapped stocks</span>
             </div>
-            <p style={{ margin: "10px 0 0", fontSize: "var(--fs-read)", color: "#5FD4C7", fontWeight: 700 }}>
-              {t.pageCount} mapped stocks name a company here
-            </p>
           </div>
         ))}
       </div>
@@ -47,8 +43,14 @@ export default function BottleneckThemes({ themes }: { themes: HubTheme[] }) {
       </Link>
 
       <style>{`
-        .bnThemeGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-        .bnThemeCard { min-width: 0; padding: 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); background: #0b1220; }
+        .bnThemeGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; border-top: 1px solid rgba(255,255,255,0.08); }
+        .bnThemeCard { min-width: 0; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .bnThemeTitle { margin: 0; font-size: 1rem; font-weight: 850; color: #f1f5f9; }
+        .bnThemeLine { margin: 2px 0 0; font-size: var(--fs-read); line-height: 1.45; color: rgba(241,245,249,0.72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bnThemeFoot { display: flex; align-items: center; gap: 6px 8px; margin-top: 6px; min-width: 0; flex-wrap: wrap; }
+        .bnThemeLogos { display: inline-flex; gap: 3px; flex: 0 0 auto; }
+        .bnThemeNames { min-width: 0; font-size: var(--fs-label); font-weight: 800; color: rgba(241,245,249,0.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bnThemeCount { flex: 0 0 auto; margin-left: auto; font-size: var(--fs-fine); font-weight: 700; color: #5FD4C7; white-space: nowrap; }
         .bnCapexCard { display: block; margin-top: 12px; padding: 16px 18px; border-radius: 14px; border: 1px solid rgba(252,211,77,0.3); background: rgba(252,211,77,0.06); text-decoration: none; }
         .bnCapexCard:hover { border-color: rgba(252,211,77,0.55); }
         @media (max-width: 1100px) { .bnThemeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
