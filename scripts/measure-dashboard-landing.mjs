@@ -27,7 +27,9 @@
 //   - at 560 px and under the order is not hero, Market today, Only on
 //     MyStockHarbor, This week, then the analyser;
 //   - (#154) the capex hub, drawn, is off the middle row or its label wraps or
-//     crowds a bar; an earnings name is cut off without an ellipsis.
+//     crowds a bar; an earnings name is cut off without an ellipsis;
+//   - (#166 d) the chart watermark overlaps the plot (it has its own strip);
+//   - (#166 c) at 640 px and under the supply-chain map is off centre.
 // "/" (#149 §1), rendered from app/page.tsx and opened at 390 px with a phone's
 // user agent, must be this same landing. With --shots DIR it saves 1280 and 390 px
 // screenshots. A mutant (a 700 px wide block) must be caught as sideways scroll.
@@ -210,6 +212,20 @@ function probe() {
       if (spilled) bad.push(`a toolbar group spills its buttons (${spilled.getAttribute("data-tb")})`);
     }
   }
+  // THE CHART WATERMARK (#166 d): in its own strip above the plot, so it never
+  // crosses the top gridline, a line or a candle, at any width.
+  const wms = [...document.querySelectorAll("[data-chart-watermark]")].filter(vis);
+  if (!wms.length) bad.push("no chart watermark");
+  for (const wm of wms) {
+    const t = wm.querySelector("span")?.getBoundingClientRect(), p = wm.parentElement?.querySelector("svg")?.getBoundingClientRect();
+    if (!t || !p) bad.push("the chart watermark has no plot under it");
+    else if (t.bottom > p.top + 0.5) bad.push(`the chart watermark overlaps the plot by ${Math.round(t.bottom - p.top)} px at ${innerWidth}px`);
+  }
+  // THE SUPPLY-CHAIN MAP CENTRED ON A PHONE (#166 c).
+  if (innerWidth <= 640) {
+    const web = [...document.querySelectorAll(".dlHub .dlWeb")].find(vis)?.getBoundingClientRect(), hubBox = [...document.querySelectorAll(".dlHub")].find(vis)?.getBoundingClientRect();
+    if (web && hubBox && Math.abs((web.left + web.width / 2) - (hubBox.left + hubBox.width / 2)) > 2) bad.push(`the supply-chain map is off centre by ${Math.round((web.left + web.width / 2) - (hubBox.left + hubBox.width / 2))} px at ${innerWidth}px`);
+  }
   const bds = [...document.querySelectorAll("[data-breakdown]")].filter(vis);
   if (!bds.length || bds.some((b) => b.dataset.breakdown !== "collapsed")) bad.push("the Breakdown is not collapsed on arrival");
   // At 560 px and under: hero, Market today, Only on, This week, then the analyser.
@@ -294,6 +310,19 @@ for (const [name, body] of runs) {
   await page.setContent(doc(runs[0][1].replace('<div class="msh-wrap">', '<div class="msh-wrap"><div style="width:700px">x</div>'), 16));
   const caught = (await page.evaluate(probe)).some((b) => /scrolls sideways/.test(b));
   console.log(`mutant (a 700 px block): ${caught ? "caught" : "NOT CAUGHT"}`);
+  if (!caught) failures++;
+  await page.close();
+}
+// #166's MUTANTS: the watermark back over the plot; the map left-aligned on a phone.
+for (const [label, from, to, width, pat] of [
+  ["the watermark strip removed (over the top gridline again)", "padding-top:20px", "padding-top:0", 390, /watermark overlaps/],
+  ["the map left-aligned on a phone", ".dlHub .dlWeb{display:block;margin-inline:auto;}", "", 390, /off centre/],
+]) {
+  if (!runs[0][1].includes(from)) { console.log(`mutant (${label}): DOES NOT APPLY`); failures++; continue; }
+  const page = await browser.newPage({ viewport: { width, height: 900 } });
+  await page.setContent(doc(runs[0][1].split(from).join(to), 16));
+  const caught = (await page.evaluate(probe)).some((b) => pat.test(b));
+  console.log(`mutant (${label}, ${width}px): ${caught ? "caught" : "NOT CAUGHT"}`);
   if (!caught) failures++;
   await page.close();
 }

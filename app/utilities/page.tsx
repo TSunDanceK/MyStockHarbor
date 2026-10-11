@@ -4,7 +4,6 @@ import CalculatorsPanel from "./CalculatorsPanel";
 import {
   infoSectionStyle,
   sectionEyebrowStyle,
-  utilityIconStyle,
   guideCardStyle,
 } from "./utilitiesStyles";
 
@@ -148,7 +147,6 @@ export default function UtilitiesPage() {
 
           <section style={infoSectionStyle()} className="mobileHideIntroSection">
             <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-              <div style={utilityIconStyle("blue")}>🧮</div>
               <div>
                 <div style={sectionEyebrowStyle("blue")}>Trading calculators</div>
                 <h2 style={{ margin: "8px 0 0", fontSize: 24, lineHeight: 1.2 }}>
@@ -190,7 +188,6 @@ export default function UtilitiesPage() {
 
           <section style={infoSectionStyle()}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={utilityIconStyle("blue")}>📘</div>
               <div>
                 <div style={sectionEyebrowStyle("blue")}>Learn next</div>
                 <h2 style={{ margin: "6px 0 0", fontSize: 24, lineHeight: 1.2 }}>
@@ -313,7 +310,6 @@ export default function UtilitiesPage() {
 
           <section style={infoSectionStyle()}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={utilityIconStyle("yellow")}>❓</div>
               <div>
                 <div style={sectionEyebrowStyle("yellow")}>Quick answers</div>
                 <h2 style={{ margin: "6px 0 0", fontSize: 24, lineHeight: 1.2 }}>FAQ</h2>

@@ -114,14 +114,29 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
   const tiles = [...mFull.matchAll(/data-index="([A-Z]+)"/g)].map((m) => m[1]);
   want("A: the index row is SPY, QQQ, DIA, IWM, each its move on the close", tiles.join(",") === "SPY,QQQ,DIA,IWM" && text(mFull).includes("−1.04%") && text(mFull).includes("+0.21%"));
   want("A: the index row is 2 × 2 at 560 px and under, one row of 4 above", /\.dlIdx\{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\);/.test(base) && /@media\(max-width:560px\)\{[^@]*\.dlIdx\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(css));
-  want("A: one line carries the trend score and the best sector", text(mFull).includes("Trend score 85/100, a strong uptrend · Best sector YTD: Technology +55%"));
+  // #166 b: the owner's layout. "As of" top right; the performance line under the tiles,
+  // the trend score on a 10-cell meter with its words; the best sector beside it.
+  want("A: the performance line carries the trend score, its meter and words, and the best sector", /data-market-line=""/.test(mFull) &&
+    text(mFull).includes("Trend Score 85/100 Strong uptrend") && text(mFull).includes("Best sector YTD Technology +55%") &&
+    /data-meter="9" data-tone="up"/.test(mFull) && (mFull.match(/<i data-on="">/g) ?? []).length === 9 && (mFull.match(/<span class="dlMeter"[^>]*>(?:<i[^>]*><\/i>){10}<\/span>/g) ?? []).length === 1 &&
+    mod.marketLine(FULL_LANDING.market) === "Trend Score 85/100 Strong uptrend · Best sector YTD Technology +55%");
+  want("A: the meter's tone follows the score (red under 45, amber to 55, green from 56)", mod.trendTone(30) === "down" && mod.trendTone(50) === "flat" && mod.trendTone(56) === "up" && /\.dlMeter\[data-tone="up"\] i\[data-on\]\{background:#22c55e;\}/.test(css) && /\.dlMeter\[data-tone="down"\] i\[data-on\]\{background:#ef4444;\}/.test(css));
+  want("A: the header says \"As of <date>\", on the right", /<div class="dlMarketHead"><h2 [^>]*>Market today<\/h2><span class="dlAsOf" data-as-of=""[^>]*>As of 6 Oct 2026<\/span><\/div>/.test(mFull) && /\.dlMarketHead\{display:flex;justify-content:space-between;/.test(base));
+  want("A: only the four ETF tiles are boxed (no border or background on the rest)", ["dlMarketHead", "dlPerf", "dlPerfItem", "dlMarketFoot"].every((k) => { const r = base.match(new RegExp(`\\.${k}\\{([^}]*)\\}`)); return !!r && !/border|background/.test(r[1]); }));
+  want("A: the credit is B's small \"powered by Tiingo\" link, bottom right of the footnote", /<div class="dlMarketFoot"><p class="dlFine" data-fine-print="">ETF moves on the close[^<]*<\/p><span class="dlPowered" data-fine-print="" data-credit="tiingo"><a href="https:\/\/www\.tiingo\.com\/"[^>]*class="tiingoCredit"[^>]*>powered by Tiingo<\/a><\/span><\/div>/.test(mFull) &&
+    /\.dlPowered\{flex:0 0 auto;margin-left:auto;font-size:var\(--fs-fine\);/.test(base));
   want("A: the old S&P / Trend / Best-sector tiles are gone", !/data-tile=|dlTiles|S&amp;P 500 \(SPY\)/.test(mFull));
   want(`A: Market today says "${mod.EMPTY.market}" with nothing`, text(mEmpty).includes(mod.EMPTY.market));
   want("A: one linked Tiingo credit in Market today", tiingoLinks(mFull) === 1);
   // The biggest mover (the retired tape's top item): one factual line, no signal words.
   const pk = cardHtml(full, "pickers") ?? "";
-  want("A: the screens card carries \"Biggest mover today: SMCI, up 9.4%\" (facts, no signal words)", /data-mover=""/.test(pk) && text(pk).includes("Biggest mover today: SMCI, up 9.4%") && !/signal/i.test(text(pk)) &&
+  want("A: the screens card carries \"Biggest mover today: SMCI, ▲ up 9.4%\" (facts, no signal words)", /data-mover=""/.test(pk) && text(pk).includes("Biggest mover today: SMCI, ▲ up 9.4%") && !/signal/i.test(text(pk)) &&
     mod.moverLine({ symbol: "XYZ", changePct: -3.21, label: "Last close · 1 Oct" }) === "Biggest mover on the last close (1 Oct): XYZ, down 3.2%");
+  // #166 a: the move in green ▲ / red ▼, with the up/down word kept (colour is never the only cue).
+  want("A: the mover's move is toned, arrowed and still worded", /<span class="dlMoverMove" data-tone="up"><span aria-hidden="true">▲ <\/span>up 9\.4%<\/span>/.test(pk) &&
+    /\.dlMoverMove\[data-tone="up"\]\{color:#86efac;\}/.test(css) && /\.dlMoverMove\[data-tone="down"\]\{color:#fca5a5;\}/.test(css) && mod.moverMove({ symbol: "X", changePct: -3.21, label: null }) === "down 3.2%");
+  // #166 c: the supply-chain map centred on a phone.
+  want("B: the hub map is centred at 640 px and under", /@media\(max-width:640px\)\{\.dlHub \.dlWeb\{display:block;margin-inline:auto;\}\}/.test(css));
   want("A: biggestMover takes the largest move either way", typeof biggestMover === "function" && biggestMover([{ symbol: "a", changePct: 3 }, { symbol: "b", changePct: -5.5 }, { symbol: "c", changePct: null }])?.symbol === "B");
 
   // ── B. Only on MyStockHarbor ──
@@ -265,7 +280,16 @@ const LANDING_MUTANTS = [
   ["A: the thermometer back in Market today", '<MarketMoodCard view={m.mood} variant="gauge" />', "<MarketMoodCard view={m.mood} />"],
   ["A: an index tile dropped", "if (!r) return null;", 'if (!r || x.symbol === "IWM") return null;'],
   ["A: the index row stays 4 across on a phone", ".dlIdx{grid-template-columns:repeat(2,minmax(0,1fr));}", ""],
-  ["A: the trend / best-sector line dropped", '{line ? <p className="dlMarketLine" data-market-line="">{line}</p> : null}', ""],
+  ["A: the trend / best-sector line dropped", '<div className="dlPerf" data-market-line="">', '<div className="dlPerf" hidden>'],
+  ["A: the trend meter dropped", "<TrendMeter score={m.trend.score} />", ""],
+  ["A: the meter lights every cell", "data-on={i < lit ? \"\" : undefined}", "data-on=\"\""],
+  ["A: the \"As of\" date dropped", '{asOf ? <span className="dlAsOf" data-as-of="" data-fine-print="">As of {day(asOf)}</span> : null}', ""],
+  ["A: the performance line boxed", ".dlPerf{display:flex;flex-wrap:wrap;", ".dlPerf{border:1px solid #222c40;display:flex;flex-wrap:wrap;"],
+  ["A: the credit back to the long inline line", '<span className="dlPowered" data-fine-print="" data-credit="tiingo"><TiingoLink /></span>', '<span className="dlPowered" data-fine-print="" data-credit="tiingo">{credit}</span>'],
+  ["A: the credit not at the right", ".dlPowered{flex:0 0 auto;margin-left:auto;", ".dlPowered{flex:0 0 auto;"],
+  ["A: the mover's colour dropped", '<span className="dlMoverMove" data-tone={c.pickers.mover.changePct >= 0 ? "up" : "down"}>', '<span className="dlMoverMove">'],
+  ["A: the mover's up/down word dropped (colour the only cue)", "export const moverMove = (m: Mover) => `${m.changePct >= 0 ? \"up\" : \"down\"} ${", "export const moverMove = (m: Mover) => `${"],
+  ["B: the hub map left-aligned on a phone", ".dlHub .dlWeb{display:block;margin-inline:auto;}", ""],
   ["A: Market today says nothing when empty", '{!shown ? <p className="dlEmpty" data-card="market" data-empty="">{EMPTY.market}</p> : null}', ""],
   ["A: a second credit in Market today", "<span className=\"dlIdxSym\">{x.symbol}</span>", "<span className=\"dlIdxSym\">{x.symbol}</span>{credit}"],
   ["A: the mover worded as a signal", "Biggest mover today", "Top buy signal today"],
