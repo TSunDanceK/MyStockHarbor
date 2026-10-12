@@ -1,18 +1,18 @@
 ---
 title: "Archer Aviation ACHR: FAA Testing and a Boeing Deal"
 date: "2026-10-12"
-excerpt: "Archer is in the formal testing phase of FAA certification and is buying three Boeing units, while it burns cash ahead of its first commercial flights."
+excerpt: "Archer is in the formal testing phase of FAA certification and is acquiring three Boeing units, while it burns cash ahead of its first commercial flights."
 symbol: "ACHR"
 timeframe: "d"
 chartBars: 250
 chartIndicators: ["MA200"]
-overallBreakdown: "Archer has closed three of four FAA certification phases, is working towards a UAE launch, and agreed in August to buy Boeing's Wisk, Insitu and SkyGrid units, all while reporting a $263.2M quarterly loss."
-latestNews: "The US antitrust waiting period on Archer's purchase of three Boeing units expired on 18 September, and Archer is aiming to close the deal by the end of 2026."
+overallBreakdown: "Archer has closed three of four FAA certification phases, is working towards a UAE launch, and agreed in August to acquire Boeing's Wisk, Insitu and SkyGrid units, all while reporting a $263.2M quarterly loss."
+latestNews: "The US antitrust waiting period on Archer's acquisition of three Boeing units expired on 18 September, and Archer is aiming to close the deal by the end of 2026."
 latestEarnings: "In Q2 2026 Archer reported $5.0M of revenue, mostly from its Hawthorne Airport business, a $263.2M net loss, and $1.56bn of cash and short-term investments at 30 June."
 investorUsefulInfo: "FAA formal testing, a UAE launch date, the Boeing deal closing and the Q3 report may all shape how the stock is read."
 drivers:
   asOf: "2026-10-12"
-  text: "Archer closed Phase 3 of the FAA's four-phase type certification in April and is now in formal testing. In the UAE, the regulator moved Midnight onto a restricted type-certificate track in May, though Archer has not given a launch date and regional airspace has been disrupted since late February. In August it agreed to buy Boeing's Wisk, Insitu and SkyGrid units; the US antitrust waiting period expired on 18 September, and Archer is aiming to close by the end of 2026. Q2 results on 10 August showed $5.0M of revenue, mostly from the Hawthorne Airport business it took a stake in this year, a $263.2M net loss and $1.56bn of cash and short-term investments. Archer has not dated its Q3 report; one estimate puts it around 5 November."
+  text: "Archer closed Phase 3 of the FAA's four-phase type certification in April and is now in formal testing. In the UAE, the regulator moved Midnight onto a restricted type-certificate track in May, though Archer has not given a launch date and regional airspace has been disrupted since late February. In August it agreed to acquire Boeing's Wisk, Insitu and SkyGrid units; the US antitrust waiting period expired on 18 September, and Archer is aiming to close by the end of 2026. Q2 results on 10 August showed $5.0M of revenue, mostly from the Hawthorne Airport business it took a stake in this year, a $263.2M net loss and $1.56bn of cash and short-term investments. Archer has not dated its Q3 report; one estimate puts it around 5 November."
   sources:
     - title: "Archer Announces First Quarter 2026 Results"
       publisher: "Archer Aviation"
@@ -32,7 +32,7 @@ drivers:
 
 Archer Aviation is building Midnight, an electric air taxi, and says it was the first eVTOL company to close Phase 3 of the FAA's four-phase type-certification process, in April 2026. It is now in Phase 4, the formal testing stage. Outside the US, the UAE's aviation regulator moved Midnight onto a restricted type-certificate track in May, which may allow a launch in Abu Dhabi before full FAA approval, though Archer has not given a date and regional airspace has been disrupted since late February.
 
-The bigger recent change is corporate. In August Archer agreed to buy three Boeing businesses: Wisk (autonomous air taxis), Insitu (military drones) and SkyGrid (airspace software). The US antitrust waiting period expired on 18 September, and Archer is aiming to close by the end of 2026. Financial terms have not been disclosed.
+The bigger recent change is corporate. In August Archer agreed to acquire three Boeing businesses: Wisk (autonomous air taxis), Insitu (military drones) and SkyGrid (airspace software). The US antitrust waiting period expired on 18 September, and Archer is aiming to close by the end of 2026. Financial terms have not been disclosed.
 
 ## Why it matters
 
