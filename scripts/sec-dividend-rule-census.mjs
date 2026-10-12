@@ -81,7 +81,12 @@ for (let i = 0; i < keys.length; i += 20) {
       return `FY${p.fy} ${p.fp} ${f4(val(b, "quarters", e))}`;
     });
     const y = a.dvr.years.map((e) => `FY${b.years.find((x) => x.e === e).fy} ${f4(val(b, "years", e))}`);
-    rows.push({ sym, cut: CUT.has(sym), rate: a.dvr.rate, q, y, nonPos: a.dvr.quarters.filter((e) => !(val(b, "quarters", e) > 0)).length });
+    // THE CLASSING YEAR IN FULL (round 2): a filer that declares the whole year
+    // in Q1 files $0 quarters after it, and its year is then a real total.
+    const yrQ = a.dvr.rate ? b.quarters.filter((p) => p.fy === a.dvr.rate.fy).sort((x, z) => (x.e < z.e ? -1 : 1))
+      .map((p) => { const c = cell(p, DPS); return `${p.fp} ${f4(c.val)}${c.derived === "as-filed" ? " F" : c.derived === "differenced" ? " D" : ""}`; }).join(", ") : "";
+    const filedZeroQ = a.dvr.rate ? b.quarters.filter((p) => { const c = cell(p, DPS); return c.derived === "as-filed" && c.val === 0; }).length : 0;
+    rows.push({ sym, cut: CUT.has(sym), rate: a.dvr.rate, q, y, yrQ, filedZeroQ, nonPos: a.dvr.quarters.filter((e) => !(val(b, "quarters", e) > 0)).length });
   });
 }
 const rate = rows.filter((r) => r.rate), split = rows.filter((r) => !r.rate);
@@ -89,12 +94,13 @@ console.log(`stored sets with quarters and years: ${sets}`);
 console.log(`#226 buckets again: rate ${bucket.rate.length} · semi-annual-like ${bucket.semi.length} · running ${bucket.running.length} · other ${bucket.other.length}`);
 console.log(`\nRULES 1–2, RATE FILERS (${rate.length}): quarters withheld ${rate.reduce((s, r) => s + r.q.length, 0)} (≤ 0 before: ${rate.reduce((s, r) => s + r.nonPos, 0)}) · years withheld ${rate.reduce((s, r) => s + r.y.length, 0)}`);
 for (const r of rate.sort((x, y) => (x.sym < y.sym ? -1 : 1)))
-  console.log(`  ${r.sym}${r.cut ? "*" : ""} (FY${r.rate.fy} ${r.rate.ratio.toFixed(2)}×${R226.rate.includes(r.sym) ? "" : ", NEW vs #226"}): quarters [${r.q.join("; ")}] · years [${r.y.join("; ")}]`);
+  console.log(`  ${r.sym}${r.cut ? "*" : ""} (FY${r.rate.fy} ${r.rate.ratio.toFixed(2)}×${R226.rate.includes(r.sym) ? "" : ", NEW vs #226"}): classing year's quarters [${r.yrQ}] · as-filed $0 quarters stored: ${r.filedZeroQ}`);
 console.log(`  in #226's 29 but not withheld now: ${R226.rate.filter((s) => !rate.some((r) => r.sym === s)).join(" ") || "none"}`);
 console.log(`\nRULE 3 ONLY, ACROSS A SPLIT (${split.length} filers, ${split.reduce((s, r) => s + r.q.length, 0)} quarters):`);
 for (const r of split) console.log(`  ${r.sym}${r.cut ? "*" : ""}: ${r.q.join("; ")}`);
 console.log(`  (rate filers' quarters across a split are counted under rules 1–2 above)`);
 
+if (process.env.ROUND2 !== "0") { console.log(`\nStore commands: ${JSON.stringify(counts)}`); process.exit(0); }
 // ── 3. the three names, every annual-DPS reader ──
 const closes = await redis.hmget("msh:tiingo:eod-last:v1", "CEG", "BKNG", "WMT");
 const closeOf = (sym) => { const v = closes?.[sym]; const o = typeof v === "string" ? JSON.parse(v) : v; return Number(o?.close ?? o?.c ?? o?.adjClose ?? NaN); };
