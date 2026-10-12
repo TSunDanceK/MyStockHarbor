@@ -112,6 +112,9 @@ const redis = new Proxy({}, { get: (_, k) => { const r = globalThis.__fakeRedis;
 const dotDashSpellings = (s) => globalThis.__dotDash(s);
 const factKey = (s) => "msh:sec:facts:v1:" + s.toUpperCase();
 const secFieldsHash = () => "H";
+// The bandwidth meter readFactSet records to (#552 COWORK #213 item 5): a no-op here.
+const recordRedisRead = async () => {};
+const flushRedisReadMeterThrottled = async () => {};
 `;
 const loadStore = (src) => lift(
   [grabFunction(src, "readFactSet"), grabFunction(src, "factSetExists")].join("\n") + "\nexport { readFactSet, factSetExists };",

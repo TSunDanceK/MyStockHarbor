@@ -993,6 +993,16 @@ export function fiscalYearEndNote(ends: string[]): string | null {
  */
 export function scaledAmount(v: number, currency = true): string {
   const abs = Math.abs(v);
+  // UNDER $0.1M, IN THOUSANDS (#552 COWORK #213 item 2): JOBY's $15k year-ago
+  // revenue printed "$0.0M", a zero that isn't one. Exactly nothing is "$0";
+  // under $1K the whole number.
+  if (abs < 1e5) {
+    const sign = v < 0 && Math.round(abs) !== 0 ? "-" : "";
+    const unit = currency ? "$" : "";
+    if (abs === 0) return `${unit}0`;
+    if (abs < 1e3) return `${sign}${unit}${Math.round(abs)}`;
+    return `${sign}${unit}${Math.round(abs / 1e3)}K`;
+  }
   // THE TIER IS PICKED FROM THE ROUNDED VALUE, not the raw one. 999,960,000 is
   // under $1B but rounds to 1000.0 in M, and "$1000.0M" is the unit change the
   // rule exists to prevent — so anything that rounds to 1000.0M reads in B,

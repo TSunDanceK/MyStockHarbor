@@ -9,7 +9,7 @@ import { anyDerived, buildGrowthVisuals, introLine, marginMeans } from "@/lib/gr
 import {
   CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, INTEREST_IN_OTHER_INCOME, INTEREST_WITHIN_FILED_OTHER, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
   filingCreditText, filingNoticeText, isCrossing, periodWords, retiredSource,
-  NOT_MEANINGFUL_GROWTH_REASON, NOT_MEANINGFUL_MARGIN_REASON, NOT_MEANINGFUL_TEXT,
+  NOT_MEANINGFUL_GROWTH_REASON, NOT_MEANINGFUL_MARGIN_REASON, NOT_MEANINGFUL_TEXT, marginChangeNotMeaningful,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
 import {
@@ -308,12 +308,14 @@ const Q4_EPS_NOTE =
 /** A growth value that prints as a number; a crossing word or a missing value prints as words. */
 const isNumberPct = (v: Pct | undefined): boolean => typeof v === "number" && Number.isFinite(v);
 
-function PctCell({ v, missing, note, notMeaningful }: { v: Pct | undefined; missing?: string | null; note?: string | null; notMeaningful?: boolean }) {
+function PctCell({ v, missing, note, notMeaningful, notMeaningfulReason }: { v: Pct | undefined; missing?: string | null; note?: string | null; notMeaningful?: boolean; notMeaningfulReason?: string | null }) {
+  // A RATE OFF A TINY BASE (#552 COWORK #212): JOBY's "+257,493.3%". FIRST,
+  // ahead of the crossing words: a revenue column that went from no revenue to
+  // some read "Turned profitable", which is profit's word (#552 COWORK #213).
+  if (notMeaningful) return <NotMeaningfulValue reason={notMeaningfulReason ?? NOT_MEANINGFUL_GROWTH_REASON} />;
   // EVERY DOTTED WORD OPENS ITS NOTE (#552 COWORK #124 item 3): this was an
   // <abbr title> with a dotted underline, which a tap or click never opened.
   if (v != null && isCrossing(v)) return <ReasonedValue text={CROSSING_WORDS[v]} reason={CROSSING_NOTE} />;
-  // A RATE OFF A TINY BASE (#552 COWORK #212): JOBY's "+257,493.3%".
-  if (notMeaningful) return <NotMeaningfulValue reason={NOT_MEANINGFUL_GROWTH_REASON} />;
   if (v == null && missing) return <ReasonedValue text="—" reason={missing} style={MUTED_VALUE} />;
   return note ? <ReasonedValue text={pct(v)} reason={note} /> : <>{pct(v)}</>;
 }
@@ -620,7 +622,7 @@ export function SecSnapshotCard({
           word={s.revenueYoYNotMeaningful || !isNumberPct(s.revenueYoY)}
           sub={s.comparedWith ? `Compared with ${s.comparedWith}` : undefined}
         >
-          <PctCell v={s.revenueYoY} missing={s.comparedWith ? null : `Prior-year ${w.one} not on file.`} notMeaningful={s.revenueYoYNotMeaningful} />
+          <PctCell v={s.revenueYoY} missing={s.comparedWith ? null : `Prior-year ${w.one} not on file.`} notMeaningful={s.revenueYoYNotMeaningful} notMeaningfulReason={s.revenueYoYNotMeaningfulReason} />
         </Metric>
         <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)} word={s.epsDiluted.val == null}>
           <CellValue cell={s.epsDiluted} empty={epsEmpty(view, view.latestLabel)} />
@@ -837,7 +839,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                     comparator and this table did not, so the same wrong base
                     was visible in one place and silent in the other. */}
                 <td data-label="Compared with">{view.growth[i]?.comparedWith ?? "not on file"}</td>
-                <td data-label="Revenue YoY"><PctCell v={view.growth[i]?.revenueYoY} notMeaningful={view.growth[i]?.revenueYoYNotMeaningful} /></td>
+                <td data-label="Revenue YoY"><PctCell v={view.growth[i]?.revenueYoY} notMeaningful={view.growth[i]?.revenueYoYNotMeaningful} notMeaningfulReason={view.growth[i]?.revenueYoYNotMeaningfulReason} /></td>
                 {/* A BLANK Q4 EPS IS NOT A GAP IN THE DATA. Q4 is never filed
                     as a standalone three-month frame, and this page refuses to
                     invent one (no 4·FY − 3·9M, no ratio against another
@@ -944,7 +946,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
                     768px card (owner review of #523). The quarterly table keeps
                     it, where a gap row makes the comparator informative. */}
                 <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
-                <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} notMeaningful={r.revenueYoYNotMeaningful} /></td>
+                <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} notMeaningful={r.revenueYoYNotMeaningful} notMeaningfulReason={r.revenueYoYNotMeaningfulReason} /></td>
                 <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} short empty={epsEmpty(view, r.label)} /></td>
                 <td data-label="EPS YoY" className="colCross"><PctCell v={r.epsYoY} /></td>
                 <td data-label="Gross margin"><MarginCell v={r.gross} refused={r.marginsRefused} notMeaningful={r.notMeaningful?.gross} /></td>
@@ -1508,6 +1510,25 @@ function trendFigureText(cell: ViewCell, v: number): string {
   return money(v, !cell.perShare, cell.perShare);
 }
 
+/**
+ * THE LINE'S TREND, n/m FIRST (#552 COWORK #213 item 1). JOBY's revenue row
+ * read "$38.6M vs $0.0M in Q2 FY2025, up 257493.3%" beside a green ▲: the
+ * snapshot's rule (the base is the same pair of periods) now applies here, and
+ * a cost's share of a tiny revenue is a margin by another name, so it takes
+ * the margin rule. No colour, and the reason is the tap note.
+ */
+export function statementTrend(view: SecEarningsView, key: string, base: TrendBase): LineTrend {
+  if (key === "revenue" && view.snapshot.revenueYoYNotMeaningful) {
+    return { trend: null, reason: `${NOT_MEANINGFUL_TEXT} vs ${base.label}: ${view.snapshot.revenueYoYNotMeaningfulReason ?? NOT_MEANINGFUL_GROWTH_REASON}.` };
+  }
+  const t = lineTrend(key, base, base.oneOff);
+  if (t.trend !== null && t.kind === "share" && marginChangeNotMeaningful(
+    { margin: t.shareNow, revenueUsd: base.now.revenue }, { margin: t.shareThen, revenueUsd: base.then.revenue })) {
+    return { trend: null, reason: `${NOT_MEANINGFUL_TEXT} vs ${base.label}: ${NOT_MEANINGFUL_MARGIN_REASON}.` };
+  }
+  return t;
+}
+
 /** The tap note: the comparison, in words. Null where the line takes no colour in itself. */
 export function trendNote(cell: ViewCell, t: LineTrend, base: TrendBase): string | null {
   if (t.trend === null) return t.reason === NO_COLOUR_LINE ? null : t.reason;
@@ -1567,7 +1588,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
   // a line carries the same figure, ▲ ● ▼ mark and tap note wherever it sits.
   const figure = (c: ViewCell) =>
     c.val != null && base
-      ? <TrendFigure cell={c} trend={lineTrend(c.key, base, base.oneOff)} base={base} />
+      ? <TrendFigure cell={c} trend={statementTrend(view, c.key, base)} base={base} />
       : (
         <CellValue
           cell={c}
