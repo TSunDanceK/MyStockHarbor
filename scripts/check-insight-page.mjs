@@ -29,6 +29,10 @@
 //     empty text); every post's `update` valid, free of advice words and dated
 //     as its `updated`; AMZN's text exactly as the owner wrote it; the box
 //     leads the body and the original sections sit under one dated heading.
+//   - #177: a post dated on a day with no closed session (a weekend, or a
+//     Monday before the close) reads "Published {its date}" and "the 120
+//     sessions to {the last closed session}"; the drivers' source line names
+//     each publisher once, its sources numbered links ("Archer Aviation (1, 2)").
 // A mutant each.
 //
 //   node scripts/check-insight-page.mjs
@@ -238,6 +242,25 @@ const RULES = {
       /robots: isInsightFixture\(slug\) \? \{ index: false, follow: false \}/.test(route) && !fs.existsSync("content/insights/fixture-aapl-new-format.md") &&
       !/insights-fixtures/.test(read("lib/blog.ts")) && !/insights-fixtures/.test(read("app/sitemap.ts"));
   },
+  "#177 no-session day: the publish bar is the last close on or before the post's date; 'Published' keeps the post's date, the thumbnail names the session": ({ V, chart, page, route, loader }) => {
+    const bars = series(() => FLAT);
+    const fri = days.findIndex((d, i) => i > 10 && new Date(`${d}T00:00:00Z`).getUTCDay() === 5);
+    const sat = new Date(Date.parse(`${days[fri]}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+    const onSat = V.publishBar(bars, sat), past = V.publishBar(bars, "2099-01-05"), on = V.publishBar(bars, days[fri - 2]);
+    return onSat?.index === fri && onSat.session === days[fri] && past?.session === days.at(-1) && on?.index === fri - 2 && on.session === days[fri - 2] &&
+      V.publishBar([], sat) === null &&
+      /const at = publishBar\(bars, n\.date\);/.test(loader) && /publishedOn: n\.date,/.test(loader) && /thumbTo = at\.session;/.test(loader) &&
+      /Published \{day\(p\.publishedOn\)\}\. The slider appears once a session has closed since\./.test(chart) &&
+      /the \{thumb\.length\} sessions to \{dayWords\(thumbTo \?\? n\.date\)\}/.test(page) &&
+      /const thumbTo = frozen && frozen\.length > 1 \? snapshot\?\.chartPoints\?\.at\(-1\)\?\.date \?\? null : data\.thumbTo;/.test(route) && /thumbTo=\{thumbTo\}/.test(route);
+  },
+  "#177 sources: one label per publisher, its sources numbered links": ({ V, page }) => {
+    const src = (publisher, url) => ({ title: `${publisher} story`, publisher, url });
+    const g = V.sourceGroups([src("Archer Aviation", "https://a.example/1"), src("StockTitan", "https://s.example/1"), src("Archer Aviation", "https://a.example/2")]);
+    return g.length === 2 && g[0].publisher === "Archer Aviation" && g[0].items.map((i) => i.url).join() === "https://a.example/1,https://a.example/2" &&
+      g[1].publisher === "StockTitan" && g[1].items.length === 1 &&
+      /sourceGroups\(n\.drivers\.sources\)\.map\(/.test(page) && /\{g\.publisher\} \(\{g\.items\.map\(/.test(page) && /data-source-n="">\{j \+ 1\}<\/a>/.test(page);
+  },
 };
 
 const MUTANTS = [
@@ -259,6 +282,8 @@ const MUTANTS = [
   ["update: the loader", "v", (s) => s.replace('...(text ? [] : ["update.text is empty"])', "")],
   ["update: the loader", "v", (s) => s.replace("const update = parseUpdate(data.update).update;", "const update = null;")],
   ["the screens link", "s", (s) => s.replace('href: "/oversold-stocks-today"', 'href: "/oversold-today"')],
+  ["#177 no-session day", "v", (s) => s.replace("return { index, session: bars[index][0] };", "return { index, session: date };")],
+  ["#177 sources", "v", (s) => s.replace("if (g) g.items.push(s);", "if (g && false) g.items.push(s);")],
   ["no advice words", "v", (s) => s.replace('case "held": return { word: "Held", detail: "No daily close below it since", tone: "up" };', 'case "held": return { word: "Held", detail: "A level to buy while it holds", tone: "up" };')],
 ];
 
@@ -279,7 +304,11 @@ const SRC_MUTANTS = [
   ["#141:", PAGE, (s) => s.replace('"Top build-out receivers · their own filed sales"', '"Build-out sellers"')],
   ["#141:", PAGE, (s) => s.replace("vs: epsLine(s.eps.value, ya)", "vs: epsVsYearAgo(s.eps.value, ya?.eps, epsMoney)")],
   ["#141:", PAGE, (s) => s.replace('`${now > ya.eps ? "up" : "down"} from ${then}${when}`', "null")],
-  ["drivers: the card", PAGE, (s) => s.replace('rel="nofollow noopener"', 'rel="noopener"')],
+  ["drivers: the card", PAGE, (s) => s.replaceAll('rel="nofollow noopener"', 'rel="noopener"')],
+  ["#177 no-session day", CHART, (s) => s.replace("Published {day(p.publishedOn)}.", "Published {day(pub.date)}.")],
+  ["#177 no-session day", PAGE, (s) => s.replace("sessions to {dayWords(thumbTo ?? n.date)}", "sessions to {dayWords(n.date)}")],
+  ["#177 no-session day", LOADER, (s) => s.replace("thumbTo = at.session;", "thumbTo = n.date;")],
+  ["#177 sources", PAGE, (s) => s.replace('data-source-n="">{j + 1}</a>', 'data-source-n="">{src.publisher}</a>')],
   ["drivers: the card", PAGE, (s) => s.replace(") : d.news?.score ? (", ") : null}{d.news?.score ? (")],
   ["drivers: the card", LOADER, (s) => s.replace("export const NEWS_SHOWN = 3;", "export const NEWS_SHOWN = 5;")],
   ["drivers: the card", LOADER, (s) => s.replace("&& junkReason(i.title) === null)", ")")],

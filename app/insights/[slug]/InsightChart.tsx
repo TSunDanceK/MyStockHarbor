@@ -21,6 +21,7 @@ export type InsightChartProps = {
   wma200: (number | null)[] | null;
   bbMid: (number | null)[] | null;
   publishIndex: number;
+  publishedOn: string;
   level: { kind: string; name: string; series: (number | null)[] } | null;
   todayLevels: { price: number; label: string }[];
 };
@@ -117,7 +118,7 @@ export default function InsightChart(p: InsightChartProps) {
           </p>
         </div>
       ) : (
-        <p className="inReadout">Published {day(pub.date)}. The slider appears once a session has closed since.</p>
+        <p className="inReadout">Published {day(p.publishedOn)}. The slider appears once a session has closed since.</p>
       )}
     </div>
   );

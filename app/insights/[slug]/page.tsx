@@ -231,6 +231,8 @@ export default async function InsightPostPage({ params }: Props) {
   }
   const frozen = snapshot?.chartPoints?.length ? snapshot.chartPoints.slice(-120).map((p) => p.close) : null;
   const thumb = frozen && frozen.length > 1 ? frozen : data.thumb;
+  // Its caption names the thumbnail's last session, not the post's date (#563 COWORK #177).
+  const thumbTo = frozen && frozen.length > 1 ? snapshot?.chartPoints?.at(-1)?.date ?? null : data.thumbTo;
 
   const insightUrl = `https://www.mystockharbor.com/insights/${post.slug}`;
   const stockUrl = post.symbol
@@ -334,7 +336,7 @@ export default async function InsightPostPage({ params }: Props) {
         }}
       />
 
-      <InsightPage d={data} html={{ whatHappened, why, originalRest }} thumb={thumb} hasFiledEarnings={await hasFiledEarnings(data.n.symbol)} />
+      <InsightPage d={data} html={{ whatHappened, why, originalRest }} thumb={thumb} thumbTo={thumbTo} hasFiledEarnings={await hasFiledEarnings(data.n.symbol)} />
     </>
   );
 }

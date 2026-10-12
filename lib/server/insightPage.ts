@@ -55,7 +55,7 @@ import { toSpendingInput } from "@/lib/server/capexSpendingJob";
 import { confluence } from "@/lib/ta/confluence";
 import type { KeyBar } from "@/lib/ta/keyLevels";
 import {
-  dayWords, differenceNote, indexOnOrBefore, levelSeries, normaliseInsight, setupLabel, sinceView, LEVEL_NAME,
+  dayWords, differenceNote, indexOnOrBefore, levelSeries, normaliseInsight, publishBar, setupLabel, sinceView, LEVEL_NAME,
   type EodBar, type NormalisedInsight, type SetupLabel, type SinceView,
 } from "@/lib/insightView";
 import { SCREEN_ROUTES, screenFor, type ScreenFlag } from "@/lib/insightScreens";
@@ -192,8 +192,10 @@ export type ChartData = {
   ma200: (number | null)[];
   wma200: (number | null)[] | null;
   bbMid: (number | null)[] | null;
-  /** The publish bar's index in `points`. */
+  /** The publish bar's index in `points`: the last closed session on or before the post's date. */
   publishIndex: number;
+  /** The post's own date, yyyy-mm-dd: on a day with no closed session it is not the publish bar's (#563 COWORK #177). */
+  publishedOn: string;
   level: { kind: string; name: string; series: (number | null)[] } | null;
   /** Today's zones as reference lines. */
   todayLevels: { price: number; label: string }[];
@@ -236,6 +238,8 @@ export type InsightPageData = {
   chart: ChartData | null;
   /** The closes up to publication, for the "Chart when published" thumbnail. */
   thumb: number[] | null;
+  /** The thumbnail's last session, yyyy-mm-dd (#177): the last close on or before the post's date. */
+  thumbTo: string | null;
   art: CardArt;
   sector: { name: string; slug: string | null } | null;
   capWords: string | null;
@@ -315,9 +319,10 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
   const price = bars.at(-1)?.[4] ?? null;
 
   // THE CHART: the post's window, its level and today's zones.
-  let chart: ChartData | null = null, thumb: number[] | null = null;
-  if (bars.length >= 2) {
-    const pub = Math.max(0, bars.findLastIndex((b) => b[0] <= n.date));
+  let chart: ChartData | null = null, thumb: number[] | null = null, thumbTo: string | null = null;
+  const at = publishBar(bars, n.date);
+  if (at && bars.length >= 2) {
+    const pub = at.index;
     const start = Math.max(0, Math.min(pub - LEAD_IN, bars.length - MIN_BARS));
     const closes = bars.map((b) => b[4]);
     const cut = <T,>(a: T[]) => a.slice(start);
@@ -333,10 +338,12 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
       wma200: level === "WMA200" ? cut(lvlSeries!) : null,
       bbMid: level === "BBMID" ? cut(lvlSeries!) : null,
       publishIndex: pub - start,
+      publishedOn: n.date,
       level: level && lvlSeries ? { kind: level, name: LEVEL_NAME[level], series: cut(lvlSeries) } : null,
       todayLevels: [...conf.above, ...(conf.inside ? [conf.inside] : []), ...conf.below].map((z) => ({ price: (z.lo + z.hi) / 2, label: `${z.count} levels` })),
     };
     thumb = closes.slice(Math.max(0, pub - 119), pub + 1);
+    thumbTo = at.session;
   }
 
   // FROM THE FILINGS: the snapshot tiles, the P/E against its sector's median, the cap.
@@ -413,7 +420,7 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
     discussed: level && lvNow !== null ? { label: SHORT[level], value: lvNow } : null,
     screenChart: bars.length >= 20 ? { closes: bars.slice(-60).map((b) => b[4]), ref: screenRef ? screenRef.slice(-60) : null } : null,
     difference: bars.length ? differenceNote(n, bars) : null,
-    chart, thumb, art, sector,
+    chart, thumb, thumbTo, art, sector,
     capWords: cap?.ok ? capText(cap.val) : null,
     nextReport: outlook?.window ? (outlook.window.estimate ? `~${outlook.window.line} (estimated)` : outlook.window.line) : null,
     snapshot: facts?.snapshot ?? null,
@@ -428,6 +435,6 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
 /** The page's data, cached per post for 6 hours (the reads above, at most four times a day a post). */
 export const getInsightPageDataCached = unstable_cache(
   (slug: string) => getInsightPageData(slug),
-  ["insight-page-data-v4"],
+  ["insight-page-data-v5"],
   { revalidate: 21600, tags: ["insight-page-data"] },
 );
