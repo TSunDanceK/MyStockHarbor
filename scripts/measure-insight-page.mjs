@@ -19,8 +19,9 @@
 //   - (#149 §3) a post with an update (AMZN) does not open its body with the
 //     "Update · {date}" box, then the chart and news, then "The original post ·
 //     {date}" over the short version; a post without one shows either.
-// With --shots DIR it saves 1280 and 390 px screenshots. A mutant (a 700 px
-// wide block) must be caught as sideways scroll.
+// With --shots DIR it saves 1280 and 390 px screenshots. Mutants must be
+// caught: a 700 px wide block as sideways scroll, and (#174) the chart's
+// "MyStockHarbor" watermark back on its old 11 px floor as under 12 px.
 //
 //   node scripts/measure-insight-page.mjs [--shots DIR]
 //
@@ -162,6 +163,17 @@ for (const [slug, body] of pages) {
   await page.setContent(doc(pages[0][1].replace('<div class="inWrap">', '<div class="inWrap"><div style="width:700px">x</div>'), 16));
   const caught = (await page.evaluate(probe)).some((b) => /scrolls sideways/.test(b));
   console.log(`mutant (a 700 px block): ${caught ? "caught" : "NOT CAUGHT"}`);
+  if (!caught) failures++;
+  await page.close();
+}
+{
+  // #174: the watermark's floor back to 11 px, at 390 px (where the clamp sits on its floor).
+  const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
+  const from = "clamp(12px, 2.4vw, 15px)", html = doc(pages[0][1], 16);
+  const applies = html.includes(from);
+  await page.setContent(html.split(from).join("clamp(11px, 2.4vw, 15px)"));
+  const caught = applies && (await page.evaluate(probe)).some((b) => /under 12px \(11px\): "MyStockHarbor"/.test(b));
+  console.log(`mutant (the watermark at 11 px): ${!applies ? "anchor not found" : caught ? "caught" : "NOT CAUGHT"}`);
   if (!caught) failures++;
   await page.close();
 }

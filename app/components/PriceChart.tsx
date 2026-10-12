@@ -254,7 +254,8 @@ function ChartWatermark() {
     >
       <span
         style={{
-          fontSize: "clamp(11px, 2.4vw, 15px)",
+          // 12 px floor: the site minimum on phones (#563 COWORK #174); 15 px from ~625 px up, as before.
+          fontSize: "clamp(12px, 2.4vw, 15px)",
           lineHeight: 1,
           fontWeight: 800,
           color: "rgba(148,163,184,0.32)",
