@@ -48,6 +48,20 @@ export type InsightFormat = "v2" | "v1";
  */
 export type InsightDrivers = { asOf: string; text: string; sources: { title: string; publisher: string; url: string }[] };
 /**
+ * The drivers' source line, one label per publisher (#563 COWORK #177): two
+ * sources from the same publisher read "Archer Aviation (1, 2)", each number
+ * its own link, instead of the name twice. First-appearance order. Pure.
+ */
+export function sourceGroups(sources: InsightDrivers["sources"]): { publisher: string; items: InsightDrivers["sources"] }[] {
+  const groups: { publisher: string; items: InsightDrivers["sources"] }[] = [];
+  for (const s of sources) {
+    const g = groups.find((x) => x.publisher === s.publisher);
+    if (g) g.items.push(s);
+    else groups.push({ publisher: s.publisher, items: [s] });
+  }
+  return groups;
+}
+/**
  * AN UPDATE TO A POST (#563 COWORK #149 §3): a dated note shown in a box at
  * the top of the body, above the original text, which then sits under "The
  * original post · {date}". A real text change, so the post's `updated` date
@@ -291,6 +305,19 @@ export function indexOnOrBefore(bars: readonly EodBar[], date: string): number {
     if (bars[mid][0] <= date) { ans = mid; lo = mid + 1; } else hi = mid - 1;
   }
   return ans;
+}
+
+/**
+ * THE PUBLISH BAR (#563 COWORK #177): the last closed session on or before the
+ * post's date (the first bar if the post predates them all). A post dated on a
+ * day with no closed session (a weekend, or a Monday before the close) gets
+ * the session before it: the chart's "120 sessions to …" names that session,
+ * while "Published …" keeps the post's own date.
+ */
+export function publishBar(bars: readonly EodBar[], date: string): { index: number; session: string } | null {
+  if (!bars.length) return null;
+  const index = Math.max(0, indexOnOrBefore(bars, date));
+  return { index, session: bars[index][0] };
 }
 
 export type SetupLabel = { text: string; tone: "up" | "down" | "flat" };

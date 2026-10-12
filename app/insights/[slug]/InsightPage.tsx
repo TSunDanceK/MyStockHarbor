@@ -27,7 +27,7 @@ import InsightVote from "./InsightVote";
 import { TiingoLink } from "@/app/components/TiingoCredit";
 import { screenMembersFor, type InsightPageData, type MoreCard, type ScreenMember } from "@/lib/server/insightPage";
 import type { ScreenFlag } from "@/lib/insightScreens";
-import { dayWords, outcomeWords, pctWords, ptsWords } from "@/lib/insightView";
+import { dayWords, outcomeWords, pctWords, ptsWords, sourceGroups } from "@/lib/insightView";
 
 export type InsightHtml = { whatHappened: string | null; why: string | null; originalRest: string | null };
 
@@ -40,7 +40,7 @@ export const INSIGHT_FINE_PRINT =
   "Descriptive analysis of public information, not investment advice. The post's text is as published on its date; prices, levels and figures on this page update daily. Filed figures: SEC EDGAR.";
 
 // hasFiledEarnings: the route's hasFiledEarnings(symbol) (#552 COWORK #197); the earnings links render only when true.
-export default function InsightPage({ d, html, thumb, hasFiledEarnings = false }: { d: InsightPageData; html: InsightHtml; thumb: number[] | null; hasFiledEarnings: boolean }) {
+export default function InsightPage({ d, html, thumb, thumbTo = null, hasFiledEarnings = false }: { d: InsightPageData; html: InsightHtml; thumb: number[] | null; thumbTo?: string | null; hasFiledEarnings: boolean }) {
   const { n } = d;
   const sym = n.symbol;
   const timeframe = n.timeframe === "w" ? "Weekly" : "Daily";
@@ -60,7 +60,7 @@ export default function InsightPage({ d, html, thumb, hasFiledEarnings = false }
         {thumb && thumb.length > 1 ? (
           <figure className="inThumb">
             <Spark closes={thumb} />
-            <figcaption className="inFine" data-fine-print="">Chart when published: the {thumb.length} sessions to {dayWords(n.date)}.</figcaption>
+            <figcaption className="inFine" data-fine-print="">Chart when published: the {thumb.length} sessions to {dayWords(thumbTo ?? n.date)}.</figcaption>
           </figure>
         ) : null}
       </Card>
@@ -77,8 +77,17 @@ export default function InsightPage({ d, html, thumb, hasFiledEarnings = false }
           <p className="inRead inDrivers" data-insight-drivers="">{n.drivers.text}</p>
           <p className="inDriverSources" data-fine-print="">
             Sources:{" "}
-            {n.drivers.sources.map((src, i) => (
-              <span key={src.url}>{i ? ", " : ""}<a href={src.url} target="_blank" rel="nofollow noopener" title={src.title}>{src.publisher}</a></span>
+            {sourceGroups(n.drivers.sources).map((g, i) => (
+              <span key={g.publisher}>
+                {i ? ", " : ""}
+                {g.items.length === 1 ? g.items.map((src) => (
+                  <a key={src.url} href={src.url} target="_blank" rel="nofollow noopener" title={src.title}>{src.publisher}</a>
+                )) : (
+                  <>{g.publisher} ({g.items.map((src, j) => (
+                    <span key={src.url}>{j ? ", " : ""}<a href={src.url} target="_blank" rel="nofollow noopener" title={src.title} aria-label={`${src.publisher}: ${src.title}`} data-source-n="">{j + 1}</a></span>
+                  ))})</>
+                )}
+              </span>
             ))}
           </p>
         </>
