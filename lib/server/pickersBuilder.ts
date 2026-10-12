@@ -30,6 +30,7 @@ import { readTiingoTickerMovers } from "./tiingoMovers";
 import type { EodBar } from "./marketData/types";
 import { computePerfFromBars, perfRowRefused, publicPickersPayload, type PerfRow } from "../pickerPerf";
 import { pickersWithoutBars } from "../pickersPublic";
+import { chartLiteOf, type ChartLite } from "../pickerChartLite";
 import { recordRedisRead, flushRedisReadMeter } from "./redisBandwidth";
 import {
   chunkByBytes,
@@ -257,6 +258,12 @@ type SignalRecord = {
   preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
   chartPoints?: PickerChartPoint[];
+  /**
+   * The bars' summary (lib/pickerChartLite.ts, #553 COWORK #214): written when
+   * the bars move to the picker-charts hash, so a payload read carries what the
+   * grid derives from bars without reading the hash.
+   */
+  chartLite?: ChartLite | null;
   supportResistanceZone?: PickerSupportResistanceZone;
   dominantOversoldIndicator?: string;
   dominantOverboughtIndicator?: string;
@@ -835,7 +842,7 @@ async function readPickersV10(manifestKey = PICKERS_MANIFEST_KEY): Promise<Cache
   };
 }
 
-async function readPickersCache(opts: { lastGood?: boolean } = {}) {
+async function readPickersCache(opts: { lastGood?: boolean; caller?: string } = {}) {
   if (!redis) return null;
 
   try {
@@ -851,29 +858,31 @@ async function readPickersCache(opts: { lastGood?: boolean } = {}) {
     if (!entry || typeof entry !== "object") return null;
     if (!entry.data || typeof entry.data !== "object") return null;
 
-    // Re-attach the chart series that writePickersCache split out, so every
-    // consumer sees the identical payload shape it saw before the series moved
-    // off-payload. Records that still carry their own chartPoints are left
-    // alone -- that's a cache entry written by a deploy predating this change,
-    // and it must keep working through the rollout.
+    // THE CHARTS HASH IS NOT RE-ATTACHED ANY MORE (#553 COWORK #214, cut 1,
+    // 2026-10-12). Every read used to pull every symbol's 72 bars (~7.6 MB)
+    // back out of msh:picker-charts:v1 so the page could ship them; the record
+    // now carries `chartLite` (lib/pickerChartLite.ts), which is everything the
+    // grid derives from bars, and the candles are fetched per visible row by
+    // /api/picker-charts. scripts/check-picker-charts-off-read.mjs holds this.
+    //
+    // ONE ROLLOUT CASE: a payload written before this change has neither bars
+    // nor a lite on its records. For those (and only those) the hash is read
+    // with HMGET and summarised; the bars themselves are NOT attached. It goes
+    // quiet after the first build under this code (the manifest's TTL is 1 h).
     const records = Array.isArray(entry.data.signalRecords) ? entry.data.signalRecords : [];
-    // The stripped payload's own bytes, ~2 KB per record. readPickerChartsBulk
-    // below meters the other ~11 KB per symbol separately, because the two move
-    // for different reasons and the whole point of the meter is to rank them.
-    await recordRedisRead("picker-payload", records.length);
-    const missing = records
-      .filter((record) => !Array.isArray(record.chartPoints) || !record.chartPoints.length)
+    await recordRedisRead("picker-payload", records.length, opts.caller);
+    const unsummarised = records
+      .filter((record) => !record.chartLite && (!Array.isArray(record.chartPoints) || !record.chartPoints.length))
       .map((record) => record.symbol);
 
-    if (missing.length) {
-      const series = await readPickerChartsBulk(missing);
+    if (unsummarised.length) {
+      const series = await readPickerChartsBulk(unsummarised, opts.caller);
       if (series.size) {
         entry.data = {
           ...entry.data,
           signalRecords: records.map((record) => {
-            if (Array.isArray(record.chartPoints) && record.chartPoints.length) return record;
             const points = series.get(record.symbol);
-            return points ? { ...record, chartPoints: points as PickerChartPoint[] } : record;
+            return points && !record.chartLite ? { ...record, chartLite: chartLiteOf(points) } : record;
           }),
         };
       }
@@ -935,7 +944,7 @@ function splitPickersPayload(data: PickersPayload): {
     const points = record.chartPoints;
     if (!Array.isArray(points) || !points.length) return record;
     series.set(record.symbol, points as StoredChartPoint[]);
-    return { ...record, chartPoints: undefined };
+    return { ...record, chartPoints: undefined, chartLite: chartLiteOf(points) };
   });
 
   return { stripped: { ...data, signalRecords }, series };
@@ -5297,7 +5306,13 @@ async function recordBuildTrigger(entry: "getPickersData" | "GET" | "GET_WARM", 
 
 export async function getPickersData(
   origin: string,
-  opts: { forceRefresh?: boolean; forceHistoryRefresh?: boolean; eodBars?: PickersBuildOptions["eodBars"] } = {}
+  opts: {
+    forceRefresh?: boolean;
+    forceHistoryRefresh?: boolean;
+    eodBars?: PickersBuildOptions["eodBars"];
+    /** Who read it, for the bandwidth meter's per-page rows (#553 COWORK #214). */
+    caller?: string;
+  } = {}
 ): Promise<PickersPayload> {
   const forceRefresh = opts.forceRefresh ?? false;
   const forceHistoryRefresh = opts.forceHistoryRefresh ?? false;
@@ -5309,7 +5324,7 @@ export async function getPickersData(
 
   // READ ALWAYS. See the note above -- this is the line the three fallbacks
   // below depend on, and making it conditional on force is what disabled them.
-  const cached = await readPickersCache();
+  const cached = await readPickersCache({ caller: opts.caller });
 
   // THIS RETURN IS ALSO WHY THERE IS NO "lost the lock but has a cache" BRANCH
   // below. An unforced request holding a cached payload is served here, before
@@ -5323,6 +5338,12 @@ export async function getPickersData(
   // code that quietly starts firing.
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
+    // THE CACHED PATH FLUSHES ITS OWN METER READS (#553 COWORK #214, cut 3).
+    // Only builds flushed before, so a page read was counted only when one
+    // instance reached METER_AUTOFLUSH_READS -- the meter saw 7-27 picker reads
+    // a day against the ~800 the Upstash bill implies. One pipeline per Redis
+    // read (the 60 s memo above returns before it, so a memo hit costs nothing).
+    await flushRedisReadMeter();
     return cached.data;
   }
 
@@ -5529,10 +5550,11 @@ async function handlePickersRequest(
   // READ ALWAYS, SERVE CONDITIONALLY. Identical to getPickersData -- see the
   // long note there for why making this conditional on force is what disabled
   // the degraded fallback, the lock fallback and the catch fallback at once.
-  const cached = await readPickersCache();
+  const cached = await readPickersCache({ caller: "api-pickers" });
 
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
+    await flushRedisReadMeter(); // the cached path flushes too (#553 COWORK #214)
 
     return NextResponse.json(publicPickersPayload(pickersWithoutBars(cached.data)), {
       headers: {

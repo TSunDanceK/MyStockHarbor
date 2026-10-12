@@ -18,6 +18,7 @@ import { cleanName, getCompanyNameMap } from "@/lib/server/companyNames";
 import { resolveProfileBulk } from "@/lib/server/staticProfile";
 import { excludedFromFundamentals } from "@/lib/server/pickerEquity";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
+import { rowBars, type ChartLite } from "@/lib/pickerChartLite";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { isRegularSessionOpen } from "@/lib/server/marketHours";
 import { recordAboveFold } from "@/lib/server/priceTiers";
@@ -219,6 +220,8 @@ type SignalRecord = {
   note?: string;
   tone?: PickerTone;
   chartPoints?: MiniCandlePoint[];
+  /** The bars' summary; the bars themselves are fetched per visible row (#553 COWORK #214). */
+  chartLite?: ChartLite | null;
   score?: number;
   dashboardHref?: string;
 
@@ -317,7 +320,15 @@ export type ResultEntry = ResultEntryFlags & {
   tone: PickerTone;
   stockHref: string;
   chartHref: string;
+  /**
+   * Full bars ONLY where a section item carries its own (the weekly cards).
+   * Every other row ships `chartLite` instead, and the grid fetches the candles
+   * for the rows it draws from /api/picker-charts (#553 COWORK #214, cut 1).
+   */
   chartPoints: MiniCandlePoint[];
+  chartLite?: ChartLite | null;
+  /** The Trend Helper series, attached by the grid once a row's bars are fetched. */
+  trendSeries?: { dates: string[]; line: number[]; state: number[] };
   badge?: string;
   // Which of the composite's six checks actually fired for this stock,
   // strongest first. The screener's membership rule is "RSI plus one more of six", so a
@@ -732,6 +743,7 @@ function entriesFromSection(args: {
       stockHref: `/stock/${encodeURIComponent(symbol)}`,
       chartHref: chartHrefForEntry(args.configHref, symbol, item.dashboardHref || record?.dashboardHref, item),
       chartPoints,
+      chartLite: record?.chartLite ?? null,
       badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
       firedIndicators: item.firedIndicators,
       reasons: getFlagReasons(flags, ALL_REASON_DEFS),
@@ -790,6 +802,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        chartLite: record.chartLite ?? null,
         // Same Signals column, same source, same rule as the universe branch --
         // this page feeds the identical grid, so leaving it out showed a blank
         // column on every row of /top-stocks-with-buy-signals.
@@ -824,6 +837,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        chartLite: record.chartLite ?? null,
         // As above -- /top-stocks-with-sell-signals feeds the same grid.
         firedIndicators: firedIndicatorsFor(record, signalsSource),
         ...flagsFromRecord(record),
@@ -855,6 +869,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        chartLite: record.chartLite ?? null,
         // Which checks fired, for the Signals column. This is the UNIVERSE
         // path, so without it the column populated only for the ~20 rows a page
         // that also appear in a section (which carry their own firedIndicators
@@ -922,6 +937,10 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         // join rather than two that can disagree.
         if (item.trendSeries && entry.chartPoints.length) {
           entry.chartPoints = attachTrendHelper(entry.chartPoints, item.trendSeries);
+        } else if (item.trendSeries) {
+          // No bars on the row any more (cut 1): the grid attaches the line,
+          // with the same attachTrendHelper, once it has fetched the bars.
+          entry.trendSeries = item.trendSeries;
         }
         if (item.tone) entry.tone = item.tone;
         const badge = [item.timeframe, item.indicator].filter(Boolean).join(" · ");
@@ -1013,20 +1032,18 @@ function valueForPredicateField(entry: ResultEntry, field: string): unknown {
   if (field !== "price" && field !== "changePct" && field !== "volume") return direct;
   if (typeof direct === "number" && Number.isFinite(direct)) return direct;
 
-  const points = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
-  const last = points[points.length - 1];
-  if (!last) return undefined;
+  // The bars or, since #553 COWORK #214, their summary: the same rowBars the grid reads.
+  const bars = rowBars(entry);
+  if (!bars.closes.length && bars.lastVolume === null) return undefined;
 
   if (field === "price") {
-    return Number.isFinite(last.close) ? last.close : undefined;
+    return bars.lastClose ?? undefined;
   }
   if (field === "volume") {
-    return typeof last.volume === "number" && Number.isFinite(last.volume) ? last.volume : undefined;
+    return bars.lastVolume ?? undefined;
   }
 
-  const prev = points.length > 1 ? points[points.length - 2] : undefined;
-  const lastClose = Number.isFinite(last.close) ? last.close : null;
-  const prevClose = prev && Number.isFinite(prev.close) ? prev.close : null;
+  const { lastClose, prevClose } = bars;
   return lastClose != null && prevClose != null && prevClose !== 0
     ? ((lastClose - prevClose) / prevClose) * 100
     : undefined;
@@ -1119,7 +1136,9 @@ async function getPickerData(config: PickerResultConfig) {
     // URL. That self-request looked like an anonymous bot to our own Vercel
     // firewall; going in-process removes it entirely. See
     // claude/pickers-firewall-selfblock-2026-07-17.md.
-    const payload = (await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
+    // The page's own name on the bandwidth meter (#553 COWORK #214): "pg-" + its slug.
+    const caller = `pg-${config.href.replace(/^\//, "").replace(/[^a-z0-9-]/g, "-")}`.slice(0, 40);
+    const payload = (await getPickersData(SITE_ORIGIN, { caller })) as unknown as PickersPayload;
     const sections = Array.isArray(payload.sections) ? payload.sections : [];
     const signalRecords = Array.isArray(payload.signalRecords) ? payload.signalRecords : [];
 

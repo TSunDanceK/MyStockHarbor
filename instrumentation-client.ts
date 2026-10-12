@@ -158,6 +158,8 @@ initBotId({
       advancedOptions: { checkLevel: "deepAnalysis" },
     },
     { path: "/api/ticker-lookup", method: "GET" },
+    // #553 COWORK #214: the candles for a picker view's visible rows.
+    { path: "/api/picker-charts", method: "GET" },
     // THE HUMAN-GATED COLD FILL (#535 COWORK #13). A server action POSTs to
     // the page's own URL, so the page paths are listed: BotID then attaches
     // its signal to that POST and coldFillAction's checkBotId() can classify

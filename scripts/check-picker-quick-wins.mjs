@@ -50,6 +50,8 @@ async function loadReader(src) {
   if (!fn) return null;
   const prelude = `${SPELL}\nlet redis = null; const PICKERS_SEC_TTL_SECONDS = 86400; const pickersSecKey = () => "pickers-sec";
 const isRow = (v) => Boolean(v && typeof v === "object" && v.v === 1);
+// The bandwidth meter (#553 COWORK #214) is bookkeeping, not a Redis command here.
+const recordRedisRead = async () => {};
 export const setRedis = (r) => { redis = r; };`;
   const js = ts.transpileModule(`${prelude}\n${fn}\nexport const reader = readSecPickerRows;`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },

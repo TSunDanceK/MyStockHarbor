@@ -40,6 +40,7 @@ import {
 import { beginTiming, timingCache } from "./timing";
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { flushRedisReadMeterThrottled, recordRedisRead } from "./redisBandwidth";
 import { markRefreshed } from "./stalenessQueue";
 import { boundedDeferred, NEWS_DEFERRED_WRITE_BUDGET_MS } from "./sourceBudget";
 import {
@@ -194,6 +195,12 @@ async function readStored<T>(key: string): Promise<StoredNews<T> | null> {
   if (!redis) return null;
   try {
     const entry = await redis.get<StoredNews<T>>(key);
+    // Metered on a hit (#553 COWORK #214, cut 3): ~32 KB a symbol, read on every
+    // stock-page news render. Throttled flush, as for the Tiingo bars.
+    if (entry) {
+      await recordRedisRead("news", 1, "news-read");
+      await flushRedisReadMeterThrottled();
+    }
     if (!entry || typeof entry !== "object" || !Array.isArray(entry.items)) return null;
     return entry;
   } catch {
@@ -366,6 +373,8 @@ export async function readStoredSymbolNews<T>(symbols: string[]): Promise<Map<st
   if (!redis || !upper.length) return out;
   try {
     const entries = await redis.mget<(StoredNews<T> | null)[]>(...upper.map(symbolKey));
+    await recordRedisRead("news", entries.filter(Boolean).length, "news-bulk");
+    await flushRedisReadMeterThrottled();
     entries.forEach((entry, i) => {
       if (entry && typeof entry === "object" && Array.isArray(entry.items) && entry.items.length) {
         // The sector feed reads constituents' records directly: the same rule.

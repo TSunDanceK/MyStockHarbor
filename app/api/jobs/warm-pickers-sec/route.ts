@@ -19,6 +19,7 @@ import { adsRatioFor } from "../../../../lib/server/secAdsMap";
 import { citedCoverFor, nonEquityListingOf } from "../../../../lib/server/secPrimaryListing";
 import { admittedForSec } from "../../../../lib/server/secSeedGate";
 import { cikForSymbol } from "../../../../lib/server/secColdFetch";
+import { flushRedisReadMeter } from "../../../../lib/server/redisBandwidth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +75,8 @@ async function handleGET(req: NextRequest) {
     });
     // durationMs (#553 COWORK #113/#114): the run's own time, beside its
     // stoppedEarly ("time-budget" when WARM_PICKERS_SEC_BUDGET_MS ran out).
+    // The run's fact-set reads, written once (#553 COWORK #214, cut 3).
+    await flushRedisReadMeter();
     console.log("[warm-pickers-sec]", `durationMs=${result.durationMs ?? null}`, JSON.stringify(result));
     const gateRefused = Object.fromEntries(Object.entries(gate.refused).map(([why, syms]) => [why, syms.length]));
     console.log("[warm-pickers-sec] seed gate refused", JSON.stringify(gateRefused));

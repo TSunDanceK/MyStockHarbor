@@ -16,6 +16,9 @@ import { EstimateCell, PickerEstimateKey, estimateMarksShown } from "@/app/compo
 import { fmtZ, latestStretch } from "@/lib/stretch";
 import { compareEpsGrowth, epsGrowthText, epsGrowthTip } from "@/lib/epsGrowthView";
 import { useFiledEarnings } from "@/app/components/useFiledEarnings";
+import { rowBars } from "@/lib/pickerChartLite";
+import { usePickerBars } from "@/app/components/usePickerBars";
+import { attachTrendHelper } from "@/lib/ta/trendHelper";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -306,17 +309,18 @@ type DerivedRow = {
 // Price / % change / volume come from the ~15-min price pool when present
 // (attached server-side), falling back to the end-of-day close/volume from
 // chartPoints on a pool miss. 200 MA always comes from chartPoints.
+// SINCE #553 COWORK #214 the row usually carries the bars' summary (chartLite)
+// instead of the bars; rowBars reads whichever is there, the same way the
+// server's predicate twin does.
 function deriveRow(entry: ResultEntry): DerivedRow {
-  const pts = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
-  const last = pts.length ? pts[pts.length - 1] : undefined;
-  const prev = pts.length > 1 ? pts[pts.length - 2] : undefined;
-  const eodClose = last && Number.isFinite(last.close) ? last.close : null;
-  const prevClose = prev && Number.isFinite(prev.close) ? prev.close : null;
+  const bars = rowBars(entry);
+  const eodClose = bars.lastClose;
+  const prevClose = bars.prevClose;
   const eodChangePct =
     eodClose != null && prevClose != null && prevClose !== 0
       ? ((eodClose - prevClose) / prevClose) * 100
       : null;
-  const eodVolume = last && typeof last.volume === "number" && Number.isFinite(last.volume) ? last.volume : null;
+  const eodVolume = bars.lastVolume;
 
   // Zero is treated as MISSING for price and volume, not as data.
   //
@@ -340,9 +344,9 @@ function deriveRow(entry: ResultEntry): DerivedRow {
     typeof entry.volume === "number" && Number.isFinite(entry.volume) && entry.volume > 0
       ? entry.volume
       : eodVolume;
-  const ma200 = last && typeof last.ma200 === "number" && Number.isFinite(last.ma200) ? last.ma200 : null;
-  // The stored end-of-day closes (72 sessions), never the live pool price: z20 is a closing measure.
-  const stretch = latestStretch(pts.map((p) => p.close).filter((c): c is number => typeof c === "number" && Number.isFinite(c)));
+  const ma200 = bars.lastMa200;
+  // The stored end-of-day closes, never the live pool price: z20 is a closing measure.
+  const stretch = latestStretch(bars.closes);
   return { price, changePct, volume, ma200, stretch };
 }
 
@@ -735,12 +739,17 @@ const SPARK_H = 22;
 const SPARK_MAX_POINTS = 40;
 
 function sparkCloses(entry: ResultEntry): number[] {
+  // The last SPARK_MAX_POINTS bars' finite closes, from the bars or their summary.
   const pts = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
-  const out: number[] = [];
-  for (const p of pts.slice(-SPARK_MAX_POINTS)) {
-    if (typeof p.close === "number" && Number.isFinite(p.close)) out.push(p.close);
+  if (pts.length) {
+    const out: number[] = [];
+    for (const p of pts.slice(-SPARK_MAX_POINTS)) {
+      if (typeof p.close === "number" && Number.isFinite(p.close)) out.push(p.close);
+    }
+    return out;
   }
-  return out;
+  const c = entry.chartLite?.c ?? [];
+  return c.slice(-SPARK_MAX_POINTS).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
 }
 
 function Sparkline({ closes, up }: { closes: number[]; up: boolean }) {
@@ -1260,6 +1269,21 @@ export default function PickerResultsGrid({
 
   const shown = sortedEntries.slice(0, visibleCount);
 
+  // THE CANDLES, FOR THE ROWS THAT DRAW ONE (#553 COWORK #214, cut 1): the
+  // chart view's visible cards, or an expanded phone row. A row that carries
+  // its own bars (a weekly card) needs no fetch.
+  const barsWanted = shown
+    .filter((e) => !e.chartPoints.length && (viewMode === "chart" || expandedRows.has(e.symbol)))
+    .map((e) => e.symbol);
+  const fetchedBars = usePickerBars(barsWanted);
+  const barsFor = (entry: ResultEntry) => {
+    if (entry.chartPoints.length) return { points: entry.chartPoints, loading: false };
+    const got = fetchedBars[entry.symbol];
+    if (got === undefined) return { points: [], loading: true };
+    const points = got ?? [];
+    return { points: entry.trendSeries && points.length ? attachTrendHelper(points, entry.trendSeries) : points, loading: false };
+  };
+
   // THE MARKS ON SCREEN (#553 COWORK #102), for the key: the table's columns
   // on every shown row; on a phone, the headline column, plus every metric
   // column of an expanded row. At most a page of rows: computed per render.
@@ -1589,7 +1613,8 @@ export default function PickerResultsGrid({
                       {closes.length > 1 ? (
                         <div className="mRowChart">
                           <MiniPickerCandleChart
-                            points={entry.chartPoints}
+                            points={barsFor(entry).points}
+                            loading={barsFor(entry).loading}
                             tone={displayTone ?? tone}
                             overlay={chartOverlayForEntry(configHref, configTitle, entry)}
                             supportResistanceZone={entry.supportResistanceZone}
@@ -1714,7 +1739,8 @@ export default function PickerResultsGrid({
                     />
                   ) : null}
                   <MiniPickerCandleChart
-                    points={entry.chartPoints}
+                    points={barsFor(entry).points}
+                    loading={barsFor(entry).loading}
                     tone={displayTone ?? tone}
                     overlay={chartOverlayForEntry(configHref, configTitle, entry)}
                     supportResistanceZone={entry.supportResistanceZone}

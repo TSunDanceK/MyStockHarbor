@@ -280,7 +280,8 @@ const RESULT_PAGE = "app/components/PickerResultPage.tsx";
 function resultPageProblems(src) {
   const c = code(RESULT_PAGE, src);
   const out = [];
-  if (!/=\s*\(await getPickersData\(SITE_ORIGIN\)\)/.test(c)) out.push("PickerResultPage no longer reads getPickersData in-process, unfiltered");
+  // The meter caller (#553 COWORK #214) rides along; still unfiltered.
+  if (!/=\s*\(await getPickersData\(SITE_ORIGIN(, \{ caller \})?\)\)/.test(c)) out.push("PickerResultPage no longer reads getPickersData in-process, unfiltered");
   if (/pickersWithoutBars/.test(c)) out.push("PickerResultPage filters the bars out of its own in-process read");
   if (/fetch\([^)]*\/api\/pickers/.test(c)) out.push("PickerResultPage fetches /api/pickers (which has no bars)");
   if (!/record\.chartPoints/.test(c) || !/item\.chartPoints/.test(c)) out.push("PickerResultPage entries no longer take record/item chartPoints");
@@ -416,11 +417,11 @@ await mutant("the shared copy mutated", async () => {
 });
 
 await mutant("PickerResultPage loses its in-process bars (filtered read)", async () =>
-  resultPageProblems(read(RESULT_PAGE).replace("(await getPickersData(SITE_ORIGIN))", "pickersWithoutBars(await getPickersData(SITE_ORIGIN))"))
+  resultPageProblems(read(RESULT_PAGE).replace("(await getPickersData(SITE_ORIGIN, { caller }))", "pickersWithoutBars(await getPickersData(SITE_ORIGIN, { caller }))"))
 );
 
 await mutant("PickerResultPage reads the route instead", async () =>
-  resultPageProblems(read(RESULT_PAGE).replace("(await getPickersData(SITE_ORIGIN))", '(await (await fetch("/api/pickers")).json())'))
+  resultPageProblems(read(RESULT_PAGE).replace("(await getPickersData(SITE_ORIGIN, { caller }))", '(await (await fetch("/api/pickers")).json())'))
 );
 
 await mutant("DashboardTicker starts drawing route chartPoints", async () =>

@@ -28,6 +28,18 @@ import type { StoredEod, StoredQuote } from "./types";
 import { parseEodLast, type EodLast } from "./eodLast";
 import { toDashed } from "../../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "../redisCacheMode";
+import { flushRedisReadMeterThrottled, recordRedisRead } from "../redisBandwidth";
+
+// METERED ON THE MISS, which is the only time Redis is read: a Data Cache hit
+// costs no bandwidth. Caller "data-cache-miss" because these readers sit under
+// every page that shows a price or a chart, and the hour profile on
+// /cache-health is what tells those apart (#553 COWORK #214, cut 3).
+// The two whole-hash reads only RECORD: they sit under the pickers overlay,
+// whose cost is pinned at its three HGETALLs (check-fmpoff-sec-cap), and the
+// page's own cached-path flush or the next throttled one writes them. The
+// per-symbol bars read flushes, throttled, because nothing else on a stock
+// page does.
+const METER_CALLER = "data-cache-miss";
 
 export const POOL_CACHE_SECONDS = 60 * 60;
 export const EOD_CACHE_SECONDS = 24 * 60 * 60;
@@ -58,6 +70,7 @@ export function parsePoolHash(raw: Record<string, unknown> | null): TiingoPool {
 async function loadPool(): Promise<TiingoPool | null> {
   if (!redis) return null;
   const raw = await redis.hgetall<Record<string, unknown>>(TIINGO_QUOTES_KEY);
+  await recordRedisRead("tiingo-pool", raw ? Object.keys(raw).length : 0, METER_CALLER);
   return raw ? parsePoolHash(raw) : null;
 }
 
@@ -75,6 +88,8 @@ export function readTiingoHistory(symbol: string): Promise<StoredEod | null> {
       if (!redis) return null;
       const raw = await redis.get<StoredEod | string>(tiingoEodKey(sym));
       if (!raw) return null;
+      await recordRedisRead("tiingo-eod", 1, METER_CALLER);
+      await flushRedisReadMeterThrottled();
       const v = typeof raw === "string" ? (JSON.parse(raw) as StoredEod) : raw;
       return Array.isArray(v?.bars) ? v : null;
     },
@@ -98,6 +113,7 @@ export function parseEodLastHash(raw: Record<string, unknown> | null): TiingoEod
 async function loadEodLast(): Promise<TiingoEodLast | null> {
   if (!redis) return null;
   const raw = await redis.hgetall<Record<string, unknown>>(TIINGO_EOD_LAST_KEY);
+  await recordRedisRead("tiingo-eod-last", raw ? Object.keys(raw).length : 0, METER_CALLER);
   return raw ? parseEodLastHash(raw) : null;
 }
 

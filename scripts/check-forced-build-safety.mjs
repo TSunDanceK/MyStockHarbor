@@ -387,8 +387,9 @@ check(
 );
 check(
   "the cache is read unconditionally in both paths",
-  (code.match(/const cached = await readPickersCache\(\);/g) || []).length === 2 &&
-    !/forceRefresh \? null : await readPickersCache\(\)/.test(code),
+  // The reader takes its meter caller since #553 COWORK #214; still unconditional.
+  (code.match(/const cached = await readPickersCache\((\{ caller: [^)]*\})?\);/g) || []).length === 2 &&
+    !/forceRefresh \? null : await readPickersCache\(/.test(code),
   "the conditional read is what disabled all three fallbacks at once"
 );
 
