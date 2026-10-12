@@ -38,6 +38,8 @@ const PLAYS = "msh:plays:v5:main", FLAGS = "msh:bull-flags:v1:main", TRI = "msh:
 const factKey = (s) => `msh:sec:facts:v1:${s.toUpperCase()}`; // secFactStore.ts SEC_FACTS_PREFIX
 const { tiingoEodKey, TIINGO_QUOTES_KEY, TIINGO_EOD_LAST_KEY } = await import("../lib/server/marketData/keys.ts");
 
+// automaticDeserialization:false makes HGETALL a flat [field, value, ...] array.
+const asObj = (h) => (Array.isArray(h) ? Object.fromEntries(Array.from({ length: h.length / 2 }, (_, i) => [h[2 * i], h[2 * i + 1]])) : h ?? {});
 const mb = (n) => `${(n / 1e6).toFixed(2)} MB`;
 const kb = (n) => `${(n / 1e3).toFixed(1)} KB`;
 
@@ -83,7 +85,7 @@ for (const [label, keyOf] of [["tiingo eod v2", tiingoEodKey], ["sec facts v1", 
 console.log("\n== 5. The bandwidth meter's own counters, last 7 UTC days (units and reads per source)");
 for (let i = 0; i < 7; i++) {
   const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10).replace(/-/g, "");
-  const h = (await redis.hgetall(`msh:redis-units:v1:${day}`)) ?? {};
+  const h = asObj(await redis.hgetall(`msh:redis-units:v1:${day}`));
   const bySource = {};
   for (const [k, v] of Object.entries(h)) {
     const m = /^([^:]+):(units|reads)$/.exec(k); // the per-source totals only
@@ -94,12 +96,16 @@ for (let i = 0; i < 7; i++) {
   }
   const line = Object.entries(bySource).sort((a, b) => b[1].units - a[1].units).map(([s, x]) => `${s} ${x.reads}r/${x.units}u`).join(" · ");
   console.log(`  ${day}: ${line || "(none)"}`);
+  if (i < 2) {
+    const callers = Object.entries(h).filter(([k]) => /^picker-(charts|payload):[^:h][^:]*:reads$/.test(k)).map(([k, v]) => `${k.replace(/:reads$/, "")}=${v}`).join(" · ");
+    if (callers) console.log(`      by caller (reads): ${callers}`);
+  }
 }
 
 console.log("\n== 6. Pickers build triggers, last 3 days (builds, not reads)");
 for (let i = 0; i < 3; i++) {
   const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
-  const h = (await redis.hgetall(`${PICKERS_BUILD_TRIGGERS_PREFIX}:${day}`)) ?? {};
+  const h = asObj(await redis.hgetall(`${PICKERS_BUILD_TRIGGERS_PREFIX}:${day}`));
   const total = Object.values(h).reduce((a, b) => a + (Number(b) || 0), 0);
   console.log(`  ${day}: ${total} build attempt(s) · ${Object.entries(h).map(([k, v]) => `${k}=${v}`).join(" ; ").slice(0, 400)}`);
 }
