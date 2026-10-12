@@ -150,7 +150,7 @@ export async function GET(req: NextRequest) {
   for (const { symbol, cik } of candidates) {
     if (Date.now() - started > FILING_JOB_BUDGET_MS) { stoppedBy = "budget"; break; }
     if (tally.filled + tally.notice >= FILING_JOB_FILLS_PER_RUN) { stoppedBy = "fill-cap"; break; }
-    const stored = await readFactSet(symbol);
+    const stored = await readFactSet(symbol, "sec-filings");
     // No stored set yet: sec-facts populates it; nothing to fill against.
     if (!stored) { tally.noSet++; updates.set(symbol, { c: Date.now(), lag: null }); continue; }
     tally.checked++;

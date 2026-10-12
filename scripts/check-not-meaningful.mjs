@@ -98,7 +98,11 @@ console.log("\n2. the view's markers, beside figures left as filed");
   check("JOBY: the operating margin (−675%) stands; its change is n/m", newest(j).notMeaningful.operating === false && newest(j).notMeaningful.operatingChange === true);
   const a = views.ACHR;
   check("ACHR: operating and net margins n/m", newest(a).notMeaningful.operating && newest(a).notMeaningful.net, JSON.stringify(newest(a).notMeaningful));
-  check("ACHR: growth is a crossing, not n/m", a.snapshot.revenueYoY === "turned-profitable" && !a.snapshot.revenueYoYNotMeaningful);
+  // #552 COWORK #213 item 3: the Pct stays the crossing (the score reads it);
+  // what prints is n/m with "No revenue a year earlier".
+  check("ACHR: no revenue a year earlier → n/m with its own reason (the Pct stays as computed)",
+    a.snapshot.revenueYoY === "turned-profitable" && a.snapshot.revenueYoYNotMeaningful === true
+      && a.snapshot.revenueYoYNotMeaningfulReason === M.NOT_MEANINGFUL_NO_BASE_REASON && M.NOT_MEANINGFUL_NO_BASE_REASON === "No revenue a year earlier");
   check("WKHS: +374.9% off $750k → n/m by the floor alone", views.WKHS.snapshot.revenueYoYNotMeaningful === true && Math.abs(views.WKHS.snapshot.revenueYoY) < 1000, String(views.WKHS.snapshot.revenueYoY));
   for (const s of ["KO", "TSLA", "JPM"]) check(`${s}: no marker anywhere`, !anyMark(views[s]));
 }
@@ -143,6 +147,27 @@ console.log("\n5. the other surfaces read the markers");
   check("calendar week: an n/m growth prints n/m with its reason", /r\.revenueYoYNote \? <span className="ewYoY" data-yoy="" data-nm=""><ReasonedValue text="n\/m" reason=\{r\.revenueYoYNote\} \/>/.test(week));
 }
 
+console.log("\n5b. the #213 follow-up: the statement row, tiny amounts, no year-ago revenue, the meter");
+{
+  const stmt = html(React.createElement(M.SecIncomeStatementCard, { view: views.JOBY }));
+  check("JOBY income statement: the revenue row's tap note is n/m with the reason, no 'up 257233'",
+    stmt.includes("n/m vs Q2 FY2025: Year-ago revenue was too small for a meaningful comparison.") && !/up 257,?233/.test(stmt));
+  check("…and the revenue row takes no colour", /data-line-trend="none"[^>]*>[\s\S]{0,400}\$38\.6M/.test(stmt));
+  check("tiny amounts: $15K, $0, -$15K, $640, and $0.5M from $100K up",
+    M.scaledAmount(15e3) === "$15K" && M.scaledAmount(0) === "$0" && M.scaledAmount(-15e3) === "-$15K" && M.scaledAmount(640) === "$640"
+      && M.scaledAmount(5e5) === "$0.5M" && M.scaledAmount(1e5) === "$0.1M" && M.scaledAmount(38.6e6) === "$38.6M",
+    [15e3, 0, -15e3, 640, 5e5, 1e5].map((v) => M.scaledAmount(v)).join(" "));
+  check("JOBY income statement: the year-ago $15K reads in thousands, not $0.0M", !stmt.includes("$0.0M"));
+  const ga = visibleText(html(React.createElement(M.SecGrowthMarginsCard, { view: views.ACHR })));
+  const snapA = visibleText(html(React.createElement(M.SecSnapshotCard, { view: views.ACHR })));
+  check("ACHR: no 'Turned profitable' on a revenue figure (snapshot and table)", !/Turned profitable/.test(snapA) && !/Revenue YoY[\s\S]*Turned profitable/.test(ga) && /YoY revenue growth[\s\S]{0,40}n\/m/.test(snapA), snapA.slice(0, 220));
+  const store = readCodeOnly("lib/server/secFactStore.ts");
+  check("the stock page's fact-set read is metered (#553 CODE-B #182)", /await recordRedisRead\("sec-facts", 1, caller\);/.test(store)
+    && /caller = "stock-page",/.test(store) && /readFactSet\(clean\)/.test(readCodeOnly("lib/server/secColdFetch.ts")));
+  check("readEarningsSchedule is gone, with its dated note", !/readEarningsSchedule\(/.test(readCodeOnly("lib/server/earningsSchedule.ts"))
+    && /RETIRED 2026-10-12 \(#552 COWORK #213 item 4\)/.test(fs.readFileSync("lib/server/earningsSchedule.ts", "utf8")));
+}
+
 console.log("\n6. mutants, one per clause");
 {
   const mutant = async (from, to) => {
@@ -157,8 +182,25 @@ console.log("\n6. mutants, one per clause");
   check("MUTANT the ±1,000% ceiling off: ACHR's −5,584% back (caught)", m2.buildSecEarningsView(mk(m2).ACHR).margins.at(-1).notMeaningful.operating === false);
   const m3 = await mutant("return marginNotMeaningful(now.margin, now.revenueUsd) || marginNotMeaningful(then.margin, then.revenueUsd);", "return marginNotMeaningful(now.margin, now.revenueUsd);");
   check("MUTANT the change reads only today's end: JOBY's 1,118,418 pt back (caught)", m3.buildSecEarningsView(mk(m3).JOBY).margins.at(-1).notMeaningful.operatingChange === false);
-  const m4 = await mutant("  if (notMeaningful) return <NotMeaningfulValue reason={NOT_MEANINGFUL_GROWTH_REASON} />;", "");
+  const m4 = await mutant("  if (notMeaningful) return <NotMeaningfulValue reason={notMeaningfulReason ?? NOT_MEANINGFUL_GROWTH_REASON} />;", "");
   check("MUTANT the growth cell ignores the marker: +257,233 printed (caught)", /257,?233/.test(visibleText(html(React.createElement(m4.SecSnapshotCard, { view: m4.buildSecEarningsView(mk(m4).JOBY) })))));
+}
+
+{
+  const mutant = async (from, to) => {
+    let applied = false;
+    const Mm = await loadCards((src) => { applied = src.split(from).length === 2; return src.replace(from, to); });
+    if (!applied) throw new Error(`mutant anchor must match once: ${from}`);
+    return Mm;
+  };
+  const m5 = await mutant("  if (key === \"revenue\" && view.snapshot.revenueYoYNotMeaningful) {", "  if (false) {");
+  check("MUTANT (#213 item 1) the statement ignores the marker: 'up 257233' back (caught)",
+    /up 257,?233/.test(html(React.createElement(m5.SecIncomeStatementCard, { view: m5.buildSecEarningsView(mk(m5).JOBY) }))));
+  const m6 = await mutant("  if (abs < 1e5) {", "  if (false) {");
+  check("MUTANT (#213 item 2) no thousands tier: $15K reads $0.0M again (caught)", m6.scaledAmount(15e3) === "$0.0M");
+  const m7 = await mutant("  if (yearAgoOnFile && now && (yearAgoRevenueUsd == null || yearAgoRevenueUsd === 0)) return NOT_MEANINGFUL_NO_BASE_REASON;", "");
+  check("MUTANT (#213 item 3) no no-base rule: ACHR's revenue reads 'Turned profitable' again (caught)",
+    /Turned profitable/.test(visibleText(html(React.createElement(m7.SecSnapshotCard, { view: m7.buildSecEarningsView(mk(m7).ACHR) })))));
 }
 
 if (failures) { console.log(`\nnot-meaningful: ${failures} FAILED`); process.exit(1); }
