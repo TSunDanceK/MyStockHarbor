@@ -1255,6 +1255,18 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // THE CONTENT CANDIDATES (#563 COWORK #182/#183): per pool symbol, its live
+  // close, stored SEC facts (A's view), n/m count, SEC market cap and sector, as
+  // compact CC| log lines; `node scripts/content-candidates.mjs --from-log task.log`
+  // turns them into data/content-candidates.json. READ-ONLY despite the prefix
+  // (the prefix routes it to the job holding the Upstash credentials): 1 HGETALL
+  // + 1 GET + 1 HMGET + one GET per symbol's fact set, no writes, no SEC requests.
+  "write-content-candidates": {
+    script: "scripts/content-candidates.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // WHICH UNIVERSE SYMBOLS SEC NO LONGER LISTS (#553 COWORK #20): measured
   // before the delisting sweep acts on it. Read-only; ~4 Redis reads.
   "write-sec-delisting-census": {
