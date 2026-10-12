@@ -49,6 +49,12 @@
 //
 // --- Rate-limiting + auto-populate system ---
 //
+// 2026-10-12 (#552 COWORK #210): NO QUOTE CALLS ANY MORE. Rows are priced from
+// the shared price pool only (quoteBatch); off-pool rows show "—". The FMP
+// quote budget described in the next paragraph and in the Backfill note at the
+// end of this block is retired with quoteOne; the hourly-cap read that remains
+// can no longer trip. Kept below as the record of what it did.
+//
 // A Redis-backed hourly cap (QUOTE_HOURLY_CAP) limits how many *new*
 // (never-quoted-before) symbols this feature spends a real FMP /quote call
 // on, shared across every visitor. Symbols already quoted within the last
@@ -104,7 +110,6 @@ const redis =
 // fetch cache's revalidate window) don't consume a slot at all.
 const QUOTE_HOURLY_CAP = 50;
 const QUOTE_COUNTER_PREFIX = "msh:earnings-quote-calls:v1";
-const QUOTED_SYMBOL_PREFIX = "msh:earnings-quoted-symbol:v1";
 // ── v2 -> v3, AND THE BUMP IS THE MIGRATION ────────────────────────────────
 //
 // F2's read side now serves an empty stored blob when the date is marked
@@ -178,61 +183,12 @@ export function isDateInWindow(date: string): boolean {
   return date >= getWindowStartDate() && date <= getWindowEndDate();
 }
 
-// Has this symbol already been through a real FMP quote call recently
-// enough that Next's own fetch cache is expected to still be warm for it?
-async function wasRecentlyQuoted(symbol: string): Promise<boolean> {
-  if (!redis) return false;
-
-  try {
-    const hit = await redis.get(`${QUOTED_SYMBOL_PREFIX}:${symbol}`);
-    return hit != null;
-  } catch {
-    return false;
-  }
-}
-
-async function markQuoted(symbol: string) {
-  if (!redis) return;
-
-  try {
-    await redis.set(`${QUOTED_SYMBOL_PREFIX}:${symbol}`, 1, {
-      ex: QUOTE_REVALIDATE_SECONDS,
-    });
-  } catch {
-    // fail open -- worst case this symbol re-spends a slot next time
-  }
-}
-
-// Atomically claims one of this hour's new-quote slots. Returns true if
-// the caller may actually hit FMP, false if the hour's budget is already
-// spent. Always increments the counter (even under bypassCap) so
-// getQuoteHourUsage stays accurate. Fails open on Redis error.
-async function reserveQuoteSlot(): Promise<boolean> {
-  if (!redis) return true;
-
-  const key = `${QUOTE_COUNTER_PREFIX}:${getHourBucket()}`;
-
-  try {
-    // THE TTL IS ESTABLISHED BEFORE THE COUNTER MOVES, not after.
-    //
-    // This was incr-then-expire, and the two are not atomic: if the incr landed
-    // and the expire did not, the key had no expiry and nothing would ever set
-    // one (the expire only ran when incr returned exactly 1, which had already
-    // happened). The bucket name carries the hour, so the result is that one
-    // hour-of-history stays permanently at or above the cap -- a slot that can
-    // never be reclaimed, for a counter whose whole purpose is to reset hourly.
-    //
-    // SET NX gives the key its TTL at creation. If the key already exists the
-    // SET is a no-op and the TTL is already there; if this SET lands and the
-    // INCR then fails, what is left is a zeroed counter that expires on time.
-    // Neither order of failure can now produce an immortal key.
-    await redis.set(key, 0, { ex: 70 * 60, nx: true }); // just over an hour, covers clock skew
-    const current = await redis.incr(key);
-    return current <= QUOTE_HOURLY_CAP;
-  } catch {
-    return true;
-  }
-}
+// ── RETIRED 2026-10-12 (#552 COWORK #210): THE FMP QUOTE BUDGET ────────────
+// wasRecentlyQuoted / markQuoted / reserveQuoteSlot spent and tracked FMP
+// /stable/quote calls for off-pool symbols. FMP's contract ended (COWORK #209),
+// so quoteBatch below prices from the shared price pool only and these went
+// with quoteOne. getQuoteHourUsage still reads the hourly counter, which
+// nothing increments any more, so the cap it guards can no longer trip.
 
 async function getQuoteHourUsage(): Promise<number> {
   if (!redis) return 0;
@@ -440,7 +396,6 @@ export type RawEarningsRow = {
 };
 
 const MONTH_CACHE_MS = 6 * 60 * 60_000; // 6 hours -- FMP's own lastUpdated field is daily
-const QUOTE_CONCURRENCY = 10;
 const QUOTE_REVALIDATE_SECONDS = 30 * 24 * 60 * 60; // ~1 month, per site owner's request
 
 // Safety ceiling on how many candidates a single date will ever quote -- far
@@ -470,19 +425,6 @@ const POPULAR_SYMBOLS = new Set([
   "QQQ", "RIVN", "SBUX", "SHOP", "SMCI", "SNAP", "SOFI", "SPY", "T", "TGT",
   "TSLA", "TSM", "TXN", "UBER", "UNH", "V", "VZ", "WFC", "WMT", "XOM",
 ]);
-
-function num(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.replace(/,/g, ""));
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
-function str(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
 
 export function daysInMonth(year: number, month: number) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -1012,107 +954,51 @@ type QuoteResult = {
   usOk?: boolean;
 };
 
-async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult> {
-  const apiKey = process.env.FMP_API_KEY;
-  // NO KEY IS NO PRICE, NOT A FAILURE — since the grid moved to SEC's own
-  // announcements (#535 COWORK #18 §3). A row is admitted by SEC's ticker file
-  // before any quote, so a missing quote no longer hides whether the company
-  // is US-listed; it only leaves price and market cap as "—" (owner ruling,
-  // COWORK #23: off-pool shows "—"). With FMP_API_KEY unset the page renders
-  // and every date can settle. A key that is SET and answers badly is still a
-  // failure below, and still keeps its date from settling.
-  if (!apiKey) return { price: null, marketCap: null, exchange: null, capped: false, failed: false };
-
-  // Symbols already quoted within the fetch-cache window don't spend an
-  // hourly slot -- only genuinely new symbols compete for the cap.
-  const alreadyQuoted = await wasRecentlyQuoted(symbol);
-  if (!alreadyQuoted) {
-    const allowed = await reserveQuoteSlot();
-    if (!allowed && !bypassCap) {
-      // Capped, not failed: a deliberate decision not to call, already handled.
-      return { price: null, marketCap: null, exchange: null, capped: true, failed: false };
-    }
-
-    // Site-wide FMP account budget (~300 calls/minute across every FMP-calling
-    // route). Only a genuinely new symbol makes a real FMP call, so only it
-    // needs a budget slot. Already-quoted symbols resolve from Next's Data
-    // Cache below without hitting FMP -- making them queue behind the budget
-    // too is what made heavy, mostly-cached days take 10-15s to render.
-    try {
-      await reserveFmpCallSlot();
-    } catch {
-      // Also a throttle rather than an upstream failure — the call was never made.
-      return { price: null, marketCap: null, exchange: null, capped: true, failed: false };
-    }
-  }
-
-  try {
-    const res = await fmpFetch(
-      `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`,
-      { next: { revalidate: QUOTE_REVALIDATE_SECONDS } }
-    );
-    // THE LAPSED-LICENCE SHAPE. A dead or downgraded key answers 401/402/403
-    // with a JSON body, which is a perfectly well-formed HTTP response — there
-    // is no exception to catch, which is exactly why this read as success.
-    if (!res.ok) return { price: null, marketCap: null, exchange: null, capped: false, failed: true };
-    const json = await res.json();
-    const row = Array.isArray(json) ? json[0] : json;
-
-    if (!alreadyQuoted) await markQuoted(symbol);
-
-    return {
-      price: num(row?.price),
-      marketCap: num(row?.marketCap),
-      exchange: str(row?.exchange),
-      capped: false,
-      failed: false,
-    };
-  } catch {
-    return { price: null, marketCap: null, exchange: null, capped: false, failed: true };
-  }
-}
+// ── quoteOne RETIRED 2026-10-12 (#552 COWORK #210) ─────────────────────────
+// It priced an off-pool symbol from FMP /stable/quote. FMP's contract ended
+// (COWORK #209), and with no key it already returned the off-pool "—" shape.
+// An off-pool row stays "—" (owner ruling, COWORK #23); see quoteBatch.
 
 // Normalize a symbol the same way the price pool keys it, so a pool lookup hits.
 function normSymbol(s: string) {
   return s.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
 }
 
-async function quoteBatch(symbols: string[], bypassCap: boolean): Promise<Record<string, QuoteResult>> {
+async function quoteBatch(symbols: string[]): Promise<Record<string, QuoteResult>> {
   const results: Record<string, QuoteResult> = {};
 
-  // Shared-cache fast path: any reporting company that's in the site-wide
-  // rolling universe already has a ~15-min-fresh price + market cap in the
-  // price pool (msh:price-pool:v1). Serve those for FREE -- no per-symbol FMP
-  // /quote call and no hourly-cap slot -- so the cap is reserved for the
-  // small-cap long tail that isn't cached anywhere. One bulk HMGET total.
-  const poolHits = new Set<string>();
+  // THE SHARED PRICE POOL IS THE ONLY PRICE SOURCE (#552 COWORK #210). Any
+  // reporting company in the site-wide rolling universe has a ~15-min-fresh
+  // price + market cap in msh:price-pool:v1. One bulk HMGET total.
+  //
+  // OFF-POOL IS "—", NOT A FAILURE (owner ruling, COWORK #23): SEC's ticker
+  // file admitted the row; it is simply unpriced, and the date can settle.
+  //
+  // A POOL READ THAT FAILS IS A FAILURE, NOT AN EMPTY POOL. It used to fall
+  // through to per-symbol FMP quotes; with those gone, reading the error as
+  // "nothing in the pool" would settle the date with every row unpriced for
+  // the cache's lifetime -- the failure-read-as-absence defect
+  // check-earnings-failure-not-absence exists for. So every row is marked
+  // failed, and the date stays open for a later pass.
+  let pool: Awaited<ReturnType<typeof readPricePoolBulk>> | null = null;
   try {
-    const pool = await readPricePoolBulk(symbols);
-    for (const symbol of symbols) {
-      const p = pool.get(normSymbol(symbol));
-      if (p && p.price != null) {
-        results[symbol] = {
-          price: p.price,
-          marketCap: p.marketCap,
-          exchange: null,
-          usOk: true, // universe symbols are US-listed by construction
-          capped: false,
-          failed: false,
-        };
-        poolHits.add(symbol);
-      }
-    }
+    pool = await readPricePoolBulk(symbols);
   } catch {
-    // fall through -- a pool read failure just means we quote everything
+    pool = null;
   }
-
-  const remaining = symbols.filter((symbol) => !poolHits.has(symbol));
-  for (let i = 0; i < remaining.length; i += QUOTE_CONCURRENCY) {
-    const slice = remaining.slice(i, i + QUOTE_CONCURRENCY);
-    const quotes = await Promise.all(slice.map((symbol) => quoteOne(symbol, bypassCap)));
-    slice.forEach((symbol, idx) => {
-      results[symbol] = quotes[idx];
-    });
+  for (const symbol of symbols) {
+    const p = pool?.get(normSymbol(symbol));
+    results[symbol] =
+      p && p.price != null
+        ? {
+            price: p.price,
+            marketCap: p.marketCap,
+            exchange: null,
+            usOk: true, // universe symbols are US-listed by construction
+            capped: false,
+            failed: false,
+          }
+        : { price: null, marketCap: null, exchange: null, capped: false, failed: pool === null };
   }
   return results;
 }
@@ -1131,7 +1017,9 @@ export async function getFullDayEarnings(
   date: string,
   opts: { bypassCap?: boolean; forceRefresh?: boolean; maxQuote?: number } = {}
 ): Promise<FullDayEarnings> {
-  const bypassCap = opts.bypassCap ?? false;
+  // opts.bypassCap is still accepted (the Backfill route and the fill loop
+  // pass it) but no longer spends anything here: it bypassed the FMP quote
+  // cap, retired with quoteOne (2026-10-12, #552 COWORK #210).
   const forceRefresh = opts.forceRefresh ?? false;
 
   const allCandidates = await getDayCandidates(date);
@@ -1192,7 +1080,7 @@ export async function getFullDayEarnings(
   const candidates = allCandidates.slice(0, limit);
   const quotedEveryCandidate = candidates.length >= Math.min(totalCandidates, MAX_CANDIDATES_PER_DAY);
 
-  const quotes = await quoteBatch(candidates.map((c) => c.symbol), bypassCap);
+  const quotes = await quoteBatch(candidates.map((c) => c.symbol));
 
   let anyCapped = false;
   let anyFailed = false;

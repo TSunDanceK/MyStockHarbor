@@ -80,7 +80,14 @@ const readReference = async (k) => __h.reference.get(k) ?? null;
 const writeReference = async (k, v) => { __h.reference.set(k, v); };
 const fmpFetch = (url, init) => __h.fmpFetch(url, init);
 const reserveFmpCallSlot = async () => {};
-const readPricePoolBulk = async () => new Map();
+// THE PRICE POOL IS THE ONLY PRICE SOURCE since quoteOne's FMP leg went
+// (2026-10-12, #552 COWORK #210), so it is the boundary the failure cases now
+// drive: \`pool\` is what it holds, \`poolThrows\` is it being unreachable.
+const readPricePoolBulk = async () => {
+  __h.calls.push("pool");
+  if (__h.poolThrows) throw new Error("price pool unreachable");
+  return new Map(Object.entries(__h.pool ?? {}));
+};
 class Redis {
   static fromEnv() { return new Redis(); }
   async get(k) { __h.cmd.push(["get", k]); const v = __h.store.get(k); return v === undefined ? null : v; }
@@ -127,14 +134,16 @@ async function loadModule() {
 const jsonResponse = (body, status) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-/** Install a harness. `mode` decides what every FMP call does. */
-function harness({ mode, monthRows = [], names = {}, store = new Map() }) {
+/** Install a harness. `mode` decides what every FMP call does; `pool` what the price pool holds. */
+function harness({ mode, monthRows = [], names = {}, store = new Map(), pool = POOL_ALL }) {
   const h = {
     reference: new Map(),
     store,
     cmd: [],
     calls: [],
     mgetThrows: false,
+    pool,
+    poolThrows: false,
     // SEC's day index and the committed names stand in for the FMP month feed
     // and stock-list since the grid moved (see the stubs above).
     monthRows,
@@ -187,6 +196,8 @@ const MONTH_ROWS = [
   { symbol: "CCC", date: DATE, epsEstimated: 3, epsActual: null, revenueEstimated: 3e9, revenueActual: null },
 ];
 const NAMES = { AAA: "Alpha Inc", BBB: "Beta Inc", CCC: "Gamma Inc" };
+// The price pool's rows for the fixture symbols (msh:price-pool:v1's shape).
+const POOL_ALL = { AAA: { price: 10, marketCap: 1e9 }, BBB: { price: 20, marketCap: 2e9 }, CCC: { price: 30, marketCap: 3e9 } };
 
 // ── THE KEY NAMES ARE READ FROM THE MODULE, NOT TYPED HERE ─────────────────
 //
@@ -230,75 +241,50 @@ console.log("\n1. Control — a healthy provider still completes and still cache
   check("the complete flag is written to Redis", wroteComplete(h));
 }
 
-// ── 2. F1 — the lapsed-licence shape ───────────────────────────────────────
-console.log("\n2. F1 — a 401 with a JSON body is a failure, not an empty market");
-for (const [label, mode] of [["401 + JSON body", "licence-401"], ["402 + JSON body", "plan-402"], ["fetch throws", "throw"]]) {
+// ── 2. F1 — a price source that fails is not an empty market ───────────────
+//
+// REWRITTEN 2026-10-12 (#552 COWORK #210). This drove FMP /stable/quote failing
+// three ways (401 + JSON body, 402, a thrown fetch). quoteOne and its FMP leg
+// are gone, so the one price source that can fail is the shared price pool --
+// and a failed pool read must keep the date open exactly as a dead quote did.
+// With every row standing unpriced and nothing contradicting itself, only
+// !anyFailed stands between this and a settled day of "—" (mutant F1c).
+console.log("\n2. F1 — a failed price-pool read is a failure, not an off-pool day");
+{
   const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
   const m = await loadModule();
-  // Warm the month feed while the provider is alive, then kill it. This is the
-  // real sequence: the calendar has candidates cached and the quotes stop.
+  // Warm the candidates while the pool is up, then take it down: the calendar
+  // has candidates and the prices stop.
   await m.getMonthDaysWithEarnings(DATE_YEAR, DATE_MONTH);
-  h.fmpFetch = harness({ mode, monthRows: MONTH_ROWS, names: NAMES, store: h.store }).fmpFetch;
-  globalThis.__EARNINGS_HARNESS__ = h;
+  h.poolThrows = true;
   h.cmd.length = 0;
 
   const r = await m.getFullDayEarnings(DATE, { forceRefresh: true, bypassCap: true });
-  check(`${label}: the date is NOT marked complete`, r.complete === false, `complete=${r.complete}`);
-  check(`${label}: no complete flag is written`, !wroteComplete(h));
-  // SINCE THE GRID MOVED TO SEC (#535 COWORK #18 §3) A ROW EXISTS BEFORE ANY
-  // QUOTE: SEC's own file admitted it. A dead provider leaves the rows standing,
-  // unpriced ("—"), and the date unsettled so a later pass prices them.
-  check(`${label}: the rows stand, unpriced — SEC admitted them, not the quote`,
+  check("pool down: the date is NOT marked complete", r.complete === false, `complete=${r.complete}`);
+  check("pool down: no complete flag is written", !wroteComplete(h));
+  check("pool down: the rows stand, unpriced — SEC admitted them, not the price",
     r.items.length === 3 && r.items.every((i) => i.price === null), `got ${r.items.length}`);
-  check(`${label}: the candidate count is still reported`, r.totalCandidates === 3, `got ${r.totalCandidates}`);
+  check("pool down: the candidate count is still reported", r.totalCandidates === 3, `got ${r.totalCandidates}`);
+  check("pool down: but the unpriced rows ARE cached, as before", wroteItems(h));
 }
 
-// ── 2b. F1 ISOLATED — the partial failure F2 cannot see ───────────────────
+// ── 2b. OFF-POOL IS "—", AND THE DAY SETTLES ──────────────────────────────
 //
-// FOUND BY THE MUTATION RUNNER, NOT BY REVIEW. With every quote failing, `items`
-// is empty and the candidate count is positive, so F2's contradiction guard
-// already blocks the write and the complete flag on its own -- and all three F1
-// mutants SURVIVED the suite above. The assertions passed for a reason unrelated
-// to what they claimed to test, which is the #453 trap exactly.
-//
-// The case where F1 is the only thing standing is a PARTIAL outage: some quotes
-// come back, so there are rows, nothing contradicts anything, and `items` looks
-// like a normal day. Without `!anyFailed` the date is marked complete with
-// companies missing -- and stays that way for 32 days, which is worse than the
-// all-empty case because nothing about the page looks wrong.
-console.log("\n2b. F1 isolated — a PARTIAL failure must not settle a date either");
-// BOTH FAILURE ARMS, because they are separate returns in quoteOne and a mutant
-// that only breaks one of them must still be caught. The 401 arm alone left the
-// thrown-fetch mutant alive through a whole mutation run.
-for (const [label, fail] of [
-  ["401 + JSON body", () => jsonResponse({ "Error Message": "Invalid API KEY." }, 401)],
-  ["fetch throws", () => { throw new TypeError("fetch failed"); }],
-]) {
-  const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
-  h.fmpFetch = async (url) => {
-    h.calls.push(url);
-    if (url.includes("/stable/quote")) {
-      const sym = new URL(url).searchParams.get("symbol");
-      // AAA answers; the other two fail.
-      if (sym === "AAA") return jsonResponse([{ symbol: sym, price: 10, marketCap: 1e9, exchange: "NASDAQ" }], 200);
-      return fail();
-    }
-    if (url.includes("/stable/stock-list")) return jsonResponse(Object.entries(NAMES).map(([symbol, companyName]) => ({ symbol, companyName })), 200);
-    return jsonResponse(MONTH_ROWS, 200);
-  };
+// REWRITTEN 2026-10-12 (#552 COWORK #210). 2b was a PARTIAL quote outage; the
+// pool is one bulk read, so a partial failure no longer exists. What replaces
+// it is the other half of F1: a symbol the pool does not hold is the owner's
+// "—" (COWORK #23), NOT a failure, so a day of mixed pool and off-pool rows
+// settles. Without this, "never settle anything" would pass section 2.
+console.log("\n2b. Off-pool rows are '—', not failures — the day settles");
+{
+  const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, pool: { AAA: { price: 10, marketCap: 1e9 } } });
   const m = await loadModule();
   const r = await m.getFullDayEarnings(DATE, { forceRefresh: true, bypassCap: true });
-
-  check(`${label}: the one good quote prices one row; the others stand unpriced`,
+  check("the pool row is priced; the two off-pool rows stand unpriced",
     r.items.length === 3 && r.items.filter((i) => i.price !== null).length === 1, `got ${r.items.length}`);
-  check(`${label}: nothing contradicts itself, so F2's guard does not fire`, r.totalCandidates === 3 && r.items.length > 0);
-  check(
-    `${label}: and the date is STILL not complete — only !anyFailed can catch this`,
-    r.complete === false,
-    `complete=${r.complete}`
-  );
-  check(`${label}: no complete flag is written`, !wroteComplete(h));
-  check(`${label}: but the partial rows ARE cached, as before`, wroteItems(h));
+  check("and the date IS complete — nothing failed", r.complete === true && wroteComplete(h), `complete=${r.complete}`);
+  check("no FMP quote call is made for the off-pool rows", !h.calls.some((u) => String(u).includes("/stable/quote")),
+    h.calls.filter((u) => String(u).includes("/stable/quote")).length + " quote calls");
 }
 
 // ── 3. F3 — a stored [] is not a cache hit while candidates exist ──────────
@@ -325,45 +311,25 @@ console.log("\n3b. A stale empty blob under a complete flag is rebuilt, not serv
   check("the stale [] is not served as an empty day", r.items.length === 3, `got ${r.items.length} rows`);
 }
 
-// ── 4. F2 — an empty day we could not SEE is poison; one we could is not ───
-console.log("\n4. Admission is SEC's — a quote no longer decides whether a row exists");
+// ── 4. Admission is SEC's — a price never decides whether a row exists ────
+//
+// REWRITTEN 2026-10-12 (#552 COWORK #210). 4a fed FMP quotes an "LSE" exchange
+// to show a quote cannot remove a row; 4b failed every quote. With no quote
+// call left, 4a becomes: a settled day is served from the cache and costs no
+// second pool read; 4b was section 2 again and is folded into it.
+console.log("\n4. A settled day is served, not re-priced");
 {
-  // 4a USED TO BE "every company is off-exchange, so the day is genuinely
-  // empty". The exchange is now read from SEC's own ticker file before any
-  // quote (gridAdmits), so a quote reporting "LSE" prices the row and nothing
-  // more: three rows, and the day settles because nothing failed.
   const store = new Map();
-  const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, store });
-  h.fmpFetch = async (url) => {
-    h.calls.push(url);
-    if (url.includes("/stable/quote")) {
-      const sym = new URL(url).searchParams.get("symbol");
-      return jsonResponse([{ symbol: sym, price: 1, marketCap: 1, exchange: "LSE" }], 200);
-    }
-    return jsonResponse([], 200);
-  };
+  const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, store, pool: {} });
   const m = await loadModule();
   const r = await m.getFullDayEarnings(DATE, { bypassCap: true });
-  check("4a: a quote's exchange does not remove a row", r.items.length === 3 && r.totalCandidates === 3);
+  check("4a: an empty pool removes no row", r.items.length === 3 && r.totalCandidates === 3);
   check("4a: nothing failed, so the day SETTLES", r.complete === true && wroteComplete(h), `complete=${r.complete}`);
-  const quotesBefore = h.calls.filter((u) => u.includes("/stable/quote")).length;
+  const poolBefore = h.calls.filter((u) => u === "pool").length;
   const r2 = await m.getFullDayEarnings(DATE, { bypassCap: true });
-  const quotesAfter = h.calls.filter((u) => u.includes("/stable/quote")).length;
-  check("4a: a second render spends no quote calls", quotesAfter === quotesBefore, `${quotesBefore} then ${quotesAfter}`);
+  const poolAfter = h.calls.filter((u) => u === "pool").length;
+  check("4a: a second render spends no pool read", poolAfter === poolBefore, `${poolBefore} then ${poolAfter}`);
   check("4a: and serves the settled day", r2.items.length === 3 && r2.complete === true);
-}
-{
-  // 4b. EVERY QUOTE FAILS: the rows stand, and the day must not settle.
-  const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
-  h.fmpFetch = async (url) => {
-    h.calls.push(url);
-    if (url.includes("/stable/quote")) return jsonResponse({ "Error Message": "Invalid API KEY." }, 401);
-    return jsonResponse([], 200);
-  };
-  const m = await loadModule();
-  const r = await m.getFullDayEarnings(DATE, { forceRefresh: true, bypassCap: true });
-  check("4b: three unpriced rows", r.items.length === 3 && r.items.every((i) => i.price === null));
-  check("4b: and is NOT marked complete", !wroteComplete(h) && r.complete === false);
 }
 
 // ── 5. F5 — an empty month is not cached in process either ─────────────────
@@ -493,16 +459,20 @@ console.log("\n6d. A failed completeness read does not mean an empty window");
   check("the read was actually attempted", h.cmd.some(([c]) => c === "mget"));
 }
 
-// ── 7. F7 — the TTL is established before the counter moves ────────────────
-console.log("\n7. F7 — the hourly counter cannot be created without an expiry");
+// ── 7. F7 RETIRED 2026-10-12 (#552 COWORK #210) ────────────────────────────
+// F7 asserted reserveQuoteSlot set the hourly counter's TTL before its INCR.
+// reserveQuoteSlot went with quoteOne's FMP leg, so the counter is only READ
+// now (getQuoteHourUsage). What is asserted instead: nothing writes it, so no
+// key without an expiry can be created by this path any more.
+console.log("\n7. The retired FMP quote budget writes nothing");
 {
-  const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
+  const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, pool: {} });
   const m = await loadModule();
   await m.getFullDayEarnings(DATE, { forceRefresh: true });
-  const idxSet = h.cmd.findIndex(([c, k, o]) => c === "set" && String(k).startsWith("msh:earnings-quote-calls:v1") && o?.ex && o?.nx);
-  const idxIncr = h.cmd.findIndex(([c, k]) => c === "incr" && String(k).startsWith("msh:earnings-quote-calls:v1"));
-  check("a SET NX with an EX precedes the INCR", idxSet !== -1 && idxIncr !== -1 && idxSet < idxIncr, `set@${idxSet} incr@${idxIncr}`);
-  check("and the old unguarded EXPIRE-after-INCR is gone", !h.cmd.some(([c, k]) => c === "expire" && String(k).startsWith("msh:earnings-quote-calls:v1")));
+  check("no SET, INCR or EXPIRE on the hourly quote counter",
+    !h.cmd.some(([c, k]) => c !== "get" && c !== "mget" && String(k).startsWith("msh:earnings-quote-calls:v1")));
+  check("and no per-symbol 'already quoted' marker is written",
+    !h.cmd.some(([c, k]) => c === "set" && String(k).startsWith("msh:earnings-quoted-symbol:v1")));
 }
 
 // ── 8. F4 — structural, because it lives in a client component ─────────────
