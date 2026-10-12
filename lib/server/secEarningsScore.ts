@@ -186,11 +186,18 @@ function scoreExplanation(view: SecEarningsView, basis: PeriodBasis = "quarter")
   // OFF A VERY SMALL BASE (#535 COWORK #20 rule 2): the figure is stated, with
   // why it is not a signal, and it carries no tone into the "though" below.
   const smallBase = revenueBaseTooSmall(s?.revenue?.val ?? null, rev);
-  const revTone = smallBase ? null : toneForGrowth(rev);
+  // A GROWTH THE PAGE PRINTS AS n/m (#552 COWORK #212/#214) IS NOT A NUMBER
+  // HERE EITHER. JOBY's reason read "Revenue grew 257493.3% against Q2
+  // FY2025, off a very small base" beside a page that prints n/m. The meaning
+  // stays, the figure goes, and like the small base it lends no tone to the
+  // sentence. TEXT ONLY: what is scored is decided below, unchanged.
+  const notMeaningful = Boolean(s?.revenueYoYNotMeaningful);
+  const revTone = smallBase || notMeaningful ? null : toneForGrowth(rev);
   if (isPct(rev) && base) {
     const verb = rev >= 0 ? `revenue grew ${rev.toFixed(1)}%` : `revenue fell ${Math.abs(rev).toFixed(1)}%`;
     clauses.push(
-      smallBase ? `${verb} against ${base}, ${SMALL_REVENUE_BASE}`
+      notMeaningful ? `revenue ${rev >= 0 ? "rose" : "fell"} from a very small base in ${base}, so the growth rate isn't meaningful`
+      : smallBase ? `${verb} against ${base}, ${SMALL_REVENUE_BASE}`
         : revTone === "good" ? `revenue grew ${rev.toFixed(1)}% against ${base}`
           : revTone === "weak" ? `revenue fell ${Math.abs(rev).toFixed(1)}% against ${base}`
             : `revenue was roughly flat against ${base}`
