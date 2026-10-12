@@ -9,6 +9,7 @@
 //
 //   node scripts/check-content-candidates.mjs
 import fs from "node:fs";
+import { toDotted } from "../lib/symbolSpellings.mjs";
 
 const FILE = "data/content-candidates.json";
 const FLAGS = ["inPool", "hasSecFacts", "thinFilings", "hasBottleneck"];
@@ -24,7 +25,7 @@ function problems(doc) {
   rows.forEach((r, i) => {
     const at = `row ${i} (${r?.symbol})`;
     if (typeof r?.symbol !== "string" || !/^[A-Z0-9][A-Z0-9.\-]*$/.test(r.symbol)) bad.push(`${at}: symbol`);
-    const key = String(r?.symbol).replace(/-/g, ".");
+    const key = toDotted(r?.symbol);
     if (seen.has(key)) bad.push(`${at}: duplicate`);
     seen.add(key);
     if (typeof r?.name !== "string" || !r.name) bad.push(`${at}: name`);

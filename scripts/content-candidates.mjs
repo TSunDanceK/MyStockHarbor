@@ -33,6 +33,7 @@
 // task=write-content-candidates, save the run's task.log, run mode 2, commit.
 import fs from "node:fs";
 import path from "node:path";
+import { toDashed, toDotted } from "../lib/symbolSpellings.mjs";
 
 const OUT = "data/content-candidates.json";
 const fromLog = process.argv.indexOf("--from-log");
@@ -86,7 +87,7 @@ if (fromLog < 0) {
   // Live: a close from the last 7 calendar days (a long weekend and a holiday).
   const liveSince = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
   const closeOf = (s) => {
-    const r = eod.get(s) ?? eod.get(s.replace(/\./g, "-")) ?? eod.get(s.replace(/-/g, "."));
+    const r = eod.get(s) ?? eod.get(toDashed(s)) ?? eod.get(toDotted(s));
     return r && typeof r.c === "number" && r.c > 0 && typeof r.d === "string" && r.d >= liveSince ? r.c : null;
   };
   const pool = new Set(poolKeys);
@@ -163,7 +164,7 @@ if (fromLog < 0) {
   // BRK.B. A dot/dash pair merges under the dotted (the site's) spelling.
   const merged = new Map();
   for (const r of rows) {
-    const key = r.symbol.includes("-") && rows.some((x) => x.symbol === r.symbol.replace(/-/g, ".")) ? r.symbol.replace(/-/g, ".") : r.symbol;
+    const key = r.symbol.includes("-") && rows.some((x) => x.symbol === toDotted(r.symbol)) ? toDotted(r.symbol) : r.symbol;
     const was = merged.get(key);
     merged.set(key, was ? { ...was, inPool: was.inPool || r.inPool, hasSecFacts: was.hasSecFacts || r.hasSecFacts, marketCap: was.marketCap ?? r.marketCap,
       nmCount: Math.max(was.nmCount, r.nmCount), figures: Math.max(was.figures, r.figures) } : { ...r, symbol: key });
