@@ -28,21 +28,23 @@ secret in the first place.
 
 ## The complete list of what breaks until the new key is in hand
 
-18 surfaces, all through `checkBackfillKey` in `lib/server/backfillAuth.ts`.
+14 surfaces, all through `checkBackfillKey` in `lib/server/backfillAuth.ts`.
 Derived by scanning, not typed from memory — re-derive with
 `grep -rln "guardDebugRequest\|checkBackfillKey" app/ lib/`.
 
-**14 debug routes**, each via `guardDebugRequest`, all fail CLOSED:
+**10 debug routes**, each via `guardDebugRequest`, all fail CLOSED:
 
 ```
 /api/debug/earnings/[symbol]        /api/debug/pickers-size
 /api/debug/earnings-calendar        /api/debug/static-profile
-/api/debug/earnings-calendar-limit  /api/debug/symbol-changes
-/api/debug/earnings-concentration   /api/debug/symbol-search
-/api/debug/fmp-endpoints            /api/debug/universe-size
-/api/debug/fmp-usage                /api/debug/index-changes
-/api/debug/ipo-calendar             /api/debug/picker-structure
+/api/debug/earnings-calendar-limit  /api/debug/universe-size
+/api/debug/earnings-concentration   /api/debug/picker-structure
+/api/debug/fmp-endpoints            /api/debug/fmp-usage
 ```
+
+(2026-10-12, #553 COWORK #207: `symbol-changes`, `symbol-search`,
+`index-changes` and `ipo-calendar` were deleted. Each called only FMP and
+answered 500 "Missing FMP_API_KEY" with the key gone; FMP ends 14 Oct.)
 
 **1 write route**, fails closed:
 
