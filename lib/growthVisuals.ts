@@ -36,7 +36,7 @@
 // PLAIN DATA OUT, strings already formatted, so the interactive chart (a client
 // component) receives JSON and never imports server code.
 import type { Pct, SecEarningsView, ViewCell } from "./server/secEarningsView";
-import { EMPTY_REASONS, periodWords } from "./server/secEarningsView";
+import { EMPTY_REASONS, NOT_MEANINGFUL_GROWTH_REASON, NOT_MEANINGFUL_MARGIN_REASON, NOT_MEANINGFUL_TEXT, periodWords } from "./server/secEarningsView";
 import { scaledAmount } from "./server/secPresentation";
 
 /** The one plain sentence explaining gross margin (#563 COWORK #55), printed under "About these figures". */
@@ -82,8 +82,10 @@ export type GvPeriod = {
   sales: GvAmount | null;
   /** The same period a year earlier, when it is on this page. */
   lastYear: (GvAmount & { label: string }) | null;
-  /** "+67.0%", "from a small base", or null when not measured. */
+  /** "+67.0%", "from a small base", or null when not measured (or n/m: see growthNote). */
   growth: string | null;
+  /** When A marks the growth n/m (#563 COWORK #178): "sales growth n/m: year-ago revenue was too small…". */
+  growthNote?: string | null;
   profit: GvAmount | null;
   /** A's one-off note for this period, or null. */
   oneOff: string | null;
@@ -145,9 +147,15 @@ function amount(cell: ViewCell | undefined | null): GvAmount | null {
 const isNum = (v: Pct | undefined): v is number => typeof v === "number" && Number.isFinite(v);
 const isFiniteNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** A's YoY as a beginner reads it. Crossings and absences say nothing here. */
-export function growthWords(v: Pct | undefined): string | null {
-  if (!isNum(v)) return null;
+/** A's reason, lower-cased to follow a colon. */
+const lc = (s: string) => `${s.charAt(0).toLowerCase()}${s.slice(1)}`;
+
+/** The panel's line for a growth A marks n/m (#563 COWORK #178; A's rule, #552 COWORK #212). */
+export const growthNotMeaningfulNote = `sales growth ${NOT_MEANINGFUL_TEXT}: ${lc(NOT_MEANINGFUL_GROWTH_REASON)}`;
+
+/** A's YoY as a beginner reads it. Crossings and absences say nothing here; an n/m growth says nothing here either (growthNote does). */
+export function growthWords(v: Pct | undefined, notMeaningful = false): string | null {
+  if (notMeaningful || !isNum(v)) return null;
   if (v > SMALL_BASE_ABOVE_PCT) return SMALL_BASE;
   return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%`;
 }
@@ -160,10 +168,13 @@ export function growthWords(v: Pct | undefined): string | null {
 export function grossMargin(
   gross: number | null,
   refused: boolean,
-  hasSales: boolean
+  hasSales: boolean,
+  notMeaningful = false,
 ): { pct: number | null; text: string | null; note: string | null } {
   // A's own words for a refused margin (its table's "Not meaningful" tooltip).
   if (refused) return { pct: null, text: null, note: EMPTY_REASONS.revenueIncomplete };
+  // OFF A TINY REVENUE BASE (#563 COWORK #178, A's rule): no dot, "n/m" and A's reason.
+  if (notMeaningful) return { pct: null, text: NOT_MEANINGFUL_TEXT, note: NOT_MEANINGFUL_MARGIN_REASON };
   if (gross == null || !Number.isFinite(gross)) {
     return { pct: null, text: null, note: hasSales ? EMPTY_REASONS.notCaptured : EMPTY_REASONS.needsRevenue };
   }
@@ -182,9 +193,11 @@ export function grossMargin(
 export function operatingMarginDot(
   m: number | null,
   refused: boolean,
-  hasSales: boolean
+  hasSales: boolean,
+  notMeaningful = false,
 ): { pct: number | null; text: string | null; note: string | null } {
   if (refused) return { pct: null, text: null, note: EMPTY_REASONS.revenueIncomplete };
+  if (notMeaningful) return { pct: null, text: NOT_MEANINGFUL_TEXT, note: NOT_MEANINGFUL_MARGIN_REASON };
   if (m == null || !Number.isFinite(m)) {
     return { pct: null, text: null, note: hasSales ? EMPTY_REASONS.notCaptured : EMPTY_REASONS.needsRevenue };
   }
@@ -252,8 +265,9 @@ export function marginChoice(grossFiled: number, opDrawn: number, name: string |
  * "operating costs were about 2.9× sales · the net loss was about 1.1× sales".
  * Within ±100% it stays a percentage, and the panel shows it under "Operating margin".
  */
-export function marginWords(m: number | null, kind: "operating" | "net", refused: boolean): string | null {
+export function marginWords(m: number | null, kind: "operating" | "net", refused: boolean, notMeaningful = false): string | null {
   if (refused || m == null || !Number.isFinite(m)) return null;
+  if (notMeaningful) return `${NOT_MEANINGFUL_TEXT}: ${lc(NOT_MEANINGFUL_MARGIN_REASON)}`;
   if (Math.abs(m) <= MARGIN_AS_MULTIPLE_BEYOND_PCT) return `${m >= 0 ? "" : "−"}${Math.abs(m).toFixed(1)}%`;
   if (kind === "operating") {
     // Operating margin m = (sales − operating costs) / sales, so costs/sales = 1 − m/100.
@@ -356,14 +370,16 @@ export function buildGrowthVisuals(
       const m = marginOf.get(p.label);
       const prior = g?.comparedWith ? byLabel.get(g.comparedWith) : undefined;
       const priorAmount = prior ? amount(prior.revenue) : null;
-      const kept = grossMargin(m?.gross ?? null, m?.marginsRefused ?? false, amount(p.revenue) !== null);
-      const op = operatingMarginDot(m?.operating ?? null, m?.marginsRefused ?? false, amount(p.revenue) !== null);
+      const nm = m?.notMeaningful, growthNm = g?.revenueYoYNotMeaningful === true;
+      const kept = grossMargin(m?.gross ?? null, m?.marginsRefused ?? false, amount(p.revenue) !== null, nm?.gross);
+      const op = operatingMarginDot(m?.operating ?? null, m?.marginsRefused ?? false, amount(p.revenue) !== null, nm?.operating);
       return {
         label: p.label,
         short: shortLabel(p.label),
         sales: amount(p.revenue),
         lastYear: priorAmount && prior ? { ...priorAmount, label: prior.label } : null,
-        growth: growthWords(g?.revenueYoY),
+        growth: growthWords(g?.revenueYoY, growthNm),
+        growthNote: growthNm ? growthNotMeaningfulNote : null,
         ...profitOf(p.label, p.netIncome),
         grossPct: kept.pct,
         grossText: kept.text,
@@ -371,8 +387,8 @@ export function buildGrowthVisuals(
         opPct: op.pct,
         opText: op.text,
         opNote: op.note,
-        operating: marginWords(m?.operating ?? null, "operating", m?.marginsRefused ?? false),
-        net: marginWords(m?.net ?? null, "net", m?.marginsRefused ?? false),
+        operating: marginWords(m?.operating ?? null, "operating", m?.marginsRefused ?? false, nm?.operating),
+        net: marginWords(m?.net ?? null, "net", m?.marginsRefused ?? false, nm?.net),
       };
     });
     // A's nouns for the table basis, not a second rule for them.
@@ -394,14 +410,16 @@ export function buildGrowthVisuals(
     const periods: GvPeriod[] = view.annual.map((a) => {
       const prior = a.comparedWith ? byLabel.get(a.comparedWith) : undefined;
       const priorAmount = prior ? amount(prior.revenue) : null;
-      const kept = grossMargin(a.gross, a.marginsRefused, amount(a.revenue) !== null);
-      const op = operatingMarginDot(a.operating, a.marginsRefused, amount(a.revenue) !== null);
+      const nm = a.notMeaningful, growthNm = a.revenueYoYNotMeaningful === true;
+      const kept = grossMargin(a.gross, a.marginsRefused, amount(a.revenue) !== null, nm?.gross);
+      const op = operatingMarginDot(a.operating, a.marginsRefused, amount(a.revenue) !== null, nm?.operating);
       return {
         label: a.label,
         short: shortLabel(a.label),
         sales: amount(a.revenue),
         lastYear: priorAmount && prior ? { ...priorAmount, label: prior.label } : null,
-        growth: growthWords(a.revenueYoY),
+        growth: growthWords(a.revenueYoY, growthNm),
+        growthNote: growthNm ? growthNotMeaningfulNote : null,
         ...profitOf(a.label, a.netIncome),
         grossPct: kept.pct,
         grossText: kept.text,
@@ -409,8 +427,8 @@ export function buildGrowthVisuals(
         opPct: op.pct,
         opText: op.text,
         opNote: op.note,
-        operating: marginWords(a.operating, "operating", a.marginsRefused),
-        net: marginWords(a.net, "net", a.marginsRefused),
+        operating: marginWords(a.operating, "operating", a.marginsRefused, nm?.operating),
+        net: marginWords(a.net, "net", a.marginsRefused, nm?.net),
       };
     });
     const yw = periodWords("year");

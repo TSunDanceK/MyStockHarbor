@@ -223,9 +223,12 @@ const rules = {
       p[7].lastYear?.label === "Q2 FY2025" && p[7].lastYear.val === p.find((x) => x.label === "Q2 FY2025").sales.val &&
       p[4].lastYear?.label === "Q3 FY2024";
   },
+  // ONDS's Q2 FY2026 (+1,235%) is beyond A's ±1,000% n/m ceiling since #552 COWORK #212, so
+  // "from a small base" is held on a synthetic +250%, and ONDS carries the n/m note (#563 COWORK #178).
   "above +200% the label reads 'from a small base'": ({ onds, M }) =>
-    onds.quarters.periods[7].growth === "from a small base" && M.growthWords(67.04) === "+67.0%" && M.growthWords(-44.44) === "−44.4%" &&
-    M.growthWords(200) === "+200.0%" && M.growthWords("loss-both") === null,
+    M.growthWords(250) === "from a small base" && M.growthWords(67.04) === "+67.0%" && M.growthWords(-44.44) === "−44.4%" &&
+    M.growthWords(200) === "+200.0%" && M.growthWords("loss-both") === null &&
+    onds.quarters.periods[7].growth === null && onds.quarters.periods[7].growthNote === M.growthNotMeaningfulNote,
   "gross margin is A's figure: whole % on the dot, one decimal in the panel": ({ onds, ondsView }) =>
     // Q3 FY2025's 25.79% is where rounding and truncating disagree (26 vs 25).
     onds.quarters.periods[7].grossPct === 43 && onds.quarters.periods[0].grossPct === 3 && onds.quarters.periods[4].grossPct === 26 &&

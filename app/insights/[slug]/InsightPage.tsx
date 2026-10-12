@@ -22,6 +22,7 @@ import { Suspense, type ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
 import { epsVsYearAgo, marginVsYearAgo, VS_TINT, type Vs } from "@/lib/snapshotVsYearAgo";
+import { NOT_MEANINGFUL_TEXT } from "@/lib/server/secEarningsView";
 import InsightChart from "./InsightChart";
 import InsightVote from "./InsightVote";
 import { TiingoLink } from "@/app/components/TiingoCredit";
@@ -488,12 +489,21 @@ export function epsLine(now: number | null, ya: { label: string; eps: number | n
   return { tone: vs.tone, words: same ? `level with ${then}${when}` : `${now > ya.eps ? "up" : "down"} from ${then}${when}` };
 }
 
-function EarningsTiles({ d }: { d: InsightPageData }) {
+/** The "From the filings" tiles (exported for scripts/check-nm-c-surfaces.mjs). */
+export function EarningsTiles({ d }: { d: Pick<InsightPageData, "snapshot" | "pe"> }) {
   const s = d.snapshot!, ya = s.yearAgo ?? null;
+  // OFF A TINY REVENUE BASE (#563 COWORK #178, A's rule from #552 COWORK #212):
+  // a margin A marks prints "n/m" with A's reason, uncoloured; a change A marks
+  // reads "n/m vs …". EPS is never marked. Absent on an older payload: nothing is n/m.
+  const nm = s.notMeaningful ?? null;
+  const margin = (v: number | null, own: string | null | undefined, change: string | null | undefined, then: number | null | undefined): { value: string; vs: Vs } => ({
+    value: own ? NOT_MEANINGFUL_TEXT : v !== null ? `${v.toFixed(1)}%` : "n/a",
+    vs: own ? { tone: null, words: own } : marginVsYearAgo(v, then, ya?.label, change ? { text: NOT_MEANINGFUL_TEXT, reason: change } : null),
+  });
   const tiles: { label: string; value: string; vs: Vs }[] = [
     { label: "EPS (diluted)", value: s.eps.value !== null ? `$${s.eps.value.toFixed(2)}` : "n/a", vs: epsLine(s.eps.value, ya) },
-    { label: "Gross margin", value: s.margins.gross !== null ? `${s.margins.gross.toFixed(1)}%` : "n/a", vs: marginVsYearAgo(s.margins.gross, ya?.gross, ya?.label) },
-    { label: "Operating margin", value: s.margins.operating !== null ? `${s.margins.operating.toFixed(1)}%` : "n/a", vs: marginVsYearAgo(s.margins.operating, ya?.operating, ya?.label) },
+    { label: "Gross margin", ...margin(s.margins.gross, nm?.gross, nm?.grossChange, ya?.gross) },
+    { label: "Operating margin", ...margin(s.margins.operating, nm?.operating, nm?.operatingChange, ya?.operating) },
   ];
   return (
     <>
