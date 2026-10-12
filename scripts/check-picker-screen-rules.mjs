@@ -168,7 +168,8 @@ function sourceRules(src) {
   want("a small base renders its own cell", /ownCell: \(e\) => !!e\.epsGrowth\?\.small,/.test(g) && /if \(col\.ownCell\?\.\(e\)\) return filled\(e, d, inert\);/.test(g));
   want("the Div ($) cell carries the cut / special mark", /const mark = dividendMark\(e\);/.test(g));
   want("the row is split-adjusted before anything is read", /const set = splitAdjusted\(filed\);\s*const inputs = valuationInputs\(set, today, filer\);/.test(f));
-  want("Div ($) is the cut figure, else the regular four quarters", /const divPerShare = read\.cut \? read\.cut\.annualised : read\.four \? read\.four\.regular : dps \? dps\.vals\.dividendsDeclaredPerShare : null;/.test(f));
+  // A rate filer's latest filed rate x 4 comes first (#553 COWORK #210; check-pickers-dividend-rate).
+  want("Div ($) is the cut figure, else the regular four quarters", /: read\.cut \? read\.cut\.annualised : read\.four \? read\.four\.regular : dps \? dps\.vals\.dividendsDeclaredPerShare : null;/.test(f));
   want("the page ships the marks only beside a shown figure", /if \(row\.div\?\.cut && figures\.divPerShare !== null\) entry\.divCut = row\.div\.cut;/.test(p) && /if \(row\.div\?\.special && figures\.divPerShare !== null\) entry\.divSpecial = row\.div\.special;/.test(p));
   // The copy says what each rule does.
   want("ATR copy names the rule", /at least twice its 14-day ATR as of the session before/.test(src.atrPage));

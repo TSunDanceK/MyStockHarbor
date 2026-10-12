@@ -24,6 +24,7 @@ import { recordAboveFold } from "@/lib/server/priceTiers";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import {
   applySecEarnings,
+  payoutRateMark,
   secPickerWhy,
   secPickerWords,
   applySecPickerRow,
@@ -1400,7 +1401,10 @@ async function getPickerData(config: PickerResultConfig) {
           const words = secPickerWords(why);
           if (Object.keys(words).length) entry.cellWord = words;
           else delete entry.cellWord;
-          if (figures.marks) entry.cellEst = figures.marks;
+          // A rate filer's payout divides its estimated Div ($): marked too (COWORK #210).
+          const payoutMark = payoutRateMark(row, earnings);
+          const marks = payoutMark ? { ...figures.marks, payout: payoutMark } : figures.marks;
+          if (marks) entry.cellEst = marks;
           else delete entry.cellEst;
         }
       } catch {
