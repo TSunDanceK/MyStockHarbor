@@ -138,8 +138,21 @@ export const BYTES_PER_SYMBOL_PICKER_CHARTS = 10_963;
  * this constant, so the thing that must not breach is sized against the larger
  * of the two.
  * ─────────────────────────────────────────────────────────────────────────
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * RE-BASELINED 2026-10-12 (#553 COWORK #214, cut 3), which is the "few days of
+ * #427" the note above was waiting for. The relay census (task
+ * write-redis-bytes-census, run 38245648810) measured the live v10 manifest's chunks at 2.29 MB over
+ * 688 records = 3,329 bytes a record. Lower than the 2026-09-11 STRLEN because
+ * that key still carried every record's 72 bars inline; the v10 chunks never
+ * have. Since cut 1 each record also carries its chart lite (~0.3 KB, 40
+ * closes), which keeps it inside the ±25% band
+ * scripts/check-picker-charts-off-read.mjs holds this to.
+ * ─────────────────────────────────────────────────────────────────────────
  */
-export const BYTES_PER_SYMBOL_PICKER_PAYLOAD = 2_000;
+export const BYTES_PER_SYMBOL_PICKER_PAYLOAD = 3_329;
+/** Where the payload figure came from; the check reads it. */
+export const BYTES_PER_SYMBOL_PICKER_PAYLOAD_CENSUS = "2026-10-12 relay write-redis-bytes-census, run 38245648810: 2.29 MB / 688 records";
 /** One symbol's stored daily history entry: ~1,188 bars of OHLCV. */
 export const BYTES_PER_SYMBOL_HISTORY = 109_962;
 /**
@@ -149,6 +162,32 @@ export const BYTES_PER_SYMBOL_HISTORY = 109_962;
  * counted has an assumption in it, and this read runs every five minutes.
  */
 export const BYTES_PER_SYMBOL_PRICE_POOL = 220;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE KEYSPACES THE METER DID NOT SEE (#553 COWORK #214, cut 3, 2026-10-12).
+//
+// Until now the meter covered the picker and history reads only, and the
+// census found three other per-symbol keyspaces between them larger than the
+// payload: Tiingo EOD bars, SEC fact sets and stored news. Unmetered, they read
+// as zero on /cache-health, and a zero looks exactly like a reader that
+// stopped. Averages from the same 2026-10-12 census (relay write-redis-bytes-census, run 38245648810,
+// MEMORY USAGE / STRLEN over a sample of each keyspace; per-row figures are
+// the HGETALL reply over its row count).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One symbol's Tiingo EOD v2 bar set (GET). Census avg 71.3 KB. */
+export const BYTES_PER_SYMBOL_TIINGO_EOD = 71_300;
+/** One row of the Tiingo quote pool hash (HGETALL): 0.24 MB / 2,617 rows. */
+export const BYTES_PER_ROW_TIINGO_POOL = 92;
+/** One row of the Tiingo EOD-last hash (HGETALL): 0.45 MB / 2,589 rows. */
+export const BYTES_PER_ROW_TIINGO_EOD_LAST = 174;
+/** One symbol's SEC fact set (GET). Census avg 17.4 KB. */
+export const BYTES_PER_SYMBOL_SEC_FACTS = 17_400;
+/** One symbol's stored news (GET / MGET). Census avg 32.3 KB. */
+export const BYTES_PER_SYMBOL_NEWS = 32_300;
+/** One row of the pickers SEC fundamentals hash: 2.56 MB / 2,528 rows. */
+export const BYTES_PER_ROW_SEC_FUNDAMENTALS = 1_013;
+export const BYTES_CENSUS_AT = "2026-10-12";
 
 export const BYTES_MEASURED_AT = "2026-09-04";
 export const BYTES_MEASURED_BY =
@@ -174,7 +213,14 @@ export type RedisReadSource =
   // because of how it loops is a meter that answers "who reads history" wrong.
   | "history-single"
   | "history-bulk"
-  | "price-pool";
+  | "price-pool"
+  // Cut 3 (#553 COWORK #214): the census's unmetered keyspaces.
+  | "tiingo-eod"
+  | "tiingo-pool"
+  | "tiingo-eod-last"
+  | "sec-facts"
+  | "news"
+  | "sec-fundamentals";
 
 const BYTES_PER_UNIT: Record<RedisReadSource, number> = {
   "picker-payload": BYTES_PER_SYMBOL_PICKER_PAYLOAD,
@@ -188,6 +234,12 @@ const BYTES_PER_UNIT: Record<RedisReadSource, number> = {
   "history-single": BYTES_PER_SYMBOL_HISTORY,
   "history-bulk": BYTES_PER_SYMBOL_HISTORY,
   "price-pool": BYTES_PER_SYMBOL_PRICE_POOL,
+  "tiingo-eod": BYTES_PER_SYMBOL_TIINGO_EOD,
+  "tiingo-pool": BYTES_PER_ROW_TIINGO_POOL,
+  "tiingo-eod-last": BYTES_PER_ROW_TIINGO_EOD_LAST,
+  "sec-facts": BYTES_PER_SYMBOL_SEC_FACTS,
+  news: BYTES_PER_SYMBOL_NEWS,
+  "sec-fundamentals": BYTES_PER_ROW_SEC_FUNDAMENTALS,
 };
 
 export const REDIS_READ_SOURCES = Object.keys(BYTES_PER_UNIT) as RedisReadSource[];
@@ -339,6 +391,29 @@ export async function flushRedisReadMeter(): Promise<void> {
   } catch {
     // bookkeeping -- never throws into a render path
   }
+}
+
+// THE CACHED-PATH FLUSH FOR PER-SYMBOL RENDER READS (#553 COWORK #214, cut 3).
+//
+// A page render that reads one symbol's bars or news is too small to flush on
+// every time (6 commands to record one read), and the 250-read threshold alone
+// means a warm instance that serves a few dozen pages and is then frozen loses
+// all of them -- the census found the meter's page totals were exactly that
+// kind of floor. A time-throttled flush bounds both: at most one flush per
+// instance per interval, and nothing older than the interval left pending
+// while the instance is still serving.
+const METER_THROTTLE_MS_DEFAULT = 60_000;
+let lastThrottledFlushMs = 0;
+
+/** Flush if this instance has not flushed in `minIntervalMs`. For per-symbol render reads. */
+export async function flushRedisReadMeterThrottled(
+  minIntervalMs = METER_THROTTLE_MS_DEFAULT
+): Promise<void> {
+  if (!pendingUnits.size) return;
+  const nowMs = Date.now();
+  if (nowMs - lastThrottledFlushMs < minIntervalMs) return;
+  lastThrottledFlushMs = nowMs;
+  await flushRedisReadMeter();
 }
 
 /** Pending reads not yet written. Exported so scripts/check-redis-bandwidth.mjs can assert the batching. */
