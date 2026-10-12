@@ -38,7 +38,6 @@ const check = (label, ok, detail = "") => {
 };
 
 const pool = readCodeOnly("lib/server/pricePool.ts");
-const stock = readCodeOnly("lib/server/stockDataCache.ts");
 const queue = readCodeOnly("lib/server/stalenessQueue.ts");
 
 // Lift the two pure functions rather than stubbing the modules around them.
@@ -235,7 +234,9 @@ check(
 );
 check(
   "the envelope test is shared, not a second copy",
-  /isFmpErrorEnvelope/.test(pool) && /hasFmpRows/.test(stock),
+  // stockDataCache, the other user, was retired 2026-10-12 (#553 COWORK #212);
+  // the pool still takes the test from the shared module, not a local copy.
+  /import \{[^}]*isFmpErrorEnvelope[^}]*\} from "\.\/fmpResponse"/.test(pool) && !/function isFmpErrorEnvelope/.test(pool),
   "hasRows and this are the same question about the same API — two copies is " +
     "the 'eight chances for the ninth endpoint' argument applied to itself, and " +
     "it is exactly how this path was missed the first time"
@@ -364,7 +365,11 @@ check(
 );
 
 // ── 3. Nothing landed must not read as fresh ───────────────────────────────
-console.log("\n3. A symbol where no endpoint answered is not marked refreshed");
+// RETIRED IN PART 2026-10-12 (#553 COWORK #212): the stockDataCache writer and
+// warm-stock-data are gone, so the assertions about its fetchOne tally, its
+// markRefreshed gate and its run record went with them. The shared answer test
+// below (fmpResponse.ts) is still asserted.
+console.log("\n3. An FMP response with no rows is not an answer (shared test)");
 
 // THE SHARED HELPER, not stockDataCache's one-line delegate. The logic moved
 // to lib/server/fmpResponse.ts when the quote path turned out to need the same
@@ -383,11 +388,6 @@ if (!envelopeFn || !hasRowsFn) {
 }
 const lifted = await lift(`${envelopeFn}\n${hasRowsFn}\nexport { hasFmpRows as hasRows };`);
 const rows = lifted;
-check(
-  "stockDataCache delegates to the shared test rather than keeping its own",
-  /return hasFmpRows\(json\);/.test(stock),
-  "one copy, because it is one question about one API"
-);
 
 // FMP answers a delisted ticker with HTTP 200 and [], so res.ok is true for a
 // symbol that no longer exists. That is the case this has to separate.
@@ -422,27 +422,6 @@ check(
   "a partial is LEGITIMATE — plenty of live symbols have no dividends and no " +
     "analyst coverage, and marking those stale forever is the same lie pointing " +
     "the other way"
-);
-check(
-  "markRefreshed is gated on something having answered",
-  /if \(tally\.answered > 0\) refreshedSymbols\.push\(symbol\);/.test(stock),
-  "the row is still WRITTEN either way — fields fall back to prev, so a symbol " +
-    "that answered on two of five endpoints keeps the other three"
-);
-check(
-  "the count is taken at the one place every endpoint goes through",
-  /async function fetchJson\(url: string, tally\?: FetchTally\)/.test(stock) &&
-    (stock.match(/fetchJson\(`[^`]*`, tally\)/g) ?? []).length === 8,
-  `${(stock.match(/fetchJson\(`[^`]*`, tally\)/g) ?? []).length} of fetchOne's 8 ` +
-    `endpoints — counting inside each block instead would be eight chances for the ` +
-    `ninth endpoint to be added without one`
-);
-check(
-  "the gap between written and marked is on the run record",
-  /noEndpointAnswered/.test(readCodeOnly("app/api/jobs/warm-stock-data/route.ts")),
-  "`written` counting more than `markedRefreshed` is the difference between " +
-    "storing a row and the row meaning anything, and that gap is where dead " +
-    "symbols live"
 );
 
 console.log(

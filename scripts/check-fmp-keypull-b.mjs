@@ -1,12 +1,13 @@
 // B's fixes before the FMP key is pulled (#553 COWORK #131/#132).
 //
-//   F1  warm-screener-fundamentals: no key is a healthy skip, and the
-//       stale-bar pass (no FMP in it) runs without the screener.
+//   F1  warm-screener-fundamentals: no FMP leg at all since its retirement
+//       (2026-10-12, #553 COWORK #212); the stale-bar pass runs every day.
 //   F2  sector panels: on the Tiingo gate, the eod-last-less fallback never
 //       shows msh:stockdata's frozen FMP week / month / YTD.
 //   F3  price pool: an FMP-only row older than FMP_POOL_ROW_MAX_AGE_MS shows no
 //       figures once POOL=tiingo or the key is unset (raw reads untouched).
-//   S1  warm-stock-data: the three hidden-field analyst endpoints are retired.
+//   S1  stockDataCache calls no FMP endpoint (its writer, warm-stock-data, was
+//       retired 2026-10-12, #553 COWORK #212; the analyst endpoints went first).
 //   S2  stock-news-data: no FMP quote on the NEWS_HERO=tiingo path.
 // Behaviour where it can run without a network (F3), source rules elsewhere;
 // a planted mutant for each.
@@ -40,28 +41,24 @@ function sourceMutants(label, src, rules, list) {
 }
 
 // ── F1 ────────────────────────────────────────────────────────────────────
-console.log("\n=== F1. warm-screener-fundamentals without the key ===\n");
+console.log("\n=== F1. warm-screener-fundamentals has no FMP leg ===\n");
 const SCREENER = "app/api/jobs/warm-screener-fundamentals/route.ts";
 const f1 = (s) => {
   const fails = [];
-  if (!/const noFmpKey = !result\.ok && result\.reason === "no-fmp-key";/.test(s)) fails.push("no-key is recognised");
-  if (!/recordJobRun\("warm-screener-fundamentals", result\.ok \|\| noFmpKey, \{/.test(s)) fails.push("no-key is recorded as a healthy run");
-  if (!/screenerSkipped: noFmpKey \? "no FMP_API_KEY" : null,/.test(s)) fails.push("the record says why");
-  const noKeyBranch = s.slice(s.indexOf('sweep.skipped = noFmpKey ? "no-fmp-key" : "screener-unavailable";'), s.indexOf("} else {", s.indexOf('sweep.skipped = noFmpKey')));
-  if (!/await staleBarPass\(universe, Date\.now\(\)\);/.test(noKeyBranch)) fails.push("the stale-bar pass runs without the screener");
-  if (!/if \(sweep\.evicted\.length\) await deregisterSymbols\(sweep\.evicted\);/.test(noKeyBranch)) fails.push("its evictions are deregistered there too");
-  if (!/await staleBarPass\(universe, nowMs\);/.test(s)) fails.push("the stale-bar pass still runs on a screener day");
+  if (/refreshScreenerFundamentals|financialmodelingprep|fmpFetch|FMP_API_KEY/.test(s)) fails.push("no FMP call, key read or screener refresh");
+  if (!/recordJobRun\("warm-screener-fundamentals", true, summary\);/.test(s)) fails.push("the run is recorded as healthy");
+  if (!/await staleBarPass\(universe, Date\.now\(\)\);/.test(s)) fails.push("the stale-bar pass runs");
+  if (!/await deregisterSymbols\(sweep\.evicted\);/.test(s)) fails.push("its evictions are deregistered");
   if ((s.match(/const stamps = await readNewestBarStamps\(\);/g) ?? []).length !== 1) fails.push("one stale-bar pass, not a copy");
-  if (/financialmodelingprep|fmpFetch/.test(s.slice(s.indexOf("const staleBarPass"), s.indexOf("const noFmpKey")))) fails.push("the stale-bar pass reaches FMP");
   return fails;
 };
 const sSrc = raw(SCREENER);
 const f1f = f1(sSrc);
 for (const f of f1f) check(f, false);
-check("F1: no key is a healthy skip; the stale-bar pass runs with or without the screener", f1f.length === 0);
+check("F1: no FMP leg; the stale-bar pass runs and its evictions are deregistered", f1f.length === 0);
 sourceMutants("F1", sSrc, f1, [
-  ["no-key recorded as a failure", /result\.ok \|\| noFmpKey, \{/, "result.ok, {"],
-  ["the stale-bar pass skipped without the screener", /\n\s*await staleBarPass\(universe, Date\.now\(\)\);/, ""],
+  ["the FMP screener read back", /async function handleGET\(req: NextRequest\) \{/, "async function handleGET(req: NextRequest) {\n  await refreshScreenerFundamentals(process.env.FMP_API_KEY);"],
+  ["the stale-bar pass skipped", /\n\s*await staleBarPass\(universe, Date\.now\(\)\);/, ""],
 ]);
 
 // ── F2 ────────────────────────────────────────────────────────────────────
@@ -131,25 +128,21 @@ sourceMutants("F3", poolSrc, f3wiring, [
 ]);
 
 // ── S1 ────────────────────────────────────────────────────────────────────
-console.log("\n=== S1. The hidden-field analyst endpoints are retired ===\n");
+console.log("\n=== S1. stockDataCache calls no FMP endpoint ===\n");
 const STOCK = "lib/server/stockDataCache.ts";
 const s1 = (s) => {
   const fails = [];
-  for (const e of ["price-target-summary", "grades-consensus", "analyst-estimates"]) {
-    if (!new RegExp(`"${e}": "retired",`).test(s)) fails.push(`${e} is retired`);
-    if (!new RegExp(`if \\(endpointOn\\("${e}"\\)\\) try \\{`).test(s)) fails.push(`${e}'s fetch is gated`);
-  }
-  if (!/const CLOCK_CALLS = Object\.values\(ENDPOINT_TRIGGERS\)\.filter\(\(t\) => t === "clock"\)\.length;/.test(s)) fails.push("retired endpoints are not counted in a symbol's cost");
-  if (!/lib\/pickerHiddenFields\.ts/.test(s)) fails.push("the reason (hidden columns) stays beside the list");
+  if (/financialmodelingprep|fmpFetch|FMP_API_KEY/.test(s)) fails.push("no FMP URL, fetch or key");
+  if (/export async function warm/.test(s)) fails.push("no warm job writes it");
   return fails;
 };
 const stSrc = raw(STOCK);
 const s1f = s1(stSrc);
 for (const f of s1f) check(f, false);
-check("S1: grades-consensus, price-target-summary and analyst-estimates are not called", s1f.length === 0);
+check("S1: stockDataCache is a read-only remnant: no FMP call, no warm", s1f.length === 0);
 sourceMutants("S1", stSrc, s1, [
-  ["an analyst endpoint back on the clock", /"grades-consensus": "retired",/, '"grades-consensus": "clock",'],
-  ["a retired fetch ungated", /if \(endpointOn\("analyst-estimates"\)\) try \{/, "try {"],
+  ["an FMP endpoint back", /const KEY_PREFIX = "msh:stockdata:v1:";/, 'const KEY_PREFIX = "msh:stockdata:v1:";\nconst BASE = "https://financialmodelingprep.com/stable";'],
+  ["a warm job back", /export async function readCachedStockDataBulk\(/, "export async function warmStockData() {}\nexport async function readCachedStockDataBulk("],
 ]);
 // The hidden fields are still hidden (else retiring their source would blank a visible column).
 const hidden = raw("lib/pickerHiddenFields.ts");

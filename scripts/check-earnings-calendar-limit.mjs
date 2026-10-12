@@ -438,137 +438,11 @@ check(
     "opposite facts"
 );
 
-// ── 3. The pass count is derived, not typed ────────────────────────────────
-console.log("\n3. The pass count comes from arithmetic, not from a cron string");
-
-const planMod = await lift(`${perFn}\n${planFn}`);
-const DAY = 24 * 60 * 60;
-
-check(
-  "one report costs two fetches at the live daily cadence",
-  planMod.fetchesPerReport(DAY, ttlDay, nearTtl) === 2,
-  `run period ${DAY / 3600}h, lead ${ttlDay / 3600}h, near-report TTL ` +
-    `${nearTtl / 3600}h — the long TTL expires one day before the report, the ` +
-    `next run refetches, and the run after that catches the date passing`
-);
-check(
-  "and three if the job ever runs twice a day",
-  planMod.fetchesPerReport(DAY / 2, ttlDay, nearTtl) === 3,
-  "which is the point of deriving it: a number typed as 'x2' would not have " +
-    "moved when the cadence did, and that is the PRICE_TARGET_RUNS failure"
-);
-check(
-  "runs more frequent than the near-report TTL do not add fetches",
-  planMod.fetchesPerReport(DAY / 8, ttlDay, nearTtl) ===
-    planMod.fetchesPerReport(nearTtl, ttlDay, nearTtl),
-  "whichever of the two is longer gates the refetch — a run that finds the key " +
-    "still warm does nothing, and counting it would overstate demand"
-);
-check(
-  "a missing input refuses to answer rather than guessing one fetch",
-  Number.isNaN(planMod.fetchesPerReport(0, ttlDay, nearTtl)) &&
-    Number.isNaN(planMod.fetchesPerReport(DAY, NaN, nearTtl)),
-  "returning 1 would make every plan below look comfortably affordable"
-);
-
-const planAt = (universeSize, peakDayShare, callsPerRun) =>
-  planMod.planEarningsDay({
-    universeSize,
-    peakDayShare,
-    callsPerRun,
-    runPeriodSeconds: DAY,
-    leadSeconds: ttlDay,
-    nearReportTtlSeconds: nearTtl,
-  });
-
-// THE FIXTURE IS THE ACTUAL 2026-09-03 RUN, and getting it wrong the first time
-// is worth recording: I used 710/4,000 -- the peak day over the RAW ROW COUNT --
-// and the denominator is total symbol-days after de-duplication and weekday
-// filtering, not rows. The run's own output settles it: impliedPeakDayRefreshes
-// was 190 at 1,500 and 380 at 3,000, so the share it measured is 190/1500 =
-// 380/3000 = 0.1267. Reading a share off the wrong denominator moved the answer
-// by a whole extra pass at both sizes.
-//
-// STILL A FLOOR. 2026-02 was truncated at 4,000, so the true peak share can
-// only be higher than this.
-const TRUNCATED_PEAK_SHARE = 190 / 1500;
-
-// THE CEILING IS READ FROM THE ROUTE, not typed as 440. It is itself derived
-// from three constants there and asserted by check-earnings-minute-wall.mjs;
-// typing it here would be the same magic number one file over.
-const earnings = readCodeOnly("app/api/jobs/warm-earnings/route.ts");
-const history = readCodeOnly("lib/server/historyCache.ts");
-const CEILING = Math.floor(
-  (num(history, "FMP_SAFE_CALLS_PER_MINUTE") - num(earnings, "EARNINGS_MIN_HEADROOM_CALLS")) *
-    (num(earnings, "EARNINGS_RUN_BUDGET_MS") / 60_000)
-);
-if (!CEILING) {
-  console.error("FAIL: could not derive the per-run ceiling — measuring nothing.");
-  process.exit(1);
-}
-const smallest = planAt(762, TRUNCATED_PEAK_SHARE, CEILING);
-const mid = planAt(1500, TRUNCATED_PEAK_SHARE, CEILING);
-const large = planAt(3000, TRUNCATED_PEAK_SHARE, CEILING);
-
-check(
-  "the peak run is charged for both fetches, not one",
-  smallest.callsOnPeakRun === smallest.peakDayReporters * 2,
-  `${smallest.peakDayReporters} reporters -> ${smallest.callsOnPeakRun} calls — ` +
-    `fetch 1 for a symbol reporting on D lands on the run of D-1 and fetch 2 on ` +
-    `the run of D, so the busiest run carries two days' work`
-);
-check(
-  "one pass covers 762 and 1500, and does not cover 3000",
-  smallest.onePassSuffices === true &&
-    mid.onePassSuffices === true &&
-    large.onePassSuffices === false &&
-    large.passesNeeded === 2,
-  `762 -> ${smallest.callsOnPeakRun} calls, 1500 -> ${mid.callsOnPeakRun}, ` +
-    `3000 -> ${large.callsOnPeakRun}, against a ${CEILING}/run ceiling. ` +
-    `1500 sits at ${Math.round((mid.callsOnPeakRun / CEILING) * 100)}% of it ON ` +
-    `TRUNCATED DATA, so a true measurement can push 1500 over on its own`
-);
-// THE HEADROOM AT 1,500 IS THE ANSWER'S WEAK POINT, so it is asserted rather
-// than mentioned. The 3,000 verdict is safe -- it fails by more than the
-// truncation could plausibly close in the other direction -- but the 1,500
-// verdict rests on 380 of 440, and the measurement behind it is a floor.
-check(
-  "1500's margin is thin enough that the true measurement can overturn it",
-  mid.callsOnPeakRun / CEILING > 0.75,
-  `${mid.callsOnPeakRun}/${CEILING} — a peak share only ` +
-    `${(CEILING / mid.callsOnPeakRun).toFixed(2)}x the truncated one puts 1500 ` +
-    `into two passes, and February was cut off at exactly 4,000 rows. Recommend ` +
-    `one pass at 1500 only once the untruncated month has been read`
-);
-// EXACTLY AT THE CEILING, AND ONE REPORTER PAST IT. 220 reporters cost 440
-// calls, which is the ceiling exactly and must still be one pass; 221 cost 442
-// and must be two.
-check(
-  "the pass count is a ceiling division, exact at the boundary",
-  planAt(1000, CEILING / 2 / 1000, CEILING).passesNeeded === 1 &&
-    planAt(1000, (CEILING / 2 + 0.1) / 1000, CEILING).passesNeeded === 2,
-  `${CEILING / 2} reporters = ${CEILING} calls is one pass; one more is two. ` +
-    `Off-by-one here is a season of silent shortfall`
-);
-check(
-  "the batch a pass would need is reported with the pass count",
-  large.batchPerPass === Math.ceil(large.callsOnPeakRun / large.passesNeeded) &&
-    large.batchPerPass <= CEILING,
-  `${large.batchPerPass} per pass at 3,000 — a pass count without the batch it ` +
-    `implies is half an answer, and the half that gets typed into a cron`
-);
-check(
-  "demand scales with the universe",
-  mid.callsOnPeakRun > smallest.callsOnPeakRun &&
-    large.callsOnPeakRun > mid.callsOnPeakRun,
-  "the whole question is where the wall lands between 762, 1500 and 3000"
-);
-check(
-  "a missing measurement produces no plan rather than a reassuring one",
-  planAt(1500, 0, CEILING) === null && planAt(0, 0.1, CEILING) === null,
-  "a peak share of zero is what an unmeasured or truncated-to-nothing month " +
-    "gives, and it would otherwise read as 'one pass is plenty'"
-);
+// ── 3. RETIRED 2026-10-12 (#553 COWORK #212): warm-earnings is gone ───────
+// Section 3 derived warm-earnings' passes per day from the season's peak share
+// and the route's per-run FMP ceiling. The job and its route were retired with
+// FMP (owner GO), so there is no ceiling to plan against; section 4 now also
+// asserts the route stays gone.
 
 // ── 4. RETIRED 2026-10-12 (#552 COWORK #210): the probe route is deleted ────
 // Section 4 ran the probe's compareSets / verdictFor (app/api/debug/
@@ -582,13 +456,16 @@ for (const route of [
   "app/api/debug/earnings/[symbol]/route.ts",
   "app/api/debug/earnings-calendar/route.ts",
   "app/api/debug/earnings-calendar-limit/route.ts",
+  // #553 COWORK #212: the job these sized, and its season measurement.
+  "app/api/jobs/warm-earnings/route.ts",
+  "app/api/debug/earnings-concentration/route.ts",
 ]) {
   check(`${route} does not exist`, !fs.existsSync(route), "deleted with the FMP contract, as B's #846 did for its four");
 }
 
 console.log(
   failures === 0
-    ? "\nA full page is split, the merge de-duplicates, and the passes are derived.\n"
+    ? "\nA full page is split, and the merge de-duplicates.\n"
     : `\n${failures} assertion(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);

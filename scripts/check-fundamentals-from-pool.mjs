@@ -1,26 +1,14 @@
-// warm-fundamentals must not re-fetch what the price pool already holds, and
-// the price pool must survive the hours the market is shut.
+// The price pool must survive the hours the market is shut.
 //
-// WHY. warm-fundamentals' quote stage produced exactly two fields, marketCap
-// and peRatio. batch-quote answers 402 on this plan, so it was ONE
-// stable/quote call PER SYMBOL, hourly -- measured at 357 of 755 symbols per
-// run with the entire 90s wait budget spent (the note above QUOTE_OFFSET_KEY in
-// fundamentalsCache.ts). ~8,600 calls a day for two numbers already sitting in
-// a Redis hash, for the same universe, because both jobs take their work list
-// from getWarmTargetSymbols.
+// HISTORY. This check began as "warm-fundamentals must not re-fetch what the
+// price pool already holds" (its section 1). That job was retired 2026-10-12
+// (#553 COWORK #212); the pool half stands on its own:
 //
-// Three things have to stay true for that saving to be real, and each fails
-// quietly:
-//
-//   * The stage reads the pool rather than fetching. A revert reads as a
-//     restored fallback, not a regression, and the only symptom is the bill.
-//   * The pool is still there when it reads it. #395's market-hours gate
-//     returned BEFORE the hash TTL reset, and HSET does not extend an existing
-//     TTL -- so a 12-hour TTL against a 15-hour weeknight gap emptied the whole
-//     pool at ~05:00 ET every day and all weekend. Nothing errored; picker
-//     pages just fell back to end-of-day closes.
-//   * The fallback stays capped. Uncapped, a cold pool silently reinstates the
-//     per-symbol rotation and the job looks healthy while spending the universe.
+//   * #395's market-hours gate returned BEFORE the hash TTL reset, and HSET
+//     does not extend an existing TTL -- so a 12-hour TTL against a 15-hour
+//     weeknight gap emptied the whole pool at ~05:00 ET every day and all
+//     weekend. Nothing errored; picker pages just fell back to end-of-day
+//     closes.
 //
 //   node scripts/check-fundamentals-from-pool.mjs
 import fs from "node:fs";
@@ -38,87 +26,12 @@ const check = (label, ok, detail = "") => {
 // Comments stripped everywhere: this file's whole subject is prose-heavy code,
 // and a regex over raw source is satisfied by the note ABOUT the code as
 // readily as by the code (claude/traps/grep-finds-the-comment-not-the-code.md).
-const fund = readCodeOnly("lib/server/fundamentalsCache.ts");
 const pool = readCodeOnly("lib/server/pricePool.ts");
-const route = readCodeOnly("app/api/jobs/warm-fundamentals/route.ts");
 
-// ── 1. The two fields come from the pool ────────────────────────────────────
-console.log("\n1. marketCap and P/E are read, not fetched");
-
-check(
-  "warm-fundamentals reads the price pool",
-  // `raw: true` since #690 Q2 (#553 COWORK #103): the FMP rows, never the
-  // Tiingo overlay -- check-fmpoff-sec-cap.mjs asserts that part.
-  /readPricePoolBulk\(cleanSymbols(?:, \{ raw: true \})?\)/.test(fund),
-  "one HMGET for the two fields the quote stage exists to produce"
-);
-
-// The load-bearing assertion: FMP is asked about MISSES, not about the
-// universe. Scoped to the call site, because fetchQuoteFundamentals itself must
-// still exist -- it is the fallback.
-const fetchCall = (fund.match(/await fetchQuoteFundamentals\([^)]*\)/) ?? [])[0];
-if (!fetchCall) {
-  console.error(
-    "FAIL: could not find the fetchQuoteFundamentals call site in " +
-      "fundamentalsCache.ts — this script would otherwise pass by measuring nothing."
-  );
-  process.exit(1);
-}
-check(
-  "and hands FMP only the pool misses, never the whole order",
-  /fallbackOrder/.test(fetchCall) && !/quoteOrder/.test(fetchCall),
-  `${fetchCall.replace(/\s+/g, " ")} — passing quoteOrder here restores the ` +
-    `per-symbol rotation with nothing to show for it but the bill`
-);
-
-const cap = Number((fund.match(/QUOTE_FALLBACK_MAX_PER_RUN = (\d+)/) ?? [])[1]);
-check(
-  "the fallback is capped so a cold pool degrades visibly",
-  // Since #621 the misses pass the failure memory first (retryable = the
-  // misses not deferred), then the cap: either form is the property.
-  cap > 0 &&
-    (/poolMisses\.slice\(0, QUOTE_FALLBACK_MAX_PER_RUN\)/.test(fund) ||
-      (/const retryable = poolMisses\.filter\(/.test(fund) &&
-        /const fallbackOrder = retryable\.slice\(0, QUOTE_FALLBACK_MAX_PER_RUN\)/.test(fund))),
-  cap
-    ? `${cap}/run — uncapped, an empty pool silently becomes the old rotation ` +
-      `and the run still reports success`
-    : "no cap found"
-);
-check(
-  "a row carrying neither field counts as a miss, not a hit",
-  /row\.marketCap != null \|\| row\.pe != null/.test(fund),
-  "seedColdPricePoolRows writes a row with a price and a null pe; counting it " +
-    "as covered would exclude that symbol from the one path that fills it in"
-);
-check(
-  "the run reports where the two fields came from",
-  ["poolHits", "poolMisses", "fallbackDeferred"].every((f) =>
-    new RegExp(`${f}:`).test(route)
-  ),
-  "poolMisses climbing toward the universe is warm-price-pool failing, showing " +
-    "up here — invisible unless it is counted"
-);
-
-// NO AGE TEST. Asserted as an absence because adding one is the plausible
-// mistake: since #395 the pool only refreshes inside the session, so a row is
-// legitimately 15 hours old at 07:00 and 63 across a weekend. Both fields are
-// close-derived, so an overnight row is the CORRECT answer, and a freshness
-// threshold here would re-fetch the universe every morning to receive the same
-// numbers back.
-const poolReadBlock = (fund.match(
-  /const pool = await readPricePoolBulk\(cleanSymbols(?:, \{ raw: true \})?\);[\s\S]*?const poolHits = quoteMap\.size;/
-) ?? [])[0];
-if (!poolReadBlock) {
-  console.error("FAIL: could not extract the pool-read block — measuring nothing.");
-  process.exit(1);
-}
-check(
-  "no freshness threshold is applied to a pooled row",
-  !/\.ts\b/.test(poolReadBlock),
-  "market cap is shares x last price and P/E is that price over trailing EPS — " +
-    "overnight the last traded price IS the price, so age is not staleness here"
-);
+// ── 1. RETIRED 2026-10-12 (#553 COWORK #212) ────────────────────────────────
+// Section 1 pinned warm-fundamentals' quote stage (pool first, FMP for capped
+// misses only). The job is retired with FMP; the price pool it read from is
+// not, and section 2 still holds it.
 
 // ── 2. The pool is still there to be read ───────────────────────────────────
 console.log("\n2. The pool survives the hours the market is shut");
