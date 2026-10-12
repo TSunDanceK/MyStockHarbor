@@ -1083,6 +1083,11 @@ export default function PickerResultsGrid({
     const dps: Col = {
       key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare),
       cell: (e, _d, inert) => {
+        // A rate filer's figure is the latest filed rate × 4: A's estimate mark (#553 COWORK #210).
+        if (e.cellEst?.dps) {
+          const v = num(e.divPerShare);
+          return <EstimateCell text={v == null || !Number.isFinite(v) ? null : `$${v.toFixed(2)}`} est={e.cellEst.dps} inert={inert} empty={MUTED} />;
+        }
         const mark = dividendMark(e);
         if (!mark) return dollarCell(num(e.divPerShare));
         return (
@@ -1093,8 +1098,9 @@ export default function PickerResultsGrid({
         );
       },
     };
-    const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e, d) => divYieldPct(e, d), cell: (e, d) => plainPctCell(divYieldPct(e, d)) };
-    const payout: Col = { key: "payout", label: "Payout Ratio", tip: BASIS_TIP, sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d, inert) => basisCell(plainPctCell(payoutRatioPct(e, d)), payoutRatioPct(e, d), e.fundamentalsFrom === "sec" ? e.payoutBasis : undefined, inert) };
+    const pctText = (v: number | null) => (v == null || !Number.isFinite(v) ? null : `${v.toFixed(2)}%`);
+    const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e, d) => divYieldPct(e, d), cell: (e, d, inert) => (e.cellEst?.dyield ? <EstimateCell text={pctText(divYieldPct(e, d))} est={e.cellEst.dyield} inert={inert} empty={MUTED} /> : plainPctCell(divYieldPct(e, d))) };
+    const payout: Col = { key: "payout", label: "Payout Ratio", tip: BASIS_TIP, sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d, inert) => basisCell(e.cellEst?.payout ? <EstimateCell text={pctText(payoutRatioPct(e, d))} est={e.cellEst.payout} inert={inert} empty={MUTED} /> : plainPctCell(payoutRatioPct(e, d)), payoutRatioPct(e, d), e.fundamentalsFrom === "sec" ? e.payoutBasis : undefined, inert) };
     const dgrowth: Col = { key: "dgrowth", label: "Div Growth", sortType: "num", get: (e) => num(e.divGrowth), cell: (e) => pctCell(num(e.divGrowth)) };
     const freq: Col = { key: "freq", label: "Payout Freq.", sortType: "str", get: (e) => e.payoutFreq ?? "", cell: (e) => textCell(e.payoutFreq) };
 

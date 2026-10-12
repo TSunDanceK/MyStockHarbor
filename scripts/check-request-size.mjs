@@ -609,7 +609,6 @@ for (const site of [
   "lib/server/playsBuilder.ts PLAYS_REDIS_KEY",
   "lib/server/bullFlagsBuilder.ts PLAYS_REDIS_KEY",
   "lib/server/descendingTrianglesBuilder.ts DESCENDING_REDIS_KEY",
-  "lib/server/benchmarksBuilder.ts `${REDIS_PREFIX}:${scope}`",
   "lib/server/sectorPanels.ts PERFORMANCE_KEY",
   "lib/server/capexSpending.ts SPENDING_KEY",
   "lib/server/capexContracts.ts CONTRACTS_KEY",
