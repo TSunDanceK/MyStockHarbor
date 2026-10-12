@@ -45,6 +45,7 @@ let cursor = "0";
 do { const [next, batch] = await redis.scan(cursor, { match: `${FACTS}:*`, count: 1000 }); cursor = String(next); keys.push(...batch); } while (cursor !== "0");
 
 const DPS = "dividendsDeclaredPerShare";
+const ROUND4 = true;
 const f4 = (v) => (typeof v === "number" ? v.toFixed(4) : "—");
 const SKIP = { rate: null, quarters: [], years: [] };
 const before = (filed) => splitAdjusted({ ...filed, dvr: SKIP });
@@ -53,7 +54,7 @@ const R226 = { rate: "BKNG WMT MSGS HP MBIN SAIC TRS V WTM PAYC LEA IIIN OGN SFB
 const bucket = { rate: [], semi: [], running: [], other: [] };
 const rows = [], keep = new Map();
 let sets = 0;
-for (let i = 0; i < keys.length; i += 20) {
+for (let i = 0; i < (ROUND4 ? 0 : keys.length); i += 20) {
   const chunk = keys.slice(i, i + 20);
   const raw = await redis.mget(...chunk);
   chunk.forEach((k, j) => {
@@ -100,6 +101,7 @@ console.log(`\nRULE 3 ONLY, ACROSS A SPLIT (${split.length} filers, ${split.redu
 for (const r of split) console.log(`  ${r.sym}${r.cut ? "*" : ""}: ${r.q.join("; ")}`);
 console.log(`  (rate filers' quarters across a split are counted under rules 1–2 above)`);
 
+if (!ROUND4) {
 // ── 3. the three names, every annual-DPS reader ──
 const closes = await redis.hmget("msh:tiingo:eod-last:v1", "CEG", "BKNG", "WMT");
 const closeOf = (sym) => { const v = closes?.[sym]; const o = typeof v === "string" ? JSON.parse(v) : v; return Number(o?.close ?? o?.c ?? o?.adjClose ?? NaN); };
@@ -125,14 +127,15 @@ for (const sym of ["CEG", "BKNG", "WMT"]) {
   console.log(`    quarters after: ${qs.join(" · ")}`);
 }
 
-// Round 3: the frames were read in round 1; no SEC requests this time.
-console.log(`\nStore commands: ${JSON.stringify(counts)}`); process.exit(0);
+}
 // ── 4. the semi-annual eleven's filed frames ──
 console.log(`\nSEMI-ANNUAL ELEVEN: filed DPS frames (newest two fiscal years), months → value [form]`);
 const cikMap = JSON.parse(fs.readFileSync("data/cik-map.json", "utf8"));
 const UA = process.env.SEC_USER_AGENT ?? "MyStockHarbor/1.0 (read-only census)";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-for (const sym of R226.semi) {
+// Round 4: HEI only. Round 1 took the first tag with any frames (Declared,
+// last filed FY2013); the tag with the NEWEST frame is the one in use.
+for (const sym of ["HEI"]) {
   const cik = cikMap[sym] ? String(cikMap[sym]).padStart(10, "0") : null;
   if (!cik) { console.log(`  ${sym}: no CIK`); continue; }
   await sleep(500);
@@ -142,7 +145,8 @@ for (const sym of R226.semi) {
     facts = await res.json();
   } catch (e) { console.log(`  ${sym}: fetch failed (${e.message})`); continue; }
   const g = facts?.facts?.["us-gaap"] ?? {};
-  const concept = ["CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid"].find((c) => g[c]?.units?.["USD/shares"]?.length);
+  const newest = (c) => Math.max(0, ...(g[c]?.units?.["USD/shares"] ?? []).map((f) => Date.parse(f.end) || 0));
+  const concept = ["CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid"].filter((c) => newest(c) > 0).sort((a, b) => newest(b) - newest(a))[0];
   if (!concept) { console.log(`  ${sym}: no DPS concept`); continue; }
   // Each fact once, in the filing that first reported it (the period's own filing).
   const first = new Map();
