@@ -190,6 +190,11 @@ export function epsStandardWord(accounting: "IFRS" | "US GAAP" | null): string {
  * difference between a figure a reader can check against the 10-Q and one they
  * cannot.
  */
+/** A rate filer's year (#552 COWORK #208 rule 2), the owner's wording. */
+export const DIVIDEND_RATE_YEAR_NOTE = "This company files its dividend as a per-quarter rate, so no full-year total is shown.";
+/** A dividend quarter withheld by rule 1 (rate filer) or rule 3 (across a split). Hedged: it names both. */
+export const DIVIDEND_QUARTER_WITHHELD_NOTE = "Not shown: this quarter is not filed on its own, and working it out from the company\u2019s other filed figures would not give a reliable result here (it files a per-quarter rate, or the figures sit on either side of a share split).";
+
 export function derivationNote(
   derived: Cell["derived"],
   /**
@@ -204,8 +209,14 @@ export function derivationNote(
    * 2026-09-22 §1.2 item 4). Omitted context keeps the cash-flow wording, which
    * is what every caller got before this parameter existed.
    */
-  context: { statement?: Statement | null; fp?: string | null } = {}
+  context: { statement?: Statement | null; fp?: string | null; key?: string | null } = {}
 ): string | null {
+  // DIVIDENDS PER SHARE HAVE THEIR OWN WITHHELD REASONS (#552 COWORK #208,
+  // secSplitAdjust's dividend-basis pass): the revenue sentence below is about
+  // scopes, which is not why a dividend figure is held back.
+  if (derived === "withheld" && context.key === "dividendsDeclaredPerShare") {
+    return context.fp === "FY" ? DIVIDEND_RATE_YEAR_NOTE : DIVIDEND_QUARTER_WITHHELD_NOTE;
+  }
   switch (derived) {
     case "differenced":
       if (context.statement === "income") {
@@ -586,7 +597,7 @@ const view = (p: StoredPeriod | null | undefined, key: string, label: string): V
   const c = cell(p, key);
   return {
     ...c, key, label,
-    derivedNote: derivationNote(c.derived, { statement: STATEMENT_OF.get(key) ?? null, fp: p?.fp ?? null }),
+    derivedNote: derivationNote(c.derived, { statement: STATEMENT_OF.get(key) ?? null, fp: p?.fp ?? null, key }),
     perShare: PER_SHARE_KEYS.has(key),
   };
 };

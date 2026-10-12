@@ -121,10 +121,15 @@ function adjustPeriod(p: StoredPeriod, f: number): StoredPeriod {
 
 /**
  * The set with every old-basis period moved onto today's share basis, and a
- * record of what moved (`spa`). A set with no proven split comes back as it
- * was, unstamped; a set already adjusted is returned untouched.
+ * record of what moved (`spa`); then the dividend-basis pass below (`dvr`). A
+ * set with nothing to move or withhold comes back as it was, unstamped; a set
+ * already adjusted is returned untouched.
  */
-export function splitAdjusted<T extends StoredFactSet>(set: T): T & { spa?: SplitAdjustment } {
+export function splitAdjusted<T extends StoredFactSet>(set: T): T & { spa?: SplitAdjustment; dvr?: DividendBasis } {
+  return dividendBasisApplied(splitMoved(set));
+}
+
+function splitMoved<T extends StoredFactSet>(set: T): T & { spa?: SplitAdjustment } {
   const already = (set as { spa?: SplitAdjustment }).spa;
   if (already) return set;
   const factors = splitFactors(set);
@@ -139,4 +144,107 @@ export function splitAdjusted<T extends StoredFactSet>(set: T): T & { spa?: Spli
       adjusted: [...factors.keys()].sort(),
     },
   };
+}
+
+// ── DIVIDENDS FILED AS A PER-QUARTER RATE (#552 COWORK #208) ───────────────
+//
+// Most filers state dividends per share as a running total: the 10-K's year
+// is the four quarters summed, a 10-Q's six months is two. Differencing those
+// frames (year − nine months, six months − three) gives a quarter. A RATE
+// filer states the quarter's rate in every frame instead: BKNG's FY2025 reads
+// $9.60 pre-split, one quarter, and the same subtraction gives $0 quarters and
+// a "year" that is a quarter (CODE-A #225/#226).
+//
+//   RATE FILER: in the newest fiscal year with both an as-filed year and an
+//   as-filed Q1, the year is 0.8–1.25× that Q1 (a running total reads ≈ 4×),
+//   and 0.8–1.25× each Q2/Q3 it filed directly as well (see dividendRateFiler).
+//   1. Its differenced quarters are withheld: only quarters it filed directly
+//      are shown.
+//   2. Its years are withheld: the filed "year" is a per-quarter rate, not a
+//      full-year total.
+//   3. ANY filer: a quarter differenced from a quarter on the other side of a
+//      proven split (one moved by the split pass above, the other not) is
+//      withheld -- the subtraction mixes two share bases.
+//
+// Withheld = value null, derivation "W", as the derived-Q4 revenue rule
+// stores it. A READ-TIME pass, here, because every dividend reader (the
+// profile row, the pickers row, valuation, the earnings view) already enters
+// through splitAdjusted: no stored set changes and nothing is re-read.
+// Stamped (`dvr`) so a set passed twice is judged once; a set with nothing
+// withheld is returned as it was.
+
+export const DIVIDEND_RATE_MIN = 0.8;
+export const DIVIDEND_RATE_MAX = 1.25;
+const DIVIDEND_BASIS_KEY = "dividendsDeclaredPerShare";
+
+export type DividendBasis = {
+  /** The year that classed the filer as a rate filer, and its year ÷ Q1 ratio; null if it is not one. */
+  rate: { fy: number; ratio: number } | null;
+  /** Period ends withheld, by array (a Q4 and its year share an end). */
+  quarters: string[];
+  years: string[];
+};
+
+/** A rate filer's classing year and ratio, or null. Pure; read on today's share basis. */
+export function dividendRateFiler(set: Pick<StoredFactSet, "quarters" | "years">): DividendBasis["rate"] {
+  const years = [...set.years].filter((y) => y?.e).sort((a, b) => (a.e < b.e ? 1 : a.e > b.e ? -1 : 0));
+  for (const y of years) {
+    const fy = cell(y, DIVIDEND_BASIS_KEY);
+    if (fy.derived !== "as-filed" || !(typeof fy.val === "number" && fy.val > 0) || y.fy == null) continue;
+    const q1 = cell(set.quarters.find((p) => p.fy === y.fy && p.fp === "Q1"), DIVIDEND_BASIS_KEY);
+    if (q1.derived !== "as-filed" || !(typeof q1.val === "number" && q1.val > 0)) continue;
+    const ratio = fy.val / q1.val;
+    const inBand = (r: number) => r >= DIVIDEND_RATE_MIN && r <= DIVIDEND_RATE_MAX;
+    if (!inBand(ratio)) return null;
+    // AND EVERY OTHER QUARTER IT FILED DIRECTLY (Q2, Q3) MATCHES THE YEAR TOO.
+    // The year ≈ Q1 alone also fits two filers whose year IS a real total
+    // (CODE-A #227 census): one that declares the whole year in Q1 and files
+    // $0 after it (WMT, WTM), and a running total whose Q1 carried a special
+    // or preceded a cut (IIIN $1.03 then $0.03s, OGN $0.28 then $0.02s). A rate
+    // filer's filed quarters each read the rate. Q4 is left out: a "Q4" filed
+    // on its own is rare, and MTH's reads the year's sum.
+    const offRate = set.quarters.some((p) => {
+      if (p.fy !== y.fy || (p.fp !== "Q2" && p.fp !== "Q3")) return false;
+      const c = cell(p, DIVIDEND_BASIS_KEY);
+      return c.derived === "as-filed" && typeof c.val === "number" && !(c.val > 0 && inBand(fy.val! / c.val));
+    });
+    return offRate ? null : { fy: y.fy, ratio };
+  }
+  return null;
+}
+
+function dividendWithheld(p: StoredPeriod, i: number): StoredPeriod {
+  const v = [...p.v];
+  v[i] = null;
+  const d = p.d.padEnd(i + 1, "-");
+  return { ...p, v, d: `${d.slice(0, i)}W${d.slice(i + 1)}` };
+}
+
+function dividendBasisApplied<T extends StoredFactSet & { spa?: SplitAdjustment }>(set: T): T & { dvr?: DividendBasis } {
+  if ((set as { dvr?: DividendBasis }).dvr) return set;
+  const i = SEC_FIELD_KEYS.indexOf(DIVIDEND_BASIS_KEY);
+  if (i < 0) return set;
+  const rate = dividendRateFiler(set);
+  const moved = new Set(set.spa?.adjusted ?? []);
+  const quarters: string[] = [];
+  const nextQuarters = set.quarters.map((p) => {
+    const c = cell(p, DIVIDEND_BASIS_KEY);
+    if (c.derived !== "differenced" || c.val === null) return p;
+    // Rule 3: the quarter before it in the same fiscal year, on the other basis.
+    const prior = p.fy == null ? undefined : set.quarters
+      .filter((x) => x.fy === p.fy && x.e < p.e)
+      .sort((a, b) => (a.e < b.e ? 1 : -1))[0];
+    const acrossSplit = Boolean(prior) && moved.has(prior!.e) !== moved.has(p.e);
+    if (!rate && !acrossSplit) return p;
+    quarters.push(p.e);
+    return dividendWithheld(p, i);
+  });
+  const years: string[] = [];
+  const nextYears = !rate ? set.years : set.years.map((y) => {
+    if (cell(y, DIVIDEND_BASIS_KEY).val === null) return y;
+    years.push(y.e);
+    return dividendWithheld(y, i);
+  });
+  if (!quarters.length && !years.length) return set;
+  return { ...set, quarters: nextQuarters, years: nextYears, dvr: { rate, quarters: quarters.sort(), years: years.sort() } };
 }
