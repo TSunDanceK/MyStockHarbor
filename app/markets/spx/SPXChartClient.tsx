@@ -91,8 +91,8 @@ export default function SPXChartClient({
   symbol = "SPX",
 }: {
   chartPoints: Point[];
-  /** "SPY" when the page is on the Tiingo path (the ETF, not the index). */
-  symbol?: "SPX" | "SPY";
+  /** "SPY" when the page is on the Tiingo path (the ETF, not the index); "QQQ" on /markets/qqq (#553 COWORK #217). */
+  symbol?: "SPX" | "SPY" | "QQQ";
 }) {
   const weeklyPoints = useMemo(() => aggregateToWeekly(chartPoints), [chartPoints]);
 

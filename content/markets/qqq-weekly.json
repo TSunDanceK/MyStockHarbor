@@ -1,0 +1,69 @@
+{
+  "asOf": "2026-10-09",
+  "indexClose": 30883.15,
+  "ath": {
+    "level": 31224.69,
+    "date": "2026-10-06"
+  },
+  "oneLiner": "Closed at 30,883.15 Friday, up about 0.5% on the day, after a record close of 31,224.69 on Tuesday and a sharp AI-led dip on Thursday.",
+  "intro": "The Nasdaq-100 closed at 30,883.15 on Friday, October 9, up about 0.5% on the day and roughly 1.1% below Tuesday's record close of 31,224.69. Thursday brought a sharp pullback in chip and AI-infrastructure names after a report questioned one major AI company's revenue, and Friday recovered part of it. Nasdaq's own weekly recap describes the index as finishing the week little changed, just off that record.",
+  "sections": {
+    "performance": {
+      "heading": "How the index has done",
+      "body": "The strip above tracks QQQ, the ETF that follows the Nasdaq-100, through the same week. The index set a record close on Tuesday, gave much of it back on Thursday as AI-linked stocks fell, and recovered part of that on Friday. The longer-period cards show how this week sits inside the run since September."
+    },
+    "chart": {
+      "heading": "The trend against its moving averages",
+      "body": "On the daily chart QQQ remains above both its 50- and 200-day moving averages, with the 200-day well below the current price. Thursday's drop was the sharpest test of the recent advance; Friday's rebound kept price above the 50-day line. The chart above plots QQQ against its own moving-average lines."
+    },
+    "levels": {
+      "heading": "Where the nearby levels sit",
+      "body": "Tuesday's record close is the nearest marker above for the index, with Friday's close about 1.1% below it. Thursday's low is the first nearby level beneath, then the zone around the 50-day average. The Price zones and Key levels cards above show where those levels sit on QQQ today."
+    },
+    "signals": {
+      "heading": "Momentum in plain words",
+      "body": "Daily RSI (14) eased from the upper end of its range after Tuesday's record, as Thursday's pullback took some heat out of the advance. MACD stayed above zero through the week's swings. The panel above shows today's readings on QQQ, which can differ from what the week's headlines suggest."
+    },
+    "change": {
+      "heading": "The weekly and monthly pattern",
+      "body": "Close to close, the index ended the week little changed after a volatile run: a record on Tuesday, a sharp AI-led decline on Thursday, and a partial rebound on Friday. The tabs above show the daily, weekly and monthly changes on QQQ."
+    }
+  },
+  "marketRead": [
+    "The Nasdaq-100 reached a record close of 31,224.69 on Tuesday, October 6, extending a run of record closes that began the day before, as fading bets on another Federal Reserve rate increase supported large technology stocks. Those bets eased after a soft September jobs report, with payrolls up about 29,000 and unemployment ticking up to 4.2%. Bond yields stayed elevated through the week, and oil held above $100 a barrel, both of which weigh on how much investors are willing to pay for growth companies.",
+    "The advance stalled on Thursday when a Financial Times report put one major AI company's annualized revenue at roughly $50 billion, about $20 billion below figures that had circulated among investors. Chip and AI-infrastructure stocks led the decline: Nvidia fell about 2.9%, AMD about 3.9% and Oracle about 5.5% on the day. On Friday a Bloomberg report that the company expects annualized revenue to reach or exceed $70 billion by year-end helped calm the group, and the index rose about 0.5% to close at 30,883.15.",
+    "Participation inside the index has been narrower than its level suggests. StreetStats put the share of Nasdaq-100 members above their 200-day average at about 54% on September 29, which it described as below average on a longer-term basis, even as the index traded well above its own 200-day line. The optimistic reading is that a record index with middling breadth leaves room for more members to join; the cautious one is that gains rest on a smaller group of large AI-linked names.",
+    "The weeks ahead may turn on third-quarter earnings, which begin with the large banks next week and reach the biggest technology companies later in the month. Investors are also watching whether the questions about AI revenue and spending that unsettled the group on Thursday return as more companies report, and whether yields and oil ease or keep pressing on valuations."
+  ],
+  "points": [
+    {
+      "label": "Catalyst",
+      "text": "A report on one major AI company's revenue drove Thursday's drop in chip stocks; a second report helped them recover on Friday."
+    },
+    {
+      "label": "Breadth",
+      "text": "About 54% of Nasdaq-100 members were above their 200-day average on September 29, a below-average reading per StreetStats."
+    },
+    {
+      "label": "Record",
+      "text": "The index set a record close of 31,224.69 on Tuesday, October 6; Friday's close sits about 1.1% below it."
+    }
+  ],
+  "breadth": {
+    "pct200": 54,
+    "source": "StreetStats",
+    "date": "2026-09-29"
+  },
+  "watchDown": [
+    "Questions about AI revenue and spending return and weigh again on chip and infrastructure stocks.",
+    "Bond yields or oil prices climb further, pressing on the valuations of growth companies.",
+    "The share of members above their 200-day average slips further below its September reading.",
+    "The index closes below Thursday's low, giving back more of the advance since September."
+  ],
+  "watchUp": [
+    "The index clears Tuesday's record close of 31,224.69 and holds above it for more than a session.",
+    "Large technology companies report third-quarter results that ease the questions about AI spending.",
+    "Breadth widens, with clearly more than half of members back above their 200-day average.",
+    "Bond yields and oil prices ease, taking some pressure off growth-company valuations."
+  ]
+}

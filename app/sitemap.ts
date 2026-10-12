@@ -56,6 +56,7 @@ const mainPages = [
 const marketPages = [
   // Market overview / analysis pages
   "/markets/spx",
+  "/markets/qqq",
 ];
 
 const seoGuides = [
