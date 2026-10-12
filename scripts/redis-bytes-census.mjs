@@ -28,14 +28,15 @@ globalThis.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 const redis = (await import("@upstash/redis")).Redis.fromEnv({ automaticDeserialization: false });
-const { PICKERS_MANIFEST_KEY, PICKERS_BUILD_TRIGGERS_PREFIX } = await import("../lib/server/pickersBuilder.ts");
-const { PICKER_CHARTS_KEY } = await import("../lib/server/pickerChartsCache.ts");
-const { factKey } = await import("../lib/server/secFactStore.ts");
-const { PICKERS_SEC_KEY } = await import("../lib/server/pickersSecFundamentals.ts");
+// Literal names, each checked against its source constant on 2026-10-12
+// (importing the builders would pull in next/server).
+const PICKERS_MANIFEST_KEY = "msh:pickers:v10:manifest"; // pickersBuilder.ts
+const PICKERS_BUILD_TRIGGERS_PREFIX = "msh:pickers-build-triggers:v1"; // pickersBuilder.ts
+const PICKER_CHARTS_KEY = "msh:picker-charts:v1"; // pickerChartsCache.ts
+const PICKERS_SEC_KEY = "msh:pickers:sec-fundamentals:v1"; // pickersSecFundamentals.ts
+const PLAYS = "msh:plays:v5:main", FLAGS = "msh:bull-flags:v1:main", TRI = "msh:descending-triangles:v4:main";
+const factKey = (s) => `msh:sec:facts:v1:${s.toUpperCase()}`; // secFactStore.ts SEC_FACTS_PREFIX
 const { tiingoEodKey, TIINGO_QUOTES_KEY, TIINGO_EOD_LAST_KEY } = await import("../lib/server/marketData/keys.ts");
-const { PLAYS_REDIS_KEY: PLAYS } = await import("../lib/server/playsBuilder.ts");
-const { PLAYS_REDIS_KEY: FLAGS } = await import("../lib/server/bullFlagsBuilder.ts");
-const { DESCENDING_REDIS_KEY: TRI } = await import("../lib/server/descendingTrianglesBuilder.ts");
 
 const mb = (n) => `${(n / 1e6).toFixed(2)} MB`;
 const kb = (n) => `${(n / 1e3).toFixed(1)} KB`;
