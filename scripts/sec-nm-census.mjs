@@ -72,11 +72,27 @@ for (let i = 0; i < keys.length; i += 20) {
       D: margins.some((x) => Math.abs(x) > 1000),
       E: [gPts, oPts].some((x) => typeof x === "number" && Math.abs(x) > 100),
     };
-    if (!Object.values(f).some(Boolean)) return;
+    // ROUND 2: THE PROPOSED RULES, EXACTLY.
+    const marginNm = (rv, mg) => typeof mg === "number" && ((typeof rv === "number" && rv > 0 && rv < 1e6) || Math.abs(mg) > 1000);
+    const yaM = ya;
+    const rule = {
+      growth: (typeof base === "number" && base > 0 && base < 1e6) || (isPct(yoyR) && Math.abs(yoyR) > 1000),
+      margin: m ? [m.gross, m.operating, m.net].some((x) => marginNm(rev, x)) : false,
+      grossPt: gPts !== null && (marginNm(rev, m.gross) || marginNm(base, yaM.gross)),
+      opPt: oPts !== null && (marginNm(rev, m.operating) || marginNm(base, yaM.operating)),
+    };
+    f.ruleAny = rule.growth || rule.margin || rule.grossPt || rule.opPt;
+    f.rule = rule;
+    if (!["A", "B", "C", "D", "E"].some((k) => f[k]) && !f.ruleAny) return;
     rows.push({ sym, cut: CUT.has(sym), label: view.latestLabel, basis: view.basis, rev, base, yoyR, m, gPts, oPts, f });
   });
 }
 const has = (r, ks) => ks.every((k) => r.f[k]);
+const R = (k) => rows.filter((r) => r.f.rule[k]);
+console.log(`ROUND 2, the proposed rules: growth n/m ${R("growth").length} · any margin n/m ${R("margin").length} · gross pt n/m ${R("grossPt").length} · operating pt n/m ${R("opPt").length} · any of them ${rows.filter((r) => r.f.ruleAny).length} names (top-200 cut: ${rows.filter((r) => r.f.ruleAny && r.cut).map((r) => r.sym).join(" ") || "none"})`);
+const leftE = rows.filter((r) => r.f.E && !(r.f.rule.grossPt || r.f.rule.opPt));
+console.log(`pt moves beyond ±100 that the rule leaves shown (both ends' margins meaningful): ${leftE.length}: ${leftE.map((r) => `${r.sym} ${r.oPts != null && Math.abs(r.oPts) > 100 ? "op " + r.oPts.toFixed(1) : "gross " + (r.gPts ?? 0).toFixed(1)}`).join(", ")}`);
+console.log(`growth beyond ±1,000% on a year-ago revenue ≥ $1M (n/m by the ceiling, not the base): ${rows.filter((r) => r.f.B && !r.f.A).map((r) => `${r.sym} ${P(r.yoyR)} on ${M(r.base)}`).join(", ")}`);
 console.log(`stored sets ${sets} · views built ${views} · view errors ${errors}`);
 console.log(`flagged on any condition: ${rows.length}`);
 for (const k of "ABCDE") console.log(`  ${k}: ${rows.filter((r) => r.f[k]).length}`);
@@ -84,7 +100,7 @@ console.log(`overlaps: B without A (growth >1,000% on a base ≥ $1M): ${rows.fi
 console.log(`\nEVERY FLAGGED NAME (sym* = top-200 cut): period · revenue (year-ago) · growth · gross/op/net · gross pt / op pt · flags`);
 for (const r of rows.sort((a, b) => (a.sym < b.sym ? -1 : 1))) {
   const mm = r.m ? `${P(r.m.gross)}/${P(r.m.operating)}/${P(r.m.net)}${r.m.marginsRefused ? " (refused)" : ""}` : "—";
-  console.log(`  ${r.sym}${r.cut ? "*" : ""} ${r.label}${r.basis === "year" ? " (annual)" : ""} · ${M(r.rev)} (${M(r.base)}) · ${P(r.yoyR)} · ${mm} · ${r.gPts == null ? "—" : r.gPts.toFixed(1)}/${r.oPts == null ? "—" : r.oPts.toFixed(1)} · ${Object.keys(r.f).filter((k) => r.f[k]).join("")}`);
+  console.log(`  ${r.sym}${r.cut ? "*" : ""} ${r.label}${r.basis === "year" ? " (annual)" : ""} · ${M(r.rev)} (${M(r.base)}) · ${P(r.yoyR)} · ${mm} · ${r.gPts == null ? "—" : r.gPts.toFixed(1)}/${r.oPts == null ? "—" : r.oPts.toFixed(1)} · ${"ABCDE".split("").filter((k) => r.f[k]).join("") + (r.f.ruleAny ? " → n/m: " + Object.keys(r.f.rule).filter((k) => r.f.rule[k]).join(",") : "")}`);
 }
 for (const s of ["JOBY", "ACHR", "KO", "TSLA", "JPM"]) if (!rows.some((r) => r.sym === s)) console.log(`  (${s}: not flagged)`);
 console.log(`\nStore commands: ${JSON.stringify(counts)}`);
