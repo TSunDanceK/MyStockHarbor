@@ -8,17 +8,19 @@
 //      despite the prefix, which only routes it to the job holding the Upstash
 //      credentials). One row per pool symbol is printed as a compact `CC|…` log
 //      line, plus a `CCSUM|…` line that mode 2 checks every row against.
-//        Redis: 1 HGETALL (price pool) + 1 GET (Pickers universe) + 1 HMGET
+//        Redis: 1 HKEYS (price pool) + 1 HGETALL (Tiingo eod-last, the live
+//        close) + 1 GET (Pickers universe) + 1 HMGET
 //        (SEC picker rows) + 1-2 GET per symbol (its stored fact set). No
-//        writes (the SEC rows are read directly, not through the metered
-//        reader), no SEC requests, no FMP.
+//        writes: the pool, the SEC rows and the fact sets are read directly,
+//        not through their metered readers (whose meters write). No SEC
+//        requests, no FMP.
 //
 //   2. Locally: `node scripts/content-candidates.mjs --from-log <task.log>`
 //      rebuilds data/content-candidates.json from those lines, recomputing
 //      hasBottleneck and latestInsightDate from content/ (the schedules do the
 //      same), then prints the two top-40 tables and the thin pages.
 //
-// THE COLUMNS. inPool: the pool row has a live close. hasSecFacts: a stored
+// THE COLUMNS. inPool: a live close (Tiingo's newest stored bar, the last 7 days). hasSecFacts: a stored
 // fact set that A's buildSecEarningsView builds without error (imported, not
 // copied). thinFilings: most of the latest quarter's growth/margin figures are
 // n/m under A's rule (#552 COWORK #212: the view's own markers). marketCap:
@@ -55,9 +57,11 @@ if (fromLog < 0) {
   const { Redis } = await import("@upstash/redis");
   const V = await import("../lib/server/secEarningsView.ts");
   const VAL = await import("../lib/server/secValuation.ts");
-  const STORE = await import("../lib/server/secFactStore.ts");
+  const { SEC_FACTS_PREFIX, dotDashSpellings } = await import("../lib/server/secManifest.ts");
+  const { secFieldsHash } = await import("../lib/server/secFields.ts");
   const { pickersSecKey } = await import("../lib/server/pickersSecFundamentals.ts");
   const { PRICE_POOL_KEY } = await import("../lib/server/pricePool.ts");
+  const { TIINGO_EOD_LAST_KEY } = await import("../lib/server/marketData/keys.ts");
   // pickersBuilder.PICKERS_SYMBOLS_KEY. Named here, as pickers-marketcap-census
   // does, because that module's @/ imports do not resolve under the relay's
   // loader; check-content-candidates asserts the two agree.
@@ -65,28 +69,45 @@ if (fromLog < 0) {
   const redis = Redis.fromEnv();
   let commands = 0;
 
-  const poolRaw = (await redis.hgetall(PRICE_POOL_KEY)) ?? {}; commands++;
+  // THE LIVE CLOSE is Tiingo's newest stored bar (eod-last, the hash every pool
+  // reader overlays at read time): the FMP pool rows themselves no longer carry
+  // a price. Read directly, not through readPricePoolBulk, whose meter writes.
+  const poolKeys = ((await redis.hkeys(PRICE_POOL_KEY)) ?? []).map((k) => String(k).toUpperCase()); commands++;
+  const eodRaw = (await redis.hgetall(TIINGO_EOD_LAST_KEY)) ?? {}; commands++;
   const uniRaw = await redis.get(PICKERS_SYMBOLS_KEY); commands++;
   const uniList = Array.isArray(uniRaw) ? uniRaw : Array.isArray(uniRaw?.symbols) ? uniRaw.symbols : [];
   const universe = new Set(uniList.map((x) => String(typeof x === "string" ? x : x?.symbol ?? "").toUpperCase()).filter(Boolean));
-  const pool = new Map();
-  for (const [k, v] of Object.entries(poolRaw)) {
+  const eod = new Map();
+  for (const [k, v] of Object.entries(eodRaw)) {
     let r = v;
     if (typeof r === "string") try { r = JSON.parse(r); } catch { r = null; }
-    if (r && typeof r === "object") pool.set(k.toUpperCase(), r);
+    if (r && typeof r === "object") eod.set(k.toUpperCase(), r);
   }
-  const symbols = [...new Set([...pool.keys(), ...universe])].sort();
+  // Live: a close from the last 7 calendar days (a long weekend and a holiday).
+  const liveSince = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+  const closeOf = (s) => {
+    const r = eod.get(s) ?? eod.get(s.replace(/\./g, "-")) ?? eod.get(s.replace(/-/g, "."));
+    return r && typeof r.c === "number" && r.c > 0 && typeof r.d === "string" && r.d >= liveSince ? r.c : null;
+  };
+  const pool = new Set(poolKeys);
+  const symbols = [...new Set([...poolKeys, ...universe])].sort();
   const secRaw = symbols.length ? await redis.hmget(pickersSecKey({}), ...symbols) : []; commands++;
   const secRow = new Map(symbols.map((s, i) => [s, Array.isArray(secRaw) ? secRaw[i] : secRaw?.[s] ?? null]));
 
   let withFacts = 0;
   const rows = [];
   for (const symbol of symbols) {
-    const p = pool.get(symbol);
-    const price = typeof p?.price === "number" && p.price > 0 ? p.price : null;
+    const price = closeOf(symbol);
     let set = null, view = null;
-    try { set = await STORE.readFactSet(symbol); } catch { set = null; }
-    commands += symbol.includes(".") || symbol.includes("-") ? 2 : 1;
+    // THE STORED FACT SET, read as secFactStore.readFactSet reads it (either
+    // spelling; a field-order mismatch is a miss) but without its bandwidth
+    // meter, which writes (#552 COWORK #213): this census stays read-only.
+    for (const spelling of dotDashSpellings(symbol)) {
+      let raw = null;
+      try { raw = await redis.get(`${SEC_FACTS_PREFIX}:${spelling.toUpperCase()}`); } catch { raw = null; }
+      commands++;
+      if (raw && typeof raw === "object") { set = raw.h === secFieldsHash() && Array.isArray(raw.quarters) ? raw : null; break; }
+    }
     if (set) { try { view = V.buildSecEarningsView(set); } catch { view = null; } }
     if (view) withFacts++;
     // A's n/m markers on the latest quarter: growth plus the five margin figures.
@@ -115,7 +136,7 @@ if (fromLog < 0) {
   const capSum = rows.reduce((a, r) => a + (r[1] === "" ? 0 : r[1]), 0);
   const nmSum = rows.reduce((a, r) => a + r[4] * 7 + r[5], 0);
   console.log(`CCSUM|${rows.length}|${capSum}|${rows.filter((r) => r[2]).length}|${withFacts}|${nmSum}|${new Date().toISOString()}|${pool.size}|${universe.size}|${commands}`);
-  console.log(`Redis commands: ${commands} (read-only: HGETALL, GET, HMGET)`);
+  console.log(`Redis commands: ${commands} (read-only: HKEYS, HGETALL, GET, HMGET)`);
 } else {
   // ── MODE 2: LOCAL, FROM THE RUN'S LOG ─────────────────────────────────────
   // The name and the sector need the app's @/ imports: the render hooks resolve them.
