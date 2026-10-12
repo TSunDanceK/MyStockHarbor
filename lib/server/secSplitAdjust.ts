@@ -156,7 +156,8 @@ function splitMoved<T extends StoredFactSet>(set: T): T & { spa?: SplitAdjustmen
 // a "year" that is a quarter (CODE-A #225/#226).
 //
 //   RATE FILER: in the newest fiscal year with both an as-filed year and an
-//   as-filed Q1, the year is 0.8–1.25× that Q1 (a running total reads ≈ 4×).
+//   as-filed Q1, the year is 0.8–1.25× that Q1 (a running total reads ≈ 4×),
+//   and 0.8–1.25× each Q2/Q3 it filed directly as well (see dividendRateFiler).
 //   1. Its differenced quarters are withheld: only quarters it filed directly
 //      are shown.
 //   2. Its years are withheld: the filed "year" is a per-quarter rate, not a
@@ -193,7 +194,21 @@ export function dividendRateFiler(set: Pick<StoredFactSet, "quarters" | "years">
     const q1 = cell(set.quarters.find((p) => p.fy === y.fy && p.fp === "Q1"), DIVIDEND_BASIS_KEY);
     if (q1.derived !== "as-filed" || !(typeof q1.val === "number" && q1.val > 0)) continue;
     const ratio = fy.val / q1.val;
-    return ratio >= DIVIDEND_RATE_MIN && ratio <= DIVIDEND_RATE_MAX ? { fy: y.fy, ratio } : null;
+    const inBand = (r: number) => r >= DIVIDEND_RATE_MIN && r <= DIVIDEND_RATE_MAX;
+    if (!inBand(ratio)) return null;
+    // AND EVERY OTHER QUARTER IT FILED DIRECTLY (Q2, Q3) MATCHES THE YEAR TOO.
+    // The year ≈ Q1 alone also fits two filers whose year IS a real total
+    // (CODE-A #227 census): one that declares the whole year in Q1 and files
+    // $0 after it (WMT, WTM), and a running total whose Q1 carried a special
+    // or preceded a cut (IIIN $1.03 then $0.03s, OGN $0.28 then $0.02s). A rate
+    // filer's filed quarters each read the rate. Q4 is left out: a "Q4" filed
+    // on its own is rare, and MTH's reads the year's sum.
+    const offRate = set.quarters.some((p) => {
+      if (p.fy !== y.fy || (p.fp !== "Q2" && p.fp !== "Q3")) return false;
+      const c = cell(p, DIVIDEND_BASIS_KEY);
+      return c.derived === "as-filed" && typeof c.val === "number" && !(c.val > 0 && inBand(fy.val! / c.val));
+    });
+    return offRate ? null : { fy: y.fy, ratio };
   }
   return null;
 }

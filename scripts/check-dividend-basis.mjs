@@ -2,7 +2,9 @@
 //
 // Fixtures shaped like the census's cases (CODE-A #226/#227):
 //   BKNG  a rate filer (year ≈ its Q1) with differenced $0 quarters → rules 1, 2
-//   WMT   a rate filer whose year is declared once, Q2–Q4 differenced to $0 → rules 1, 2
+//   WMT   declares the whole year in Q1 and files $0 after it: year ≈ Q1, but
+//         NOT a rate filer (its year is a real total) → untouched
+//   V     a rate filer whose Q2/Q3 are filed at the rate, Q4 differenced to $0 → rules 1, 2
 //   CEG   a rate filer with every quarter filed directly → rule 2 only
 //   DD    a running-total filer with a proven split mid-year → rule 3 only
 //   plus a plain running-total filer that must come back untouched.
@@ -44,10 +46,16 @@ const BKNG = set([
 ], [per("2025-12-31", "FY", 2025, { [DPS]: 0.384, epsDiluted: 6.62 })]);
 const WMT = set([
   per("2025-04-30", "Q1", 2026, { [DPS]: 0.94, epsDiluted: 0.61 }),
-  per("2025-07-31", "Q2", 2026, { [DPS]: [0, "D"], epsDiluted: 0.88 }),
+  per("2025-07-31", "Q2", 2026, { [DPS]: 0, epsDiluted: 0.88 }),
   per("2025-10-31", "Q3", 2026, { [DPS]: [0, "D"], epsDiluted: 0.77 }),
   per("2026-01-31", "Q4", 2026, { [DPS]: [0, "D"] }),
 ], [per("2026-01-31", "FY", 2026, { [DPS]: 0.94, epsDiluted: 2.73 })]);
+const V = set([
+  per("2024-12-31", "Q1", 2025, { [DPS]: 0.59, epsDiluted: 2.58 }),
+  per("2025-03-31", "Q2", 2025, { [DPS]: 0.59, epsDiluted: 2.32 }),
+  per("2025-06-30", "Q3", 2025, { [DPS]: 0.59, epsDiluted: 2.69 }),
+  per("2025-09-30", "Q4", 2025, { [DPS]: [0, "D"] }),
+], [per("2025-09-30", "FY", 2025, { [DPS]: 0.59, epsDiluted: 10.2 })]);
 const CEG = set([
   per("2025-03-31", "Q1", 2025, { [DPS]: 0.3874 }),
   per("2025-06-30", "Q2", 2025, { [DPS]: 0.3874 }),
@@ -69,17 +77,19 @@ const RUNNING = set([
 
 console.log("1. who is a rate filer (the year against its own filed Q1)");
 check("BKNG 1.00× → rate", S.dividendRateFiler(BKNG)?.ratio === 1);
-check("WMT 1.00× → rate", S.dividendRateFiler(WMT)?.fy === 2026);
+check("V 1.00×, Q2/Q3 filed at the rate → rate", S.dividendRateFiler(V)?.fy === 2025);
+check("WMT 1.00× to Q1, but Q2 filed at $0 (the year declared once) → not", S.dividendRateFiler(WMT) === null);
 check("CEG 1.00× (FY2025, the newest year with a filed Q1) → rate", S.dividendRateFiler(CEG)?.fy === 2025);
 check("a running total (4.0×) → not", S.dividendRateFiler(RUNNING) === null);
 check("DD (no filed year with a filed Q1 in the same year) → not", S.dividendRateFiler(DD) === null);
 
 console.log("\n2. rule 1: a rate filer's differenced quarters are withheld, filed ones kept");
 {
-  const b = S.splitAdjusted(BKNG), w = S.splitAdjusted(WMT);
+  const b = S.splitAdjusted(BKNG), v = S.splitAdjusted(V);
   check("BKNG Q2–Q4 2025: $0 → withheld (null, W)", ["2025-06-30", "2025-09-30", "2025-12-31"].every((e) => dps(b, e).val === null && dps(b, e).derived === "withheld"));
   check("BKNG's filed Q1s stay", dps(b, "2025-03-31").val === 0.384 && dps(b, "2026-03-31").val === 0.42);
-  check("WMT Q2–Q4: withheld; Q1 $0.94 stays", ["2025-07-31", "2025-10-31", "2026-01-31"].every((e) => dps(w, e).derived === "withheld") && dps(w, "2025-04-30").val === 0.94);
+  check("V Q4 $0 → withheld; Q1–Q3 $0.59 stay", dps(v, "2025-09-30").derived === "withheld" && ["2024-12-31", "2025-03-31", "2025-06-30"].every((e) => dps(v, e).val === 0.59));
+  check("WMT comes back as the same object: $0.94 year and its $0 quarters stand", S.splitAdjusted(WMT) === WMT);
   check("other fields untouched (EPS)", cell(b.quarters.find((p) => p.e === "2025-09-30"), "epsDiluted").val === 3.38);
 }
 
@@ -115,15 +125,17 @@ console.log("\n6. the readers");
   // A newer differenced quarter reading a positive figure (as BKNG's Q3 2025 did, $0.3688).
   const before = buildProfileDividend({ ...BKNG, quarters: [per("2026-06-30", "Q2", 2026, { [DPS]: [0.3688, "D"] }), ...BKNG.quarters] });
   check("profile row: a newest differenced quarter is skipped, the newest FILED quarter shown", before.state === "declared" && before.perShare === 0.42 && before.periodEnd === "2026-03-31", JSON.stringify(before));
-  const wmt = S.splitAdjusted(WMT);
-  check("pickers payout: no fiscal-year fallback on a rate filer's year (was 0.94 ÷ 2.73 = 34%)", samePeriodPayout(wmt, null) === null && samePeriodPayout(WMT, null)?.val > 34);
-  check("pickers Q4: not derived from a withheld year", quarterlyDps(wmt)[0] === null);
+  const v = S.splitAdjusted(V);
+  check("pickers payout: no fiscal-year fallback on a rate filer's year (was 0.59 ÷ 10.2 = 5.8%)", samePeriodPayout(v, null) === null && samePeriodPayout(V, null)?.val > 5.7);
+  const vNoQ4 = S.splitAdjusted({ ...V, quarters: V.quarters.map((p) => (p.fp === "Q4" ? per(p.e, "Q4", 2025, {}) : p)) });
+  check("pickers Q4: nothing derived from a withheld year", quarterlyDps(vNoQ4)[0] === null);
+  check("WMT's pickers payout keeps its fiscal-year figure (0.94 ÷ 2.73)", Math.abs(samePeriodPayout(S.splitAdjusted(WMT), null)?.val - 34.43) < 0.01);
   check("tap note, a rate filer's year (the owner's wording)", derivationNote("withheld", { key: DPS, fp: "FY" }) === DIVIDEND_RATE_YEAR_NOTE && DIVIDEND_RATE_YEAR_NOTE === "This company files its dividend as a per-quarter rate, so no full-year total is shown.");
   check("tap note, a withheld dividend quarter", derivationNote("withheld", { key: DPS, fp: "Q3" }) === DIVIDEND_QUARTER_WITHHELD_NOTE);
   check("the revenue note is unchanged for revenue", /different scopes/.test(derivationNote("withheld", { key: "revenue", fp: "Q4" })));
 }
 
-console.log("\n7. mutations, one per rule");
+console.log("\n7. mutations, one per rule (and the rate test's two edges)");
 {
   const SRC = fs.readFileSync("lib/server/secSplitAdjust.ts", "utf8");
   const mutant = async (anchor, replacement, tag) => {
@@ -138,6 +150,8 @@ console.log("\n7. mutations, one per rule");
   check("MUTATION rule 2 off: CEG's year back (caught)", dps(M2.splitAdjusted(CEG), "2025-12-31", "years").val !== null);
   const M3 = await mutant("    const acrossSplit = Boolean(prior) && moved.has(prior!.e) !== moved.has(p.e);", "    const acrossSplit = false;", "rule3");
   check("MUTATION rule 3 off: DD Q3 −$0.205 back (caught)", dps(M3.splitAdjusted(DD), "2025-09-30").derived !== "withheld");
+  const M5 = await mutant("    return offRate ? null : { fy: y.fy, ratio };", "    return { fy: y.fy, ratio };", "q2q3");
+  check("MUTATION the Q2/Q3 guard off: WMT's real $0.94 year withheld (caught)", M5.splitAdjusted(WMT) !== WMT);
   const M4 = await mutant("export const DIVIDEND_RATE_MAX = 1.25;", "export const DIVIDEND_RATE_MAX = 5;", "range");
   check("MUTATION the rate band widened to 5×: a running-total filer withheld (caught)", M4.splitAdjusted(RUNNING) !== RUNNING);
 }

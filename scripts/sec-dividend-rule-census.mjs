@@ -100,7 +100,6 @@ console.log(`\nRULE 3 ONLY, ACROSS A SPLIT (${split.length} filers, ${split.redu
 for (const r of split) console.log(`  ${r.sym}${r.cut ? "*" : ""}: ${r.q.join("; ")}`);
 console.log(`  (rate filers' quarters across a split are counted under rules 1–2 above)`);
 
-if (process.env.ROUND2 !== "0") { console.log(`\nStore commands: ${JSON.stringify(counts)}`); process.exit(0); }
 // ── 3. the three names, every annual-DPS reader ──
 const closes = await redis.hmget("msh:tiingo:eod-last:v1", "CEG", "BKNG", "WMT");
 const closeOf = (sym) => { const v = closes?.[sym]; const o = typeof v === "string" ? JSON.parse(v) : v; return Number(o?.close ?? o?.c ?? o?.adjClose ?? NaN); };
@@ -126,6 +125,8 @@ for (const sym of ["CEG", "BKNG", "WMT"]) {
   console.log(`    quarters after: ${qs.join(" · ")}`);
 }
 
+// Round 3: the frames were read in round 1; no SEC requests this time.
+console.log(`\nStore commands: ${JSON.stringify(counts)}`); process.exit(0);
 // ── 4. the semi-annual eleven's filed frames ──
 console.log(`\nSEMI-ANNUAL ELEVEN: filed DPS frames (newest two fiscal years), months → value [form]`);
 const cikMap = JSON.parse(fs.readFileSync("data/cik-map.json", "utf8"));
