@@ -336,25 +336,32 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   };
 
   const growth = view.growth ?? [];
+  // N/M IS LEFT OUT, AND COUNTED (#552 COWORK #212): JOBY's +257,493% would
+  // otherwise be the line's "latest", and a margin off a tiny revenue would
+  // pull the typical figure. Counted so the exclusion note can say why.
+  let notMeaningful = growth.filter((g) => g.revenueYoYNotMeaningful).length;
   const lines = [
-    line("Revenue growth", "revenue", growth.map((g) => g.revenueYoY)),
+    line("Revenue growth", "revenue", growth.map((g) => (g.revenueYoYNotMeaningful ? null : g.revenueYoY))),
     line("EPS growth", "EPS", growth.map((g) => g.epsYoY)),
   ];
 
   // MARGIN IS A LEVEL, NOT A RATE, so it gets its own line rather than being
   // forced through the growth wording.
-  const opMargins = view.margins.map((m) => m.operating).filter((x): x is number => x !== null);
+  const opMarginsAll = view.margins.map((m) => (m.notMeaningful?.operating ? null : m.operating));
+  const opMargins = opMarginsAll.filter((x): x is number => x !== null);
   if (opMargins.length >= TREND_MIN_PERIODS) {
+    notMeaningful += view.margins.filter((r) => r.notMeaningful?.operating).length;
     const m = median(opMargins);
-    const newest = view.margins.length ? view.margins[view.margins.length - 1].operating : null;
+    const newest = opMarginsAll.length ? opMarginsAll[opMarginsAll.length - 1] : null;
     // THE DIRECTION, NOT THE LEVEL (#552 COWORK #47): AXTI's typical −15.5%
     // beside a latest 21.9% had no chip, while revenue had "Growing".
     // EACH PERIOD AGAINST ITS YEAR-EARLIER MARGIN (#552 COWORK #187 §2): the
     // chip is the move most periods made, and the count is how many made it.
     // HSY read "Widening 8 of 8" while its margin fell; the old chip compared
     // only the latest with the typical and counted every period measured.
-    const deltas = view.margins.map((r) => r.operatingYoYpp).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
-    const newestDelta = view.margins.length ? view.margins[view.margins.length - 1].operatingYoYpp ?? null : null;
+    const deltaOf = (r: SecEarningsView["margins"][number]) => (r.notMeaningful?.operatingChange ? null : r.operatingYoYpp ?? null);
+    const deltas = view.margins.map(deltaOf).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+    const newestDelta = view.margins.length ? deltaOf(view.margins[view.margins.length - 1]) : null;
     const chip = deltas.length >= TREND_MIN_PERIODS
       ? modalTone(deltas.map((d) => toneForMarginDelta(d)), toneForMarginDelta(newestDelta), null)
       : null;
@@ -391,14 +398,17 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   // ("either not on file, or the comparison crosses...") on every filer that
   // skipped anything, which tells a reader with one missing margin and no
   // crossing something untrue about their own page.
-  const why =
+  const others = totalSkipped - notMeaningful;
+  const otherWhy =
     crossings === 0
       ? `the ${w.one} is not on file`
-      : crossings === totalSkipped
+      : crossings === others
         ? `the comparison crosses between profit and loss, where a percentage would be an artefact ` +
           `of the arithmetic rather than a rate of change`
         : `either the ${w.one} is not on file, or the comparison crosses between profit and loss, ` +
           `where a percentage would be an artefact of the arithmetic rather than a rate of change`;
+  const NM_WHY = "revenue was too small for a meaningful figure";
+  const why = notMeaningful === 0 ? otherWhy : others === 0 ? NM_WHY : `${otherWhy}; or ${NM_WHY}`;
   // RATES ONLY: a margin is a level, and "pace" is not a word for a level.
   const skewed = lines.some((l) =>
     l.kind === "rate" && l.value !== null && l.latest !== null && l.value - l.latest > TREND_SKEW_PP);

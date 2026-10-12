@@ -542,6 +542,61 @@ export const isPct = (v: Pct): v is number => typeof v === "number" && Number.is
 export const isCrossing = (v: Pct): v is PctCrossing =>
   typeof v === "string" && v in CROSSING_WORDS;
 
+// ── NOT MEANINGFUL ON A TINY BASE (#552 COWORK #212) ───────────────────────
+//
+// JOBY Q2 FY2026: $38.6M of revenue against $15k a year earlier printed
+// "+257,493.3%", and an operating margin change of "▲1,118,418.2 pt"; ACHR's
+// $5.0M of revenue an operating margin of "−5,584.0%". All arithmetically
+// right, none of them a rate a reader can use. Measured over every stored set
+// (CODE-A #229): these rules mark 73 latest periods, none in the top-200 cut.
+//
+// A DISPLAY RULE, NOT A DATA RULE. The view keeps every figure as filed and
+// carries a marker beside it; the score reads the figures and is unchanged
+// (owner ruling, #535 COWORK #23: large growth off a real base keeps scoring;
+// its own small-base floor is REVENUE_BASE_FLOOR_USD in secPresentation).
+// Dollar figures and EPS are never marked.
+
+/** Revenue under this (USD), now or a year earlier, carries no meaningful ratio. */
+export const NOT_MEANINGFUL_REVENUE_USD = 1_000_000;
+/** A growth rate or a margin beyond ±this (percent) is the same artefact on a larger base. */
+export const NOT_MEANINGFUL_PCT = 1_000;
+/** The tap note under an n/m growth figure. */
+export const NOT_MEANINGFUL_GROWTH_REASON = "Year-ago revenue was too small for a meaningful comparison";
+/** The tap note under an n/m margin, or an n/m margin change. */
+export const NOT_MEANINGFUL_MARGIN_REASON = "Revenue is too small for a meaningful margin";
+/** What every surface prints in place of the figure. */
+export const NOT_MEANINGFUL_TEXT = "n/m";
+
+const tinyRevenue = (usd: number | null | undefined) =>
+  typeof usd === "number" && Number.isFinite(usd) && usd > 0 && usd < NOT_MEANINGFUL_REVENUE_USD;
+
+/**
+ * Revenue growth that is not meaningful: the year-ago revenue (USD) is under
+ * NOT_MEANINGFUL_REVENUE_USD, or the rate is beyond ±NOT_MEANINGFUL_PCT. Only a
+ * number can be n/m — a crossing already says what happened instead.
+ */
+export function revenueGrowthNotMeaningful(growth: Pct, yearAgoRevenueUsd: number | null | undefined): boolean {
+  if (!isPct(growth)) return false;
+  return tinyRevenue(yearAgoRevenueUsd) || Math.abs(growth) > NOT_MEANINGFUL_PCT;
+}
+
+/** A margin that is not meaningful: its period's revenue (USD) is tiny, or it is beyond ±NOT_MEANINGFUL_PCT. */
+export function marginNotMeaningful(margin: number | null | undefined, revenueUsd: number | null | undefined): boolean {
+  if (typeof margin !== "number" || !Number.isFinite(margin)) return false;
+  return tinyRevenue(revenueUsd) || Math.abs(margin) > NOT_MEANINGFUL_PCT;
+}
+
+/** A margin's change in points is not meaningful when EITHER end's margin is not. */
+export function marginChangeNotMeaningful(
+  now: { margin: number | null | undefined; revenueUsd: number | null | undefined },
+  then: { margin: number | null | undefined; revenueUsd: number | null | undefined },
+): boolean {
+  return marginNotMeaningful(now.margin, now.revenueUsd) || marginNotMeaningful(then.margin, then.revenueUsd);
+}
+
+/** Per margin, and per margin change against the year-earlier period, whether it is n/m. */
+export type MarginsNotMeaningful = { gross: boolean; operating: boolean; net: boolean; grossChange: boolean; operatingChange: boolean };
+
 // ── the view ────────────────────────────────────────────────────────────────
 
 export type ViewCell = Cell & {
@@ -769,6 +824,8 @@ export type SecEarningsView = {
   snapshot: {
     revenue: ViewCell;
     revenueYoY: Pct;
+    /** TRUE when revenueYoY is a number that is not meaningful (#552 COWORK #212). Optional: hand-built views omit it. */
+    revenueYoYNotMeaningful?: boolean;
     epsDiluted: ViewCell;
     epsYoY: Pct;
     netIncome: ViewCell;
@@ -836,6 +893,8 @@ export type SecEarningsView = {
     net: number | null;
     /** TRUE when revenueLineIncomplete: the three margins are refused, by name. */
     marginsRefused: boolean;
+    /** Which of the figures print "n/m" (#552 COWORK #212). Optional: hand-built views omit it. */
+    notMeaningful?: MarginsNotMeaningful;
     /**
      * The operating margin against the same period a year earlier, in
      * percentage points. Null when either margin is absent or refused, or no
@@ -886,6 +945,8 @@ export type SecEarningsView = {
     comparedWith: string | null;
     revenue: ViewCell;
     revenueYoY: Pct;
+    /** TRUE when revenueYoY is a number that is not meaningful (#552 COWORK #212). Optional. */
+    revenueYoYNotMeaningful?: boolean;
     epsDiluted: ViewCell;
     epsYoY: Pct;
     gross: number | null;
@@ -893,6 +954,8 @@ export type SecEarningsView = {
     net: number | null;
     /** TRUE when revenueLineIncomplete: the three margins are refused, by name. */
     marginsRefused: boolean;
+    /** Which of the margins print "n/m" (#552 COWORK #212). Optional. */
+    notMeaningful?: MarginsNotMeaningful;
     /** The year's net income in dollars, as filed (#563 COWORK #36: the Years profit chart). */
     netIncome: ViewCell;
   }[];
@@ -901,6 +964,8 @@ export type SecEarningsView = {
     /** The period the percentages are measured against, or null when none is on file. */
     comparedWith: string | null;
     revenueYoY: Pct;
+    /** TRUE when revenueYoY is a number that is not meaningful (#552 COWORK #212). Optional. */
+    revenueYoYNotMeaningful?: boolean;
     epsYoY: Pct;
   }[];
   cashQuality: {
@@ -1155,6 +1220,29 @@ export function isConsecutive(newer: StoredPeriod, older: StoredPeriod): boolean
 
 const pctOf = (part: number | null, whole: number | null) =>
   part === null || whole === null || whole === 0 ? null : (part / whole) * 100;
+
+/**
+ * One period's n/m markers against its year-earlier period (#552 COWORK #212):
+ * the revenue growth, each margin, and the gross and operating changes. The
+ * $1M floor reads the USD figures (`valueOf(p)`); the growth rate is the one
+ * the view already computed, in the reporting currency.
+ */
+const periodNotMeaningful = (p: StoredPeriod, prior: StoredPeriod | null, revenueYoY: Pct) => {
+  const m = marginsOf(p), was = prior ? marginsOf(prior) : null;
+  const rev = valueOf(p, "revenue"), revBefore = prior ? valueOf(prior, "revenue") : null;
+  return {
+    revenueYoYNotMeaningful: revenueGrowthNotMeaningful(revenueYoY, revBefore),
+    notMeaningful: {
+      gross: marginNotMeaningful(m.gross, rev),
+      operating: marginNotMeaningful(m.operating, rev),
+      net: marginNotMeaningful(m.net, rev),
+      grossChange: was !== null && m.gross !== null && was.gross !== null
+        && marginChangeNotMeaningful({ margin: m.gross, revenueUsd: rev }, { margin: was.gross, revenueUsd: revBefore }),
+      operatingChange: was !== null && m.operating !== null && was.operating !== null
+        && marginChangeNotMeaningful({ margin: m.operating, revenueUsd: rev }, { margin: was.operating, revenueUsd: revBefore }),
+    } satisfies MarginsNotMeaningful,
+  };
+};
 
 /** The three margins of one period, or all three refused when its revenue line is incomplete. */
 const marginsOf = (p: StoredPeriod) => {
@@ -1426,7 +1514,7 @@ export function buildSecEarningsView(
   const rows = measured.filter((r) => hasSomething(r) && hasComparator(r)).slice(0, renderLimit);
   const shown = rows.map((r) => r.p);
 
-  const margins = rows.map(({ p, prior, gross, operating, net, marginsRefused }, i) => ({
+  const margins = rows.map(({ p, prior, gross, operating, net, marginsRefused, revenueYoY }, i) => ({
     label: periodLabel(p),
     // TRUE when the row OLDER than this one is not the immediately preceding
     // fiscal quarter. `shown` is newest-first, so the older neighbour is i + 1.
@@ -1440,6 +1528,7 @@ export function buildSecEarningsView(
     // filing is absent from the store or present with nothing in it.
     gapAfter: annualOnly ? false : shown[i + 1] ? !isConsecutive(p, shown[i + 1]) : false,
     gross, operating, net, marginsRefused,
+    notMeaningful: periodNotMeaningful(p, prior, revenueYoY).notMeaningful,
     // THE MARGIN'S OWN YEAR-ON-YEAR MOVE, in points (#552 COWORK #187 §2): the
     // trend card counts the periods that actually widened or narrowed, so it
     // needs each period against its year-earlier one, not the window's median.
@@ -1456,6 +1545,7 @@ export function buildSecEarningsView(
     // same wrong base was visible in one place and silent in the other.
     comparedWith: prior ? periodLabel(prior) : null,
     revenueYoY,
+    revenueYoYNotMeaningful: periodNotMeaningful(p, prior, revenueYoY).revenueYoYNotMeaningful,
     epsYoY,
   })).reverse();
 
@@ -1543,6 +1633,7 @@ export function buildSecEarningsView(
       epsYoY: yoy(valueOf(home(p), "epsDiluted"), valueOf(home(prior), "epsDiluted")),
       ...marginsOf(p),
       netIncome: view(p, "netIncome", "Net income"),
+      ...periodNotMeaningful(p, prior, yoy(valueOf(home(p), "revenue"), valueOf(home(prior), "revenue"))),
     };
   }).reverse();
 
@@ -1729,6 +1820,10 @@ export function buildSecEarningsView(
       // them on converted values would put the FX move in the headline while
       // the table below it read correctly.
       revenueYoY: yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
+      revenueYoYNotMeaningful: revenueGrowthNotMeaningful(
+        yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
+        valueOf(yearAgo, "revenue"),
+      ),
       epsDiluted: view(latest, "epsDiluted", `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(home(latest), "epsDiluted"), valueOf(home(yearAgo), "epsDiluted")),
       netIncome: view(latest, "netIncome", "Net income"),

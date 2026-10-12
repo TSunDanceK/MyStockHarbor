@@ -9,6 +9,7 @@ import { anyDerived, buildGrowthVisuals, introLine, marginMeans } from "@/lib/gr
 import {
   CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, INTEREST_IN_OTHER_INCOME, INTEREST_WITHIN_FILED_OTHER, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
   filingCreditText, filingNoticeText, isCrossing, periodWords, retiredSource,
+  NOT_MEANINGFUL_GROWTH_REASON, NOT_MEANINGFUL_MARGIN_REASON, NOT_MEANINGFUL_TEXT,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
 import {
@@ -307,10 +308,12 @@ const Q4_EPS_NOTE =
 /** A growth value that prints as a number; a crossing word or a missing value prints as words. */
 const isNumberPct = (v: Pct | undefined): boolean => typeof v === "number" && Number.isFinite(v);
 
-function PctCell({ v, missing, note }: { v: Pct | undefined; missing?: string | null; note?: string | null }) {
+function PctCell({ v, missing, note, notMeaningful }: { v: Pct | undefined; missing?: string | null; note?: string | null; notMeaningful?: boolean }) {
   // EVERY DOTTED WORD OPENS ITS NOTE (#552 COWORK #124 item 3): this was an
   // <abbr title> with a dotted underline, which a tap or click never opened.
   if (v != null && isCrossing(v)) return <ReasonedValue text={CROSSING_WORDS[v]} reason={CROSSING_NOTE} />;
+  // A RATE OFF A TINY BASE (#552 COWORK #212): JOBY's "+257,493.3%".
+  if (notMeaningful) return <NotMeaningfulValue reason={NOT_MEANINGFUL_GROWTH_REASON} />;
   if (v == null && missing) return <ReasonedValue text="—" reason={missing} style={MUTED_VALUE} />;
   return note ? <ReasonedValue text={pct(v)} reason={note} /> : <>{pct(v)}</>;
 }
@@ -359,6 +362,18 @@ const signTone = (v: number | null | undefined): EarningsTone | null =>
  */
 function NotMeaningful() {
   return <ReasonedValue text="Not meaningful" reason={EMPTY_REASONS.revenueIncomplete} style={MUTED_VALUE} />;
+}
+
+/** "n/m" with its reason on tap (#552 COWORK #212): a growth rate or margin off a tiny revenue base. */
+function NotMeaningfulValue({ reason }: { reason: string }) {
+  return <ReasonedValue text={NOT_MEANINGFUL_TEXT} reason={reason} style={MUTED_VALUE} />;
+}
+
+/** A table's margin cell: refused by name, n/m on a tiny base, or the level. */
+function MarginCell({ v, refused, notMeaningful }: { v: number | null; refused: boolean; notMeaningful?: boolean }) {
+  if (refused) return <NotMeaningful />;
+  if (notMeaningful) return <NotMeaningfulValue reason={NOT_MEANINGFUL_MARGIN_REASON} />;
+  return <>{pctLevel(v)}</>;
 }
 
 // A NEGATIVE CARRIES "−" (U+2212), not a hyphen (#563 COWORK #72): one minus sign
@@ -601,11 +616,11 @@ export function SecSnapshotCard({
             filer was a four-year-old quarter labelled "year over year". */}
         <Metric
           label="YoY revenue growth"
-          tone={toneForGrowth(s.revenueYoY)}
-          word={!isNumberPct(s.revenueYoY)}
+          tone={s.revenueYoYNotMeaningful ? null : toneForGrowth(s.revenueYoY)}
+          word={s.revenueYoYNotMeaningful || !isNumberPct(s.revenueYoY)}
           sub={s.comparedWith ? `Compared with ${s.comparedWith}` : undefined}
         >
-          <PctCell v={s.revenueYoY} missing={s.comparedWith ? null : `Prior-year ${w.one} not on file.`} />
+          <PctCell v={s.revenueYoY} missing={s.comparedWith ? null : `Prior-year ${w.one} not on file.`} notMeaningful={s.revenueYoYNotMeaningful} />
         </Metric>
         <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)} word={s.epsDiluted.val == null}>
           <CellValue cell={s.epsDiluted} empty={epsEmpty(view, view.latestLabel)} />
@@ -694,6 +709,15 @@ function MarginDelta({ view }: { view: SecEarningsView }) {
   if (!latest || base === null) return null;
   const prior = view.margins.find((m) => m.label === base);
   if (!prior || latest.operating === null || prior.operating === null) return null;
+  // OFF A TINY BASE, NO MOVE IS STATED (#552 COWORK #212): JOBY's
+  // "▲1,118,418.2 pt" was a margin on $15k of year-ago revenue.
+  if (latest.notMeaningful?.operatingChange) {
+    return (
+      <p className="earningsDataNote" data-margin-change-nm="">
+        Operating margin vs <strong>{base}</strong>: <NotMeaningfulValue reason={NOT_MEANINGFUL_MARGIN_REASON} />
+      </p>
+    );
+  }
   const pp = latest.operating - prior.operating;
   const tone = toneForMarginDelta(pp);
   // ONE LINE: the two margins, the move, the word. The sentence that followed
@@ -813,7 +837,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                     comparator and this table did not, so the same wrong base
                     was visible in one place and silent in the other. */}
                 <td data-label="Compared with">{view.growth[i]?.comparedWith ?? "not on file"}</td>
-                <td data-label="Revenue YoY"><PctCell v={view.growth[i]?.revenueYoY} /></td>
+                <td data-label="Revenue YoY"><PctCell v={view.growth[i]?.revenueYoY} notMeaningful={view.growth[i]?.revenueYoYNotMeaningful} /></td>
                 {/* A BLANK Q4 EPS IS NOT A GAP IN THE DATA. Q4 is never filed
                     as a standalone three-month frame, and this page refuses to
                     invent one (no 4·FY − 3·9M, no ratio against another
@@ -826,9 +850,9 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                     <PctCell v={view.growth[i]?.epsYoY} />
                   )}
                 </td>
-                <td data-label="Gross margin">{m.marginsRefused ? <NotMeaningful /> : pctLevel(m.gross)}</td>
-                <td data-label="Operating margin">{m.marginsRefused ? <NotMeaningful /> : pctLevel(m.operating)}</td>
-                <td data-label="Net margin">{m.marginsRefused ? <NotMeaningful /> : pctLevel(m.net)}</td>
+                <td data-label="Gross margin"><MarginCell v={m.gross} refused={m.marginsRefused} notMeaningful={m.notMeaningful?.gross} /></td>
+                <td data-label="Operating margin"><MarginCell v={m.operating} refused={m.marginsRefused} notMeaningful={m.notMeaningful?.operating} /></td>
+                <td data-label="Net margin"><MarginCell v={m.net} refused={m.marginsRefused} notMeaningful={m.notMeaningful?.net} /></td>
               </tr>
             ))}
           </tbody>
@@ -920,12 +944,12 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
                     768px card (owner review of #523). The quarterly table keeps
                     it, where a gap row makes the comparator informative. */}
                 <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
-                <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} /></td>
+                <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} notMeaningful={r.revenueYoYNotMeaningful} /></td>
                 <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} short empty={epsEmpty(view, r.label)} /></td>
                 <td data-label="EPS YoY" className="colCross"><PctCell v={r.epsYoY} /></td>
-                <td data-label="Gross margin">{r.marginsRefused ? <NotMeaningful /> : pctLevel(r.gross)}</td>
-                <td data-label="Operating margin">{r.marginsRefused ? <NotMeaningful /> : pctLevel(r.operating)}</td>
-                <td data-label="Net margin">{r.marginsRefused ? <NotMeaningful /> : pctLevel(r.net)}</td>
+                <td data-label="Gross margin"><MarginCell v={r.gross} refused={r.marginsRefused} notMeaningful={r.notMeaningful?.gross} /></td>
+                <td data-label="Operating margin"><MarginCell v={r.operating} refused={r.marginsRefused} notMeaningful={r.notMeaningful?.operating} /></td>
+                <td data-label="Net margin"><MarginCell v={r.net} refused={r.marginsRefused} notMeaningful={r.notMeaningful?.net} /></td>
               </tr>
             ))}
           </tbody>
