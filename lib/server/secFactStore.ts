@@ -14,6 +14,7 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { SEC_FACTS_EMPTY_KEY, SEC_FACTS_INDEX_KEY, SEC_FACTS_PREFIX, dotDashSpellings } from "./secManifest";
 import { secFieldsHash } from "./secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
+import { flushRedisReadMeterThrottled, recordRedisRead } from "./redisBandwidth";
 import type { StoredFactSet } from "./secFactCodec";
 
 export * from "./secFactCodec";
@@ -33,7 +34,15 @@ export const factKey = (symbol: string) => `${SEC_FACTS_PREFIX}:${symbol.toUpper
  * All three mean "this page has no SEC data to render", and the page's job is to
  * say so rather than to render zeroes.
  */
-export async function readFactSet(symbol: string): Promise<StoredFactSet | null> {
+export async function readFactSet(
+  symbol: string,
+  /**
+   * Who read it, for the bandwidth meter (#553 CODE-B #182): `[a-z0-9-]`.
+   * THE STOCK PAGE IS THE DEFAULT: its render path (secColdFetch) is the
+   * caller that reads on every request; every job passes its own name.
+   */
+  caller = "stock-page",
+): Promise<StoredFactSet | null> {
   if (!redis) return null;
   try {
     // DOT OR DASH, WHICHEVER IT WAS WRITTEN UNDER (#552 COWORK #147 1a). A set
@@ -48,6 +57,11 @@ export async function readFactSet(symbol: string): Promise<StoredFactSet | null>
       if (raw) break;
     }
     if (!raw || typeof raw !== "object") return null;
+    // METERED ON A HIT (#552 COWORK #213 item 5, B's request in #553 CODE-B
+    // #182): ~17 KB a symbol on every stock-page render, which B's meter could
+    // not see from here. Throttled flush, as the news and Tiingo reads do.
+    await recordRedisRead("sec-facts", 1, caller);
+    await flushRedisReadMeterThrottled();
     // THE GATE. Not a warning, not a best-effort decode: a mismatch means the
     // positional arrays mean something else, and reading them anyway is the
     // silent-wrong-number failure this whole design is built against.

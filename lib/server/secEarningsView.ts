@@ -562,6 +562,12 @@ export const NOT_MEANINGFUL_REVENUE_USD = 1_000_000;
 export const NOT_MEANINGFUL_PCT = 1_000;
 /** The tap note under an n/m growth figure. */
 export const NOT_MEANINGFUL_GROWTH_REASON = "Year-ago revenue was too small for a meaningful comparison";
+/**
+ * The tap note when the year-earlier period is on file with NO revenue (zero,
+ * or none tagged) and this period has some (#552 COWORK #213 item 3): "Turned
+ * profitable" is profit's word, and a revenue column must not borrow it.
+ */
+export const NOT_MEANINGFUL_NO_BASE_REASON = "No revenue a year earlier";
 /** The tap note under an n/m margin, or an n/m margin change. */
 export const NOT_MEANINGFUL_MARGIN_REASON = "Revenue is too small for a meaningful margin";
 /** What every surface prints in place of the figure. */
@@ -578,6 +584,24 @@ const tinyRevenue = (usd: number | null | undefined) =>
 export function revenueGrowthNotMeaningful(growth: Pct, yearAgoRevenueUsd: number | null | undefined): boolean {
   if (!isPct(growth)) return false;
   return tinyRevenue(yearAgoRevenueUsd) || Math.abs(growth) > NOT_MEANINGFUL_PCT;
+}
+
+/**
+ * WHY a revenue growth figure prints "n/m", or null when it stands (#552
+ * COWORK #213): no revenue in a year-earlier period that IS on file (ACHR's $0,
+ * JOBY's FY2023 from about $0), else the tiny-base rule above. The view keeps
+ * its Pct as computed — a crossing word included — so the score reads what it
+ * always read; every surface shows the reason instead.
+ */
+export function revenueGrowthNotMeaningfulReason(
+  growth: Pct,
+  nowRevenueUsd: number | null | undefined,
+  yearAgoRevenueUsd: number | null | undefined,
+  yearAgoOnFile: boolean,
+): string | null {
+  const now = typeof nowRevenueUsd === "number" && Number.isFinite(nowRevenueUsd) && nowRevenueUsd > 0;
+  if (yearAgoOnFile && now && (yearAgoRevenueUsd == null || yearAgoRevenueUsd === 0)) return NOT_MEANINGFUL_NO_BASE_REASON;
+  return revenueGrowthNotMeaningful(growth, yearAgoRevenueUsd) ? NOT_MEANINGFUL_GROWTH_REASON : null;
 }
 
 /** A margin that is not meaningful: its period's revenue (USD) is tiny, or it is beyond ±NOT_MEANINGFUL_PCT. */
@@ -824,8 +848,10 @@ export type SecEarningsView = {
   snapshot: {
     revenue: ViewCell;
     revenueYoY: Pct;
-    /** TRUE when revenueYoY is a number that is not meaningful (#552 COWORK #212). Optional: hand-built views omit it. */
+    /** TRUE when revenueYoY prints "n/m" (#552 COWORK #212/#213). Optional: hand-built views omit it. */
     revenueYoYNotMeaningful?: boolean;
+    /** Why, when it does: revenueGrowthNotMeaningfulReason. */
+    revenueYoYNotMeaningfulReason?: string | null;
     epsDiluted: ViewCell;
     epsYoY: Pct;
     netIncome: ViewCell;
@@ -945,8 +971,9 @@ export type SecEarningsView = {
     comparedWith: string | null;
     revenue: ViewCell;
     revenueYoY: Pct;
-    /** TRUE when revenueYoY is a number that is not meaningful (#552 COWORK #212). Optional. */
+    /** TRUE when revenueYoY prints "n/m" (#552 COWORK #212/#213). Optional. */
     revenueYoYNotMeaningful?: boolean;
+    revenueYoYNotMeaningfulReason?: string | null;
     epsDiluted: ViewCell;
     epsYoY: Pct;
     gross: number | null;
@@ -964,8 +991,9 @@ export type SecEarningsView = {
     /** The period the percentages are measured against, or null when none is on file. */
     comparedWith: string | null;
     revenueYoY: Pct;
-    /** TRUE when revenueYoY is a number that is not meaningful (#552 COWORK #212). Optional. */
+    /** TRUE when revenueYoY prints "n/m" (#552 COWORK #212/#213). Optional. */
     revenueYoYNotMeaningful?: boolean;
+    revenueYoYNotMeaningfulReason?: string | null;
     epsYoY: Pct;
   }[];
   cashQuality: {
@@ -1230,8 +1258,10 @@ const pctOf = (part: number | null, whole: number | null) =>
 const periodNotMeaningful = (p: StoredPeriod, prior: StoredPeriod | null, revenueYoY: Pct) => {
   const m = marginsOf(p), was = prior ? marginsOf(prior) : null;
   const rev = valueOf(p, "revenue"), revBefore = prior ? valueOf(prior, "revenue") : null;
+  const reason = revenueGrowthNotMeaningfulReason(revenueYoY, rev, revBefore, prior !== null);
   return {
-    revenueYoYNotMeaningful: revenueGrowthNotMeaningful(revenueYoY, revBefore),
+    revenueYoYNotMeaningful: reason !== null,
+    revenueYoYNotMeaningfulReason: reason,
     notMeaningful: {
       gross: marginNotMeaningful(m.gross, rev),
       operating: marginNotMeaningful(m.operating, rev),
@@ -1546,6 +1576,7 @@ export function buildSecEarningsView(
     comparedWith: prior ? periodLabel(prior) : null,
     revenueYoY,
     revenueYoYNotMeaningful: periodNotMeaningful(p, prior, revenueYoY).revenueYoYNotMeaningful,
+    revenueYoYNotMeaningfulReason: periodNotMeaningful(p, prior, revenueYoY).revenueYoYNotMeaningfulReason,
     epsYoY,
   })).reverse();
 
@@ -1820,10 +1851,15 @@ export function buildSecEarningsView(
       // them on converted values would put the FX move in the headline while
       // the table below it read correctly.
       revenueYoY: yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
-      revenueYoYNotMeaningful: revenueGrowthNotMeaningful(
-        yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
-        valueOf(yearAgo, "revenue"),
-      ),
+      ...(() => {
+        const reason = revenueGrowthNotMeaningfulReason(
+          yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
+          valueOf(latest, "revenue"),
+          valueOf(yearAgo, "revenue"),
+          yearAgo !== null,
+        );
+        return { revenueYoYNotMeaningful: reason !== null, revenueYoYNotMeaningfulReason: reason };
+      })(),
       epsDiluted: view(latest, "epsDiluted", `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(home(latest), "epsDiluted"), valueOf(home(yearAgo), "epsDiluted")),
       netIncome: view(latest, "netIncome", "Net income"),

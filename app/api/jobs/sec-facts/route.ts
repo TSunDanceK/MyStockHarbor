@@ -653,7 +653,7 @@ export async function GET(req: NextRequest) {
       const fresh = await toStoredSet(extracted, defaultSources(), fxSeriesThisRun);
       const rates = identityRates(checkIdentities(extracted));
 
-      const prior = await readFactSet(symbol);
+      const prior = await readFactSet(symbol, "sec-facts-job");
       // ── A PERIOD READ FROM THE FILING IS NOT OVERWRITTEN BY A FEED THAT
       // STILL LACKS IT (#535 COWORK #6). While companyfacts is behind the
       // recorded lag, the stored set (with its filled period) stands; once the
@@ -865,7 +865,7 @@ export async function GET(req: NextRequest) {
       if (!cik) continue;
       reportDates.attempted++;
       try {
-        const set = setsThisRun.get(symbol) ?? (await readFactSet(symbol));
+        const set = setsThisRun.get(symbol) ?? (await readFactSet(symbol, "sec-facts-job"));
         // NO FACT SET, NO PERIOD ENDS, NO MATCHING. Fetching submissions for a
         // symbol whose periods are unknown would produce events with a null
         // period every time — rows that cannot be charted and cannot be

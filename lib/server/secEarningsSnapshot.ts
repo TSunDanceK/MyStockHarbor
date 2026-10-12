@@ -272,7 +272,7 @@ export function notMeaningfulOf(view: SecEarningsView): SnapshotNotMeaningful {
   const m = view.margins.at(-1)?.notMeaningful;
   const margin = (on: boolean | undefined) => (on ? NOT_MEANINGFUL_MARGIN_REASON : null);
   return {
-    revenueYoY: view.snapshot.revenueYoYNotMeaningful ? NOT_MEANINGFUL_GROWTH_REASON : null,
+    revenueYoY: view.snapshot.revenueYoYNotMeaningful ? view.snapshot.revenueYoYNotMeaningfulReason ?? NOT_MEANINGFUL_GROWTH_REASON : null,
     gross: margin(m?.gross),
     operating: margin(m?.operating),
     net: margin(m?.net),

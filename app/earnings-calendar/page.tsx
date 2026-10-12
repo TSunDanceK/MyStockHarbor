@@ -277,7 +277,8 @@ export default async function EarningsCalendarPage({
           revenue: f && f.revenue !== null ? scaledAmount(f.revenue) : null,
           revenueYoY: f?.revenueYoY ?? null,
           // OFF A TINY BASE (#552 COWORK #212): "n/m", with why on tap.
-          revenueYoYNote: f?.revenueYoYNotMeaningful ? NOT_MEANINGFUL_GROWTH_REASON : null,
+          revenueYoYNote: typeof f?.revenueYoYNotMeaningful === "string" ? f.revenueYoYNotMeaningful
+            : f?.revenueYoYNotMeaningful ? NOT_MEANINGFUL_GROWTH_REASON : null,
           eps: f && f.epsDiluted !== null ? signed$(f.epsDiluted) : null,
           since: sharesSince(before && before.d ? { date: before.d, close: before.c } : null, last ? { date: last.d, close: last.c } : null),
         };
