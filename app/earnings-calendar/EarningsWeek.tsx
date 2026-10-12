@@ -11,6 +11,7 @@ import { useState } from "react";
 import type React from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import BackfillButton from "./BackfillButton";
+import { ReasonedValue } from "@/app/components/EstimatedValue";
 
 export type WeekRow = {
   symbol: string;
@@ -19,6 +20,8 @@ export type WeekRow = {
   revenue: string | null;
   /** % vs the same period a year earlier, or null (no comparable period). */
   revenueYoY: number | null;
+  /** Set when revenueYoY is off a tiny base: it prints "n/m" and this on tap (#552 COWORK #212). */
+  revenueYoYNote?: string | null;
   /** "$1.42", diluted, as filed. */
   eps: string | null;
   /** % from the last close before the filing to the latest close. */
@@ -100,7 +103,8 @@ export default function EarningsWeek({ days, initial, credit = null, backfill = 
               <span role="cell" className="ewNum" data-revenue="">
                 {r.revenue ?? "—"}
                 {/* NO COMPARABLE QUARTER: the YoY reads "—", never a guess. */}
-                {r.revenue ? <span className="ewYoY" data-yoy="" style={{ color: toneOf(r.revenueYoY) }}>{r.revenueYoY === null ? "—" : signedPct(r.revenueYoY)}</span> : null}
+                {r.revenue && r.revenueYoYNote ? <span className="ewYoY" data-yoy="" data-nm=""><ReasonedValue text="n/m" reason={r.revenueYoYNote} /></span>
+                  : r.revenue ? <span className="ewYoY" data-yoy="" style={{ color: toneOf(r.revenueYoY) }}>{r.revenueYoY === null ? "—" : signedPct(r.revenueYoY)}</span> : null}
               </span>
               <span role="cell" className="ewNum ewWide" data-eps="">{r.eps ?? "—"}</span>
               <span role="cell" className="ewNum ewWide" data-since="" style={{ color: toneOf(r.since) }}>{r.since === null ? "—" : signedPct(r.since)}</span>

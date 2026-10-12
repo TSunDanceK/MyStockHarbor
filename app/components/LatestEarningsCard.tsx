@@ -104,6 +104,13 @@ function formatPlainDate(value: string | null | undefined) {
  * reads as "we don't know", where the truth is "we know exactly what happened
  * and a percentage would misdescribe it". See SnapshotPct.
  */
+/**
+ * "n/m" (#552 COWORK #212). The same text as secEarningsView's
+ * NOT_MEANINGFUL_TEXT, written here because this card takes only types from
+ * lib/server; the reasons come with the payload (snapshot.notMeaningful).
+ */
+const NOT_MEANINGFUL = "n/m";
+
 function growthText(p: SnapshotPct): string | null {
   if (p.kind === "pct") return formatGrowth(p.value);
   if (p.kind === "crossing") return p.words;
@@ -202,6 +209,17 @@ export default function LatestEarningsCard({
   const epsVs = epsVsYearAgo(snapshot.eps.value, ya ? ya.eps : null, perShare);
   const grossVs = marginVsYearAgo(snapshot.margins.gross, ya ? ya.gross : null, ya?.label);
   const opVs = marginVsYearAgo(snapshot.margins.operating, ya ? ya.operating : null, ya?.label);
+  // OFF A TINY REVENUE BASE (#552 COWORK #212): the figure prints "n/m" and the
+  // tile's line says why, uncoloured. Absent on an older payload: nothing is n/m.
+  const nm = snapshot.notMeaningful ?? null;
+  const marginTile = (v: number | null, own: string | null | undefined, change: string | null | undefined, vs: { words: string | null; tone: VsTone }, refused: string | null) => ({
+    value: own ? NOT_MEANINGFUL : formatLevel(v),
+    loss: own ? false : isLoss(v),
+    meta: refused ?? own ?? (change ? `${NOT_MEANINGFUL} vs ${ya?.label ?? "a year ago"}: ${change.charAt(0).toLowerCase()}${change.slice(1)}` : vs.words),
+    tone: refused || own || change ? undefined : toneOf(vs.tone),
+  });
+  const grossTile = marginTile(snapshot.margins.gross, nm?.gross, nm?.grossChange, grossVs, snapshot.marginReasons.gross);
+  const opTile = marginTile(snapshot.margins.operating, nm?.operating, nm?.operatingChange, opVs, snapshot.marginReasons.operating);
   return (
     <section className="snapshotMetricsWrap" style={earningsCardStyle(tone, verdict)}>
       <div style={sectionEyebrowStyle}>Latest earnings</div>
@@ -353,8 +371,8 @@ export default function LatestEarningsCard({
                 <EarningsMetric
                   label="Revenue"
                   value={formatFigure(snapshot.revenue)}
-                  meta={snapshot.revenue.emptyReason ?? growthText(snapshot.revenueYoY)}
-                  tone={snapshot.revenue.emptyReason ? undefined : growthTone(snapshot.revenueYoY)}
+                  meta={snapshot.revenue.emptyReason ?? (nm?.revenueYoY ? `${NOT_MEANINGFUL} y/y: ${nm.revenueYoY}` : growthText(snapshot.revenueYoY))}
+                  tone={snapshot.revenue.emptyReason || nm?.revenueYoY ? undefined : growthTone(snapshot.revenueYoY)}
                   note={snapshot.revenue.derivedNote}
                 />
                 <EarningsMetric
@@ -366,10 +384,10 @@ export default function LatestEarningsCard({
               </>
             ) : null}
             {/* Up or down by at least 0.5 pt against the year-ago quarter: green or red; between, uncoloured. */}
-            <EarningsMetric label="Gross margin" value={formatLevel(snapshot.margins.gross)} loss={isLoss(snapshot.margins.gross)} meta={snapshot.marginReasons.gross ?? grossVs.words} tone={snapshot.marginReasons.gross ? undefined : toneOf(grossVs.tone)} />
-            <EarningsMetric label="Operating margin" value={formatLevel(snapshot.margins.operating)} loss={isLoss(snapshot.margins.operating)} meta={snapshot.marginReasons.operating ?? opVs.words} tone={snapshot.marginReasons.operating ? undefined : toneOf(opVs.tone)} />
+            <EarningsMetric label="Gross margin" value={grossTile.value} loss={grossTile.loss} meta={grossTile.meta} tone={grossTile.tone} />
+            <EarningsMetric label="Operating margin" value={opTile.value} loss={opTile.loss} meta={opTile.meta} tone={opTile.tone} />
             {SHOW_CHARTED_METRIC_TILES ? (
-              <EarningsMetric label="Net margin" value={formatLevel(snapshot.margins.net)} loss={isLoss(snapshot.margins.net)} meta={snapshot.marginReasons.net} />
+              <EarningsMetric label="Net margin" value={nm?.net ? NOT_MEANINGFUL : formatLevel(snapshot.margins.net)} loss={nm?.net ? false : isLoss(snapshot.margins.net)} meta={snapshot.marginReasons.net ?? nm?.net} />
             ) : null}
           </div>
 

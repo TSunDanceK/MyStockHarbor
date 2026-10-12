@@ -132,7 +132,8 @@ const MUTANTS = [
   ["the same bands", (s) => once('good: "rgba(34,197,94,0.08)"', 'good: "rgba(34,197,94,0.2)"')(s)],
   ["the year-ago figures", (s) => once("const m = view.margins.find((r) => r.label === label && !r.marginsRefused) ?? null;", "const m = view.margins.at(-1) ?? null;")(s)],
   ["the tiles:", (s) => once("const tint = tone === \"good\" || tone === \"weak\" ? VS_TINT[tone] : null;", "const tint = null as string | null;")(s)],
-  ["the tiles:", (s) => once("meta={snapshot.marginReasons.gross ?? grossVs.words} tone={snapshot.marginReasons.gross ? undefined : toneOf(grossVs.tone)}", "meta={snapshot.marginReasons.gross}")(s)],
+  // The gross tile's year-ago words and tint come through marginTile since #552 COWORK #212.
+  ["the tiles:", (s) => once("const grossTile = marginTile(snapshot.margins.gross, nm?.gross, nm?.grossChange, grossVs, snapshot.marginReasons.gross);", "const grossTile = marginTile(snapshot.margins.gross, nm?.gross, nm?.grossChange, { words: null, tone: null }, snapshot.marginReasons.gross);")(s)],
   ["the partial-score", (s) => once('<details data-snapshot-partial="" style={earningsHowStyle}>\n          <summary style={partialSummaryStyle}>{partialLine(snapshot.toneLabel)}</summary>\n          <div style={earningsHowBodyStyle}>{snapshot.partialNote}</div>\n        </details>', "<div style={earningsFootnoteStyle}>{snapshot.partialNote}</div>")(s)],
   ["the chart to", (s) => once("const CHART_PAD_L = 2;", "const CHART_PAD_L = 58;")(s)],
   // The floor stretched to the margin scale's ratio again: -$175B for INTC.

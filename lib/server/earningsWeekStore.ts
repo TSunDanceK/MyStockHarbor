@@ -120,6 +120,7 @@ export async function fillWeekFigures(
             end: v.latestEnd ?? null,
             revenue: num(v.snapshot.revenue.val),
             revenueYoY: num(v.snapshot.revenueYoY),
+            revenueYoYNotMeaningful: v.snapshot.revenueYoYNotMeaningful,
             epsDiluted: num(v.snapshot.epsDiluted.val),
           });
         }

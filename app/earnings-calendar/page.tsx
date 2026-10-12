@@ -24,6 +24,7 @@ import { registrantFor } from "@/lib/server/stockProfile";
 import { isProductionDeployment } from "@/lib/server/deployTarget";
 import { gridAdmits, gridCompanyName } from "@/lib/server/secTickerNames";
 import { fillWeekFigures, readWeekFigures } from "@/lib/server/earningsWeekStore";
+import { NOT_MEANINGFUL_GROWTH_REASON } from "@/lib/server/secEarningsView";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsWeek, { type WeekDay, type WeekRow } from "./EarningsWeek";
 import EarningsComingUp, { type ComingUpFacts } from "./EarningsComingUp";
@@ -275,6 +276,8 @@ export default async function EarningsCalendarPage({
           company: c.company,
           revenue: f && f.revenue !== null ? scaledAmount(f.revenue) : null,
           revenueYoY: f?.revenueYoY ?? null,
+          // OFF A TINY BASE (#552 COWORK #212): "n/m", with why on tap.
+          revenueYoYNote: f?.revenueYoYNotMeaningful ? NOT_MEANINGFUL_GROWTH_REASON : null,
           eps: f && f.epsDiluted !== null ? signed$(f.epsDiluted) : null,
           since: sharesSince(before && before.d ? { date: before.d, close: before.c } : null, last ? { date: last.d, close: last.c } : null),
         };
