@@ -9,7 +9,8 @@ import TickerLogo from "@/app/components/TickerLogo";
 import { chartHref } from "@/lib/chartHref";
 import { TiingoLink } from "@/app/components/TiingoCredit";
 import type { BottleneckCompany, BottleneckPost } from "@/lib/bottlenecks";
-import type { BottleneckPageData, Move } from "@/lib/server/bottleneckPage";
+import type { BottleneckPageData, FiledRow, Move } from "@/lib/server/bottleneckPage";
+import { NOT_MEANINGFUL_TEXT } from "@/lib/server/secEarningsView";
 import { GRADE_WORDS, initials, mapSide, unlistedWords, type FaqItem, type Meter } from "@/lib/bottleneckPage";
 import BottleneckMap from "./BottleneckMap";
 
@@ -177,12 +178,7 @@ export default function BottleneckView({ post, name, data: d, supplierMeter, cus
         {d.filed ? (
           <section className="bnCard" data-filed="">
             <h2 className="bnH3">From the filings</h2>
-            <dl className="bnFiled">
-              <div><dt>Revenue, {d.filed.period}</dt><dd>{d.filed.revenue}{d.filed.revenueYoY !== null ? <span className="bnMove" data-tone={toneOf(d.filed.revenueYoY)}> {pct(d.filed.revenueYoY)} y/y</span> : null}</dd></div>
-              {d.filed.gross !== null ? <div><dt>Gross margin</dt><dd>{d.filed.gross.toFixed(1)}%{d.filed.grossPts !== null ? <span className="bnMove" data-tone={toneOf(d.filed.grossPts)}> {d.filed.grossPts > 0 ? "+" : d.filed.grossPts < 0 ? "−" : ""}{Math.abs(d.filed.grossPts).toFixed(1)} pt y/y</span> : null}</dd></div> : null}
-              {d.filed.cogs ? <div><dt>Cost of sales</dt><dd>{d.filed.cogs}</dd></div> : null}
-            </dl>
-            <p className="bnFine" data-fine-print="">From its own SEC filings{d.filed.cogs ? "; cost of sales is revenue less gross profit" : ""}.</p>
+            <FiledFigures filed={d.filed} />
             {d.hasFiledEarnings[sym] ? <Link href={`/stock/${encodeURIComponent(sym)}/earnings`} prefetch={false} className="bnLink" data-earnings-link="">{sym} filed earnings →</Link> : null}
           </section>
         ) : null}
@@ -218,4 +214,31 @@ export default function BottleneckView({ post, name, data: d, supplierMeter, cus
       </nav>
     </div>
   );
+}
+
+/** "From the filings": the figures and their fine print (exported for scripts/check-nm-c-surfaces.mjs). */
+export function FiledFigures({ filed }: { filed: FiledRow }) {
+  return (
+    <>
+      <dl className="bnFiled">
+        {/* n/m (#563 COWORK #178, A's rule): no number, no tone; the reason is in the fine print below. */}
+        <div><dt>Revenue, {filed.period}</dt><dd>{filed.revenue}{filed.notMeaningful.revenueYoY ? <span className="bnMove" data-nm=""> {NOT_MEANINGFUL_TEXT} y/y</span> : filed.revenueYoY !== null ? <span className="bnMove" data-tone={toneOf(filed.revenueYoY)}> {pct(filed.revenueYoY)} y/y</span> : null}</dd></div>
+        {filed.notMeaningful.gross ? <div><dt>Gross margin</dt><dd data-nm="">{NOT_MEANINGFUL_TEXT}</dd></div>
+          : filed.gross !== null ? <div><dt>Gross margin</dt><dd>{filed.gross.toFixed(1)}%{filed.notMeaningful.grossPts ? <span className="bnMove" data-nm=""> {NOT_MEANINGFUL_TEXT} y/y</span> : filed.grossPts !== null ? <span className="bnMove" data-tone={toneOf(filed.grossPts)}> {filed.grossPts > 0 ? "+" : filed.grossPts < 0 ? "−" : ""}{Math.abs(filed.grossPts).toFixed(1)} pt y/y</span> : null}</dd></div> : null}
+        {filed.cogs ? <div><dt>Cost of sales</dt><dd>{filed.cogs}</dd></div> : null}
+      </dl>
+      <p className="bnFine" data-fine-print="">From its own SEC filings{filed.cogs ? "; cost of sales is revenue less gross profit" : ""}.{nmNotes(filed.notMeaningful).map((t) => <span key={t} data-nm-reason=""> {t}.</span>)}</p>
+    </>
+  );
+}
+
+/** The fine print's n/m lines (#563 COWORK #178): "Revenue growth: n/m, {A's reason}", each reason once. */
+function nmNotes(nm: { revenueYoY: string | null; gross: string | null; grossPts: string | null }): string[] {
+  const out: string[] = [];
+  const say = (what: string, reason: string | null) => {
+    if (reason && !out.some((t) => t.endsWith(reason.charAt(0).toLowerCase() + reason.slice(1)))) out.push(`${what}: ${NOT_MEANINGFUL_TEXT}, ${reason.charAt(0).toLowerCase()}${reason.slice(1)}`);
+  };
+  say("Revenue growth", nm.revenueYoY);
+  say("Gross margin", nm.gross ?? nm.grossPts);
+  return out;
 }

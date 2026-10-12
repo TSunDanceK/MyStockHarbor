@@ -23,7 +23,7 @@
 // filedEarningsGate(). The filings card reads only for a symbol that passes it.
 import { unstable_cache } from "next/cache";
 import { readTiingoEodLast } from "@/lib/server/marketData/read";
-import { getSecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
+import { getSecEarningsSnapshot, type SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
 import { cikForSymbol } from "@/lib/server/secColdFetch";
 import { filedEarningsGate } from "@/lib/server/filedEarnings";
 import { sectorOf } from "@/lib/server/sectorOf";
@@ -35,29 +35,44 @@ import { toDashed } from "@/lib/symbolSpellings.mjs";
 export type Move = { close: number; changePct: number | null; date: string };
 
 /** Filed figures for the "From the filings" card, or null to hide it. */
-export type FiledRow = { period: string; revenue: string; revenueYoY: number | null; gross: number | null; grossPts: number | null; cogs: string | null };
+export type FiledRow = {
+  period: string; revenue: string; revenueYoY: number | null; gross: number | null; grossPts: number | null; cogs: string | null;
+  /**
+   * A's n/m reasons (#563 COWORK #178; A's rule, #552 COWORK #212): set where A
+   * marks the figure, which then prints NOT_MEANINGFUL_TEXT instead of a number.
+   * The dollar figures are never marked.
+   */
+  notMeaningful: { revenueYoY: string | null; gross: string | null; grossPts: string | null };
+};
 
 const money = (v: number) => {
   const a = Math.abs(v), s = v < 0 ? "-" : "";
   return a >= 1e9 ? `${s}$${(a / 1e9).toFixed(1)}bn` : a >= 1e6 ? `${s}$${(a / 1e6).toFixed(0)}m` : `${s}$${a.toFixed(0)}`;
 };
 
+/** The "From the filings" row from A's snapshot, or null to hide the card. Pure (scripts/check-nm-c-surfaces.mjs runs it). */
+export function filedRowOf(s: SecEarningsSnapshot | null): FiledRow | null {
+  if (!s?.available || s.basis !== "quarter" || typeof s.revenue?.value !== "number") return null;
+  const rev = s.revenue.value, g = s.margins.gross, nm = s.notMeaningful ?? null;
+  return {
+    period: s.periodLabel ?? "Latest quarter",
+    revenue: money(rev),
+    revenueYoY: s.revenueYoY?.kind === "pct" && !nm?.revenueYoY ? s.revenueYoY.value : null,
+    gross: typeof g === "number" && !nm?.gross ? g : null,
+    grossPts: typeof g === "number" && typeof s.yearAgo?.gross === "number" && !nm?.gross && !nm?.grossChange ? Math.round((g - s.yearAgo.gross) * 10) / 10 : null,
+    // Computed, and labelled so: revenue less gross profit.
+    cogs: typeof g === "number" ? money(rev * (1 - g / 100)) : null,
+    notMeaningful: {
+      revenueYoY: s.revenueYoY?.kind === "pct" ? nm?.revenueYoY ?? null : null,
+      gross: typeof g === "number" ? nm?.gross ?? null : null,
+      grossPts: typeof g === "number" && !nm?.gross ? nm?.grossChange ?? null : null,
+    },
+  };
+}
+
 const readFiled = (symbol: string) => unstable_cache(
-  async (): Promise<FiledRow | null> => {
-    const s = await getSecEarningsSnapshot(symbol).catch(() => null);
-    if (!s?.available || s.basis !== "quarter" || typeof s.revenue?.value !== "number") return null;
-    const rev = s.revenue.value, g = s.margins.gross;
-    return {
-      period: s.periodLabel ?? "Latest quarter",
-      revenue: money(rev),
-      revenueYoY: s.revenueYoY?.kind === "pct" ? s.revenueYoY.value : null,
-      gross: typeof g === "number" ? g : null,
-      grossPts: typeof g === "number" && typeof s.yearAgo?.gross === "number" ? Math.round((g - s.yearAgo.gross) * 10) / 10 : null,
-      // Computed, and labelled so: revenue less gross profit.
-      cogs: typeof g === "number" ? money(rev * (1 - g / 100)) : null,
-    };
-  },
-  ["bottleneck-filed-v1", symbol],
+  async (): Promise<FiledRow | null> => filedRowOf(await getSecEarningsSnapshot(symbol).catch(() => null)),
+  ["bottleneck-filed-v2", symbol],
   { revalidate: 43200, tags: ["bottleneck-filed"] },
 )();
 
