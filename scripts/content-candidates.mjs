@@ -23,7 +23,9 @@
 // copied). thinFilings: most of the latest quarter's growth/margin figures are
 // n/m under A's rule (#552 COWORK #212: the view's own markers). marketCap:
 // price x SEC cover-page shares (secValuation.marketCap, the Pickers' figure),
-// or null when SEC refuses it. sector: the committed SIC profile (sectorOf).
+// or null when SEC refuses it. sector: the committed SIC profile (sectorOf) and
+// name: the committed name snapshot, both added in mode 2 (they read committed
+// files only, and their @/ imports need the render hooks).
 //
 // REFRESH: monthly, or when the universe changes. Dispatch the relay with
 // task=write-content-candidates, save the run's task.log, run mode 2, commit.
@@ -56,10 +58,10 @@ if (fromLog < 0) {
   const STORE = await import("../lib/server/secFactStore.ts");
   const { pickersSecKey } = await import("../lib/server/pickersSecFundamentals.ts");
   const { PRICE_POOL_KEY } = await import("../lib/server/pricePool.ts");
-  const { PICKERS_SYMBOLS_KEY } = await import("../lib/server/pickersBuilder.ts");
-  const { sectorOf } = await import("../lib/server/sectorOf.ts");
-  const { snapshotCompanyName } = await import("../lib/server/companyNameSnapshot.ts");
-  const { normaliseCompanyName } = await import("../lib/server/news/companyName.ts");
+  // pickersBuilder.PICKERS_SYMBOLS_KEY. Named here, as pickers-marketcap-census
+  // does, because that module's @/ imports do not resolve under the relay's
+  // loader; check-content-candidates asserts the two agree.
+  const PICKERS_SYMBOLS_KEY = "msh:pickers:v10:symbols";
   const redis = Redis.fromEnv();
   let commands = 0;
 
@@ -105,8 +107,7 @@ if (fromLog < 0) {
     }
     console.log(`CCROW ${JSON.stringify({
       symbol,
-      name: normaliseCompanyName(snapshotCompanyName(symbol)) || set?.entityName || symbol,
-      sector: sectorOf(symbol)?.name ?? null,
+      entityName: set?.entityName ?? null,
       marketCap: cap,
       inPool: price !== null,
       inUniverse: universe.has(symbol),
@@ -118,6 +119,12 @@ if (fromLog < 0) {
   console.log(`Redis commands: ${commands} (read-only: HGETALL, GET, HMGET)`);
 } else {
   // ── MODE 2: LOCAL, FROM THE RUN'S LOG ─────────────────────────────────────
+  // The name and the sector need the app's @/ imports: the render hooks resolve them.
+  const { register } = await import("node:module");
+  register("./lib/tsx-render-hooks.mjs", import.meta.url);
+  const { sectorOf } = await import("../lib/server/sectorOf.ts");
+  const { snapshotCompanyName } = await import("../lib/server/companyNameSnapshot.ts");
+  const { normaliseCompanyName } = await import("../lib/server/news/companyName.ts");
   const log = fs.readFileSync(process.argv[fromLog + 1], "utf8");
   const rows = [...log.matchAll(/CCROW (\{.*\})\s*$/gm)].map((m) => JSON.parse(m[1]));
   const meta = JSON.parse(/CCMETA (\{.*\})\s*$/m.exec(log)?.[1] ?? "null");
@@ -125,8 +132,8 @@ if (fromLog < 0) {
   const { bn, latest } = contentFlags();
   const symbols = rows.map((r) => ({
     symbol: r.symbol,
-    name: r.name,
-    sector: r.sector,
+    name: normaliseCompanyName(snapshotCompanyName(r.symbol)) || r.entityName || r.symbol,
+    sector: sectorOf(r.symbol)?.name ?? null,
     marketCap: typeof r.marketCap === "number" ? r.marketCap : null,
     inPool: r.inPool === true,
     hasSecFacts: r.hasSecFacts === true,
