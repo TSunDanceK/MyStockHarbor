@@ -1257,7 +1257,7 @@ const TASKS = {
   },
   // THE CONTENT CANDIDATES (#563 COWORK #182/#183): per pool symbol, its live
   // close, stored SEC facts (A's view), n/m count, SEC market cap and sector, as
-  // CCROW log lines; `node scripts/content-candidates.mjs --from-log task.log`
+  // compact CC| log lines; `node scripts/content-candidates.mjs --from-log task.log`
   // turns them into data/content-candidates.json. READ-ONLY despite the prefix
   // (the prefix routes it to the job holding the Upstash credentials): 1 HGETALL
   // + 1 GET + 1 HMGET + one GET per symbol's fact set, no writes, no SEC requests.

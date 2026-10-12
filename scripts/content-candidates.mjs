@@ -6,8 +6,8 @@
 //
 //   1. On the relay runner (relay task write-content-candidates; READ-ONLY
 //      despite the prefix, which only routes it to the job holding the Upstash
-//      credentials). One row per pool symbol is printed as a `CCROW {json}` log
-//      line, plus a `CCMETA {json}` line.
+//      credentials). One row per pool symbol is printed as a compact `CC|…` log
+//      line, plus a `CCSUM|…` line that mode 2 checks every row against.
 //        Redis: 1 HGETALL (price pool) + 1 GET (Pickers universe) + 1 HMGET
 //        (SEC picker rows) + 1-2 GET per symbol (its stored fact set). No
 //        writes (the SEC rows are read directly, not through the metered
@@ -23,7 +23,7 @@
 // copied). thinFilings: most of the latest quarter's growth/margin figures are
 // n/m under A's rule (#552 COWORK #212: the view's own markers). marketCap:
 // price x SEC cover-page shares (secValuation.marketCap, the Pickers' figure),
-// or null when SEC refuses it. sector: the committed SIC profile (sectorOf) and
+// to the nearest $1M, or null when SEC refuses it. sector: the committed SIC profile (sectorOf) and
 // name: the committed name snapshot, both added in mode 2 (they read committed
 // files only, and their @/ imports need the render hooks).
 //
@@ -80,6 +80,7 @@ if (fromLog < 0) {
   const secRow = new Map(symbols.map((s, i) => [s, Array.isArray(secRaw) ? secRaw[i] : secRaw?.[s] ?? null]));
 
   let withFacts = 0;
+  const rows = [];
   for (const symbol of symbols) {
     const p = pool.get(symbol);
     const price = typeof p?.price === "number" && p.price > 0 ? p.price : null;
@@ -103,19 +104,17 @@ if (fromLog < 0) {
     const r = typeof row === "string" ? (() => { try { return JSON.parse(row); } catch { return null; } })() : row;
     if (r?.inputs && price !== null) {
       const fig = VAL.marketCap({ shares: r.inputs.shares, eps: null, refusals: r.inputs.refusals }, price);
-      if (fig?.ok && typeof fig.val === "number") cap = Math.round(fig.val);
+      // In $M: the log is copied off the runner by hand-checked transcription (the
+      // sandbox cannot reach the artifact host), so the rows are kept short and
+      // CCSUM below lets mode 2 verify every one of them.
+      if (fig?.ok && typeof fig.val === "number") cap = Math.round(fig.val / 1e6);
     }
-    console.log(`CCROW ${JSON.stringify({
-      symbol,
-      entityName: set?.entityName ?? null,
-      marketCap: cap,
-      inPool: price !== null,
-      inUniverse: universe.has(symbol),
-      hasSecFacts: !!view,
-      nmCount, figures,
-    })}`);
+    rows.push([symbol, cap ?? "", price !== null ? 1 : 0, view ? 1 : 0, nmCount, figures]);
   }
-  console.log(`CCMETA ${JSON.stringify({ generatedAt: new Date().toISOString(), symbols: symbols.length, pool: pool.size, universe: universe.size, withFacts, commands })}`);
+  for (const r of rows) console.log(`CC|${r.join("|")}`);
+  const capSum = rows.reduce((a, r) => a + (r[1] === "" ? 0 : r[1]), 0);
+  const nmSum = rows.reduce((a, r) => a + r[4] * 7 + r[5], 0);
+  console.log(`CCSUM|${rows.length}|${capSum}|${rows.filter((r) => r[2]).length}|${withFacts}|${nmSum}|${new Date().toISOString()}|${pool.size}|${universe.size}|${commands}`);
   console.log(`Redis commands: ${commands} (read-only: HGETALL, GET, HMGET)`);
 } else {
   // ── MODE 2: LOCAL, FROM THE RUN'S LOG ─────────────────────────────────────
@@ -126,17 +125,26 @@ if (fromLog < 0) {
   const { snapshotCompanyName } = await import("../lib/server/companyNameSnapshot.ts");
   const { normaliseCompanyName } = await import("../lib/server/news/companyName.ts");
   const log = fs.readFileSync(process.argv[fromLog + 1], "utf8");
-  const rows = [...log.matchAll(/CCROW (\{.*\})\s*$/gm)].map((m) => JSON.parse(m[1]));
-  const meta = JSON.parse(/CCMETA (\{.*\})\s*$/m.exec(log)?.[1] ?? "null");
-  if (!rows.length || !meta) { console.error("no CCROW/CCMETA lines in the log"); process.exit(1); }
+  const rows = [...log.matchAll(/^(?:\S+ )?CC\|([^|\n]+)\|(\d*)\|([01])\|([01])\|(\d+)\|(\d+)\s*$/gm)].map((m) => ({
+    symbol: m[1], marketCap: m[2] === "" ? null : Number(m[2]) * 1e6, inPool: m[3] === "1", hasSecFacts: m[4] === "1", nmCount: Number(m[5]), figures: Number(m[6]),
+  }));
+  const sum = /CCSUM\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|([^|]+)\|(\d+)\|(\d+)\|(\d+)/.exec(log);
+  if (!rows.length || !sum) { console.error("no CC / CCSUM lines in the log"); process.exit(1); }
+  // EVERY ROW VERIFIED against the runner's own totals before anything is written.
+  const got = [rows.length, rows.reduce((a, r) => a + (r.marketCap ?? 0) / 1e6, 0), rows.filter((r) => r.inPool).length, rows.filter((r) => r.hasSecFacts).length, rows.reduce((a, r) => a + r.nmCount * 7 + r.figures, 0)];
+  const want = sum.slice(1, 6).map(Number);
+  if (got.some((v, i) => Math.round(v) !== want[i]) || new Set(rows.map((r) => r.symbol)).size !== rows.length) {
+    console.error(`checksum mismatch: got ${got.join("/")}, runner said ${want.join("/")}`); process.exit(1);
+  }
+  const meta = { generatedAt: sum[6], pool: Number(sum[7]), universe: Number(sum[8]), withFacts: want[3], commands: Number(sum[9]) };
   const { bn, latest } = contentFlags();
   const symbols = rows.map((r) => ({
     symbol: r.symbol,
-    name: normaliseCompanyName(snapshotCompanyName(r.symbol)) || r.entityName || r.symbol,
+    name: normaliseCompanyName(snapshotCompanyName(r.symbol)) || r.symbol,
     sector: sectorOf(r.symbol)?.name ?? null,
-    marketCap: typeof r.marketCap === "number" ? r.marketCap : null,
-    inPool: r.inPool === true,
-    hasSecFacts: r.hasSecFacts === true,
+    marketCap: r.marketCap,
+    inPool: r.inPool,
+    hasSecFacts: r.hasSecFacts,
     // Most of the latest quarter's growth/margin figures n/m (A's rule).
     thinFilings: r.figures > 0 && r.nmCount * 2 > r.figures,
     hasBottleneck: bn.has(r.symbol),
