@@ -18,7 +18,6 @@ export const WRITE_SITES = [
   { file: "lib/ai-stock-analysis.ts", key: "getRedisKey(symbol", cls: "row" },
   { file: "lib/indexnowAuto.ts", key: "key", cls: "small" },
   { file: "lib/insightSnapshots.ts", key: "key", cls: "row" },
-  { file: "lib/server/benchmarksBuilder.ts", key: "`${REDIS_PREFIX}:${scope}`", cls: "listed", candidate: '"msh:benchmarks:stock"' },
   { file: "lib/server/bullFlagsBuilder.ts", key: "PLAYS_REDIS_KEY", cls: "listed", candidate: "BULL_FLAGS_REDIS_KEY" },
   { file: "lib/server/bullFlagsBuilder.ts", key: "PLAYS_LOCK_KEY", cls: "small" },
   { file: "lib/server/capexContracts.ts", key: "CONTRACTS_KEY", cls: "listed", candidate: "CONTRACTS_KEY" },

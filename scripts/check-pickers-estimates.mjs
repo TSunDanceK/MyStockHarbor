@@ -313,7 +313,7 @@ function uiRules(gridSrc, pageSrc) {
     /return \(entry as unknown as Record<string, unknown>\)\[field\];/.test(vff) && !/cellEst|\best\b/.test(vff) &&
       /valueSatisfies\(p, valueForField\(entry, derived, p\.field\)\)/.test(g));
   want("the grid passes A's word to the mark", /const aWord = \(e\.cellWord as [^;]*\)\?\.\[key\];[\s\S]{0,200}cellMark\(key, code, aWord\)/.test(g));
-  want("the page ships the marks and A's words", /if \(figures\.marks\) entry\.cellEst = figures\.marks;/.test(p) && /const words = secPickerWords\(why\);\s*if \(Object\.keys\(words\)\.length\) entry\.cellWord = words;/.test(p));
+  want("the page ships the marks and A's words", /const marks = payoutMark \? \{ \.\.\.figures\.marks, payout: payoutMark \} : figures\.marks;\s*if \(marks\) entry\.cellEst = marks;/.test(p) && /const words = secPickerWords\(why\);\s*if \(Object\.keys\(words\)\.length\) entry\.cellWord = words;/.test(p));
   return fails;
 }
 const gridSrc = read(GRID);
@@ -394,7 +394,7 @@ const UI_MUTANTS = [
   ["FILTERS: a marked figure dropped from the filters", GRID, "  return (entry as unknown as Record<string, unknown>)[field];\n}",
     "  if ((entry as { cellEst?: Record<string, unknown> }).cellEst?.[field === \"enterpriseValue\" ? \"ev\" : \"pb\"]) return null;\n  return (entry as unknown as Record<string, unknown>)[field];\n}"],
   ["PB sorted by something other than its number", GRID, `sortType: "num", get: (e) => num(e.pbRatio),`, `sortType: "num", get: (e) => (e.cellEst?.pb ? null : num(e.pbRatio)),`],
-  ["the page drops the marks", PAGE, "if (figures.marks) entry.cellEst = figures.marks;", "void figures;"],
+  ["the page drops the marks", PAGE, "if (marks) entry.cellEst = marks;", "void marks;"],
   ["the page drops A's words", PAGE, "if (Object.keys(words).length) entry.cellWord = words;", "void words;"],
 ];
 for (const [label, file, from, to] of UI_MUTANTS) {

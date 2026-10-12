@@ -661,7 +661,6 @@ for (const [file, fn, what] of UNDER_TEST) {
 //              half-fix that entry warns against.
 const TRACED = new Map([
   ["app/api/market/route.ts#fetchSingleQuote", "no dot: CURATED_UNIVERSE (holds BRK.B) is skipped by getNextDiscoveryBatch; the rest is FMP screener rows"],
-  ["lib/server/benchmarksBuilder.ts#fetchFmpQuote", "no dot: fixed SPY/QQQ/DIA/IWM and BTCUSD-style lists only"],
   ["lib/server/earningsCalendar.ts#quoteOne", "no dot: FMP earnings-calendar rows, and looksNonUsOrDerivative drops any symbol with '.' or '-'"],
   ["lib/server/indexChanges.ts#fetchRecentIndexAdditions", "no dot, by FMP convention not measurement: FMP constituent endpoints, 402 on this plan so unreached today"],
   ["app/api/jobs/warm-earnings/route.ts#fetchFmpEarnings", "PRESET: the earnings warm queue, filled from the pickers universe and the dynamic universe"],

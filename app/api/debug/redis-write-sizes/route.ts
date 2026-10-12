@@ -206,12 +206,6 @@ const CANDIDATES: Candidate[] = [
     writtenBy: "market refresh",
     shape: "string",
   },
-  {
-    key: "msh:benchmarks:stock",
-    owner: "lib/server/benchmarksBuilder.ts writeRedis() (one key per scope)",
-    writtenBy: "dashboard benchmarks, 24 h TTL",
-    shape: "string",
-  },
   { key: SECTOR_PERFORMANCE_KEY, owner: "lib/server/sectorPanels.ts", writtenBy: "sector pages, short TTL", shape: "string" },
   { key: WARM_TARGETS_KEY, owner: "lib/server/warmTargets.ts", writtenBy: "warm jobs, on a target-cache miss", shape: "string" },
   { key: WARM_TARGETS_FALLBACK_KEY, owner: "lib/server/warmTargets.ts", writtenBy: "warm jobs, with the key above", shape: "string" },

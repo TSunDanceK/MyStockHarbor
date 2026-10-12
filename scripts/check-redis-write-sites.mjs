@@ -78,7 +78,7 @@ const missing = listedMissing(toolSrc);
 check("each listed write's key is a CANDIDATES entry", missing.length === 0, missing.join("; "));
 // The literal candidates must still be what their owners write.
 check('"msh:market:state" is still the market route\'s REDIS_KEY', /const REDIS_KEY = "msh:market:state";/.test(code("app/api/market/route.ts")));
-check('"msh:benchmarks:stock" is still REDIS_PREFIX + the stock scope', /const REDIS_PREFIX = "msh:benchmarks";/.test(code("lib/server/benchmarksBuilder.ts")));
+// msh:benchmarks:* has no writer since #553 COWORK #210 (2026-10-12): it only ever held FMP payloads.
 
 // ── 3. the plays builders measure and log their payload write ───────────────
 console.log("\n3. The plays builders' payload writes are measured and logged, not swallowed");

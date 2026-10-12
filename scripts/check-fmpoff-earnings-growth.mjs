@@ -268,7 +268,7 @@ const TEXT_MUTANTS = [
   ["FMP earnings read unconditionally", "builder", "= needFmpEarnings\n    ? await readCachedFmpEarningsBulk(universe)\n    : new Map();", "= await readCachedFmpEarningsBulk(universe);"],
   ["FMP earnings still queued on the SEC setting", "builder", "  if (needFmpEarnings) {\n    if (!dryRun) await queueEarningsWarmupSymbols(", "  if (true) {\n    if (!dryRun) await queueEarningsWarmupSymbols("],
   ["page keeps the FMP copy", "page", "  description: SEC\n    ? SEC_GROWTH_COPY.description", "  description: false\n    ? SEC_GROWTH_COPY.description"],
-  ["growth not written on the dollar branch", "fund", "    payout: samePeriodPayout(set, inputs.eps),\n    growth: secGrowthFacts(set, today, filer, inputs.refusals),", "    payout: samePeriodPayout(set, inputs.eps),"],
+  ["growth not written on the dollar branch", "fund", "      : samePeriodPayout(set, eps),\n    growth: secGrowthFacts(set, today, filer, inputs.refusals),", "      : samePeriodPayout(set, eps),"],
 ];
 for (const [label, which, from, to] of TEXT_MUTANTS) {
   const srcs = { builder: builderSrc, page: pageSrc, fund: fundSrc };

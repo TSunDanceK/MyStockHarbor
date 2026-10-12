@@ -52,9 +52,9 @@ import { Redis } from "@upstash/redis";
 import { symbolSpellings } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { readFactSet } from "./secFactStore";
-import { valueOf, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
+import { cell, valueOf, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
-import { isConsecutive } from "./secEarningsView";
+import { DIVIDEND_RATE_YEAR_NOTE, isConsecutive } from "./secEarningsView";
 import {
   marketCap,
   multipleInputs,
@@ -70,10 +70,10 @@ import {
   type ValuationInputs,
   type ValuationRefusal,
 } from "./secValuation";
-import { enterpriseValueOf, type Estimate } from "./secEstimates";
+import { enterpriseValueOf, reportWindowMark, type Estimate } from "./secEstimates";
 import { isBankOrInsurer, type CellWhyCode, type CellWhyColumn } from "../pickerCellWhy";
 import { secGrowthFacts, type SecGrowthFacts } from "./pickersSecEarningsGrowth";
-import { splitAdjusted } from "./secSplitAdjust";
+import { splitAdjusted, type DividendBasis } from "./secSplitAdjust";
 
 export const PICKERS_SEC_KEY = "msh:pickers:sec-fundamentals:v1";
 /**
@@ -176,14 +176,18 @@ export type SecPickerRow = {
    *   special  a special dividend left out of the figure, yield and growth
    *   ifrs     an IFRS-only filer with no dividend figure: IFRS publishes no
    *            per-share dividend tag (A's secDividend gate), so "–" is by design
+   *   rate     a per-quarter-rate filer (#553 COWORK #210): Div ($) is `q`, the
+   *            latest quarterly rate it filed (period ending `end`), times 4 --
+   *            an estimate, and so are the yield and payout built on it
    */
-  div?: { cut?: { ttm: number }; special?: number; ifrs?: true };
+  div?: { cut?: { ttm: number }; special?: number; ifrs?: true; rate?: { q: number; end: string } };
 };
 
 /** A payout ratio (PERCENT) whose dividend and EPS cover the same period. */
 export type PayoutBasis = {
   val: number;
-  basis: "four-quarters" | "fiscal-year";
+  /** A rate filer's payout (#553 COWORK #210) takes its EPS's basis, "year-to-date" included. */
+  basis: EpsBasis["basis"];
   periodEnd: string;
   fiscalYear?: number | null;
 };
@@ -272,7 +276,7 @@ const PICKERS_VALUATION_OPTS = { withEstimates: true } as const;
 /** A figure's mark as the client renders it: A's EstimateMark shape. */
 export type SecPickerMark = Pick<Estimate, "kind" | "note">;
 /** The columns that can carry one, by grid column key. */
-export type SecPickerMarks = Partial<Record<"ev" | "pb", SecPickerMark>>;
+export type SecPickerMarks = Partial<Record<"ev" | "pb" | "dps" | "dyield" | "payout", SecPickerMark>>;
 
 const markOf = (e: Estimate | undefined): SecPickerMark | null => (e ? { kind: e.kind, note: e.note } : null);
 
@@ -417,6 +421,46 @@ function dividendGrowth(set: StoredFactSet): number | null {
   return a !== null && b !== null && b > 0 ? ((a - b) / b) * 100 : null;
 }
 
+// ── A PER-QUARTER-RATE FILER'S DIVIDEND (#553 COWORK #210, 2026-10-12) ──────
+// A's #848 (#552 COWORK #208) found 25 filers whose every dividend frame states
+// the quarter's RATE (BKNG, CEG, V): their "year" is one quarter's rate and
+// their differenced quarters read $0, so A's splitAdjusted now withholds both
+// and stamps the set `dvr.rate`. Pickers then had no four quarters and no year:
+// Div ($), yield, growth and payout read "–". Cowork's ruling (COWORK #210):
+//   Div ($)  the latest filed rate x 4, marked as an estimate;
+//   Growth   that rate against the rate filed for the same quarter a year before;
+//   Payout   rate x 4 over twelve months of EPS, marked as the Div ($) is.
+// The rate must be one the filer filed itself (as-filed, positive) in the
+// newest four stored quarters: an older one is not "the latest rate".
+
+/** The latest quarterly rate a rate filer filed, and the same quarter's rate a year before. */
+export type DividendRate = { rate: number; periodEnd: string; prior: number | null };
+
+const DPS_KEY = "dividendsDeclaredPerShare";
+const filedRate = (set: StoredFactSet, p: StoredPeriod | undefined): number | null => {
+  const c = cell(home(set, p), DPS_KEY);
+  return c.derived === "as-filed" && typeof c.val === "number" && c.val > 0 ? c.val : null;
+};
+
+/** Pure. Null unless A's dividend-basis pass classed the (split-adjusted) set a rate filer. */
+export function dividendRateRead(set: StoredFactSet & { dvr?: DividendBasis }): DividendRate | null {
+  if (!set.dvr?.rate) return null;
+  const q = set.quarters.slice(0, 4).find((p) => filedRate(set, p) !== null);
+  if (!q) return null;
+  const before = q.fy == null ? undefined : set.quarters.find((p) => p.fy === q.fy! - 1 && p.fp === q.fp);
+  return { rate: filedRate(set, q)!, periodEnd: q.e, prior: filedRate(set, before) };
+}
+
+/**
+ * The mark on a rate filer's Div ($), yield and payout: A's estimate sign, the
+ * owner's wording. BUILT IN secEstimates, as every mark is (check-estimates):
+ * through A's plain { kind: "estimate", note } builder, which is named for the
+ * report window -- a dividend-named builder there is A's to add.
+ */
+export const DIVIDEND_RATE_MARK: SecPickerMark = reportWindowMark(
+  `${DIVIDEND_RATE_YEAR_NOTE} Estimate: the latest quarterly rate it filed \u00d7 4.`
+);
+
 /** WRITE half. Pure. */
 export function buildSecPickerRow(
   filed: StoredFactSet,
@@ -456,15 +500,21 @@ export function buildSecPickerRow(
   const cf = twelveMonthsOf(set, ["operatingCashFlow", "capex"]);
   const dps = twelveMonthsOf(set, ["dividendsDeclaredPerShare"]);
   const read = dividendRead(set);
-  // Div ($): a cut shows the latest quarter annualised; else the regular four
-  // quarters (Q4 derived, specials out); else twelveMonthsOf's figure as before.
-  const divPerShare = read.cut ? read.cut.annualised : read.four ? read.four.regular : dps ? dps.vals.dividendsDeclaredPerShare : null;
+  const rate = dividendRateRead(set);
+  // Div ($): a rate filer shows its latest filed rate x 4 (COWORK #210); a cut
+  // the latest quarter annualised; else the regular four quarters (Q4 derived,
+  // specials out); else twelveMonthsOf's figure as before.
+  const divPerShare = rate
+    ? Math.round(rate.rate * 4 * 1e6) / 1e6
+    : read.cut ? read.cut.annualised : read.four ? read.four.regular : dps ? dps.vals.dividendsDeclaredPerShare : null;
   const tx = Array.isArray(set.tx) ? set.tx : [];
   const div: NonNullable<SecPickerRow["div"]> = {
     ...(divPerShare === null && tx.includes("ifrs-full") && !tx.includes("us-gaap") ? { ifrs: true as const } : {}),
-    ...(read.cut ? { cut: { ttm: read.cut.ttm } } : {}),
-    ...(read.four && read.four.special > 0 ? { special: Math.round(read.four.special * 1e4) / 1e4 } : {}),
+    ...(!rate && read.cut ? { cut: { ttm: read.cut.ttm } } : {}),
+    ...(!rate && read.four && read.four.special > 0 ? { special: Math.round(read.four.special * 1e4) / 1e4 } : {}),
+    ...(rate ? { rate: { q: rate.rate, end: rate.periodEnd } } : {}),
   };
+  const eps = inputs.eps;
   return {
     v: 1,
     at: nowMs,
@@ -477,9 +527,15 @@ export function buildSecPickerRow(
     // filer that tags it negative cannot turn FCF into OCF + capex.
     freeCashFlow: cf ? cf.vals.operatingCashFlow - Math.abs(cf.vals.capex) : null,
     divPerShare,
-    divGrowth: dividendGrowth(set),
-    eps: inputs.eps,
-    payout: samePeriodPayout(set, inputs.eps),
+    divGrowth: rate ? (rate.prior ? ((rate.rate - rate.prior) / rate.prior) * 100 : null) : dividendGrowth(set),
+    eps,
+    // A rate filer's payout is the annualised rate over the row's own twelve
+    // months of EPS, so it carries that EPS's period (never "periods differ").
+    payout: rate
+      ? eps && eps.val > 0 && divPerShare !== null
+        ? { val: (divPerShare / eps.val) * 100, basis: eps.basis, periodEnd: eps.periodEnd }
+        : null
+      : samePeriodPayout(set, eps),
     growth: secGrowthFacts(set, today, filer, inputs.refusals),
     ...(Object.keys(div).length ? { div } : {}),
   };
@@ -527,6 +583,11 @@ export function applySecPickerRow(row: SecPickerRow, price: number | null): SecP
   if (evMark) marks.ev = evMark;
   const pbMark = usd && mult.pb?.ok ? markOf(mult.pb.est) : null;
   if (pbMark) marks.pb = pbMark;
+  // A rate filer's Div ($) is an estimate, and the yield divides it (COWORK #210).
+  if (usd && row.div?.rate && row.divPerShare !== null) {
+    marks.dps = DIVIDEND_RATE_MARK;
+    if (divYield !== null) marks.dyield = DIVIDEND_RATE_MARK;
+  }
   return {
     ...(Object.keys(marks).length ? { marks } : {}),
     marketCap: cap,
@@ -564,6 +625,11 @@ export type SecEarningsFigures = {
 export const PAYOUT_PERIODS_DIFFER = "Not shown: the EPS and dividend periods differ";
 
 export const SEC_EARNINGS_FIELDS: ("peRatio" | "epsTtm" | "payoutRatio")[] = ["peRatio", "epsTtm", "payoutRatio"];
+
+/** The payout cell's mark: a rate filer's payout shown divides its estimated Div ($) (COWORK #210). */
+export function payoutRateMark(row: Pick<SecPickerRow, "div">, earnings: SecEarningsFigures | null): SecPickerMark | null {
+  return row.div?.rate && earnings?.payoutRatio != null ? DIVIDEND_RATE_MARK : null;
+}
 
 /**
  * READ half for the three. NULL (not a figures object) for a row written
