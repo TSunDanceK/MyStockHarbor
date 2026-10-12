@@ -374,7 +374,7 @@ function Detail({ p, one, notReported, showProfit, margin }: { p: GvPeriod; one:
         <dd>
           {p.sales ? <><DerivedTag note={p.sales.derivedNote} /><strong>{p.sales.text}</strong></> : nr}
           {p.lastYear ? <> · {p.lastYear.label}: <DerivedTag note={p.lastYear.derivedNote} />{p.lastYear.text}</> : null}
-          {p.growth ? <> · {p.growth} on a year earlier</> : null}
+          {p.growth ? <> · {p.growth} on a year earlier</> : p.growthNote ? <> · {p.growthNote}</> : null}
         </dd>
         {/* NO PROFIT ROW while the chart is off: an unmarked profit figure here
             would be the same trap as an unmarked bar (COWORK #36 blocker). */}

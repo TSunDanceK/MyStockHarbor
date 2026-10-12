@@ -50,8 +50,25 @@ export function epsVsYearAgo(now: number | null | undefined, then: number | null
   return { tone: now > then ? "good" : "weak", words: null };
 }
 
-/** A margin (a level, in %) against the year-ago quarter's: "▲ 2.1 pt vs Q2 FY2025". */
-export function marginVsYearAgo(now: number | null | undefined, then: number | null | undefined, label: string | null | undefined): Vs {
+/**
+ * A margin (a level, in %) against the year-ago quarter's: "▲ 2.1 pt vs Q2 FY2025".
+ *
+ * `notMeaningful` (#563 COWORK #178): A's n/m rule for the change (#552 COWORK
+ * #212, the snapshot's `notMeaningful.grossChange` / `.operatingChange`). The
+ * caller passes A's text and reason in, so this module stays import-free; the
+ * line reads as A's card does, uncoloured: "n/m vs Q2 FY2025: revenue is too
+ * small for a meaningful margin".
+ */
+export function marginVsYearAgo(
+  now: number | null | undefined,
+  then: number | null | undefined,
+  label: string | null | undefined,
+  notMeaningful?: { text: string; reason: string } | null,
+): Vs {
+  if (notMeaningful) {
+    const r = notMeaningful.reason;
+    return { tone: null, words: `${notMeaningful.text} vs ${label || "a year ago"}: ${r.charAt(0).toLowerCase()}${r.slice(1)}` };
+  }
   if (!fin(now)) return { tone: null, words: null };
   if (!fin(then) || !label) return { tone: null, words: NO_YEAR_AGO };
   const d = Math.round((now - then) * 10) / 10;
