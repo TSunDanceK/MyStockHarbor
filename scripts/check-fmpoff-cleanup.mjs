@@ -2,14 +2,10 @@
 //
 // WHAT IS PINNED, AND HOW:
 //
-//   1. warm-earnings, warm-fundamentals and warm-stock-data answer 200 with
-//      { ok: true, skipped: true, reason: "no FMP_API_KEY" } (the warm-price-pool shape) when the key is unset, record the
-//      run as ok + skipped, and do NOTHING else first -- no target derivation,
-//      no queue enqueue, no lock. Proven by RUNNING each route's GET: the route
-//      is transpiled with every import replaced by a call-recording stub, so
-//      "nothing else first" is the list of stub calls the handler made, not an
-//      offset comparison. With the key set the same harness shows the handler
-//      going past the gate (unchanged path). Auth still comes first (401).
+//   1. The three FMP warm jobs (warm-earnings, warm-fundamentals,
+//      warm-stock-data) stay retired: no route file and no cron entry. Until
+//      2026-10-12 (#553 COWORK #212) this section RAN each route's GET to prove
+//      its no-key skip; the jobs were retired with FMP.
 //   2. B10: app/api/stock-earnings-debug/ is gone and no code references it.
 //   3. B11: no client component calls a cron job route, in particular
 //      /api/jobs/warm-earnings, and no page copy points readers at the removed
@@ -35,183 +31,28 @@ const check = (label, ok, detail = "") => {
 };
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 
-// ── harness: a route module with every import stubbed ───────────────────────
-
-const HARNESS = `
-const __h = globalThis.__FMPOFF_HARNESS__;
-const __mk = (name) => new Proxy(function () {}, {
-  apply(_t, _this, args) { __h.calls.push(name); return __mk(name + "()"); },
-  construct() { __h.calls.push("new " + name); return __mk(name + " instance"); },
-  get(_t, p) {
-    if (p === Symbol.toPrimitive) return () => 1;
-    if (p === "then") return undefined;
-    return __mk(name + "." + String(p));
-  },
-});
-`;
-
-// Names with real behaviour; everything else imported becomes a recording stub.
-const SPECIAL = {
-  NextResponse: `{ json: (body, init) => new Response(JSON.stringify(body ?? null), { status: init?.status ?? 200, headers: { "content-type": "application/json" } }) }`,
-  NextRequest: `Request`,
-  recordJobRun: `async (...args) => { __h.calls.push("recordJobRun"); __h.records.push(args); }`,
-  guardJob: `(_job, handler) => handler`,
-  Redis: `class { static fromEnv() { return __mk("redis"); } }`,
+// ── 1. RETIRED 2026-10-12 (#553 COWORK #212, owner GO) ────────────────────────
+// Section 1 RAN each FMP warm job's GET (warm-earnings, warm-fundamentals,
+// warm-stock-data) through an all-imports-stubbed harness to prove the no-key
+// skip. The jobs, their crons and their routes are retired, so what is pinned
+// now is that they stay gone: no route file, no cron entry.
+console.log("\n1. The FMP warm jobs are retired: no route, no cron");
+let seq = 0; // module-name counter for the lifts below
+const RETIRED_JOBS = ["warm-earnings", "warm-fundamentals", "warm-stock-data"];
+const retiredVerdicts = (vercelJson, exists) => {
+  const crons = (JSON.parse(vercelJson).crons ?? []).map((c) => c.path);
+  return RETIRED_JOBS.flatMap((job) => [
+    [`${job}: no route file`, !exists(`app/api/jobs/${job}/route.ts`)],
+    [`${job}: no cron entry`, !crons.includes(`/api/jobs/${job}`)],
+  ]);
 };
-
-function stubbedModuleSource(src) {
-  const sf = ts.createSourceFile("route.ts", src, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
-  const names = new Set();
-  const cuts = [];
-  for (const st of sf.statements) {
-    if (!ts.isImportDeclaration(st)) continue;
-    cuts.push([st.getStart(sf), st.getEnd()]);
-    const clause = st.importClause;
-    if (!clause || clause.isTypeOnly) continue;
-    if (clause.name) names.add(clause.name.text);
-    const nb = clause.namedBindings;
-    if (nb && ts.isNamedImports(nb)) {
-      for (const el of nb.elements) if (!el.isTypeOnly) names.add(el.name.text);
-    } else if (nb && ts.isNamespaceImport(nb)) names.add(nb.name.text);
-  }
-  let body = src;
-  for (const [a, b] of cuts.reverse()) body = body.slice(0, a) + body.slice(b);
-  const stubs = [...names]
-    .map((n) => `const ${n} = ${SPECIAL[n] ?? `__mk(${JSON.stringify(n)})`};`)
-    .join("\n");
-  return HARNESS + stubs + "\n" + body;
-}
-
-let seq = 0;
-async function loadRoute(src, env) {
-  const saved = {};
-  for (const k of Object.keys(env)) {
-    saved[k] = process.env[k];
-    if (env[k] === undefined) delete process.env[k];
-    else process.env[k] = env[k];
-  }
-  const h = { calls: [], records: [] };
-  globalThis.__FMPOFF_HARNESS__ = h;
-  const js = ts.transpileModule(stubbedModuleSource(src) + `\n//${++seq}\n`, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-  }).outputText;
-  const mod = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
-  const restore = () => {
-    for (const [k, v] of Object.entries(saved)) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-  };
-  return { mod, h, restore };
-}
-
-// Fake values only: every client is a stub, nothing connects anywhere.
-const BASE_ENV = {
-  UPSTASH_REDIS_REST_URL: "stub",
-  UPSTASH_REDIS_REST_TOKEN: "stub",
-  CRON_SECRET: "s3cret",
-  NEXT_PUBLIC_SITE_URL: "http://localhost",
-};
-const authed = (job) =>
-  new Request(`http://localhost/api/jobs/${job}`, { headers: { authorization: "Bearer s3cret" } });
-
-async function runGet(src, job, { key, auth = true }) {
-  const { mod, h, restore } = await loadRoute(src, { ...BASE_ENV, FMP_API_KEY: key });
-  try {
-    h.calls.length = 0; // only what the HANDLER does, not module initialisation
-    let res = null;
-    let threw = null;
-    try {
-      res = await mod.GET(auth ? authed(job) : new Request(`http://localhost/api/jobs/${job}`));
-    } catch (e) {
-      threw = e;
-    }
-    const body = res ? await res.json().catch(() => null) : null;
-    return { status: res?.status ?? null, body, calls: [...h.calls], records: [...h.records], threw };
-  } finally {
-    restore();
-  }
-}
-
-/** The no-key contract, as a list of [label, ok, detail]. */
-async function noKeyVerdicts(src, job) {
-  const out = [];
-  const r = await runGet(src, job, { key: undefined });
-  out.push([`${job}: no key -> 200`, r.status === 200, `status ${r.status}`]);
-  out.push([
-    `${job}: no key -> body { ok: true, skipped: true, reason: "no FMP_API_KEY" }`,
-    r.body?.ok === true && r.body?.skipped === true && r.body?.reason === "no FMP_API_KEY",
-    JSON.stringify(r.body),
-  ]);
-  const rec = r.records[0];
-  out.push([
-    `${job}: no key -> recorded as ok + skipped (not failed, not silent)`,
-    r.records.length === 1 &&
-      rec[0] === job &&
-      rec[1] === true &&
-      rec[2]?.skipped === true &&
-      rec[2]?.reason === "no FMP_API_KEY",
-    JSON.stringify(r.records),
-  ]);
-  out.push([
-    `${job}: no key -> no work before the skip (only the run record)`,
-    r.calls.length === 1 && r.calls[0] === "recordJobRun",
-    r.calls.join(", ") || "(none)",
-  ]);
-  return out;
-}
-
-const JOBS = [
-  {
-    job: "warm-earnings",
-    // With a key the stubbed lock read is not "OK", so the run reaches the
-    // lock-skip: past the FMP gate, and stops before any FMP call.
-    withKey: (r) => r.status === 200 && r.body?.reason === "locked",
-  },
-  { job: "warm-fundamentals", withKey: (r) => r.calls.includes("getWarmTargetSymbols") },
-  { job: "warm-stock-data", withKey: (r) => r.calls.includes("getWarmTargetSymbols") },
-];
-
-const SKIP_RETURN = `return NextResponse.json({ ok: true, skipped: true, reason: "no FMP_API_KEY" });`;
-const OLD_500 = `return NextResponse.json({ error: "Missing FMP_API_KEY environment variable." }, { status: 500 });`;
-const NEW_RECORD = (job) => `await recordJobRun("${job}", true, { skipped: true, reason: "no FMP_API_KEY" });`;
-
-console.log("\n1. FMP warm jobs skip with 200 without the key");
-for (const { job, withKey } of JOBS) {
-  const rel = `app/api/jobs/${job}/route.ts`;
-  const src = read(rel);
-
-  for (const [label, ok, detail] of await noKeyVerdicts(src, job)) check(label, ok, detail);
-
-  const keyed = await runGet(src, job, { key: "stub-key" });
-  check(
-    `${job}: key set -> handler goes past the gate (unchanged path)`,
-    withKey(keyed) && !keyed.records.some((r) => r[2]?.reason === "no FMP_API_KEY"),
-    `status ${keyed.status}, calls: ${keyed.calls.slice(0, 4).join(", ")}`
-  );
-
-  const unauth = await runGet(src, job, { key: undefined, auth: false });
-  check(
-    `${job}: unauthorized -> 401 before the skip, nothing recorded`,
-    unauth.status === 401 && unauth.records.length === 0,
-    `status ${unauth.status}`
-  );
-
-  // MUTANT "500 restored": the pre-change answer. Must be caught.
-  check(`${job}: source carries the skip return being mutated`, src.includes(SKIP_RETURN));
-  const m500 = src.replace(SKIP_RETURN, OLD_500);
-  const v500 = await noKeyVerdicts(m500, job);
-  check(`${job}: MUTANT "500 restored" is caught`, v500.some(([, ok]) => !ok));
-
-  // MUTANT "gate removed": no key check at all, so the run does the work
-  // anyway. Must be caught by the no-work-before-the-skip assertion.
-  const blockStart = src.indexOf("  if (!process.env.FMP_API_KEY) {");
-  const blockEnd = src.indexOf("\n  }\n", src.indexOf(SKIP_RETURN)) + 4;
-  const mGone = blockStart >= 0 ? src.slice(0, blockStart) + src.slice(blockEnd) : src;
-  check(`${job}: MUTANT "gate removed" differs from the source`, mGone !== src && !mGone.includes(NEW_RECORD(job)));
-  const vGone = await noKeyVerdicts(mGone, job);
-  check(`${job}: MUTANT "gate removed" is caught`, vGone.some(([, ok]) => !ok));
-}
+const vercelSrc = read("vercel.json");
+const onDisk = (rel) => fs.existsSync(path.join(ROOT, rel));
+for (const [label, ok] of retiredVerdicts(vercelSrc, onDisk)) check(label, ok);
+// MUTANTS: a cron entry restored, and a route file restored. Each must be caught.
+const withCron = JSON.stringify({ ...JSON.parse(vercelSrc), crons: [...(JSON.parse(vercelSrc).crons ?? []), { path: "/api/jobs/warm-stock-data", schedule: "7-57/10 * * * *" }] });
+check('MUTANT "a retired cron restored" is caught', retiredVerdicts(withCron, onDisk).some(([, ok]) => !ok));
+check('MUTANT "a retired route restored" is caught', retiredVerdicts(vercelSrc, (rel) => rel === "app/api/jobs/warm-earnings/route.ts" || onDisk(rel)).some(([, ok]) => !ok));
 
 // ── 2. B10 ──────────────────────────────────────────────────────────────────
 

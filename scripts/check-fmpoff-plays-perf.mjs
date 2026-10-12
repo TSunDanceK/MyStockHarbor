@@ -269,7 +269,9 @@ function b6Rules(srcs) {
   want("the row map is keyed from signalRecords' perf", /if \(symbol && record\.perf\) perfBySymbol\.set\(symbol, record\.perf\);/.test(p));
 
   const s = code(STOCK_DATA, srcs[STOCK_DATA]);
-  want("FMP stock-price-change is not called on the flag", /if \(priceProviderFor\("PICKERS"\) !== "tiingo"\) \{\s*try \{\s*const row = firstRow\(await fetchJson\(`\$\{base\}\/stock-price-change/.test(s));
+  // STRONGER SINCE 2026-10-12 (#553 COWORK #212): stockDataCache's writer was
+  // retired, so FMP's stock-price-change is not called at all, flag or not.
+  want("FMP stock-price-change is not called", !/stock-price-change|fetchJson\(/.test(s));
 
   const g = code(GRID, srcs[GRID]);
   for (const k of ["perf1w", "perf1m", "perf6m", "perfYtd", "perf1y"]) want(`the grid's ${k} cell goes through perfCell`, new RegExp(`key: "${k}"[^\\n]*cell: \\(e\\) => perfCell\\(e, "${k}"\\) \\}`).test(g));
@@ -326,7 +328,7 @@ const SRC_MUTANTS = [
   ["the descending-triangles credit keeps the first payload's provider", "credit", "app/plays/descending-triangles/DescendingTrianglesClient.tsx", /setHistory\(data\.history \?\? null\);/, ""],
   ["the page takes FMP's perf on the flag", "b6", PICKER_PAGE, /if \(!perfOnTiingo\) \{/, "if (true) {"],
   ["perf from FMP-fallback series", "b6", PICKERS_BUILDER, /perfFromTiingo\.has\(symbol\)\s*\?/, "true ?"],
-  ["stock-price-change still called on the flag", "b6", STOCK_DATA, /if \(priceProviderFor\("PICKERS"\) !== "tiingo"\) \{/, "if (true) {"],
+  ["stock-price-change called again", "b6", STOCK_DATA, /const KEY_PREFIX = "msh:stockdata:v1:";/, 'const KEY_PREFIX = "msh:stockdata:v1:";\nconst perf = () => fetchJson(`${"base"}/stock-price-change`);'],
   ["the grid shows the false reason for every empty perf cell", "b6", GRID, /const why = perfWhyText\(e\.perfWhy\?\.\[key\]\);/, `const why = "${FALSE_REASON}";`],
   ["a perf column bypasses perfCell", "b6", GRID, /cell: \(e\) => perfCell\(e, "perfYtd"\) \}/, "cell: (e) => pctCell(num(e.perfYtd)) }"],
 ];

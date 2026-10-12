@@ -363,10 +363,15 @@ globalThis.fetch = realFetch;
 //
 // A SEC x Tiingo cap or P/E carries the Tiingo close (cap / shares, pe x eps).
 // Stored under an FMP-named key it escapes the msh:tiingo: purge (§7). So the
-// fundamentals warm, the sector index and the sector performance table run
-// here, POOL=tiingo, against a stubbed Upstash that keeps every WRITE; no write
+// sector index and the sector performance table run here, POOL=tiingo, against
+// a stubbed Upstash that keeps every WRITE; no write
 // outside msh:tiingo: may carry any of the fixture's SEC x Tiingo figures. The
 // readers must still see them, computed at read time.
+//
+// THE FUNDAMENTALS WARM IS RETIRED (2026-10-12, #553 COWORK #212): its rows
+// are SEEDED here exactly as it wrote them (the FMP pool's figures, never an
+// overlay), because they are still read until they age out. The two mutants
+// that rewrote the warm went with it.
 console.log("\n=== 6. No SEC x Tiingo cap or P/E persisted outside msh:tiingo: ===\n");
 const PP = await real("lib/server/pricePool.ts");
 const WRITE_OPS = new Set(["set", "setex", "psetex", "mset", "msetnx", "hset", "hmset", "hsetnx", "lpush", "rpush", "sadd", "zadd", "append", "json.set", "eval", "evalsha"]);
@@ -390,6 +395,8 @@ function persistFixture({ withSec = true } = {}) {
     ["ZZZ", JSON.stringify(fullRow({ ...shares(9.1e9), eps: P_EPS }))],
   ]);
   hashes.set(S.PICKERS_SEC_KEY, withSec ? sec : new Map());
+  // The stored fundamentals rows, as the retired warm wrote them: FMP's figures.
+  PSYMS.forEach((s, i) => kv.set(`msh:pickers:fundamentals:v1:${s}`, JSON.stringify({ symbol: s, marketCap: fmpCap[s], peRatio: 30 + i, industry: null, sector: null, updatedAt: new Date(NOW - 3_600_000).toISOString() })));
   // The SEC x Tiingo figures this fixture produces, through the real overlay.
   const eodObj = Object.fromEntries([...hashes.get(K.TIINGO_EOD_LAST_KEY)].map(([k, v]) => [k, JSON.parse(v)]));
   const vals = P.secTiingoValuations(PSYMS, null, eodObj, S.parseSecCapHash(Object.fromEntries(sec), NOW), NOW);
@@ -443,24 +450,18 @@ async function persistBehaviour({ F, U, Pn }) {
   const keep = { pool: process.env.PRICE_PROVIDER_POOL, key: process.env.FMP_API_KEY };
   process.env.PRICE_PROVIDER_POOL = "tiingo";
   try {
-    // (a) The warm (needs the key; every symbol is a pool hit, so no FMP call), the index, the table.
+    // (a) The index and the table, over the seeded fundamentals rows.
     const st = persistFixture();
     stubRedis(st);
-    process.env.FMP_API_KEY = "x";
-    const warm = await F.warmFundamentals(PSYMS);
-    delete process.env.FMP_API_KEY;
     const idx = await U.getSectorIndex();
     await Pn.getSectorPerformanceTable();
     // The property first, so a mutant is reported by it.
     const l = leaks(st);
     want(`no write outside msh:tiingo: carries a SEC x Tiingo cap or P/E${l.length ? ` (${l[0]})` : ""}`, l.length === 0);
-    const fundWrites = st.writes.filter((w) => /fundamentals:v1:/.test(w.key));
-    want("the warm ran and wrote the fundamentals rows (the scan is measuring something)", warm?.written === PSYMS.length && fundWrites.length === PSYMS.length && st.fetches.length === 0);
+    want("nothing fetched from outside Redis", st.fetches.length === 0);
     want("the sector index and the performance table were written (the scan covers them)",
       st.writes.some((w) => w.key === U.SECTOR_INDEX_KEY) && st.writes.some((w) => w.key === PN_PERF_KEY) && idx.capBasis === "sec-tiingo");
     want("the fixture has SEC x Tiingo figures to look for (AAPL cap 1.3e9 x 101.7)", near(st.vals.get("AAPL")?.marketCap, 1.3e9 * 101.7) && st.forbidden.length >= 6);
-    const aaplRow = JSON.parse(String(fundWrites.find((w) => w.key.endsWith(":AAPL"))?.args?.[0] ?? "{}"));
-    want("the stored fundamentals row holds the FMP pool's figures (7.7e11, P/E 30)", aaplRow.marketCap === st.fmpCap.AAPL && aaplRow.peRatio === 30);
 
     // (b) Readers, at read time, from the rows just written.
     const read = await F.readCachedFundamentalsBulk(["AAPL", "TSM", "ZZZ"]);
@@ -478,7 +479,6 @@ async function persistBehaviour({ F, U, Pn }) {
     const st2 = persistFixture({ withSec: false });
     stubRedis(st2);
     process.env.FMP_API_KEY = "x";
-    await F.warmFundamentals(PSYMS);
     const idx2 = await U.getSectorIndex();
     delete process.env.FMP_API_KEY;
     const tech2 = (idx2.bySlug.technology ?? []).filter((s) => ["AAPL", "MSFT", "NVDA"].includes(s));
@@ -499,9 +499,6 @@ for (const f of persistReal) check(f, false);
 check("only FMP figures (or none) persisted; readers still get SEC x Tiingo at read time", persistReal.length === 0);
 const FUND = "lib/server/fundamentalsCache.ts";
 for (const [name, rel, from, to] of [
-  ["the warm reads the Tiingo overlay (SEC x Tiingo into the FMP rows)", FUND, /readPricePoolBulk\(cleanSymbols, \{ raw: true \}\)/, "readPricePoolBulk(cleanSymbols)"],
-  ["the warm writes the read-time figures", FUND, /quoteMap\.set\(sym, \{ marketCap: row\.marketCap, peRatio: row\.pe \}\);/,
-    "const sx = (await (await import(\"./tiingoPool\")).readSecTiingoCaps([sym], Date.now())).get(sym);\n      quoteMap.set(sym, { marketCap: sx ?? row.marketCap, peRatio: row.pe });"],
   ["the reader no longer overlays at read time", FUND, /if \(!opts\.raw && result\.size && priceProviderFor\("POOL"\) === "tiingo"\) \{/, "if (false) {"],
   ["the sector index persists its caps", FILES.universe, /index\.capBasis = basis;/, "index.capBasis = basis;\n  (index as unknown as Record<string, unknown>).caps = Object.fromEntries(caps);"],
   ["the sector index's FMP basis reads the overlaid rows", FILES.universe, /readCachedFundamentalsBulk\(symbols, \{ raw: true \}\)/, "readCachedFundamentalsBulk(symbols)"],

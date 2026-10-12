@@ -42,7 +42,7 @@ import { JOB_REDIS_OPTS } from "./redisCacheMode";
 
 export type GuardedJob = Extract<
   JobKey,
-  "warm-stock-data" | "warm-fundamentals" | "warm-screener-fundamentals" | "warm-picker-universe" | "warm-pickers-sec" | "ipo-refresh"
+  "warm-screener-fundamentals" | "warm-picker-universe" | "warm-pickers-sec" | "ipo-refresh"
   | "tiingo-quotes" | "tiingo-eod" | "tiingo-supported" | "tiingo-cold-queue"
 >;
 
@@ -52,10 +52,7 @@ export type GuardedJob = Extract<
  * A ceiling is a safety net, not a target: a normal run never gets near it.
  */
 export const JOB_LIMITS: Record<GuardedJob, { perRun: number; perDay: number }> = {
-  // 144 runs/day, ~320-440 commands a run, ~46-63K a day.
-  "warm-stock-data": { perRun: 1_000, perDay: 190_000 },
-  // 24 runs/day, ~870-1,100 a run, ~21-26K a day.
-  "warm-fundamentals": { perRun: 2_500, perDay: 78_000 },
+  // warm-stock-data and warm-fundamentals: retired 2026-10-12 (#553 COWORK #212).
   // 1 run/day, ~3,900 a run.
   "warm-screener-fundamentals": { perRun: 8_000, perDay: 12_000 },
   // 1 run/day, ~6-7K a run (a forced history refetch of ~700 symbols); the

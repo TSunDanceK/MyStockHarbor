@@ -455,11 +455,14 @@ const datasetBlock = (ds) => {
 check(
   "each dataset entry can be isolated from its neighbours",
   datasetKeys.every((ds) => datasetBlock(ds).length > 0) &&
-    !datasetBlock("fundamentals").includes("pricePool"),
+    !datasetBlock("screenerFundamentals").includes("pricePool"),
   "a per-entry assertion written as a lazy match reads the NEXT entry's fields " +
     "— which is how four of these first reported the wrong answer"
 );
-check("the DATASETS registry has entries", datasetKeys.length >= 6, datasetKeys.join(", "));
+// 5, not 6, since 2026-10-12 (#553 COWORK #212): fundamentals, stockData and
+// earnings were retired with their FMP warm jobs. A floor, so a parse that finds
+// nothing still fails.
+check("the DATASETS registry has entries", datasetKeys.length >= 5, datasetKeys.join(", "));
 for (const ds of datasetKeys) {
   const has =
     new RegExp(`markRefreshed\\(\\s*"${ds}"`).test(tree) ||

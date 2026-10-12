@@ -15,6 +15,9 @@
 //   small   -- a lock, flag, stamp, counter or short list.
 // Sizes are from the CODE-B #75 census (2026-10-01) where measured.
 export const WRITE_SITES = [
+  // Retired 2026-10-12 (#553 COWORK #212) with the FMP warm jobs: the
+  // fundamentals and stock-data row writes, the quote offset, and warm-earnings'
+  // lock, enqueue guard and store write.
   { file: "lib/ai-stock-analysis.ts", key: "getRedisKey(symbol", cls: "row" },
   { file: "lib/indexnowAuto.ts", key: "key", cls: "small" },
   { file: "lib/insightSnapshots.ts", key: "key", cls: "row" },
@@ -36,8 +39,6 @@ export const WRITE_SITES = [
   { file: "lib/server/earningsWeekStore.ts", key: "weekCloseKey(date", cls: "row" },
   { file: "lib/server/feedCache.ts", key: "`${REDIS_PREFIX}:${key}`", cls: "row" },
   { file: "lib/server/fundamentalsCache.ts", key: "`${SCREENER_FUND_KEY_PREFIX}${symbol}`", cls: "chunked", bound: "500 rows x <=207 B = 0.09 MB" },
-  { file: "lib/server/fundamentalsCache.ts", key: "QUOTE_OFFSET_KEY", cls: "small" },
-  { file: "lib/server/fundamentalsCache.ts", key: "`${FUND_KEY_PREFIX}${sym}`", cls: "chunked", bound: "universe rows x <=193 B = 0.12 MB" },
   { file: "lib/server/historyCache.ts", key: "NEWEST_BAR_STAMP_HASH", cls: "small" },
   { file: "lib/server/historyCache.ts", key: "key", cls: "small" },
   { file: "lib/server/historyCache.ts", key: "getHistoryRedisKey(normalized", cls: "row" },
@@ -112,7 +113,6 @@ export const WRITE_SITES = [
   { file: "lib/server/sectorTone.ts", key: "sectorToneKey(", cls: "row" },
   { file: "lib/server/sectorUniverse.ts", key: "SECTOR_INDEX_KEY", cls: "listed", candidate: "SECTOR_INDEX_KEY" },
   { file: "lib/server/stalenessQueue.ts", key: "seededKey(dataset", cls: "small" },
-  { file: "lib/server/stockDataCache.ts", key: "`${KEY_PREFIX}${symbol}`", cls: "chunked", bound: "REFRESH_SLICE_SIZE (40) rows x <=713 B = 0.03 MB" },
   { file: "lib/server/symbolEviction.ts", key: "`${PRESET_ALARM_KEY_PREFIX}${symbol}`", cls: "small" },
   { file: "lib/server/symbolEviction.ts", key: "key", cls: "small" },
   { file: "lib/server/symbolEviction.ts", key: "STALE_BAR_DAYS_HASH", cls: "small" },
@@ -123,9 +123,6 @@ export const WRITE_SITES = [
   { file: "lib/youtube.ts", key: "UPLOADS_PLAYLIST_KEY", cls: "small" },
   { file: "lib/youtube.ts", key: "`${LAST_GOOD_LIST_PREFIX}:${limit}`", cls: "row" },
   { file: "lib/youtube.ts", key: "`${LAST_GOOD_VIDEO_PREFIX}:${videoId}`", cls: "row" },
-  { file: "app/api/jobs/warm-earnings/route.ts", key: "EARNINGS_LOCK_KEY", cls: "small" },
-  { file: "app/api/jobs/warm-earnings/route.ts", key: "EARNINGS_ENQUEUE_GUARD_KEY", cls: "small" },
-  { file: "app/api/jobs/warm-earnings/route.ts", key: "`${EARNINGS_REDIS_KEY_PREFIX}${symbol}`", cls: "row" },
   { file: "app/api/jobs/warm-price-pool/route.ts", key: "PRICE_POOL_LOCK_KEY", cls: "small" },
   { file: "app/api/market/route.ts", key: "REDIS_KEY", cls: "listed", candidate: '"msh:market:state"' },
 ];
