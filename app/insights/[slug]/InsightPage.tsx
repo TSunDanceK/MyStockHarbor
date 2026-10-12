@@ -28,7 +28,7 @@ import InsightVote from "./InsightVote";
 import { TiingoLink } from "@/app/components/TiingoCredit";
 import { screenMembersFor, type InsightPageData, type MoreCard, type ScreenMember } from "@/lib/server/insightPage";
 import type { ScreenFlag } from "@/lib/insightScreens";
-import { dayWords, outcomeWords, pctWords, ptsWords, sourceGroups } from "@/lib/insightView";
+import { dayWords, miniLabel, outcomeWords, pctWords, ptsWords, sourceGroups } from "@/lib/insightView";
 
 export type InsightHtml = { whatHappened: string | null; why: string | null; originalRest: string | null };
 
@@ -333,7 +333,7 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
     return (
       <div className="inMoreCard" data-more="bottlenecks">
         <span className="inEyebrow">Bottlenecks</span>
-        <MiniWeb center={sym} left={m.suppliers.map((s) => s.ticker ?? s.name)} right={m.dependants.names} />
+        <MiniWeb center={sym} left={m.suppliers.map((s) => miniLabel(s.name, s.ticker))} right={m.dependants.names} />
         {m.suppliers.length ? (
           <>
             <h3 className="inH3">Who {m.company} depends on</h3>
@@ -407,8 +407,38 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
       </div>
     );
   }
-  const words = m.kind === "sector" ? { eyebrow: "Sector", big: m.name, line: `How the ${m.name} sector is moving.`, go: "Open the sector page →" }
-    : m.kind === "calendar" ? { eyebrow: "Earnings calendar", big: "This week", line: "Who reports this week, and the latest results.", go: "Open the calendar →" }
+  if (m.kind === "sector") {
+    // FILLED (#563 COWORK #181): the sector's own figures (the side box's row, no
+    // second read), then other same-sector stocks with a page here, in the Screens
+    // card's row style. No peers: no heading. Descriptive only.
+    const mv = m.move ?? null, peers = m.peers ?? [];
+    const fig = (label: string, v: number | null, digits = 1) => v === null ? null : (
+      <li><span>{label}</span><strong className={tone(v) === "up" ? "inUp" : tone(v) === "down" ? "inDown" : ""}>{pctWords(v, digits)}</strong></li>
+    );
+    return (
+      <div className="inMoreCard" data-more="sector">
+        <span className="inEyebrow">Sector</span>
+        <Link href={m.href} className="inMoreBig inMoreMid inMoreTitleLink">{m.name}</Link>
+        {mv ? (
+          <ul className="inList inTight" data-sector-figures="">
+            {fig("Year to date", mv.ytd, 2)}
+            {fig("Latest session", mv.day)}
+            {fig("This week", mv.week)}
+            {fig("This month", mv.month)}
+            {mv.rank !== null ? <li><span>Rank, latest session</span><strong>{mv.rank} of 11</strong></li> : null}
+          </ul>
+        ) : <span className="inRead">How the {m.name} sector is moving.</span>}
+        {peers.length ? (
+          <>
+            <h3 className="inH3" data-sector-peers-head="">Other {m.name} on MyStockHarbor</h3>
+            <ScreenMembersList members={peers} />
+          </>
+        ) : null}
+        <Link href={m.href} className="inMoreGo">Open the sector page →</Link>
+      </div>
+    );
+  }
+  const words = m.kind === "calendar" ? { eyebrow: "Earnings calendar", big: "This week", line: "Who reports this week, and the latest results.", go: "Open the calendar →" }
     : { eyebrow: "The market", big: "S&P 500", line: "The index's trend, levels and this week's read.", go: "Open the S&P 500 page →" };
   return (
     <Link href={m.href} className="inMoreCard" data-more={m.kind}>
@@ -443,19 +473,31 @@ export function ScreenMembersList({ members }: { members: ScreenMember[] }) {
   );
 }
 
-/** Suppliers on the left feeding the stock in the middle; the pages that depend on it on the right. */
+/**
+ * Suppliers on the left feeding the stock in the middle; the pages that depend on it on the right.
+ * THE LABELS ARE HTML (#563 COWORK #181), a column beside the drawing at the dots'
+ * heights, each whole (miniLabel): inside the SVG they had about five characters of
+ * room and were cut mid-word ("Molic", "Singl"). The centre takes a full ticker.
+ */
 function MiniWeb({ center, left, right }: { center: string; left: string[]; right: string[] }) {
-  const W = 220, H = 96, C = { x: W / 2, y: H / 2 };
+  const W = 140, H = 96, C = { x: 76, y: H / 2 };
   const at = (i: number, n: number, x: number) => ({ x, y: n === 1 ? H / 2 : 14 + (i * (H - 28)) / (n - 1) });
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} aria-hidden="true" className="inMiniWeb" style={{ maxWidth: 260 }}>
-      {left.map((s, i) => { const p = at(i, left.length, 40); return <line key={`l${s}`} x1={p.x} y1={p.y} x2={C.x - 14} y2={C.y} stroke="rgba(147,197,253,0.5)" strokeWidth={1} />; })}
-      {right.map((s, i) => { const p = at(i, right.length, W - 40); return <line key={`r${s}`} x1={C.x + 14} y1={C.y} x2={p.x} y2={p.y} stroke="rgba(95,212,199,0.5)" strokeWidth={1} />; })}
-      {left.map((s, i) => { const p = at(i, left.length, 40); return <g key={`lc${s}`}><circle cx={p.x} cy={p.y} r={3.5} fill="#93c5fd" /><text x={p.x - 7} y={p.y + 4} textAnchor="end" fill="#cbd5e1" style={{ fontSize: "0.75rem" }}>{s.slice(0, 5)}</text></g>; })}
-      {right.map((s, i) => { const p = at(i, right.length, W - 40); return <circle key={`rc${s}`} cx={p.x} cy={p.y} r={3.5} fill="#5FD4C7" />; })}
-      <circle cx={C.x} cy={C.y} r={14} fill="#0b1220" stroke="#5FD4C7" strokeWidth={2} />
-      <text x={C.x} y={C.y + 4} textAnchor="middle" fill="#f1f5f9" style={{ fontSize: "0.75rem", fontWeight: 800 }}>{center.slice(0, 4)}</text>
-    </svg>
+    <div className="inMiniWeb" aria-hidden="true">
+      {left.length ? (
+        <ul className="inMiniLabels" data-mini-labels="" style={{ justifyContent: left.length === 1 ? "center" : "space-between" }}>
+          {left.map((s, i) => <li key={i}>{s}</li>)}
+        </ul>
+      ) : null}
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} focusable="false">
+        {left.map((s, i) => { const p = at(i, left.length, 6); return <line key={`l${i}`} x1={p.x} y1={p.y} x2={C.x - 19} y2={C.y} stroke="rgba(147,197,253,0.5)" strokeWidth={1} />; })}
+        {right.map((s, i) => { const p = at(i, right.length, W - 8); return <line key={`r${i}`} x1={C.x + 19} y1={C.y} x2={p.x} y2={p.y} stroke="rgba(95,212,199,0.5)" strokeWidth={1} />; })}
+        {left.map((s, i) => { const p = at(i, left.length, 6); return <circle key={`lc${i}`} cx={p.x} cy={p.y} r={3.5} fill="#93c5fd" />; })}
+        {right.map((s, i) => { const p = at(i, right.length, W - 8); return <circle key={`rc${i}`} cx={p.x} cy={p.y} r={3.5} fill="#5FD4C7" />; })}
+        <circle cx={C.x} cy={C.y} r={19} fill="#0b1220" stroke="#5FD4C7" strokeWidth={2} />
+        <text x={C.x} y={C.y + 4} textAnchor="middle" fill="#f1f5f9" style={{ fontSize: "0.75rem", fontWeight: 800 }}>{center}</text>
+      </svg>
+    </div>
   );
 }
 
@@ -624,6 +666,10 @@ const CSS = `
 .inMoreMid { font-size: 1.25rem; }
 .inMoreGo { font-size: var(--fs-read); font-weight: 800; color: #93c5fd; margin-top: auto; }
 .inMoreCard .inRead { margin: 0; }
+.inMiniWeb { display: flex; align-items: stretch; gap: 6px; height: 96px; min-width: 0; max-width: 100%; }
+.inMiniWeb svg { flex: 0 0 auto; display: block; }
+.inMiniLabels { list-style: none; margin: 0; padding: calc(14px - 0.6em) 0; display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.inMiniLabels li { font-size: 0.75rem; line-height: 1.2; color: #cbd5e1; white-space: nowrap; }
 .inRelCard { padding: 0; overflow: hidden; }
 .inRelCard img, .inRelBrand { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
 .inRelBrand { display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 950; color: rgba(95,212,199,0.35); background: linear-gradient(135deg, #0d1f35, #060c18); }
