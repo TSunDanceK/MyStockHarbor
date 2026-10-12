@@ -82,16 +82,10 @@ check(
     `constant — while these are apart the LIMIT decides coverage and the constant ` +
     `is inert; when they converge it has started shaping the universe`
 );
-check(
-  "the run reports the floor it actually got, not just the one configured",
-  /observedFloor/.test(screener) &&
-    /observedFloor: result\.observedFloor/.test(
-      readCodeOnly("app/api/jobs/warm-screener-fundamentals/route.ts")
-    ),
-  "the screener answers market-cap-descending, so the smallest cap returned IS " +
-    "the coverage floor — recording it makes 'has the constant started binding' " +
-    "answerable from a run record instead of from reasoning"
-);
+// RETIRED 2026-10-12 (#553 COWORK #212): "the run reports the floor it
+// actually got" pinned observedFloor on warm-screener-fundamentals' record. That
+// job's FMP screener read is gone (check-fmp-keypull-b F1 pins that it stays
+// gone), so there is no observed floor to record.
 
 // ── 3. The write survives 3x the rows ───────────────────────────────────────
 console.log("\n3. Three thousand rows do not become one oversized request");

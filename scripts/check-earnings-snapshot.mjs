@@ -130,7 +130,8 @@ console.log("\n3. a margin is a level; growth is a change");
 
   // THE MUTATION. One formatter for both is exactly how the old card did it.
   const oneFormatter = await loadSnapshot(once(
-    "formatLevel(snapshot.margins.gross)", "formatGrowth(snapshot.margins.gross)"));
+    // The margin tiles' value comes from one helper since #552 COWORK #212 (marginTile).
+    "value: own ? NOT_MEANINGFUL : formatLevel(v),", "value: own ? NOT_MEANINGFUL : formatGrowth(v),"));
   const mutated = (textFor(oneFormatter, "AAPL").match(/Gross margin ([+-]?[\d.]+%)/) ?? [])[1];
   check("...and the assertion CATCHES the growth formatter on a margin",
     Boolean(mutated) && mutated.startsWith("+"), `mutated gross margin: ${mutated}`);

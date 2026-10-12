@@ -9,7 +9,9 @@
 #   - a commit SUBJECT line carrying [skip preview] skips (a body that only
 #     mentions it builds);
 #   - a diff since VERCEL_GIT_PREVIOUS_SHA (else HEAD^) touching only
-#     reports/, claude/, docs/ or *.md files skips. scripts/ is NOT skipped
+#     reports/, claude/, docs/ or *.md files skips -- EXCEPT content/: its
+#     *.md files are live pages (insights, bottlenecks, videos), so any path
+#     under content/ builds (#553 COWORK #213). scripts/ is NOT skipped
 #     (some checks run in the build), and a diff that cannot be computed
 #     (shallow clone, no previous commit) builds.
 # One log line names the reason. Tested by scripts/check-vercel-ignore-build.mjs.
@@ -49,6 +51,7 @@ if [ -z "$files" ]; then
 fi
 while IFS= read -r f; do
   case "$f" in
+    content/*) build "site content changed ($f)" ;;
     reports/*|claude/*|docs/*|*.md) ;;
     *) build "code changed ($f)" ;;
   esac

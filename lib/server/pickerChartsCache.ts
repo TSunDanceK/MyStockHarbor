@@ -32,21 +32,16 @@ import { recordRedisRead } from "./redisBandwidth";
 //
 // The read/write chunking is the point of this module, not an optimisation.
 //
-// SHAPE CONTRACT
+// SHAPE CONTRACT (CHANGED 2026-10-12, #553 COWORK #214)
 // --------------
-// `writePickersCache`/`readPickersCache` in pickersBuilder.ts are the only
-// call sites: the payload is stripped of `chartPoints` on the way into Redis
-// and has them re-attached on the way out. Every consumer therefore sees the
-// exact same payload shape as before this module existed -- no component, page
-// or API route needed changing. That is deliberate: it makes this change
-// revertible in one commit and keeps the blast radius off the render paths.
-//
-// FOLLOW-UP (not done here): because the store is keyed per symbol, the
-// re-attach could later be narrowed to just the symbols a given page actually
-// draws. The screener's list view -- the default -- draws ZERO charts, and
-// chart view draws at most CHART_PAGE_SIZE (21) at a time, yet the payload
-// currently carries every series on every render. That is a large win, but it
-// changes render paths, so it belongs in its own PR.
+// `writePickersCache` strips `chartPoints` on the way into Redis and leaves
+// each record its `chartLite` (lib/pickerChartLite.ts). `readPickersCache` NO
+// LONGER RE-ATTACHES the series: re-attaching all ~690 on every page read was
+// ~7.6 MB a read and the bulk of the Upstash bill (CODE-B #181), while the list
+// view -- the default -- draws zero candles and chart view at most 21. The
+// candles are now read per drawn row by /api/picker-charts, which is this
+// module's only render-path reader. scripts/check-picker-charts-off-read.mjs
+// holds the payload read to that.
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -170,7 +165,8 @@ export async function writePickerChartsBulk(
  * Fail-open per chunk, for the same reason as the write path.
  */
 export async function readPickerChartsBulk(
-  symbols: string[]
+  symbols: string[],
+  caller?: string
 ): Promise<Map<string, StoredChartPoint[]>> {
   const out = new Map<string, StoredChartPoint[]>();
   if (!redis) return out;
@@ -178,11 +174,11 @@ export async function readPickerChartsBulk(
   const fields = Array.from(new Set(symbols.map(cleanSymbol).filter(Boolean)));
   if (!fields.length) return out;
 
-  // ~11 KB per symbol, and the whole universe is read on every picker page
-  // regeneration that misses the in-process memo. Counted before the chunk loop
-  // so a partial read still reports what it asked for -- the bandwidth is spent
-  // on the request, not on the reply being usable.
-  await recordRedisRead("picker-charts", fields.length);
+  // ~11 KB per symbol. Since #553 COWORK #214 the payload read no longer
+  // calls this; /api/picker-charts does, for the rows a view draws. Counted
+  // before the chunk loop so a partial read still reports what it asked for --
+  // the bandwidth is spent on the request, not on the reply being usable.
+  await recordRedisRead("picker-charts", fields.length, caller);
 
   for (const group of chunk(fields, CHUNK_SIZE)) {
     try {

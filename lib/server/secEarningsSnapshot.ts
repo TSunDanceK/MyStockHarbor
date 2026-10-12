@@ -27,7 +27,8 @@
 // the full report therefore cannot disagree about the same filing, which they
 // would within a week of anyone tuning either copy. See that module's header.
 import {
-  EMPTY_REASONS, buildSecEarningsView, conversionNote, filingCreditText, filingNoticeText, isPct,
+  EMPTY_REASONS, NOT_MEANINGFUL_GROWTH_REASON, NOT_MEANINGFUL_MARGIN_REASON, buildSecEarningsView, conversionNote,
+  filingCreditText, filingNoticeText, isPct,
   type PeriodBasis, type Pct, type SecEarningsView, type ViewCell,
 } from "./secEarningsView";
 import { resolveFactSetForRender, type ColdResult } from "./secColdFetch";
@@ -251,6 +252,35 @@ export type SnapshotAnnualChart = {
   reason: string | null;
 };
 
+/** Per figure, the reason it prints "n/m", or null. See SecEarningsSnapshot.notMeaningful. */
+export type SnapshotNotMeaningful = {
+  revenueYoY: string | null;
+  gross: string | null;
+  operating: string | null;
+  net: string | null;
+  grossChange: string | null;
+  operatingChange: string | null;
+};
+const NONE_NOT_MEANINGFUL: SnapshotNotMeaningful = { revenueYoY: null, gross: null, operating: null, net: null, grossChange: null, operatingChange: null };
+
+/**
+ * The snapshot's n/m reasons from the view's own markers (#552 COWORK #212):
+ * the snapshot period's growth flag, and the NEWEST margin row's (the row the
+ * tiles caption). Exported for the check.
+ */
+export function notMeaningfulOf(view: SecEarningsView): SnapshotNotMeaningful {
+  const m = view.margins.at(-1)?.notMeaningful;
+  const margin = (on: boolean | undefined) => (on ? NOT_MEANINGFUL_MARGIN_REASON : null);
+  return {
+    revenueYoY: view.snapshot.revenueYoYNotMeaningful ? NOT_MEANINGFUL_GROWTH_REASON : null,
+    gross: margin(m?.gross),
+    operating: margin(m?.operating),
+    net: margin(m?.net),
+    grossChange: margin(m?.grossChange),
+    operatingChange: margin(m?.operatingChange),
+  };
+}
+
 export type SecEarningsSnapshot = {
   symbol: string;
   /**
@@ -337,6 +367,14 @@ export type SecEarningsSnapshot = {
    * its tile stays uncoloured. Null with no comparison period.
    */
   yearAgo: { label: string; eps: number | null; gross: number | null; operating: number | null } | null;
+  /**
+   * WHICH FIGURES ARE "n/m" (#552 COWORK #212): per figure, the tap note, or
+   * null where the figure stands. The figures themselves (revenueYoY, margins,
+   * yearAgo) stay as filed; a surface prints NOT_MEANINGFUL_TEXT in their
+   * place and this sentence on tap. The changes are the latest margin against
+   * yearAgo's, in points — the tiles' "vs a year ago" line.
+   */
+  notMeaningful: SnapshotNotMeaningful;
 
   /** Set only for a filer that reports in another currency. */
   currencyNote: string | null;
@@ -507,6 +545,7 @@ export function buildSecEarningsSnapshot(args: {
       margins: { gross: null, operating: null, net: null },
       marginReasons: { gross: null, operating: null, net: null },
       yearAgo: null,
+      notMeaningful: NONE_NOT_MEANINGFUL,
       currencyNote: null,
       filingCredit: null,
       filingNotice: null,
@@ -565,6 +604,7 @@ export function buildSecEarningsSnapshot(args: {
       net: marginReason(margins.net),
     },
     yearAgo: yearAgoOf(view),
+    notMeaningful: notMeaningfulOf(view),
     currencyNote: view.currency ? conversionNote(view.currency) : null,
     filingCredit: view.latestFromFiling ? filingCreditText(view.latestFromFiling) : null,
     filingNotice: view.filedNotInFeed ? filingNoticeText(view.filedNotInFeed) : null,

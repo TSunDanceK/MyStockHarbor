@@ -99,14 +99,20 @@ export type ReportedFigures = {
   revenue: number | null;
   /** % vs the same period a year earlier; null when there is no comparable period. */
   revenueYoY: number | null;
+  /** Set when revenueYoY is off a tiny base and prints "n/m" (#552 COWORK #212). Absent on records written before it. */
+  revenueYoYNotMeaningful?: true;
   epsDiluted: number | null;
 };
 export function figuresForAnnouncement(
   announcedPeriodEnd: string | null,
-  latest: { end: string | null; revenue: number | null; revenueYoY: number | null; epsDiluted: number | null } | null,
+  latest: { end: string | null; revenue: number | null; revenueYoY: number | null; revenueYoYNotMeaningful?: boolean; epsDiluted: number | null } | null,
 ): ReportedFigures | null {
   if (!announcedPeriodEnd || !latest || latest.end !== announcedPeriodEnd) return null;
-  return { periodEnd: announcedPeriodEnd, revenue: latest.revenue, revenueYoY: latest.revenueYoY, epsDiluted: latest.epsDiluted };
+  return {
+    periodEnd: announcedPeriodEnd, revenue: latest.revenue, revenueYoY: latest.revenueYoY,
+    ...(latest.revenueYoYNotMeaningful ? { revenueYoYNotMeaningful: true as const } : {}),
+    epsDiluted: latest.epsDiluted,
+  };
 }
 
 // ── ONE ROW PER FILER, UNDER ITS MOST-TRADED CLASS (#552 COWORK #174) ──────

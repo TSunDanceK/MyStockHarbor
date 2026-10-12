@@ -29,24 +29,12 @@
       "schedule": "2 7 * * *"
     },
     {
-      "path": "/api/jobs/warm-earnings",
-      "schedule": "15 7 * * *"
-    },
-    {
       "path": "/api/jobs/warm-screener-fundamentals",
       "schedule": "50 7 * * *"
     },
     {
-      "path": "/api/jobs/warm-fundamentals",
-      "schedule": "22 * * * *"
-    },
-    {
       "path": "/api/jobs/warm-price-pool",
       "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/jobs/warm-stock-data",
-      "schedule": "7-57/10 * * * *"
     },
     {
       "path": "/api/jobs/sec-daily-index",

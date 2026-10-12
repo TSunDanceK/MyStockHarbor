@@ -29,7 +29,6 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { JOBS, describeCron, type JobKey } from "./jobRuns";
-import { EARNINGS_STALE_AFTER_SECONDS } from "./earningsFreshness";
 import { TIER1_TTL_MS, TIER2_TTL_MS, readTier1 } from "./priceTiers";
 import { ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
 
@@ -93,12 +92,9 @@ const SEEDED_PREFIX = "msh:staleness-seeded:v1";
  * NEXT dataset added without a denominator impossible to mistake for healthy.
  */
 export const DATASETS = {
-  fundamentals: {
-    label: "Fundamentals (market cap, P/E)",
-    ttlSeconds: 60 * 60 * 26,
-    job: "warm-fundamentals",
-    coverage: "registered",
-  },
+  // RETIRED 2026-10-12 (#553 COWORK #212): fundamentals, stockData and earnings,
+  // whose only producers were the FMP warm jobs (warm-fundamentals,
+  // warm-stock-data, warm-earnings), retired with their crons.
   // `profile` (FMP industry/sector, 30 d) was removed with the /stable/profile
   // leg (#553 COWORK #16): sector and industry come from the committed SEC
   // classification now, which has no queue to go stale.
@@ -109,17 +105,6 @@ export const DATASETS = {
     // OBSERVED-ONLY: markRefreshed with no registerSymbols caller. Its ratio is
     // a self-selecting denominator and the page must not render it as coverage.
     coverage: "observed-only",
-  },
-  stockData: {
-    label: "Stock data (valuation, dividends, analysts)",
-    // Matches TTL_SECONDS in stockDataCache. The job refreshes
-    // REFRESH_SLICE_SIZE symbols per run, so its lap is the longest in the
-    // system -- ~5h at today's universe and ~20h at 3,000 -- which is exactly
-    // why it needed a per-symbol denominator: a lap that quietly stops
-    // completing looks identical to one that is merely slow.
-    ttlSeconds: 60 * 60 * 26,
-    job: "warm-stock-data",
-    coverage: "registered",
   },
   pricePool: {
     label: "Price pool",
@@ -186,30 +171,6 @@ export const DATASETS = {
     ttlSeconds: 60 * 60 * 26,
     job: "warm-picker-universe",
     qualifier: "forced refetch",
-    coverage: "registered",
-  },
-  earnings: {
-    label: "Earnings",
-    // DERIVED, and it was a typed `60 * 60 * 24 * 7`.
-    //
-    // 7 days was the only number in this table with no argument behind it, and
-    // it was wrong against the dataset's own cache rule by a factor of
-    // thirteen. computeEarningsTtlSeconds holds a symbol's rows for up to 95
-    // days between reports, markRefreshed only fires when the job refetches,
-    // and the job only refetches once the key has expired -- so a correctly
-    // cached symbol at rest was reported as past its TTL for 94 days in every
-    // 95. Observed 2026-09-11: `12 / 349`, `337 past their TTL`, "96% of
-    // observed symbols past their own TTL". Every word of that was correct and
-    // none of it was a fault.
-    //
-    // This is the pricePool disease in a second dataset -- a page that cannot
-    // tell IDLE-BECAUSE-CORRECT from BROKEN, reporting the more alarming of the
-    // two every single day. See lib/server/earningsFreshness.ts for the full
-    // trace, the three terms this number is made of, and what moved to the
-    // job's run record to keep a same-day signal.
-    ttlSeconds: EARNINGS_STALE_AFTER_SECONDS,
-    job: "warm-earnings",
-    qualifier: "refetched on key expiry, not on a clock",
     coverage: "registered",
   },
   news: {

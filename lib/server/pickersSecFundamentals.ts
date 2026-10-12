@@ -51,6 +51,7 @@
 import { Redis } from "@upstash/redis";
 import { symbolSpellings } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { recordRedisRead } from "./redisBandwidth";
 import { readFactSet } from "./secFactStore";
 import { cell, valueOf, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
@@ -834,6 +835,9 @@ export async function readSecPickerRows(symbols: string[]): Promise<Map<string, 
   const fields = [...new Set(asked.flatMap(spellingsOf))];
   try {
     const raw = (await redis.hmget(pickersSecKey(), ...fields)) as unknown;
+    // Metered per field asked (#553 COWORK #214, cut 3): the reply is sized by
+    // the rows that exist, but an absent field costs a null, so this is a ceiling.
+    await recordRedisRead("sec-fundamentals", fields.length, "sec-picker-rows");
     const byField = new Map<string, unknown>();
     fields.forEach((f, i) =>
       byField.set(f, Array.isArray(raw) ? raw[i] : raw && typeof raw === "object" ? (raw as Record<string, unknown>)[f] : null)
@@ -921,6 +925,8 @@ export async function loadSecCapRows(): Promise<Record<string, SecCapRow> | null
   // it fills only from an explicit seed and goes stale in 3 days, so a preview
   // reading it showed "—" for every cap. Only cap/P/E inputs are projected.
   const raw = await redis.hgetall<Record<string, unknown>>(PICKERS_SEC_KEY);
+  // The census's 2.56 MB HGETALL (#553 COWORK #214, cut 3): every row, per Data Cache miss.
+  await recordRedisRead("sec-fundamentals", raw ? Object.keys(raw).length : 0, "sec-cap-rows");
   return raw ? parseSecCapHash(raw, Date.now()) : null;
 }
 
@@ -1035,8 +1041,15 @@ export async function warmPickersSec(
   const result: WarmPickersSecResult = {
     ok: true, symbols: 0, written: 0, noFactSet: 0, stoppedEarly: null, commands: 0,
   };
+  // THE FACT-SET GETS, METERED (#553 COWORK #214, cut 3): ~17 KB each, ~2,600 a
+  // run, and the largest read this job makes. Recorded once, when the run ends
+  // by any path; the route flushes. A's readFactSet is the stock page's
+  // reader too and is A's to meter there.
+  let factSetsRead = 0;
   const done = () => {
     result.durationMs = Math.max(0, clock() - startedAt);
+    if (factSetsRead) void recordRedisRead("sec-facts", factSetsRead, "warm-pickers-sec");
+    factSetsRead = 0;
     return result;
   };
   if (!redis) return { ...done(), ok: false, stoppedEarly: "no-redis" };
@@ -1080,6 +1093,7 @@ export async function warmPickersSec(
     }
     const set = await readSet(symbol).catch(() => null);
     result.commands++;
+    if (set) factSetsRead++;
     if (!set) {
       result.noFactSet++;
       continue;

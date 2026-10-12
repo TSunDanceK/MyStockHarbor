@@ -6,7 +6,8 @@
 //   - relay/*, mockup/*, claude/*-census, claude/*-study, claude/*-mockup skip;
 //   - [skip preview] in the commit SUBJECT skips; in the body only, it builds
 //     (#791's own first push was skipped that way, COWORK #166);
-//   - a diff of only reports/, claude/, docs/ or *.md skips; any other file
+//   - a diff of only reports/, claude/, docs/ or *.md skips, except content/
+//     (live pages, #553 COWORK #213), which builds; any other file
 //     (scripts/ included) builds;
 //   - a diff that cannot be computed (no previous commit, bad SHA) or is
 //     empty (a redeploy of the same commit) builds;
@@ -65,6 +66,8 @@ function rules(src) {
   const docs = repo(["claude/notes.txt", "reports/x.json", "docs/a.txt", "README.md"]);
   const scripts = repo(["scripts/check-x.mjs"]);
   const mixed = repo(["claude/notes.txt", "lib/x.ts"]);
+  // #553 COWORK #213: content/**/*.md are live pages, not docs (#851, #852 were skipped).
+  const content = repo(["content/insights/x.md"]);
   const first = repo([], { firstOnly: true });
   const env = (o) => ({ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "claude/feature", VERCEL_GIT_COMMIT_MESSAGE: "a change", ...o });
   const is = (r, code) => r.code === code && /^vercel-ignore-build: (SKIP|BUILD) — /.test(r.out);
@@ -87,6 +90,7 @@ function rules(src) {
   // Diffs.
   want("docs-only (reports/, claude/, docs/, *.md) skips", is(run(src, env({ VERCEL_GIT_PREVIOUS_SHA: docs.prev }), docs.dir), 0));
   want("scripts/ changes build", is(run(src, env({ VERCEL_GIT_PREVIOUS_SHA: scripts.prev }), scripts.dir), 1));
+  want("a content/insights/x.md-only diff builds (site content, not docs)", is(run(src, env({ VERCEL_GIT_PREVIOUS_SHA: content.prev }), content.dir), 1));
   want("docs plus code builds", is(run(src, env({ VERCEL_GIT_PREVIOUS_SHA: mixed.prev }), mixed.dir), 1));
   want("no previous SHA falls back to HEAD^ (docs-only still skips)", is(run(src, env({}), docs.dir), 0));
   want("a diff that cannot be computed builds (first commit, no HEAD^)", is(run(src, env({}), first.dir), 1));
@@ -113,6 +117,7 @@ try {
     ["[skip preview] ignored", '  skip "commit subject says [skip preview]"', '  :'],
     ["[skip preview] matched anywhere in the message (the #791 bug)", 'subject="${subject%%$\'\\n\'*}"\n', ""],
     ["scripts/ treated as docs", "    reports/*|claude/*|docs/*|*.md) ;;", "    reports/*|claude/*|docs/*|scripts/*|*.md) ;;"],
+    ["content/ markdown treated as docs again (the #851/#852 bug)", '    content/*) build "site content changed ($f)" ;;\n', ""],
     ["an uncomputable diff skips", '  build "diff since $base could not be computed"', '  skip "diff since $base could not be computed"'],
     ["an empty diff skips", '  build "no changed files found since $base"', '  skip "no changed files found since $base"'],
   ];

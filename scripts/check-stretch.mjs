@@ -114,7 +114,9 @@ async function libRules(L) {
 function gridRules(src) {
   const fails = [];
   const want = (label, ok) => { if (!ok) fails.push(label); };
-  want("a Stretch (z20) column, from the row's stored closes", /label: "Stretch \(z20\)"/.test(src) && /const stretch = latestStretch\(pts\.map\(\(p\) => p\.close\)/.test(src));
+  // Since #553 COWORK #214 the stored closes come through rowBars (the bars, or
+  // their chart lite's 40 closes); check-picker-charts-off-read proves both agree.
+  want("a Stretch (z20) column, from the row's stored closes", /label: "Stretch \(z20\)"/.test(src) && /const bars = rowBars\(entry\)/.test(src) && /const stretch = latestStretch\(bars\.closes\)/.test(src));
   want("only on the oversold/overbought pages", /const stretchPage = \/oversold\|overbought\/i\.test\(configHref\);/.test(src) &&
     /if \(stretchPage\) sets\.general\.splice\(sets\.general\.indexOf\(change\) \+ 1, 0, stretch\);/.test(src));
   want("the column set follows the page", /\}, \[isEarnings, displayTone, configHref(?:, hasFiledEarnings)?\]\);/.test(src));
@@ -172,7 +174,7 @@ try {
   }
   const GRID_MUTANTS = [
     ["the column on every picker page", /const stretchPage = \/oversold\|overbought\/i\.test\(configHref\);/, "const stretchPage = true;"],
-    ["the column from the live pool price", /const stretch = latestStretch\(pts\.map\(\(p\) => p\.close\)/, "const stretch = latestStretch([price ?? 0]"],
+    ["the column from the live pool price", /const stretch = latestStretch\(bars\.closes\)/, "const stretch = latestStretch([price ?? 0]"],
     ["the column set stuck on the first page", /\}, \[isEarnings, displayTone, configHref(?:, hasFiledEarnings)?\]\);/, "}, [isEarnings, displayTone]);"],
   ];
   for (const [label, from, to] of GRID_MUTANTS) {

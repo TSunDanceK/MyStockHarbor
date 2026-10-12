@@ -121,7 +121,7 @@ const CANDIDATES: Candidate[] = [
   {
     key: SCHEDULE_KEY,
     owner: "lib/server/earningsSchedule.ts readEarningsSchedule()",
-    writtenBy: "warm-stock-data (every 10 min), rebuilt once a day on TTL lapse",
+    writtenBy: "nothing since 2026-10-12: its one reader, warm-stock-data, was retired (#553 COWORK #212)",
     shape: "string",
     note:
       "Written from a read path on a cache miss, and its catch is bare -- an " +

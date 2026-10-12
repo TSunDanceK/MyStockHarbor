@@ -26,6 +26,8 @@
 // one, because a fixture without that symbol cannot tell the two apart.
 //
 //   node scripts/check-cache-health-accuracy.mjs
+import fs from "node:fs";
+import path from "node:path";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
 
@@ -385,21 +387,26 @@ const TIERED = Object.keys(
       .map(([, name]) => [name, true])
   )
 );
-const callSites = [
-  ...readCodeOnly("app/api/jobs/warm-earnings/route.ts").matchAll(/readPastTtl\(\s*"(\w+)"/g),
-].map((m) => m[1]);
+// EVERY CALL SITE IN app/ AND lib/. The one caller was warm-earnings, retired
+// 2026-10-12 (#553 COWORK #212), so today there are none; the rule below still
+// holds for the next one, wherever it is added.
+const treeFiles = [];
+const walkTree = (dir) => {
+  for (const e of fs.readdirSync(path.join(process.cwd(), dir), { withFileTypes: true })) {
+    const rel = path.join(dir, e.name);
+    if (e.isDirectory()) walkTree(rel);
+    else if (/\.tsx?$/.test(e.name)) treeFiles.push(rel);
+  }
+};
+walkTree("app");
+walkTree("lib");
+const callSites = treeFiles.flatMap((f) => [...readCodeOnly(f).matchAll(/readPastTtl\(\s*"(\w+)"/g)].map((m) => m[1]));
 
 check(
   "the registry really does declare a tiered dataset, so this is not vacuous",
   TIERED.length >= 1 && TIERED.includes("pricePool"),
   `tiered: ${TIERED.join(", ") || "none"} — an empty list would make the ` +
     `assertion below pass by having nothing to check`
-);
-check(
-  "and at least one readPastTtl call site was found",
-  callSites.length >= 1,
-  `call sites: ${callSites.join(", ") || "none"} — a renamed function would ` +
-    `otherwise leave this green while the seam reopened`
 );
 check(
   "no readPastTtl call names a tiered dataset",
