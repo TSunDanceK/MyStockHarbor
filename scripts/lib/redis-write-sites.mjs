@@ -27,8 +27,6 @@ export const WRITE_SITES = [
   { file: "lib/server/dailyPageLimit.ts", key: "key", cls: "small", count: 2 },
   { file: "lib/server/descendingTrianglesBuilder.ts", key: "DESCENDING_REDIS_KEY", cls: "listed", candidate: "DESCENDING_REDIS_KEY" },
   { file: "lib/server/descendingTrianglesBuilder.ts", key: "DESCENDING_LOCK_KEY", cls: "small" },
-  { file: "lib/server/earningsCalendar.ts", key: "`${QUOTED_SYMBOL_PREFIX}:${symbol}`", cls: "row" },
-  { file: "lib/server/earningsCalendar.ts", key: "key", cls: "small" },
   { file: "lib/server/earningsCalendar.ts", key: "`${DAY_COMPLETE_PREFIX}:${date}`", cls: "small" },
   { file: "lib/server/earningsCalendar.ts", key: "`${DAY_ITEMS_PREFIX}:${date}`", cls: "row" },
   { file: "lib/server/earningsCalendar.ts", key: "CALENDAR_SCAN_GATE_KEY", cls: "small" },

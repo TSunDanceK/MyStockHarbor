@@ -61,9 +61,13 @@ const debugRoutes = routes.filter((r) => r.includes("debug"));
 
 console.log("\n1. Every debug route asks for the key");
 
+// THE FLOOR FOLLOWS THE DELETIONS (2026-10-12): #846 removed four FMP-only
+// debug routes and #552 COWORK #210 three more (earnings/[symbol],
+// earnings-calendar, earnings-calendar-limit), leaving 8. The floor still
+// catches a scan that finds nothing; it is not a count to defend.
 check(
   "the scan found debug routes to check",
-  debugRoutes.length >= 10,
+  debugRoutes.length >= 5,
   `${debugRoutes.length} of ${routes.length} route handlers under app/api have "debug" in ` +
     `their path — a scan that finds nothing passes trivially, which is the ` +
     `failure mode of a derived list`

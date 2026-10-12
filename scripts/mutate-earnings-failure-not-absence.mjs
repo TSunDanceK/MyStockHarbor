@@ -45,17 +45,21 @@ if (before) {
 // mutant is reported as unapplied rather than silently skipped -- an unapplied
 // mutant looks identical to a caught one from the exit code alone.
 const MUTANTS = [
+  // ── F1a/F1b REWRITTEN 2026-10-12 (#552 COWORK #210) ─────────────────────
+  // They dropped `failed` from quoteOne's two FMP failure arms. quoteOne is
+  // gone; the price pool is the one source that can fail, so these now undo
+  // the two halves of reading a pool failure as a failure.
   {
-    id: "F1a  failed flag dropped from quoteOne's return",
+    id: "F1a  a failed pool read marked off-pool (failed: false)",
     file: CAL,
-    from: `if (!res.ok) return { price: null, marketCap: null, exchange: null, capped: false, failed: true };`,
-    to: `if (!res.ok) return { price: null, marketCap: null, exchange: null, capped: false, failed: false };`,
+    from: `: { price: null, marketCap: null, exchange: null, capped: false, failed: pool === null };`,
+    to: `: { price: null, marketCap: null, exchange: null, capped: false, failed: false };`,
   },
   {
-    id: "F1b  failed flag dropped from the thrown-fetch arm",
+    id: "F1b  a failed pool read swallowed as an empty pool",
     file: CAL,
-    from: `    return { price: null, marketCap: null, exchange: null, capped: false, failed: true };\n  }\n}`,
-    to: `    return { price: null, marketCap: null, exchange: null, capped: false, failed: false };\n  }\n}`,
+    from: `  } catch {\n    pool = null;\n  }`,
+    to: `  } catch {\n    pool = new Map();\n  }`,
   },
   {
     id: "F1c  !anyFailed removed from the completeness test",
@@ -116,12 +120,9 @@ const MUTANTS = [
     from: `  const completed = await readWindowCompleteness(dates);\n  if (!completed) {`,
     to: `  const completed = (await readWindowCompleteness(dates)) ?? new Set<string>();\n  if (false) {`,
   },
-  {
-    id: "F7   the TTL re-ordered after the counter (the original two-step)",
-    file: CAL,
-    from: `    await redis.set(key, 0, { ex: 70 * 60, nx: true }); // just over an hour, covers clock skew\n    const current = await redis.incr(key);`,
-    to: `    const current = await redis.incr(key);\n    if (current === 1) {\n      await redis.expire(key, 70 * 60);\n    }`,
-  },
+  // ── F7 RETIRED 2026-10-12 (#552 COWORK #210) ────────────────────────────
+  // It re-ordered reserveQuoteSlot's SET NX / INCR. reserveQuoteSlot went with
+  // quoteOne's FMP leg; §7 of the suite now asserts nothing writes the counter.
   {
     id: "F4   Backfill re-reading the complete flag",
     file: BTN,

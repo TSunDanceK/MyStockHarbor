@@ -17,10 +17,10 @@ export const maxDuration = 300;
 
 // Owner-only, single-date backfill -- triggered by the "Backfill" button on
 // app/earnings-calendar/page.tsx. POST { date, key }. Populates every US-listed
-// candidate for the one date (getFullDayEarnings, no 100-cap), bypassing this
-// feature's own hourly quote cap but never the site-wide FMP account budget
-// (reserveFmpCallSlot, still enforced inside quoteOne). Only dates inside the
-// active window can be backfilled.
+// candidate for the one date (getFullDayEarnings, no 100-cap), priced from the
+// shared price pool only -- the FMP quote leg and its cap were retired on
+// 2026-10-12 (#552 COWORK #210). Only dates inside the active window can be
+// backfilled.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(request: Request) {

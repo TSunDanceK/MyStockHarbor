@@ -40,6 +40,7 @@
 // it -- the PRICE_TARGET_RUNS shape this rebuild removed once already.
 //
 //   node scripts/check-earnings-calendar-limit.mjs
+import fs from "node:fs";
 import ts from "typescript";
 import { readCodeOnly } from "./lib/source-code.mjs";
 
@@ -51,7 +52,6 @@ const check = (label, ok, detail = "") => {
 
 const calendar = readCodeOnly("lib/server/earningsCalendar.ts");
 const plan = readCodeOnly("lib/server/earningsPlan.ts");
-const probe = readCodeOnly("app/api/debug/earnings-calendar-limit/route.ts");
 const store = readCodeOnly("lib/server/earningsStore.ts");
 
 const lift = async (src, extra = "") => {
@@ -570,101 +570,21 @@ check(
     "gives, and it would otherwise read as 'one pass is plenty'"
 );
 
-// ── 4. The probe can actually answer the question ──────────────────────────
-console.log("\n4. The probe compares sets, not just counts");
-
-// RUN, NOT GREPPED. The first version of these two asserted that the
-// comparison loop and the verdict strings EXISTED -- and both survived a
-// mutation that threw the result away (`vsBaseline = null`) or bypassed the
-// branch entirely (`if (false)`). Two assertions that could not fail, in the
-// file whose whole subject is a number nobody checked. Both are pure exported
-// functions now, so the claim is about behaviour.
-// LIFTED AS TYPESCRIPT, unmodified. The first attempt regex-stripped the type
-// annotations before transpiling and mangled the source into a module that
-// exported nothing -- transpileModule erases types without needing them to
-// resolve, so `Pick<Probe, ...>` referring to a type left behind in the route
-// is fine. Rewriting source to make it liftable is how a fixture stops being
-// the code it claims to test.
-const probeMod = await lift(
-  `${grabFunction(probe, "compareSets")}\n${grabFunction(probe, "verdictFor")}`
-);
-const setOf = (...keys) => new Set(keys);
-check(
-  "a larger set that ADDS rows is reported as added, not just bigger",
-  (() => {
-    const r = probeMod.compareSets(setOf("A|1"), setOf("A|1", "B|2"));
-    return r.added === 1 && r.removed === 0 && r.identical === false;
-  })(),
-  "this is what a limit being honoured looks like: strictly more of the same month"
-);
-check(
-  "an identical set is identical even though nothing about the size says so",
-  probeMod.compareSets(setOf("A|1", "B|2"), setOf("B|2", "A|1")).identical === true,
-  "a 200 that ignores the parameter returns the same rows — 'the count did not " +
-    "change' and 'the endpoint ignored me' are different claims, and only the " +
-    "set separates them"
-);
-check(
-  "a same-SIZE different SLICE is not identical",
-  (() => {
-    const r = probeMod.compareSets(setOf("A|1", "B|2"), setOf("A|1", "C|3"));
-    return r.identical === false && r.added === 1 && r.removed === 1;
-  })(),
-  "a server-side hard cap can return the same count from a different window, " +
-    "and comparing counts alone would call that 'ignored'"
-);
-check(
-  "it flags a count that lands exactly on its own limit",
-  /probe\.looksCapped = limit > 0 && rows\.length === limit;/.test(probe),
-  "otherwise raising the limit and hitting a higher cap reads as success"
-);
-check(
-  "it reports bytes, from the raw text",
-  /const text = await res\.text\(\);/.test(probe) && /probe\.bytes = text\.length;/.test(probe),
-  "the answer decides what a daily reference-cache write carries; measuring a " +
-    "re-serialised object instead of the transfer would understate it"
-);
-check(
-  "it goes to FMP rather than through the cached month",
-  /cache: "no-store"/.test(probe) && !/fetchMonthRows/.test(probe),
-  "the reference key holds a 24h TTL, so a probe reading it would measure the " +
-    "cache and report on the endpoint"
-);
-const P = (rows, looksCapped = false, identical = null) => ({
-  rows,
-  looksCapped,
-  vsBaseline: identical === null ? null : { added: 0, removed: 0, identical },
-});
-check(
-  "identical sets at every limit -> limit-ignored",
-  probeMod.verdictFor([P(4000), P(4000, false, true), P(4000, false, true)]).startsWith(
-    "limit-ignored"
-  ),
-  "which is the world where the answer is date slicing, and that is a different " +
-    "change — saying so is the deliverable, not a disappointment"
-);
-check(
-  "the biggest probe landing on its own limit -> still truncated",
-  probeMod
-    .verdictFor([P(4000), P(4000, true, false), P(10000, true, false)])
-    .startsWith("hard-cap-or-still-truncated"),
-  "otherwise raising the limit and hitting a HIGHER cap reads as success — the " +
-    "original failure repeated one order of magnitude up"
-);
-check(
-  "a count that moves and stops short of its limit -> honoured",
-  probeMod
-    .verdictFor([P(4000), P(4000, true, false), P(7318, false, false)])
-    .startsWith("limit-honoured"),
-  "the row count moves with the parameter and the largest probe is under its " +
-    "own limit, so it is a whole month"
-);
-check(
-  "nothing came back -> nothing is established",
-  probeMod.verdictFor([P(null), P(0)]).startsWith("no-data"),
-  "an all-failed probe must not fall through to a reassuring verdict; that is " +
-    "the absence-read-as-health defect this repo keeps finding"
-);
+// ── 4. RETIRED 2026-10-12 (#552 COWORK #210): the probe route is deleted ────
+// Section 4 ran the probe's compareSets / verdictFor (app/api/debug/
+// earnings-calendar-limit) against fixture sets. The probe called only FMP,
+// FMP's contract has ended (COWORK #209), and its answer is already recorded
+// above: "limit-ignored", 0/4,000/10,000/20,000 all returned the same 4,000
+// rows. The route went with the other two FMP-only earnings debug routes;
+// what is asserted now is that all three stay gone.
+console.log("\n4. The FMP-only earnings debug routes are gone (COWORK #210)");
+for (const route of [
+  "app/api/debug/earnings/[symbol]/route.ts",
+  "app/api/debug/earnings-calendar/route.ts",
+  "app/api/debug/earnings-calendar-limit/route.ts",
+]) {
+  check(`${route} does not exist`, !fs.existsSync(route), "deleted with the FMP contract, as B's #846 did for its four");
+}
 
 console.log(
   failures === 0

@@ -260,6 +260,8 @@ function str(value: unknown): string | null {
 // the last field this was read for, is now the company's own annual-report
 // wording (lib/server/filingDescription.ts). No FMP profile call remains on
 // this page.
+// 2026-10-12 (#552 COWORK #210): FMP's contract has ended (COWORK #209), so
+// this can never return data again. Still not called; hidden, not deleted.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | null> {
   const apiKey = process.env.FMP_API_KEY;
@@ -350,6 +352,8 @@ async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | nul
 // a real per-quarter (and per-year, as a fallback for sparse quarterly
 // coverage) shares-outstanding series. Field names are still mapped
 // defensively in case FMP changes the shape.
+// 2026-10-12 (#552 COWORK #210): FMP's contract has ended (COWORK #209), so
+// this can never return data again. Still not called; hidden, not deleted.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | null> {
   const apiKey = process.env.FMP_API_KEY;
