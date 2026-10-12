@@ -1412,6 +1412,8 @@ const TASKS = {
   "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY (Relay B, #553 COWORK #159 PR 2): "What it does" extracted across the stored IPO list (1 GET + SEC).
   "write-ipo-about-measure": { script: "scripts/ipo-about-measure.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (#553 COWORK #212 item 2): sizes of the keys that move the Upstash bytes, and the meter's day counters.
+  "write-redis-bytes-census": { script: "scripts/redis-bytes-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
