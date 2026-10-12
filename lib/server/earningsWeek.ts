@@ -99,18 +99,22 @@ export type ReportedFigures = {
   revenue: number | null;
   /** % vs the same period a year earlier; null when there is no comparable period. */
   revenueYoY: number | null;
-  /** Set when revenueYoY is off a tiny base and prints "n/m" (#552 COWORK #212). Absent on records written before it. */
-  revenueYoYNotMeaningful?: true;
+  /**
+   * Set when revenueYoY prints "n/m": the reason (#552 COWORK #213), or `true`
+   * on a record written by #855 before the reason was carried (read as the
+   * tiny-base reason). Absent on records written before either.
+   */
+  revenueYoYNotMeaningful?: string | true;
   epsDiluted: number | null;
 };
 export function figuresForAnnouncement(
   announcedPeriodEnd: string | null,
-  latest: { end: string | null; revenue: number | null; revenueYoY: number | null; revenueYoYNotMeaningful?: boolean; epsDiluted: number | null } | null,
+  latest: { end: string | null; revenue: number | null; revenueYoY: number | null; revenueYoYNotMeaningful?: string; epsDiluted: number | null } | null,
 ): ReportedFigures | null {
   if (!announcedPeriodEnd || !latest || latest.end !== announcedPeriodEnd) return null;
   return {
     periodEnd: announcedPeriodEnd, revenue: latest.revenue, revenueYoY: latest.revenueYoY,
-    ...(latest.revenueYoYNotMeaningful ? { revenueYoYNotMeaningful: true as const } : {}),
+    ...(latest.revenueYoYNotMeaningful ? { revenueYoYNotMeaningful: latest.revenueYoYNotMeaningful } : {}),
     epsDiluted: latest.epsDiluted,
   };
 }

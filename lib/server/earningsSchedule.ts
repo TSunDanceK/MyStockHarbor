@@ -31,26 +31,16 @@
 // whose answer changes daily -- the same shape of spend that suspended the
 // database on 2026-08-28 and that warmTargets.ts was rebuilt to avoid.
 
-import { Redis } from "@upstash/redis";
-import { PAGE_READ_CACHE } from "./redisCacheMode";
-import { fetchMonthRows, type RawEarningsRow } from "./earningsCalendar";
-
-const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv(PAGE_READ_CACHE)
-    : null;
+// ── RETIRED 2026-10-12 (#552 COWORK #213 item 4) ──────────────────────────
+// readEarningsSchedule built this index from FMP's earnings calendar (via
+// earningsCalendar.fetchMonthRows) and cached it here. Its one reader,
+// warm-stock-data, was retired with FMP (#853, #553 COWORK #212), and a fresh
+// search found no other caller, so the reader and the helpers only it used
+// (buildSchedule, monthsAround, startOfTodayUtcMs) are deleted. What stays:
+// the key, which B's debug sizing route (api/debug/redis-write-sizes) still
+// lists until its entry is retired there, and the entry type.
 
 export const SCHEDULE_KEY = "msh:earnings-schedule:v1";
-// A day. The calendar itself is on REFERENCE_TTL_DAILY_SECONDS, so a shorter
-// TTL here would rebuild from the same rows.
-const SCHEDULE_TTL_SECONDS = 24 * 60 * 60;
-
-// How far either side of today to look. Earnings are quarterly, so one quarter
-// back is enough to find the last report and one forward to find the next --
-// two months of slack each way covers a delayed filing and a calendar that
-// lists a date early.
-const MONTHS_BACK = 4;
-const MONTHS_FORWARD = 3;
 
 export type EarningsScheduleEntry = {
   /** Most recent report on or before today, ISO date. */
@@ -60,96 +50,3 @@ export type EarningsScheduleEntry = {
 };
 
 export type EarningsSchedule = Map<string, EarningsScheduleEntry>;
-
-/**
- * Midnight UTC of today, as ms.
- *
- * The single place this codebase's "has it reported yet" boundary is defined.
- */
-export function startOfTodayUtcMs(nowMs = Date.now()): number {
-  return Date.parse(`${new Date(nowMs).toISOString().slice(0, 10)}T00:00:00.000Z`);
-}
-
-/**
- * Fold calendar rows into the index. Exported and PURE so the invariant check
- * can run it rather than pattern-match it -- the boundary condition above is
- * exactly the kind a regex cannot see.
- */
-export function buildSchedule(rows: RawEarningsRow[], nowMs = Date.now()): EarningsSchedule {
-  const boundary = startOfTodayUtcMs(nowMs);
-  const out: EarningsSchedule = new Map();
-
-  for (const row of rows) {
-    const symbol = String(row?.symbol ?? "").trim().toUpperCase();
-    const date = typeof row?.date === "string" ? row.date.slice(0, 10) : "";
-    if (!symbol || !date) continue;
-    const t = Date.parse(`${date}T00:00:00.000Z`);
-    if (!Number.isFinite(t)) continue;
-
-    const entry = out.get(symbol) ?? { last: null, next: null };
-    if (t <= boundary) {
-      // ON or before today counts as reported. A date equal to the boundary is
-      // today's report: it belongs to `last`, so a refresh triggered by it
-      // fires on the day rather than a quarter later.
-      if (!entry.last || date > entry.last) entry.last = date;
-    } else if (!entry.next || date < entry.next) {
-      entry.next = date;
-    }
-    out.set(symbol, entry);
-  }
-
-  return out;
-}
-
-function monthsAround(nowMs: number): Array<{ year: number; month: number }> {
-  const now = new Date(nowMs);
-  const out: Array<{ year: number; month: number }> = [];
-  for (let offset = -MONTHS_BACK; offset <= MONTHS_FORWARD; offset++) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
-    out.push({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 });
-  }
-  return out;
-}
-
-export async function readEarningsSchedule(nowMs = Date.now()): Promise<EarningsSchedule> {
-  if (redis) {
-    try {
-      const cached = await redis.get<Record<string, EarningsScheduleEntry>>(SCHEDULE_KEY);
-      if (cached && typeof cached === "object" && Object.keys(cached).length) {
-        return new Map(Object.entries(cached));
-      }
-    } catch {
-      // fail open -- rebuild below
-    }
-  }
-
-  const months = monthsAround(nowMs);
-  const rows: RawEarningsRow[] = [];
-  for (const { year, month } of months) {
-    try {
-      rows.push(...(await fetchMonthRows(year, month)));
-    } catch {
-      // One unreadable month is a smaller index, not no index. A missing month
-      // makes some symbols look un-reported, and the floor in stockDataCache is
-      // what stops that becoming a permanent exclusion.
-    }
-  }
-
-  const schedule = buildSchedule(rows, nowMs);
-
-  // NEVER CACHE AN EMPTY INDEX. An empty result means every month read failed,
-  // and pinning it for a day would put the whole universe on the floor -- every
-  // symbol refreshing at the 120-day cadence and the trigger silently inert,
-  // with every run still reporting success.
-  if (redis && schedule.size) {
-    try {
-      await redis.set(SCHEDULE_KEY, Object.fromEntries(schedule), {
-        ex: SCHEDULE_TTL_SECONDS,
-      });
-    } catch {
-      // fail open
-    }
-  }
-
-  return schedule;
-}
