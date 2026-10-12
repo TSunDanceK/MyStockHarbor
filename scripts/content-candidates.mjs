@@ -144,7 +144,7 @@ if (fromLog < 0) {
   register("./lib/tsx-render-hooks.mjs", import.meta.url);
   const { sectorOf } = await import("../lib/server/sectorOf.ts");
   const { snapshotCompanyName } = await import("../lib/server/companyNameSnapshot.ts");
-  const { normaliseCompanyName } = await import("../lib/server/news/companyName.ts");
+  const { cleanName } = await import("../lib/server/companyNames.ts");
   const log = fs.readFileSync(process.argv[fromLog + 1], "utf8");
   const rows = [...log.matchAll(/^(?:\S+ )?CC\|([^|\n]+)\|(\d*)\|([01])\|([01])\|(\d+)\|(\d+)\s*$/gm)].map((m) => ({
     symbol: m[1], marketCap: m[2] === "" ? null : Number(m[2]) * 1e6, inPool: m[3] === "1", hasSecFacts: m[4] === "1", nmCount: Number(m[5]), figures: Number(m[6]),
@@ -159,9 +159,20 @@ if (fromLog < 0) {
   }
   const meta = { generatedAt: sum[6], pool: Number(sum[7]), universe: Number(sum[8]), withFacts: want[3], commands: Number(sum[9]) };
   const { bn, latest } = contentFlags();
-  const symbols = rows.map((r) => ({
+  // ONE ROW PER COMPANY SPELLING: the pool keys BRK-B where the universe has
+  // BRK.B. A dot/dash pair merges under the dotted (the site's) spelling.
+  const merged = new Map();
+  for (const r of rows) {
+    const key = r.symbol.includes("-") && rows.some((x) => x.symbol === r.symbol.replace(/-/g, ".")) ? r.symbol.replace(/-/g, ".") : r.symbol;
+    const was = merged.get(key);
+    merged.set(key, was ? { ...was, inPool: was.inPool || r.inPool, hasSecFacts: was.hasSecFacts || r.hasSecFacts, marketCap: was.marketCap ?? r.marketCap,
+      nmCount: Math.max(was.nmCount, r.nmCount), figures: Math.max(was.figures, r.figures) } : { ...r, symbol: key });
+  }
+  const symbols = [...merged.values()].map((r) => ({
     symbol: r.symbol,
-    name: normaliseCompanyName(snapshotCompanyName(r.symbol)) || r.symbol,
+    // The committed name, cleaned as the insight page's screen list cleans it
+    // ("NVIDIA Corporation - Common Stock" -> "NVIDIA Corporation").
+    name: cleanName(snapshotCompanyName(r.symbol)) || r.symbol,
     sector: sectorOf(r.symbol)?.name ?? null,
     marketCap: r.marketCap,
     inPool: r.inPool,
