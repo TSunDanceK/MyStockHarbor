@@ -10,6 +10,8 @@
 //   NONE ads-mentions=<k> <form> <accession>
 //   UNRATED <form> <accession>   (a 10-K whose 12(b) row under the ticker is
 //                                 depositary shares, with no ratio cited)
+// A 10-K filer's row comes only from ITS OWN 12(b) row under the ticker being
+// depositary shares: never from its body text alone.
 // The universe: every 20-F filer, plus (ANNUAL=1) every other filer located or
 // incorporated outside the US or with an F-6 on its list. A 10-K filer is
 // mapped ONLY for a depositary-share row; its ordinary listing needs no row.
@@ -93,8 +95,11 @@ for (const s of mine) {
     // A 10-K FILER IS MAPPED ONLY FOR A DEPOSITARY-SHARE ROW. Its ordinary
     // listing is the ordinary case (no row needed); a depositary row with no
     // cited ratio is UNRATED, for the class refusal (#552 COWORK #218).
-    if (text20 && !is20F && !("row" in decided && decided.row.kind === "ads")) {
-      const cover = R.coverRowFor(text20, s);
+    // ONLY FROM ITS OWN 12(b) ROW: a 10-K's body text can quote another
+    // listing's ADSs (CCL's performance graph is Carnival plc's, CUK).
+    const cover10k = text20 && !is20F ? R.coverRowFor(text20, s) : null;
+    if (text20 && !is20F && !("row" in decided && decided.row.kind === "ads" && cover10k?.kind === "ads")) {
+      const cover = cover10k;
       if (cover?.kind === "ads") {
         tally.UNRATED++;
         console.log(`${s.padEnd(6)} UNRATED ${"refuse" in decided ? decided.refuse : "no ratio"} | ${lastRef}`);
