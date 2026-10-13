@@ -254,7 +254,7 @@ checks.push(
   ["the job is scheduled daily and needs no FMP key",
     vercel.crons.some((c) => c.path === "/api/jobs/warm-pickers-sec" && c.schedule === "35 5 * * *") && !/FMP_API_KEY/.test(job)],
   ["the daily job passes the cited ADS ratio from A's map, imported (#553 COWORK #44)",
-    /import \{ adsRatioFor \} from "[./]+lib\/server\/secAdsMap";/.test(job) &&
+    /import \{ (?:adsListedUnrated, )?adsRatioFor \} from "[./]+lib\/server\/secAdsMap";/.test(job) &&
       /warmPickersSec\(symbols, \(s\) => \(\{\s*annualForm: registrantFor\(s\)\?\.annualForm \?\? null,\s*ads: adsRatioFor\(s\),/.test(job) &&
       /buildSecPickerRow\(set, today, filerFor\(symbol\), nowMs\)/.test(readCodeOnly(MODULE))],
   ["the job reads the shared revenue guard through multipleInputs (imported, not copied)",
@@ -318,7 +318,7 @@ checks.push(
   checks.push(["the loader exposes A's citedCoverFor and nonEquityListingOf from one module", typeof L.citedCoverFor === "function" && typeof L.nonEquityListingOf === "function"]);
 
   const jobPasses = (c) => /import \{ citedCoverFor, nonEquityListingOf \} from "[./]+lib\/server\/secPrimaryListing";/.test(c) &&
-    /nonEquity: nonEquityListingOf\(s\),[\s\S]{0,400}?citedCover: citedCoverFor\(s\),\s*\}\)(?:\)|,)/.test(c);
+    /nonEquity: nonEquityListingOf\(s\),[\s\S]{0,600}?citedCover: citedCoverFor\(s\),\s*\}\)(?:\)|,)/.test(c);
   checks.push(["the daily job passes A's cited cover, imported", jobPasses(job)]);
   checks.push(["mutant caught: the job drops citedCover", !jobPasses(job.replace(/\s*citedCover: citedCoverFor\(s\),/, ""))]);
   checks.push(["mutant caught: the job passes null instead", !jobPasses(job.replace("citedCover: citedCoverFor(s),", "citedCover: null,"))]);

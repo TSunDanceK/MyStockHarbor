@@ -35,3 +35,22 @@ export function adsRatioFor(symbol: string): AdsRatioEntry | null {
   const e = lookupSpellingIn(ENTRIES, String(symbol ?? "").toUpperCase())?.value ?? null;
   return e && !e.withheld ? e : null;
 }
+
+/** A 10-K's depositary-share 12(b) row with no ratio cited: the row, verbatim, and where. */
+export type AdsUnratedEntry = { evidence: string; form: string; source: string; filed: string };
+
+const UNRATED = (ratiosFile as unknown as { unrated?: Record<string, AdsUnratedEntry> }).unrated ?? {};
+
+/**
+ * A NON-20-F FILER LISTED THROUGH DEPOSITARY SHARES WITHOUT A USABLE RATIO
+ * (#552 COWORK #218): on the census's `unrated` list (its latest 10-K's 12(b)
+ * row under the ticker is an ADS and no ratio is cited), or holding a map row
+ * that is withheld. valuationInputs then refuses it as it refuses a 20-F filer
+ * with no ratio. A 20-F filer needs nothing here: its form already refuses.
+ */
+export function adsListedUnrated(symbol: string): boolean {
+  const s = String(symbol ?? "").toUpperCase();
+  if (adsRatioFor(s)) return false;
+  const e = lookupSpellingIn(ENTRIES, s)?.value ?? null;
+  return Boolean(lookupSpellingIn(UNRATED, s)?.value) || Boolean(e?.withheld && e.form !== "20-F");
+}
