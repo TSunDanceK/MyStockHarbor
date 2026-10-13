@@ -90,6 +90,16 @@ function rules(R, V, capexSrc = read(CAPEX)) {
     U("State & local governments", "") === "Not a single company" && U("All other customers", "") === "Not a single company" &&
     U("Brazil", "Not a single company: the country segment.") === "Not a single company" &&
     U("Largest customer (unnamed)", "") === "Name not disclosed" && U("Samsung Electronics", "").indexOf("Not a listed") === -1);
+  // 11b (#563 COWORK #190). The blurbs' other ways of saying private; a
+  // state-owned company is not private; "private-label" is not a company.
+  want("labels: 'not a publicly traded company', 'no publicly traded shares', 'taken private', 'a private, family-owned company' read Private; state-owned and private-label do not",
+    U("Tract", "Not a publicly traded company.") === "Private company" &&
+    U("Arla Foods", "A farmer-owned cooperative with no publicly traded shares.") === "Private company" &&
+    U("Rand Worldwide", "No longer a publicly traded company.") === "Private company" &&
+    U("CyrusOne", "Taken private by KKR in 2022, with no public ticker.") === "Private company" &&
+    U("TRUMPF", "A private, family-owned company with no public ticker.") === "Private company" &&
+    U("COFCO Americas", "Arm of China's largest state-owned food conglomerate. Not a publicly traded company.") === "No US listing" &&
+    U("Acme Bottling", "Bottler for one of the retailer's private-label products.") === "No US listing");
   // 12 (#188). "A single big customer" means one named company or body, never a group.
   const C = (rows) => R.singleCustomerAnswer(R.customerMeter(rows.map((x) => x.pct), ""), rows.map((x) => ({ blurb: "", ticker: null, ...x })));
   const kdp = C([{ name: "All other customers", pct: 52, blurb: "Not a single company." }, { name: "Walmart", pct: 15, ticker: "WMT" }]);
@@ -192,6 +202,10 @@ const MUTANTS = [
   // #188.
   ["foreign-listed read as 'not listed'", RULES_SRC, "  \"non-us\": \"No US listing\",", "  \"non-us\": \"Not a listed company\","],
   ["the `listing` field ignored", RULES_SRC, "  if (c.listing) return c.listing;", ""],
+  // #190.
+  ["'not a publicly traded' not read as private", RULES_SRC, "|\\b(?:not|no longer) (?:a )?publicly[- ]traded\\b", ""],
+  ["'no publicly traded shares' not read as private", RULES_SRC, "|\\bno publicly[- ]traded shares\\b", ""],
+  ["a state-owned company read as private", RULES_SRC, "if (PRIVATE.test(c.blurb) && !STATE_OWNED.test(c.blurb))", "if (PRIVATE.test(c.blurb))"],
   ["groups not recognised", RULES_SRC, "if (GROUP.test(c.blurb) || GROUP_NAME.test(c.name)) return \"group\";", ""],
   ["one sovereign customer read as a group", RULES_SRC, "if (SOVEREIGN.test(c.name) &&", "if (false &&"],
   ["the FAQ's top row taken whatever it is", RULES_SRC, "const single = byPct.find(isSingleNamed), group = byPct[0];", "const single = byPct[0], group = byPct[0];"],
