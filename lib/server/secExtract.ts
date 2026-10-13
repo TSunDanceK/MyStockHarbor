@@ -1511,13 +1511,15 @@ function extractCompanyFactsWith(
     const excise = filerTagsExcise(facts);
     const gapConcept = revenueGapConcept(facts, currency);
     // ── THE DERIVED TOTAL (#552 COWORK #219, LUNR) ──────────────────────────
-    // For a G filer, a period with the contract line and the gap concept filed
-    // for the same frame but no `Revenues` takes their SUM as its total, marked
+    // For a G filer whose gap is REVENUE NOT FROM CONTRACTS (the ruling's
+    // words), a period with the contract line and that line filed for the
+    // same frame but no `Revenues` takes their SUM as its total, marked
     // computed. Without it the floor kept LUNR on the contract line (older
-    // quarters lack `Revenues`), understating its revenue by the gap. Built in
+    // quarters lack `Revenues`), understating its revenue by the gap. Not for a
+    // lease-income or interest gap: AHR's floor still holds it. Built in
     // copies, so nothing outside this rule sees a derived total.
     const totalQuarter = new Map(fbQuarter), totalYear = new Map(fbYear);
-    if (gapConcept) {
+    if (gapConcept && /^RevenueNotFromContractWithCustomer/.test(gapConcept)) {
       const kField: FieldDef = { ...revenueField, chain: [gapConcept], ifrsChain: undefined };
       const kRows = rowsForField(facts, kField, new Set<string>(), currency);
       const kBucket: Bucket = new Map();

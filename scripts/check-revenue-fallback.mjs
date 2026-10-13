@@ -211,6 +211,20 @@ console.log("\n3c. option G: a gap that is itself revenue (#552 COWORK #219)");
   check("LUNR: the newest quarter takes Revenues ($206.2M)", lnew?.val === 206.2 * M && lnew?.tag === "Revenues", JSON.stringify(lnew));
   check("...an older quarter reads contract + not-from-contract ($188.0M + $2.8M), marked computed",
     Math.abs((lold?.val ?? 0) - 190.8 * M) < 1 && lold?.derived === "computed", JSON.stringify(lold));
+  // AHR: the same shape with a LEASE-INCOME gap. No derived total (the ruling
+  // names the not-from-contract line), so the floor keeps the contract line.
+  const ahr = payload({
+    [CONTRACT]: lq.map(([a, b], i) => [a, b, [600, 610, 620, 634.5][i] * M]),
+    OperatingLeaseLeaseIncome: lq.map(([a, b]) => [a, b, 39.8 * M]),
+    Revenues: [[...Q, 674.3 * M]],
+    [OP]: lq.map(([a, b]) => [a, b, 50 * M]),
+  });
+  const an = X.extractCompanyFacts("AHR", ahr).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
+  check("AHR (lease-income gap, Revenues on the newest quarter only): no derived total, the floor keeps the contract line",
+    an?.val === 634.5 * M && an?.tag === CONTRACT && X.revenueGapConcept(ahr) === "OperatingLeaseLeaseIncome", JSON.stringify(an));
+  const XR = await load(extractRaw.replace("if (gapConcept && /^RevenueNotFromContractWithCustomer/.test(gapConcept)) {", "if (gapConcept) {"));
+  check("MUTATION: a derived total for any gap concept → AHR moves (caught)",
+    XR.extractCompanyFacts("AHR", ahr).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV]?.val === 674.3 * M);
   const XG = await load(extractRaw.replace("const hit = REVENUE_GAP_CONCEPTS.find(equals) ?? null;", "const hit = null;"));
   check("MUTATION: the gap test removed → MELI back on the $7,055M contract line (caught)",
     XG.extractCompanyFacts("FIX", meli).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV]?.val === 7055 * M);
