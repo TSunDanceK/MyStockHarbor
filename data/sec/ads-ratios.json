@@ -1,5 +1,5 @@
 {
- "_comment": "Cited ADS ratios (#552 COWORK #22 §1): ordinary shares per American Depositary Share, as each filer's own LATEST 20-F states it (its 12(b) section, then its text), or an F-6 filed after that 20-F (#552 COWORK #45: an older F-6 never wins), verbatim. Found by scripts/ads-ratio-census.mjs (lib/server/secAdsRatio.ts). A symbol not listed keeps the depositary-share refusal; a ratio is never inferred or defaulted to 1. Read by lib/server/secAdsMap.ts. kind 'ordinary' = the 20-F cover's Section 12(b) row lists ordinary/common shares under the ticker and the filing has no ADS (ratio 1, cited). BBD and CIG are left out: their ADSs are of preferred shares and the quoted line is the common-share ADS. Also left out, by rule: depositary shares of preferred shares or CPOs, and a class ticker (PBR-A, CIG-C) that no 12(b) row names. A row with `withheld` keeps its citation but is not used: adsRatioFor returns nothing for it, so the depositary-share refusal applies (MFG, #552 COWORK #64: a cited ratio with good reason to think it stale).",
+ "_comment": "Cited ADS ratios (#552 COWORK #22 §1): ordinary shares per American Depositary Share, as each filer's own LATEST ANNUAL REPORT states it (a 20-F: its 12(b) section, then its text; a 10-K or 10-KT, since #552 COWORK #218/#222: only its own 12(b) row under the ticker), or an F-6 filed after that report (#552 COWORK #45: an older F-6 never wins), verbatim. Found by scripts/ads-ratio-census.mjs (lib/server/secAdsRatio.ts). A symbol not listed keeps the depositary-share refusal; a ratio is never inferred or defaulted to 1. Read by lib/server/secAdsMap.ts. kind 'ordinary' = the 20-F cover's Section 12(b) row lists ordinary/common shares under the ticker and the filing has no ADS (ratio 1, cited). BBD and CIG are left out: their ADSs are of preferred shares and the quoted line is the common-share ADS. Also left out, by rule: depositary shares of preferred shares or CPOs, and a class ticker (PBR-A, CIG-C) that no 12(b) row names. A row with `withheld` keeps its citation but is not used: adsRatioFor returns nothing for it, so the depositary-share refusal applies (MFG, #552 COWORK #64: a cited ratio with good reason to think it stale). `unrated` (#552 COWORK #218): non-20-F filers whose latest 10-K's 12(b) row under the ticker is depositary shares with no ratio stated; secAdsMap.adsListedUnrated refuses them as a 20-F filer with no ratio is refused. Empty when no such filer exists (the census of 2026-10-13 found none).",
  "entries": {
   "AAPG": {
    "kind": "ads",
@@ -530,6 +530,14 @@
    "source": "0001604481-26-000004",
    "filed": "2026-04-21"
   },
+  "CMPS": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one ordinary share, par value of £0.008 per share",
+   "form": "10-K",
+   "source": "0001816590-26-000020",
+   "filed": "2026-03-24"
+  },
   "CMRE": {
    "kind": "ordinary",
    "ordinaryPerAds": 1,
@@ -866,6 +874,14 @@
    "source": "0001434265-26-000014",
    "filed": "2026-02-17"
   },
+  "GPCR": {
+   "kind": "ads",
+   "ordinaryPerAds": 3,
+   "evidence": "American Depositary Shares (ADSs), each representing three ordinary shares, par value $0.0001 per ordinary share",
+   "form": "10-K",
+   "source": "0001104659-26-020562",
+   "filed": "2026-02-26"
+  },
   "GRAB": {
    "kind": "ordinary",
    "ordinaryPerAds": 1,
@@ -1017,6 +1033,14 @@
    "form": "20-F",
    "source": "0001104659-26-028162",
    "filed": "2026-03-16"
+  },
+  "IMCR": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one ordinary share, nominal value £0.002 per share",
+   "form": "10-K",
+   "source": "0001671927-26-000005",
+   "filed": "2026-02-25"
   },
   "IMTX": {
    "kind": "ordinary",
@@ -1493,6 +1517,14 @@
    "form": "20-F",
    "source": "0001104659-26-051987",
    "filed": "2026-04-30"
+  },
+  "ONC": {
+   "kind": "ads",
+   "ordinaryPerAds": 13,
+   "evidence": "American Depositary Shares, each representing 13 Ordinary Shares, par value $0.0001 per share",
+   "form": "10-K",
+   "source": "0001628280-26-011946",
+   "filed": "2026-02-26"
   },
   "ONON": {
    "kind": "ordinary",
@@ -1982,6 +2014,14 @@
    "source": "0001104659-26-026480",
    "filed": "2026-03-11"
   },
+  "TEVA": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one Ordinary Share",
+   "form": "10-K",
+   "source": "0001193125-26-034532",
+   "filed": "2026-02-03"
+  },
   "TGS": {
    "kind": "ads",
    "ordinaryPerAds": 5,
@@ -2334,6 +2374,14 @@
    "source": "0001178913-26-000784",
    "filed": "2026-03-09"
   },
+  "ZLAB": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "American Depositary Shares, each representing 10 Ordinary Shares, par value $0.000006 per share",
+   "form": "10-K",
+   "source": "0001704292-26-000015",
+   "filed": "2026-02-26"
+  },
   "ZTO": {
    "kind": "ads",
    "ordinaryPerAds": 1,
@@ -2342,5 +2390,6 @@
    "source": "0001104659-26-044613",
    "filed": "2026-04-17"
   }
- }
+ },
+ "unrated": {}
 }

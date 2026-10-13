@@ -765,6 +765,12 @@ const TASKS = {
   "ads-ratio-census-2": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
   "ads-ratio-census-3": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
   "ads-ratio-census": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true },
+  // THE LATEST ANNUAL REPORT, 20-F OR 10-K (#552 COWORK #218/#222): every foreign or F-6 filer. Read-only, no credential.
+  "ads-annual-census-1": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/3", ANNUAL: "1" } },
+  "ads-annual-census-2": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3", ANNUAL: "1" } },
+  "ads-annual-census-3": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3", ANNUAL: "1" } },
+  // Named symbols, with their 12(b) table and newest F-6 read whatever its date (ONC, GPCR: confirm before a row).
+  "ads-annual-confirm": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { ANNUAL: "1", CONFIRM_F6: "1", SHOW12B: "1" } },
   "ads-ratio-12b": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHOW12B: "1" } },
   "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
@@ -1434,6 +1440,9 @@ const TASKS = {
   "write-held-open-requests-all": { script: "scripts/held-open-requests.mjs", args: () => [], needsTypescript: true, writes: true, env: { ALL: "1" } },
   // READS ONLY (#553 COWORK #225): the #856 meter day hashes, per source and caller. HGETALL, 1 command a day.
   "write-redis-meter-day": { script: "scripts/redis-meter-day.mjs", args: () => [], writes: true },
+  // NO CREDENTIALS (owner request 13 Oct, #553 COWORK #229): fetches the four published AI answer-bot IP lists
+  // and prints the firewall rule JSON. Public data only; the sandbox cannot reach these hosts.
+  "firewall-ai-answer-bots-rule": { script: "scripts/firewall/build-ai-answer-bots-rule.mjs", args: () => [] },
 };
 
 const argv = process.argv.slice(2);

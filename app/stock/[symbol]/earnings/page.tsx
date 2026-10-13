@@ -52,7 +52,7 @@ import RelatedStocks from "@/app/components/RelatedStocks";
 import { readReportDatesChecked } from "@/lib/server/secReportDatesStore";
 import { outlookForEarningsCard } from "@/lib/server/symbolOutlook";
 import { firstFilerNextReport } from "@/lib/server/firstFilerOutlook";
-import { adsRatioFor } from "@/lib/server/secAdsMap";
+import { adsListedUnrated, adsRatioFor } from "@/lib/server/secAdsMap";
 import { nonEquityListingOf, citedCoverFor } from "@/lib/server/secPrimaryListing";
 import NextReportCard from "./NextReportCard";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
@@ -518,7 +518,7 @@ async function getEarningsData(symbol: string) {
   // THE SAME 20-F RULE THE /stock PROFILE APPLIES, from the same registrant
   // file, so the two pages cannot disagree about whether a cap is computable.
   const valuation = cold.status === "ready"
-    ? valuationInputs(cold.set, todayIso, { annualForm: registrantFor(symbol)?.annualForm ?? null, ads: adsRatioFor(symbol), nonEquity: nonEquityListingOf(symbol), citedCover: citedCoverFor(symbol) })
+    ? valuationInputs(cold.set, todayIso, { annualForm: registrantFor(symbol)?.annualForm ?? null, ads: adsRatioFor(symbol), nonEquity: nonEquityListingOf(symbol), citedCover: citedCoverFor(symbol), adsUnrated: adsListedUnrated(symbol) })
     : { shares: null, eps: null, refusals: [] };
   // ON TIINGO: readSurfacePrice's price and its own label ("close, 29 Sep
   // 2026" or "last IEX trade, 14:05 ET"); its date is the ET trading day, which
