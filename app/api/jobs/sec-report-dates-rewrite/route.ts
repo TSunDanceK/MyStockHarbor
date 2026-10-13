@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
     const cik = records[listed.indexOf(symbol)]?.cik || cikForSymbol(symbol);
     if (!cik) { tally.noCik++; skipped.push(symbol); continue; }
     try {
-      const set = await readFactSet(symbol);
+      const set = await readFactSet(symbol, "report-dates");
       if (!set) { tally.noFactSet++; skipped.push(symbol); continue; }
       // A CITED SUCCESSOR (XOM) reads its predecessor's filing list too.
       const subs = await withPredecessorSubmissions(cik, await fetchSubmissions(cik), fetchSubmissions);

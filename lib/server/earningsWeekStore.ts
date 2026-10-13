@@ -26,7 +26,7 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { canWriteSecState } from "./secWriteGate";
 import { readFactSet } from "./secFactStore";
 import { readReportDates } from "./secReportDatesStore";
-import { buildSecEarningsView } from "./secEarningsView";
+import { NOT_MEANINGFUL_GROWTH_REASON, buildSecEarningsView } from "./secEarningsView";
 import { moneyIsUsd, unitOf } from "./pickersSecFundamentals";
 import { readTiingoHistory } from "./marketData/read";
 import { TIINGO_PREFIX } from "./marketData/keys";
@@ -112,7 +112,7 @@ export async function fillWeekFigures(
       const event = rec?.events.find((e) => e.announcedOn === date) ?? null;
       if (need.figures) {
         let got: ReportedFigures | null = null;
-        const set = event?.periodEnd ? await readFactSet(source).catch(() => null) : null;
+        const set = event?.periodEnd ? await readFactSet(source, "earnings-week").catch(() => null) : null;
         if (set && moneyIsUsd(unitOf(set))) {
           const v = buildSecEarningsView(set);
           const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : null);
@@ -120,7 +120,8 @@ export async function fillWeekFigures(
             end: v.latestEnd ?? null,
             revenue: num(v.snapshot.revenue.val),
             revenueYoY: num(v.snapshot.revenueYoY),
-            revenueYoYNotMeaningful: v.snapshot.revenueYoYNotMeaningful,
+            revenueYoYNotMeaningful: v.snapshot.revenueYoYNotMeaningful
+              ? v.snapshot.revenueYoYNotMeaningfulReason ?? NOT_MEANINGFUL_GROWTH_REASON : undefined,
             epsDiluted: num(v.snapshot.epsDiluted.val),
           });
         }
