@@ -244,7 +244,13 @@ export function buildMergeCensus(posts: BottleneckPost[]): CensusRow[] {
 // An editorial map, company key → theme. One theme per company. A key with no
 // pages today simply contributes nothing, so a company can be listed ahead of
 // its first mention.
-export type ThemeId = "foundry" | "memory" | "accelerators" | "cloud" | "payments" | "customers";
+//
+// TICKER-KEYED THEMES (#563 COWORK #180): a theme can also list mapped PAGES by
+// their own ticker (THEME_PAGES), for a group of stocks whose partners are
+// spread across unrelated industries (the eVTOL makers: Toyota, Stellantis,
+// Honeywell…). Such a page counts towards the theme, and the listed partners
+// it names are the card's logos. A later page joins by adding its ticker here.
+export type ThemeId = "foundry" | "memory" | "accelerators" | "cloud" | "payments" | "customers" | "evtol";
 
 export const THEMES: { id: ThemeId; title: string; line: string }[] = [
   { id: "foundry", title: "Chip foundry", line: "The few plants that make other companies' chip designs." },
@@ -253,6 +259,7 @@ export const THEMES: { id: ThemeId; title: string; line: string }[] = [
   { id: "cloud", title: "Cloud hosting", line: "Where software companies rent their computing." },
   { id: "payments", title: "Payment networks", line: "The rails card and online payments run on." },
   { id: "customers", title: "Big customers", line: "Large buyers that make up an outsized share of a supplier's sales." },
+  { id: "evtol", title: "Electric air taxis (eVTOL)", line: "Air-taxi makers that may rely on a few hard-to-replace suppliers, batteries and certification." },
 ];
 
 export const THEME_MAP: Record<string, ThemeId> = {
@@ -264,21 +271,33 @@ export const THEME_MAP: Record<string, ThemeId> = {
   AAPL: "customers", META: "customers", WMT: "customers", COST: "customers", DELL: "customers", TGT: "customers", HPQ: "customers", HPE: "customers",
 };
 
+/** Mapped pages by their own ticker → theme (#563 COWORK #180). A ticker with no page today contributes nothing. */
+export const THEME_PAGES: Record<string, ThemeId> = {
+  JOBY: "evtol", ACHR: "evtol",
+};
+
 export type HubTheme = {
   id: ThemeId;
   title: string;
   line: string;
-  /** Distinct mapped stock pages naming at least one company in the theme. */
+  /** Distinct mapped stock pages naming at least one company in the theme, or (ticker-keyed) in it themselves. */
   pageCount: number;
-  /** The theme's most-named companies, for the logos. */
+  /** What pageCount counts, for the count's tooltip. */
+  countNote: string;
+  /** The theme's most-named companies, for the logos; on a ticker-keyed theme, the listed partners its pages name. */
   top: HubCompany[];
 };
 
-export function buildThemes(companies: HubCompany[], map: Record<string, ThemeId> = THEME_MAP): HubTheme[] {
+export function buildThemes(companies: HubCompany[], map: Record<string, ThemeId> = THEME_MAP, pageMap: Record<string, ThemeId> = THEME_PAGES): HubTheme[] {
   return THEMES.map((t) => {
     const members = companies.filter((c) => map[c.key] === t.id);
     const pages = new Set(members.flatMap((c) => c.pages.map((p) => p.slug)));
-    return { ...t, pageCount: pages.size, top: members.slice(0, 3) };
+    // Ticker-keyed: the theme's own pages, and the listed partners they name (most-named first).
+    const own = new Set(companies.flatMap((c) => c.pages).filter((p) => pageMap[p.symbol.toUpperCase()] === t.id).map((p) => p.slug));
+    for (const slug of own) pages.add(slug);
+    const partners = own.size ? companies.filter((c) => c.ticker !== null && !members.includes(c) && c.pages.some((p) => own.has(p.slug))) : [];
+    const countNote = `${pages.size} mapped stocks ${own.size ? (members.length ? "are in or name a company in this theme" : "are in this theme") : "name a company in this theme"}`;
+    return { ...t, pageCount: pages.size, countNote, top: [...members, ...partners].slice(0, 3) };
   });
 }
 
