@@ -16,6 +16,13 @@
 //             for this case) a filer whose newest `Revenues` is > 5% above its
 //             contract line takes `Revenues` for every period -- AFRM -- unless
 //             it tags excise (COP, CEG: kept on the contract line)
+//   G         (#552 COWORK #219, option G) beside that test, a gap of the total
+//             over the contract line that equals a concept tagged as revenue
+//             moves the filer too -- MELI (excise), PAYX (excise, 3%) -- but not
+//             hedging gains (DVN), and not a gap an other-income concept also
+//             equals (MDU); LUNR's older quarters read contract + not-from-
+//             contract, marked computed, so its floor holds; AHR's lease gap
+//             gets no derived total and its floor still holds
 // plus a mutation: the substitution removed, and the rescued cases fail.
 import fs from "node:fs";
 import { lift } from "./lib/earnings-plan.mjs";
