@@ -82,6 +82,7 @@ for (const s of mine) {
   try {
     const facts = await get(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik.padStart(10, "0")}.json`);
     tally.filers++;
+    if (process.env.GAP) { /* gap mode runs below without the two extractions */ }
     const a = S.extractCompanyFacts(s, facts), b = C.extractCompanyFacts(s, facts), bb = CB.extractCompanyFacts(s, facts);
     const diffB = [];
     for (const [A, B] of [[a.quarters, bb.quarters], [a.years, bb.years]]) for (const p of new Set([...A.map((x) => x.end), ...B.map((x) => x.end)])) {
@@ -96,6 +97,29 @@ for (const s of mine) {
         const pa = A.find((p) => p.end === e), pb = B.find((p) => p.end === e);
         if (v(pa, "revenue") !== v(pb, "revenue")) diffs.push({ bucket, e, pa, pb });
       }
+    }
+    if (process.env.GAP) {
+      // WHAT FILLS THE GAP between Revenues and the contract line, in the newest quarter both cover:
+      // a concept named as revenue (a real part of the total) or as other income / gains (not revenue).
+      const g = facts.facts?.["us-gaap"] ?? {};
+      const q = (k) => (g[k]?.units?.USD ?? []).filter((r) => r.start && /^10-[KQ]/.test(r.form ?? "") && Math.abs((Date.parse(r.end) - Date.parse(r.start)) / 864e5 - 91) <= 10);
+      const rv = q("Revenues"), ct = q("RevenueFromContractWithCustomerExcludingAssessedTax");
+      const end = rv.map((r) => r.end).filter((e) => ct.some((c) => c.end === e)).sort().at(-1);
+      if (!end) { console.log(`GAP ${s} no quarter carries both`); continue; }
+      const val = (rs) => rs.filter((r) => r.end === end).sort((x, y) => x.filed.localeCompare(y.filed)).at(-1)?.val ?? null;
+      const gap = val(rv) - val(ct);
+      const hits = [];
+      for (const [k, c] of Object.entries(g)) {
+        if (k === "Revenues" || k === "RevenueFromContractWithCustomerExcludingAssessedTax") continue;
+        const x = val(q(k));
+        if (x == null || gap <= 0) continue;
+        if (Math.abs(x - gap) <= Math.max(0.5e6, gap * 0.01)) hits.push(k);
+      }
+      const rev = hits.filter((k) => /Revenue|Sales|Rental|Lease|Interest.*Income.*Operating|FinancialServices/i.test(k) && !/Cost|Expense|Proceeds|Payments/i.test(k));
+      const oth = hits.filter((k) => /OtherIncome|Nonoperating|EquityMethod|Gain|Loss|InvestmentIncome|OtherOperatingIncome|Derivative/i.test(k));
+      const verdict = rev.length ? "GAP-IS-REVENUE" : oth.length ? "GAP-IS-OTHER-INCOME" : "GAP-UNEXPLAINED";
+      console.log(`GAP ${s} ${verdict} q:${end} Revenues ${m(val(rv))} contract ${m(val(ct))} gap ${m(gap)} | revenue-named: ${rev.join(", ") || "—"} | other: ${oth.join(", ") || "—"} | all equal: ${hits.slice(0, 8).join(", ") || "—"}`);
+      continue;
     }
     if (process.env.DETAIL) {
       // EVERY revenue-like concept the filer tags, for its newest year and newest quarter-length duration.
