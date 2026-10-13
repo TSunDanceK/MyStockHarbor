@@ -42,7 +42,7 @@ import {
 import { buildShareHistory, type ShareHistory } from "./secShareHistory";
 import { listedFromFor } from "./secFirstPeriodic";
 import { registrantFor } from "./stockProfile";
-import { adsRatioFor } from "./secAdsMap";
+import { adsListedUnrated, adsRatioFor } from "./secAdsMap";
 import { nonEquityListingOf, citedCoverFor } from "./secPrimaryListing";
 import {
   TIMING_WORDING, type ReportTiming,
@@ -711,6 +711,8 @@ export async function getStockPageSecFacts(symbol: string): Promise<{
             citedCover: citedCoverFor(clean),
             // THE BANK GATE for estimates (secEstimates, #552 COWORK #113).
             sic: registrantFor(clean)?.sic ?? null,
+            // A 10-K's ADS listing with no cited ratio: refused (#552 COWORK #218).
+            adsUnrated: adsListedUnrated(clean),
           })
         : null,
       // PRE-LISTING POINTS DROPPED (#552 COWORK #89 §3), from the archived submissions.

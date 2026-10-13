@@ -497,6 +497,14 @@ export type FilerFacts = {
    */
   ads?: { ordinaryPerAds: number; source: string; kind?: "ads" | "ordinary" } | null;
   /**
+   * A 10-K FILER LISTED THROUGH DEPOSITARY SHARES WITH NO USABLE CITED RATIO
+   * (#552 COWORK #218): its own 12(b) row under the ticker is an ADS, so its
+   * cover count of ORDINARY shares cannot be set against the ADS price. ONC
+   * printed ~$524bn that way (×13). Refused exactly as a 20-F filer without a
+   * ratio is. From secAdsMap.adsListedUnrated; passed in, like `ads`.
+   */
+  adsUnrated?: boolean;
+  /**
    * A DEBT TICKER on a shared CIK (#552 COWORK #48, secPrimaryListing): BIPI is
    * Brookfield Infrastructure's "5.125% Perpetual Subordinated Notes". The
    * filer's figures are the equity's, so a cap or P/E under a note's ticker is
@@ -552,7 +560,7 @@ export function valuationInputs(
   // perfectly clean, unambiguous, single-class ordinary-share count is exactly
   // the case this refusal exists for.
   const ads = filer.ads && Number.isFinite(filer.ads.ordinaryPerAds) && filer.ads.ordinaryPerAds > 0 ? filer.ads : null;
-  if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {
+  if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F" || filer.adsUnrated === true)) {
     // TWO REFUSALS, NOT ONE, because they are two different claims about two
     // different figures and only one of them was ever assumed. The share-count
     // one is true by definition: a cover-page count is a count of ordinary

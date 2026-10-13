@@ -8,6 +8,12 @@
 //   3. The committed map (data/sec/ads-ratios.json): every row's own evidence,
 //      re-read by the shipped parser, yields its ratio — so a row cannot hold
 //      a number its citation does not state. MUTATION: a wrong ratio caught.
+//   3c. A 10-K filer listed through ADSs with no usable cited ratio
+//      (#552 COWORK #218): adsListedUnrated, from the map's `unrated` list or a
+//      withheld non-20-F row; valuationInputs refuses it as a 20-F filer with
+//      no ratio. And a 10-K cover's 12(b) wording is read ("Securities
+//      registered pursuant to Section 12(b)"). MUTATIONS: the flag ignored;
+//      the 10-K wording dropped; a cited row no longer clearing the flag.
 //   4. valuationInputs: no ratio → the refusal, unchanged (never a default);
 //      a cited ratio → shares in ADS-equivalents and EPS per ADS only when the
 //      filer's own identity says EPS is per ordinary share. MUTATIONS: the
@@ -198,6 +204,64 @@ console.log("\n3b. a withheld row is cited but not used (#552 COWORK #64, MFG)")
   check("the Pickers seed skips a withheld row too", /e && !e\.withheld \? e : null/.test(seed));
 }
 
+console.log("\n3c. a 10-K filer listed through ADSs with no cited ratio (#552 COWORK #218)");
+{
+  // The 10-K cover's 12(b) wording, as ZLAB's reads.
+  const ZL = "Securities registered pursuant to Section 12(b) of the Act: Title of each class Trading Symbol(s) Name of each exchange on which registered American Depositary Shares, each representing 10 Ordinary Shares, par value $0.000006 per share ZLAB The Nasdaq Global Market Securities registered pursuant to Section 12(g) of the Act: None";
+  const zl = R.decideAdsRow(ZL, "ZLAB", null, false);
+  check("a 10-K cover's 12(b) section is read: ZLAB's own row, 10, from the cover row",
+    "row" in zl && zl.row.ordinaryPerAds === 10 && zl.row.basis === "cover-row" && R.coverRowFor(ZL, "ZLAB")?.kind === "ads", JSON.stringify(zl));
+  const UN = "Securities registered pursuant to Section 12(b) of the Act: Title of each class Trading Symbol(s) Name of each exchange on which registered American Depositary Shares XYZQ The Nasdaq Global Market Securities registered pursuant to Section 12(g) of the Act: None";
+  check("a 10-K depositary row with no ratio anywhere → refused by the parser, its row read as ADS",
+    "refuse" in R.decideAdsRow(UN, "XYZQ", null, false) && R.coverRowFor(UN, "XYZQ")?.kind === "ads");
+  const M10 = await loadR(once(RSRC, "(?:registered,?\\s+or\\s+to\\s+be\\s+registered,?|securities\\s+registered)", "registered,?\\s+or\\s+to\\s+be\\s+registered,?"));
+  check("MUTATION: the 10-K wording dropped → ZLAB's cover row is not found (caught)", M10.coverRowFor(ZL, "ZLAB") === null);
+
+  const MSRC = fs.readFileSync("lib/server/secAdsMap.ts", "utf8");
+  const IMP = 'import ratiosFile from "@/data/sec/ads-ratios.json";';
+  const FILE = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8"));
+  const loadMapWith = async (src, file) => {
+    const tmp = `lib/server/.check-ads-map-${process.pid}-${Math.random().toString(36).slice(2)}.ts`;
+    fs.writeFileSync(tmp, src.replace(IMP, `const ratiosFile = ${JSON.stringify(file)};`));
+    try { return await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+  };
+  const fixture = {
+    ...FILE,
+    entries: { ...FILE.entries, ZLAB: { kind: "ads", ordinaryPerAds: 10, evidence: "American Depositary Shares, each representing 10 Ordinary Shares", form: "10-K", source: "0001704292-26-000015", filed: "2026-02-26" }, HELDK: { kind: "ads", ordinaryPerAds: 4, evidence: "each ADS represents four ordinary shares", form: "10-K", source: "0000000000-26-000001", filed: "2026-02-26", withheld: { since: "2026-10-13", reason: "fixture: a withheld row on a 10-K filer" } } },
+    unrated: { ...(FILE.unrated ?? {}), XYZQ: { evidence: "American Depositary Shares", form: "10-K", source: "0000000000-26-000002", filed: "2026-02-26" }, ZLAB: { evidence: "x", form: "10-K", source: "0000000000-26-000003", filed: "2026-02-26" } },
+  };
+  const Mu = await loadMapWith(MSRC, fixture);
+  check("adsListedUnrated: on the unrated list with no cited row → true", Mu.adsListedUnrated("XYZQ") === true);
+  check("...a withheld row on a 10-K filer → true; MFG's withheld 20-F row → false (its form refuses it already)",
+    Mu.adsListedUnrated("HELDK") === true && Mu.adsListedUnrated("MFG") === false);
+  check("...a cited row always wins (ZLAB listed both ways in the fixture → false); a domestic filer → false",
+    Mu.adsListedUnrated("ZLAB") === false && Mu.adsListedUnrated("AAPL") === false);
+  const Mw = await loadMapWith(once(MSRC, "  if (adsRatioFor(s)) return false;\n", ""), fixture);
+  check("MUTATION: a cited row no longer clears the flag → ZLAB refused despite its ratio (caught)", Mw.adsListedUnrated("ZLAB") === true);
+  check("the committed `unrated` list: every row is a 10-K-type depositary row, cited, with no ratio in the map",
+    Object.entries(FILE.unrated ?? {}).every(([k, e]) => /^10-KT?$/.test(e.form) && /^\d{10}-\d{2}-\d{6}$/.test(e.source) && /^\d{4}-\d{2}-\d{2}$/.test(e.filed)
+      && /depositary|\bADSs?\b/i.test(e.evidence) && !(FILE.entries[k] && !FILE.entries[k].withheld)),
+    Object.keys(FILE.unrated ?? {}).join(","));
+
+  const p3 = (e, st, fp, fy, vals) => ({ e, s: st, fp, fy, a: null, f: null, d: "", v: KEYS0.map((k) => vals[k] ?? null) });
+  const onc = { symbol: "ONCX", quarters: [], years: [p3("2025-12-31", "2025-01-01", "FY", 2025, { epsDiluted: -0.5, sharesDiluted: 1.4e9, netIncome: -0.7e9 })], instants: [],
+    cover: { asOf: "2026-02-01", accession: null, filed: null, val: 1.4e9, derived: "as-filed" }, cur: "USD" };
+  const ref = V0.valuationInputs(onc, "2026-10-13", { annualForm: "10-K", adsUnrated: true });
+  check("valuationInputs: a 10-K filer with adsUnrated → both depositary refusals, no cap (ONC's ×13 cannot recur)",
+    ref.refusals.includes("ads-ratio-makes-shares-incomparable") && ref.refusals.includes("ads-ratio-makes-eps-incomparable") && V0.marketCap(ref, 300).ok === false);
+  check("...the same filer without the flag is valued as before (a plain 10-K)",
+    V0.marketCap(V0.valuationInputs(onc, "2026-10-13", { annualForm: "10-K" }), 300).ok === true);
+  check("...and with a cited ratio it is valued on the ratio, the flag notwithstanding",
+    V0.marketCap(V0.valuationInputs(onc, "2026-10-13", { annualForm: "10-K", adsUnrated: true, ads: { ordinaryPerAds: 13, source: "x", kind: "ads" } }), 300).ok === true);
+  const VS = fs.readFileSync("lib/server/secValuation.ts", "utf8");
+  const tmp = `lib/server/.check-ads-mut-${process.pid}-u.ts`;
+  fs.writeFileSync(tmp, once(VS, ` || filer.adsUnrated === true)) {`, `)) {`));
+  let Mf;
+  try { Mf = await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+  check("MUTATION: the adsUnrated flag ignored → a 10-K ADS listing valued on its ordinary count (caught)",
+    Mf.marketCap(Mf.valuationInputs(onc, "2026-10-13", { annualForm: "10-K", adsUnrated: true }), 300).ok === true);
+}
+
 console.log("\n4. valuationInputs");
 const V = await import("../lib/server/secValuation.ts");
 const { SEC_FIELD_KEYS } = await import("../lib/server/secFields.ts");
@@ -231,7 +295,7 @@ check("EPS in neither unit (identity ~3) → refused, not guessed", V.peRatio(V.
   const bad = Mu.peRatio(Mu.valuationInputs(set(yearAds), TODAY, { annualForm: "20-F", ads: ads5 }), 200);
   check("MUTATION: the EPS unit check removed → per-ADS EPS multiplied again, P/E 5x too low (caught)",
     bad.ok && Math.abs(bad.val - 200 / (45.25 * 25)) < 1e-9 && Math.abs(bad.val - V.peRatio(perAds, 200).val) > 1e-6);
-  const Md = await loadMutant(once(VS, `if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {`, `if (false && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {`));
+  const Md = await loadMutant(once(VS, `if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F" || filer.adsUnrated === true)) {`, `if (false) {`));
   check("MUTATION: the refusal lifted without a cited ratio → a cap in the wrong unit appears (caught)",
     Md.marketCap(Md.valuationInputs(set(yearOrd), TODAY, { annualForm: "20-F" }), 100)?.ok === true);
 }
@@ -319,6 +383,10 @@ console.log("\n5. wiring: the stock page and the earnings page pass the cited ra
 const snap = readCodeOnly("lib/server/secEarningsSnapshot.ts"), page = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
 check("secEarningsSnapshot passes ads: adsRatioFor(clean)", /ads: adsRatioFor\(clean\)/.test(snap));
 check("the earnings page passes ads: adsRatioFor(symbol)", /ads: adsRatioFor\(symbol\)/.test(page));
+const warmJob = readCodeOnly("app/api/jobs/warm-pickers-sec/route.ts"), seedSrc = readCodeOnly("scripts/pickers-sec-seed.mjs");
+check("all four pass adsUnrated (#552 COWORK #218): the snapshot, the earnings page, the Pickers job and its seed",
+  /adsUnrated: adsListedUnrated\(clean\)/.test(snap) && /adsUnrated: adsListedUnrated\(symbol\)/.test(page)
+  && /adsUnrated: adsListedUnrated\(s\)/.test(warmJob) && /adsUnrated: adsListedUnrated\(s\)/.test(seedSrc));
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

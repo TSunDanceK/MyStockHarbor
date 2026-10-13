@@ -135,7 +135,11 @@ export function adsRatioOf(text: string):
 // that registers depositary shares is an ADS listing, one that registers only
 // ordinary/common shares is a direct listing.
 
-const SECTION_12B = /registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i;
+// THE 10-K COVER'S WORDING TOO (#552 COWORK #218/#222): "Securities registered
+// pursuant to Section 12(b) of the Act". ZLAB, CMPS and TEVA list their ADSs
+// under it; with the 20-F wording alone the section was never found on a 10-K,
+// so a 10-K's depositary row could not be read or refused.
+const SECTION_12B = /(?:registered,?\s+or\s+to\s+be\s+registered,?|securities\s+registered)\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i;
 const ADS_MENTION = /(?:American|Global)\s+deposit[ao]ry|\b[AG]DSs?\b/i;
 // A DEPOSITARY SHARE OF SOMETHING OTHER THAN COMMON EQUITY: preferred shares
 // (AVAL, CIB, ITUB) or CPO units (CX, TV). The filer's EPS and share count are
