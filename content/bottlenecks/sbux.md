@@ -140,6 +140,7 @@ customers:
       Energy - and leads the US RTD coffee category.
   - name: Arla Foods
     ticker: null
+    listing: private
     pct: 12
     grade: some
     blurb: >

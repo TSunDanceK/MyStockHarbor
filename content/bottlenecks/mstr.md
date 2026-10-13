@@ -5,6 +5,7 @@ category: Bitcoin Treasury & Enterprise Analytics Software
 domain: strategy.com
 title: "Strategy (MSTR) Bottlenecks: Who Strategy Depends On"
 date: 2026-07-26
+updated: 2026-10-13
 summary: >
   Strategy Inc (formerly MicroStrategy) has transformed from a mid-size enterprise
   business-intelligence software vendor into primarily a Bitcoin treasury company,
@@ -49,7 +50,8 @@ supplyChain:
     grade: some
     blurb: >
       One of Strategy's three named bitcoin custodians, holding roughly 40%
-      of the company's bitcoin per its SEC filings. Coinbase has also acted as
+      of the company's bitcoin as of February 13, 2026, per its FY2025
+      10-K. Coinbase has also acted as
       an execution venue for large bitcoin purchases, making it central to
       both how Strategy buys and how it safeguards its core treasury asset.
   - name: Anchorage Digital Bank
@@ -58,7 +60,8 @@ supplyChain:
     grade: some
     blurb: >
       A federally chartered digital-asset bank and one of Strategy's named
-      bitcoin custodians, holding roughly 37% of the company's bitcoin. A
+      bitcoin custodians, holding roughly 37% of the company's bitcoin as
+      of February 13, 2026, per its FY2025 10-K. A
       private company with no public ticker.
   - name: Fidelity Digital Assets
     ticker: null
@@ -66,7 +69,8 @@ supplyChain:
     grade: some
     blurb: >
       The third named custodian holding a portion of Strategy's bitcoin,
-      reported at roughly 23% of total holdings. Operated by Fidelity
+      reported at roughly 23% of total holdings as of February 13, 2026,
+      per its FY2025 10-K. Operated by Fidelity
       Investments, a private company with no public ticker.
   - name: TD Securities (Toronto-Dominion Bank)
     ticker: TD
@@ -131,10 +135,11 @@ customers:
     pct: 41
     grade: hard
     blurb: >
-      The general public, holding roughly 48% of Strategy's shares
-      according to ownership analyses, making individual retail investors
-      the single largest bloc absorbing Strategy's stock issuance. Not a
-      single company.
+      The general public is the largest bloc of Strategy's shareholders;
+      ownership-data providers put its stake at roughly 37% to 48%
+      depending on how they define retail, making individual investors the
+      biggest group absorbing Strategy's stock issuance. Not a single
+      company.
   - name: Convertible-note & derivatives hedge funds
     ticker: null
     pct: 15

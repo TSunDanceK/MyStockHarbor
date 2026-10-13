@@ -5,6 +5,7 @@ category: Semiconductor foundry (contract chip manufacturer)
 domain: tsmc.com
 title: "TSMC (TSM) Bottlenecks: Who TSMC Depends On"
 date: 2026-07-08
+updated: 2026-10-13
 summary: >
   TSMC is the world's largest contract chip manufacturer, fabricating the
   leading-edge processors designed by Nvidia, Apple, AMD, and nearly every
@@ -23,7 +24,7 @@ supplyChain:
   - name: ASML
     ticker: ASML
     pct: 28
-    grade: some
+    grade: hard
     blurb: >
       The sole global supplier of extreme ultraviolet (EUV) lithography
       machines needed to print the smallest chip features. No alternative

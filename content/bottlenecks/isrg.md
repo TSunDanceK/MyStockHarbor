@@ -110,6 +110,7 @@ customers:
       Intuitive's own procedure growth.
   - name: Kaiser Permanente
     ticker: null
+    listing: private
     pct: 6
     grade: spread
     blurb: >

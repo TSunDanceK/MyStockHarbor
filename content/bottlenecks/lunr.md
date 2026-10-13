@@ -5,6 +5,7 @@ category: Space infrastructure / lunar lander & spacecraft manufacturer
 domain: intuitivemachines.com
 title: "Intuitive Machines (LUNR) Bottlenecks: Who Intuitive Machines Depends On"
 date: 2026-08-10
+updated: 2026-10-13
 summary: >
   Intuitive Machines builds most of its Nova-C lunar lander hardware in-house,
   so its real supply-side dependency is narrower than a typical hardware
@@ -19,9 +20,10 @@ supplyChainNote: >
   including its own liquid-methane/liquid-oxygen main engine, structures, and
   much of its avionics software — rather than sourcing from a broad supplier
   base. The entries below are the material external dependencies it can't
-  easily substitute: SpaceX for launch, its named teammates on NASA's Lunar
-  Terrain Vehicle (LTV) "Moon RACER" program, and the specific electronics
-  suppliers named in mission press coverage.
+  easily substitute: SpaceX for launch, its named teammates on its "Moon
+  RACER" Lunar Terrain Vehicle (LTV) team (NASA picked other providers to
+  build the rovers in May 2026), and the specific electronics suppliers
+  named in mission press coverage.
 disclaimer: >
   The percentages shown are editorial estimates based on public research
   (company disclosures, earnings commentary, and industry reporting) meant
@@ -43,16 +45,19 @@ supplyChain:
     pct: 20
     grade: some
     blurb: >
-      Teammate on Intuitive Machines' "Moon RACER" bid, which won NASA's
-      Lunar Terrain Vehicle (LTV) award — providing vehicle engineering and
-      systems-integration work for the crewed lunar rover program.
+      Teammate on Intuitive Machines' "Moon RACER" team, one of three
+      selected for NASA's 2024 Lunar Terrain Vehicle (LTV) feasibility
+      phase, providing vehicle engineering and systems-integration work. In
+      May 2026 NASA picked Lunar Outpost and Astrolab, not Moon RACER, to
+      build the rovers.
   - name: Michelin
     ticker: null
     pct: 12
     grade: some
     blurb: >
       Moon RACER teammate supplying purpose-built, non-pneumatic tires
-      engineered for the Moon's vacuum and abrasive regolith. Trades only as
+      engineered for the Moon's vacuum and abrasive regolith (Moon RACER
+      was not picked to build NASA's rovers in May 2026). Trades only as
       a thin OTC ADR (MGDDY) with its primary listing on Euronext Paris —
       no proper US-listed ticker.
   - name: L3Harris Technologies
@@ -70,7 +75,8 @@ supplyChain:
     grade: spread
     blurb: >
       Austrian engineering firm and Moon RACER teammate, contributing
-      electric powertrain design for the Lunar Terrain Vehicle. A private
+      electric powertrain design for the team's Lunar Terrain Vehicle
+      concept (not picked by NASA in May 2026). A private
       company with no public ticker.
   - name: Aitech Systems
     ticker: null
@@ -91,7 +97,9 @@ customers:
       By far Intuitive Machines' largest and founding customer, predating
       its 2023 public listing. Spans CLPS lunar-delivery task orders (IM-1,
       IM-2, IM-3, and the newest $180.4M CLPS award), Artemis-related work
-      including the Moon RACER/Lunar Terrain Vehicle award and PRIME-1 South
+      including the 2024 Moon RACER Lunar Terrain Vehicle feasibility
+      contract (NASA chose other providers to build the rovers in May
+      2026) and PRIME-1 South
       Pole delivery, and the Near Space Network/OMES III communications
       vehicle with a ceiling of up to $4.82B. Intuitive Machines' own SEC
       filings disclose that a single customer made up 72% of revenue in Q3
@@ -104,10 +112,11 @@ customers:
     pct: 10
     grade: some
     blurb: >
-      Selected Intuitive Machines as a subcontractor to supply spacecraft
-      buses for the Space Development Agency's proliferated missile-tracking
-      constellation (Tracking Layer Tranche 3, 18 spacecraft awarded August
-      2026) — the company's most significant move yet into national-security
+      Selected Intuitive Machines (through its Lanteris Space Systems
+      subsidiary) as a subcontractor to supply spacecraft platforms for
+      Space Development Agency missile-tracking satellites: 18 for the
+      Tranche 3 Tracking Layer (March 2026) and 18 for the AMDT3 mission
+      (August 2026) — the company's most significant move yet into national-security
       space beyond NASA, still early and not yet a large share of realized
       revenue.
   - name: U.S. Air Force
@@ -151,13 +160,13 @@ roughly) on the Moon, but its bottleneck story has two very different
 halves. On the supply side, it's unusually self-reliant for a hardware
 company — it builds its own engine, structures, and avionics software —
 leaving SpaceX's launch pad as the one dependency it genuinely cannot work
-around, plus a handful of named partners on NASA's Lunar Terrain Vehicle
-program and specific electronics suppliers like Aitech and L3Harris. On the
+around, plus a handful of named partners from its Lunar Terrain Vehicle
+bid (which NASA did not pick in May 2026) and specific electronics suppliers like Aitech and L3Harris. On the
 customer side, the picture is the opposite of diversified: SEC filings show
 a single customer made up 72% of Q3 2025 revenue, and every public
 disclosure points to that customer being NASA, which has been the company's
 primary revenue source since before its 2023 IPO. 2026 brought real
-diversification — a Space Development Agency subcontract via L3Harris, an
+diversification — Space Development Agency subcontracts via L3Harris, an
 Air Force lunar-power award, a Korean government imaging contract, and
 paying commercial payload customers like Nokia and Lonestar — but none of it
 yet approaches the scale of the core NASA relationship.

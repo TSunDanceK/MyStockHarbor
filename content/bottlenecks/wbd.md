@@ -46,6 +46,7 @@ supplyChain:
       technology dependency in WBD's stack.
   - name: National Basketball Association
     ticker: null
+    listing: private
     pct: 20
     grade: some
     blurb: >

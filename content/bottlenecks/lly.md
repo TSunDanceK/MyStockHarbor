@@ -38,7 +38,7 @@ disclaimer: >
 watch:
   - "Jardiance: Lilly's share of Jardiance net sales in key markets runs to 31 December 2028."
   - "Own plants: a $4.5B Indiana expansion announced in May 2026 includes an API site due in 2027."
-  - "Pharmaron: Lilly said Pharmaron's capacity may grow in scale as needed."
+  - "Pharmaron: the March 2026 deal lets Pharmaron's capacity grow in scale as needed."
 supplyChain:
   - name: Contract manufacturers (active ingredients, fill-finish and devices)
     ticker: null
