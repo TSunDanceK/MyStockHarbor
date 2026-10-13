@@ -1424,6 +1424,9 @@ const TASKS = {
   "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY (Relay B, #553 COWORK #159 PR 2): "What it does" extracted across the stored IPO list (1 GET + SEC).
   "write-ipo-about-measure": { script: "scripts/ipo-about-measure.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (#553 COWORK #222 step 1): the audited symbols' stored last two
+  // EOD bars and IEX quote rows; dates, ET times, %, yes/no. GET/MGET/HMGET, ~2 commands.
+  "write-premarket-quote-census": { script: "scripts/premarket-quote-census.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
