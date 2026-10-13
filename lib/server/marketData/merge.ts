@@ -9,6 +9,7 @@
 // not the consolidated price, and its high/low are IEX's too (COWORK #56,
 // labels). Volume is left out: volume stays EOD-only (COWORK #53).
 import type { EodBar } from "./types";
+import { regularSessionTime } from "../../ta/sessionBar";
 
 export type PoolQuote = { price: number; open: number | null; high: number | null; low: number | null; at: number };
 
@@ -39,10 +40,14 @@ function easternParts(ms: number) {
 
 /**
  * The partial bar for `quote`, or null when the quote is not newer than the
- * last stored bar (after the close the nightly consolidated bar replaces it).
+ * last stored bar (after the close the nightly consolidated bar replaces it),
+ * or when it is not a regular-session print (lib/ta/sessionBar.ts, #553 COWORK #222).
  */
 export function todaySoFar(bars: readonly EodBar[], quote: PoolQuote | null | undefined): TodayBar | null {
   if (!quote || !(quote.price > 0) || !Number.isFinite(quote.at)) return null;
+  // A pre-market or after-hours print is not a session bar (#553 COWORK #222):
+  // it would carry MA / RSI / MACD to a price the session never traded at.
+  if (!regularSessionTime(quote.at)) return null;
   const { date, hhmm } = easternParts(quote.at);
   const last = bars.length ? bars[bars.length - 1][0] : "";
   if (date <= last) return null;

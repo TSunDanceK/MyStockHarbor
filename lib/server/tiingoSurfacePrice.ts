@@ -23,12 +23,24 @@
 // yesterday's close under today's IEX trade. Comparing the two dates instead
 // always shows the newer of the two, and names it.
 //
+// BUT ONLY A SESSION PRINT COUNTS (#553 COWORK #222, 13 Oct). "Newer wins" let
+// the quotes job's first write of the day (~08:11 ET, pre-market) replace
+// yesterday's close as THE price, beside yesterday's day range on Key levels:
+// the audit's "day high 0.26% below the last price". The IEX row now competes
+// only when lib/ta/sessionBar.ts sessionPrint says it is a print from today's
+// regular session (09:30–16:00 ET); a pre-market, after-hours or earlier-day
+// print is refused and the stored close shows, under its own date. After the
+// close a session print still beats yesterday's bar (#563 COWORK #77). The
+// "(pre-market)" / "(after hours)" suffix below can therefore no longer reach a
+// label; sessionSuffix stays for the checks that pin the wording rule.
+//
 // READS ONLY, THROUGH B'S ADAPTER (read.ts). No Tiingo call from here: the pool
 // is one cached blob shared with every other surface, the history one cached
 // entry per symbol (#553 COWORK #56 §3).
 import { readTiingoHistory, readTiingoPool } from "./marketData/read";
 import type { EodBar, StoredQuote } from "./marketData/types";
 import { toDashed } from "../symbolSpellings.mjs";
+import { sessionPrint, sessionPrintLabel } from "../ta/sessionBar";
 
 /** The contract's credit, linked on each switched figure (#563 COWORK #31 §5). */
 export const TIINGO_CREDIT = "Market data from Tiingo.com";
@@ -37,8 +49,8 @@ export const TIINGO_URL = "https://www.tiingo.com/";
 export type SurfacePrice = {
   price: number;
   /**
-   * "last IEX trade, 14:05 ET" | "last IEX trade, 08:40 ET (pre-market)" |
-   * "last IEX trade, 17:05 ET, 29 Sep (after hours)" | "close, 29 Sep 2026"
+   * "today so far (IEX, 14:05 ET)" | "today's last IEX trade, 16:00 ET" |
+   * "close, 29 Sep 2026" (#553 COWORK #222: only today's session prints are IEX)
    */
   label: string;
   kind: "iex" | "close";
@@ -88,8 +100,8 @@ export function pickSurfacePrice(
   const last = bars?.length ? bars[bars.length - 1] : null;
   const close = last && Number.isFinite(last[4]) && last[4] > 0 ? { date: last[0], price: last[4] } : null;
   const iex =
-    row && Number.isFinite(row.price) && row.price > 0 && Number.isFinite(row.at) && row.at > 0
-      ? { ...easternDateTime(row.at), price: row.price }
+    row && Number.isFinite(row.price) && row.price > 0 && Number.isFinite(row.at) && row.at > 0 && sessionPrint(row.at, nowMs)
+      ? { ...easternDateTime(row.at), price: row.price, at: row.at }
       : null;
 
   // The close wins a tie: same trading day, and it is the consolidated figure.
@@ -97,13 +109,8 @@ export function pickSurfacePrice(
     return { price: close.price, kind: "close", date: close.date, label: `close, ${dayMonth(close.date)} ${close.date.slice(0, 4)}` };
   }
   if (iex) {
-    const today = easternDateTime(nowMs).date;
-    return {
-      price: iex.price,
-      kind: "iex",
-      date: iex.date,
-      label: `last IEX trade, ${iex.time} ET${iex.date === today ? "" : `, ${dayMonth(iex.date)}`}${sessionSuffix(iex.time)}`,
-    };
+    // Only today's session prints reach here (sessionPrint), so the label is the session's own.
+    return { price: iex.price, kind: "iex", date: iex.date, label: sessionPrintLabel(iex.at, nowMs) };
   }
   return null;
 }

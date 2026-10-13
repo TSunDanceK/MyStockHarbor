@@ -94,7 +94,7 @@ function poolBehaviour(P) {
   const fails = [];
   const want = (label, ok) => { if (!ok) fails.push(label); };
   const r = P.mapTiingoPoolRow(FMP, IEX, LAST, THU_1405);
-  want("in session: the IEX trade, labelled with its ET time", r?.price === 103 && r.priceLabel === "last IEX trade, 14:05 ET" && r.ts === THU_1405 && r.source === "tiingo");
+  want("in session: the IEX trade, labelled with its ET time", r?.price === 103 && r.priceLabel === "today so far (IEX, 14:05 ET)" && r.ts === THU_1405 && r.source === "tiingo");
   want("% change from the STORED consolidated close (100), not IEX's prevClose or the open", r && Math.abs(r.changePct - 3) < 1e-9);
   want("open and day range are the IEX row's while the price is IEX", r?.open === 101 && r.dayHigh === 104 && r.dayLow === 99);
   want("volume is the last EOD bar's, labelled \"as of last close\" (never IEX's)", r?.volume === 3000 && r.volumeLabel === "as of last close");
@@ -112,6 +112,11 @@ function poolBehaviour(P) {
   want("...its range is the bar's and its time is 16:00 ET of that day", c?.open === 99 && c.dayHigh === 101 && c.ts === Date.UTC(2026, 8, 30, 20, 0));
   want("...and with no FMP row, no market cap is invented", c?.marketCap === null && c.pe === null);
 
+  // The same trading day stored (the EOD bar landed): the consolidated close wins the tie with
+  // today's IEX print. Since #553 COWORK #222 the stale case above is refused by the session gate
+  // on its own, so this is the case that still tells "newer-of" from "IEX always wins".
+  const tie = P.mapTiingoPoolRow(null, IEX, { ...LAST, d: "2026-10-01", c: 102, pc: 100 }, THU_1405);
+  want("same trading day stored: the close wins the tie with today's IEX print", tie?.price === 102 && tie.priceLabel === "close, 1 Oct 2026");
   const noBars = P.mapTiingoPoolRow(null, IEX, null, THU_1405);
   want("no stored bar: IEX's prevClose is the only base, and there is no volume", noBars && Math.abs(noBars.changePct - ((103 - 100.5) / 100.5) * 100) < 1e-9 && noBars.volume === null && noBars.volumeLabel === null);
   want("nothing usable: null, so the reader keeps its FMP row", P.mapTiingoPoolRow(FMP, null, null, THU_1405) === null);

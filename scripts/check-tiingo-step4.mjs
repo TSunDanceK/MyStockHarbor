@@ -68,7 +68,7 @@ function behaviour(Q) {
 
   const iex = Q.buildTiingoQuote("ABC", ROW, BARS, THU_1405, "ABC Corp");
   want("in session: the IEX trade, labelled with its ET time",
-    iex?.price === 103 && iex.priceLabel === "last IEX trade, 14:05 ET" && iex.date === "2026-10-01" && iex.time === "14:05");
+    iex?.price === 103 && iex.priceLabel === "today so far (IEX, 14:05 ET)" && iex.date === "2026-10-01" && iex.time === "14:05");
   want("previous close is the stored consolidated close, not IEX's prevClose",
     iex?.previousClose === 100 && iex.change === 3 && Math.abs(iex.changePercentage - 3) < 1e-9);
   want("day range and open are the IEX row's while the price is IEX",
