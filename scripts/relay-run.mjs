@@ -765,6 +765,11 @@ const TASKS = {
   "ads-ratio-census-2": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
   "ads-ratio-census-3": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
   "ads-ratio-census": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true },
+  // OPTION G ON EVERY REGISTRANT (#552 COWORK #219): movers S→G, and what a pure replacement would differ on. Read-only, no credential.
+  "revenue-gap-census": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true },
+  "revenue-gap-census-1": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/3" } },
+  "revenue-gap-census-2": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
+  "revenue-gap-census-3": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
   "ads-ratio-12b": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHOW12B: "1" } },
   "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
