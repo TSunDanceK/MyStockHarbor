@@ -1,8 +1,10 @@
 // A SYMBOL'S LIVE MARKET CAP, AS THE STOCK PAGE COMPUTES IT (#552 COWORK #223/#224:
 // V after #873, ONC after #877). READS ONLY, despite the write- task prefix (the
-// store read needs the credential): per symbol 1 GET (the stored fact set), the
-// shipped readSurfacePrice (the Tiingo pool and the symbol's EOD history) and 1
-// HGET (its Pickers SEC row). The shipped valuationInputs + marketCap with the
+// store read needs the credential): per symbol 1 GET (the stored fact set), 1 HGET
+// (its Tiingo pool row), 1 GET (its Tiingo EOD history) and 1 HGET (its Pickers SEC
+// row). The price is the shipped pickSurfacePrice, lifted from its module (whose
+// reader goes through next/cache and cannot run outside Next) and given the same
+// two reads readSurfaceInputs makes. The shipped valuationInputs + marketCap with the
 // filer facts the earnings snapshot passes.
 //
 // ACTIONS LOGS ARE PUBLIC, AND TIINGO DATA IN A LOG IS DISTRIBUTION (contract
@@ -16,7 +18,15 @@ import { Redis } from "@upstash/redis";
 const redis = Redis.fromEnv();
 const V = await import("../lib/server/secValuation.ts");
 const { adsRatioFor, adsListedUnrated } = await import("../lib/server/secAdsMap.ts");
-const { readSurfacePrice } = await import("../lib/server/tiingoSurfacePrice.ts");
+const KEYS = await import("../lib/server/marketData/keys.ts");
+const { readCodeOnly } = await import("./lib/source-code.mjs");
+const { lift, grabFunction } = await import("./lib/earnings-plan.mjs");
+const SP = readCodeOnly("lib/server/tiingoSurfacePrice.ts");
+const { pickSurfacePrice } = await lift([
+  readCodeOnly("lib/ta/sessionBar.ts").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, ""),
+  SP.match(/^const MONTHS = [^;]+;$/m)[0], grabFunction(SP, "easternDateTime"), grabFunction(SP, "dayMonth"), grabFunction(SP, "pickSurfacePrice"),
+  "export { pickSurfacePrice };",
+].join("\n"));
 const { nonEquityListingOf, citedCoverFor } = await import("../lib/server/secPrimaryListing.ts");
 const keyOf = (src, n) => (fs.readFileSync(src, "utf8").match(new RegExp(`${n} = "([^"]+)"`)) ?? [])[1];
 const FACTS = keyOf("lib/server/secManifest.ts", "SEC_FACTS_PREFIX");
@@ -27,7 +37,10 @@ const obj = (x) => (typeof x === "string" ? JSON.parse(x) : x);
 let commands = 0;
 for (const s of (process.env.SYMBOLS || "V").split(/[,\s]+/).filter(Boolean)) {
   const set = await redis.get(`${FACTS}:${s}`); commands++;
-  const surface = await readSurfacePrice(s); commands += 2;
+  const dashed = s.replace(".", "-");
+  const quote = obj(await redis.hget(KEYS.TIINGO_QUOTES_KEY, dashed)); commands++;
+  const eod = obj(await redis.get(KEYS.tiingoEodKey(dashed))); commands++;
+  const surface = pickSurfacePrice(quote && quote.price > 0 ? quote : null, Array.isArray(eod?.bars) ? eod.bars : null, Date.now());
   const pick = obj(await redis.hget(PICKERS, s)); commands++;
   console.log(`\n== ${s}`);
   if (!set) { console.log("  no stored set"); continue; }
