@@ -22,6 +22,7 @@ import { macdTone } from "@/lib/ta/macdSeries";
 import { indexWords, isStale, parseQqqWeekly, weeklyDate, type QqqWeekly, type SectionKey } from "@/lib/qqqWeekly";
 import { FAQ, QQQ_DESCRIPTION, QQQ_TITLE, QQQ_URL, WEEKLY_CHART_EXPLAINER, faqJsonLd, trendWords } from "@/lib/qqqPage";
 import { dailyReturnBars, monthlyReturnBars, weeklyReturnBars } from "@/lib/closeReturns";
+import { TREND_METER_CSS, TrendMeter } from "@/app/components/TrendMeter";
 import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
 import PerformanceStrip from "@/app/stock/[symbol]/PerformanceStrip";
 import StockPriceChart from "@/app/stock/[symbol]/StockPriceChart";
@@ -193,9 +194,9 @@ function WriteUp({ weekly, k, stale }: { weekly: QqqWeekly | null; k: SectionKey
 }
 
 /** A hero tile: label, value, a line under it; `dated` lifts the date out when the weekly file is stale. */
-function Tile({ label, value, sub, tone, dated }: { label: string; value: React.ReactNode; sub: React.ReactNode; tone?: string; dated?: boolean }) {
+function Tile({ label, value, sub, tone, dated, wide }: { label: string; value: React.ReactNode; sub: React.ReactNode; tone?: string; dated?: boolean; wide?: boolean }) {
   return (
-    <div className="qqqTile" style={{ ...card({ padding: 14 }) }}>
+    <div className={wide ? "qqqTile qqqTrendTile" : "qqqTile"} style={{ ...card({ padding: 14 }) }}>
       <div style={{ fontSize: "var(--fs-label)", fontWeight: 850, letterSpacing: "0.08em", textTransform: "uppercase", color: C.muted }}>{label}</div>
       <div style={{ marginTop: 6, fontSize: "1.5rem", fontWeight: 900, letterSpacing: "-0.03em", color: tone ?? C.value, fontVariantNumeric: "tabular-nums" }}>{value}</div>
       <div style={{ marginTop: 4, fontSize: "var(--fs-read)", lineHeight: 1.45, color: dated ? C.amber : C.muted, fontWeight: dated ? 750 : 400 }}>{sub}</div>
@@ -275,8 +276,18 @@ export default async function QQQPage() {
                 <Tile label="From the record high" value={`${fromAth >= 0 ? "+" : "−"}${Math.abs(fromAth).toFixed(1)}%`}
                   sub={`Record close ${indexWords(weekly.ath.level)} on ${weeklyDate(weekly.ath.date)}`} dated={stale} />
               ) : null}
-              <Tile label="Trend score" value={trend ? `${trend.score}/100` : "—"} tone={trendTone}
-                sub={trend ? `${trendWords(trend.score)} · a price-trend score from QQQ's moving averages and RSI (14), not sentiment` : "QQQ's price history couldn't be loaded just now"} />
+              {/* THE TREND SCORE ON THE DASHBOARD'S METER (#553 COWORK #221): "85/100", the shared
+                  10-cell bar (app/components/TrendMeter.tsx) and the trend words in one row;
+                  the caption one short line. Spans the row where the tiles run two across. */}
+              <Tile label="Trend score" wide tone={trendTone}
+                value={trend ? (
+                  <span className="qqqTrendRow" data-trend={trend.score}>
+                    <span>{trend.score}/100</span>
+                    <TrendMeter score={trend.score} />
+                    <span className="qqqTrendWords">{trendWords(trend.score)}</span>
+                  </span>
+                ) : "—"}
+                sub={trend ? "From QQQ's moving averages and RSI (14): price trend, not sentiment." : "QQQ's price history couldn't be loaded just now"} />
               </div>
             <a className="qqqCrossLink" href="/markets/spx" style={crossLink}>Compare with the S&amp;P 500 →</a>
             </div>
@@ -485,14 +496,20 @@ export default async function QQQPage() {
           .qqqKeysCell .klCard { flex: 1 1 auto; display: flex; flex-direction: column; }
           .qqqMoodCell .moodCard { flex: 1 1 auto; display: flex; flex-direction: column; }
         }
+        /* THE TREND TILE'S ROW (#553 COWORK #221): score, meter and words on one line, wrapping only if the tile is narrow. */
+        .qqqTrendRow { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+        .qqqTrendWords { font-size: var(--fs-read); font-weight: 800; letter-spacing: 0; }
+        ${TREND_METER_CSS}
         @media (max-width: 900px) {
           .qqqTiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          /* Two tiles a row here: the trend tile takes a row of its own, not half of one beside a hole. */
+          .qqqTrendTile { grid-column: 1 / -1; }
           .qqqHeroGrid { grid-template-columns: minmax(0, 1fr) !important; }
           .qqqLevels { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "zones" "keys" "glance"; }
           .qqqPoints, .qqqWatch, .qqqRead { grid-template-columns: minmax(0, 1fr) !important; }
         }
-        /* THE NASDAQ-100'S FIVE-DIGIT CLOSE (30,883.15) doesn't fit a half-width tile on a small phone, as SPX's four digits do: one tile a row there. */
-        @media (max-width: 420px) {
+        /* THE NASDAQ-100'S FIVE-DIGIT CLOSE (30,883.15) doesn't fit a half-width tile on a small phone (measured to 430 px at a 20 px root, #553 COWORK #221), as SPX's four digits do: one tile a row there. */
+        @media (max-width: 480px) {
           .qqqTiles { grid-template-columns: minmax(0, 1fr) !important; }
         }
         @media (max-width: 640px) {
