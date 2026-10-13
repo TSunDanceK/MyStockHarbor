@@ -72,7 +72,7 @@ check(`the source yields SEC write sites to check`, sites.length >= 7, `${sites.
 for (const s of sites) {
   const gated = /canWriteSecState\(\)/.test(s.body);
   const prefixed = /secCounterPrefix\(/.test(readCodeOnly(s.file)) &&
-    /coldRateKey|coldExhaustionKey|RATE_PREFIX|cold-exhausted/.test(s.body);
+    /coldRateKey|coldExhaustionKey|coldPaceKey|RATE_PREFIX|PACE_PREFIX|cold-exhausted/.test(s.body);
   check(`${s.file}:${s.line} ${s.fn} — ${s.text.slice(0, 54)}`,
     gated || prefixed,
     gated ? "gated" : prefixed ? "counter, preview-prefixed" : "NOT GATED");

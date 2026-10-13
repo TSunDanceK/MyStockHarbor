@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { recordSectorTone } from "@/lib/server/sectorTone";
 import { readOrRefreshSectorNews, readStoredSymbolNews } from "@/lib/server/newsStore";
 import { activeNewsProviders, newsProviderMode } from "@/lib/server/news";
 import { wireProvider } from "@/lib/server/news/wireProvider";
@@ -489,6 +490,10 @@ async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBas
       ? keywordNewsScore.reason
       : `No recent headlines are stored yet for the largest ${sector.name} names.`,
   };
+
+  // Kept for the /sector cards (#553 COWORK #157): only a score built from
+  // real headlines, so a sector with none shows no chip rather than "Neutral".
+  if (news.length) await recordSectorTone(sector.slug, newsScore.label, newsScore.score);
 
   const earningsScore: EarningsScoreResult = {
     ...keywordEarningsScore,

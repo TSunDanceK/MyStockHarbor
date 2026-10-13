@@ -627,64 +627,32 @@ check(
   "an unconditional fallback would add a request to every render"
 );
 
-console.log("\n=== 10. THE STORE WRITES DO NOT BLOCK THE READER ===\n");
+console.log("\n=== 10. THE STORE WRITES: AWAITED, BOUNDED, NEVER after() ===\n");
+// CHANGED BY #553 COWORK #203 (from #563 CODE-C #138). These writes used to go
+// through after() so the reader never waited on them. But the store runs only
+// inside the news pages' unstable_cache builders, which Next also runs as a
+// background refresh after the response has closed, and an after() there held
+// the function to Vercel's 300 s kill. They are now awaited inside the
+// builder, each bounded by NEWS_DEFERRED_WRITE_BUDGET_MS; the full rule set,
+// with mutants, is scripts/check-news-store-no-after.mjs. What stays here:
+// none of the three writes is dropped, and none escapes the budget.
 const storeCode = codeOf(read("lib/server/newsStore.ts"), "lib/server/newsStore.ts");
 check(
-  "after() comes from next/server, not a detached promise",
-  /import \{ after \} from "next\/server";/.test(storeCode),
-  "a floating promise in a serverless function can be killed the moment the response is sent"
+  "the news store calls no after()",
+  !/\bafter\(/.test(storeCode),
+  "an after() inside an unstable_cache background refresh holds the function to the 300 s limit"
 );
-// AWAITED INSIDE after() IS CORRECT — the deferred callback has to await its own
-// writes or they are dropped. The property is that none of them is awaited
-// OUTSIDE one, so the after() blocks are removed before looking. The first
-// version tested `!/await writeStored\(/` over the whole file and failed on the
-// correct code, which would have pushed the fix toward dropping the await.
-const outsideAfter = (() => {
-  let out = "";
-  let i = 0;
-  while (i < storeCode.length) {
-    // `after(` ALONE WOULD ALSO MATCH A DECLARATION of that identifier, which
-    // scripts/check-assertion-anchors.mjs flagged on the first version of this.
-    // Anchored on the two call shapes actually used instead.
-    const nextCall = /after\((?:async )?\(\) =>/g;
-    nextCall.lastIndex = i;
-    const hit = nextCall.exec(storeCode);
-    const at = hit ? hit.index : -1;
-    if (at < 0) { out += storeCode.slice(i); break; }
-    out += storeCode.slice(i, at);
-    // Walk to the matching close paren so nested parens do not end it early.
-    let depth = 0;
-    let j = at + "after".length;
-    for (; j < storeCode.length; j += 1) {
-      if (storeCode[j] === "(") depth += 1;
-      else if (storeCode[j] === ")") { depth -= 1; if (depth === 0) { j += 1; break; } }
-    }
-    i = j;
-  }
-  return out;
-})();
-check(
-  "the after() blocks were actually found and removed",
-  outsideAfter.length < storeCode.length && /writeStored/.test(storeCode),
-  "if the stripper matched nothing the checks below would pass over the whole file"
-);
-for (const [write, why] of [
-  ["writeStored", "the store itself"],
-  ["recordRefreshStats", "the refresh counters"],
-  ["markViewed", "the staleness mark"],
+for (const [write, shape, why] of [
+  ["writeStored", /await boundedDeferred\("news-store", key, async \(\) => \{\s*await writeStored\(/, "the store itself"],
+  ["recordRefreshStats", /await writeStored\(key, kept, nowMs\);\s*await recordRefreshStats\(/, "the refresh counters"],
+  ["markViewed", /await boundedDeferred\("news-store", upper, \(\) => markViewed\(/, "the staleness mark"],
 ]) {
   check(
-    `${write} is not awaited outside after() (${why})`,
-    !new RegExp(`await ${write}\\(`).test(outsideAfter),
-    "the reader already holds the items; it consumes none of these"
+    `${write} is awaited inside a bounded write (${why})`,
+    shape.test(storeCode),
+    "not awaited would mean dropped when the builder returns; unbounded would mean a hung write holds the builder"
   );
 }
-check(
-  "...and all three are inside an after() callback",
-  /after\(async \(\) => \{[\s\S]*?writeStored\([\s\S]*?recordRefreshStats\([\s\S]*?\}\)/.test(storeCode) &&
-    /after\(\(\) => markViewed\(/.test(storeCode),
-  "not awaited AND not deferred would mean simply dropped"
-);
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

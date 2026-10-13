@@ -8,7 +8,7 @@ export function EstimateKey({ marks, style }: { marks: (EstimateMark | null | un
   const kinds = new Set(marks.filter((m): m is EstimateMark => Boolean(m)).map((m) => m.kind));
   if (!kinds.size) return null;
   return (
-    <div data-estimate-key="" style={{ fontSize: 12, lineHeight: 1.6, opacity: 0.8, ...style }}>
+    <div data-estimate-key="" style={{ fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", opacity: 0.8, ...style }}>
       {kinds.has("estimate") ? (
         <div>
           <span style={{ color: ESTIMATE_COLOUR, fontWeight: 700 }}>{ESTIMATE_SIGN} Estimate</span>

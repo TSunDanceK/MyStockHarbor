@@ -4,8 +4,11 @@ import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { getDailyHistory } from "@/lib/server/historyCache";
-import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { historyForSurface, historyOnTiingo, readTiingoHistoryPoints } from "@/lib/server/tiingoHistory";
+import { performanceStrip } from "@/lib/ta/performance";
+import { strengthBadge } from "@/lib/strengthBadge";
+import { earningsBadgeInput } from "@/lib/earningsBadge";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import { searchSymbols } from "@/lib/server/symbolSearch";
 import {
   getStockPageSecFacts,
@@ -20,9 +23,13 @@ import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import { composeCompanyProfile, exchangeFor, peBasisLabel, peBasisNote, registrantFor } from "@/lib/server/stockProfile";
 import { filingDescriptionFor } from "@/lib/server/filingDescription";
 import {
-  REFUSAL_CELL_WORD, REFUSAL_WORDS, fyPeRatio, valuationMultiples, type EpsBasis, type MultipleInputs, type ValuationFigure, type ValuationInputs,
+  REFUSAL_CELL_WORD, REFUSAL_WORDS, fyPeNote, fyPeRatio, valuationMultiples, type EpsBasis, type MultipleInputs, type ValuationFigure, type ValuationInputs,
 } from "@/lib/server/secValuation";
 import { readableDate } from "@/lib/server/secEstimates";
+import { isBankSic, peSectorOf, readPeSectorMedians } from "@/lib/server/peSectorMedians";
+import { peSectorLine } from "@/lib/peSectorLine";
+import { readValuationBenchmarks, valuationGroupOf } from "@/lib/server/valuationBenchmarks";
+import { valuationBand } from "@/lib/valuationBands";
 import { symbolSpellings } from "@/lib/symbolSpellings.mjs";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
@@ -37,10 +44,13 @@ import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { readTiingoQuote } from "@/lib/server/tiingoQuote";
 import { awaitingSecRead } from "@/lib/server/secColdFetch";
+import { stockPageIndexable } from "@/lib/stockPageRobots";
 import Link from "next/link";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import StockSymbolPageClient, { type InitialQuote } from "./StockSymbolPageClient";
+import TiingoColdFill, { TiingoRequestedTouch } from "./TiingoColdFill";
+import { inCommittedUniverse, isColdTiingoCandidate, preparingWords } from "@/lib/server/tiingoColdState";
 
 type Props = {
   params: Promise<{ symbol: string }>;
@@ -66,13 +76,31 @@ type Props = {
 // changes the wording on the page, never whether it renders. A real
 // outage/circuit-breaker signal needs state across requests; see the note on
 // the no-data branch in the page component.
-type QuoteOutcome = "ok" | "no-data" | "unavailable";
+// "cold-tiingo" (#553 COWORK #121): a real ticker with no stored Tiingo data
+// yet, on the Tiingo path. The page shows "being prepared" and the cold fill
+// stores it within seconds (TiingoColdFill.tsx); no FMP call is made for it.
+type QuoteOutcome = "ok" | "no-data" | "unavailable" | "cold-tiingo";
 
 // toDashed AT THE VENDOR BOUNDARY, as in lib/stock-news-data.ts's fetchFmpQuote.
 // The route parameter is the reader's spelling; FMP's is the dash. Without it
 // /stock/BRK.B asked FMP for "BRK.B", got the empty row, and scored the page
 // "no-data" -- which reads as "this symbol has no data", the one outcome above
 // that is supposed to be legitimate. The displayed symbol is left alone.
+const EMPTY_QUOTE: InitialQuote = {
+  price: null,
+  date: null,
+  open: null,
+  previousClose: null,
+  change: null,
+  changePercentage: null,
+  dayLow: null,
+  dayHigh: null,
+  yearLow: null,
+  yearHigh: null,
+  volume: null,
+  avgVolume: null,
+};
+
 async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcome: QuoteOutcome }> {
   // STEP 4 (#553 COWORK #71), behind PRICE_PROVIDER_STOCK_PAGE, the same switch
   // as the client's /api/quote refresh, so the header never seeds from FMP and
@@ -81,6 +109,13 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
   if (priceProviderFor("STOCK_PAGE") === "tiingo") {
     const t = await readTiingoQuote(symbol);
     tiingoAsked = true;
+    // A COLD SYMBOL TAKES THE TIINGO COLD FILL, NOT THE FMP LEG (#553 COWORK
+    // #121 §6), so the path is proven while FMP is still there for everything
+    // the cold fill does not cover (a ticker off Tiingo's list, or one Tiingo
+    // answered empty for). The page then renders "being prepared".
+    if ((!t || t.price == null) && (await isColdTiingoCandidate(symbol))) {
+      return { quote: EMPTY_QUOTE, outcome: "cold-tiingo" };
+    }
     if (t && t.price != null) {
       return {
         quote: {
@@ -104,20 +139,7 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
     }
   }
   const apiKey = process.env.FMP_API_KEY;
-  const empty: InitialQuote = {
-    price: null,
-    date: null,
-    open: null,
-    previousClose: null,
-    change: null,
-    changePercentage: null,
-    dayLow: null,
-    dayHigh: null,
-    yearLow: null,
-    yearHigh: null,
-    volume: null,
-    avgVolume: null,
-  };
+  const empty: InitialQuote = EMPTY_QUOTE;
   // NO FMP KEY AFTER A TIINGO MISS IS "NO DATA" (#553 CODE-B #94 B12). Tiingo
   // was asked and had nothing, and there is no fallback left to ask, so an
   // unknown or delisted ticker reads "No data available" rather than
@@ -238,6 +260,8 @@ function str(value: unknown): string | null {
 // the last field this was read for, is now the company's own annual-report
 // wording (lib/server/filingDescription.ts). No FMP profile call remains on
 // this page.
+// 2026-10-12 (#552 COWORK #210): FMP's contract has ended (COWORK #209), so
+// this can never return data again. Still not called; hidden, not deleted.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | null> {
   const apiKey = process.env.FMP_API_KEY;
@@ -328,6 +352,8 @@ async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | nul
 // a real per-quarter (and per-year, as a fallback for sparse quarterly
 // coverage) shares-outstanding series. Field names are still mapped
 // defensively in case FMP changes the shape.
+// 2026-10-12 (#552 COWORK #210): FMP's contract has ended (COWORK #209), so
+// this can never return data again. Still not called; hidden, not deleted.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | null> {
   const apiKey = process.env.FMP_API_KEY;
@@ -403,10 +429,6 @@ function valuationSourceNote(m: MultipleInputs | null, v: ValuationInputs | null
   );
 }
 
-/** Under an FY-basis P/E (#552 COWORK #98 §2). */
-function fyPeNote(eps: EpsBasis): string {
-  return `Twelve months of diluted EPS aren't on file, so this P/E uses the latest full year (to ${readableDate(eps.periodEnd)}).`;
-}
 
 // ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
 
@@ -422,7 +444,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // History follows PRICE_PROVIDER_CHARTS exactly as the page body does (step 3,
   // #553 COWORK #71), so the title's MA/RSI read and the page agree.
   const [rawHistory, quoteResult] = await Promise.all([
-    historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page" })).then(
+    historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page" }), {
+      // A cold Tiingo symbol reads no FMP history: the page says "being
+      // prepared" and the cold fill stores its bars (#553 COWORK #121 §6).
+      skipFmp: () => isColdTiingoCandidate(upper),
+    }).then(
       (h) => h.points,
       () => [] as Point[]
     ),
@@ -440,10 +466,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const hasData = points.length > 0 || quote.price != null;
 
   const seed = computeIndicatorSeed(points, "", quote.price, quote.date);
-  const title = hasData ? buildSeoTitle(upper, seed) : `${upper} | No data available | MyStockHarbor`;
+  const preparing = !hasData && quoteResult.outcome === "cold-tiingo";
+  const title = hasData
+    ? buildSeoTitle(upper, seed)
+    : preparing
+      ? `${upper} | Price data being prepared | MyStockHarbor`
+      : `${upper} | No data available | MyStockHarbor`;
   const description = hasData
     ? buildSeoDescription(upper, seed)
-    : `We do not currently have market data for ${upper}.`;
+    : preparing
+      ? preparingWords(upper)
+      : `We do not currently have market data for ${upper}.`;
 
   return {
     title,
@@ -459,7 +492,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       //
       // AND NOINDEX WHILE A COLD SYMBOL IS NOT YET READ (#535 COWORK #13): its
       // figures section says "not yet read" until a set is stored.
-      index: hasData && !(await awaitingSecRead(upper)),
+      // The sitemap applies the same predicate (lib/stockPageRobots.ts, #553 COWORK #143).
+      index: stockPageIndexable({ hasData, awaitingSecRead: hasData && (await awaitingSecRead(upper)) }),
       follow: true,
     },
     alternates: {
@@ -510,7 +544,7 @@ export default async function StockPage({ params }: Props) {
   }
 
   // Fetch everything in parallel — none of these block each other.
-  const [historyResult, quoteResult, companyName, secFacts, fundamentals, directory] =
+  const [historyResult, quoteResult, companyName, secFacts, fundamentals, directory, spyPoints] =
     await Promise.all([
       // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
       // unreachable) stays distinguishable from a read that legitimately
@@ -520,7 +554,9 @@ export default async function StockPage({ params }: Props) {
       // Tiingo bars + today's labelled partial bar, whole, or this FMP read
       // whole on a Tiingo miss (lib/server/tiingoHistory.ts). The chart, the
       // indicator seed and the 52-week range all read this one series.
-      historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page-meta" })).then(
+      historyForSurface("CHARTS", upper, () => getDailyHistory(upper, { caller: "stock-page-meta" }), {
+        skipFmp: () => isColdTiingoCandidate(upper),
+      }).then(
         (h) => ({ points: h.points as Point[], failed: false, provider: h.provider }),
         () => ({ points: [] as Point[], failed: true, provider: "none" as const })
       ),
@@ -533,15 +569,31 @@ export default async function StockPage({ params }: Props) {
       fetchStockPageSecFacts(upper),
       // A cached Redis mget that never fetches on a miss: the FMP-cache leg of
       // resolveProfile, exactly as the news page reads it.
-      readCachedFundamentalsBulk([upper]).then((m) => m.get(upper) ?? null, () => null),
+      // `raw` (#690 follow-up, 2026-10-03): read only for the profile (sector,
+      // industry, updatedAt), which the read-time cap/P/E overlay never changes.
+      readCachedFundamentalsBulk([upper], { raw: true }).then((m) => m.get(upper) ?? null, () => null),
       // Nasdaq Trader's directory for the heading, memoised per process.
       getCompanyNameMap().catch(() => new Map<string, string>()),
+      // THE PERFORMANCE STRIP'S BENCHMARK (#563 COWORK #69): SPY's stored
+      // Tiingo bars through B's Data Cache reader, read-only. 1 GET per 24 h
+      // cache miss, shared by every stock page (key is the symbol, not the
+      // page). Only beside a Tiingo series: one provider per comparison.
+      historyOnTiingo("CHARTS") ? readTiingoHistoryPoints("SPY") : Promise.resolve(null),
     ]);
 
   const quote = quoteResult.quote;
   const points: Point[] = historyResult.points.filter(
     (p) => p.date && Number.isFinite(p.close)
   );
+  // THE FULL SERIES, not the 500 bars the client gets: 3Y and 5Y need ~1,260
+  // sessions and the stored Tiingo history holds ~1,400. Derived % only goes
+  // down to the client (no bars in any public JSON).
+  // The render time decides whether today's partial bar is in session (#563 COWORK #75/#76).
+  const performance = performanceStrip(historyResult.points, historyResult.provider === "tiingo" ? spyPoints : null, Date.now());
+  // THE STRENGTH BADGE (#563 COWORK #105): scored here from the same series, SPY
+  // and the earnings snapshot already read above (no read of its own), on
+  // completed sessions only. Tiingo's series only: nothing from FMP is used.
+  const strength = historyResult.provider === "tiingo" ? strengthBadge(historyResult.points, spyPoints, earningsBadgeInput(secFacts.snapshot)) : null;
 
   // ── THE PROFILE BLOCK, FROM FREE SOURCES (brief 2026-09-22 PR 2) ─────────
   // Composed rather than fetched, and no longer from FMP at all: the
@@ -562,6 +614,13 @@ export default async function StockPage({ params }: Props) {
     valuation: secFacts.profileFacts.valuation,
     price: quote.price,
     points,
+    // ONE PRICE BASIS, ONE 52-WEEK SOURCE (step 5, #553 COWORK #80): on a
+    // Tiingo quote (it carries a priceLabel) the profile row takes the header's
+    // own range -- the same bars, through the same helper (fiftyTwoWeek.ts) --
+    // and the cap names the price it was computed at. The FMP path is unchanged.
+    ...(quote.priceLabel
+      ? { range: quote.yearLow != null && quote.yearHigh != null ? { low: quote.yearLow, high: quote.yearHigh } : null, priceLabel: quote.priceLabel }
+      : {}),
     exchange: exchangeFor(upper),
     registrant: registrantFor(upper),
   });
@@ -590,7 +649,22 @@ export default async function StockPage({ params }: Props) {
   const pe = fyPe ?? multiples?.pe;
   const peEps = fyPe && inputs?.fyEps ? inputs.fyEps : inputs?.eps ?? null;
   const fyWord = fyPe ? word(fyPe) : null;
+  // LOW / FAIR / RICH VS THE SECTOR (#552 COWORK #202 item 3): one Data Cache
+  // read, no Redis command on a hit. The trailing P/E only — never the FY
+  // fallback, which the benchmarks are not built on. Rules: lib/valuationBands.ts.
+  const bandGroup = valuationGroupOf(upper);
+  const benchmarks = await readValuationBenchmarks().catch(() => null);
+  // AN ESTIMATED FIGURE GETS NO BAR: the peers are filed figures only, and
+  // nothing is built on an estimate beyond its own marked value.
+  const filed = (f: ValuationFigure | null | undefined) => (mark(f) ? null : figure(f));
+  const bands = {
+    peRatio: fyPe ? null : valuationBand(figure(pe), bandGroup, benchmarks, "peRatio", "A P/E"),
+    priceToSalesRatio: valuationBand(filed(multiples?.ps), bandGroup, benchmarks, "priceToSalesRatio", "A P/S"),
+    priceToBookRatio: valuationBand(filed(multiples?.pb), bandGroup, benchmarks, "priceToBookRatio", "A P/B"),
+    evToEbitda: valuationBand(filed(multiples?.evEbitda), bandGroup, benchmarks, "evToEbitda", "An EV/EBITDA"),
+  };
   const valuation = {
+    bands,
     peRatio: figure(pe),
     priceToSalesRatio: figure(multiples?.ps),
     priceToBookRatio: figure(multiples?.pb),
@@ -612,11 +686,23 @@ export default async function StockPage({ params }: Props) {
       priceToBookRatio: mark(multiples?.pb),
       evToEbitda: mark(multiples?.evEbitda),
     },
-    sourceNote: valuationSourceNote(secFacts.profileFacts.multiples, inputs, peEps),
+    // The multiples use the header's price; on Tiingo the note says which one.
+    sourceNote: `${valuationSourceNote(secFacts.profileFacts.multiples, inputs, peEps)}${quote.priceLabel ? ` Price: ${quote.priceLabel}.` : ""}`,
     // WHICH TWELVE MONTHS, said on the label (#552 COWORK #8/#9): "TTM to …"
     // or "FY2025", never a bare "TTM" over a fiscal-year figure.
     peBasis: peBasisLabel(peEps),
     peBasisNote: fyPe ? null : peBasisNote(inputs?.eps),
+    // P/E VS ITS SECTOR'S MEDIAN (#552 COWORK #147 §2): on the trailing P/E
+    // only (never the FY fallback, which the medians are not built on), never
+    // for a bank. One Data Cache read; no Redis command on a hit. The rules
+    // and the words are lib/peSectorLine.ts.
+    peSector: await (async () => {
+      if (fyPe || !pe?.ok || isBankSic(registrantFor(upper)?.sic)) return null;
+      const sector = peSectorOf(upper);
+      const medians = sector ? await readPeSectorMedians().catch(() => null) : null;
+      const line = peSectorLine(figure(pe), sector, medians?.sectors[sector as string], medians?.asOf ? readableDate(medians.asOf) : "");
+      return line ? { glyph: line.glyph, text: line.text, note: line.note, median: line.median } : null;
+    })(),
   };
 
   // OLD BEHAVIOUR, REMOVED: this threw when there was no history and no price.
@@ -670,6 +756,27 @@ export default async function StockPage({ params }: Props) {
     // across requests (consecutive-failure count or a circuit breaker in Redis)
     // and is its own change; until it exists, a hard failure here would be a
     // guess with a 5xx attached.
+    // A REAL TICKER WE HOLD NO TIINGO DATA FOR YET (#553 COWORK #121/#122):
+    // "being prepared", and the cold fill stores it after hydration, then the
+    // page refreshes into the full analysis with the Tiingo credit. A crawler
+    // keeps this state (noindex) and the symbol is queued for the job.
+    if (quoteResult.outcome === "cold-tiingo") {
+      const name = companyName || snapshotCompanyName(upper) || "";
+      return (
+        <main style={{ maxWidth: 720, margin: "0 auto", padding: "48px 20px 96px" }}>
+          <h1 style={{ fontSize: "1.6rem", marginBottom: 12 }}>
+            {name ? `${name} (${upper})` : upper}
+          </h1>
+          <TiingoColdFill symbol={upper} token={mintQuoteToken()} />
+          <p style={{ opacity: 0.8, lineHeight: 1.6 }}>
+            Meanwhile, try <Link href="/">searching for another symbol</Link>, or browse the{" "}
+            <Link href="/pickers">stock screeners</Link>.
+          </p>
+          <RelatedStocks currentSymbol={upper} symbols={getRelatedSymbols(upper)} />
+        </main>
+      );
+    }
+
     const couldNotReach = quoteResult.outcome === "unavailable" || historyResult.failed;
 
     // No JSON-LD on this branch on purpose: emitting FinancialProduct data for
@@ -793,9 +900,16 @@ export default async function StockPage({ params }: Props) {
         }}
       />
 
+      {/* A symbol outside the committed universe, shown from Tiingo's bars:
+          a view keeps it in the requested set (#553 COWORK #121 §4). */}
+      {historyResult.provider === "tiingo" && !inCommittedUniverse(upper) ? (
+        <TiingoRequestedTouch symbol={upper} token={mintQuoteToken()} />
+      ) : null}
+
       <StockSymbolPageClient
         symbol={upper}
         earningsSnapshot={secFacts.snapshot}
+        strength={strength}
         dividend={secFacts.dividend}
         // NULL WHEN NOTHING RESOLVED, not an empty object. The client renders
         // the standalone dilution chart and "Learn the indicators" section only
@@ -818,12 +932,18 @@ export default async function StockPage({ params }: Props) {
         // MA200 line was undefined over roughly half the visible chart, which
         // is why the client re-fetched 900 bars on every load.
         initialHistory={points.slice(-500)}
+        performance={performance}
+        // The render time (#563 COWORK #75/#76): whether today's partial bar is
+        // in session is decided against this, not the browser's clock, so the
+        // server HTML and the hydrated page agree.
+        renderedAt={Date.now()}
         initialQuote={quote}
         // Step 4 (#553 COWORK #71/#92): the linked credit, shown by the client
-        // under the header stats whenever the quote is a Tiingo one.
+        // under the header stats whenever the quote is a Tiingo one. B's
+        // site-wide "powered by Tiingo" link since #552 COWORK #205.
         tiingoCredit={
           priceProviderFor("STOCK_PAGE") === "tiingo" ? (
-            <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+            <TiingoLink />
           ) : null
         }
         // Step 3 (#553 COWORK #71/#92/#103): the linked credit under the chart.
@@ -832,7 +952,7 @@ export default async function StockPage({ params }: Props) {
         // shows it only beside a series whose provider is "tiingo".
         historyCredit={
           historyResult.provider === "tiingo" || historyOnTiingo("HISTORY") ? (
-            <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+            <TiingoLink />
           ) : null
         }
         // Proves to /api/quote that this client rendered a real page. Empty

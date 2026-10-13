@@ -39,6 +39,7 @@ supplyChain:
   - name: Chinese-Origin Rare-Earth Magnets & Motor Components
     ticker: null
     pct: 40
+    grade: hard
     blurb: >
       The high-strength neodymium magnets inside the small electric motors
       that power AeroVironment's Puma, Raven, and Switchblade aircraft rely
@@ -51,6 +52,7 @@ supplyChain:
   - name: Diversified Electronics & Composite-Airframe Subcontractor Base
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       AeroVironment says it deliberately multi-sources electronics,
       castings, and composite airframe components rather than relying on
@@ -63,6 +65,7 @@ supplyChain:
   - name: Lithium-Ion Battery Cell Manufacturing (China / East Asia)
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       The rechargeable lithium-ion packs used across AeroVironment's small
       unmanned aircraft depend on battery cells whose global manufacturing
@@ -73,6 +76,7 @@ supplyChain:
   - name: MP Materials Corp
     ticker: MP
     pct: 15
+    grade: some
     blurb: >
       MP Materials is the centerpiece of a July 2025 public-private
       partnership in which the U.S. Department of Defense became its
@@ -86,6 +90,7 @@ customers:
   - name: U.S. Army
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       The U.S. Army is AeroVironment's single largest identified customer,
       generating approximately 25% of fiscal 2026 revenue through direct
@@ -95,6 +100,7 @@ customers:
   - name: Rest of U.S. Department of Defense
     ticker: null
     pct: 38
+    grade: hard
     blurb: >
       Beyond the Army, other military branches and defense agencies — Navy,
       Air Force, Marine Corps, U.S. Special Operations Command, and others
@@ -105,6 +111,7 @@ customers:
   - name: Other U.S. Government Agencies & Subcontractors
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Federal agencies outside the DoD, plus prime contractors that
       subcontract AeroVironment equipment into their own government
@@ -114,6 +121,7 @@ customers:
   - name: Foreign & International Customers
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       The remaining share of revenue comes from foreign governments and
       direct commercial/international buyers outside U.S.-government-funded

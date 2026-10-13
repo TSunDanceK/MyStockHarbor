@@ -9,9 +9,9 @@ import DashboardClient, {
   type StockEarningsSummary,
 } from "../components/DashboardClient";
 import StockPagesBottomNav from "@/app/components/StockPagesBottomNav";
-import { getDailyHistory } from "@/lib/server/historyCache";
+import { getCachedDailyHistory, getDailyHistory } from "@/lib/server/historyCache";
 import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
 import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
@@ -19,6 +19,10 @@ import { secEarningsSummary } from "@/lib/server/secEarningsSummary";
 import { getInternalNewsPayload } from "@/lib/server/internalNews";
 import { cleanSymbol, SYMBOL_COOKIE } from "@/lib/symbol";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { DASHBOARD_SOURCE_BUDGET_MS, withBudget } from "@/lib/server/sourceBudget";
+import { EMPTY_LANDING, getDashboardLanding } from "@/lib/server/dashboardCards";
+import { LANDING_CSS, LandingCards, MarketToday } from "./DashboardLanding";
+import { filedEarningsGate } from "@/lib/server/filedEarnings";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -54,18 +58,23 @@ import { priceProviderFor } from "@/lib/server/marketData/provider";
 // remaining headers() call on this route).
 export const dynamic = "force-dynamic";
 
+// THE HERO LINE AS THE TITLE (#563 COWORK #142 §2); the canonical is "/" since #149 §1 (below).
+const DASHBOARD_TITLE = "Stock research from the filings, not the hype | MyStockHarbor";
+const DASHBOARD_DESCRIPTION =
+  "Every figure traced to the SEC filing or the price it came from, and every chart explained in plain English: supply chains, capex flows, screens and a full stock analyser.";
 export const metadata: Metadata = {
-  title: "Stock Chart Dashboard | MyStockHarbor",
-  description:
-    "Interactive stock chart dashboard with technical indicators, stock pickers, market benchmarks and news briefings. Analyse any stock with MA, RSI, MACD and more.",
+  title: DASHBOARD_TITLE,
+  description: DASHBOARD_DESCRIPTION,
+  // "/" SERVES THIS SAME PAGE (#563 COWORK #149 §1), so this URL points at it:
+  // the homepage keeps its own title, description and structured data and is
+  // the one canonical copy.
   alternates: {
-    canonical: "https://www.mystockharbor.com/dashboard",
+    canonical: "https://www.mystockharbor.com/",
   },
   openGraph: {
-    title: "Stock Chart Dashboard | MyStockHarbor",
-    description:
-      "Interactive stock charts with technical indicators, pickers and market benchmarks.",
-    url: "https://www.mystockharbor.com/dashboard",
+    title: DASHBOARD_TITLE,
+    description: DASHBOARD_DESCRIPTION,
+    url: "https://www.mystockharbor.com/",
     siteName: "MyStockHarbor",
     type: "website",
   },
@@ -160,19 +169,46 @@ export default async function DashboardPage({ searchParams }: Props) {
   // An explicit ?symbol= outranks the memory, which outranks the default.
   const symbol = requested || remembered || "SPY";
 
-  const [rawHistory, quoteAndName, benchmarks, news, earningsSummary] =
+  // A BUDGET PER SOURCE (#553 CODE-B #137, COWORK #145/#146). These five used
+  // to share one unbounded Promise.all, so a single read that never answered
+  // (our Upstash client has no request timeout) held the render to Vercel's
+  // 300 s limit -- ~3.5% of cold renders in the 24 h before this. Each source
+  // now resolves to its own "missing" value after DASHBOARD_SOURCE_BUDGET_MS,
+  // the page renders the other four, and one log line names the source and
+  // symbol. See lib/server/sourceBudget.ts.
+  const budget = <T,>(source: string, work: Promise<T>, fallback: T) =>
+    withBudget("dashboard", source, symbol, work, fallback, DASHBOARD_SOURCE_BUDGET_MS);
+
+  const [rawHistory, quoteAndName, benchmarks, news, earningsSummary, landing] =
     await Promise.all([
       // STEP 3 (#553 COWORK #71 row 3), behind PRICE_PROVIDER_HISTORY, the same
       // gate as /api/history, which this chart calls on every timeframe change:
       // one provider for the seed and the refetches (lib/server/tiingoHistory.ts).
-      historyForSurface("HISTORY", symbol, () => getDailyHistory(symbol, { caller: "dashboard" })).then(
-        (h) => ({ points: h.points as Point[], provider: h.provider as string }),
-        () => ({ points: [] as Point[], provider: "none" })
+      //
+      // NO KEY, CACHE ONLY (COWORK #146): with FMP_API_KEY unset the FMP path
+      // can only ever serve what is cached, so it reads the cache and stops.
+      // getDailyHistory would otherwise, on a miss, take or lose the history
+      // lock and poll up to 12 s for a fetch that cannot happen.
+      budget(
+        "history",
+        historyForSurface("HISTORY", symbol, () =>
+          process.env.FMP_API_KEY
+            ? getDailyHistory(symbol, { caller: "dashboard" })
+            : getCachedDailyHistory(symbol, "dashboard")
+        ).then(
+          (h) => ({ points: h.points as Point[], provider: h.provider as string }),
+          () => ({ points: [] as Point[], provider: "none" })
+        ),
+        { points: [] as Point[], provider: "none" }
       ),
-      getInitialQuoteAndName(symbol),
-      getInitialBenchmarks(),
-      getInitialNews(symbol),
-      getInitialEarningsSummary(symbol),
+      budget("quote", getInitialQuoteAndName(symbol), { quote: null, name: "" }),
+      budget("benchmarks", getInitialBenchmarks(), null),
+      budget("news", getInitialNews(symbol), null),
+      budget("earnings", getInitialEarningsSummary(symbol), null),
+      // THE LANDING (#563 COWORK #134): "Market right now" and the cards, one
+      // Data Cache entry for every visitor (15 min; lib/server/dashboardCards.ts).
+      // Not per symbol. A miss renders every card's empty state, never a failure.
+      budget("landing", getDashboardLanding().catch(() => EMPTY_LANDING), EMPTY_LANDING),
     ]);
 
   const initialHistory: Point[] = Array.isArray(rawHistory.points) ? rawHistory.points : [];
@@ -181,9 +217,10 @@ export default async function DashboardPage({ searchParams }: Props) {
   // STEP 4 (#553 COWORK #71/#92): the linked credit, rendered here and handed
   // down, shown by the client beside any figure that came from Tiingo (a quote
   // with a priceLabel, a benchmark payload with provider "tiingo").
+  // Step 5 (#553 COWORK #98): also when the ticker's movers are Tiingo's (POOL).
   const tiingoCredit =
-    priceProviderFor("STOCK_PAGE") === "tiingo" ? (
-      <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+    priceProviderFor("STOCK_PAGE") === "tiingo" || priceProviderFor("POOL") === "tiingo" ? (
+      <TiingoLink />
     ) : null;
 
   return (
@@ -211,7 +248,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           // "tiingo": the seed's below, then each refetch's.
           historyCredit={
             historyOnTiingo("HISTORY") ? (
-              <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+              <TiingoLink />
             ) : null
           }
           initialHistoryProvider={rawHistory.provider}
@@ -221,6 +258,13 @@ export default async function DashboardPage({ searchParams }: Props) {
           // symbol-scoped, precisely because chooseSymbol() swaps symbols here
           // without a reload. See lib/server/quoteToken.ts.
           pageToken={mintQuoteToken()}
+          landing={{
+            market: <MarketToday m={landing.market} />,
+            cards: <LandingCards c={landing.cards} hasFiledEarnings={await filedEarningsGate()} />,
+            mapped: landing.market.mapped,
+            bottlenecks: landing.bottlenecks,
+            css: LANDING_CSS,
+          }}
         />
       </Suspense>
 

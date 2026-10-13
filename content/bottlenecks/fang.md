@@ -35,6 +35,7 @@ supplyChain:
   - name: Plains All American Pipeline, L.P.
     ticker: PAA
     pct: 30
+    grade: hard
     blurb: >
       Plains became the 100% owner of the EPIC Crude pipeline system in
       November 2025, after buying out Diamondback's 27.5% equity stake;
@@ -44,6 +45,7 @@ supplyChain:
   - name: Halliburton Company
     ticker: HAL
     pct: 26
+    grade: some
     blurb: >
       Under a three-way December 2024 deal with VoltaGrid, Halliburton
       supplies Diamondback with electric "simul-frac" completion fleets
@@ -52,6 +54,7 @@ supplyChain:
   - name: VoltaGrid LLC
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       VoltaGrid provides roughly 200 megawatts of on-site power
       generation for Diamondback's electric completion fleets under the
@@ -60,6 +63,7 @@ supplyChain:
   - name: Kinetik Holdings Inc.
     ticker: KNTK
     pct: 14
+    grade: some
     blurb: >
       Kinetik's gathering systems feed crude into the EPIC pipeline
       network Diamondback relies on for takeaway; Kinetik was a
@@ -68,6 +72,7 @@ supplyChain:
   - name: Iron Oak Energy Solutions (formerly Black Mountain Sand)
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Supplies in-basin frac sand to Diamondback's Winkler County, Texas
       completions under a long-running multi-year contract; the supplier
@@ -76,6 +81,7 @@ customers:
   - name: Four undisclosed large-volume crude & gas purchasers
     ticker: null
     pct: 75
+    grade: hard
     blurb: >
       Diamondback's own 10-K discloses that four purchasers each
       individually accounted for more than 10% of total revenue in 2023,
@@ -88,6 +94,7 @@ customers:
   - name: Plains All American Pipeline, L.P.
     ticker: PAA
     pct: 25
+    grade: some
     blurb: >
       As 100% owner of the EPIC Crude system carrying Diamondback's
       anchor-shipper barrels to the Corpus Christi export market, Plains

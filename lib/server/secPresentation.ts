@@ -96,6 +96,8 @@ export function marginMoveMeaningful(older: number | null, newer: number | null)
 }
 
 export const MARGIN_NOT_MEANINGFUL = "not meaningful — revenue is too small relative to costs";
+/** The score explanation's own sentence for it (#552 COWORK #95). */
+export const MARGIN_NOT_MEANINGFUL_HERE = "not meaningful here: revenue is too small relative to costs";
 
 /**
  * Revenue growth off a prior-period revenue under this (USD) is shown but not
@@ -199,6 +201,26 @@ export type TrendLine = {
    * meaningful (marginMoveMeaningful).
    */
   move: { tone: EarningsTone; word: string } | null;
+  /**
+   * THE CHIP'S VERDICT AND ITS COUNT (#552 COWORK #187 §2). The chip used to be
+   * the median's tone beside "N of M" where N was every period MEASURED, so it
+   * read "Growing 8 of 8" on TXN with two of the eight down. Now the chip is the
+   * tone most periods share (ties go to the latest period's tone, then the
+   * median's), and `matched` is how many periods carry it, out of `compared`.
+   * A rate line counts each period's YoY; the margin line counts each period's
+   * move against its year-earlier margin. Null when the line is refused or has
+   * fewer than TREND_MIN_PERIODS comparisons.
+   */
+  chipTone: EarningsTone | null;
+  matched: number | null;
+  compared: number;
+  /**
+   * THE LATEST PERIOD, WHEN IT DISAGREES WITH THE CHIP (#552 COWORK #190): TXN's
+   * margin read "Narrowing 5 of 8" beside a latest quarter up 7.1pp on the year.
+   * The majority is right, but the chip reads as the current state, so the tile
+   * adds "Latest: widening". Null when the latest agrees or has no tone.
+   */
+  latestChip: { tone: EarningsTone; word: string } | null;
 };
 
 export type TrendSummary = {
@@ -248,6 +270,27 @@ function median(xs: number[]): number | null {
 }
 
 /**
+ * THE TONE MOST PERIODS SHARE, and how many share it (#552 COWORK #187 §2).
+ * Ties go to the latest period's tone, then the median's, then the order
+ * good, weak, neutral (a tie between a move and no move names the move).
+ * Exported for the check.
+ */
+export function modalTone(
+  tones: (EarningsTone | null)[],
+  latest: EarningsTone | null,
+  median: EarningsTone | null,
+): { tone: EarningsTone; matched: number } | null {
+  const counts = new Map<EarningsTone, number>();
+  for (const t of tones) if (t) counts.set(t, (counts.get(t) ?? 0) + 1);
+  if (!counts.size) return null;
+  const top = Math.max(...counts.values());
+  const tied = [...counts.keys()].filter((t) => counts.get(t) === top);
+  const tone = (latest && tied.includes(latest) ? latest : median && tied.includes(median) ? median : null)
+    ?? (["good", "weak", "neutral"] as EarningsTone[]).find((t) => tied.includes(t))!;
+  return { tone, matched: top };
+}
+
+/**
  * Summarise the rendered run, NEVER averaging across an n/m.
  *
  * Crossings and absences are counted and excluded, and a line that drops below
@@ -266,7 +309,7 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
     const skipped = values.length - nums.length;
     const crossed = values.filter(isCrossing);
     crossings += crossed.length;
-    // `values` is oldest first (see GrowthMarginsChart), so the newest is last.
+    // `values` is oldest first (the card draws oldest left), so the newest is last.
     const last = values.length ? values[values.length - 1] : null;
     const latest = isPct(last) ? last : null;
     const latestTone = toneForGrowth(latest);
@@ -281,27 +324,48 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
           ? `Not measured: ${subject} was a loss in the year-earlier ${w.many}, so a % change isn't meaningful.`
           : `Not measured: ${subject} crossed between profit and loss in these ${w.many}, so a % change isn't meaningful.`
         : `Not measured: needs ${TREND_MIN_PERIODS} comparable ${w.many}, has ${nums.length}.`;
-      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped, reason, latestWords, move: null };
+      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped, reason, latestWords, move: null,
+        chipTone: null, matched: null, compared: nums.length, latestChip: null };
     }
     const m = median(nums);
-    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), latest, latestTone, counted: nums.length, skipped, reason: null, latestWords, move: null };
+    const tone = toneForGrowth(m as Pct);
+    const chip = modalTone(nums.map((n) => toneForGrowth(n)), latestTone, tone);
+    return { label, kind: "rate", value: m, tone, latest, latestTone, counted: nums.length, skipped, reason: null, latestWords, move: null,
+      chipTone: chip?.tone ?? null, matched: chip?.matched ?? null, compared: nums.length,
+      latestChip: chip && latestTone && latestTone !== chip.tone ? { tone: latestTone, word: `Latest: ${growthToneWord(latestTone).toLowerCase()}` } : null };
   };
 
   const growth = view.growth ?? [];
+  // N/M IS LEFT OUT, AND COUNTED (#552 COWORK #212): JOBY's +257,493% would
+  // otherwise be the line's "latest", and a margin off a tiny revenue would
+  // pull the typical figure. Counted so the exclusion note can say why.
+  let notMeaningful = growth.filter((g) => g.revenueYoYNotMeaningful).length;
   const lines = [
-    line("Revenue growth", "revenue", growth.map((g) => g.revenueYoY)),
+    line("Revenue growth", "revenue", growth.map((g) => (g.revenueYoYNotMeaningful ? null : g.revenueYoY))),
     line("EPS growth", "EPS", growth.map((g) => g.epsYoY)),
   ];
 
   // MARGIN IS A LEVEL, NOT A RATE, so it gets its own line rather than being
   // forced through the growth wording.
-  const opMargins = view.margins.map((m) => m.operating).filter((x): x is number => x !== null);
+  const opMarginsAll = view.margins.map((m) => (m.notMeaningful?.operating ? null : m.operating));
+  const opMargins = opMarginsAll.filter((x): x is number => x !== null);
   if (opMargins.length >= TREND_MIN_PERIODS) {
+    notMeaningful += view.margins.filter((r) => r.notMeaningful?.operating).length;
     const m = median(opMargins);
-    const newest = view.margins.length ? view.margins[view.margins.length - 1].operating : null;
+    const newest = opMarginsAll.length ? opMarginsAll[opMarginsAll.length - 1] : null;
     // THE DIRECTION, NOT THE LEVEL (#552 COWORK #47): AXTI's typical −15.5%
     // beside a latest 21.9% had no chip, while revenue had "Growing".
-    const moveTone = m !== null && newest !== null && marginMoveMeaningful(m, newest) ? toneForMarginDelta(newest - m) : null;
+    // EACH PERIOD AGAINST ITS YEAR-EARLIER MARGIN (#552 COWORK #187 §2): the
+    // chip is the move most periods made, and the count is how many made it.
+    // HSY read "Widening 8 of 8" while its margin fell; the old chip compared
+    // only the latest with the typical and counted every period measured.
+    const deltaOf = (r: SecEarningsView["margins"][number]) => (r.notMeaningful?.operatingChange ? null : r.operatingYoYpp ?? null);
+    const deltas = view.margins.map(deltaOf).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+    const newestDelta = view.margins.length ? deltaOf(view.margins[view.margins.length - 1]) : null;
+    const chip = deltas.length >= TREND_MIN_PERIODS
+      ? modalTone(deltas.map((d) => toneForMarginDelta(d)), toneForMarginDelta(newestDelta), null)
+      : null;
+    const moveTone = chip && m !== null && newest !== null && marginMoveMeaningful(m, newest) ? chip.tone : null;
     lines.push({
       label: "Operating margin",
       kind: "level",
@@ -317,6 +381,15 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
       reason: null,
       latestWords: null,
       move: moveTone && m !== null && newest !== null ? { tone: moveTone, word: marginToneWord(moveTone, { older: m, newer: newest }) } : null,
+      chipTone: moveTone,
+      matched: moveTone ? chip!.matched : null,
+      compared: deltas.length,
+      latestChip: (() => {
+        const t = toneForMarginDelta(newestDelta);
+        if (!moveTone || !t || t === moveTone || newest === null || newestDelta === null) return null;
+        // The latest period's own move, so the verb follows its own ends (a negative margin improves, not widens).
+        return { tone: t, word: `Latest: ${marginToneWord(t, { older: newest - newestDelta, newer: newest }).toLowerCase()}` };
+      })(),
     });
   }
 
@@ -325,14 +398,17 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   // ("either not on file, or the comparison crosses...") on every filer that
   // skipped anything, which tells a reader with one missing margin and no
   // crossing something untrue about their own page.
-  const why =
+  const others = totalSkipped - notMeaningful;
+  const otherWhy =
     crossings === 0
       ? `the ${w.one} is not on file`
-      : crossings === totalSkipped
+      : crossings === others
         ? `the comparison crosses between profit and loss, where a percentage would be an artefact ` +
           `of the arithmetic rather than a rate of change`
         : `either the ${w.one} is not on file, or the comparison crosses between profit and loss, ` +
           `where a percentage would be an artefact of the arithmetic rather than a rate of change`;
+  const NM_WHY = "revenue was too small for a meaningful figure";
+  const why = notMeaningful === 0 ? otherWhy : others === 0 ? NM_WHY : `${otherWhy}; or ${NM_WHY}`;
   // RATES ONLY: a margin is a level, and "pace" is not a word for a level.
   const skewed = lines.some((l) =>
     l.kind === "rate" && l.value !== null && l.latest !== null && l.value - l.latest > TREND_SKEW_PP);
@@ -467,6 +543,20 @@ export function partialScoreNote(
   return `${head}${range} Not directly comparable with a full score.`;
 }
 
+/**
+ * THE SCORE CARD'S ONE VISIBLE LINE (#552 COWORK #95). The rest (what could
+ * not be measured and why, the explanation) sits in "About this score". The
+ * range is stated only when it is narrower than the scale, as the note does.
+ * Null without a coverage reading: no claim either way.
+ */
+export function scoreSummaryLine(c: ScoreCoverage | null, pinnedBand: string | null = null): string | null {
+  if (!c) return null;
+  if (!c.partial) return `Full score: all ${c.total} measures available.`;
+  const base = `Partial score: ${c.measured} of ${c.total} measures available`;
+  if (!(c.low > 0 || c.high < 100)) return `${base}.`;
+  return `${base}, so the full score could fall between ${c.low} and ${c.high}${c.pinned && pinnedBand ? `, inside ${pinnedBand} either way` : ""}.`;
+}
+
 /** True when the reachable range is narrower than the whole scale — worth drawing. */
 export function coverageIsInformative(c: ScoreCoverage): boolean {
   return c.partial && (c.low > 0 || c.high < 100);
@@ -570,7 +660,17 @@ export function stalePriceNote(price: number, asOf: string): string {
 export const WATERFALL_TOLERANCE_PCT = 0.5;
 
 export type WaterfallGate =
-  | { ok: true; steps: { key: string; label: string; delta: number }[]; total: number }
+  | {
+      ok: true; steps: { key: string; label: string; delta: number }[]; total: number;
+      /**
+       * SUBTOTAL BARS between the steps (#552 COWORK #168): gross profit after
+       * cost of revenue, drawn from zero to the running total there, like the
+       * closing operating-income bar. Only where the card's gross-profit figure
+       * agrees with that running total (WATERFALL_TOLERANCE_PCT), so the bar's
+       * length and its printed figure never disagree.
+       */
+      subtotals: { afterKey: string; key: string; label: string; value: number }[];
+    }
   | { ok: false; why: "incomplete-breakdown" | "missing-lines" };
 
 /**
@@ -659,7 +759,16 @@ export function waterfallGate(view: SecEarningsView): WaterfallGate {
   if (Math.abs(drawn - operating) > Math.max(Math.abs(operating), 1) * (WATERFALL_TOLERANCE_PCT / 100)) {
     return { ok: false, why: "incomplete-breakdown" };
   }
-  return { ok: true, steps, total: operating };
+  const cogs = val("costOfRevenue");
+  const gp = val("grossProfit");
+  const subtotals: { afterKey: string; key: string; label: string; value: number }[] = [];
+  if (steps.some((st) => st.key === "costOfRevenue") && cogs !== null && gp !== null) {
+    const running = revenue - cogs;
+    if (Math.abs(gp - running) <= Math.max(Math.abs(running), 1) * (WATERFALL_TOLERANCE_PCT / 100)) {
+      subtotals.push({ afterKey: "costOfRevenue", key: "grossProfit", label: "Gross profit", value: running });
+    }
+  }
+  return { ok: true, steps, total: operating, subtotals };
 }
 
 /**
@@ -683,11 +792,14 @@ export type WaterfallGeometry = {
   zeroPct: number | null;
   bars: { key: string; label: string; delta: number; leftPct: number; widthPct: number }[];
   totalBar: { leftPct: number; widthPct: number; loss: boolean };
+  /** Subtotal bars (#552 COWORK #168), each from zero to its value, like the total. */
+  subtotalBars: { afterKey: string; key: string; label: string; value: number; leftPct: number; widthPct: number; loss: boolean }[];
 };
 
 export function waterfallGeometry(
   steps: { key: string; label: string; delta: number }[],
   total: number,
+  subtotals: { afterKey: string; key: string; label: string; value: number }[] = [],
 ): WaterfallGeometry | null {
   const points: { key: string; label: string; delta: number; from: number; to: number }[] = [];
   for (const s of steps) {
@@ -708,6 +820,11 @@ export function waterfallGeometry(
       widthPct: (Math.abs(p.delta) / range) * 100,
     })),
     totalBar: { leftPct: at(Math.min(0, total)), widthPct: (Math.abs(total) / range) * 100, loss: total < 0 },
+    // A subtotal is a running total the axis already spans, so it needs no
+    // change to lo/hi: drawn from zero to its value, left of zero when negative.
+    subtotalBars: subtotals.map((s) => ({
+      ...s, leftPct: at(Math.min(0, s.value)), widthPct: (Math.abs(s.value) / range) * 100, loss: s.value < 0,
+    })),
   };
 }
 
@@ -876,6 +993,16 @@ export function fiscalYearEndNote(ends: string[]): string | null {
  */
 export function scaledAmount(v: number, currency = true): string {
   const abs = Math.abs(v);
+  // UNDER $0.1M, IN THOUSANDS (#552 COWORK #213 item 2): JOBY's $15k year-ago
+  // revenue printed "$0.0M", a zero that isn't one. Exactly nothing is "$0";
+  // under $1K the whole number.
+  if (abs < 1e5) {
+    const sign = v < 0 && Math.round(abs) !== 0 ? "-" : "";
+    const unit = currency ? "$" : "";
+    if (abs === 0) return `${unit}0`;
+    if (abs < 1e3) return `${sign}${unit}${Math.round(abs)}`;
+    return `${sign}${unit}${Math.round(abs / 1e3)}K`;
+  }
   // THE TIER IS PICKED FROM THE ROUNDED VALUE, not the raw one. 999,960,000 is
   // under $1B but rounds to 1000.0 in M, and "$1000.0M" is the unit change the
   // rule exists to prevent — so anything that rounds to 1000.0M reads in B,
@@ -909,4 +1036,140 @@ export function compareAmounts(
   const ok = (v: number | null | undefined): v is number => v != null && Number.isFinite(v);
   if (!ok(a) || !ok(b)) return ok(a) === ok(b) ? 0 : ok(a) ? -1 : 1;
   return dir === "asc" ? a - b : b - a;
+}
+
+// ── THE QUALITY-OF-EARNINGS AND BALANCE-SHEET CARDS (#552 COWORK #169) ──────
+//
+// The owner's redesign: each card answers its own title. Every rule the cards
+// draw by lives here, pure, so a check drives it on fixtures and a mutant per
+// rule. Figures only from what the cards already hold, or one ratio of two of
+// them: no estimate, no request. Words describe; they never rate.
+
+/** Which lead line the cash card opens with, or null when a leg is missing. */
+export type CashLead = { kind: "ahead" | "behind" | "loss"; ocf: number; netIncome: number } | null;
+export function cashLead(ocf: number | null, netIncome: number | null): CashLead {
+  if (ocf === null || netIncome === null) return null;
+  if (netIncome <= 0) return { kind: "loss", ocf, netIncome };
+  return { kind: ocf >= netIncome ? "ahead" : "behind", ocf, netIncome };
+}
+
+/**
+ * A SHARE OF ANOTHER FIGURE, OR WHY THERE IS NONE. Never a percentage of a
+ * figure at or below zero ("n/m"), and never one of a missing figure.
+ */
+export type ShareOf = { ok: true; pct: number } | { ok: false; why: "missing" | "not-meaningful" };
+export function shareOf(part: number | null, of: number | null): ShareOf {
+  if (part === null || of === null || !Number.isFinite(part) || !Number.isFinite(of)) return { ok: false, why: "missing" };
+  if (of <= 0) return { ok: false, why: "not-meaningful" };
+  return { ok: true, pct: (part / of) * 100 };
+}
+
+/**
+ * THE TILE'S INK. Cash against profit (the first two tiles) reads green at
+ * 100% or more and amber below; the other two (capex, share-based pay) are
+ * neither good nor bad, so they are never green or red.
+ */
+export function cashTileTone(tile: "ocf" | "fcf" | "capex" | "sbc", s: ShareOf): EarningsTone | null {
+  if (!s.ok || tile === "capex" || tile === "sbc") return null;
+  return s.pct >= 100 ? "good" : "neutral";
+}
+
+/**
+ * THE CHART'S CEILING (#552 COWORK #188). The plot top is the window's highest
+ * share, rounded up to the next CONVERSION_TOP_STEP and never below 100% (so the
+ * dashed 100% line sits inside the plot), but never above this: one freak
+ * quarter must not flatten the rest. It was a FIXED 200%, which drew all eight
+ * of TSLA's 217%–825% at the same height.
+ */
+export const CONVERSION_MAX_PCT = 300;
+/** The plot top rounds up to a multiple of this. */
+export const CONVERSION_TOP_STEP = 50;
+/** Fewer usable periods than this and the chart is hidden, with the reason. */
+export const CONVERSION_MIN_PERIODS = 4;
+
+export type ConversionBar = {
+  label: string;
+  /** OCF ÷ net income, %, or null for a loss period or a missing leg. */
+  pct: number | null;
+  loss: boolean;
+  /** Bar height as % of the plot top (see conversionBars' `top`), clamped; 0 below zero. */
+  heightPct: number;
+  /** Above the top: drawn to it with a break mark, labelled with its true figure. */
+  clamped: boolean;
+};
+/** Oldest first, as drawn. A loss period has no bar, only its marker. */
+export function conversionBars(history: { label: string; ocf: number | null; netIncome: number | null }[]): { bars: ConversionBar[]; usable: number; top: number } {
+  const pcts = history.map((h) => {
+    const loss = h.netIncome !== null && h.netIncome <= 0;
+    const s = loss ? null : shareOf(h.ocf, h.netIncome);
+    return { label: h.label, loss, pct: s && s.ok ? s.pct : null };
+  });
+  // SCALED TO THE DATA, WITHIN [100%, CONVERSION_MAX_PCT].
+  const high = Math.max(0, ...pcts.map((p) => p.pct ?? 0));
+  const top = Math.min(CONVERSION_MAX_PCT, Math.max(100, Math.ceil(high / CONVERSION_TOP_STEP) * CONVERSION_TOP_STEP));
+  const bars = pcts.map(({ label, loss, pct }) => ({
+    label, pct, loss,
+    heightPct: pct === null ? 0 : (Math.min(Math.max(pct, 0), top) / top) * 100,
+    clamped: pct !== null && pct > top,
+  }));
+  return { bars, usable: bars.filter((b) => b.pct !== null).length, top };
+}
+
+/**
+ * NET CASH OR NET DEBT, on the card's own definition (cash + short-term
+ * investments − total debt). The dashed gap box sits on the longer bar's side:
+ * the cash row for net cash, the debt row for net debt.
+ */
+export function netPosition(net: number | null): { kind: "cash" | "debt"; amount: number } | null {
+  if (net === null || !Number.isFinite(net)) return null;
+  return net >= 0 ? { kind: "cash", amount: net } : { kind: "debt", amount: -net };
+}
+
+/** The current-ratio meter: 0–3, a mark at 1.0, the dot clamped at 3 (the true value is printed). */
+export const RATIO_METER_MAX = 3;
+export function ratioMeter(ratio: number | null): { pos: number; clamped: boolean } | null {
+  if (ratio === null || !Number.isFinite(ratio)) return null;
+  const v = Math.min(Math.max(ratio, 0), RATIO_METER_MAX);
+  return { pos: (v / RATIO_METER_MAX) * 100, clamped: ratio > RATIO_METER_MAX };
+}
+
+/**
+ * THE BALANCE SHEET'S ONE SHARED SCALE (#552 COWORK #169): cash and short-term
+ * investments on one row, total debt on the other, both against the larger of
+ * the two, so the lengths can be compared. The gap between the two ends is the
+ * net position, drawn as a box spanning both rows on the longer bar's side.
+ * Null when either side cannot be drawn (no debt on file, or neither cash nor
+ * short-term investments) — the card then shows the totals alone.
+ */
+export type BalanceBars = {
+  /** Each a % of the shared scale. */
+  cashPct: number;
+  stiPct: number;
+  debtPct: number;
+  liquid: number;
+  gap: { fromPct: number; toPct: number; kind: "cash" | "debt"; amount: number };
+};
+export function balanceBars(cash: number | null, sti: number | null, debt: number | null): BalanceBars | null {
+  if (debt === null || !Number.isFinite(debt) || (cash === null && sti === null)) return null;
+  const c = Math.max(cash ?? 0, 0), s = Math.max(sti ?? 0, 0), d = Math.max(debt, 0);
+  const liquid = c + s;
+  const scale = Math.max(liquid, d);
+  if (!(scale > 0)) return null;
+  const pct = (v: number) => (v / scale) * 100;
+  const net = liquid - d;
+  return {
+    cashPct: pct(c), stiPct: pct(s), debtPct: pct(d), liquid,
+    gap: { fromPct: pct(Math.min(liquid, d)), toPct: pct(Math.max(liquid, d)), kind: net >= 0 ? "cash" : "debt", amount: Math.abs(net) },
+  };
+}
+
+/**
+ * THE "SPLIT-ADJUSTED" LINE (#552 COWORK #187 §1): which split, and what was
+ * done about it, in the fine print of the card whose figures moved.
+ */
+export function splitAdjustedNote(a: { splits: { ratio: number }[] }): string {
+  const name = (k: number) => (k >= 1 ? `${+k.toFixed(2)}-for-1 split` : `1-for-${+(1 / k).toFixed(2)} reverse split`);
+  const which = a.splits.map((s) => name(s.ratio)).join(" and the ");
+  return `Split-adjusted: per-share figures (EPS and dividends per share) from before the company's ${which} ` +
+    `are restated to today's share count, using the split the company's own filings record, so every period compares like for like.`;
 }

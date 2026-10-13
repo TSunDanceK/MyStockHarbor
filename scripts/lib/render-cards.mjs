@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import { grabConst } from "./source-code.mjs";
 import { grabFunction } from "./earnings-plan.mjs";
+import { splitAdjustSource } from "./split-adjust-source.mjs";
 import ts from "typescript";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -78,6 +79,8 @@ export async function loadCards(mutate = (src) => src) {
     stripImports("lib/server/fxRates.ts"),
     stripImports("lib/server/secCurrency.ts"),
     stripImports("lib/server/secFactCodec.ts"),
+    // THE SPLIT ADJUSTMENT the view (and secValuation below) call at entry.
+    splitAdjustSource(),
     stripImports("lib/server/secEarningsView.ts"),
     // THE CARDS' OTHER TWO SOURCES. SecEarningsCards.tsx imports the tone
     // bands and the trend median from secPresentation and the valuation legs
@@ -108,23 +111,79 @@ export async function loadCards(mutate = (src) => src) {
     // THE ESTIMATE LAYER, which secValuation reads (#552 COWORK #112).
     stripImports("lib/server/secEstimates.ts"),
     stripImports("lib/server/secValuation.ts"),
+    // THE TRAFFIC-LIGHT RULES (#552 COWORK #137 §2), for SecIncomeStatementCard.
+    // Import-free, so the whole file joins as is.
+    stripImports("lib/lineTrend.ts"),
   ].join("\n");
   const cards = fs
     .readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8")
     .replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
   // `mutate` is how a check breaks the shipped source on purpose and re-renders
   // — the mutation harness. Identity by default.
-  return importTsxSource(mutate(`${view}\n${cards}`));
+  const unit = mutate(`${view}\n${cards}`);
+  // THE GROWTH & MARGINS PICTURE (#563 COWORK #36): SecGrowthMarginsCard draws
+  // C's GrowthVisuals from buildGrowthVisuals, so both join the unit, after the
+  // cards (hoisted; the card calls them at render). ONLY WHEN THE CALLER HAS NOT
+  // ALREADY APPENDED THEM: check-growth-visuals appends its own (mutated) copy
+  // through `mutate`, and a second copy would be a duplicate declaration.
+  return importTsxSource(/function buildGrowthVisuals\(/.test(unit) ? unit : unit + growthVisualsUnit());
+}
+
+/** C's builder and component, stripped and joined the way check-growth-visuals joins them. */
+export function growthVisualsUnit() {
+  const builder = stripImports("lib/growthVisuals.ts");
+  // The palette GrowthVisuals.tsx imports (#552 COWORK #134: shared with the snapshot tile).
+  const palette = stripImports("lib/growthPalette.ts");
+  const component = stripImports("app/stock/[symbol]/earnings/GrowthVisuals.tsx")
+    .replace("export default function GrowthVisuals", "export function GrowthVisuals");
+  return `\n${reasonedValueUnit()}\n${palette}\n${builder}\n${component}\n`;
 }
 
 /**
- * The price-reaction charts (app/stock/[symbol]/earnings/ReactionCharts.tsx).
- * Self-contained — its only import is React's types — so it transpiles alone.
+ * A's ReasonedValue (app/components/EstimatedValue.tsx) and the React hooks it
+ * and GrowthVisuals use, for a unit that renders the picture: the one-off tag
+ * opens its note through it (#563 COWORK #52). Its re-export line is dropped,
+ * since estimateMark's constants are inlined ahead of it.
+ */
+export function reasonedValueUnit() {
+  const mark = stripImports("app/components/estimateMark.ts");
+  const comp = stripImports("app/components/EstimatedValue.tsx")
+    .replace(/^"use client";$/m, "")
+    .replace(/^export \{ ESTIMATE_COLOUR, ESTIMATE_SIGN, type EstimateMark \};$/m, "");
+  return `import { useEffect, useId, useRef, useState } from "react";\n${mark}\n${comp}\n`;
+}
+
+/**
+ * The Next report card (#552 COWORK #96), with what it imports: the shared
+ * estimate mark, and secEstimates' date words (the two functions and their
+ * month table, not the module). `mutate` breaks the card's source on purpose.
+ */
+export async function loadNextReportCard(mutate = (src) => src) {
+  const est = fs.readFileSync("lib/server/secEstimates.ts", "utf8");
+  const card = stripImports("app/stock/[symbol]/earnings/NextReportCard.tsx")
+    .replace("export default function NextReportCard", "export function NextReportCard");
+  return importTsxSource([
+    reasonedValueUnit(),
+    grabConst("lib/server/secEstimates.ts", "EST_MONTH_ABBR"),
+    grabFunction(est, "readableDate"),
+    grabFunction(est, "readableIsoDates"),
+    grabFunction(est, "reportWindowMark"),
+    mutate(card),
+  ].join("\n"));
+}
+
+/**
+ * The price-reaction charts (app/stock/[symbol]/earnings/ReactionCharts.tsx),
+ * with the day slider it renders and the slider's pure module.
  */
 export async function loadReactionCharts(mutate = (src) => src) {
   const src = fs.readFileSync("app/stock/[symbol]/earnings/ReactionCharts.tsx", "utf8")
     .replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
-  return importTsxSource(mutate(src));
+  // THE DAY SLIDER (#552 COWORK #189) and its pure module, ahead of the card
+  // that renders it, with the one React hook it uses.
+  const days = stripImports("app/stock/[symbol]/earnings/reactionDays.ts");
+  const slider = stripImports("app/stock/[symbol]/earnings/ReactionDaySlider.tsx").replace(/^"use client";$/m, "");
+  return importTsxSource(mutate(['import { useState } from "react";', days, slider, src].join("\n")));
 }
 
 /** Render one element to markup. */

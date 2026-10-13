@@ -126,6 +126,8 @@ export type SecManifestEntry = {
    * because neither of those can see a labelling change — see SEC_LABEL_VERSION.
    */
   lv?: number;
+  /** The SHARE-SERIES shape, absent = 1. Selects like `lv`; see SEC_SHARE_VERSION. */
+  sv?: number;
   w?: number;
   /**
    * `y` is the YEAR retention window the set was written under. Absent means 5,
@@ -478,6 +480,8 @@ export type SeedResult = {
   withCik: number;
   withoutCik: string[];
   tickerMapPresent: boolean;
+  /** New symbols the seed gate refused (secSeedGate), by reason. Never in the manifest. */
+  refused: Record<string, string[]>;
 };
 
 /**
@@ -517,9 +521,17 @@ export function seedManifest(
   manifest: SecManifest,
   universe: string[],
   cikByTicker: Map<string, TickerEntry>,
-  tickerMapPresent: boolean
+  tickerMapPresent: boolean,
+  /**
+   * THE SEED GATE (#552 COWORK #147 1a): why a NEW symbol may not be seeded,
+   * or null. An entry already in the manifest is left as it is (entries are
+   * never removed); populationQueues applies the same rule to its populate.
+   * Defaults to admitting all, so a caller that passes nothing behaves as before.
+   */
+  refusal: (symbol: string, cik: string | null) => string | null = () => null
 ): SeedResult {
   const withoutCik: string[] = [];
+  const refused: Record<string, string[]> = {};
   let added = 0;
 
   for (const symbol of universe) {
@@ -538,6 +550,8 @@ export function seedManifest(
       if (!existing.exchange && found?.exchange) existing.exchange = found.exchange;
       continue;
     }
+    const why = refusal(symbol, cik);
+    if (why) { (refused[why] ??= []).push(symbol); continue; }
     manifest.symbols[symbol] = emptyEntry(cik, found?.exchange ?? null);
     added++;
   }
@@ -550,6 +564,7 @@ export function seedManifest(
     withCik: Object.values(manifest.symbols).filter((e) => e.cik).length,
     withoutCik,
     tickerMapPresent,
+    refused,
   };
 }
 
@@ -585,6 +600,16 @@ export const SEC_FACTS_PREFIX = "msh:sec:facts:v1";
  * at any universe size.
  */
 export const SEC_FACTS_INDEX_KEY = "msh:sec:facts:index:v1";
+
+/**
+ * INDEXED FACT SETS STORED WITH NO FILED PERIOD (#552 COWORK #197): 0 quarters
+ * and 0 years -- the empty answer (SKHY, 2026-10-07: 26 of 1,732). writeFactSet
+ * SADDs on an empty write and SREMs on any write with a period, so
+ * lib/server/filedEarnings can link /stock/SYM/earnings only for index less
+ * this. A symbol discarded or evicted leaves the index, so a member left here
+ * only ever subtracts; it is not in PER_SYMBOL_SETS for that reason.
+ */
+export const SEC_FACTS_EMPTY_KEY = "msh:sec:facts:empty:v1";
 
 export async function readFactSetIndex(): Promise<{ symbols: string[]; commands: number; failed: boolean }> {
   if (!redis) return { symbols: [], commands: 0, failed: false };

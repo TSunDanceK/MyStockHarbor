@@ -35,6 +35,7 @@ supplyChain:
   - name: Tencent Holdings
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Pinduoduo's platform runs substantially on Tencent Cloud
       infrastructure, and Pinduoduo's group-buying model grew up embedded
@@ -47,6 +48,7 @@ supplyChain:
   - name: J&T Global Express
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       A Tencent-backed courier that grew explosively on Pinduoduo's order
       volume - at one point reported to draw roughly 90% of its orders from
@@ -57,6 +59,7 @@ supplyChain:
   - name: DHL Group
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Signed an expanded 2025-2026 agreement with Temu covering air-freight,
       multimodal transport, and last-mile delivery built around Temu's
@@ -67,6 +70,7 @@ supplyChain:
   - name: YunExpress
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A major cross-border small-parcel consolidator and customs-clearance
       provider widely used for Temu's international shipments. A private
@@ -74,6 +78,7 @@ supplyChain:
   - name: 4PX
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A cross-border logistics and customs-brokerage consolidator, owned by
       SF Holding, used in Temu's international fulfillment chain. Trades
@@ -82,6 +87,7 @@ supplyChain:
   - name: Apple
     ticker: AAPL
     pct: 8
+    grade: spread
     blurb: >
       Controls iOS app-store distribution for both Pinduoduo and Temu;
       Indonesia's government formally asked Apple to block Temu from its
@@ -90,6 +96,7 @@ supplyChain:
   - name: Alphabet (Google)
     ticker: GOOGL
     pct: 7
+    grade: spread
     blurb: >
       Controls Android app-store distribution for Pinduoduo and Temu
       through Google Play, carrying the same regulatory-exposure dynamic as
@@ -97,6 +104,7 @@ supplyChain:
   - name: Guangdong & Zhejiang manufacturing clusters
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company - Temu's merchandise comes from tens of
       thousands of small-to-mid Chinese factories concentrated in these
@@ -107,6 +115,7 @@ supplyChain:
   - name: Nuvei
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Expanded its 2025 partnership with Temu to add access to 700+
       localized payment methods across 200+ markets. Taken private by
@@ -116,6 +125,7 @@ customers:
   - name: Pinduoduo (China domestic marketplace)
     ticker: null
     pct: 60
+    grade: hard
     blurb: >
       Not a single company - PDD's original and still-largest business,
       serving hundreds of millions of Chinese consumers and a large base of
@@ -124,6 +134,7 @@ customers:
   - name: Temu (international marketplace)
     ticker: null
     pct: 40
+    grade: hard
     blurb: >
       Not a single company - PDD's fast-growing international discount
       marketplace, which drives enormous order volume but is generally

@@ -21,7 +21,7 @@
 // hung and a rejected promise.
 import type { ColdFillReply } from "./coldFillAction";
 
-export type ColdFillPhase = "reading" | "slow" | "none" | "waiting";
+export type ColdFillPhase = "reading" | "slow" | "none" | "waiting" | "queued";
 
 export type ColdFillStep =
   | { kind: "phase"; phase: ColdFillPhase }
@@ -39,6 +39,9 @@ export const COLD_FILL_WORDS: Record<ColdFillPhase, string> = {
   slow: "This is taking longer than usual; figures will appear once the company's filings are read.",
   none: "SEC's data for this company has nothing this page can show yet.",
   waiting: "This company's SEC filings have not been read yet. They are read on a schedule, so figures may appear later.",
+  // QUEUED FOR THE SCHEDULED READ (#552 COWORK #132): the queue drains at the
+  // sec-facts runs, twice a day, so "a few minutes" would be false here.
+  queued: "SEC filing figures for this company are being prepared; they may take a few hours to appear.",
 };
 
 const POLL: ColdFillStep = { kind: "poll" };
@@ -50,12 +53,16 @@ export function stepForReply(reply: ColdFillReply): ColdFillStep {
     switch (reply.outcome) {
       case "filled": return { kind: "filled" };
       case "no-data": return { kind: "phase", phase: "none" };
-      case "queued":
-      case "busy": return POLL;
+      // A TIMED-OUT FILL MAY STILL LAND, so it polls; a fill never started
+      // (busy, deferred) waits for the scheduled read.
+      case "queued": return POLL;
+      case "busy":
+      case "deferred": return { kind: "phase", phase: "queued" };
       default: return { kind: "phase", phase: "waiting" };
     }
   }
   if (reply.refused === "in-flight") return POLL;
+  if (reply.refused === "visitor-cap" || reply.refused === "crawler") return { kind: "phase", phase: "queued" };
   // A refused BotID verdict is the automation case: no fill is coming from it,
   // so the sentence, not a poll.
   if (reply.refused === "bot") return { kind: "phase", phase: "slow" };

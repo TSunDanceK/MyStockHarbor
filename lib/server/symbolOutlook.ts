@@ -91,7 +91,36 @@ export type SymbolOutlook = {
    * the headline sentence as before.
    */
   value?: string;
+  /**
+   * THE NEXT-REPORT CARD'S ONE LINE (#552 COWORK #96): a window, never a day.
+   * "Mid-November 2026" from the period end plus this filer's own median lag;
+   * "Expected around now" once that window is open; "Later than usual; no
+   * report filed yet" past it. `estimate` is false only for the last, which
+   * is a fact about the record. Absent where there is no estimate to give;
+   * the card then prints the headline.
+   */
+  window?: { line: string; estimate: boolean };
 };
+
+/** The window line past the usual date: a fact, not an estimate. */
+export const OUTLOOK_LATE_LINE = "Later than usual; no report filed yet";
+/** The window line once the estimate's window is open. */
+export const OUTLOOK_NOW_LINE = "Expected around now";
+/** Days past the filer's usual date before "around now" becomes "later than usual". */
+export const OUTLOOK_LATE_AFTER_DAYS = 7;
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const addDaysIso = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * "Early / Mid / Late November 2026": the third of a month an estimated date
+ * falls in. A ten-day window, never the day itself (no fake precision).
+ */
+export function monthThirdLabel(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const third = d <= 10 ? "Early" : d <= 20 ? "Mid" : "Late";
+  return `${third}-${MONTH_NAMES[m - 1]} ${y}`;
+}
 
 /**
  * The record to the answer. PURE, so every branch is reachable from a fixture
@@ -123,6 +152,9 @@ export function outlookFrom(
         headline: dueRowLabel(entry),
         hedge: null,
         evidence: last ? [last] : [],
+        window: today > addDaysIso(entry.expectedOn, OUTLOOK_LATE_AFTER_DAYS)
+          ? { line: OUTLOOK_LATE_LINE, estimate: false }
+          : { line: OUTLOOK_NOW_LINE, estimate: true },
       };
     }
   }
@@ -140,6 +172,9 @@ export function outlookFrom(
       headline: outlookBandLabel(symbol, row.band),
       hedge: OUTLOOK_HEDGE,
       evidence: evidenceFor(row.medianLagDays, row.fromPeriods, row.periodEnd, rec),
+      window: row.band === "d0_7"
+        ? { line: OUTLOOK_NOW_LINE, estimate: true }
+        : { line: monthThirdLabel(addDaysIso(row.periodEnd, row.medianLagDays)), estimate: true },
     };
   }
 
@@ -153,6 +188,9 @@ export function outlookFrom(
       // "not in the next 30 days" invites the reader to do the arithmetic the
       // sentence just refused to do for them.
       evidence: habit ? evidenceFor(habit.medianLagDays, habit.fromPeriods, null, rec) : compact([lastFiled(rec)]),
+      // THE WINDOW, NOT "NOT IN THE NEXT 30 DAYS" (#552 COWORK #96): the same
+      // period end and median lag the decision used, as a ten-day window.
+      ...(habit && rec?.nextPeriodEnd ? { window: { line: monthThirdLabel(addDaysIso(rec.nextPeriodEnd, habit.medianLagDays)), estimate: true } } : {}),
     };
   }
 
@@ -170,6 +208,7 @@ export function outlookFrom(
     headline: outlookNoEstimateLabel(symbol),
     hedge: outlookReasonLabel(reason),
     evidence: compact([lastFiled(rec)]),
+    ...(reason === "estimate-in-past" ? { window: { line: OUTLOOK_LATE_LINE, estimate: false } } : {}),
   };
 }
 

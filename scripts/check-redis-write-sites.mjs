@@ -32,7 +32,9 @@ const walk = (d, o = []) => {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {
     const p = path.join(d, e.name);
     if (e.isDirectory()) { if (e.name !== "node_modules") walk(p, o); }
-    else if (/\.tsx?$/.test(e.name)) o.push(path.relative(ROOT, p));
+    // Not the .check-* mutant copies other checks write beside the real
+    // modules while check-all runs them in parallel: a copy is not a site.
+    else if (/\.tsx?$/.test(e.name) && !e.name.startsWith(".check-")) o.push(path.relative(ROOT, p));
   }
   return o;
 };
@@ -76,7 +78,7 @@ const missing = listedMissing(toolSrc);
 check("each listed write's key is a CANDIDATES entry", missing.length === 0, missing.join("; "));
 // The literal candidates must still be what their owners write.
 check('"msh:market:state" is still the market route\'s REDIS_KEY', /const REDIS_KEY = "msh:market:state";/.test(code("app/api/market/route.ts")));
-check('"msh:benchmarks:stock" is still REDIS_PREFIX + the stock scope', /const REDIS_PREFIX = "msh:benchmarks";/.test(code("lib/server/benchmarksBuilder.ts")));
+// msh:benchmarks:* has no writer since #553 COWORK #210 (2026-10-12): it only ever held FMP payloads.
 
 // ── 3. the plays builders measure and log their payload write ───────────────
 console.log("\n3. The plays builders' payload writes are measured and logged, not swallowed");
@@ -86,7 +88,7 @@ const BUILDERS = [
   ["lib/server/descendingTrianglesBuilder.ts", "DESCENDING_REDIS_KEY", "desc-tri"],
 ];
 const builderRule = (src, key, tag) => {
-  const i = src.indexOf(`await redis.set(${key}, entry`);
+  const i = src.indexOf(`await writeRedis.set(${key}, entry`); // the 20 s client (#553 COWORK #156)
   if (i < 0) return "payload write not found";
   const before = src.slice(Math.max(0, i - 700), i);
   const after = src.slice(i, i + 700);
@@ -109,7 +111,8 @@ const EOD_ROW_BYTES_MEASURED = 81_492;
 const jobs = code("lib/server/marketData/jobs.ts");
 const helper = code("lib/server/chunkByBytes.ts");
 const chunk = Number((jobs.match(/const EOD_WRITE_CHUNK = (\d+);/) ?? [])[1]);
-const bars = Number((jobs.match(/export const EOD_WINDOW_BARS = (\d+);/) ?? [])[1]);
+// The window moved to eodWindow.ts (shared with the stock-page cold fill, #553 COWORK #121).
+const bars = Number((code("lib/server/marketData/eodWindow.ts").match(/export const EOD_WINDOW_BARS = (\d+);/) ?? [])[1]);
 const escaping = Number((helper.match(/MEASURED_ESCAPING_INFLATION = ([0-9.]+)/) ?? [])[1]);
 const budget = 5 * 1024 * 1024;
 check("REQUEST_BYTE_BUDGET is still 5 MB", /REQUEST_BYTE_BUDGET = 5 \* 1024 \* 1024;/.test(helper));
@@ -141,7 +144,7 @@ console.log("\n5. Mutants");
 {
   const f = BUILDERS[1][0];
   const src = code(f);
-  const i = src.indexOf(`await redis.set(${BUILDERS[1][1]}, entry`);
+  const i = src.indexOf(`await writeRedis.set(${BUILDERS[1][1]}, entry`);
   const m = src.slice(0, i) + src.slice(i).replace("} catch (error) {", "} catch {");
   check("mutant caught: a builder back on a silent catch", m !== src && builderRule(m, BUILDERS[1][1], BUILDERS[1][2]) !== null);
 }

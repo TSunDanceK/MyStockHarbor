@@ -75,7 +75,45 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["trendFlipBearish"],
   sectionIncludes: ["bearish trend flip stocks (daily)"],
+  // Named on the page (#553 COWORK #161): the section sorts by bars since
+  // the flip, newest first, ties A to Z (pickersBuilder).
+  rankedBy: { label: "most recent Trend Helper flip, newest first", short: "newest flip" },
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "The rule behind a bearish flip",
+      paragraphs: [
+        "A bearish trend flip is recorded when the Trend Helper Slow line — a 55-period Hull moving average, which weights recent prices more heavily so it turns sooner than a simple average — has rolled over and price has settled beneath it. Specifically, the stock needs two closes in a row below the line while the line is sloping down. A flat line confirms nothing either way.",
+        "The previous state must have been bullish, and the change must be recent: the confirmation has to land within the last three bars, so roughly the last four trading sessions. Stocks whose very first confirmed state in the data happens to be bearish are not counted, because nothing actually flipped. The bearish state then stays in place until two closes above a rising line confirm the opposite.",
+      ],
+    },
+    {
+      heading: "Making sense of the rows",
+      paragraphs: [
+        "The newest flips sit at the top, and stocks that flipped on the same session are listed alphabetically. Each row starts with the session the flip confirmed on; this is never the current day, because the screen works from end-of-day bars and the latest one is the previous close.",
+        "A bearish flip describes a change in trend condition, not what happens next. One useful question is what kind of drop produced it. A stock slipping under the line after a long run higher may simply be pausing, while one losing the line close to its 200-day average, or near a support level visible on the chart, can tell a more serious story. Comparing the flip with the moving-average columns can help separate the two.",
+      ],
+    },
+    {
+      heading: "Blind spots",
+      paragraphs: [
+        "The rule sees only closing prices against one moving average. It does not know about earnings, guidance or sector news, and in a range-bound stock the line can whipsaw, confirming bearish one week and bullish the next. Each row works best as a prompt to look at the chart, and with hourly rebuilds from end-of-day data, the list can trail the market by a session.",
+      ],
+    },
+    {
+      heading: "A hypothetical flip, step by step",
+      paragraphs: [
+        "Suppose a stock has been in a bullish state for months and its Slow line begins to curl lower after a sharp pullback. On the first finish under the down-sloping line, nothing is recorded yet. The second consecutive finish beneath it confirms the bearish state, and that session becomes the date in the row. Had the line still been rising on those two days, the closes under it would not have counted, however large the drop.",
+        "Compared with the weekly bearish trend flip page, this list turns over much faster: a daily flip stays for at most four sessions, while the weekly version is measured in closed weeks. A stock showing on both at once may reflect the shorter and longer trends lining up, though that remains a description of past closes rather than a forecast.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-with-bullish-trend-flip", label: "Daily bullish trend flips" },
+    { href: "/stocks-with-weekly-bearish-trend-flip", label: "Weekly bearish trend flips" },
+    { href: "/stocks-below-50-day-moving-average", label: "Stocks below the 50-day moving average" },
+    { href: "/stocks-below-200-day-moving-average", label: "Stocks below the 200-day moving average" },
+  ],
 };
 
 export default function Page() {

@@ -30,6 +30,10 @@ import {
   instantFields,
   revenueLineIncompleteValues,
   REVENUE_FALLBACK_CHAIN,
+  REVENUE_TOTAL_OVER_CONTRACT,
+  SHARE_UNIT_SLIP_CORROBORATION,
+  SHARE_UNIT_SLIP_FACTORS,
+  SHARE_UNIT_SLIP_TOLERANCE,
   secFieldsHash,
   SELLING_TAGS,
   SUMMED_SGA_TAG,
@@ -114,6 +118,22 @@ export const SEC_YEAR_WINDOW = 6;
  */
 export const SEC_LABEL_VERSION = 5;
 
+/**
+ * THE SHARE-SERIES SHAPE a stored set was written under (#552 COWORK #132).
+ *
+ * 1 (absent) — before #706: no `asr` (restated comparatives) or `asf`
+ *     (re-filed periods), so a split cannot be proven and the dilution chart
+ *     cuts at it (BKNG drew nothing).
+ * 2 — `as`/`asr`/`asf` as #706 reads them.
+ *
+ * ITS OWN STAMP, because nothing else could see it: none of the three share
+ * fields is in contentHash (they are not restatement evidence about a filed
+ * figure), so a re-read that changed only them was counted "unchanged" and
+ * never written, while the manifest stamped the symbol current. Absent selects,
+ * so every set written before this stamp existed is re-read once.
+ */
+export const SEC_SHARE_VERSION = 2;
+
 export type FactRow = {
   start?: string;
   end?: string;
@@ -152,7 +172,13 @@ export type Derivation =
   /** Computed from two other fields of the SAME period. See FieldDef.ratioSource. */
   | "computed"
   /** Several values for one period and no way to choose. Value is null. */
-  | "ambiguous";
+  | "ambiguous"
+  /**
+   * A differenced Q4 the filer's own figures show crosses scopes (#552 COWORK
+   * #196/#200, see q4RevenueScope). Value is null; the page reads "Not
+   * reported" with the reason on tap.
+   */
+  | "withheld";
 
 export type FieldValue = {
   val: number | null;
@@ -334,6 +360,24 @@ export type ExtractResult = {
    * for a year. Optional: absent on older sets and hand-built results.
    */
   annualShares?: [string, number][];
+  /**
+   * THE FILER'S OWN SPLIT EVIDENCE (#552 COWORK #89 §1): for each year or
+   * quarter whose basic share count was RESTATED by a later filing, `[periodEnd,
+   * newest ÷ originally filed]`, kept only when the two differ by at least 1.5×
+   * either way. A 20-for-1 split restates the prior years' comparatives in the
+   * next 10-K, so the restated year carries ~20. The chart builder decides which
+   * ratios are whole splits (secShareHistory); this records them raw.
+   * Optional; absent = none, or written before it existed.
+   */
+  shareRestated?: [string, number][];
+  /**
+   * PERIODS RE-FILED UNCHANGED (#552 COWORK #89 §1): year and recent-quarter
+   * ends whose basic share count a later filing reported again within 1%.
+   * The other half of the split evidence: a doubling between two periods
+   * whose earlier one was re-reported unchanged AFTER it is real issuance, not
+   * a split (a split restates the comparatives). Optional.
+   */
+  shareRefiled?: string[];
   /**
    * THE BALANCE-SHEET NONCONTROLLING INTEREST (us-gaap MinorityInterest) on the
    * stored instants' dates, `[date, USD]`, newest first. An extra, not a field:
@@ -1059,6 +1103,80 @@ type ExtractOpts = {
 };
 
 /**
+ * THE UNIT-SLIP FACTOR, OR NULL (#552 COWORK #192): the power of ten that
+ * makes net income ÷ (EPS × shares) ~1, when it is within
+ * SHARE_UNIT_SLIP_TOLERANCE of one of SHARE_UNIT_SLIP_FACTORS. Anything else
+ * -- an ADS ratio, a preferred-dividend gap, a mismatched period -- is null.
+ */
+export function unitSlipFactor(netIncome: number, eps: number, shares: number): number | null {
+  if (!Number.isFinite(netIncome) || !Number.isFinite(eps) || !Number.isFinite(shares) || eps === 0 || shares <= 0) return null;
+  const u = netIncome / (eps * shares);
+  for (const f of SHARE_UNIT_SLIP_FACTORS) if (Math.abs(u / f - 1) <= SHARE_UNIT_SLIP_TOLERANCE) return f;
+  return null;
+}
+
+/**
+ * A DERIVED Q4 REVENUE THAT CROSSES SCOPES (#552 COWORK #196/#200; census
+ * CODE-A #205). Q4 is FY − 9M, and where the year's line and the quarters'
+ * line cover different scopes the difference is arithmetic on unlike numbers:
+ * OXY's FY2025 Q4 read $1.66B against $5–7B in its other quarters.
+ *
+ * A LOW Q4 ALONE PROVES NOTHING. The plain ratio flagged 27 filers, most of
+ * them small biotechs whose Q4 really was small (milestone revenue), so the
+ * test needs the filer's own second opinion. Withheld when:
+ *   1. the derived Q4 is NEGATIVE — revenue cannot be below zero (FIX, AMLX);
+ *   2. it is under DERIVED_Q4_FLOOR of the mean of the same year's other three
+ *      quarters, AND the filer's own `Revenues` total (or
+ *      `RevenuesNetOfInterestExpense`), differenced the same way, gives a Q4
+ *      at or above that floor of ITS quarters' mean — the total says the year
+ *      had a normal fourth quarter, so the line's collapse is a scope artefact;
+ *   3. it is under that floor AND the nine months it was differenced from do
+ *      not add up to the three quarters shown beside it (off by more than
+ *      NINE_MONTHS_TOLERANCE) — the quarters were restated to a different
+ *      scope than the year-to-date figure, so FY − 9M is not this year's Q4
+ *      on the quarters' basis. OXY FY2025: the census found no `Revenues`
+ *      total, and its nine months disagree with its own three quarters.
+ * With no such proof, the Q4 stands as filed arithmetic: that keeps the true
+ * small quarters and the seasonal ones (MTN, SR, SMG, BATRA in the census).
+ *
+ * PURE, so check-q4-revenue-scope can drive it with plain numbers.
+ */
+export const DERIVED_Q4_FLOOR = 0.4;
+export const NINE_MONTHS_TOLERANCE = 0.02;
+export type Q4ScopeVerdict = "negative" | "scope" | "quarters" | null;
+export function q4RevenueScope(
+  q4: number,
+  siblings: number[],
+  total?: { q4: number; siblings: number[] } | null,
+  /** The nine-month figure Q4 was differenced from (FY − Q4), or null. */
+  nine?: number | null,
+): Q4ScopeVerdict {
+  if (!Number.isFinite(q4)) return null;
+  if (q4 < 0) return "negative";
+  const mean = (xs: number[]) => (xs.length === 3 && xs.every(Number.isFinite) ? (xs[0] + xs[1] + xs[2]) / 3 : null);
+  const m = mean(siblings);
+  if (m == null || !(m > 0) || q4 >= DERIVED_Q4_FLOOR * m) return null;
+  if (total && Number.isFinite(total.q4)) {
+    const tm = mean(total.siblings);
+    if (tm != null && tm > 0 && total.q4 >= DERIVED_Q4_FLOOR * tm) return "scope";
+  }
+  if (nine != null && Number.isFinite(nine) && nine > 0 && Math.abs(nine - 3 * m) > NINE_MONTHS_TOLERANCE * nine) return "quarters";
+  return null;
+}
+
+/** The contract-revenue tag the total-over-contract rule compares against. */
+const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
+
+/**
+ * DOES THE FILER TAG EXCISE AT ALL (#552 COWORK #192 ruling A)? Any us-gaap
+ * concept naming excise -- the filers whose `Revenues` is gross of excise or
+ * carries other income, which the total-over-contract rule must not reach.
+ */
+export function filerTagsExcise(facts: CompanyFacts): boolean {
+  return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k));
+}
+
+/**
  * THE EXTRACTION, WITH rankPerPeriod FILL-BACK (#552 COWORK #58, JD).
  *
  * A rankPerPeriod field (a total ahead of its component) resolves each period
@@ -1333,6 +1451,101 @@ function extractCompanyFactsWith(
         notes.push(`revenue ${end}: tagged line ${rev} is below ${op != null ? "operating" : "pre-tax"} income ${bar}; ${fb.tag} ${fb.val} used`);
       }
     }
+
+    // ── THE FILER'S TOTAL OVER ITS CONTRACT LINE (#552 COWORK #192 ruling A) ──
+    // AFRM's contract revenue ($1.11B FY2025) is one line of a $3.22B total,
+    // complete by the predicate above (no income exceeds it), so the page
+    // showed the sub-line. Where the filer's NEWEST period carries both and
+    // `Revenues` is more than REVENUE_TOTAL_OVER_CONTRACT larger, `Revenues`
+    // becomes the filer's ONE revenue concept: every period takes it, and a
+    // period without it reads Not reported rather than mixing measures.
+    // EXCISE-TAGGED FILERS ARE EXCLUDED: their `Revenues` carries other income
+    // or derivative gains (COP, CEG, MELI in the #198 census). This knowingly
+    // supersedes #535 COWORK #12 ruling A for this case only.
+    if (!filerTagsExcise(facts)) {
+      const newest = [...quarterCells.keys(), ...yearCells.keys()].sort().at(-1);
+      // LIKE FOR LIKE: a quarter against a quarter, else a year against a
+      // year -- never one duration against the other (ADP's $21.9B fiscal
+      // year against its $5.47B fourth quarter, caught by the round-2 census).
+      const pairAt = (cells: typeof quarterCells, fbCells: typeof fbQuarter) => {
+        const r = newest ? cells.get(newest)?.get("revenue") : undefined;
+        const f = newest ? fbCells.get(newest)?.get("revenue") : undefined;
+        return r && f ? { rev: r, fb: f } : null;
+      };
+      const pair = pairAt(quarterCells, fbQuarter) ?? pairAt(yearCells, fbYear);
+      const rev = pair?.rev;
+      const fb = pair?.fb;
+      // THE FLOOR (#552 COWORK #194): `Revenues` must cover at least as many of
+      // the newest 8 quarters, AND of the newest 4 years, as the contract line
+      // it would replace. Otherwise the one-concept rule would leave more
+      // periods unreported than it fixes (BANC, GLP, HRI in the round-2
+      // census), and the filer keeps its old concept.
+      const covers = (cells: typeof quarterCells, fbCells: typeof fbQuarter, n: number) => {
+        const ends = [...cells.keys()].sort().reverse().slice(0, n);
+        const total = ends.filter((e) => { const t = fbCells.get(e)?.get("revenue"); return t?.tag === "Revenues" && t.val != null; }).length;
+        const contract = ends.filter((e) => { const c = cells.get(e)?.get("revenue"); return c?.tag === CONTRACT_REVENUE_TAG && c.val != null; }).length;
+        return total >= contract;
+      };
+      const floorHolds = covers(quarterCells, fbQuarter, 8) && covers(yearCells, fbYear, 4);
+      if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
+          fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT && !floorHolds) {
+        notes.push(`revenue: Revenues exceeds the contract line on ${newest} but covers fewer of the newest 8 quarters / 4 years; the contract line is kept (floor)`);
+      } else if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
+          fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT) {
+        let moved = 0, refused = 0;
+        for (const [cells, fbCells] of [[quarterCells, fbQuarter], [yearCells, fbYear]] as const) {
+          for (const [end, m] of cells) {
+            const total = fbCells.get(end)?.get("revenue");
+            if (total && total.tag === "Revenues" && total.val != null) { m.set("revenue", total); moved++; }
+            else if (m.has("revenue")) { m.delete("revenue"); refused++; }
+          }
+        }
+        notes.push(`revenue: Revenues ${fb.val} exceeds the contract line ${rev.val} by more than ${Math.round((REVENUE_TOTAL_OVER_CONTRACT - 1) * 100)}% on ${newest}; Revenues used for ${moved} period(s), ${refused} without it left unreported`);
+      }
+    }
+
+    // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD (#552 COWORK #196/#200) ──
+    // AFTER every revenue choice above, so it judges the figure that would be
+    // stored. Only a DIFFERENCED revenue cell can be judged: an as-filed
+    // quarter is the filer's own number. Siblings are the quarters inside the
+    // nine months the Q4 was differenced from (the 372-day window covers a
+    // 53-week year). The second total is the fallback chain's own differenced
+    // cells, and only when it is a DIFFERENT concept from the one judged.
+    const siblingsOf = (cells: typeof quarterCells, q4: FieldValue) => {
+      const [nineEnd, q4End] = q4.covers ?? [null, null];
+      if (!nineEnd || !q4End) return [];
+      const floor = new Date(Date.parse(q4End) - 372 * DAY).toISOString().slice(0, 10);
+      const out: number[] = [];
+      for (const m of cells.values()) {
+        const c = m.get("revenue");
+        if (!c?.covers || c.val == null) continue;
+        if (c.covers[1] <= nineEnd && c.covers[0] >= floor) out.push(c.val);
+      }
+      return out;
+    };
+    for (const [end, m] of quarterCells) {
+      const q4 = m.get("revenue");
+      if (!q4 || q4.derived !== "differenced" || q4.val == null) continue;
+      const fb = fbQuarter.get(end)?.get("revenue");
+      const total = fb && fb.val != null && `${fb.ns}|${fb.tag}` !== `${q4.ns}|${q4.tag}`
+        ? { q4: fb.val, siblings: siblingsOf(fbQuarter, fb) }
+        : null;
+      // The nine months, recovered from the year it was differenced against —
+      // only when the year is the SAME concept, so it is the same subtraction.
+      const fy = yearCells.get(end)?.get("revenue");
+      const nine = fy && fy.val != null && `${fy.ns}|${fy.tag}` === `${q4.ns}|${q4.tag}` ? fy.val - q4.val : null;
+      const siblings = siblingsOf(quarterCells, q4);
+      const verdict = q4RevenueScope(q4.val, siblings, total, nine);
+      if (!verdict) continue;
+      m.set("revenue", { ...q4, val: null, derived: "withheld" });
+      notes.push(
+        verdict === "negative"
+          ? `revenue ${end}: derived Q4 ${q4.val} is negative; withheld`
+          : verdict === "scope"
+            ? `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
+            : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters and the nine months ${nine} differ from those quarters' sum ${siblings.reduce((a, b) => a + b, 0)}; withheld (scope mismatch)`
+      );
+    }
   }
 
   // ── durations that do NOT add: as filed, or not at all ─────────────────────
@@ -1358,6 +1571,56 @@ function extractCompanyFactsWith(
         val: best.row.val!, tag: best.tag, ns: best.ns, unit: best.unit, derived: "as-filed",
         covers: [best.row.start, best.row.end],
       });
+    }
+  }
+
+  // ── SHARE COUNTS ON A UNIT SLIP (#552 COWORK #192; CODE-A #199 §1) ───────
+  // 45 filers store some periods' weighted shares in thousands or millions
+  // (MCD, NMR, BBVA, NVMI …): net income ÷ (EPS × shares) comes out ~1,000 or
+  // ~1/1,000,000 instead of ~1. The filer's OWN three figures for the period
+  // prove the factor, so the count is rescaled only where that arithmetic
+  // lands within SHARE_UNIT_SLIP_TOLERANCE of a power in SHARE_UNIT_SLIP_FACTORS
+  // -- against an AS-FILED EPS only, never one this file computed. A period
+  // whose proof fails is left exactly as filed. Runs BEFORE the ratio
+  // fallback, so no EPS is ever computed from a slipped count.
+  //
+  // ── AND CORROBORATED, BECAUSE THE RATIO CANNOT SAY WHICH FIGURE SLIPPED ──
+  // ~1/1,000 says EPS × shares is 1,000× net income -- the shares may be in
+  // units where they should be thousands, or the NET INCOME may be the figure
+  // on the slip. Rescaling the shares in the second case would corrupt a
+  // correct count. So the rescaled count must also land within
+  // SHARE_UNIT_SLIP_CORROBORATION of an independent count: the cover share
+  // count (dei), or the median of the filer's own periods whose arithmetic
+  // already closes at ~1. With neither, nothing is rescaled.
+  const cover = readCoverShares(facts)?.val ?? null;
+  const cleanMedian = (shareKey: "sharesBasic" | "sharesDiluted", epsKey: "epsBasic" | "epsDiluted") => {
+    const vals: number[] = [];
+    for (const cells of [quarterCells, yearCells]) for (const m of cells.values()) {
+      const ni = m.get("netIncome")?.val, sh = m.get(shareKey)?.val, eps = m.get(epsKey);
+      if (ni == null || ni === 0 || sh == null || sh <= 0 || !eps || eps.val == null || eps.val === 0 || eps.derived !== "as-filed") continue;
+      if (Math.abs(ni / (eps.val * sh) - 1) <= SHARE_UNIT_SLIP_TOLERANCE) vals.push(sh);
+    }
+    vals.sort((a, b) => a - b);
+    return vals.length ? vals[vals.length >> 1] : null;
+  };
+  const near = (x: number, ref: number | null) => ref !== null && ref > 0 && x / ref <= SHARE_UNIT_SLIP_CORROBORATION && ref / x <= SHARE_UNIT_SLIP_CORROBORATION;
+  const medians = { sharesBasic: cleanMedian("sharesBasic", "epsBasic"), sharesDiluted: cleanMedian("sharesDiluted", "epsDiluted") };
+  for (const cells of [quarterCells, yearCells]) {
+    for (const [end, m] of cells) {
+      const ni = m.get("netIncome")?.val ?? null;
+      if (ni === null || ni === 0) continue;
+      for (const [shareKey, epsKey] of [["sharesBasic", "epsBasic"], ["sharesDiluted", "epsDiluted"]] as const) {
+        const sh = m.get(shareKey), eps = m.get(epsKey);
+        if (!sh || sh.val == null || sh.val <= 0 || !eps || eps.val == null || eps.val === 0 || eps.derived !== "as-filed") continue;
+        const f = unitSlipFactor(ni, eps.val, sh.val);
+        if (f === null) continue;
+        if (!near(sh.val * f, cover) && !near(sh.val * f, medians[shareKey])) {
+          notes.push(`${shareKey} ${end}: ratio says x${f} but no independent count corroborates it; left as filed`);
+          continue;
+        }
+        m.set(shareKey, { ...sh, val: sh.val * f });
+        notes.push(`${shareKey} ${end}: ${sh.val} rescaled x${f} (net income ${ni} / (EPS ${eps.val} x shares) = ${(ni / (eps.val * sh.val)).toPrecision(4)})`);
+      }
     }
   }
 
@@ -1539,6 +1802,8 @@ function extractCompanyFactsWith(
         .filter((e): e is [string, string] => e[1] !== null)
     ),
     annualShares: annualShareSeries(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null, naming.yearEnd),
+    ...(() => { const r = shareRestatements(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null); return r.length ? { shareRestated: r } : {}; })(),
+    ...(() => { const r = shareRefiledUnchanged(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null); return r.length ? { shareRefiled: r } : {}; })(),
     ...(ytd ? { ytd } : {}),
     ...(nci.length ? { nci } : {}),
     untagged: SEC_FIELDS.filter((f) => !fieldIsTagged(facts, f)).map((f) => f.key),
@@ -1570,6 +1835,57 @@ export function minorityInterestAt(facts: CompanyFacts, dates: string[], currenc
     if (!prior || (r.filed ?? "") > prior.filed) best.set(r.end, { val: r.val, filed: r.filed ?? "" });
   }
   return [...best].map(([e, x]) => [e, x.val] as [string, number]).sort((a, b) => b[0].localeCompare(a[0]));
+}
+
+/**
+ * See ExtractResult.shareRestated. Per period (year or quarter), the resolved
+ * value (resolve(): the newest filing) against the ORIGINALLY filed value of
+ * the same concept, kept where they differ by 1.5× or more either way.
+ */
+export const SHARE_RESTATED_MIN_RATIO = 1.5;
+function shareRestatements(bucket: Bucket | undefined, preferred: string | null): [string, number][] {
+  if (!bucket) return [];
+  const out = new Map<string, number>();
+  for (const [, cands] of bucket) {
+    const best = resolve(cands, preferred);
+    if (!best?.row.start || !best.row.end || typeof best.row.val !== "number" || best.row.val <= 0) continue;
+    const q = quartersCovered(spanDays(best.row.start, best.row.end));
+    if (q !== 1 && q !== 4) continue;
+    let original: FactRow | null = null;
+    for (const c of cands) {
+      if (conceptKey(c) !== conceptKey(best) || typeof c.row.val !== "number" || c.row.val <= 0) continue;
+      if (!original || newer(original, c.row) === original) original = c.row;
+    }
+    if (!original || typeof original.val !== "number") continue;
+    const ratio = best.row.val / original.val;
+    if (ratio >= SHARE_RESTATED_MIN_RATIO || ratio <= 1 / SHARE_RESTATED_MIN_RATIO) out.set(best.row.end, ratio);
+  }
+  return [...out].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+/**
+ * See ExtractResult.shareRefiled. Fiscal years, and quarters ending within
+ * SHARE_REFILED_QUARTER_YEARS of the newest quarter (the span the chart draws
+ * as quarters), whose concept was filed by two or more accessions all within
+ * 1% of one another.
+ */
+export const SHARE_REFILED_QUARTER_YEARS = 4;
+function shareRefiledUnchanged(bucket: Bucket | undefined, preferred: string | null): string[] {
+  if (!bucket) return [];
+  const found: { end: string; q: number }[] = [];
+  for (const [, cands] of bucket) {
+    const best = resolve(cands, preferred);
+    if (!best?.row.start || !best.row.end || typeof best.row.val !== "number" || best.row.val <= 0) continue;
+    const q = quartersCovered(spanDays(best.row.start, best.row.end));
+    if (q !== 1 && q !== 4) continue;
+    const same = cands.filter((c) => conceptKey(c) === conceptKey(best) && typeof c.row.val === "number" && c.row.val > 0);
+    if (new Set(same.map((c) => c.row.accn)).size < 2) continue;
+    if (!same.every((c) => Math.abs((c.row.val as number) / (best.row.val as number) - 1) <= 0.01)) continue;
+    found.push({ end: best.row.end, q });
+  }
+  const newestQuarter = found.filter((f) => f.q === 1).map((f) => f.end).sort().at(-1) ?? null;
+  const floor = newestQuarter ? `${Number(newestQuarter.slice(0, 4)) - SHARE_REFILED_QUARTER_YEARS}${newestQuarter.slice(4)}` : "";
+  return [...new Set(found.filter((f) => f.q === 4 || f.end >= floor).map((f) => f.end))].sort();
 }
 
 /**

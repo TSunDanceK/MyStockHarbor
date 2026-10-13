@@ -1,5 +1,33 @@
+import fs from "node:fs";
+import path from "node:path";
 import { ImageResponse } from "next/og";
 import { getPostBySlug } from "@/lib/blog";
+import { getInsightPageDataCached } from "@/lib/server/insightPage";
+
+/**
+ * THE POST'S PICTURE AS THE SHARE IMAGE (#563 COWORK #133): the hero's library
+ * art, as a JPEG data URI (next/og draws no WebP). Read from the deployment's
+ * own public/ folder, else from the production site; null on any failure, and
+ * the image falls back to the branded card.
+ */
+async function heroArt(src: string): Promise<string | null> {
+  if (!/^\/news-art\/[\w.-]+\.webp$/.test(src)) return null;
+  try {
+    let buf: Buffer | null = null;
+    try {
+      buf = fs.readFileSync(path.join(process.cwd(), "public", src));
+    } catch {
+      const res = await fetch(`https://www.mystockharbor.com${src}`, { signal: AbortSignal.timeout(4000) });
+      buf = res.ok ? Buffer.from(await res.arrayBuffer()) : null;
+    }
+    if (!buf) return null;
+    const sharp = (await import("sharp")).default;
+    const jpg = await sharp(buf).resize(1200, 630, { fit: "cover" }).jpeg({ quality: 78 }).toBuffer();
+    return `data:image/jpeg;base64,${jpg.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,11 +61,17 @@ export default async function OGImage({ params }: Props) {
   let symbol: string | null = null;
   let badge = "Daily · Technical Analysis";
 
+  let art: string | null = null;
   try {
     const post = getPostBySlug(slug);
     title = post.title;
     symbol = post.symbol ?? null;
     badge = setupBadge(post.timeframe, post.chartIndicators);
+    // The page's own label and picture, from its cached data: the badge
+    // matches the page's one setup label (#132), never the frontmatter.
+    const d = await getInsightPageDataCached(slug).catch(() => null);
+    if (d?.label) badge = `${post.timeframe === "w" ? "Weekly" : "Daily"} · ${d.label.text}`;
+    if (d?.art.kind === "library") art = await heroArt(d.art.art.src);
   } catch {
     // Slug not found — render generic fallback
   }
@@ -58,6 +92,13 @@ export default async function OGImage({ params }: Props) {
           position: "relative",
         }}
       >
+        {/* The post's picture under a dark gradient, when it has one. */}
+        {art ? (
+          <img src={art} width={1200} height={630} alt="" style={{ position: "absolute", inset: 0, width: 1200, height: 630, objectFit: "cover" }} />
+        ) : null}
+        {art ? (
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(6,12,24,0.35) 0%, rgba(6,12,24,0.82) 60%, rgba(6,12,24,0.96) 100%)" }} />
+        ) : null}
         {/* Subtle grid overlay */}
         <div
           style={{

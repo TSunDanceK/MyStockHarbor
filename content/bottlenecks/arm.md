@@ -35,6 +35,7 @@ supplyChain:
   - name: Synopsys
     ticker: SNPS
     pct: 30
+    grade: hard
     blurb: >
       Arm's chip designers rely on Synopsys' electronic design automation
       (EDA) software — design compilers, simulation, and verification tools
@@ -44,6 +45,7 @@ supplyChain:
   - name: Cadence Design Systems
     ticker: CDNS
     pct: 25
+    grade: some
     blurb: >
       The other half of the EDA duopoly Arm depends on, supplying
       complementary verification IP and simulation tools used alongside
@@ -53,6 +55,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 25
+    grade: some
     blurb: >
       As Arm pushes deeper into silicon with reference platforms like
       Neoverse Compute Subsystems and the Arm Total Design ecosystem, it
@@ -62,6 +65,7 @@ supplyChain:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 20
+    grade: some
     blurb: >
       Arm migrated its compute-intensive EDA verification workloads to AWS
       in 2016 and now runs tens of millions of parallel simulation jobs a
@@ -72,6 +76,7 @@ customers:
   - name: Arm China
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       A separately managed joint venture, majority owned by Chinese
       investors, that holds the exclusive right to license Arm's IP to
@@ -82,6 +87,7 @@ customers:
   - name: Apple
     ticker: AAPL
     pct: 11
+    grade: some
     blurb: >
       Holds a broad Architecture License Agreement letting it design fully
       custom Arm-based cores for the iPhone, iPad, and Mac lines. Named in
@@ -90,6 +96,7 @@ customers:
   - name: Qualcomm
     ticker: QCOM
     pct: 11
+    grade: some
     blurb: >
       One of Arm's largest licensees for Android smartphone chipsets
       (Snapdragon) and increasingly for Arm-based PC processors, using both
@@ -99,6 +106,7 @@ customers:
   - name: Samsung Electronics
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Licenses Arm cores across its Exynos mobile chipsets, memory
       products, and foundry business, making it one of Arm's longest-
@@ -107,6 +115,7 @@ customers:
   - name: MediaTek
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Ships more Arm Cortex-based smartphone application processors by unit
       volume than almost any other licensee, largely using off-the-shelf
@@ -115,6 +124,7 @@ customers:
   - name: Nvidia
     ticker: NVDA
     pct: 8
+    grade: spread
     blurb: >
       Licenses the Arm architecture for its Grace CPU and Grace Hopper/
       Blackwell superchips used in AI data centers — a fast-growing royalty
@@ -123,6 +133,7 @@ customers:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 6
+    grade: spread
     blurb: >
       Licenses Arm's architecture to design its custom Graviton server
       processors, which now power a large and growing share of new AWS
@@ -132,6 +143,7 @@ customers:
   - name: All other licensees
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Hundreds of additional licensees across automotive (ADAS and
       infotainment chipmakers), networking equipment, IoT, gaming consoles,

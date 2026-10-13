@@ -44,7 +44,7 @@ const underMutation = async (name, from, to, probe) => {
 };
 
 const PAGE = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/page.tsx"), "utf8");
-const LIST = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/EarningsDayList.tsx"), "utf8");
+const WEEK = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/EarningsWeek.tsx"), "utf8");
 const CAL = fs.readFileSync(path.join(ROOT, "lib/server/earningsCalendar.ts"), "utf8");
 
 console.log("\n1. THE RULE");
@@ -85,15 +85,17 @@ console.log("\n3. THE CALL SITES — the part that regressed twice before");
   // SUPERSEDED 2026-09-23 (owner ruling, #535 COWORK #23): on the SEC-fed
   // grid an off-pool row shows "—" in both cells, and the note says once what
   // the dash means. Pinned the other way round now.
-  check("an off-pool row shows a dash in both cells (owner ruling, COWORK #23)",
-    /\{ key: "price", label: "Price", fmt: \(i\) => formatPrice\(i\.price\) \}/.test(LIST) &&
-      /\{ key: "marketCap", label: "Market Cap", fmt: \(i\) => formatCompact\(i\.marketCap\) \}/.test(LIST) &&
-      /return value !== null \? `\$\$\{value\.toFixed\(2\)\}` : "—";/.test(LIST));
-  check("...and the note explains the dash, once",
+  // SUPERSEDED AGAIN 2026-10-05 (owner pick, #552 COWORK #170): the week page
+  // shows no price and no market cap column (the cap only sorts the rows), so
+  // there is no off-pool dash to explain. The stamp above still feeds the day
+  // blobs the sector panels read; the calendar prints neither cell nor note.
+  check("the week list has no price or market cap column (owner pick, COWORK #170)",
+    !/Market cap/i.test(WEEK) && !/columnheader"[^>]*>Price</.test(WEEK));
+  check("...and the dash note still says what a dash means, for any surface that shows one",
     /A dash marks companies outside that set/.test(fs.readFileSync("lib/server/gridPriceCoverage.ts", "utf8")));
-  check("the page prints the note only when a row is actually blank",
-    /items\.some\(\(i\) => i\.priceCoverage === "outside-bar-universe"\)/.test(PAGE),
-    "a standing note on a fully-covered day explains a gap that is not there");
+  check("the page prints no coverage note for cells it does not show",
+    !/PRICE_COVERAGE_NOTE/.test(PAGE),
+    "a note explaining a dash that is not on the page is its own small lie");
 }
 
 console.log("\n4. (a) THE FAILURE-VS-ABSENCE DISTINCTION SURVIVED THE CUTOVER");
@@ -103,8 +105,10 @@ console.log("\n4. (a) THE FAILURE-VS-ABSENCE DISTINCTION SURVIVED THE CUTOVER");
   check("...still feeds it getMonthVisibility, #483's signal",
     /monthVisibility: getMonthVisibility\(/.test(PAGE),
     "this is the signal that sat unread for weeks");
+  // The rows ARE the candidates since #552 COWORK #170: nothing is quoted, so
+  // `true` is the true answer (check-calendar-day-state asserts the pairing).
   check("...and still feeds it the completeness flag",
-    /complete: dateComplete/.test(PAGE));
+    /complete: dateComplete/.test(PAGE) || (/items:\s*cands\.map\(/.test(PAGE) && /complete:\s*true/.test(PAGE)));
   check("the bare emptiness test has NOT come back",
     !/dayData\.usListedCount\s*>\s*0\s*\?/.test(PAGE),
     "`usListedCount > 0 ? quiet : quiet` is the exact line that undid #483");

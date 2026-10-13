@@ -502,7 +502,9 @@ function rules(srcs) {
   // The dashboard seed: HISTORY, the same gate as the route it refetches from.
   const dp = code[FILES.dashPage];
   want("the dashboard's SSR seed switches on HISTORY",
-    /historyForSurface\("HISTORY", symbol, \(\) => getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\)/.test(dp) &&
+    // The seed may read the cache only when FMP_API_KEY is unset (#553 COWORK #146);
+    // the gate around it is the same.
+    /historyForSurface\("HISTORY", symbol, \(\) =>\s*(?:process\.env\.FMP_API_KEY\s*\?\s*)?getDailyHistory\(symbol, \{ caller: "dashboard" \}\)/.test(dp) &&
     (dp.match(/getDailyHistory\(symbol/g) ?? []).length === 1);
   want("the dashboard shows the credit under the chart", /historyCredit=\{\s*historyOnTiingo\("HISTORY"\) \?/.test(dp) && /\{historyCredit\}/.test(code[FILES.dashClient]));
 
@@ -525,16 +527,21 @@ function rules(srcs) {
 
   // The client: the toggle's inputs are unchanged (#89: no data or calculation change).
   const sc = code[FILES.stockClient];
-  want("the returns inputs are unchanged: 20 daily, 12 weekly, from aggregateWeekly",
-    /const weeklyHistory = useMemo\(\(\) => aggregateWeekly\(history\), \[history\]\);/.test(sc) &&
-    /const dailyReturns = useMemo\(\(\) => computeCloseOverCloseReturns\(history, 20\), \[history\]\);/.test(sc) &&
-    /const weeklyReturns = useMemo\(\(\) => computeCloseOverCloseReturns\(weeklyHistory, 12\), \[weeklyHistory\]\);/.test(sc));
+  // #553 COWORK #115: the same windows (20 daily, 12 weekly), now from
+  // lib/closeReturns.ts with end-of-period labels, plus 12 complete months.
+  want("the returns inputs: 20 daily, 12 weekly, 12 monthly, from the page's own bars",
+    /const dailyReturns = useMemo\(\(\) => dailyReturnBars\(history, 20\), \[history\]\);/.test(sc) &&
+    /const weeklyReturns = useMemo\(\(\) => weeklyReturnBars\(history, 12\), \[history\]\);/.test(sc) &&
+    /const monthlyReturns = useMemo\(\(\) => monthlyReturnBars\(history, 12\), \[history\]\);/.test(sc));
   want("one toggle card, Daily first, and no second returns chart beside it",
-    (sc.match(/<ReturnsToggleCard /g) ?? []).length === 1 && /daily=\{dailyReturns\} weekly=\{weeklyReturns\}/.test(sc) && !/<ReturnsBarChart /.test(sc));
+    (sc.match(/<ReturnsToggleCard /g) ?? []).length === 1 && /daily=\{dailyReturns\} weekly=\{weeklyReturns\} monthly=\{monthlyReturns\}/.test(sc) && !/<ReturnsBarChart /.test(sc));
+  // RE-ANCHORED for C's Price levels ladder (#563 COWORK #68), which replaced the
+  // indicator rows: the same intent, a short history hands its reason to the MA,
+  // and the ladder prints it ("MA200: Not enough price history stored yet").
   want("the MA rows say why on a short history, not a bare \"—\"",
-    /% vs price` : closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : "Distance unavailable"/.test(sc) &&
-    /% vs price` : closes\.length && closes\.length < 50 \? SHORT_HISTORY_NOTE : "Distance unavailable"/.test(sc) &&
-    /className="indicator-row" title=\{"title" in row \? row\.title : undefined\}/.test(sc));
+    /ma200Missing=\{closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : null\}/.test(sc) &&
+    /ma50Missing=\{closes\.length && closes\.length < 50 \? SHORT_HISTORY_NOTE : null\}/.test(sc) &&
+    /<LevelsSignals\s/.test(sc));
   // COWORK #103 nit: keyed on the provider of the series shown, so a
   // client-fetched Tiingo chart is credited and a seeded FMP one is not.
   want("the stock chart is given the credit only while the series shown is Tiingo's",
@@ -587,7 +594,8 @@ const MUTANTS = [
   ["a CSV download from /api/history", FILES.route, /: getCacheControlHeader\(\),/, ': getCacheControlHeader(), "Content-Disposition": "attachment; filename=history.csv",'],
   ["/api/history on the CHARTS gate", FILES.route, /historyForSurface\("HISTORY", /, 'historyForSurface("CHARTS", '],
   ["/api/history's monthly roll-up dropped", FILES.route, /const points = carryPartialLabel\(daily, aggregate\(daily, interval\)\);/, "const points = daily;"],
-  ["the stock page's metadata read left on FMP", FILES.stockPage, /historyForSurface\("CHARTS", upper, \(\) => getDailyHistory\(upper, \{ caller: "stock-page" \}\)\)/, 'getDailyHistory(upper, { caller: "stock-page" })'],
+  // The read now carries the cold-fill option (#553 COWORK #121), so the mutant takes the whole call.
+  ["the stock page's metadata read left on FMP", FILES.stockPage, /historyForSurface\("CHARTS", upper, \(\) => getDailyHistory\(upper, \{ caller: "stock-page" \}\), \{[\s\S]*?\}\)/, 'getDailyHistory(upper, { caller: "stock-page" })'],
   ["the stock page hands the credit down whatever the provider", FILES.stockPage, /historyResult\.provider === "tiingo" \|\| historyOnTiingo\("HISTORY"\) \?/, "true ?"],
   ["the stock page passes no seed provider", FILES.stockPage, /historyProvider=\{historyResult\.provider\}/, ""],
   ["the stock chart credited by the seed, not the provider (COWORK #103)", FILES.stockClient, /credit=\{shownProvider === "tiingo" \? historyCredit : null\}/, "credit={seededHistory ? historyCredit : null}"],
@@ -602,10 +610,11 @@ const MUTANTS = [
   ["the interactive chart asks for more than the cap", FILES.interactive, /days=2000/, "days=4000"],
   ["the Tiingo cap raised past what the charts use", FILES.helper, /TIINGO_HISTORY_MAX_DAYS = 2600;/, "TIINGO_HISTORY_MAX_DAYS = 5000;"],
   ["the stock page's history fetch sends no page token", FILES.stockClient, /&days=900`, pageToken \? \{ headers: \{ "x-msh-page-token": pageToken \} \} : undefined\)/, "&days=900`)"],
-  ["the dashboard seed left on FMP", FILES.dashPage, /historyForSurface\("HISTORY", symbol, \(\) => getDailyHistory\(symbol, \{ caller: "dashboard" \}\)\)/, 'getDailyHistory(symbol, { caller: "dashboard" })'],
-  ["the weekly input window changed", FILES.stockClient, /computeCloseOverCloseReturns\(weeklyHistory, 12\)/, "computeCloseOverCloseReturns(weeklyHistory, 20)"],
+  ["the dashboard seed left on FMP", FILES.dashPage, /historyForSurface\("HISTORY", symbol, \(\) =>[\s\S]*?getCachedDailyHistory\(symbol, "dashboard"\)\s*\)/, 'getDailyHistory(symbol, { caller: "dashboard" })'],
+  ["the weekly input window changed", FILES.stockClient, /weeklyReturnBars\(history, 12\)/, "weeklyReturnBars(history, 20)"],
+  ["the monthly view not handed to the card", FILES.stockClient, / monthly=\{monthlyReturns\}/, ""],
   ["the old second returns card restored", FILES.stockClient, /<ReturnsToggleCard /, '<ReturnsBarChart symbol={symbol} periodLabel="Weekly" compareLabel="x" bars={weeklyReturns} /><ReturnsToggleCard '],
-  ["a bare \"—\" on a short MA200", FILES.stockClient, /closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : "Distance unavailable"/, '"Distance unavailable"'],
+  ["a bare \"—\" on a short MA200", FILES.stockClient, /ma200Missing=\{closes\.length && closes\.length < 200 \? SHORT_HISTORY_NOTE : null\}/, "ma200Missing={null}"],
 ];
 for (const [label, file, from, to] of MUTANTS) {
   const m = srcs[file].replace(from, to);

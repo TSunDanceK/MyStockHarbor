@@ -28,6 +28,7 @@
 // starts filling it at once.
 //
 //   node scripts/check-earnings-calendar-cost.mjs
+import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
 
@@ -102,16 +103,25 @@ check(
     "page telling every visitor it cannot answer"
 );
 
-console.log("\n2. The completeness marker is read once, not twice");
+console.log("\n2. The completeness marker is not read at all, and the figures are one MGET");
 
+// SINCE THE WEEK PAGE (#552 COWORK #170) the rows are the day's candidates
+// from the month index, so the day blob and its completeness marker (once
+// read twice per render) are not read by the render at all; and the row
+// figures for all seven days come back in one MGET, not per day or per row.
 check(
-  "the page shares one read between the render and the flag",
-  /const loadDayComplete = cache\(/.test(page) &&
-    /loadDayComplete\(selectedDate\),/.test(page) &&
-    !/\n\s*isDateFullyPopulated\(selectedDate\),/.test(page),
-  "getFullDayEarnings already reads the marker internally and the page read it " +
-    "again through isDateFullyPopulated — two GETs for one fact"
+  "the render reads no completeness marker, and no day blob",
+  !/isDateFullyPopulated\(|loadDayComplete\(|getDayEarningsForRender\(|getCachedDayItems\(/.test(page),
+  "the grid's per-day reads went with the grid"
 );
+{
+  const store = fs.readFileSync("lib/server/earningsWeekStore.ts", "utf8");
+  const fn = store.slice(store.indexOf("export async function readWeekFigures"), store.indexOf("/** What one symbol needs filled"));
+  const oneMget = (src) => (src.match(/await redis\./g) ?? []).length === 1 && /await redis\.mget</.test(src);
+  check("the strip's 14 figure keys are one MGET", oneMget(fn) && /readWeekFigures\(days\)/.test(page));
+  check("MUTATION: a GET per day → caught",
+    !oneMget(fn.replace("const vals = await redis.mget<unknown[]>(...keys);", "const vals = await Promise.all(keys.map((k) => redis.get(k)));")));
+}
 
 console.log("\n3. The background scan runs once per window, not once per visitor");
 
@@ -175,7 +185,7 @@ check(
 // it rather than leaving it to review.
 const afterIdx = page.indexOf("after(async () => {");
 const claimIdx = page.indexOf("await claimCalendarScan()", afterIdx);
-const workIdx = page.indexOf("await getFullDayEarnings(selectedDate", afterIdx);
+const workIdx = page.indexOf("await fillWeekFigures(", afterIdx);
 check(
   "...and it is claimed before any of the work",
   afterIdx !== -1 && claimIdx !== -1 && workIdx !== -1 && claimIdx < workIdx,
@@ -183,9 +193,37 @@ check(
     `fill has already run is a counter, not a gate`
 );
 
+// ── THE CUT IN ONE MGET (#552 COWORK #181) ──────────────────────────────
+// Widened to 200 (#552 COWORK #186), one GET per record would be 200 commands
+// a build. The forward sections read them in one MGET, and a failed MGET is
+// "we could not read", never 200 filers with no record.
+{
+  const due = readCodeOnly("lib/server/dueInputs.ts");
+  const fwd = grabFunction(due, "getCalendarForwardSections") ?? "";
+  const bulkRule = (src) => /await readReportDatesBulk\(DUE_STRIP_CUT\)/.test(src) && !/readReportDates\(/.test(src);
+  check("the forward sections read the cut in one bulk read, no per-symbol GET", bulkRule(fwd));
+  check("MUTATION: back to one GET per symbol → caught",
+    !bulkRule(fwd.replace("await readReportDatesBulk(DUE_STRIP_CUT)", "await Promise.all(DUE_STRIP_CUT.map((s) => readReportDates(s)))")));
+  check("a failed bulk read resolves both sections to 'unavailable'",
+    /if \(!read\.ok\) \{[\s\S]*?manifestRead: false[\s\S]*?expected: \{ kind: "unavailable" \}/.test(fwd));
+
+  const store = readCodeOnly("lib/server/secReportDatesStore.ts");
+  const bulk = grabFunction(store, "readReportDatesBulk") ?? "";
+  const load = (src) => lift(`const reportDatesKey = (s) => "k:" + s;\n${src.replace(/^export /, "")}\nexport { readReportDatesBulk };`);
+  const run = async (src, stub) => { globalThis.__redis = stub; return (await load(src.replace(/\bredis\b/g, "globalThis.__redis"))).readReportDatesBulk(["A", "B", "C"]); };
+  let calls = 0;
+  const good = await run(bulk, { mget: async (...keys) => { calls++; return keys.map((k) => (k === "k:B" ? null : { events: [] })); } });
+  check("one MGET for three records, a missing one null", calls === 1 && good.ok && good.recs.get("A") !== null && good.recs.get("B") === null, `calls ${calls}`);
+  const bad = await run(bulk, { mget: async () => { throw new Error("down"); } });
+  check("a thrown MGET is ok:false, not three nulls", bad.ok === false);
+  const folded = bulk.replace(/(bulk read failed[^\n]*\n\s*)return \{ ok: false \};/, "$1return { ok: true, recs: new Map() };");
+  const swallowed = await run(folded, { mget: async () => { throw new Error("down"); } }).catch(() => ({ ok: false }));
+  check("MUTATION: the failure folded into an empty set → caught", folded !== bulk && swallowed.ok === true);
+}
+
 console.log(
   failures === 0
-    ? "\nThe fifty forward reads are memoised, the marker is read once, and the scan is gated.\n"
+    ? "\nThe forward reads (one MGET of the cut) are memoised, the render reads no marker, and the scan is gated.\n"
     : `\n${failures} assertion(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);

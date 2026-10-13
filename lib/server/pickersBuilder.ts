@@ -11,7 +11,8 @@
 // CACHING_REFRESH_ARCHITECTURE_PLAN.md (project doc) for the full context.
 
 import { Redis } from "@upstash/redis";
-import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { chartHref } from "@/lib/chartHref";
+import { BULK_READ_CACHE, PAGE_READ_CACHE } from "./redisCacheMode";
 import { readMarketState } from "./marketState";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../ta/divergence";
@@ -25,8 +26,11 @@ import {
 import { getDailyHistoryBulk } from "./historyCache";
 import { priceProviderFor, type PriceProvider } from "./marketData/provider";
 import { tiingoPickerHistory, type PickerHistoryStats } from "./marketData/pickerHistory";
+import { readTiingoTickerMovers } from "./tiingoMovers";
 import type { EodBar } from "./marketData/types";
+import { computePerfFromBars, perfRowRefused, publicPickersPayload, type PerfRow } from "../pickerPerf";
 import { pickersWithoutBars } from "../pickersPublic";
+import { chartLiteOf, type ChartLite } from "../pickerChartLite";
 import { recordRedisRead, flushRedisReadMeter } from "./redisBandwidth";
 import {
   chunkByBytes,
@@ -43,8 +47,14 @@ import {
 } from "./dynamicUniverseCache";
 import { readSearchDemand } from "./searchDemand";
 import { PRESET_UNIVERSE } from "./presetUniverse";
+import { readTopByCap, TOP_BY_CAP } from "./topByCap";
+import { toDashed } from "../symbolSpellings.mjs";
 import { isPriceExcluded } from "../priceExcluded.mjs";
 import { POSITIVE_LAST_EARNINGS_ENABLED } from "../positiveLastEarnings";
+import { moneyIsUsd, pickersFundamentalsSource, readSecPickerRows, type SecPickerRow } from "./pickersSecFundamentals";
+import { SEC_GROWTH_COPY, secStrongEarningsGrowth } from "./pickersSecEarningsGrowth";
+import { trueRangeSpike } from "../pickerScreenRules";
+import { compareEpsGrowth, type EpsGrowthView } from "../epsGrowthView";
 import {
   readPickerChartsBulk,
   writePickerChartsBulk,
@@ -96,6 +106,8 @@ type MarketRow = {
   rangePct: number | null;
   last: number | null;
   volume: number | null;
+  /** Tiingo ticker movers only (step 5): "Last close · 1 Oct". */
+  label?: string | null;
 };
 
 type MarketPayload = {
@@ -133,6 +145,8 @@ type PickerItem = {
   epsGrowthPct?: number | null;
   revenueGrowthPct?: number | null;
   releaseDate?: string | null;
+  /** The Earnings Growth page's column and order (#553 COWORK #186 ruling 1). */
+  epsGrowth?: EpsGrowthView;
   /**
    * Trend Helper (Slow) for the drawn window only, joined by date in
    * PickerResultPage. NOT the enriched chartPoints array: those would duplicate
@@ -244,6 +258,12 @@ type SignalRecord = {
   preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
   chartPoints?: PickerChartPoint[];
+  /**
+   * The bars' summary (lib/pickerChartLite.ts, #553 COWORK #214): written when
+   * the bars move to the picker-charts hash, so a payload read carries what the
+   * grid derives from bars without reading the hash.
+   */
+  chartLite?: ChartLite | null;
   supportResistanceZone?: PickerSupportResistanceZone;
   dominantOversoldIndicator?: string;
   dominantOverboughtIndicator?: string;
@@ -279,6 +299,12 @@ type SignalRecord = {
   // from the preset mega-cap list or the day's market activity. Carried on the
   // payload so the All Stocks / pickers UI can badge or group these later.
   isPopularSearch?: boolean;
+  // THE PERFORMANCE TAB FROM STORED BARS (#553 CODE-B #94 B6): 1W/1M/6M/YTD/1Y
+  // computed here, at build time, from this symbol's Tiingo bars, with the
+  // close they run to and a true reason for each refused period
+  // (lib/pickerPerf.ts). Only with PRICE_PROVIDER_PICKERS=tiingo; absent on
+  // the FMP path, where the page keeps stockDataCache's figures.
+  perf?: PerfRow;
 };
 
 type TickerEarningsGrowthItem = {
@@ -451,6 +477,14 @@ const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
+// The payload's chunk MGET and every write of the payload itself (the chunks,
+// up to the 5 MB budget each; the manifest; the reduced fallback) take the 20 s
+// deadline; everything else here stays on the page's 6 s (#553 CODE-B #144,
+// COWORK #156).
+const bulkRedis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(BULK_READ_CACHE)
+    : null;
 
 /* ----------------------------- caching ------------------------------ */
 
@@ -598,6 +632,15 @@ function pctChange(from: number, to: number) {
   return ((to - from) / from) * 100;
 }
 
+/** The weekly trend-flip cards' candle count (#553 COWORK #186 ruling 6). */
+const WEEKLY_FLIP_CANDLES = 64;
+
+/** A candle with nothing but its date and OHLC, rounded as buildPickerChartPoints rounds. */
+function slimCandle(p: { date: string; open?: number; high?: number; low?: number; close: number }): PickerChartPoint {
+  const r = (v: number | undefined) => (typeof v === "number" && Number.isFinite(v) ? Number(v.toFixed(2)) : undefined);
+  return { date: p.date.slice(0, 10), open: r(p.open), high: r(p.high), low: r(p.low), close: Number(p.close.toFixed(2)) };
+}
+
 function buildPickerChartPoints(points: Point[], bars = 72): PickerChartPoint[] {
   const clean = points.filter((point) => point?.date && Number.isFinite(point.close));
   const closes = clean.map((point) => point.close);
@@ -662,18 +705,8 @@ function buildDashboardHref(args: {
   timeframe?: "D" | "W" | "M";
   indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
 }) {
-  const params = new URLSearchParams();
-  params.set("symbol", args.symbol);
-
-  if (args.timeframe) {
-    params.set("tf", args.timeframe);
-  }
-
-  if (args.indicator) {
-    params.set("indicator", args.indicator);
-  }
-
-  return `/?${params.toString()}`;
+  // Lands on the analyser (#563 COWORK #151).
+  return chartHref(args.symbol, { tf: args.timeframe, indicator: args.indicator });
 }
 
 function scoreLinear(value: number, min: number, max: number) {
@@ -793,7 +826,7 @@ async function readPickersV10(manifestKey = PICKERS_MANIFEST_KEY): Promise<Cache
   if (!Array.isArray(manifest.chunkKeys) || !manifest.head) return null;
 
   const chunks = manifest.chunkKeys.length
-    ? ((await redis.mget<PickerItem[][]>(...manifest.chunkKeys)) ?? [])
+    ? ((await (bulkRedis ?? redis).mget<PickerItem[][]>(...manifest.chunkKeys)) ?? [])
     : [];
 
   const records: PickerItem[] = [];
@@ -809,7 +842,7 @@ async function readPickersV10(manifestKey = PICKERS_MANIFEST_KEY): Promise<Cache
   };
 }
 
-async function readPickersCache(opts: { lastGood?: boolean } = {}) {
+async function readPickersCache(opts: { lastGood?: boolean; caller?: string } = {}) {
   if (!redis) return null;
 
   try {
@@ -825,29 +858,31 @@ async function readPickersCache(opts: { lastGood?: boolean } = {}) {
     if (!entry || typeof entry !== "object") return null;
     if (!entry.data || typeof entry.data !== "object") return null;
 
-    // Re-attach the chart series that writePickersCache split out, so every
-    // consumer sees the identical payload shape it saw before the series moved
-    // off-payload. Records that still carry their own chartPoints are left
-    // alone -- that's a cache entry written by a deploy predating this change,
-    // and it must keep working through the rollout.
+    // THE CHARTS HASH IS NOT RE-ATTACHED ANY MORE (#553 COWORK #214, cut 1,
+    // 2026-10-12). Every read used to pull every symbol's 72 bars (~7.6 MB)
+    // back out of msh:picker-charts:v1 so the page could ship them; the record
+    // now carries `chartLite` (lib/pickerChartLite.ts), which is everything the
+    // grid derives from bars, and the candles are fetched per visible row by
+    // /api/picker-charts. scripts/check-picker-charts-off-read.mjs holds this.
+    //
+    // ONE ROLLOUT CASE: a payload written before this change has neither bars
+    // nor a lite on its records. For those (and only those) the hash is read
+    // with HMGET and summarised; the bars themselves are NOT attached. It goes
+    // quiet after the first build under this code (the manifest's TTL is 1 h).
     const records = Array.isArray(entry.data.signalRecords) ? entry.data.signalRecords : [];
-    // The stripped payload's own bytes, ~2 KB per record. readPickerChartsBulk
-    // below meters the other ~11 KB per symbol separately, because the two move
-    // for different reasons and the whole point of the meter is to rank them.
-    await recordRedisRead("picker-payload", records.length);
-    const missing = records
-      .filter((record) => !Array.isArray(record.chartPoints) || !record.chartPoints.length)
+    await recordRedisRead("picker-payload", records.length, opts.caller);
+    const unsummarised = records
+      .filter((record) => !record.chartLite && (!Array.isArray(record.chartPoints) || !record.chartPoints.length))
       .map((record) => record.symbol);
 
-    if (missing.length) {
-      const series = await readPickerChartsBulk(missing);
+    if (unsummarised.length) {
+      const series = await readPickerChartsBulk(unsummarised, opts.caller);
       if (series.size) {
         entry.data = {
           ...entry.data,
           signalRecords: records.map((record) => {
-            if (Array.isArray(record.chartPoints) && record.chartPoints.length) return record;
             const points = series.get(record.symbol);
-            return points ? { ...record, chartPoints: points as PickerChartPoint[] } : record;
+            return points && !record.chartLite ? { ...record, chartLite: chartLiteOf(points) } : record;
           }),
         };
       }
@@ -909,7 +944,7 @@ function splitPickersPayload(data: PickersPayload): {
     const points = record.chartPoints;
     if (!Array.isArray(points) || !points.length) return record;
     series.set(record.symbol, points as StoredChartPoint[]);
-    return { ...record, chartPoints: undefined };
+    return { ...record, chartPoints: undefined, chartLite: chartLiteOf(points) };
   });
 
   return { stripped: { ...data, signalRecords }, series };
@@ -1004,7 +1039,7 @@ function logPayloadWriteSize(entry: CachedPickersPayload, label = "full") {
  *   AND SO DOES Promise.all, WHICH THE BRIEF DID NOT ANTICIPATE.
  *   @upstash/redis sets `enableAutoPipelining` to TRUE by default
  *   (chunk-K7RP6Y36.mjs:4488) and nothing in this project turns it off --
- *   PAGE_READ_CACHE only sets `cache`. Measured against the installed client
+ *   PAGE_READ_CACHE sets only `cache` and a request deadline. Measured against the installed client
  *   by stubbing fetch: three SEQUENTIALLY AWAITED sets produce three request
  *   bodies; three CONCURRENT sets produce ONE body containing all three.
  *   Concurrency here is a pipeline with a different name.
@@ -1019,6 +1054,7 @@ function logPayloadWriteSize(entry: CachedPickersPayload, label = "full") {
  */
 async function writePickersChunked(stripped: PickersPayload) {
   if (!redis) return;
+  const writeRedis = bulkRedis ?? redis;
 
   const { signalRecords, ...head } = stripped;
   const records = Array.isArray(signalRecords) ? signalRecords : [];
@@ -1076,7 +1112,7 @@ async function writePickersChunked(stripped: PickersPayload) {
     // this project does not enable no-await-in-loop -- a disable directive for
     // a rule that is off warns as unused, and the next lint cleanup would
     // delete it and take the explanation with it.
-    await redis.set(chunkKeys[i], groups[i], { ex: PICKERS_CHUNK_TTL_SECONDS });
+    await writeRedis.set(chunkKeys[i], groups[i], { ex: PICKERS_CHUNK_TTL_SECONDS });
   }
 
   const manifest: PickersManifest = {
@@ -1093,7 +1129,7 @@ async function writePickersChunked(stripped: PickersPayload) {
   // staler symbol list than the payload it names.
   const symbols = records.map((record) => record.symbol).filter(Boolean);
   account(tryMeasureSet(PICKERS_SYMBOLS_KEY, symbols, PICKERS_SYMBOLS_TTL_SECONDS));
-  await redis.set(PICKERS_SYMBOLS_KEY, symbols, { ex: PICKERS_SYMBOLS_TTL_SECONDS });
+  await writeRedis.set(PICKERS_SYMBOLS_KEY, symbols, { ex: PICKERS_SYMBOLS_TTL_SECONDS });
 
   // LAST, and on its own. Everything it points at is already durable.
   //
@@ -1102,10 +1138,10 @@ async function writePickersChunked(stripped: PickersPayload) {
   // size does NOT fall with the chunk budget. If the head ever grows, this is
   // the body that breaches, and chunking harder would not help.
   account(tryMeasureSet(PICKERS_MANIFEST_KEY, manifest, PICKERS_REDIS_TTL_SECONDS));
-  await redis.set(PICKERS_MANIFEST_KEY, manifest, { ex: PICKERS_REDIS_TTL_SECONDS });
+  await writeRedis.set(PICKERS_MANIFEST_KEY, manifest, { ex: PICKERS_REDIS_TTL_SECONDS });
   // The same manifest again, for the contexts that never build. After the 1h
   // one, so a reader of either always finds complete chunks. +1 SET a build.
-  await redis.set(PICKERS_LAST_GOOD_MANIFEST_KEY, manifest, { ex: PICKERS_LAST_GOOD_TTL_SECONDS });
+  await writeRedis.set(PICKERS_LAST_GOOD_MANIFEST_KEY, manifest, { ex: PICKERS_LAST_GOOD_TTL_SECONDS });
 
   const requests = groups.length + 3;
   const inflationPct =
@@ -1164,7 +1200,8 @@ async function writePickersCache(data: PickersPayload, reduced?: () => PickersPa
     // a day the full one breaches, so its size is the more interesting of the
     // two on exactly the days this instrumentation exists for.
     logPayloadWriteSize(entry, "reduced");
-    await redis.set(PICKERS_REDIS_KEY, entry, {
+    const writeRedis = bulkRedis ?? redis;
+    await writeRedis.set(PICKERS_REDIS_KEY, entry, {
       ex: PICKERS_REDIS_TTL_SECONDS,
     });
     console.warn("[pickers] cached reduced payload (chartPoints stripped outside sections)");
@@ -1736,6 +1773,8 @@ function atr(points: Point[], period = 14): (number | null)[] {
 
 type AggregatedPoint = {
   date: string;
+  /** The period's first open (#553 COWORK #186 ruling 6: the weekly flip candles). */
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -1779,6 +1818,7 @@ function aggregatePoints(points: Point[], interval: "w" | "m"): AggregatedPoint[
       currentKey = key;
       current = {
         date: point.date,
+        open: point.open,
         close: point.close,
         high: point.high,
         low: point.low,
@@ -2402,12 +2442,39 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
   };
 }
 
+// THE OVERSOLD / OVERBOUGHT RULE (#553 COWORK #168, owner-approved
+// 2026-10-06). It was any 2 of the 6 checks, so a stock simply 5%+ under both
+// its MA50 and MA200 was "oversold" with no momentum reading at all (302 of 685
+// on 5 Oct). Now RSI(14) must be one of them: RSI <= 30 AND at least one more
+// oversold check, with more oversold readings than overbought; overbought
+// mirrors it with RSI >= 70. `rule: "any-two"` keeps the old rule for the
+// before/after census only.
+export type CompositeGateRule = "rsi-plus-one" | "any-two";
+
+export function compositeGate(
+  c: Pick<CompositeResult, "oversold" | "overbought" | "oversoldIndicators" | "overboughtIndicators">,
+  side: "oversold" | "overbought",
+  rule: CompositeGateRule = "rsi-plus-one"
+): boolean {
+  const mine = side === "oversold" ? c.oversold : c.overbought;
+  const theirs = side === "oversold" ? c.overbought : c.oversold;
+  if (!(mine >= 2 && mine > theirs)) return false;
+  if (rule === "any-two") return true;
+  const fired = (side === "oversold" ? c.oversoldIndicators : c.overboughtIndicators) ?? [];
+  return fired.includes("RSI(14)");
+}
+
 function pickIsGreenOverallSignal(c: CompositeResult) {
-  return c.oversold >= 2 && c.oversold > c.overbought;
+  return compositeGate(c, "oversold");
 }
 
 function pickIsRedOverallSignal(c: CompositeResult) {
-  return c.overbought >= 2 && c.overbought > c.oversold;
+  return compositeGate(c, "overbought");
+}
+
+/** The composite, for the read-only rule census (scripts/oversold-rule-census.mjs). */
+export function compositeForStudy(points: Point[]) {
+  return buildCompositeFromHistory(points);
 }
 
 function buildTrendScoreFromHistory(points: Point[]): TrendScoreResult | null {
@@ -2724,6 +2791,10 @@ function computeAthPullback(points: Point[]): AthPullbackCandidate | null {
 
   const drawdownPct = ((allTimeHigh - lastClose) / allTimeHigh) * 100;
   if (drawdownPct < 20) return null;
+  // AND ABOVE MA200 (#553 COWORK #186 ruling 5): a pullback in an uptrend, not
+  // a stock in a downtrend that also happens to be off its high.
+  const ma200Gate = lastNum(movingAverage(closes, 200));
+  if (typeof ma200Gate !== "number" || !(lastClose > ma200Gate)) return null;
 
   const adv = averageDollarVolume(points, 20);
   const advScore = liquidityScore(points);
@@ -3007,6 +3078,12 @@ type TrendFlipResult = {
    * that already has a documented timeout cliff.
    */
   dailyTrend?: { dates: string[]; line: Array<number | null>; state: number[] };
+  /**
+   * The same over the CLOSED weekly series, aligned to it, when a weekly flip
+   * qualified (#553 COWORK #186 ruling 6): the weekly cards draw weekly candles
+   * with this line, so the colour change is the flip week.
+   */
+  weeklyTrend?: { dates: string[]; line: Array<number | null>; state: number[] };
 };
 
 // Bars 0, 1, 2, 3 inclusive -- "flipped on the latest bar, or in the three
@@ -3113,8 +3190,24 @@ function computeTrendFlips(pts: Point[], now = new Date()): TrendFlipResult {
       })()
     : undefined;
 
+  // THE WEEKLY LINE (#553 COWORK #186 ruling 6): one more HMA pass, only for a
+  // symbol whose weekly flip qualified, on the same closed weeks the flip was
+  // measured on.
+  const weeklyQualifies = qualifies(weeklyFlip, 1) || qualifies(weeklyFlip, -1);
+  const weeklyTrend = weeklyQualifies
+    ? (() => {
+        const series = computeTrendHelper(weekly.map((b) => b.close), trendLen, confirmBars);
+        return {
+          dates: weekly.map((b) => b.date.slice(0, 10)),
+          line: series.line,
+          state: series.state as number[],
+        };
+      })()
+    : undefined;
+
   return {
     dailyTrend,
+    weeklyTrend,
     trendFlipBullish: qualifies(dailyFlip, 1),
     trendFlipBearish: qualifies(dailyFlip, -1),
     trendFlipBullishWeekly: qualifies(weeklyFlip, 1),
@@ -3354,6 +3447,9 @@ async function buildPickersPayload(
   //                          filling whatever slots remain up to UNIVERSE_CAP.
   // Slice 3 backfills any slots slices 1-2 didn't use, so there are never gaps.
   const universeSlots = new Set<string>();
+  // ONE SYMBOL, ONE SLOT, WHATEVER ITS SPELLING (#553 COWORK #186): the preset
+  // writes BRK.B, the SEC and Tiingo stores (the size slice) write BRK-B.
+  const slotSpellings = new Set<string>();
   const fillSlots = (symbols: string[], maxFromThisSource: number) => {
     let added = 0;
     for (const raw of symbols) {
@@ -3363,23 +3459,50 @@ async function buildPickersPayload(
       // The dated PRICE_EXCLUDED list (#553 COWORK #61): hidden from the
       // universe, so from every preset, signal and section built on it.
       if (!s || universeSlots.has(s) || isPriceExcluded(s)) continue;
+      if (slotSpellings.has(toDashed(s))) continue;
       universeSlots.add(s);
+      slotSpellings.add(toDashed(s));
       added++;
     }
   };
   fillSlots(PRESET_UNIVERSE, PRESET_UNIVERSE.length);
+  // THE SIZE SLICE (#553 COWORK #182/#186): the largest TOP_BY_CAP companies by
+  // SEC cover shares x the stored Tiingo close, straight after the preset, so
+  // a large steady company no longer depends on having been a mover once
+  // (topByCap.ts). Read from the Data Cache, no new command.
+  const topByCap = await readTopByCap(TOP_BY_CAP);
+  fillSlots(topByCap, TOP_BY_CAP);
   fillSlots(popularSearchSymbols, POPULAR_SEARCH_QUOTA);
   fillSlots(dynamicUniverse, UNIVERSE_CAP); // backfills the remainder
   const universe = Array.from(universeSlots);
 
+  // STRONG EARNINGS GROWTH FROM THE FILINGS (#553 CODE-B #94 B5, 2026-10-03).
+  // Under PICKERS_FUNDAMENTALS's SEC default the list's membership comes from
+  // the picker SEC hash (pickersSecEarningsGrowth.ts) -- ONE HMGET here, per
+  // build, in place of the chunked FMP earnings MGET it replaces; nothing per
+  // page view. The FMP earnings rows are then read only while the hidden
+  // Positive Last Earnings screener is switched back on, which still needs
+  // them; with it off (the default) they are neither read nor queued.
+  // PICKERS_FUNDAMENTALS=fmp is the rollback to the FMP rule, unchanged.
+  const earningsGrowthFromSec = pickersFundamentalsSource() === "sec";
+  const needFmpEarnings = !earningsGrowthFromSec || POSITIVE_LAST_EARNINGS_ENABLED;
+
   // READ BEFORE QUEUEING, and pass the result on. These two used to run the
   // other way round over the same universe, so every earnings key was fetched
   // twice -- once to decide whether to queue it and once to use it.
-  const earningsBySymbol = await readCachedFmpEarningsBulk(universe);
+  const earningsBySymbol: Map<string, EarningsRow[]> = needFmpEarnings
+    ? await readCachedFmpEarningsBulk(universe)
+    : new Map();
 
   // Queue missing earnings data for the background warmer. The picker route reads
   // earnings from Redis only, so page loads never spend FMP calls on earnings.
-  if (!dryRun) await queueEarningsWarmupSymbols(universe, earningsBySymbol);
+  if (needFmpEarnings) {
+    if (!dryRun) await queueEarningsWarmupSymbols(universe, earningsBySymbol);
+  }
+
+  const secRowsBySymbol: Map<string, SecPickerRow> = earningsGrowthFromSec
+    ? await readSecPickerRows(universe)
+    : new Map();
 
   // Same idea for price history: one pipelined mget for the whole universe
   // up front instead of one Redis GET per symbol inside the loop below (was
@@ -3426,6 +3549,9 @@ async function buildPickersPayload(
   // registering only the fallback symbols would be a truncated list, which
   // reconcileToList refuses by design.
   let historyBySymbol: ReadonlyMap<string, Point[]>;
+  // B6: which symbols' series are Tiingo's, so the Performance tab is computed
+  // from Tiingo bars only. Null off the Tiingo path (no `perf` is written).
+  let perfFromTiingo: ReadonlySet<string> | null = null;
   if (opts.historyOverride && dryRun) {
     historyBySymbol = opts.historyOverride;
     lastHistoryStats = null;
@@ -3436,6 +3562,7 @@ async function buildPickersPayload(
         : null,
     });
     historyBySymbol = got.bySymbol;
+    perfFromTiingo = got.fromTiingo;
     lastHistoryStats = { provider: "tiingo", universe: universe.length, ...got.stats };
   } else {
     historyBySymbol = await getDailyHistoryBulk(universe, {
@@ -3495,6 +3622,13 @@ async function buildPickersPayload(
           }
 
           const earningsRows = earningsBySymbol.get(symbol) ?? [];
+          // B6: on the Tiingo path, a series the FMP fallback supplied gets no
+          // returns (they would be FMP figures); it says why instead.
+          const perf: PerfRow | undefined = perfFromTiingo
+            ? perfFromTiingo.has(symbol)
+              ? computePerfFromBars(pts)
+              : perfRowRefused("noBars")
+            : undefined;
 
           const dynamicName = isDynamicUniverse(symbol);
           const popularName = isPopularSearch(symbol);
@@ -3516,17 +3650,29 @@ async function buildPickersPayload(
             });
           }
 
-          const strongEarningsGrowthCandidate = computeStrongEarningsGrowthCandidate(earningsRows);
+          // SEC default: filed figures only, never the FMP rows (see above).
+          const secRow = secRowsBySymbol.get(symbol);
+          const strongEarningsGrowthCandidate = earningsGrowthFromSec
+            ? secStrongEarningsGrowth(secRow, secRow ? moneyIsUsd(secRow.unit) : false)
+            : computeStrongEarningsGrowthCandidate(earningsRows);
           if (strongEarningsGrowthCandidate) {
             strongEarningsGrowth.push({
               symbol,
               chartPoints,
               tone: strongEarningsGrowthCandidate.tone,
               note: strongEarningsGrowthCandidate.note,
-              _score: strongEarningsGrowthCandidate.score + dynamicBoost(symbol),
+              // RANKED BY EPS GROWTH, HIGHEST FIRST, on the SEC default (#553
+              // COWORK #161): the page says so in a "Ranked by" line, so the
+              // order is the filed EPS growth alone -- no popularity boost and
+              // no capped blend, which would make that line untrue. The FMP
+              // rollback keeps its old composite.
+              _score: earningsGrowthFromSec
+                ? (strongEarningsGrowthCandidate.epsGrowthPct ?? 0)
+                : strongEarningsGrowthCandidate.score + dynamicBoost(symbol),
               epsGrowthPct: strongEarningsGrowthCandidate.epsGrowthPct,
               revenueGrowthPct: strongEarningsGrowthCandidate.revenueGrowthPct,
               releaseDate: strongEarningsGrowthCandidate.releaseDate,
+              epsGrowth: earningsGrowthFromSec ? (strongEarningsGrowthCandidate as { view?: EpsGrowthView }).view : undefined,
             });
           }
 
@@ -3731,11 +3877,37 @@ async function buildPickersPayload(
           // enriched chartPoints array instead is what the first attempt did,
           // and takeTop discarded it: section chartPoints are stripped because
           // they duplicate signalRecords, so the line has to ride separately.
-          // The weekly sections get nothing: their flip is weekly and this line
-          // is daily, so it would contradict the date printed in the same row.
+          // The weekly sections never take this daily line: their flip is weekly,
+          // so it would contradict the date printed in the same row.
+          // THE FULL SERIES STAY OUT OF THE RECORD (#553 COWORK #186 ruling 6,
+          // measured 2026-10-07): spread whole, every qualifying record carried
+          // its entire daily and weekly Trend Helper history -- 0.9 MB of
+          // signalRecords for the weekly one alone. Only the drawn window ships,
+          // as the sections' trendSeries; nothing reads these from a record.
+          const { dailyTrend: _dailyFull, weeklyTrend: _weeklyFull, ...trendFlipFlags } = trendFlips;
+          void _dailyFull;
+          void _weeklyFull;
           const dailyTrendSeries = trendFlips.dailyTrend
             ? trendTailForPoints(chartPoints, trendFlips.dailyTrend)
             : undefined;
+          // THE WEEKLY CARDS (#553 COWORK #186 ruling 6): the last 64 CLOSED
+          // weekly candles (the week in progress is not drawn: the flip is
+          // measured on closed weeks only) with the weekly line over them, so
+          // the colour changes on the flip week. Slim points -- date and OHLC
+          // only -- because these ride in the payload (keepChartPoints).
+          const weeklyFlipPoints = trendFlips.weeklyTrend
+            ? (() => {
+                const closedWeeks = new Set(trendFlips.weeklyTrend.dates);
+                return aggregatePoints(pts, "w")
+                  .filter((p) => closedWeeks.has(p.date.slice(0, 10)))
+                  .slice(-WEEKLY_FLIP_CANDLES)
+                  .map((p) => slimCandle(p));
+              })()
+            : undefined;
+          const weeklyTrendSeries =
+            weeklyFlipPoints && trendFlips.weeklyTrend
+              ? trendTailForPoints(weeklyFlipPoints, trendFlips.weeklyTrend, WEEKLY_FLIP_CANDLES)
+              : undefined;
 
           // The four flip sections. RANKED BY RECENCY ALONE: `_score` is the
           // negated bar count and NOTHING else -- no liquidity term and, in
@@ -3775,8 +3947,8 @@ async function buildPickersPayload(
               : "";
             target.push({
               symbol,
-              chartPoints,
-              trendSeries: weekly ? undefined : dailyTrendSeries,
+              chartPoints: weekly && weeklyFlipPoints?.length ? weeklyFlipPoints : chartPoints,
+              trendSeries: weekly ? weeklyTrendSeries : dailyTrendSeries,
               tone: direction === "Bullish" ? "green" : "red",
               note: dateLabel
                 ? `${direction} Trend Helper flip • ${dateLabel} • ${age}`
@@ -3967,15 +4139,12 @@ async function buildPickersPayload(
           );
 
           const volSma20Arr = smaNullable(volumeArr, 20);
-          const atrSma20Arr = smaNullable(atrArr, 20);
 
           const lastClose = closes.length ? closes[closes.length - 1] : null;
           const lastMA50 = lastNum(ma50Arr);
           const lastMA200 = lastNum(ma200Arr);
           const lastVol = lastNum(volumeArr);
           const lastVolSma20 = lastNum(volSma20Arr);
-          const lastAtr = lastNum(atrArr);
-          const lastAtrSma20 = lastNum(atrSma20Arr);
 
           const oversold = !!oversoldCandidate;
           const overbought = !!overboughtCandidate;
@@ -3988,11 +4157,10 @@ async function buildPickersPayload(
             lastVolSma20 > 0 &&
             lastVol >= lastVolSma20 * 1.8;
 
-          const atrSpike =
-            typeof lastAtr === "number" &&
-            typeof lastAtrSma20 === "number" &&
-            lastAtrSma20 > 0 &&
-            lastAtr >= lastAtrSma20 * 1.5;
+          // ALTERNATIVE B (#553 COWORK #186 ruling 4): today's true range >= 2x
+          // the prior ATR(14). The old rule (ATR14 >= 1.5x its 20-day mean)
+          // flagged nothing on 45 of 60 sessions.
+          const atrSpike = trueRangeSpike(pts, atrArr);
 
           const aboveMA50 =
             typeof lastClose === "number" &&
@@ -4051,7 +4219,7 @@ async function buildPickersPayload(
             dailyMa200Proximity: hasDailyMa200Proximity,
             weeklyMa200Proximity: hasWeeklyMa200Proximity,
             weeklyMa200DistancePct,
-            ...trendFlips,
+            ...trendFlipFlags,
             bullishRsiDivergence,
             bearishRsiDivergence,
             bullishMacdDivergence,
@@ -4094,6 +4262,7 @@ async function buildPickersPayload(
               : undefined,
             isDynamicUniverse: dynamicName,
             isPopularSearch: popularName,
+            perf,
           });
         } catch {
           failedSymbolCount++;
@@ -4138,7 +4307,7 @@ async function buildPickersPayload(
     const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
     return sorted
       .slice(0, n)
-      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, supportResistanceZone, chartFocus, dominantIndicator, firedIndicators, trendSeries, _score, score }) => ({
+      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, supportResistanceZone, chartFocus, dominantIndicator, firedIndicators, trendSeries, epsGrowth, _score, score }) => ({
         symbol,
         note,
         tone,
@@ -4155,6 +4324,7 @@ async function buildPickersPayload(
         // these two lists is dropped with no error and no type complaint -- the
         // Trend Helper line shipped that way once and rendered nothing.
         trendSeries,
+        epsGrowth,
         score: typeof score === "number" ? score : typeof _score === "number" ? Math.round(_score) : undefined,
       }));
   };
@@ -4184,6 +4354,18 @@ async function buildPickersPayload(
   // in COMPLETION order, which is not deterministic. Pre-sorting by symbol
   // makes a tie resolve alphabetically and the same input produce the same
   // page twice running.
+  // THE EARNINGS GROWTH ORDER (#553 COWORK #186 ruling 1): EPS growth %,
+  // highest first, then the small-base group by $ change (lib/epsGrowthView).
+  // Written into _score as a rank so takeTop keeps it; `score` stays the
+  // rounded % the section has always shipped.
+  if (earningsGrowthFromSec) {
+    strongEarningsGrowth.sort(compareEpsGrowth);
+    strongEarningsGrowth.forEach((item, i) => {
+      item.score = typeof item.epsGrowthPct === "number" ? Math.round(item.epsGrowthPct) : undefined;
+      item._score = strongEarningsGrowth.length - i;
+    });
+  }
+
   for (const bucket of [
     trendFlipBullishDaily,
     trendFlipBearishDaily,
@@ -4219,17 +4401,26 @@ async function buildPickersPayload(
     })] : []),
     buildSection({
       title: "Stocks With Strong Earnings Growth",
-      description:
-        "Stocks ranked by year-over-year EPS and revenue growth, recent positive earnings consistency and beat history.",
+      // The words follow the rule in force (#553 CODE-B #94 B5, 2026-10-03).
+      description: earningsGrowthFromSec
+        ? SEC_GROWTH_COPY.sectionDescription
+        : "Stocks ranked by year-over-year EPS and revenue growth, recent positive earnings consistency and beat history.",
       source: strongEarningsGrowth,
-      take: 20,
+      // EVERY candidate, so every row the page lists is in growth order: the
+      // page's flag is exactly this bucket (strongEarningsGrowth: !!candidate),
+      // and a row past the section would fall back to the conditions-met
+      // score. Items are chartPoints-stripped, so this costs little (#553 COWORK #161).
+      take: Math.max(20, strongEarningsGrowth.length),
     }),
     buildSection({
       title: "Daily MA200 Proximity",
       description:
         "Stocks trading close to their Daily MA200, with ranking favouring constructive MA200 behaviour over messy long-term weakness.",
       source: dailyMa200Proximity,
-      take: 20,
+      // EVERY CANDIDATE (#553 COWORK #184 item 4): the page names this order
+      // ("Ranked by 200-day setup score"), so every row it lists must be in it,
+      // not the first 20 and then the conditions-met score.
+      take: Math.max(20, dailyMa200Proximity.length),
     }),
     buildSection({
       title: "Weekly MA200 Proximity",
@@ -4249,7 +4440,9 @@ async function buildPickersPayload(
       // 40, not the 20 every other section uses: this section's ORDER is the
       // product, and the pages it backs show 36 rows before "See more". At 20
       // the last 16 rows would fall out of the ranked set and quietly revert to
-      // the tracked-conditions count.
+      // the tracked-conditions count. And at least every candidate (#553
+      // COWORK #161): the page now says "Ranked by most recent … flip", which
+      // must hold for every row it lists, not only the first 40.
       //
       // NO keepChartPoints, still: these items ship the symbol's ordinary daily
       // points via signalRecords. Their Trend Helper line rides along as
@@ -4259,28 +4452,34 @@ async function buildPickersPayload(
       // daily points", which stayed true and stopped being the whole story:
       // it read as a reason no chart data was needed here at all, which is how
       // the line came to be attached to chartPoints and silently stripped.
-      take: 40,
+      take: Math.max(40, trendFlipBullishDaily.length),
     }),
     buildSection({
       title: "Bearish Trend Flip Stocks (Daily)",
       description:
         "Stocks whose Trend Helper (Slow) state has confirmed a flip to bearish within the last four daily bars, most recent first.",
       source: trendFlipBearishDaily,
-      take: 40,
+      take: Math.max(40, trendFlipBearishDaily.length),
     }),
     buildSection({
       title: "Bullish Trend Flip Stocks (Weekly)",
       description:
         "Stocks whose Trend Helper (Slow) state has confirmed a flip to bullish within the last four closed weeks, most recent first.",
       source: trendFlipBullishWeekly,
-      take: 40,
+      take: Math.max(40, trendFlipBullishWeekly.length),
+      // The weekly candles ride with the item (#553 COWORK #186 ruling 6):
+      // signalRecords carries daily points only.
+      keepChartPoints: true,
     }),
     buildSection({
       title: "Bearish Trend Flip Stocks (Weekly)",
       description:
         "Stocks whose Trend Helper (Slow) state has confirmed a flip to bearish within the last four closed weeks, most recent first.",
       source: trendFlipBearishWeekly,
-      take: 40,
+      take: Math.max(40, trendFlipBearishWeekly.length),
+      // The weekly candles ride with the item (#553 COWORK #186 ruling 6):
+      // signalRecords carries daily points only.
+      keepChartPoints: true,
     }),
     buildSection({
       title: "Macro Support and Resistance Stocks",
@@ -4354,6 +4553,12 @@ async function buildPickersPayload(
   // its own re-derivation of "top movers" / "recent earnings growth".
   // Weekly MA200 proximity and buy-signal counts are cheap to derive
   // client-side from filteredSignalRecords, so they aren't duplicated here.
+  // STEP 5 (#553 COWORK #98 ruling 6): the ticker is the one page that SHOWS
+  // movers, so on PRICE_PROVIDER_POOL=tiingo they come from the Tiingo
+  // universe's stored EOD moves, labelled (lib/server/tiingoMovers.ts). A miss
+  // keeps the discovery list below.
+  const tiingoTickerMovers: MarketRow[] | null =
+    priceProviderFor("POOL") === "tiingo" ? await readTiingoTickerMovers(8).catch(() => null) : null;
   const topMoversForTicker = topMoversRaw
     .filter((row) => typeof row.changePct === "number" && Number.isFinite(row.changePct))
     // The market's movers come from outside the universe, so the dated
@@ -4400,7 +4605,7 @@ async function buildPickersPayload(
     sections,
     signalRecords: fullSignalRecords,
     tickerFeed: {
-      topMovers: topMoversForTicker,
+      topMovers: tiingoTickerMovers ?? topMoversForTicker,
       earningsGrowth: earningsGrowthForTicker,
     },
     degradedSymbolCount: failedSymbolCount,
@@ -4575,10 +4780,11 @@ export async function buildPickerStructureDiagnostics() {
   // than coincidental:
   //   /stock/[symbol]            tile reads "Overbought" iff rsi >= 70.
   //   /overbought-stocks-today   lists a stock iff comp.overbought >= 2 AND
-  //                              comp.overbought > comp.oversold AND it lands
-  //                              in the section's top 20.
-  // RSI is one of roughly six checks feeding the second, so neither implies the
-  // other. The rule is spelled out here so it can be checked rather than taken
+  //                              comp.overbought > comp.oversold AND RSI(14)
+  //                              is one of them (COWORK #168) AND it lands in
+  //                              the section's top 20.
+  // Since #168 the second implies rsi >= 70; the first does not imply the
+  // second. The rule is spelled out here so it can be checked rather than taken
   // on trust; both directions are listed separately.
   const obRank = new Map<string, number>();
   rows
@@ -4589,7 +4795,7 @@ export async function buildPickerStructureDiagnostics() {
   const inSection = (sym: string) => (obRank.get(sym) ?? Infinity) <= SECTION_TAKE;
 
   const vocabularyContradictions = {
-    rule: "stock page says Overbought iff rsi >= 70; screener lists iff compOverbought >= 2 && compOverbought > compOversold && sectionRank <= 20",
+    rule: "stock page says Overbought iff rsi >= 70; screener lists iff compOverbought >= 2 && compOverbought > compOversold && rsi >= 70 && sectionRank <= 20",
     onScreenerButNotOverboughtOnStockPage: rows
       .filter((r) => inSection(r.symbol) && (r.rsi === null || r.rsi < 70))
       .map((r) => ({ symbol: r.symbol, rsi: r.rsi, compOverbought: r.compOverbought, compOversold: r.compOversold, sectionRank: obRank.get(r.symbol) ?? null }))
@@ -5100,7 +5306,13 @@ async function recordBuildTrigger(entry: "getPickersData" | "GET" | "GET_WARM", 
 
 export async function getPickersData(
   origin: string,
-  opts: { forceRefresh?: boolean; forceHistoryRefresh?: boolean; eodBars?: PickersBuildOptions["eodBars"] } = {}
+  opts: {
+    forceRefresh?: boolean;
+    forceHistoryRefresh?: boolean;
+    eodBars?: PickersBuildOptions["eodBars"];
+    /** Who read it, for the bandwidth meter's per-page rows (#553 COWORK #214). */
+    caller?: string;
+  } = {}
 ): Promise<PickersPayload> {
   const forceRefresh = opts.forceRefresh ?? false;
   const forceHistoryRefresh = opts.forceHistoryRefresh ?? false;
@@ -5112,7 +5324,7 @@ export async function getPickersData(
 
   // READ ALWAYS. See the note above -- this is the line the three fallbacks
   // below depend on, and making it conditional on force is what disabled them.
-  const cached = await readPickersCache();
+  const cached = await readPickersCache({ caller: opts.caller });
 
   // THIS RETURN IS ALSO WHY THERE IS NO "lost the lock but has a cache" BRANCH
   // below. An unforced request holding a cached payload is served here, before
@@ -5126,6 +5338,12 @@ export async function getPickersData(
   // code that quietly starts firing.
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
+    // THE CACHED PATH FLUSHES ITS OWN METER READS (#553 COWORK #214, cut 3).
+    // Only builds flushed before, so a page read was counted only when one
+    // instance reached METER_AUTOFLUSH_READS -- the meter saw 7-27 picker reads
+    // a day against the ~800 the Upstash bill implies. One pipeline per Redis
+    // read (the 60 s memo above returns before it, so a memo hit costs nothing).
+    await flushRedisReadMeter();
     return cached.data;
   }
 
@@ -5271,9 +5489,11 @@ async function handlePickersRequest(
 
   let forceRefresh = false;
   let ownerKeyed = false;
-  // NO PRICE BARS IN THIS PUBLIC JSON (#553 COWORK #105): every payload answer
-  // below goes through pickersWithoutBars (lib/pickersPublic.ts), which removes
-  // every chartPoints. Pages read the bars in-process (getPickersData).
+  // NO TIINGO BARS OR RETURNS IN THIS PUBLIC JSON (#553 COWORK #103/#105/#107):
+  // every payload answer below goes through
+  // publicPickersPayload(pickersWithoutBars(..)), which removes every
+  // chartPoints (lib/pickersPublic.ts) and signalRecords[].perf
+  // (lib/pickerPerf.ts). Pages read both in-process (getPickersData).
 
   if (forceRequested) {
     const ip = getClientIp(req);
@@ -5319,7 +5539,7 @@ async function handlePickersRequest(
   if (forceHistoryRefresh) forceRefresh = true;
 
   if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
-    return NextResponse.json(pickersWithoutBars(memo.data), {
+    return NextResponse.json(publicPickersPayload(pickersWithoutBars(memo.data)), {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
         "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
@@ -5330,12 +5550,13 @@ async function handlePickersRequest(
   // READ ALWAYS, SERVE CONDITIONALLY. Identical to getPickersData -- see the
   // long note there for why making this conditional on force is what disabled
   // the degraded fallback, the lock fallback and the catch fallback at once.
-  const cached = await readPickersCache();
+  const cached = await readPickersCache({ caller: "api-pickers" });
 
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
+    await flushRedisReadMeter(); // the cached path flushes too (#553 COWORK #214)
 
-    return NextResponse.json(pickersWithoutBars(cached.data), {
+    return NextResponse.json(publicPickersPayload(pickersWithoutBars(cached.data)), {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
         // Set on EVERY response path, not just the one that built something.
@@ -5356,7 +5577,7 @@ async function handlePickersRequest(
     const lastGood = await readPickersLastGood();
     if (lastGood?.data) {
       memo = { ts: now, data: lastGood.data };
-      return NextResponse.json(pickersWithoutBars(lastGood.data), {
+      return NextResponse.json(publicPickersPayload(pickersWithoutBars(lastGood.data)), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": "false",
@@ -5381,7 +5602,7 @@ async function handlePickersRequest(
     if (published?.data) {
       memo = { ts: now, data: published.data };
 
-      return NextResponse.json(pickersWithoutBars(published.data), {
+      return NextResponse.json(publicPickersPayload(pickersWithoutBars(published.data)), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
@@ -5437,7 +5658,7 @@ async function handlePickersRequest(
       recordBuildStats(data, { degradedFallbackUsed: true, wrote: false });
       memo = { ts: now, data: cached.data };
 
-      return NextResponse.json(pickersWithoutBars(cached.data), {
+      return NextResponse.json(publicPickersPayload(pickersWithoutBars(cached.data)), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-Degraded-Fallback": "true",
@@ -5450,7 +5671,7 @@ async function handlePickersRequest(
     memo = { ts: now, data };
     await writePickersCache(data, () => buildReducedPickersPayload(data));
 
-    return NextResponse.json(pickersWithoutBars(data), {
+    return NextResponse.json(publicPickersPayload(pickersWithoutBars(data)), {
       headers: {
         "Cache-Control": forceRefresh
           ? "no-store"
@@ -5462,7 +5683,7 @@ async function handlePickersRequest(
     if (cached?.data) {
       memo = { ts: now, data: cached.data };
 
-      return NextResponse.json(pickersWithoutBars(cached.data), {
+      return NextResponse.json(publicPickersPayload(pickersWithoutBars(cached.data)), {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",

@@ -157,11 +157,15 @@ function rules(srcs) {
   // benchmarks
   const bench = code[FILES.bench];
   const inner = fnBody(bench, "getBenchmarksDataInner");
-  const tBranch = inner.slice(inner.indexOf("&& stockPageOnTiingo()"), inner.indexOf("const stored = await readRedis"));
+  const tBranch = inner.slice(inner.indexOf("&& stockPageOnTiingo()"), inner.indexOf("// NO FMP FALLBACK"));
   want("the Tiingo tiles are gated on STOCK_PAGE and the stock scope", /scope === "stock" && stockPageOnTiingo\(\)/.test(inner));
   want("the Tiingo tiles come before the msh:benchmarks read, and are never written to it",
     tBranch.length > 0 && /await getBenchmarksTiingo\(/.test(tBranch) && !/writeRedis|redis\./.test(tBranch) && !/writeRedis|redis\./.test(fnBody(bench, "getBenchmarksTiingo")));
-  want("the FMP path stays the fallback", inner.indexOf("=> fetchFmpQuote(") > inner.indexOf("await getBenchmarksTiingo("));
+  // FMP ENDED (#553 COWORK #210, 2026-10-12): no FMP fallback and no 500; an
+  // empty Tiingo read hides the tiles (no items, the unavailable label, a 200).
+  want("no FMP fallback: after the Tiingo try the tiles are hidden, not fetched from FMP",
+    !/fetchFmpQuote|fmpFetch|FMP_API_KEY|status: 500/.test(bench) &&
+    /return \{\s*data: \{ updatedAt: "", scope: BENCHMARKS_UNAVAILABLE, items: \[\] \},\s*headers: \{\},\s*\};\s*\}$/.test(inner.trimEnd()));
   for (const [sym, name] of [["SPY", "S&P 500"], ["QQQ", "Nasdaq 100"], ["DIA", "Dow Jones"], ["IWM", "Russell 2000"]])
     want(`the ${sym} tile is named as an ETF ("${sym} · ${name} ETF")`, bench.includes(`"${sym} · ${name} ETF"`));
   want("no \"(via …)\" label, no index symbol, no index level computed",
@@ -174,6 +178,8 @@ function rules(srcs) {
   want("the dashboard shows the quote's price label and the credit", /quote\?\.priceLabel \?/.test(code[FILES.dashClient]) && /tiingoCredit=\{tiingoCredit\}/.test(code[FILES.dashPage]));
   want("the dashboard seed carries the price label", /priceLabel: q\.priceLabel/.test(code[FILES.dashPage]));
   want("a benchmark tile shows its own price label", /it\.priceLabel \?\?/.test(code[FILES.dashClient]));
+  want("an FMP tile's time is readable, not the raw date and time (COWORK #101)",
+    /as of \$\{utcStamp\(/.test(code[FILES.dashClient]) && !/\? `\$\{it\.date\} \$\{it\.time\}` :/.test(code[FILES.dashClient]));
 
   // /api/quote: the missing-key 500 never pre-empts the Tiingo read (FMP-off test)
   const route = code[FILES.quoteRoute];
@@ -210,8 +216,11 @@ const MUTANTS = [
   ["the render path follows the switch", FILES.quoteData, /return await fetchQuoteSnapshotInner\(symbolInput, fetchQuoteFromFmpCached\);/, "if (stockPageOnTiingo()) { const t = await readTiingoQuote(symbolInput); if (t) return t; }\n    return await fetchQuoteSnapshotInner(symbolInput, fetchQuoteFromFmpCached);"],
   ["the Tiingo tiles are written to msh:benchmarks", FILES.bench, /cache\.set\(scope, \{ at: Date\.now\(\), payload: tiingo \}\);/, "cache.set(scope, { at: Date.now(), payload: tiingo }); await writeRedis(scope, { at: Date.now(), payload: tiingo });"],
   ["the old \"(via SPY)\" label", FILES.bench, /"SPY · S&P 500 ETF"/, '"S&P 500 (via SPY)"'],
+  // #553 COWORK #210: an empty Tiingo read hides the tiles, never a 500.
+  ["the empty Tiingo read answers 500 again", FILES.bench, /    headers: \{\},\n  \};\n\}/, "    headers: {},\n    status: 500,\n  };\n}"],
   ["the ETF note dropped", FILES.dashClient, / · ETF prices, not index levels/, ""],
   ["the stock page seeds from FMP only", FILES.stockPage, /if \(priceProviderFor\("STOCK_PAGE"\) === "tiingo"\) \{\n\s*const t = await readTiingoQuote\(symbol\);/, "if (false) {\n    const t = null as any;"],
+  ["the FMP tile shows the raw time again", FILES.dashClient, /`as of \$\{utcStamp\(`\$\{it\.date\}T\$\{it\.time\}Z`\) \?\? `\$\{it\.date\} \$\{it\.time\}`\}`/, "`${it.date} ${it.time}`"],
   ["/api/quote returns 500 before the Tiingo read again", FILES.quoteRoute, /  const payload = await fetchQuoteSnapshot\(symbol\);/, "  if (!process.env.FMP_API_KEY) return NextResponse.json(emptyQuote(symbol), { status: 500 });\n  const payload = await fetchQuoteSnapshot(symbol);"],
   ["/api/quote answers 500 again with no price and no key", FILES.quoteRoute, /status: 404, headers/, "status: 500, headers"],
   ["the dashboard words a 404 as a load failure", FILES.dashClient, /setErr\(`No data available for \$\{symbol\.toUpperCase\(\)\}\.`\)/, 'setErr("Failed to load data (try another ticker).")'],

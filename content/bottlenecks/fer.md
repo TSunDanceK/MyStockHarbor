@@ -50,6 +50,7 @@ supplyChain:
   - name: Canada Pension Plan Investment Board
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       The largest co-owner of Ferrovial's flagship 407 ETR toll road in
       Toronto, holding roughly 44% alongside Ferrovial's own controlling
@@ -59,6 +60,7 @@ supplyChain:
   - name: AECOM
     ticker: ACM
     pct: 15
+    grade: some
     blurb: >
       The design-build general contractor (as "AECOM Tishman") actually
       constructing JFK Airport's New Terminal One, the project Ferrovial
@@ -66,6 +68,7 @@ supplyChain:
   - name: The Carlyle Group
     ticker: CG
     pct: 12
+    grade: some
     blurb: >
       A private-equity co-investor alongside Ferrovial in the JFK New
       Terminal One consortium, one of Ferrovial's largest current US
@@ -73,6 +76,7 @@ supplyChain:
   - name: Indra Sistemas
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Built the electronic toll-collection back-office systems for
       Cintra's Texas managed lanes (SH-130, LBJ Express, North Tarrant
@@ -82,6 +86,7 @@ supplyChain:
   - name: Grupo Aeroportuario del Sureste
     ticker: ASR
     pct: 8
+    grade: spread
     blurb: >
       Runs the retail and concessions side of JFK's New Terminal One, the
       commercial operations underpinning the terminal project Ferrovial
@@ -89,6 +94,7 @@ supplyChain:
   - name: ST Engineering (TransCore)
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Its TransCore unit's "Integrity" back-office tolling platform
       underpins the entire North Carolina Turnpike Authority network,
@@ -98,6 +104,7 @@ supplyChain:
   - name: AtkinsRéalis
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       An engineering, design, and project-management partner on the JFK
       New Terminal One team, and until early 2025 a fellow shareholder in
@@ -106,6 +113,7 @@ supplyChain:
   - name: Public Sector Pension Investment Board
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Holds roughly 7.5% of 407 ETR alongside Ferrovial and CPP
       Investments - another Canadian Crown corporation co-owner with no
@@ -113,6 +121,7 @@ supplyChain:
   - name: JLC Infrastructure
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       A private infrastructure investment firm co-investing in the JFK
       New Terminal One consortium alongside Ferrovial. Not a publicly
@@ -120,6 +129,7 @@ supplyChain:
   - name: Ullico
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       A private, labor-owned insurance and investment firm supplying
       union-linked capital to the JFK New Terminal One project alongside
@@ -128,6 +138,7 @@ customers:
   - name: Construction
     ticker: null
     pct: 80
+    grade: hard
     blurb: >
       Ferrovial's largest segment by far - roughly 80% of FY2025 revenue -
       spanning Webber's US infrastructure work and majority-owned
@@ -136,6 +147,7 @@ customers:
   - name: Highways (toll roads / Cintra)
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Ferrovial's toll-road concession portfolio, led by its controlling
       stake in Toronto's 407 ETR plus Cintra's US managed lanes in Texas
@@ -144,6 +156,7 @@ customers:
   - name: Energy
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       Ferrovial's smallest reporting segment, covering renewable-energy
       and infrastructure-adjacent energy projects - a minor but growing
@@ -151,6 +164,7 @@ customers:
   - name: Other / corporate & unallocated
     ticker: null
     pct: 2
+    grade: spread
     blurb: >
       Residual corporate-level and unallocated items not attributed to a
       specific operating segment in Ferrovial's FY2025 results.

@@ -58,7 +58,9 @@ function suite(code) {
   // 2. no FMP taxonomy anywhere on the path
   ok("the warm makes no /stable/profile call", !/stable\/profile/.test(code.cache));
   ok("the warm keeps no profile cache", !/msh:pickers:profile/.test(code.cache) && !/readCachedProfilesBulk|fetchProfile/.test(code.cache));
-  ok("the warm feeds the resolver no vendor label", /cleanSymbols\.map\(\(sym\) => \(\{ symbol: sym, cached: null \}\)\)/.test(code.cache));
+  // The warm that called the resolver was retired 2026-10-12 (#553 COWORK #212):
+  // the cache module must not hand the resolver a cached (vendor) label at all.
+  ok("the cache feeds the resolver no vendor label", !/cached: (?!null\b)\w/.test(code.cache));
   ok("the page reads sector/industry from the resolver", /resolveProfileBulk\(\s*entries\.map\(\(e\) => \(\{ symbol: e\.symbol, cached: null \}\)\)/.test(code.page));
   ok("the page never takes them from the cached fundamentals row", !/entry\.(industry|sector) = f\.(industry|sector)/.test(code.page));
 
@@ -87,7 +89,7 @@ if (base.fails.length) {
 const MUTANTS = [
   ["a preset asks for a label the resolver never produces", { ...code, presets: { ...code.presets, "semiconductor-stocks": code.presets["semiconductor-stocks"].replace('"Semiconductors"', '"Semiconductor Equipment & Materials"') } }],
   ["the warm fetches /stable/profile again", { ...code, cache: code.cache + "\nconst u = `https://financialmodelingprep.com/stable/profile?symbol=${s}`;" }],
-  ["the warm feeds a vendor label", { ...code, cache: code.cache.replace("({ symbol: sym, cached: null })", "({ symbol: sym, cached: sc })") }],
+  ["the cache feeds a vendor label", { ...code, cache: code.cache + "\nconst t = resolveProfileBulk(symbols.map((sym) => ({ symbol: sym, cached: sc })));" }],
   ["the page takes the cached row's industry", { ...code, page: code.page + "\nif (f.industry) entry.industry = f.industry;" }],
 ];
 let survived = 0;

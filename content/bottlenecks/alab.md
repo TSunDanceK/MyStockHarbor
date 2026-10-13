@@ -44,6 +44,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 34
+    grade: hard
     blurb: >
       Astera Labs' 10-K is unusually blunt about this: "We use a fabless
       manufacturing model and partner with TSMC to fabricate all of our ICs."
@@ -55,6 +56,7 @@ supplyChain:
   - name: Amkor Technology
     ticker: AMKR
     pct: 15
+    grade: some
     blurb: >
       Amkor is one of only two assembly, packaging and test partners Astera
       names in its filings. High-speed retimer and switch packages have to
@@ -66,6 +68,7 @@ supplyChain:
   - name: ASE Technology Holding
     ticker: ASX
     pct: 15
+    grade: some
     blurb: >
       ASE, the world's largest outsourced semiconductor assembly and test
       provider, is the other named packaging and test partner in Astera's
@@ -75,6 +78,7 @@ supplyChain:
   - name: Synopsys
     ticker: SNPS
     pct: 12
+    grade: some
     blurb: >
       Synopsys is Astera's longest-standing named design partner — its design
       and verification tools were used to build the industry's first PCIe 5.0
@@ -85,6 +89,7 @@ supplyChain:
   - name: Cadence Design Systems
     ticker: CDNS
     pct: 7
+    grade: spread
     blurb: >
       Astera's filings refer to "EDA tool providers" in the plural without
       naming them all, and in practice no chip company of this kind operates
@@ -95,6 +100,7 @@ supplyChain:
   - name: ASML Holding
     ticker: ASML
     pct: 5
+    grade: hard
     blurb: >
       Astera never buys a machine from ASML, but every leading-edge wafer it
       orders from TSMC is patterned on one. ASML is the sole supplier of EUV
@@ -104,6 +110,7 @@ supplyChain:
   - name: Teradyne
     ticker: TER
     pct: 4
+    grade: spread
     blurb: >
       Astera's 10-K stresses "high production test coverage and full product
       traceability" on parts that must meet JEDEC and PCI-SIG timing specs.
@@ -114,6 +121,7 @@ supplyChain:
   - name: Ibiden
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Astera discloses that it relies on "a small, limited number of other
       manufacturing partners" for its IC substrates without naming them.
@@ -125,6 +133,7 @@ supplyChain:
   - name: Module, board & cable assembly partners
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Beyond bare silicon, Astera ships finished Taurus smart cable modules
       and evaluation boards, which its 10-K says depend on a small, limited
@@ -135,6 +144,7 @@ customers:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 70
+    grade: hard
     blurb: >
       Astera's 10-K discloses that one end customer was more than 70% of 2025
       revenue without naming it; Amazon Web Services is the account widely
@@ -146,6 +156,7 @@ customers:
   - name: NVIDIA
     ticker: NVDA
     pct: 10
+    grade: some
     blurb: >
       Astera's retimers and fabric silicon already ship inside NVIDIA HGX,
       MGX and NVL72 platforms, and the two companies expanded their
@@ -156,6 +167,7 @@ customers:
   - name: Microsoft
     ticker: MSFT
     pct: 6
+    grade: spread
     blurb: >
       Microsoft is one of the hyperscalers whose Azure AI buildout pulls
       PCIe/CXL retimer and smart-cable content at volume, and is a plausible
@@ -165,6 +177,7 @@ customers:
   - name: Meta Platforms
     ticker: META
     pct: 4
+    grade: spread
     blurb: >
       Meta's AI infrastructure spending and its open rack and MTIA
       accelerator work make it a natural consumer of third-party connectivity
@@ -173,6 +186,7 @@ customers:
   - name: Alphabet (Google)
     ticker: GOOGL
     pct: 3
+    grade: spread
     blurb: >
       Google's TPU racks are more vertically integrated than most, which
       limits how much connectivity content it buys outside, but it remains
@@ -181,6 +195,7 @@ customers:
   - name: Advanced Micro Devices
     ticker: AMD
     pct: 3
+    grade: spread
     blurb: >
       AMD's Instinct accelerator platforms and its push behind open scale-up
       standards make it the most credible non-NVIDIA accelerator ecosystem
@@ -189,6 +204,7 @@ customers:
   - name: Dell Technologies
     ticker: DELL
     pct: 2
+    grade: spread
     blurb: >
       Dell is among the system OEMs Astera's 10-K cites as a customer
       category alongside hyperscalers. OEM AI server platforms carry Astera
@@ -197,6 +213,7 @@ customers:
   - name: Hewlett Packard Enterprise
     ticker: HPE
     pct: 1
+    grade: spread
     blurb: >
       HPE's AI and HPC server lines are part of the same System OEM channel,
       where Astera's PCIe/CXL signal-integrity parts are designed into
@@ -204,6 +221,7 @@ customers:
   - name: Super Micro Computer
     ticker: SMCI
     pct: 1
+    grade: spread
     blurb: >
       Supermicro builds AI server and rack systems at high volume around
       NVIDIA and AMD platforms, making it another OEM route through which

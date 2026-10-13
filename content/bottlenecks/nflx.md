@@ -39,6 +39,7 @@ supplyChain:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 45
+    grade: hard
     blurb: >
       Netflix's 10-K states verbatim that it relies on Amazon Web Services
       to operate certain aspects of its service and runs the vast majority
@@ -48,6 +49,7 @@ supplyChain:
   - name: Sony Pictures (Sony Group)
     ticker: SONY
     pct: 20
+    grade: some
     blurb: >
       Netflix and Sony Pictures closed a reported $7 billion-plus exclusive
       global licensing deal in January 2026 giving Netflix streaming rights
@@ -56,6 +58,7 @@ supplyChain:
   - name: Comcast (NBCUniversal)
     ticker: CMCSA
     pct: 15
+    grade: some
     blurb: >
       Netflix and Universal Filmed Entertainment Group have an expanded US
       licensing deal for feature films, part of Netflix's ongoing
@@ -64,6 +67,7 @@ supplyChain:
   - name: Equus Compute Solutions
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       The systems integrator Netflix selected to help design and build its
       Open Connect Appliances - the physical servers Netflix places inside
@@ -72,6 +76,7 @@ supplyChain:
   - name: Other content studios and rights holders
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company - the broader group of film and television
       studios that license content to Netflix alongside its own growing
@@ -82,6 +87,7 @@ customers:
   - name: Roku
     ticker: ROKU
     pct: 22
+    grade: some
     blurb: >
       The largest connected-TV platform in the US by device share (about
       28%, per Parks Associates), making it Netflix's single largest
@@ -92,6 +98,7 @@ customers:
   - name: Samsung Electronics
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       Samsung Smart TVs are the #2 connected-TV platform by share (about
       23%, per Parks Associates) and Samsung has also opened its Smart TV
@@ -101,6 +108,7 @@ customers:
   - name: Amazon
     ticker: AMZN
     pct: 16
+    grade: some
     blurb: >
       Beyond hosting Netflix's cloud infrastructure, Amazon Fire TV is a
       major device-distribution channel, and a September 2025 partnership
@@ -110,6 +118,7 @@ customers:
   - name: Apple
     ticker: AAPL
     pct: 12
+    grade: some
     blurb: >
       The Apple TV app and Apple TV hardware are a long-running, top-tier
       device-distribution channel for Netflix, covered under the same
@@ -117,6 +126,7 @@ customers:
   - name: T-Mobile US
     ticker: TMUS
     pct: 10
+    grade: some
     blurb: >
       T-Mobile's "Netflix on Us" program bundles a Netflix subscription
       into certain postpaid wireless plans and has continued covering the
@@ -125,6 +135,7 @@ customers:
   - name: Magnite
     ticker: MGNI
     pct: 8
+    grade: spread
     blurb: >
       Publicly confirmed by Magnite as one of Netflix's key global
       programmatic advertising partners, helping sell inventory on
@@ -132,6 +143,7 @@ customers:
   - name: The Trade Desk
     ticker: TTD
     pct: 6
+    grade: spread
     blurb: >
       A programmatic demand-side platform partner giving advertisers
       another route to buy Netflix ad-tier inventory, part of Netflix's
@@ -139,12 +151,14 @@ customers:
   - name: Alphabet (Google)
     ticker: GOOGL
     pct: 5
+    grade: spread
     blurb: >
       Google's DV360 platform is a confirmed programmatic buying partner
       for Netflix's ad-supported tier inventory.
   - name: Microsoft
     ticker: MSFT
     pct: 3
+    grade: spread
     blurb: >
       Netflix's exclusive ad-tech partner from the ad tier's 2022 launch;
       Netflix has since built its own ad platform and wound down exclusive

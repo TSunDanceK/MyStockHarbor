@@ -12,10 +12,12 @@
 // lock defined in this module and stay perfectly consistent.
 
 import { Redis } from "@upstash/redis";
-import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { chartHref } from "@/lib/chartHref";
+import { BULK_READ_CACHE, PAGE_READ_CACHE } from "./redisCacheMode";
 import { REQUEST_BYTE_BUDGET, pctOfRequestLimit, trySetRequestBytes } from "./chunkByBytes";
 import { detectBullFlag, type BullFlagResult } from "../ta/bullFlag";
 import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
+import { playsTiingoHistory } from "./marketData/playsHistory";
 import { flushRedisReadMeter } from "./redisBandwidth";
 
 import { addToDynamicUniverse, readDynamicUniverse, ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
@@ -115,6 +117,8 @@ export type PlaysPayload = {
   dynamicUniverseCount: number;
   dynamicUniversePreview: string[];
   estimatedApiCalls: number;
+  /** Which provider the scan read (#553 B4), with the per-tier counts on Tiingo. */
+  history?: { provider: "tiingo" | "fmp"; memory?: number; cache?: number; fmpFallback?: number; missing?: number };
   sections: PlaySection[];
   debug?: unknown;
   error?: string;
@@ -151,6 +155,12 @@ let memo:
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv(PAGE_READ_CACHE)
+    : null;
+// The payload write is measured against the 5 MB request budget, so it takes
+// the 20 s deadline; reads and the lock stay on the page's 6 s (#553 COWORK #156).
+const bulkRedis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(BULK_READ_CACHE)
     : null;
 
 const MEMORY_CACHE_MS = 60_000;
@@ -330,7 +340,8 @@ async function writePlaysCache(data: PlaysPayload) {
       );
       return;
     }
-    await redis.set(PLAYS_REDIS_KEY, entry, {
+    const writeRedis = bulkRedis ?? redis;
+    await writeRedis.set(PLAYS_REDIS_KEY, entry, {
       ex: PLAYS_REDIS_TTL_SECONDS,
     });
     console.log(`[bull-flags] payload write ${measured?.bodyBytes ?? "?"} bytes ok`);
@@ -464,14 +475,8 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
 }
 
 function buildDashboardHref(symbol: string, timeframe: "M" | "ST" | "D" | "W") {
-  const params = new URLSearchParams();
-  params.set("symbol", symbol);
-  params.set(
-    "tf",
-    timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe
-  );
-
-  return `/?${params.toString()}`;
+  // Lands on the analyser (#563 COWORK #151).
+  return chartHref(symbol, { tf: timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe });
 }
 
 function toPlayItem(
@@ -836,7 +841,7 @@ async function buildPlaysPayload(
   let freshHistoryFetchesUsed = 0;
   const limit = pLimit(10);
 
-  async function getHistoryForScan(symbol: string) {
+  async function getFmpHistoryForScan(symbol: string) {
     const cachedPoints = await getCachedDailyHistory(symbol, "plays-bull-flags");
 
     if (symbol === normalizedDebugSymbol && debugSymbolScan) {
@@ -863,6 +868,23 @@ async function buildPlaysPayload(
     }
 
     return fetchHistory(symbol, HISTORY_DAYS);
+  }
+
+  // ON STORED TIINGO BARS (#553 CODE-B #94 B4). PRICE_PROVIDER_PICKERS=tiingo
+  // scans the Tiingo history from the Data Cache (marketData/playsHistory.ts);
+  // the FMP path above then serves only symbols Tiingo has no history for, and
+  // only while FMP_API_KEY is set. A series is never spliced across providers.
+  const tiingoScan = await playsTiingoHistory(universe, getFmpHistoryForScan);
+
+  async function getHistoryForScan(symbol: string) {
+    if (!tiingoScan) return getFmpHistoryForScan(symbol);
+    const points = normalizeCachedPoints(tiingoScan.bySymbol.get(symbol) ?? []);
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.historyProvider = tiingoScan.fromTiingo.has(symbol) ? "tiingo" : points.length ? "fmp" : "none";
+      debugSymbolScan.cacheHadHistory = points.length > 0;
+      debugSymbolScan.cachedBars = points.length;
+    }
+    return points;
   }
 
   await Promise.all(
@@ -1040,6 +1062,7 @@ async function buildPlaysPayload(
         : dynamicUniverse.length,
     dynamicUniversePreview: dynamicUniverse.slice(0, 20),
     estimatedApiCalls: freshHistoryFetchesUsed + 1,
+    history: tiingoScan ? { provider: "tiingo", ...tiingoScan.stats } : { provider: "fmp" },
     sections,
     debug: debugSymbolScan
       ? {

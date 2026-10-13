@@ -242,8 +242,9 @@ check(
 );
 check(
   "the picker payload and its chart series are metered SEPARATELY",
-  /recordRedisRead\("picker-payload", records\.length\)/.test(builder) &&
-    /recordRedisRead\("picker-charts", fields\.length\)/.test(charts),
+  // With the reader's caller since #553 COWORK #214 (per job and per page).
+  /recordRedisRead\("picker-payload", records\.length, opts\.caller\)/.test(builder) &&
+    /recordRedisRead\("picker-charts", fields\.length, caller\)/.test(charts),
   "they move for different reasons and at a 5x different size; one folded " +
     "counter cannot rank them, which is the entire purpose of the meter"
 );

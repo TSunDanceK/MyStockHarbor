@@ -34,6 +34,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 32
+    grade: hard
     blurb: >
       Workday's 10-K names AWS as a third-party infrastructure supplier
       it depends on to host applications and serve customers, with the
@@ -42,6 +43,7 @@ supplyChain:
   - name: Alphabet Inc. (Google Cloud)
     ticker: GOOGL
     pct: 26
+    grade: some
     blurb: >
       The second named cloud infrastructure supplier in Workday's 10-K
       risk factors, with the partnership expanded in May 2026 to bring
@@ -49,6 +51,7 @@ supplyChain:
   - name: Deloitte, Accenture, PwC, KPMG, EY & other systems integrators
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Not a single company. Workday's 10-K states that third parties
       provide the majority of deployment services for its customers, and
@@ -58,6 +61,7 @@ supplyChain:
   - name: Microsoft Corporation
     ticker: MSFT
     pct: 12
+    grade: some
     blurb: >
       Joined Workday's AI Agent Partner Network in 2025, layering
       Microsoft's AI and productivity ecosystem alongside Workday's own
@@ -65,6 +69,7 @@ supplyChain:
   - name: Company-operated data centers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company. Workday still operates some of its own
       legacy data centers alongside its growing AWS and Google Cloud
@@ -74,6 +79,7 @@ customers:
   - name: Fortune 500 & global enterprise customers
     ticker: null
     pct: 55
+    grade: hard
     blurb: >
       Not a single company. Analysts estimate Workday now serves roughly
       65% of the Fortune 500 across HR and/or Financials, with reported
@@ -83,6 +89,7 @@ customers:
   - name: Mid-market enterprise customers
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Not a single company. Small and mid-size enterprise customers make
       up a smaller but growing share of Workday's base as it extends
@@ -90,6 +97,7 @@ customers:
   - name: Public sector, education & healthcare customers
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. Government agencies, universities, and
       healthcare systems make up a distinct share of Workday's customer

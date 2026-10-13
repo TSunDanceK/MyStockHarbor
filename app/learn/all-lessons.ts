@@ -28,3 +28,11 @@ export function getNextLesson(slug: string) {
 export function lessonsByCategory(cat: string) {
   return ALL_LESSONS.filter((l) => (l.category as string) === cat);
 }
+
+/**
+ * A category as readers see it (#563 COWORK #168): the "Divergencies" category
+ * key stays (it is in the data and the code), but the section reads "Divergences".
+ */
+export function categoryLabel(cat: string) {
+  return cat === "Divergencies" ? "Divergences" : cat;
+}

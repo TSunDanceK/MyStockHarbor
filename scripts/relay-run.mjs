@@ -47,6 +47,10 @@ const TASKS = {
   // IS DEXTAUS CURRENT, WHICH WAY IT POINTS, AND WHAT ECB'S TWD LEG LOOKS
   // LIKE BESIDE IT (#552, COWORK #22 §0). Read-only and uncredentialled likewise.
   "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
+  // DEXINUS / DEXMXUS before they become primaries (#552 COWORK #132 (c)). Read-only and uncredentialled likewise.
+  "fred-inr-mxn": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [] },
+  // DEXCHUS before it becomes CNY's primary (#552 COWORK #140). Read-only and uncredentialled likewise.
+  "fred-cny": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "CNY:DEXCHUS" } },
   // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
   // and every FRED series the adapter names; touches no store, so read-only.
   "fx-filer-diagnosis": {
@@ -1251,6 +1255,18 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // THE CONTENT CANDIDATES (#563 COWORK #182/#183): per pool symbol, its live
+  // close, stored SEC facts (A's view), n/m count, SEC market cap and sector, as
+  // compact CC| log lines; `node scripts/content-candidates.mjs --from-log task.log`
+  // turns them into data/content-candidates.json. READ-ONLY despite the prefix
+  // (the prefix routes it to the job holding the Upstash credentials): 1 HGETALL
+  // + 1 GET + 1 HMGET + one GET per symbol's fact set, no writes, no SEC requests.
+  "write-content-candidates": {
+    script: "scripts/content-candidates.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // WHICH UNIVERSE SYMBOLS SEC NO LONGER LISTS (#553 COWORK #20): measured
   // before the delisting sweep acts on it. Read-only; ~4 Redis reads.
   "write-sec-delisting-census": {
@@ -1326,6 +1342,11 @@ const TASKS = {
   // PREFIX: the script refuses any write verb before it is sent; `write-` is the
   // credential boundary. Counts, symbols and flag names only in the log.
   "write-pickers-history-parity": { script: "scripts/pickers-history-parity.mjs", args: () => [], needsTypescript: true, writes: true },
+  // Pickers "–" census (#553 COWORK #87a), READ-ONLY despite the prefix: the
+  // script refuses any write verb before it is sent. Names (live exact / dotted /
+  // committed floor / none) and empty-cell reason codes per column; counts,
+  // symbols and codes only in the log. Redis: GET + one HMGET per page of rows.
+  "write-pickers-why-census": { script: "scripts/pickers-why-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // Capex named links, plan (c) (#563 COWORK #19): read-only scan of every tracked
   // filer's latest 10-K/20-F for sentences naming a receiver next to a trade word.
   // Candidates for review only; nothing is published unreviewed. Redis 0.
@@ -1342,6 +1363,67 @@ const TASKS = {
   "capex-receiver-six-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "4/4" } },
   // Batch 2 fix (#563 COWORK #24): the filed text before a truncated quote. SYMBOLS carries QUOTE_CONTEXT.
   "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
+  // READS ONLY: which margin the Growth & margins chart draws across the universe (#563 COWORK #71). ~105 MGET.
+  "write-margin-kind-census": { script: "scripts/margin-kind-census.mjs", args: () => [], writes: true },
+  // READS ONLY: the confluence ladder's census before the build (#563 COWORK #83 §4). GET + ~110 MGET.
+  "write-confluence-census": { script: "scripts/confluence-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY: Market Mood's shipped maths on the stored bars (#563 COWORK #96). 1 GET + ~105 MGET; dates and 0–100 scores only.
+  "write-market-mood-dryrun": { script: "scripts/market-mood-dryrun.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READ-ONLY DESPITE THE PREFIX (Relay A, #552 COWORK #148): the stored SEC
+  // sets that fail the seed gate (symbol + reason), and how many still have a
+  // picker row. 1 SMEMBERS + 1 HKEYS; deletes nothing.
+  "write-sec-gate-stored-census": { script: "scripts/sec-gate-stored-census.mjs", args: () => [], writes: true },
+  // THE FMP PURGE (Relay B, #553 COWORK #136). ONLY AFTER THE FMP CANCEL, ON THE
+  // OWNER'S SAY. Dry: counts per group, every opt-in group included (one SCAN
+  // pass + MGETs + 1 HGETALL). Applied: the default groups only; each opt-in
+  // group (pool figures, market:state, FMP-era snapshots, meters) needs its own
+  // task, added on a ruling. See scripts/lib/fmp-purge-plan.mjs.
+  "write-fmp-purge-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--pool-figures", "--market-state", "--insight-snapshots", "--meters"], writes: true },
+  "write-fmp-purge": { script: "scripts/fmp-purge.mjs", args: () => ["--apply"], writes: true },
+  // THE OWNER'S OPT-INS (Relay B, #553 COWORK #171, 2026-10-06): the default groups plus the FMP usage
+  // meters, and the FMP figures nulled in the price-pool rows (fields and bookkeeping kept). Market
+  // state and insight snapshots stay out (held).
+  "write-fmp-purge-meters-pool": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--meters", "--pool-figures"], writes: true },
+  // READS ONLY (Relay B, #553 COWORK #171): which posts the FMP-era insight snapshots belong to and
+  // whether stored Tiingo bars could rebuild each. SCAN + MGET + GET; slugs, symbols, dates, counts.
+  "write-insight-snapshot-census": { script: "scripts/insight-snapshot-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // THE 63 FMP-ERA INSIGHT SNAPSHOTS (Relay B, #553, the owner's OK 2026-10-06): dry first, then the
+  // deletion. Tiingo-path records are never touched; each post rebuilds from its stored Tiingo bars.
+  "write-fmp-purge-snapshots-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--insight-snapshots"], writes: true },
+  "write-fmp-purge-snapshots": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--insight-snapshots"], writes: true },
+  // KRW and ZAR (#552 COWORK #151): measured the same way before FRED becomes their primary.
+  "fred-krw-zar": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "KRW:DEXKOUS,ZAR:DEXSFUS" } },
+  // SGD's FRED series against the ECB cross, as fred-krw-zar (#552 COWORK #157 §3). Public data, no credentials.
+  "fred-sgd": { script: "scripts/fred-inr-mxn-probe.mjs", args: () => [], env: { PAIRS: "SGD:DEXSIUS" } },
+  // THE DUE-STRIP CUT, RE-RANKED (#552 COWORK #185). Read-only (its guard
+  // refuses anything but GET/HKEYS/HMGET); prints CUT_JSON for
+  // data/due-strip.json. -pickers measures the old rule (the analysis universe).
+  "write-due-strip-rank": {
+    script: "scripts/due-strip-rank.mjs",
+    args: () => [],
+    writes: true,
+  },
+  "write-due-strip-rank-pickers": {
+    script: "scripts/due-strip-rank.mjs",
+    args: () => [],
+    writes: true,
+    env: { UNIVERSE: "pickers" },
+  },
+  // THE 63 SNAPSHOTS ONLY (Relay B, #553 CODE-B #152): write-fmp-purge-snapshots above also re-deletes
+  // the default groups, and on 2026-10-06 its dry run found 8 of A's refilled earnings keys there.
+  // --opt-ins-only keeps every default key; use these two in its place.
+  "write-fmp-purge-snapshots-only-dry": { script: "scripts/fmp-purge.mjs", args: () => ["--opt-ins-only", "--insight-snapshots"], writes: true },
+  "write-fmp-purge-snapshots-only": { script: "scripts/fmp-purge.mjs", args: () => ["--apply", "--opt-ins-only", "--insight-snapshots"], writes: true },
+  // READS ONLY (Relay B, #553 COWORK #181): the insight writer's list (GET of the nightly key; repeats from content/insights).
+  "write-insight-candidates-read": { script: "scripts/insight-candidates-read.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #181/#188/#190): the last 5 sessions' lists, dry.
+  "write-insight-candidates-dry-run": { script: "scripts/insight-candidates-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #173/#190): the nightly market state built dry from eod-last, against the old key.
+  "write-market-dynamic-dry-run": { script: "scripts/market-dynamic-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #191 item 1): stored news, junk headlines by day.
+  "write-news-junk-census": { script: "scripts/news-junk-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (Relay B, #553 COWORK #159 PR 2): "What it does" extracted across the stored IPO list (1 GET + SEC).
+  "write-ipo-about-measure": { script: "scripts/ipo-about-measure.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);

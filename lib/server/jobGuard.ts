@@ -38,11 +38,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Redis } from "@upstash/redis";
 import { JOB_RUN_PREFIX, type JobKey } from "./jobRuns";
+import { JOB_REDIS_OPTS } from "./redisCacheMode";
 
 export type GuardedJob = Extract<
   JobKey,
-  "warm-stock-data" | "warm-fundamentals" | "warm-screener-fundamentals" | "warm-picker-universe" | "warm-pickers-sec" | "ipo-refresh"
-  | "tiingo-quotes" | "tiingo-eod"
+  "warm-screener-fundamentals" | "warm-picker-universe" | "warm-pickers-sec" | "ipo-refresh"
+  | "tiingo-quotes" | "tiingo-eod" | "tiingo-supported" | "tiingo-cold-queue"
 >;
 
 /**
@@ -51,25 +52,39 @@ export type GuardedJob = Extract<
  * A ceiling is a safety net, not a target: a normal run never gets near it.
  */
 export const JOB_LIMITS: Record<GuardedJob, { perRun: number; perDay: number }> = {
-  // 144 runs/day, ~320-440 commands a run, ~46-63K a day.
-  "warm-stock-data": { perRun: 1_000, perDay: 190_000 },
-  // 24 runs/day, ~870-1,100 a run, ~21-26K a day.
-  "warm-fundamentals": { perRun: 2_500, perDay: 78_000 },
+  // warm-stock-data and warm-fundamentals: retired 2026-10-12 (#553 COWORK #212).
   // 1 run/day, ~3,900 a run.
   "warm-screener-fundamentals": { perRun: 8_000, perDay: 12_000 },
   // 1 run/day, ~6-7K a run (a forced history refetch of ~700 symbols); the
   // lock-failure amplifier in CODE-B #39 is ~28K, which this stops at 15K.
   "warm-picker-universe": { perRun: 15_000, perDay: 21_000 },
-  // 1 run/day, ~860 a run (stated), hard cap ~2,050 (stated).
-  "warm-pickers-sec": { perRun: 2_100, perDay: 6_500 },
+  // 1 run/day (+ a manual run). ~2,630 a run since #690 widened it to the Tiingo universe
+  // (~2,600 fact-set GETs + an HSET per 100 + the universe GET). The old
+  // 2,100 (sized for ~850) would have stopped the first widened run (#553
+  // CODE-B #116); check-tiingo-step5 holds this to 2x the planned universe.
+  // Sized for 3,000 symbols (the run cap) at 1 GET each + an HSET per 100,
+  // plus the warm-target derivation's own reads, x2 (#553 COWORK #124). The
+  // job also stops itself short of this (guardCommandsLeft), so a stop still
+  // flushes and reports.
+  "warm-pickers-sec": { perRun: 7_000, perDay: 21_000 },
   // 1 run/day, ~5 a run (stated). A catch-up run is still tiny.
   "ipo-refresh": { perRun: 200, perDay: 600 },
   // Tiingo (#553 COWORK #55 §2). Quotes: ~10 a run inside market hours (HKEYS,
   // limiter pipeline of 4, HSET, EXPIRE, run record), ~10 active runs a day.
   "tiingo-quotes": { perRun: 60, perDay: 600 },
-  // EOD: ~890 a complete night (844 SETs, limiter ~40, HKEYS, GET/SET meta);
-  // the 02:45 run is 1 GET after a complete night.
-  "tiingo-eod": { perRun: 2_000, perDay: 4_000 },
+  // EOD: one SET per symbol + the limiter (4 per 100) + meta and summary.
+  // ~2,716 a complete night at the 5b universe (~2,600), up to ~3,750 with
+  // #121's requested set at its 1,000 cap; the 02:45 run is 1 GET after a
+  // complete night. Was 2,000 / 4,000 (sized for ~844), which would have
+  // stopped the first widened night (#553 CODE-B #116); check-tiingo-step5
+  // holds this to 2x / 3x the planned universe.
+  "tiingo-eod": { perRun: 8_000, perDay: 12_000 },
+  // Supported list (#553 COWORK #121): ~12 a run (DEL, ~6 SADD chunks, marker,
+  // RENAME, EXPIRE, DEL, limiter 4), 1 run a day.
+  "tiingo-supported": { perRun: 60, perDay: 180 },
+  // Cold queue: 2 a run when empty (144 runs/day ~ 300); ~10 per queued symbol,
+  // at most 100 a run and 500 queued a day (~5,000).
+  "tiingo-cold-queue": { perRun: 2_000, perDay: 12_000 },
 };
 
 export const JOB_COMMANDS_PREFIX = "msh:jobs:commands:v1";
@@ -178,6 +193,18 @@ function installFetchGuard() {
   globalThis.fetch = guarded as typeof fetch;
 }
 
+/**
+ * Commands this guarded run may still send before the guard stops it, or null
+ * outside a guarded run. A job reads it to STOP ITSELF with room to spare
+ * (#553 COWORK #124): a guard stop makes every later request throw, so a job
+ * that runs into it cannot flush, EXPIRE or report. warm-pickers-sec checks it
+ * before each read and keeps a reserve for its final writes.
+ */
+export function guardCommandsLeft(): number | null {
+  const ctx = als.getStore();
+  return ctx ? ctx.budget - ctx.commands : null;
+}
+
 // ── the kill switch (Edge Config, no Redis) ──────────────────────────────────
 /**
  * `false` only when Edge Config explicitly disables the job. EDGE_CONFIG is the
@@ -214,7 +241,7 @@ export function jobEnabledIn(item: unknown, job: GuardedJob): boolean {
 
 // ── the breaker's store ──────────────────────────────────────────────────────
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv(JOB_REDIS_OPTS) : null;
 
 const dayKey = (nowMs: number) => `${JOB_COMMANDS_PREFIX}:${new Date(nowMs).toISOString().slice(0, 10)}`;
 

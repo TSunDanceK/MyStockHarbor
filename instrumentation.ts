@@ -6,4 +6,7 @@
 export async function register() {
   const { installRedisSizeGuard } = await import("./lib/server/redisSizeGuard");
   installRedisSizeGuard();
+  // One line per timed-out Upstash request, by key prefix (#553 CODE-B #144).
+  const { installRedisTimeoutLog } = await import("./lib/server/redisTimeoutLog");
+  installRedisTimeoutLog();
 }

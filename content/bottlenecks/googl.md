@@ -27,12 +27,14 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 26
+    grade: some
     blurb: >
       The primary foundry fabricating Google's custom TPU AI accelerator
       chips.
   - name: Samsung Electronics
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       A second foundry partner now fabricating TPUs for Google - Google
       reportedly entered Samsung's top-five client list in 2025 amid rising
@@ -41,23 +43,27 @@ supplyChain:
   - name: Broadcom
     ticker: AVGO
     pct: 14
+    grade: some
     blurb: >
       Co-designs Google's TPU AI accelerators alongside Google's own
       hardware teams.
   - name: NVIDIA
     ticker: NVDA
     pct: 12
+    grade: some
     blurb: >
       Supplies GPUs used across Google Cloud's AI infrastructure alongside
       Google's own TPUs.
   - name: Intel
     ticker: INTC
     pct: 8
+    grade: spread
     blurb: >
       Supplies data-center CPUs used across Google's cloud infrastructure.
   - name: SK hynix
     ticker: SKHY
     pct: 8
+    grade: spread
     blurb: >
       A major memory and HBM supplier to Google's AI infrastructure,
       including HBM for Google's Ironwood-generation TPUs. Its primary
@@ -66,11 +72,13 @@ supplyChain:
   - name: Micron Technology
     ticker: MU
     pct: 8
+    grade: spread
     blurb: >
       Supplies memory used across Google's data-center infrastructure.
   - name: Global Unichip Corp
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Provides ASIC design services supporting Google's custom chip
       development. Trades primarily on the Taiwan Stock Exchange with no
@@ -78,12 +86,14 @@ supplyChain:
   - name: Vertiv Holdings
     ticker: VRT
     pct: 3
+    grade: spread
     blurb: >
       Supplies power and cooling infrastructure across Google's data
       centers.
   - name: Corning
     ticker: GLW
     pct: 1
+    grade: spread
     blurb: >
       Supplies optical and fiber components used in Google's networking
       infrastructure.
@@ -91,6 +101,7 @@ customers:
   - name: Anthropic
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       One of the largest known users of Google's TPUs and Cloud compute,
       training its Claude models substantially on Google infrastructure. A
@@ -98,52 +109,61 @@ customers:
   - name: Meta Platforms
     ticker: META
     pct: 14
+    grade: some
     blurb: >
       Reportedly evaluating deployment of Google's TPUs starting in 2027 as
       part of diversifying its AI chip supply.
   - name: Salesforce
     ticker: CRM
     pct: 10
+    grade: some
     blurb: >
       Runs significant enterprise infrastructure on Google Cloud.
   - name: Spotify
     ticker: SPOT
     pct: 10
+    grade: some
     blurb: >
       Runs its streaming platform substantially on Google Cloud
       infrastructure.
   - name: Snap Inc
     ticker: SNAP
     pct: 8
+    grade: spread
     blurb: >
       Relies on Google Cloud for a significant share of its infrastructure.
   - name: Deutsche Bank
     ticker: DB
     pct: 8
+    grade: spread
     blurb: >
       A major enterprise customer for Google Cloud's infrastructure and AI
       products.
   - name: General Motors
     ticker: GM
     pct: 8
+    grade: spread
     blurb: >
       Works with Google Cloud on AI and autonomous-driving data
       infrastructure.
   - name: Target Corporation
     ticker: TGT
     pct: 8
+    grade: spread
     blurb: >
       A large enterprise customer running retail infrastructure on Google
       Cloud.
   - name: PayPal
     ticker: PYPL
     pct: 2
+    grade: spread
     blurb: >
       Uses Google Cloud infrastructure and AI tools across parts of its
       platform.
   - name: US federal government
     ticker: null
     pct: 2
+    grade: spread
     blurb: >
       Federal and public-sector agencies are customers of Google Cloud's
       infrastructure. Not a publicly traded company.

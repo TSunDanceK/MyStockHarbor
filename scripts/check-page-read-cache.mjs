@@ -79,7 +79,9 @@ for (const file of allFiles) {
       file,
       line,
       args: m[1],
-      guarded: /PAGE_READ_CACHE/.test(m[1]),
+      // BULK_READ_CACHE is the same cache mode with the 20 s bulk deadline
+      // (#553 CODE-B #144); check-redis-timeouts holds it to cache: "default".
+      guarded: /PAGE_READ_CACHE|BULK_READ_CACHE/.test(m[1]),
     });
   }
 }

@@ -677,11 +677,13 @@ export type EstimatorId = "A" | "B" | "C";
 /** The year-ago announcement for the same fiscal quarter, or null. */
 export function sameQuarterLastYear(
   events: readonly ReportEvent[],
-  nextPeriodEnd: string
+  nextPeriodEnd: string,
+  /** Which evidence to read; 8-K unless the caller has ruled a 6-K filer in (estimateNextReport). */
+  basis: ReportEvent["basis"] = "8-K item 2.02"
 ): ReportEvent | null {
   let best: ReportEvent | null = null;
   for (const e of events) {
-    if (!e.periodEnd || e.basis !== "8-K item 2.02") continue;
+    if (!e.periodEnd || e.basis !== basis) continue;
     const gap = daysBetween(e.periodEnd, nextPeriodEnd);
     // A YEAR, GENEROUSLY: a 52/53-week calendar moves the anniversary by a
     // week either way, and a 4-4-5 year can be 371 days.
@@ -697,9 +699,10 @@ const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 export function runEstimator(
   id: EstimatorId,
   events: readonly ReportEvent[],
-  nextPeriodEnd: string
+  nextPeriodEnd: string,
+  basis: ReportEvent["basis"] = "8-K item 2.02"
 ): string | null {
-  const yearAgo = sameQuarterLastYear(events, nextPeriodEnd);
+  const yearAgo = sameQuarterLastYear(events, nextPeriodEnd, basis);
   if (id === "A") {
     if (!yearAgo) return null;
     return iso(Date.parse(nextPeriodEnd) + daysBetween(yearAgo.periodEnd!, yearAgo.announcedOn) * DAY);
@@ -712,7 +715,7 @@ export function runEstimator(
     return iso(Date.parse(yearAgo.announcedOn) + 364 * DAY);
   }
   const lags = events
-    .filter((e) => e.periodEnd && e.basis === "8-K item 2.02")
+    .filter((e) => e.periodEnd && e.basis === basis)
     .map((e) => daysBetween(e.periodEnd!, e.announcedOn))
     .filter((d) => d >= 0 && d <= 200);
   const lag = median(lags);
@@ -732,6 +735,156 @@ export const PRIMARY_ESTIMATOR: EstimatorId = "A";
 // B wins the exact-hit column (26 of 44 against A's 15) and loses the mean. The
 // rule was fixed before the run and says MEAN, so A ships and the split is
 // recorded rather than used to justify a different choice afterwards.
+
+// ── US EQUITY MARKET TRADING DAYS (#552 COWORK #199/#200) ─────────────────
+//
+// NYSE's full-day closures, computed from their rules rather than listed, so
+// the calendar never runs out: New Year's Day, Martin Luther King Jr. Day,
+// Washington's Birthday, Good Friday, Memorial Day, Juneteenth (from 2022),
+// Independence Day, Labor Day, Thanksgiving and Christmas. A holiday on a
+// Saturday is observed the Friday before, on a Sunday the Monday after --
+// EXCEPT New Year's Day on a Saturday, which NYSE does not move into the old
+// year (2022: open on Fri 31 Dec 2021). Unscheduled closures (a national day
+// of mourning) cannot be computed and are not here; early closes still trade.
+//
+// HERE, NOT IN ITS OWN MODULE, because this file is deliberately import-free:
+// several checks load it from source as a single data: module. It is used
+// only to keep an estimated REPORT DAY off a day the market is shut;
+// marketHours.ts and lastSession.ts are unchanged.
+
+const ymd = (y: number, m: number, d: number) =>
+  `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+/** The n-th (1-based) given weekday (0 = Sunday) of a month; n = -1 is the last. */
+function nthWeekday(y: number, m: number, weekday: number, n: number): string {
+  if (n > 0) {
+    const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+    return ymd(y, m, 1 + ((weekday - first + 7) % 7) + (n - 1) * 7);
+  }
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const last = new Date(Date.UTC(y, m - 1, lastDay)).getUTCDay();
+  return ymd(y, m, lastDay - ((last - weekday + 7) % 7));
+}
+
+/** Easter Sunday (Gregorian; anonymous algorithm). */
+function easter(y: number): string {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return ymd(y, month, day);
+}
+
+export const addCalendarDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+export const weekdayOf = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
+
+/** A fixed-date holiday moved to its observed weekday. */
+function observed(d: string, newYears = false): string | null {
+  const w = weekdayOf(d);
+  if (w === 6) return newYears ? null : addCalendarDays(d, -1);
+  if (w === 0) return addCalendarDays(d, 1);
+  return d;
+}
+
+const holidayCache = new Map<number, ReadonlySet<string>>();
+
+/** NYSE full-day holidays observed in calendar year `y`. */
+export function usMarketHolidays(y: number): ReadonlySet<string> {
+  const hit = holidayCache.get(y);
+  if (hit) return hit;
+  const days = [
+    observed(ymd(y, 1, 1), true),
+    nthWeekday(y, 1, 1, 3),          // MLK Day: third Monday of January
+    nthWeekday(y, 2, 1, 3),          // Washington's Birthday: third Monday of February
+    addCalendarDays(easter(y), -2),          // Good Friday
+    nthWeekday(y, 5, 1, -1),         // Memorial Day: last Monday of May
+    y >= 2022 ? observed(ymd(y, 6, 19)) : null,
+    observed(ymd(y, 7, 4)),
+    nthWeekday(y, 9, 1, 1),          // Labor Day: first Monday of September
+    nthWeekday(y, 11, 4, 4),         // Thanksgiving: fourth Thursday of November
+    observed(ymd(y, 12, 25)),
+  ].filter((d): d is string => Boolean(d));
+  const set = new Set(days);
+  holidayCache.set(y, set);
+  return set;
+}
+
+export function isUsMarketHoliday(d: string): boolean {
+  return usMarketHolidays(Number(d.slice(0, 4))).has(d);
+}
+
+/** Monday to Friday and not an NYSE holiday. */
+export function isUsTradingDay(d: string): boolean {
+  const w = weekdayOf(d);
+  return w !== 0 && w !== 6 && !isUsMarketHoliday(d);
+}
+
+/** The first trading day strictly after (step 1) or before (step -1) `d`. */
+export function nextUsTradingDay(d: string, step: 1 | -1 = 1): string {
+  let x = addCalendarDays(d, step);
+  while (!isUsTradingDay(x)) x = addCalendarDays(x, step);
+  return x;
+}
+
+// ── AN ESTIMATED DAY IS A TRADING DAY (#552 COWORK #199) ──────────────────
+//
+// US filers do not announce results on a Saturday, a Sunday or an NYSE
+// holiday, but a lag added to a period end lands wherever the calendar puts
+// it: NFLX's 30 Sep + 18 days read "Sun 18 Oct", GOOGL's "Sun 25 Oct".
+// The rule (owner, COWORK #199): such a day moves to the nearest trading day
+// IN THE DIRECTION OF THE FILER'S OWN HABIT -- the weekday its past 8-K 2.02
+// announcements fall on -- and otherwise to the following trading day.
+// Only the day moves: kind, window and confidence are left as they were.
+
+/** How many of the filer's newest results announcements decide its habit. */
+export const HABIT_EVENTS = 8;
+
+/**
+ * The weekday (1 = Monday ... 5 = Friday) the filer announces results on: the
+ * strict mode of its newest HABIT_EVENTS 8-K 2.02 dates (6-K results dates for
+ * a filer with no 8-K), seen at least twice. Null when there is no clear habit.
+ */
+export function habitWeekday(events: readonly ReportEvent[]): number | null {
+  const eightK = events.filter((e) => e.basis === "8-K item 2.02" && e.announcedOn);
+  const pool = (eightK.length ? eightK : events.filter((e) => e.basis === "6-K near period end" && e.announcedOn)).slice(0, HABIT_EVENTS);
+  const n = new Map<number, number>();
+  for (const e of pool) {
+    const w = weekdayOf(e.announcedOn);
+    if (w >= 1 && w <= 5) n.set(w, (n.get(w) ?? 0) + 1);
+  }
+  const ranked = [...n].sort((a, b) => b[1] - a[1]);
+  if (!ranked.length || ranked[0][1] < 2 || ranked[1]?.[1] === ranked[0][1]) return null;
+  return ranked[0][0];
+}
+
+/**
+ * `date` if the market trades that day; otherwise the trading day within three
+ * days either side that falls on the filer's habitual weekday (each weekday
+ * occurs exactly once in that seven-day window), else the following trading
+ * day. `notBefore` / `notAfter` bound the move: an estimate never moves into
+ * the past, and a deadline-clamped one never past its statutory deadline (it
+ * steps back to the previous trading day instead).
+ */
+export function onTradingDay(
+  date: string,
+  events: readonly ReportEvent[],
+  bounds: { notBefore?: string; notAfter?: string } = {},
+): string {
+  if (isUsTradingDay(date)) return date;
+  const inBounds = (d: string) => (!bounds.notBefore || d >= bounds.notBefore) && (!bounds.notAfter || d <= bounds.notAfter);
+  const habit = habitWeekday(events);
+  if (habit !== null) {
+    for (let k = -3; k <= 3; k++) {
+      const d = addCalendarDays(date, k);
+      if (weekdayOf(d) === habit && isUsTradingDay(d) && inBounds(d)) return d;
+    }
+  }
+  const after = nextUsTradingDay(date, 1);
+  if (inBounds(after)) return after;
+  const before = nextUsTradingDay(date, -1);
+  return inBounds(before) ? before : after;
+}
 
 /**
  * Estimate the next announcement.
@@ -755,19 +908,28 @@ export function estimateNextReport(
   // honest output is silence — not a date computed from the announcement, which
   // is the conflation this whole module exists to keep out.
   if (!nextPeriodEnd) return { kind: "none", reason: "no matched fiscal period end" };
-  const usable = events.filter((e) => e.periodEnd && e.basis === "8-K item 2.02");
+  // A 6-K FILER'S OWN RESULTS EVENTS COUNT (#552 COWORK #192). RY, BMO, BNS
+  // and CM announce every quarter by 6-K and file no 8-K at all, so an 8-K-only
+  // bar left them at "only 0 prior announcements" with four or more matched
+  // 6-K events stored. A filer with ANY 8-K 2.02 event keeps the 8-K bar
+  // alone -- the stronger signal is never diluted by the weaker one
+  // (SIX_K_IS_A_WEAKER_SIGNAL) -- and the spread rule below still refuses an
+  // irregular 6-K history exactly as it refuses an irregular 8-K one.
+  const eightK = events.filter((e) => e.periodEnd && e.basis === "8-K item 2.02");
+  const basis: ReportEvent["basis"] = eightK.length ? "8-K item 2.02" : "6-K near period end";
+  const usable = eightK.length ? eightK : events.filter((e) => e.periodEnd && e.basis === "6-K near period end");
   const lags = usable
     .map((e) => daysBetween(e.periodEnd!, e.announcedOn))
     .filter((d) => d >= 0 && d <= 200);
   if (lags.length < REGULARITY_WINDOW) {
-    return { kind: "none", reason: `only ${lags.length} prior 8-K item 2.02 announcement(s)` };
+    return { kind: "none", reason: `only ${lags.length} prior ${basis === "8-K item 2.02" ? "8-K item 2.02" : "6-K results"} announcement(s)` };
   }
 
   const recent = lags.slice(0, REGULARITY_WINDOW);
   const spread = Math.max(...recent) - Math.min(...recent);
 
-  const primary = runEstimator(PRIMARY_ESTIMATOR, usable, nextPeriodEnd);
-  const predicted = primary ?? runEstimator("C", usable, nextPeriodEnd);
+  const primary = runEstimator(PRIMARY_ESTIMATOR, usable, nextPeriodEnd, basis);
+  const predicted = primary ?? runEstimator("C", usable, nextPeriodEnd, basis);
   if (!predicted) return { kind: "none", reason: "no usable prior announcement" };
 
   const cap = new Date(Date.parse(nextPeriodEnd) + deadlineDays(category, annual) * DAY);
@@ -776,10 +938,25 @@ export function estimateNextReport(
   const timings = usable.slice(0, REGULARITY_WINDOW).map((e) => e.timing);
   const timing = timings.length && timings.every((t) => t === timings[0]) ? timings[0] : null;
 
+  // A 6-K HISTORY EARNS A MONTH AT MOST (#552 COWORK #192 with
+  // SIX_K_IS_A_WEAKER_SIGNAL). Its events count toward the bar, but a
+  // positionally-selected 6-K must not carry the most specific claim the page
+  // makes: a regular 6-K filer reads "expected in <month>", never a day.
+  if (basis === "6-K near period end") {
+    const months = new Set(recent.map((d) => iso(Date.parse(nextPeriodEnd) + d * DAY).slice(0, 7)));
+    if (spread <= REGULAR_SPREAD_DAYS || months.size === 1) {
+      const month = (clamped ? cap.toISOString() : predicted).slice(0, 7);
+      return { kind: "month", month, spreadDays: spread, fromEvents: lags.length, timing };
+    }
+    return { kind: "none", reason: `last ${REGULARITY_WINDOW} 6-K lags spread ${spread} days across ${months.size} months` };
+  }
+
   if (spread <= REGULAR_SPREAD_DAYS) {
+    const capDay = cap.toISOString().slice(0, 10);
     return {
       kind: "date",
-      date: clamped ? cap.toISOString().slice(0, 10) : predicted,
+      // ON A TRADING DAY (#552 COWORK #199), never past the statutory deadline.
+      date: onTradingDay(clamped ? capDay : predicted, usable, { notAfter: capDay }),
       medianLagDays: median(lags)!,
       spreadDays: spread,
       fromEvents: lags.length,
@@ -1030,7 +1207,16 @@ export function estimateUpcoming(
   let end = snap(cadence.end);
   let estimate = estimateNextReport(events, end, category, cadence.annual);
   for (let i = 0; i < 8; i++) {
-    if (estimate.kind !== "date" || estimate.date >= floor) break;
+    if (estimate.kind === "date") {
+      if (estimate.date >= floor) break;
+    } else if (Date.parse(end) + deadlineDays(category, cadence.annual) * DAY >= Date.parse(floor)) {
+      // ROLLED WHATEVER THE KIND (#552 COWORK #192). With no date to test, a
+      // period whose statutory deadline has passed has been reported, so the
+      // estimate is not for it: RY's record sat on 2026-04-30 in October
+      // because only a DATE estimate used to roll. Stops at the first period
+      // still inside its deadline.
+      break;
+    }
     end = snap(new Date(Date.parse(end) + cadence.stepDays * DAY).toISOString().slice(0, 10));
     estimate = estimateNextReport(events, end, category, cadence.annual);
   }

@@ -75,7 +75,46 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["trendFlipBullish"],
   sectionIncludes: ["bullish trend flip stocks (daily)"],
+  // Named on the page (#553 COWORK #161): the section sorts by bars since
+  // the flip, newest first, ties A to Z (pickersBuilder).
+  rankedBy: { label: "most recent Trend Helper flip, newest first", short: "newest flip" },
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "What counts as a daily bullish flip",
+      paragraphs: [
+        "This screen lists stocks whose Trend Helper Slow line has just turned from a bearish state to a bullish one on daily bars. The Slow line is a 55-period Hull moving average, a type of average designed to react faster than a simple average while still smoothing out day-to-day noise.",
+        "A bullish state confirms only after two consecutive daily closes above the line while the line itself is sloping upward. If the line is flat, neither direction confirms. Once bullish, the state holds until a bearish confirmation replaces it, so a single dip below the line does not undo it.",
+        "To appear here, that flip must have confirmed no more than three bars ago, which means within the last four sessions. A stock’s first-ever confirmation in the loaded history is left out, since there is no earlier state for it to have flipped from.",
+      ],
+    },
+    {
+      heading: "Reading the list from the top down",
+      paragraphs: [
+        "Rows are ordered by how recent the flip is, newest first, with ties sorted A–Z. The date at the start of each row is the session the flip confirmed on, and because the data is end-of-day, the newest possible bar is the previous session’s close, not today’s trading.",
+        "A fresh flip on its own says only that short-to-medium momentum has turned. It may help to check where the stock sits relative to its 200-day moving average, and whether volume picked up around the flip, since a turn inside a long decline can read differently from one inside an existing uptrend.",
+      ],
+    },
+    {
+      heading: "Where daily flips fall short",
+      paragraphs: [
+        "Daily flips can happen often in choppy, sideways markets, where price may cross the line, confirm and reverse within a couple of weeks. The two-close rule cuts some of that noise but cannot remove it. The screen also cannot see news, earnings dates or intraday moves, and the page rebuilds hourly from end-of-day bars, so it always lags the live market slightly.",
+      ],
+    },
+    {
+      heading: "One row, worked through",
+      paragraphs: [
+        "Picture a stock that spent several weeks closing below a falling Slow line. The line then levels off and starts to tilt upward, and on a Monday the stock closes above it. On Tuesday it closes above the rising line again, so Tuesday becomes the confirmation bar and the row is dated to that session. If Wednesday slips back under the line, the bullish state still stands, because only two closes below a falling line could reverse it.",
+        "That stock stays listed through the next three sessions after Tuesday and then drops off, even if the new trend carries on. A stock that closed above the line twice while the line was still flat or tilting down would not qualify at all, an edge case that may leave out some early turns. The weekly bullish flip page applies the same logic to closed weeks, so a daily flip may show up there later.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-with-weekly-bullish-trend-flip", label: "Weekly bullish trend flips" },
+    { href: "/stocks-with-bearish-trend-flip", label: "Daily bearish trend flips" },
+    { href: "/best-trend-score-stocks", label: "Best trend score stocks" },
+    { href: "/stocks-above-50-day-moving-average", label: "Stocks above the 50-day moving average" },
+  ],
 };
 
 export default function Page() {

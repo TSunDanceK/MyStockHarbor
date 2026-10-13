@@ -9,9 +9,9 @@
 // reading A5, not a tidiness exercise.
 //
 // AND THE COUNT WAS WRONG. The build plan said seven. There are EIGHT: the
-// eighth is aggregateToWeekly in app/insights/[slug]/InsightPostClient.tsx,
-// which draws the chart on every published insight post -- including the weekly
-// MA200 posts the daily automation writes with timeframe "w". Found by grepping
+// eighth is aggregateToWeekly, once in app/insights/[slug]/InsightPostClient.tsx
+// and since the insight rebuild (#563 COWORK #132) in lib/insightView.ts, where
+// it draws the 200-week average for the weekly MA200 posts. Found by grepping
 // for the definitions rather than trusting the list, and it is discovered here on
 // every run rather than pinned, so a ninth copy shows up as a new row.
 //
@@ -41,7 +41,7 @@ const CANDIDATE_FILES = [
   "app/components/DashboardClient.tsx",
   "app/markets/spx/SPXChartClient.tsx",
   "app/stock/[symbol]/StockSymbolPageClient.tsx",
-  "app/insights/[slug]/InsightPostClient.tsx",
+  "lib/insightView.ts",
 ];
 const AGGREGATOR_NAMES = new Set([
   "aggregatePoints",

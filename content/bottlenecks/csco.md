@@ -35,6 +35,7 @@ supplyChain:
   - name: Hon Hai Precision Industry (Foxconn)
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Cisco's largest electronics manufacturing services partner, assembling
       a large share of Cisco's high-volume switching, routing, and wireless
@@ -43,6 +44,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing
     ticker: TSM
     pct: 14
+    grade: some
     blurb: >
       The advanced-node foundry that fabricates Cisco's custom Silicon One
       networking ASICs as well as chips from several of Cisco's other
@@ -51,6 +53,7 @@ supplyChain:
   - name: Broadcom Inc.
     ticker: AVGO
     pct: 13
+    grade: some
     blurb: >
       Supplies merchant networking silicon and custom components used
       across parts of Cisco's switch and router portfolios, even as Cisco
@@ -58,6 +61,7 @@ supplyChain:
   - name: Flex Ltd.
     ticker: FLEX
     pct: 12
+    grade: some
     blurb: >
       A top-tier contract manufacturer handling assembly, testing, and
       system-level build for Cisco's enterprise networking and data-center
@@ -66,6 +70,7 @@ supplyChain:
   - name: Fabrinet
     ticker: FN
     pct: 10
+    grade: some
     blurb: >
       A specialized manufacturer of optical transceivers and photonic
       components that Cisco depends on for the pluggable optics used
@@ -74,6 +79,7 @@ supplyChain:
   - name: Amphenol Corp.
     ticker: APH
     pct: 9
+    grade: spread
     blurb: >
       A major supplier of connectors, cable assemblies, and high-speed
       interconnect used throughout Cisco's networking hardware, components
@@ -82,6 +88,7 @@ supplyChain:
   - name: Marvell Technology
     ticker: MRVL
     pct: 8
+    grade: spread
     blurb: >
       Provides networking and optical DSP silicon used in Cisco's switching
       and optical transport products, an area where alternate suppliers are
@@ -89,6 +96,7 @@ supplyChain:
   - name: Micron Technology
     ticker: MU
     pct: 7
+    grade: spread
     blurb: >
       A key supplier of DRAM and NAND memory used across Cisco's routers,
       switches, and appliances, a commodity market prone to price swings
@@ -96,6 +104,7 @@ supplyChain:
   - name: Samsung Electronics
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Supplies memory chips and other components used across Cisco's
       hardware lines. Samsung trades on the Korea Exchange and only as a
@@ -103,6 +112,7 @@ supplyChain:
   - name: SK hynix
     ticker: SKHY
     pct: 5
+    grade: spread
     blurb: >
       Another major memory supplier for Cisco's hardware, subject to the
       same cyclical DRAM/NAND pricing swings as other chip customers. Its
@@ -112,6 +122,7 @@ customers:
   - name: World Wide Technology
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Cisco's single largest reseller and systems integrator, reportedly
       generating more than $6 billion a year in Cisco product sales, about
@@ -120,6 +131,7 @@ customers:
   - name: TD Synnex
     ticker: SNX
     pct: 12
+    grade: spread
     blurb: >
       One of the two dominant global IT distributors that move Cisco
       hardware and software from the factory to thousands of resellers and
@@ -127,6 +139,7 @@ customers:
   - name: U.S. Federal Government
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Cisco's largest public-sector buyer, purchasing networking and
       security infrastructure across civilian, defense, and intelligence
@@ -135,6 +148,7 @@ customers:
   - name: Ingram Micro Holding
     ticker: INGM
     pct: 11
+    grade: some
     blurb: >
       The other half of Cisco's core global distribution duopoly, holding
       authorized distribution agreements that move Cisco networking and
@@ -142,6 +156,7 @@ customers:
   - name: Microsoft
     ticker: MSFT
     pct: 9
+    grade: spread
     blurb: >
       One of the hyperscale cloud operators Cisco has named as placing
       large, binding orders for its AI-networking gear as Azure builds out
@@ -149,6 +164,7 @@ customers:
   - name: Amazon.com
     ticker: AMZN
     pct: 9
+    grade: spread
     blurb: >
       Both a cloud buyer purchasing Cisco networking equipment for AWS
       infrastructure and a channel partner reselling Cisco products, and one
@@ -157,6 +173,7 @@ customers:
   - name: CDW Corporation
     ticker: CDW
     pct: 9
+    grade: spread
     blurb: >
       A top-ranked Cisco reseller and one of the largest value-added
       resellers of Cisco networking, security, and collaboration gear to
@@ -164,6 +181,7 @@ customers:
   - name: Alphabet
     ticker: GOOGL
     pct: 8
+    grade: spread
     blurb: >
       Google Cloud is among the hyperscalers Cisco has named as placing
       binding AI-networking infrastructure orders as it expands data-center
@@ -171,6 +189,7 @@ customers:
   - name: Meta Platforms
     ticker: META
     pct: 8
+    grade: spread
     blurb: >
       A hyperscale AI infrastructure buyer that Cisco has cited as part of
       the wave of large cloud and social-media operators driving its
@@ -178,6 +197,7 @@ customers:
   - name: Insight Enterprises
     ticker: NSIT
     pct: 6
+    grade: spread
     blurb: >
       A major global IT solutions provider and repeat multi-year Cisco
       Partner of the Year winner that packages Cisco networking, security,

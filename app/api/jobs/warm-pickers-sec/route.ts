@@ -5,16 +5,21 @@
 // call -- it reads the stored fact sets and writes one Redis hash -- so it does
 // not need FMP_API_KEY and keeps working when that key is gone.
 //
-// COST: ~860 Redis commands a run (one GET per symbol, one HSET per 100, one
-// EXPIRE), hard-capped by MAX_SYMBOLS_PER_RUN; the first write error stops it.
+// COST: ~2,630 Redis commands a run (one GET per symbol over ~2,600 symbols,
+// one HSET per 100, one EXPIRE, +1 GET for the universe), hard-capped by
+// MAX_SYMBOLS_PER_RUN; the first write error stops it.
 import { NextRequest, NextResponse } from "next/server";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
-import { guardJob } from "../../../../lib/server/jobGuard";
+import { guardCommandsLeft, guardJob } from "../../../../lib/server/jobGuard";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
+import { readTiingoUniverseSymbols } from "../../../../lib/server/tiingoUniverse";
 import { warmPickersSec } from "../../../../lib/server/pickersSecFundamentals";
 import { registrantFor } from "../../../../lib/server/stockProfile";
 import { adsRatioFor } from "../../../../lib/server/secAdsMap";
-import { nonEquityListingOf } from "../../../../lib/server/secPrimaryListing";
+import { citedCoverFor, nonEquityListingOf } from "../../../../lib/server/secPrimaryListing";
+import { admittedForSec } from "../../../../lib/server/secSeedGate";
+import { cikForSymbol } from "../../../../lib/server/secColdFetch";
+import { flushRedisReadMeter } from "../../../../lib/server/redisBandwidth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +40,19 @@ async function handleGET(req: NextRequest) {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
 
   try {
-    const { symbols } = await getWarmTargetSymbols(base);
+    const { symbols: warm } = await getWarmTargetSymbols(base);
+    // PLUS THE TIINGO UNIVERSE (#553 COWORK #110, 2026-10-03): the pool overlay
+    // (earnings calendar, sector weights) caps a row from this hash only, so it
+    // must hold every symbol the overlay prices. Warm targets first, so the run
+    // cap can never drop a Pickers symbol. +1 GET for the universe key.
+    const universe = [...new Set([...warm, ...(await readTiingoUniverseSymbols())])];
+    // THE SEC SEED GATE (#552 COWORK #148): a preferred, warrant, note or ETF
+    // gets no SEC picker row, even where a set is stored under its ticker from
+    // before the gate (it would carry the PARENT's figures). Dropped before any
+    // read, so its old row is pruned like any symbol that left the universe.
+    // Committed files only: no Redis cost.
+    const gate = admittedForSec(universe, cikForSymbol);
+    const symbols = gate.admitted;
     // The cited ADS ratio (#553 COWORK #44), as the stock and earnings pages
     // pass it: absent keeps the depositary-share refusal. A committed file, so
     // no Redis cost. And A's non-common listings (#553 COWORK #67): a note,
@@ -45,12 +62,30 @@ async function handleGET(req: NextRequest) {
       annualForm: registrantFor(s)?.annualForm ?? null,
       ads: adsRatioFor(s),
       nonEquity: nonEquityListingOf(s),
-    }));
-    console.log("[warm-pickers-sec]", JSON.stringify(result));
+      // The filer's SIC for A's bank gate on the ≈ Ent. Value (#553 COWORK
+      // #102), as the earnings snapshot passes it. A committed file, no Redis cost.
+      sic: registrantFor(s)?.sic ?? null,
+      // A's cited 20-F / 40-F cover counts (#552 COWORK #86b, #92 Q2), as the
+      // stock and earnings pages pass them; used only when newer than dei.
+      citedCover: citedCoverFor(s),
+    }), Date.now(), undefined, {
+      // Stop short of the job guard's ceiling, so a stop still flushes, sets
+      // the EXPIRE and logs stoppedEarly: "command-budget" (#553 COWORK #124).
+      commandsLeft: guardCommandsLeft,
+    });
+    // durationMs (#553 COWORK #113/#114): the run's own time, beside its
+    // stoppedEarly ("time-budget" when WARM_PICKERS_SEC_BUDGET_MS ran out).
+    // The run's fact-set reads, written once (#553 COWORK #214, cut 3).
+    await flushRedisReadMeter();
+    console.log("[warm-pickers-sec]", `durationMs=${result.durationMs ?? null}`, JSON.stringify(result));
+    const gateRefused = Object.fromEntries(Object.entries(gate.refused).map(([why, syms]) => [why, syms.length]));
+    console.log("[warm-pickers-sec] seed gate refused", JSON.stringify(gateRefused));
     await recordJobRun("warm-pickers-sec", result.ok, {
+      durationMs: result.durationMs ?? null,
       targets: result.symbols,
       written: result.written,
       noFactSet: result.noFactSet,
+      gateRefused: JSON.stringify(gateRefused),
       stoppedEarly: result.stoppedEarly,
       commands: result.commands,
       pruned: result.pruned ?? null,

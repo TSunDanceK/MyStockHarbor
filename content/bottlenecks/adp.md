@@ -34,6 +34,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 35
+    grade: hard
     blurb: >
       ADP's next-generation Human Capital Management and payroll platform
       runs extensively on Amazon Web Services, built on containerized
@@ -45,6 +46,7 @@ supplyChain:
   - name: U.S. banking system / ACH & Federal Reserve payment network
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Not a single company. ADP moves hundreds of billions of dollars in
       U.S. client funds each year, collecting payroll and tax withholdings
@@ -56,6 +58,7 @@ supplyChain:
   - name: Insurance carrier network (health, life, disability & retirement carriers)
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. ADP's benefits administration and ADP
       TotalSource (PEO) businesses depend on integrations and underwriting
@@ -67,6 +70,7 @@ supplyChain:
   - name: Third-party payment card & prepaid-card banking partners
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. ADP's Wisely pay-card product depends on a
       partner bank to actually issue cards and hold cardholder funds
@@ -77,6 +81,7 @@ customers:
   - name: Employer Services – U.S. clients (payroll, HCM & compliance)
     ticker: null
     pct: 42
+    grade: hard
     blurb: >
       Not a single company. ADP's core Employer Services segment —
       payroll processing, HR software, tax filing and compliance —
@@ -86,6 +91,7 @@ customers:
   - name: Employer Services – international clients (multinational payroll & HCM)
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Not a single company. ADP pays millions of workers outside the
       United States, and a meaningful share of Employer Services revenue
@@ -94,6 +100,7 @@ customers:
   - name: PEO Services – ADP TotalSource clients (U.S. co-employment)
     ticker: null
     pct: 33
+    grade: spread
     blurb: >
       Not a single company. ADP TotalSource, the company's professional
       employer organization, generated roughly a third of fiscal 2025

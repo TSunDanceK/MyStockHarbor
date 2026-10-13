@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { chartHref } from "@/lib/chartHref";
 import Link from "next/link";
 
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
+import { filedEarningsGate } from "@/lib/server/filedEarnings";
 
 // Why this page exists
 // --------------------
@@ -112,7 +114,7 @@ const subLinkStyle = {
   borderBottom: "1px solid rgba(148,163,184,0.25)",
 } as const;
 
-function DirectorySection({
+async function DirectorySection({
   id,
   heading,
   blurb,
@@ -126,6 +128,8 @@ function DirectorySection({
   showEarnings: boolean;
 }) {
   const groups = groupByInitial(entries);
+  // #552 COWORK #197: an earnings link only for a symbol with a filed SEC set (one cached read).
+  const hasFiledEarnings = await filedEarningsGate();
 
   return (
     <section id={id} style={{ marginTop: 44 }}>
@@ -201,7 +205,7 @@ function DirectorySection({
                   >
                     News
                   </Link>
-                  {showEarnings ? (
+                  {showEarnings && hasFiledEarnings(entry.symbol) ? (
                     <Link
                       href={`/stock/${encodeURIComponent(entry.symbol)}/earnings`}
                       style={subLinkStyle}
@@ -277,7 +281,7 @@ export default async function StockDirectoryPage() {
 
       <div style={{ maxWidth: 1140, margin: "0 auto", padding: "40px 20px 80px" }}>
         <Link
-          href="/dashboard"
+          href={chartHref()}
           style={{
             fontSize: 13,
             color: "rgba(148,163,184,0.95)",

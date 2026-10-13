@@ -13,6 +13,7 @@ import { Redis } from "@upstash/redis";
 import registrantsFile from "@/data/sec/registrants.json";
 import { lookupSpellingIn } from "@/lib/symbolSpellings.mjs";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
+import { JOB_REDIS_OPTS } from "./redisCacheMode";
 
 export const SEC_SIC_CHANGES_KEY = "msh:sec:sic-changes:v1";
 
@@ -44,7 +45,7 @@ export function sicChangeOf(
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(JOB_REDIS_OPTS)
     : null;
 
 /** One HSET for all of a run's changes; nothing at all when there are none. */

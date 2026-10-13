@@ -49,7 +49,7 @@ export function HideWatermarksButton() {
         alignItems: "center",
         justifyContent: "center",
         padding: "5px 9px",
-        fontSize: 10.5,
+        fontSize: "var(--fs-label)",
         fontWeight: 650,
         letterSpacing: "0.02em",
         color: "rgba(148,163,184,0.38)",

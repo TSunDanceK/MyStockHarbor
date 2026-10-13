@@ -67,9 +67,11 @@ console.log("\n2. the universe sends only what the guard keeps");
 const jobs = readCodeOnly("lib/server/marketData/jobs.ts");
 const wired = (c) =>
   /const r = retickeredOut\(pool, live, lastSeen\);/.test(c) &&
-  /return \{ symbols: r\.keep, retickered: r\.dropped\.map\(\(d\) => d\.symbol\), retickerGuard: r\.guard \};/.test(c) &&
-  (c.match(/const \{ symbols, retickered, retickerGuard \} = await universe\(\);/g) ?? []).length === 2 &&
-  (c.match(/\bretickered,\s*retickerGuard,/g) ?? []).length === 2;
+  // ", universeSource" since step 5 (#553 COWORK #98): which list the guard ran over.
+  /return \{ symbols: r\.keep, retickered: r\.dropped\.map\(\(d\) => d\.symbol\), retickerGuard: r\.guard(, universeSource)? \};/.test(c) &&
+  (c.match(/const \{ symbols, retickered, retickerGuard(, universeSource)? \} = await universe\(\);/g) ?? []).length === 2 &&
+  // Line-initial: the two result objects, not the destructuring above.
+  (c.match(/\n\s*retickered,\s*retickerGuard,/g) ?? []).length === 2;
 check("universe() returns r.keep, and both jobs record what was dropped", wired(jobs));
 
 console.log("\n3. mutants");

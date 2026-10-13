@@ -37,6 +37,7 @@ supplyChain:
   - name: Quanta Services, Inc.
     ticker: PWR
     pct: 20
+    grade: some
     blurb: >
       The largest US electric transmission and distribution construction
       contractor - a category match for the physical grid buildout behind
@@ -45,6 +46,7 @@ supplyChain:
   - name: GE Vernova
     ticker: GEV
     pct: 18
+    grade: some
     blurb: >
       One of a small handful of global manufacturers of power transformers
       and grid equipment, whose multi-year order backlogs now gate how
@@ -53,6 +55,7 @@ supplyChain:
   - name: Hitachi Energy
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       A top-tier global transformer and switchgear manufacturer utilities
       like Exelon depend on amid the constrained transformer market.
@@ -61,6 +64,7 @@ supplyChain:
   - name: Siemens Energy AG
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Another top-tier global transformer and grid-equipment manufacturer
       in the same constrained supply category. Trades on the Frankfurt
@@ -69,6 +73,7 @@ supplyChain:
   - name: Eaton Corporation plc
     ticker: ETN
     pct: 12
+    grade: some
     blurb: >
       A major switchgear and electrical-equipment manufacturer supplying
       the substation and grid-hardening equipment behind Exelon's
@@ -76,6 +81,7 @@ supplyChain:
   - name: MYR Group Inc.
     ticker: MYRG
     pct: 10
+    grade: some
     blurb: >
       A second major national transmission and distribution construction
       contractor utilities like Exelon depend on for grid buildout
@@ -83,6 +89,7 @@ supplyChain:
   - name: Itron, Inc.
     ticker: ITRI
     pct: 7
+    grade: spread
     blurb: >
       Supplies the advanced metering infrastructure network ComEd uses for
       smart-meter data - a network Illinois gas utilities now share,
@@ -91,6 +98,7 @@ supplyChain:
   - name: Landis+Gyr Group AG
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Signed a contract to supply the majority of smart meters for the
       advanced-metering rollout across Pepco Holdings' territory (Delaware,
@@ -100,6 +108,7 @@ customers:
   - name: Diversified residential, commercial & industrial customer base
     ticker: null
     pct: 55
+    grade: hard
     blurb: >
       Not a single company - Exelon's roughly 10.7 million retail
       customers across ComEd, PECO, BGE, Pepco, Delmarva Power, and
@@ -108,6 +117,7 @@ customers:
   - name: Amazon (Amazon Data Services)
     ticker: AMZN
     pct: 12
+    grade: some
     blurb: >
       Party to PECO's first-ever Transmission Security Agreement, covering
       a planned data center in Falls Township, Pennsylvania, with Amazon
@@ -115,6 +125,7 @@ customers:
   - name: Equinix, Inc.
     ticker: EQIX
     pct: 8
+    grade: spread
     blurb: >
       One of the named data-center operators with a FERC-approved
       Transmission Security Agreement at ComEd, part of Exelon's roughly
@@ -122,6 +133,7 @@ customers:
   - name: Tract
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       A named data-center developer with a FERC-approved Transmission
       Security Agreement at ComEd covering a roughly 1 GW project in
@@ -129,6 +141,7 @@ customers:
   - name: Aligned Data Centers
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       A Macquarie-backed data-center operator with a FERC-approved
       Transmission Security Agreement at ComEd. Not a publicly traded
@@ -136,6 +149,7 @@ customers:
   - name: QTS Investment Properties Chicago
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       A Blackstone-owned data-center entity with a FERC-approved
       Transmission Security Agreement at ComEd. Not a publicly traded
@@ -143,6 +157,7 @@ customers:
   - name: Other named ComEd data-center TSA counterparties
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Not a single company - smaller FERC-approved Transmission Security
       Agreement counterparties at ComEd, including Grundy County Power,

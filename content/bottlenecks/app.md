@@ -36,6 +36,7 @@ supplyChain:
   - name: Alphabet Inc. (Google Cloud)
     ticker: GOOGL
     pct: 40
+    grade: hard
     blurb: >
       AppLovin's own SEC filings disclose a cloud-infrastructure agreement
       with a minimum spend commitment of roughly $1.3 billion over three
@@ -45,6 +46,7 @@ supplyChain:
   - name: NVIDIA Corporation
     ticker: NVDA
     pct: 12
+    grade: some
     blurb: >
       The GPU hardware underneath AXON's ad-ranking models - Google
       Cloud's case study on AppLovin specifically cites a move from
@@ -52,6 +54,7 @@ supplyChain:
   - name: Apple Inc.
     ticker: AAPL
     pct: 28
+    grade: some
     blurb: >
       AppLovin's own risk factors cite changes to App Store policy,
       including Apple's App Tracking Transparency framework, as a factor
@@ -60,6 +63,7 @@ supplyChain:
   - name: Alphabet Inc. (Google Play)
     ticker: GOOGL
     pct: 20
+    grade: some
     blurb: >
       The Android-side counterpart to Apple's App Store, named alongside
       it in AppLovin's risk factors as a distribution and policy
@@ -68,6 +72,7 @@ customers:
   - name: Mobile gaming & consumer app publishers
     ticker: null
     pct: 65
+    grade: hard
     blurb: >
       Not a single company. Mobile game studios and consumer-app
       developers buying user-acquisition advertising have historically
@@ -76,6 +81,7 @@ customers:
   - name: E-commerce & DTC brands
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. AppLovin opened its Axon ad platform to
       self-serve advertisers in June 2026, specifically targeting
@@ -84,6 +90,7 @@ customers:
   - name: Subscription apps, fintech & other non-gaming advertisers
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. A smaller but growing slice of AppLovin's
       advertiser base outside gaming and e-commerce, spanning subscription

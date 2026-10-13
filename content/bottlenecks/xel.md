@@ -38,6 +38,7 @@ supplyChain:
   - name: GE Vernova
     ticker: GEV
     pct: 20
+    grade: some
     blurb: >
       Xcel's largest single equipment partner, GE Vernova supplies wind
       turbines for Xcel's onshore fleet and, under a February 2026 strategic
@@ -47,6 +48,7 @@ supplyChain:
   - name: Siemens Energy AG
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Supplying ten SGT6-5000F "F-class" gas turbines (roughly 2,088 MW
       combined) for Xcel's Tolk Station coal-to-gas conversion and a new
@@ -56,6 +58,7 @@ supplyChain:
   - name: Natural gas producers & interstate pipeline network
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company - Xcel's gas-fired generating fleet and its
       natural-gas distribution utilities (including PSCo in Colorado, one of
@@ -66,6 +69,7 @@ supplyChain:
   - name: Vestas Wind Systems A/S
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Won a 2023 order for 168 V110-2.0/2.2 MW turbines (about 370 MW) to
       repower Xcel's Pleasant Valley (Minnesota) and Border Winds (North
@@ -75,6 +79,7 @@ supplyChain:
   - name: Westinghouse Electric Company
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Long-standing nuclear fuel supplier and outage-services contractor for
       Xcel's Prairie Island nuclear plant in Minnesota, which is advancing
@@ -84,6 +89,7 @@ supplyChain:
   - name: Framatome
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Delivers PROtect advanced nuclear fuel technology to Xcel's Monticello
       Nuclear Generating Plant, which received federal approval in 2025 to
@@ -93,6 +99,7 @@ supplyChain:
   - name: Solar panel & equipment suppliers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company - Xcel procures utility-scale solar modules,
       racking and balance-of-plant equipment through competitive all-source
@@ -102,6 +109,7 @@ supplyChain:
   - name: NextEra Energy, Inc.
     ticker: NEE
     pct: 8
+    grade: spread
     blurb: >
       Signed a February 2026 memorandum of understanding with Xcel to
       jointly develop new generation, storage and transmission resources -
@@ -110,6 +118,7 @@ supplyChain:
   - name: Powder River Basin coal producers
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company - Xcel's remaining coal units (including at
       Hayden and Pueblo/Comanche in Colorado, and legacy units at Sherco in
@@ -119,6 +128,7 @@ supplyChain:
   - name: Transformer & grid-equipment manufacturers
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Not a single company - large power transformers, breakers and
       substation equipment from manufacturers such as Hitachi Energy and
@@ -129,6 +139,7 @@ customers:
   - name: Diversified residential, commercial & industrial customer base
     ticker: null
     pct: 52
+    grade: hard
     blurb: >
       Not a single company - Xcel's traditional base of roughly 3.8 million
       electric and 2.2 million natural gas accounts across Minnesota,
@@ -138,6 +149,7 @@ customers:
   - name: Other contracted & pipeline data-center/large-load customers
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company - beyond its publicly named hyperscale deals,
       Xcel has disclosed several gigawatts of aggregate data-center
@@ -147,6 +159,7 @@ customers:
   - name: Microsoft Corporation
     ticker: MSFT
     pct: 10
+    grade: some
     blurb: >
       Named alongside Meta among the large tech companies Xcel disclosed
       were driving its Minnesota data-center pipeline, part of several
@@ -155,6 +168,7 @@ customers:
   - name: Alphabet Inc. (Google)
     ticker: GOOGL
     pct: 8
+    grade: spread
     blurb: >
       Signed a 2026 agreement under which Xcel will power a nearly 1 GW
       Google data center in Pine Island, Minnesota, backed by roughly 1.9 GW
@@ -164,6 +178,7 @@ customers:
   - name: QTS Realty Trust
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Its Aurora, Colorado "hyperscale" data-center campus (ramping toward
       177 MW) was set to rival Evraz Rocky Mountain Steel as Xcel's largest
@@ -172,6 +187,7 @@ customers:
   - name: Meta Platforms, Inc.
     ticker: META
     pct: 8
+    grade: spread
     blurb: >
       Xcel's power supply agreement backs Meta's approximately $800 million,
       715,000-square-foot AI data center in Rosemount, Minnesota, matched
@@ -180,6 +196,7 @@ customers:
   - name: Public authorities & government/institutional customers
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Not a single company - covers roughly 70,000 electric accounts
       classified as public authorities and other institutional customers

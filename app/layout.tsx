@@ -5,6 +5,7 @@ import SiteHeader from "./components/SiteHeader";
 import CrawlableNav from "./components/CrawlableNav";
 import PageViewTracker from "./components/PageViewTracker";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
+import { LATEST_VIDEOS_LIMIT } from "@/lib/videoResolve";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,6 +18,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+
+/** Impact.com's site verification ID (#563 COWORK #167); scripts/check-impact-verification.mjs holds the tag to it. */
+const IMPACT_SITE_VERIFICATION = "9aa5dfcb-1339-4383-b1e8-7c2ac0ab674b";
 export const metadata: Metadata = {
   title: "MyStockHarbor — Stock Screeners, Swing Trade Setups & Daily Market Insights",
   description:
@@ -54,9 +58,6 @@ export const metadata: Metadata = {
       "Free stock screeners for breakouts, oversold stocks & bullish divergence. Daily insight posts, live dashboards, chart pattern plays, and swing trade setups. No login needed.",
     images: ["https://www.mystockharbor.com/og-image-v2.png"],
   },
-  other: {
-    "impact-site-verification": "cfd647ce-ddd8-4f2a-921f-3763ef298b2a",
-  },
 };
 
 export default async function RootLayout({
@@ -68,7 +69,11 @@ export default async function RootLayout({
   // getLatestYouTubeVideos — see lib/youtube.ts) so the global header's
   // "Video Breakdowns" nav link always points at whichever video is
   // currently newest, without any client-side fetch or hardcoded video ID.
-  const [latestVideo] = await getLatestYouTubeVideos(1);
+  //
+  // THE PAGE'S OWN LIST (#563 COWORK #70): the same limit the video page reads,
+  // so one cache entry answers both and the link's id is always in the list the
+  // page falls back to. With limit 1 it was a separate 24-hour entry.
+  const [latestVideo] = await getLatestYouTubeVideos(LATEST_VIDEOS_LIMIT);
   const latestVideoId = latestVideo?.id ?? null;
 
   const footerLinkStyle: React.CSSProperties = {
@@ -187,6 +192,10 @@ export default async function RootLayout({
   return (
     <html lang="en-GB">
       <head>
+        {/* Impact.com site verification (#563 COWORK #167). A raw tag, NOT the
+            metadata API: Impact reads the attribute `value`, and metadata.other
+            renders `content`. A public verification ID, not a secret. */}
+        <meta name="impact-site-verification" {...{ value: IMPACT_SITE_VERIFICATION }} />
         <script
           async
           src="https://www.googletagmanager.com/gtag/js?id=G-V2BD40X7H2"
@@ -368,16 +377,18 @@ export default async function RootLayout({
                 <div
                   style={{
                     fontWeight: 800,
-                    fontSize: 14,
+                    fontSize: "0.875rem",
                     color: "#f8fafc",
                   }}
                 >
                   MyStockHarbor
                 </div>
 
+                {/* FINE PRINT ON PURPOSE (#563 COWORK #102): the disclaimer and the © line sit at --fs-fine. */}
                 <div
+                  data-fine-print
                   style={{
-                    fontSize: 12,
+                    fontSize: "var(--fs-fine)",
                     lineHeight: 1.55,
                     color: "rgba(241,245,249,0.78)",
                   }}
@@ -416,7 +427,7 @@ export default async function RootLayout({
                   <details key={column.heading} className="footer-col" open>
                     <summary
                       style={{
-                        fontSize: 12,
+                        fontSize: "var(--fs-label)",
                         fontWeight: 700,
                         color: "#e2e8f0",
                       }}
@@ -445,10 +456,11 @@ export default async function RootLayout({
               <CrawlableNav />
 
               <div
+                data-fine-print
                 style={{
                   borderTop: "1px solid rgba(255,255,255,0.08)",
                   paddingTop: 10,
-                  fontSize: 12,
+                  fontSize: "var(--fs-fine)",
                   color: "rgba(241,245,249,0.56)",
                 }}
               >

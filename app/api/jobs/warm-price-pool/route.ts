@@ -3,7 +3,11 @@ import { Redis } from "@upstash/redis";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPricePool, keepPricePoolAlive, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS } from "../../../../lib/server/pricePool";
+import { MOOD_ETFS } from "../../../../lib/marketMood";
 import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
+import { planTiingoUniverse, writeTiingoUniverse, refreshTiingoUniverseOffHours, STOCK_PAGE_SYMBOLS } from "../../../../lib/server/tiingoUniverse";
+import { priceProviderFor } from "../../../../lib/server/marketData/provider";
+import { JOB_REDIS_OPTS } from "../../../../lib/server/redisCacheMode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +46,7 @@ export const maxDuration = 300;
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(JOB_REDIS_OPTS)
     : null;
 
 const PRICE_POOL_LOCK_KEY = "msh:price-pool:v1:warm-lock";
@@ -91,12 +95,11 @@ export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!process.env.FMP_API_KEY) {
-    return NextResponse.json(
-      { error: "Missing FMP_API_KEY environment variable." },
-      { status: 500 }
-    );
-  }
+  // NO FMP_API_KEY CHECK HERE ANY MORE (step 5, #553 COWORK #98 ruling 2).
+  // It returned 500 before the lock, the market gate and keepPricePoolAlive, so
+  // with the key unset the pool's 12 h TTL lapsed -- and the pool's fields were
+  // the Tiingo jobs' universe. The check now sits after the Tiingo universe
+  // write, and its return keeps the pool alive first.
 
   const lock = await acquireLock();
   if (!lock) {
@@ -140,6 +143,12 @@ export async function GET(req: NextRequest) {
       // gate stays; the reset is hoisted to the same decision instead, through
       // the single exported keep-alive so there is no second expire to drift.
       const poolKeptAlive = await keepPricePoolAlive();
+      // THE TIINGO UNIVERSE, ON THE CLOSED PATH TOO (#553 COWORK #119/#120).
+      // The in-session write below never runs on a weekend or overnight, so a
+      // universe change merged then (5b, Sat 3 Oct) never reached the key and
+      // the Tiingo jobs and warm-pickers-sec stayed on ~760 symbols. 1 TTL a
+      // run; HKEYS + SET only when the key is absent or older than 6 h.
+      const tiingoUniverse = await refreshTiingoUniverseOffHours();
       await recordJobRun("warm-price-pool", true, {
         skipped: true,
         reason: "market-closed",
@@ -153,6 +162,9 @@ export async function GET(req: NextRequest) {
         // one is written instead of it. Without the flag the two are the same
         // line on /cache-health and the saving is invisible.
         targetsSkipped: true,
+        tiingoUniverse: tiingoUniverse.symbols ?? null,
+        tiingoUniverseWritten: tiingoUniverse.written,
+        tiingoUniverseReason: tiingoUniverse.reason,
       });
       // No releaseLock here: the `finally` below owns it, and releasing twice
       // means the second call can delete a token a LATER run has already taken.
@@ -161,6 +173,7 @@ export async function GET(req: NextRequest) {
         skipped: true,
         reason: "market-closed",
         targetsSkipped: true,
+        tiingoUniverse,
       });
     }
 
@@ -180,7 +193,52 @@ export async function GET(req: NextRequest) {
     // fundamentals warms share: an ETF has no filings to warm.
     // And C's video-page tickers (#553 COWORK #83), for the same reason.
     const poolSymbols = [...new Set([...symbols, ...POOL_BENCHMARK_ETFS, ...POOL_VIDEO_TICKERS])];
-    const result = await warmPricePool(poolSymbols, Date.now());
+
+    // THE TIINGO UNIVERSE, WITH NO FMP CALL (step 5, #553 COWORK #98 ruling 2):
+    // the symbols the Tiingo quote and EOD jobs fetch, from the lists already
+    // in hand, plus every symbol with a stock page (5b). Written on every
+    // in-session run, FMP_API_KEY or not; its 4-day
+    // TTL carries it across nights and weekends. See lib/server/tiingoUniverse.ts.
+    const tiingoUniverse = planTiingoUniverse({
+      targets: symbols,
+      etfs: POOL_BENCHMARK_ETFS,
+      video: POOL_VIDEO_TICKERS,
+      // Step 5b (the owner's widening): every symbol with a stock page.
+      stockPages: STOCK_PAGE_SYMBOLS,
+      // Market Mood's inputs (#563 COWORK #96 ruling 2): SPY, TLT, HYG and LQD (LQD is new: +1 request a night).
+      mood: MOOD_ETFS,
+    });
+    const tiingoUniverseWritten = await writeTiingoUniverse(tiingoUniverse);
+
+    if (!process.env.FMP_API_KEY) {
+      // KEEP-ALIVE BEFORE THIS RETURN, as on the market-closed path: the pool's
+      // fields are the Tiingo jobs' fallback universe and its FMP rows still
+      // carry the market cap and P/E the readers use, so a key-less day must
+      // not let the hash lapse.
+      const poolKeptAlive = await keepPricePoolAlive();
+      await recordJobRun("warm-price-pool", true, {
+        skipped: true,
+        reason: "no FMP_API_KEY",
+        written: 0,
+        poolKeptAlive,
+        tiingoUniverse: tiingoUniverse.symbols.length,
+        tiingoUniverseWritten,
+      });
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: "no FMP_API_KEY",
+        poolKeptAlive,
+        tiingoUniverse: tiingoUniverse.symbols.length,
+        tiingoUniverseWritten,
+      });
+    }
+
+    // On PRICE_PROVIDER_POOL=tiingo the three FMP mover buckets are skipped:
+    // they only pre-fill prices, and no page reads an FMP pool price then.
+    const result = await warmPricePool(poolSymbols, Date.now(), {
+      moverBuckets: priceProviderFor("POOL") !== "tiingo",
+    });
     console.log("[warm-price-pool]", JSON.stringify(result));
     await recordJobRun("warm-price-pool", result.ok !== false, {
       targets: poolSymbols.length,
@@ -225,6 +283,8 @@ export async function GET(req: NextRequest) {
       // early is its own time budget -- rarer, and the signal worth an alert.
       outOfTime: result.outOfTime ?? null,
       reason: result.reason ?? null,
+      tiingoUniverse: tiingoUniverse.symbols.length,
+      tiingoUniverseWritten,
     });
     return NextResponse.json(result);
   } catch (error) {

@@ -25,6 +25,11 @@ import { readCodeOnly, eventTypeSource } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
+
+// lib/server/outsideFetch.ts, inlined with a pass-through unstable_cache (#553 COWORK #171).
+const outsideFetchInline = () => read("lib/server/outsideFetch.ts")
+  .replace('import { unstable_cache } from "next/cache";', "const unstable_cache = (fn) => fn;")
+  .replace(/^export /gm, "");
 let failures = 0;
 const check = (label, ok, detail = "") => {
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
@@ -45,6 +50,7 @@ let src = read("lib/server/news/wireProvider.ts")
   .replace(/^import \{ stripHtmlTags, containsHtmlMarkup, decodeHtml, cleanRssDescription \} from ".\/text";$/m,
     () => read("lib/server/news/text.ts").replace(/^export /gm, ""))
   .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "")
+  .replace(/^import \{ cachedOutsideText \} from "\.\.\/outsideFetch";$/m, () => outsideFetchInline())
   // The timing helpers, inlined rather than stubbed: they are no-ops unless
   // MSH_TIMING=1, so running the real ones proves the per-feed instrumentation
   // cannot change what the adapter parses. Added when pollAll started timing
@@ -261,7 +267,8 @@ check(
   /pollAll\(\)\)\.filter\(/.test(wireSrc) && /fetchMarket[\s\S]{0,120}pollAll\(\)/.test(wireSrc),
   "both consumers reach the same two requests"
 );
-check("revalidate 3600 is kept", /next: \{ revalidate: 3600 \}/.test(wireSrc));
+// The hourly cache moved from Next's fetch cache to our own, bounded (#553 COWORK #171).
+check("the hourly cache is kept", /cachedOutsideText\(3600\)\(source\.url/.test(wireSrc));
 check("exactly two feed URLs", (wireSrc.match(/https:\/\/www\.(globenewswire|prnewswire)\.com/g) ?? []).length === 2);
 check("Nasdaq's rssoutbound is not reintroduced", !/rssoutbound|nasdaq\.com/i.test(wireSrc));
 check(

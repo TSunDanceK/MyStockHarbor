@@ -39,6 +39,7 @@ supplyChain:
   - name: Independent Hotels & Accommodation Partners
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       The room and property inventory listed by hundreds of thousands of
       independent hotels, apartments and alternative-accommodation hosts is
@@ -48,6 +49,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 18
+    grade: some
     blurb: >
       Amazon Web Services hosts the bulk of Booking.com's cloud
       infrastructure, managing roughly 150 petabytes of data and over 100
@@ -58,6 +60,7 @@ supplyChain:
   - name: Amadeus IT Group
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Amadeus supplies Priceline and Booking with air content and flight
       distribution through its Travel Platform, including NDC fares from
@@ -68,6 +71,7 @@ supplyChain:
   - name: Adyen N.V.
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Adyen is a core global payment processing partner for Booking.com,
       handling local payment methods and merchant settlement across
@@ -78,6 +82,7 @@ supplyChain:
   - name: Visa Inc.
     ticker: V
     pct: 8
+    grade: spread
     blurb: >
       Visa's card network rails process a large share of guest and
       traveler payments across Booking's brands, particularly for
@@ -86,6 +91,7 @@ supplyChain:
   - name: Mastercard Incorporated
     ticker: MA
     pct: 7
+    grade: spread
     blurb: >
       Mastercard provides parallel card-network infrastructure alongside
       Visa, supporting virtual card payments used to settle with hotels and
@@ -93,6 +99,7 @@ supplyChain:
   - name: Global Airline Network
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       The seat inventory of major airlines worldwide, accessed largely
       through Amadeus's distribution layer, is the underlying supply behind
@@ -101,6 +108,7 @@ supplyChain:
   - name: Major Car Rental Operators
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Rentalcars.com's business depends on vehicle inventory supplied by
       large rental operators such as Hertz, Avis Budget and Enterprise,
@@ -110,6 +118,7 @@ customers:
   - name: Alphabet Inc. (Google)
     ticker: GOOGL
     pct: 40
+    grade: hard
     blurb: >
       Google is by far Booking's most important demand-generation channel:
       analysts have estimated that well over half of its multibillion-dollar
@@ -120,6 +129,7 @@ customers:
   - name: Major Global Hotel Chains
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Large branded groups such as Marriott, Hilton, IHG and Accor supply
       significant booking volume but also compete directly with Booking
@@ -129,6 +139,7 @@ customers:
   - name: Meta Platforms, Inc.
     ticker: META
     pct: 15
+    grade: some
     blurb: >
       Facebook and Instagram advertising serve as a secondary paid
       acquisition channel Booking uses to diversify some traffic away from
@@ -136,6 +147,7 @@ customers:
   - name: Metasearch & Travel Aggregator Platforms
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Sites such as Trivago and TripAdvisor aggregate and route
       price-comparison traffic to Booking's brands, giving these
@@ -144,6 +156,7 @@ customers:
   - name: Apple Inc. (App Store distribution)
     ticker: AAPL
     pct: 10
+    grade: some
     blurb: >
       Booking.com, Priceline, Kayak and OpenTable rely on Apple's App Store
       (alongside Google Play) for mobile app distribution, discovery and

@@ -64,7 +64,8 @@ const config: PickerResultConfig = {
     "Review stocks screening near the weekly 200-day moving average. These are slower, higher-timeframe levels that can matter for larger trend tests.",
   explainerTitle: "How to use weekly MA200 setups",
   explainerBody:
-    "The weekly 200-day moving average is a higher-timeframe reference point. These setups are usually slower than daily MA200 tests, so focus on whether the stock is building support, reclaiming the level, or rejecting from it.",
+    "The weekly 200-day moving average is a higher-timeframe reference point. These setups are usually slower than daily MA200 tests, so focus on whether the stock is building support, reclaiming the level, or rejecting from it. A weekly 200 average needs about 4 years of price history, so a recently listed stock may not appear here even if it is near the level.",
+  // ^ the history note (#553 COWORK #186, item 7): why a younger listing is absent.
   emptyText:
     "No weekly MA200 proximity stocks are currently available from the live picker feed.",
   tone: "yellow",
@@ -73,6 +74,41 @@ const config: PickerResultConfig = {
   sectionIncludes: ["weekly ma200"],
   filterTimeframe: "W",
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "A 200-week average, despite the name",
+      paragraphs: [
+        "The address says 200-day, but the line this page measures is the 200-week simple moving average: the mean of the last 200 weekly closes, close to four years of trading. Because it moves so slowly, a stock reaching it is often revisiting a level last seen years earlier, which is why longer-term chart readers tend to watch it.",
+        "A stock is included when its price sits between 1% below and 3% above that average. The band is lopsided on purpose, leaning toward stocks holding at or just above the line rather than ones well beneath it.",
+      ],
+    },
+    {
+      heading: "History, timing and ordering",
+      paragraphs: [
+        "The calculation needs at least 220 weekly bars, a little over four years of data, so recently listed companies cannot appear even if they look close to the level on a chart elsewhere. The current, unfinished week counts as a bar, so the reading can shift during the week as new daily closes arrive, and a stock may join or leave before the week is out.",
+        "The top 20 candidates are ranked and shown first. Remaining matches follow in conditions met order, a count of how many tracked screener conditions each stock meets.",
+      ],
+    },
+    {
+      heading: "Reading weekly tests carefully",
+      paragraphs: [
+        "Weekly setups unfold slowly, so a stock may sit in this band for several weeks before anything resolves. Checking whether price approached from above, after a long pullback, or from below, after a recovery, can add useful context, and so can the slope of the average itself, since a rising 200-week line and a flat one describe quite different histories.",
+        "The screen cannot tell whether the level will hold, and a single wide week can carry price straight through the band. Prices are end-of-day, the newest bar being the previous session’s close, and the page rebuilds hourly. For a faster view of the same idea, the daily 200-day page uses the same −1% to +3% band, measured on daily bars.",
+      ],
+    },
+    {
+      heading: "A hypothetical weekly reading",
+      paragraphs: [
+        "Suppose a stock’s 200-week average stands at 60 and its latest price is 61.20, 2% above the line, so it falls inside the band. A week of steady gains to 62 would put it about 3.3% above and outside the range, while a drop to 59.20 would leave it about 1.3% below and outside on that side too. Because the unfinished week is counted, either change could happen midweek, so the row may come and go between visits.",
+        "Stocks hovering just beyond the band, say 4% above an average that is still rising, will not be listed here, however close they look. A stock with barely 220 weekly bars also has only a short history of the average itself, so its slope may say little yet. The weekly trend flip pages, by contrast, use closed weeks only, so their readings change once a week rather than during it.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-near-200-day-moving-average", label: "Near the daily 200-day average" },
+    { href: "/stocks-with-weekly-bullish-trend-flip", label: "Weekly bullish trend flips" },
+    { href: "/macro-support-resistance-stocks", label: "Macro support and resistance" },
+  ],
 };
 
 export default function Page() {

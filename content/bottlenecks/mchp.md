@@ -50,6 +50,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 28
+    grade: some
     blurb: >
       TSMC is the only external wafer foundry Microchip names publicly. In
       April 2024 Microchip announced an expanded partnership with TSMC to
@@ -62,6 +63,7 @@ supplyChain:
   - name: Other Taiwan-based external wafer foundries
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. Microchip's 10-K risk factors warn that
       "changes in relations between China and Taiwan" could disrupt the
@@ -72,6 +74,7 @@ supplyChain:
   - name: Third-party OSAT assembly & test subcontractors
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Not a single company. Microchip performs the majority of its own
       chip packaging and testing in-house, about 67% of both assembly and
@@ -83,6 +86,7 @@ supplyChain:
   - name: Rare-earth & specialty raw material suppliers
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Not a single company. Microchip's 10-K flags dependence on rare
       earth elements and minerals concentrated in a small number of
@@ -94,6 +98,7 @@ supplyChain:
   - name: Legacy fab equipment & spare-parts suppliers
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Not a single company. Microchip's own fabs, including its Gresham,
       Oregon facility (running mature 0.13-to-0.5-micron processes) and
@@ -106,6 +111,7 @@ customers:
   - name: Arrow Electronics
     ticker: ARW
     pct: 10
+    grade: some
     blurb: >
       Arrow Electronics is Microchip's largest distributor and the only
       customer or distributor Microchip names as exceeding its 10%
@@ -114,6 +120,7 @@ customers:
   - name: Industrial end-market customers
     ticker: null
     pct: 28
+    grade: some
     blurb: >
       Not a single company. Industrial customers, spanning factory
       automation, power and energy infrastructure, and building
@@ -123,6 +130,7 @@ customers:
   - name: Communications, computing & consumer end-market customers
     ticker: null
     pct: 37
+    grade: hard
     blurb: >
       Not a single company. Microchip groups the remainder of its revenue
       across communications infrastructure, computing/data-center, and
@@ -134,6 +142,7 @@ customers:
   - name: Aerospace & defense end-market customers
     ticker: null
     pct: 17
+    grade: some
     blurb: >
       Not a single company. Aerospace and defense customers grew sharply
       in importance, from about 11% of Microchip's revenue in fiscal 2024
@@ -143,6 +152,7 @@ customers:
   - name: Automotive end-market customers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company. Automotive customers, largely Tier 1 suppliers
       building microcontrollers and analog ICs into ADAS, EV powertrain,

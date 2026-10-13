@@ -124,7 +124,7 @@ import { initBotId } from "botid/client/core";
  * /api/earnings-calendar/backfill-date, /api/stock-valuation/*,
  * /api/stock-analyst-rating/*, /api/stock-news/insight,
  * /api/stock-news/why-it-matters, /api/ticker-lookup,
- * /api/internal/verify-human.
+ * /api/internal/verify-human, /api/insights/vote (GET and POST).
  */
 initBotId({
   protect: [
@@ -158,6 +158,8 @@ initBotId({
       advancedOptions: { checkLevel: "deepAnalysis" },
     },
     { path: "/api/ticker-lookup", method: "GET" },
+    // #553 COWORK #214: the candles for a picker view's visible rows.
+    { path: "/api/picker-charts", method: "GET" },
     // THE HUMAN-GATED COLD FILL (#535 COWORK #13). A server action POSTs to
     // the page's own URL, so the page paths are listed: BotID then attaches
     // its signal to that POST and coldFillAction's checkBotId() can classify
@@ -170,6 +172,12 @@ initBotId({
       method: "POST",
       advancedOptions: { checkLevel: "deepAnalysis" },
     },
+    // THE INSIGHT READER VOTE (#563 COWORK #132/#133, PR 2): a vote and a
+    // returning voter's tally. Basic check, as on the other data routes.
+    { path: "/api/insights/vote", method: "POST" },
+    { path: "/api/insights/vote", method: "GET" },
+    // The dashboard's "Filed earnings" chart (#563 COWORK #154 §6).
+    { path: "/api/dashboard-earnings/*", method: "GET" },
   ],
 }
 );

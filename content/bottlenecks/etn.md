@@ -49,6 +49,7 @@ supplyChain:
   - name: Copper & Base-Metal Producers
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Copper is Eaton's single largest raw-material cost, used in windings,
       busbars, wiring devices, and switchgear. 2025 U.S. tariffs on copper
@@ -60,6 +61,7 @@ supplyChain:
   - name: Semiconductor & Power-Electronics Component Makers
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Circuit breakers, UPS systems, variable-frequency drives, and Eaton's
       growing data-center power-electronics business all depend on
@@ -71,6 +73,7 @@ supplyChain:
   - name: Electrical & Specialty Steel Producers
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Iron and steel, including grain-oriented electrical steel used in
       transformer and motor cores, are core inputs to Eaton's electrical
@@ -81,6 +84,7 @@ supplyChain:
   - name: Aerospace-Grade Forgings & Specialty Alloys
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Eaton's Aerospace segment depends on titanium and nickel-alloy
       forgings and castings for hydraulic and fuel-system components. These
@@ -91,6 +95,7 @@ supplyChain:
   - name: Global Component & Materials Vendor Base
     ticker: null
     pct: 25
+    grade: hard
     blurb: >
       The remainder of Eaton's sourcing spans thousands of qualified
       vendors worldwide for plastics, rubber, chemicals, fluids, and
@@ -102,6 +107,7 @@ customers:
   - name: Large Electrical Distributors & OEM Customers (Top 6)
     ticker: null
     pct: 17
+    grade: some
     blurb: >
       Eaton discloses that six large customers accounted for 22% of
       combined Electrical Americas and Electrical Global segment sales in
@@ -113,6 +119,7 @@ customers:
   - name: Aerospace OEMs (Top 3 Aircraft Manufacturers)
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       Three large original equipment manufacturers of aircraft accounted
       for 20% of Aerospace segment sales in 2025, per Eaton's 10-K. Eaton's
@@ -123,6 +130,7 @@ customers:
   - name: Vehicle & eMobility OEMs (Mobility Group, Being Spun Off)
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Four large vehicle OEMs made up 37% of Vehicle segment sales and one
       OEM made up 18% of eMobility segment sales in 2025, reflecting
@@ -134,6 +142,7 @@ customers:
   - name: Diversified Contractor, Utility & Distributor Base
     ticker: null
     pct: 76
+    grade: spread
     blurb: >
       The large majority of Eaton's revenue is spread across tens of
       thousands of electrical contractors, utilities, industrial OEMs,

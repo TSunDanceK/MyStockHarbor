@@ -36,6 +36,7 @@ supplyChain:
   - name: Solstice Advanced Materials
     ticker: SOLS
     pct: 15
+    grade: some
     blurb: >
       Once Honeywell's in-house Advanced Materials unit, Solstice was spun
       off in October 2025 and now supplies specialty refrigerants,
@@ -45,6 +46,7 @@ supplyChain:
   - name: Semiconductor & electronic component suppliers
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. Honeywell's controls, sensors, and connected
       building/industrial devices depend on a broad global base of chipmakers
@@ -54,6 +56,7 @@ supplyChain:
   - name: Specialty metals, castings & precision component manufacturers
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. Steel, aluminum, and precision-machined parts go
       into valves, actuators, and instrument housings used across the
@@ -61,6 +64,7 @@ supplyChain:
   - name: Contract electronics manufacturers (EMS providers)
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company. Third-party electronics manufacturers assemble
       printed circuit boards and finished modules for Honeywell's
@@ -68,6 +72,7 @@ supplyChain:
   - name: Engineered plastics, resins & injection-molded component suppliers
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. Molded housings and enclosures for sensors,
       detectors, and building-control hardware come from specialty plastics
@@ -75,6 +80,7 @@ supplyChain:
   - name: Microsoft
     ticker: MSFT
     pct: 8
+    grade: spread
     blurb: >
       Honeywell Forge, the software and analytics layer running across all
       three automation segments, is built on Microsoft Azure cloud
@@ -84,6 +90,7 @@ supplyChain:
   - name: Global freight, logistics & component-distribution partners
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company. Honeywell relies on third-party freight and
       distribution networks to move components into its factories and
@@ -91,6 +98,7 @@ supplyChain:
   - name: Catalyst & process-chemistry input suppliers
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company. Process Automation & Technology's refining and
       petrochemical licensing business needs specialty catalysts and
@@ -99,6 +107,7 @@ supplyChain:
   - name: Precious & industrial metals suppliers
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company. Platinum-group metals, copper, and other
       industrial metals feed into catalysts, wiring, and precision
@@ -107,6 +116,7 @@ customers:
   - name: Wesco International
     ticker: WCC
     pct: 16
+    grade: some
     blurb: >
       A major electrical, security, and industrial distributor that resells
       Honeywell Building Automation and fire/security products (including
@@ -115,6 +125,7 @@ customers:
   - name: Automotive & general manufacturing OEMs
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Not a single company. Industrial Automation's sensors and
       instrumentation are embedded by OEMs into vehicles, appliances, and
@@ -122,6 +133,7 @@ customers:
   - name: Independent ("tier-two") data center operators
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Not a single company. Honeywell has flagged data centers, especially
       independently owned facilities adopting liquid cooling and
@@ -130,6 +142,7 @@ customers:
   - name: ExxonMobil
     ticker: XOM
     pct: 12
+    grade: some
     blurb: >
       A long-standing licensee and alliance partner for Honeywell UOP
       refining and petrochemical process technology, representative of the
@@ -138,6 +151,7 @@ customers:
   - name: US federal, state & local government
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company. Federal buildings, defense installations, and
       public infrastructure use Honeywell fire, security, and building
@@ -147,6 +161,7 @@ customers:
   - name: Global healthcare systems & hospitals
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. Hospitals and healthcare campuses are a cited
       growth vertical for Building Automation's life-safety, infection
@@ -154,6 +169,7 @@ customers:
   - name: Arrow Electronics
     ticker: ARW
     pct: 9
+    grade: spread
     blurb: >
       A major global electronics distributor that resells Honeywell sensing
       and instrumentation components to smaller industrial and OEM
@@ -161,6 +177,7 @@ customers:
   - name: Shell
     ticker: SHEL
     pct: 8
+    grade: spread
     blurb: >
       Another example of the global energy majors that license Honeywell
       UOP process technology and use its process-control systems in
@@ -168,6 +185,7 @@ customers:
   - name: Commercial real estate owners & facility-management firms
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company. Building owners and third-party facility
       managers across Honeywell's installed base of more than 10 million

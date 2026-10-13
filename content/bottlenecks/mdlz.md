@@ -25,6 +25,7 @@ supplyChain:
   - name: Barry Callebaut AG
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       The world's largest cocoa and chocolate-ingredients processor,
       supplying Mondelez under a long-term global partnership that
@@ -34,6 +35,7 @@ supplyChain:
   - name: Wheat, flour & grain inputs
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. Mondelez's 10-K discloses wheat as a core
       purchased commodity for its biscuit and cracker business - Ritz,
@@ -42,6 +44,7 @@ supplyChain:
   - name: Cargill, Incorporated
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       One of the world's largest cocoa processors and traders, and a
       named partner in Mondelez's Cocoa Life sustainable-sourcing
@@ -49,6 +52,7 @@ supplyChain:
   - name: Sugar & other sweeteners
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. A disclosed 10-K commodity risk, sourced
       globally from many sugar refiners and growers with no single named
@@ -56,6 +60,7 @@ supplyChain:
   - name: Edible oils & palm oil
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. A disclosed 10-K commodity risk tied to
       Southeast Asian palm oil and other vegetable-oil supply chains,
@@ -63,6 +68,7 @@ supplyChain:
   - name: Amcor plc
     ticker: AMCR
     pct: 10
+    grade: some
     blurb: >
       A global packaging major and publicly confirmed collaborator with
       Mondelez on flexible and recycled packaging for its Cadbury and
@@ -71,6 +77,7 @@ supplyChain:
   - name: Olam Group
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       A major global cocoa trader and processor that partnered with
       Mondelez to develop what the two companies describe as the world's
@@ -80,6 +87,7 @@ supplyChain:
   - name: Energy, packaging & logistics inputs
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. Mondelez's 10-K discloses reliance on
       natural gas, fuel, and electricity for its factories and
@@ -88,6 +96,7 @@ supplyChain:
   - name: Dairy ingredients
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Not a single company. A disclosed 10-K commodity risk used across
       Mondelez's biscuit and chocolate lines, with no single named
@@ -96,6 +105,7 @@ customers:
   - name: Walmart Inc.
     ticker: WMT
     pct: 30
+    grade: hard
     blurb: >
       Mondelez's largest single global retail customer, carrying Oreo,
       Ritz, Cadbury, and Chips Ahoy! across its US and international
@@ -104,12 +114,14 @@ customers:
   - name: Costco Wholesale
     ticker: COST
     pct: 12
+    grade: some
     blurb: >
       A major US and international warehouse-club customer for
       Mondelez's multipack and bulk snack formats.
   - name: Amazon.com, Inc.
     ticker: AMZN
     pct: 10
+    grade: some
     blurb: >
       Mondelez's fastest-growing e-commerce and grocery channel, with
       publicly highlighted joint retail-media and share-growth
@@ -117,12 +129,14 @@ customers:
   - name: The Kroger Co.
     ticker: KR
     pct: 10
+    grade: some
     blurb: >
       The largest traditional US grocery chain and a major channel for
       Mondelez's snack and biscuit brands.
   - name: Carrefour S.A.
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A major European and international hypermarket chain, and a
       significant channel for the roughly two-thirds of Mondelez's
@@ -131,6 +145,7 @@ customers:
   - name: Tesco plc
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       The largest UK grocery retailer and a key channel for Cadbury and
       other Mondelez UK and European brands. Trades primarily on the
@@ -138,12 +153,14 @@ customers:
   - name: Target Corporation
     ticker: TGT
     pct: 6
+    grade: spread
     blurb: >
       A major US mass-merchandise retailer and a standard large-format
       channel for Mondelez's snack brands.
   - name: Seven & i Holdings (7-Eleven)
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       A global convenience-store operator central to Mondelez's
       travel-retail and impulse-snacking strategy across Asia and North
@@ -152,6 +169,7 @@ customers:
   - name: Aldi
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       A fast-growing European and US discount grocery chain increasingly
       important to Mondelez's value-tier snack distribution. A private
@@ -159,6 +177,7 @@ customers:
   - name: Diversified global grocery, discount & convenience retail
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Not a single company. Mondelez sells through thousands of
       additional retailers across more than 150 countries; its 10-K

@@ -154,6 +154,14 @@ const POOL_BENCHMARK_ETFS = ["SPY", "QQQ", "DIA", "IWM"]; // #553 COWORK #78: th
 const POOL_VIDEO_TICKERS = ["ASTS", "KRMN", "LUNR", "MOD", "IFNNY"]; // #553 COWORK #83: and these
 const isActiveMarketWindow = () => S().marketOpen;
 const keepPricePoolAlive = async () => { S().keptAlive += 1; return true; };
+// Step 5 (#553 COWORK #98): the route writes the Tiingo universe in session.
+const planTiingoUniverse = (parts) => ({ symbols: Object.values(parts).flat(), sources: {}, dropped: { debt: 0, excluded: 0 } });
+const writeTiingoUniverse = async () => true;
+// #553 COWORK #120: and refreshes it on the market-closed path.
+const refreshTiingoUniverseOffHours = async () => ({ written: false, reason: "fresh" });
+const STOCK_PAGE_SYMBOLS = ["KO"]; // step 5b: the stock-page symbols join the universe
+const MOOD_ETFS = []; // #563 COWORK #96: Market Mood's ETFs join the universe (asserted in check-market-mood)
+const priceProviderFor = () => "fmp";
 const process = { env: { FMP_API_KEY: "x", NEXT_PUBLIC_SITE_URL: "https://x" } };
 ${getFn}
 export { GET };`,

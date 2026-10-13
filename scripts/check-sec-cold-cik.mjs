@@ -179,7 +179,7 @@ check("...and it does NOT read the manifest from the render path",
 check("the job drains the recorded CIKs BEFORE it builds its queues",
   JOB_SRC.indexOf("await drainColdCiks(manifest)") > 0 &&
     JOB_SRC.indexOf("await drainColdCiks(manifest)") <
-      JOB_SRC.indexOf("const q = populationQueues(manifest)"),
+      JOB_SRC.indexOf("const q = populationQueues(manifest,"),
   "populationQueues filters on e.cik, so draining after would leave the symbol unqueued for a day");
 
 {

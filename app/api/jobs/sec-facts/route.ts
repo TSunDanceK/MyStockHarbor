@@ -11,7 +11,7 @@ import { withClassCover } from "@/lib/server/secCoverClasses";
 import { withInstanceEps } from "@/lib/server/secInstanceEps";
 import { applyRereadRequests, SEC_REREAD_REQUESTS } from "@/lib/server/secRereadRequests";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
-import { conversionGained, toStoredSet } from "@/lib/server/secFactBuild";
+import { mustWriteOver, priorStandsForFx, toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
@@ -21,7 +21,9 @@ import type { Submissions } from "@/lib/server/secReportDates";
 import { newestStoredEnd } from "@/lib/server/secFilingFill";
 import { buildAndWriteReportDates, carryEventQueued, reportDatesQueue, withPredecessorSubmissions } from "@/lib/server/secReportDatesWrite";
 import dueStripCut from "@/data/due-strip.json";
+import rewindowPriorityFile from "@/data/sec/rewindow-priority.json";
 import { makeJobBudget, FETCH_TIMEOUT_MS, JOB_BUDGET_MS, REPORT_DATES_RESERVE_MS } from "@/lib/server/jobBudget";
+import { secSeedRefusal } from "@/lib/server/secSeedGate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -111,7 +113,9 @@ export const maxDuration = 300;
  */
 export const SEC_COLD_PER_RUN = 50;
 export const SEC_REVERIFY_PER_RUN = 150;
-export const SEC_POPULATE_PER_RUN = 300;
+// HALVED TO 150 (#552 COWORK #175): at 300, populate and reverify took the whole
+// facts phase and rewindow did 0; 150 frees ~75 s for it and still grows coverage ~150 a run.
+export const SEC_POPULATE_PER_RUN = 150;
 
 /**
  * Symbols whose SEC REPORT DATES are refreshed per run, from `submissions`.
@@ -171,10 +175,22 @@ export const SEC_REPORT_DATES_BACKFILL_SLICE = 100;
  * the NEXT window change, when the whole populated universe is eligible at
  * once. At 759 SYMBOLS, 5 a run is 152 days — a permanent state rather than a
  * migration. At 25 it is ~31 days, still small enough never to compete with
- * work a reader is waiting on (reverify takes 150 and populate 300 in the same
+ * work a reader is waiting on (reverify takes 150 and populate 150 in the same
  * run), and short enough to actually finish.
  */
 export const SEC_REWINDOW_PER_RUN = 25;
+
+/**
+ * RE-READ FIRST (#552 COWORK #121 follow-up 2). The dilution fix moves
+ * secChainsHash, so every stored set joins the rewindow queue; the charts that
+ * depend on the new restatement extras (asr/asf) read wrong or "too short"
+ * until their set is re-read. Those symbols, measured on the archive
+ * (scripts/dilution-series-probe.mjs, probe branch), go to the front. A symbol
+ * already current is never selected, so the list goes inert as the queue drains.
+ */
+const REWINDOW_PRIORITY: ReadonlySet<string> = new Set(
+  (rewindowPriorityFile as { symbols: string[] }).symbols.map((s) => s.toUpperCase())
+);
 
 /**
  * THE POPULATE BACKLOG ABOVE WHICH REWINDOW STOPS BORROWING SLACK.
@@ -184,8 +200,8 @@ export const SEC_REWINDOW_PER_RUN = 25;
  * pressure — a page reading "not loaded yet" is worse than a page reading a
  * figure from an older window — and rewindow drops back to its guaranteed floor.
  *
- * 400 is a ceiling on the BACKLOG, not on the slice. populate takes 300/run, so
- * a backlog under 400 clears in two runs; above it, the queue is growing faster
+ * 400 is a ceiling on the BACKLOG, not on the slice. populate takes 150/run, so
+ * a backlog under 400 clears in three runs; above it, the queue is growing faster
  * than one run drains and the slack is not spare.
  */
 export const SEC_POPULATE_SLACK_CEILING = 400;
@@ -302,6 +318,31 @@ export function restatedPeriods(
   return out;
 }
 
+/**
+ * WHETHER A MOVED OVERLAP IS A SILENT RESTATEMENT TO LOG (#552 COWORK #157 §3).
+ *
+ * The overlap (restatedPeriods) moving is necessary and no longer sufficient.
+ * contentHash is taken on the filer's REPORTING-CURRENCY figures (encodeFactSet's
+ * `fx.reported`), so for a non-USD filer an unchanged hash with moved stored
+ * values is the exchange rate moving, not the filer: on 5 Oct the FRED switch
+ * re-converted KEP, HMY, WF, SHG, VNET and XPEV by 0.01–0.05% and each was
+ * logged as a restatement with `from` equal to `to`. A real restatement moves
+ * the reported figures, so it moves the hash and stays loud (RMD: 245af012 ->
+ * b82793f5). For a USD filer the stored values ARE the hashed ones, so a moved
+ * overlap always moves the hash and nothing changes. Not the whole-hash test
+ * as the trigger (a wider window moves the hash too, see restatedPeriods): the
+ * overlap stays the trigger and the hash only rules out FX.
+ */
+export function isSilentRestatement(
+  prior: StoredFactSet | null,
+  next: StoredFactSet,
+  movedPeriods: string[],
+  needsReverify: boolean
+): prior is StoredFactSet {
+  if (!prior || !movedPeriods.length || needsReverify) return false;
+  return prior.contentHash !== next.contentHash;
+}
+
 export function populationQueues(
   manifest: SecManifest,
   limits = {
@@ -313,7 +354,19 @@ export function populationQueues(
    * The backlog above which rewindow stops borrowing. A parameter so the check
    * can drive both sides of the boundary without editing the constant.
    */
-  slackCeiling = SEC_POPULATE_SLACK_CEILING
+  slackCeiling = SEC_POPULATE_SLACK_CEILING,
+  /**
+   * Symbols the rewindow re-reads FIRST (#552 COWORK #121 follow-up 2): the
+   * ones whose page changes when the re-read lands. Order only: the same
+   * symbols, the same allowance, no extra requests.
+   */
+  priority: ReadonlySet<string> = new Set(),
+  /**
+   * THE SEED GATE'S RULE ON POPULATE (#552 COWORK #147 1a): an entry seeded
+   * before the gate existed and failing it now is never populated. Populate
+   * only: a set already stored keeps its re-reads until the owner rules on it.
+   */
+  refusal: (symbol: string, cik: string | null) => string | null = () => null
 ) {
   const entries = Object.entries(manifest.symbols).filter(([, e]) => e.cik);
 
@@ -325,7 +378,7 @@ export function populationQueues(
     .map(([s]) => s);
 
   const populate = entries
-    .filter(([, e]) => !e.needsReverify && e.contentHash === null)
+    .filter(([s, e]) => !e.needsReverify && e.contentHash === null && !refusal(s, e.cik))
     .map(([s]) => s)
     .sort();
 
@@ -343,7 +396,7 @@ export function populationQueues(
   const rewindow = entries
     .filter(([, e]) => !e.needsReverify && e.contentHash !== null && needsReread(e))
     .map(([s]) => s)
-    .sort();
+    .sort((a, b) => Number(priority.has(b)) - Number(priority.has(a)) || (a < b ? -1 : a > b ? 1 : 0));
 
   // ── REWINDOW BORROWS WHAT THE OTHER TWO QUEUES DO NOT USE ────────────────
   //
@@ -504,7 +557,7 @@ export async function GET(req: NextRequest) {
   const requested = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());
   if (requested.length) console.log(`[sec-facts] re-read requested: ${requested.join(", ")}`);
 
-  const q = populationQueues(manifest);
+  const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY, secSeedRefusal);
   // CAPTURED BEFORE THE FACT-SET LOOP CLEARS IT. A symbol queued for a re-read
   // by an 8-K or 6-K ("unconfirmed") filed since Sep 20 has no lastEventFiled
   // yet (the field is new), and the loop sets needsReverify false as it goes.
@@ -600,7 +653,7 @@ export async function GET(req: NextRequest) {
       const fresh = await toStoredSet(extracted, defaultSources(), fxSeriesThisRun);
       const rates = identityRates(checkIdentities(extracted));
 
-      const prior = await readFactSet(symbol);
+      const prior = await readFactSet(symbol, "sec-facts-job");
       // ── A PERIOD READ FROM THE FILING IS NOT OVERWRITTEN BY A FEED THAT
       // STILL LACKS IT (#535 COWORK #6). While companyfacts is behind the
       // recorded lag, the stored set (with its filled period) stands; once the
@@ -613,10 +666,20 @@ export async function GET(req: NextRequest) {
       const keepFilled = Boolean(prior?.ff && freshNewest < prior.ff.reportDate);
       // The "neither source has it" notice rides along the same way.
       const keepNotice = Boolean(prior?.lg && freshNewest < prior.lg.reportDate);
-      const set: StoredFactSet = keepFilled ? prior! : keepNotice ? { ...fresh, lg: prior!.lg } : fresh;
-      // OR A REFUSED PERIOD NOW CONVERTS (a rate source was added). The hash is
-      // on the reported figures and cannot see it. See conversionGained.
-      const changed = keepFilled ? false : prior ? prior.contentHash !== set.contentHash || conversionGained(prior, set) : true;
+      // ── A RATE SERIES THAT FAILED TO LOAD NEVER BLANKS A STORED SET ───────
+      // (#552 COWORK #132 (b)). The prior stands, counted unchanged; its own
+      // stamps go to the manifest below, so a stale prior stays queued and the
+      // next run with a rate re-reads it.
+      const keepForFx = priorStandsForFx(prior, extracted, fresh);
+      if (keepForFx) console.warn("[sec-facts] fx unavailable — stored set kept", JSON.stringify({ symbol, cur: extracted.reportingCurrency }));
+      const keepPrior = keepFilled || keepForFx;
+      const set: StoredFactSet = keepPrior ? prior! : keepNotice ? { ...fresh, lg: prior!.lg } : fresh;
+      // A figure moved, OR A REFUSED PERIOD NOW CONVERTS (a rate source was
+      // added; the hash is on the reported figures and cannot see it), OR THE
+      // STORED SET IS BEHIND WHAT THE CODE WRITES (#552 COWORK #132 (a)): the
+      // manifest stamps from `set`, so a stale prior left unwritten was stamped
+      // current with the old shape still stored. See mustWriteOver.
+      const changed = keepPrior ? false : prior ? mustWriteOver(prior, set) : true;
       // LAYER 2 OF THE CORRECTIONS FAILSAFE (spec §3). A figure that moved with
       // no filing event behind it is a SILENT RESTATEMENT -- the case the
       // amended-form signal cannot see. The site is allowed to update; it is
@@ -640,7 +703,7 @@ export async function GET(req: NextRequest) {
       // entry (TSM) has no entry here, and `entry.needsReverify` threw on the
       // one path that reaches it -- a prior set whose overlap moved, as a
       // currency flip does -- so the set was never rewritten.
-      if (prior && movedPeriods.length && !entry?.needsReverify) {
+      if (isSilentRestatement(prior, set, movedPeriods, Boolean(entry?.needsReverify))) {
         console.warn(
           "[sec-facts] SILENT RESTATEMENT",
           JSON.stringify({ symbol, from: prior.contentHash, to: set.contentHash, movedPeriods })
@@ -720,6 +783,7 @@ export async function GET(req: NextRequest) {
         // what actually produced this set, not what was current when the line
         // was written. A set written by the cold path never passes through here.
         entry.lv = set.lv ?? 1;
+        entry.sv = set.sv ?? 1;
         // FROM THE SET, NOT FROM secChainsHash() — the manifest must record
         // which chains ACTUALLY produced this set, not which chains were
         // current when the manifest line was written. They are the same value
@@ -801,7 +865,7 @@ export async function GET(req: NextRequest) {
       if (!cik) continue;
       reportDates.attempted++;
       try {
-        const set = setsThisRun.get(symbol) ?? (await readFactSet(symbol));
+        const set = setsThisRun.get(symbol) ?? (await readFactSet(symbol, "sec-facts-job"));
         // NO FACT SET, NO PERIOD ENDS, NO MATCHING. Fetching submissions for a
         // symbol whose periods are unknown would produce events with a null
         // period every time — rows that cannot be charted and cannot be

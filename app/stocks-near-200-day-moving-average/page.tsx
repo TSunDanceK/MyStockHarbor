@@ -63,7 +63,44 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["dailyMa200Proximity"],
   sectionIncludes: ["daily ma200"],
+  // THE ORDER IN WORDS (#553 COWORK #184 item 4): the list was in this score's
+  // order while the sort control read "Market Cap (high to low)". A composite,
+  // named as one: the score's parts are computeMa200Candidate's, plus
+  // pickersBuilder's dynamicBoost (today's movers and most-searched names).
+  rankedBy: { label: "200-day setup score (closeness to the line, time spent above it, its slope and liquidity, with a lift for today's most active and most searched names), best first", short: "setup score" },
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "Sitting close to the long-term average",
+      paragraphs: [
+        "The 200-day simple moving average, the mean of the last 200 daily closes, is one of the most widely watched long-term trend references. This screen finds stocks trading close to it, a zone where traders often watch to see whether the average acts as support or gives way.",
+        "A stock needs at least 220 daily bars to be tested, and its latest close must sit between 1% below and 3% above its 200-day average. The window leans upward on purpose, so it mainly captures stocks resting on or just above the line, plus those that have slipped only slightly under it.",
+        "This rule uses the daily average only. A separate page applies a similar test to the 200-week average on weekly bars, which tracks a much longer stretch of history and tends to change far more slowly than the daily line.",
+      ],
+    },
+    {
+      heading: "How every candidate is ranked",
+      paragraphs: [
+        "All qualifying stocks are ranked by a setup score with five parts. Distance makes up 28%, with the best marks going to closes between 0.25% below and 1.5% above the average. Another 32% rewards stocks that spent little of their last 500 bars more than 7% below the average, which tends to favor names with a history of holding above it.",
+        "Time spent above the average adds 18%, the 30-bar slope of the average adds 14%, and liquidity, meaning how heavily the stock trades, adds 8%. A rising slope generally suggests the long-term trend is still pointing up, while a flat or falling one may make the average less reliable as a reference.",
+        "When reading the list, it can help to compare how far each stock sits from the line rather than treating every row alike. Opening the chart may show whether earlier tests of the average held and which way the average itself is tilting.",
+      ],
+    },
+    {
+      heading: "What closeness does not guarantee",
+      paragraphs: [
+        "Being near the 200-day says nothing on its own about which way price goes next. Averages do break, and a stock sitting 1% above the line one day may be well below it a week later. The score leans on past behavior, and the past may not repeat.",
+        "The screen uses daily bars of end-of-day prices, so the newest bar is the previous session’s close, and the page rebuilds hourly. It compares a single close with the average, without waiting for a second day of confirmation.",
+        "It also cannot see earnings dates, news or valuation, any of which might move a stock through the average regardless of its history. And because the analysis universe covers about 700 US-listed stocks, plenty of names testing their own 200-day line will never show up on this page.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-near-weekly-200-day-moving-average", label: "Stocks near the weekly 200 average" },
+    { href: "/stocks-trading-above-200-day-moving-average", label: "Stocks above the 200-day average" },
+    { href: "/stocks-below-200-day-moving-average", label: "Stocks below the 200-day average" },
+    { href: "/best-trend-score-stocks", label: "Best trend score stocks" },
+  ],
 };
 
 export default function Page() {

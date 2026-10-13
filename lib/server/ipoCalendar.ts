@@ -278,6 +278,8 @@ async function fetchSecIpoRows(from: string, to: string): Promise<ConfirmedIpo[]
 // anything on its own.
 export type IpoProvider = "fmp" | "sec";
 
+// FMP IS CANCELLED (2026-10-06, #553 COWORK #170/#171). IPO_PROVIDER=fmp would
+// read nothing without a new FMP key; the purge removed msh:feed:ipo:all:fmp.
 export function ipoProvider(): IpoProvider {
   return process.env.IPO_PROVIDER === "sec" ? "sec" : "fmp";
 }

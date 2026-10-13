@@ -26,6 +26,7 @@ supplyChain:
   - name: SpaceX
     ticker: null
     pct: 40
+    grade: hard
     blurb: >
       AST's primary launch provider under a multi-launch agreement, having
       already carried the BlueWalker 3 prototype and the first five
@@ -36,6 +37,7 @@ supplyChain:
   - name: Blue Origin
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       Contracted under a multi-launch deal to fly AST's Block 2 BlueBird
       satellites aboard New Glenn. The dependency risk became concrete in
@@ -46,6 +48,7 @@ supplyChain:
   - name: NewSpace India Limited (ISRO)
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       India's national launch provider has flown AST's satellites twice,
       including BlueBird 6 on the LVM3 rocket, the heaviest payload that
@@ -55,6 +58,7 @@ supplyChain:
   - name: Nokia
     ticker: NOK
     pct: 12
+    grade: some
     blurb: >
       Supplies 4G/5G radio access network technology under a multi-year
       agreement that lets AST's satellites communicate with standard,
@@ -65,6 +69,7 @@ supplyChain:
   - name: Specialized component & electronics suppliers
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       AST's satellites use extensively customized phased-array antenna
       electronics, semiconductors, and structural hardware built to its own
@@ -74,6 +79,7 @@ customers:
   - name: AT&T
     ticker: T
     pct: 22
+    grade: some
     blurb: >
       AST's earliest and longest-running strategic U.S. carrier partner,
       an equity investor and a signer of an 850 MHz spectrum-sharing and
@@ -81,6 +87,7 @@ customers:
   - name: Verizon
     ticker: VZ
     pct: 22
+    grade: some
     blurb: >
       Committed roughly $100 million and, in October 2025, signed a
       definitive commercial agreement using 850 MHz spectrum to bring
@@ -89,6 +96,7 @@ customers:
   - name: Vodafone
     ticker: VOD
     pct: 18
+    grade: some
     blurb: >
       A lead Series B investor since 2020 and, since December 2024, party
       to a definitive commercial agreement running through 2034 to deliver
@@ -97,6 +105,7 @@ customers:
   - name: U.S. Government (Space Development Agency)
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       AST has been awarded prime contracts (roughly $30-43 million
       disclosed) supporting Space Development Agency direct-to-device and
@@ -106,6 +115,7 @@ customers:
   - name: Rakuten Mobile
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       A lead Series B investor that in 2026 formed a roughly 50/50 joint
       venture with AST to build Japan's satellite direct-to-cell network,
@@ -115,6 +125,7 @@ customers:
   - name: stc Group (Saudi Telecom)
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Saudi Arabia's dominant carrier signed a commercial agreement in
       October 2024 that included a roughly $175 million prepayment
@@ -124,6 +135,7 @@ customers:
   - name: American Tower
     ticker: AMT
     pct: 5
+    grade: spread
     blurb: >
       A Series B equity investor and infrastructure partner whose global
       tower and ground-site footprint is a natural fit for AST's gateway

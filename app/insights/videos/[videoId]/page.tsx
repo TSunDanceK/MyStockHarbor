@@ -7,16 +7,17 @@ import {
   getVideoContent,
   getAllVideoMeta,
   mergeVideoLists,
-  toFallbackVideo,
 } from "@/lib/videoContent";
+import { LATEST_VIDEOS_LIMIT, resolveVideo } from "@/lib/videoResolve";
 import { getVideoStockData } from "@/lib/videoStockData";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import TiingoCredit from "@/app/components/TiingoCredit";
 import { remark } from "remark";
 import html from "remark-html";
 import VideoPageClient from "./VideoPageClient";
 import DatasheetViewer from "./DatasheetViewer";
 import PageShareBar from "@/app/components/PageShareBar";
 import { ReasonedValue } from "@/app/components/EstimatedValue";
+import { hasFiledEarnings } from "@/lib/server/filedEarnings";
 
 // Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
 // makes every crawl a full serverless render Google can never cheaply
@@ -72,14 +73,15 @@ function fmtPrice(value: number | null): string {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { videoId } = await params;
 
-  const [apiVideo, videoContent] = await Promise.all([
+  // The latest list is the page body's own cached read (same limit, same entry).
+  const [apiVideo, videoContent, apiVideos] = await Promise.all([
     getYouTubeVideoById(videoId),
     Promise.resolve(getVideoContent(videoId)),
+    getLatestYouTubeVideos(LATEST_VIDEOS_LIMIT),
   ]);
 
-  // Same fallback rule as the page body below: written analysis on disk is
-  // enough to describe the page, with or without the YouTube API.
-  const video = apiVideo ?? (videoContent ? toFallbackVideo(videoContent) : null);
+  // Same fallback rule as the page body below (lib/videoResolve.ts).
+  const video = resolveVideo(videoId, apiVideo, apiVideos, videoContent);
 
   if (!video) {
     return {
@@ -132,7 +134,7 @@ export default async function VideoPage({ params }: Props) {
   const [apiVideo, videoContent, apiVideos] = await Promise.all([
     getYouTubeVideoById(videoId),
     Promise.resolve(getVideoContent(videoId)),
-    getLatestYouTubeVideos(20),
+    getLatestYouTubeVideos(LATEST_VIDEOS_LIMIT),
   ]);
 
   // This used to be `if (!video) notFound()` against the API result alone,
@@ -146,8 +148,13 @@ export default async function VideoPage({ params }: Props) {
   // Disk content is now sufficient on its own: toFallbackVideo builds the
   // embed, thumbnail and watch URLs deterministically from the video ID. The
   // API is preferred when present (real title and publish date), and 404
-  // remains correct only when NEITHER source knows this ID.
-  const video = apiVideo ?? (videoContent ? toFallbackVideo(videoContent) : null);
+  // remains correct only when NO source knows this ID.
+  //
+  // THE LATEST LIST IS A SOURCE TOO (#563 COWORK #70). A new video has no
+  // last-known-good copy, so with the hourly budget spent its by-id read is
+  // null, and with no article on disk yet the header's own "Video Breakdowns"
+  // link 404'd (and ISR cached the 404). The list in hand already knows it.
+  const video = resolveVideo(videoId, apiVideo, apiVideos, videoContent);
 
   if (!video) notFound();
 
@@ -188,7 +195,8 @@ export default async function VideoPage({ params }: Props) {
     // The Tiingo path says why an MA tile is empty with a price on screen (#553 COWORK #88).
     { label: "vs MA50", value: fmtPct(stockData.ma50Pct), note: stockData.ma50Note ?? null },
     { label: "vs MA200", value: fmtPct(stockData.ma200Pct), note: stockData.ma200Note ?? null },
-    ...(stockData.peRatio ? [{ label: "P/E (TTM)", value: stockData.peRatio.toFixed(1) }] : []),
+    // THE FY FALLBACK (#563 COWORK #50): labelled for the year, with its note on tap/hover.
+    ...(stockData.peRatio ? [{ label: stockData.peLabel ?? "P/E (TTM)", value: stockData.peRatio.toFixed(1), note: stockData.peNote ?? null }] : []),
     ...(stockData.trend ? [{ label: "Trend", value: stockData.trend }] : []),
   ] : null;
 
@@ -247,9 +255,12 @@ export default async function VideoPage({ params }: Props) {
                 #30/#31): "update live" is not true of a pooled IEX trade or an EOD
                 close, and the contract asks for the linked credit on each figure. */}
             {stockData?.priceLabel ? (
-              <p style={{ fontSize: 11, opacity: 0.5, marginBottom: 0, fontStyle: "italic" }}>
-                Price: {stockData.priceLabel}.{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null} Figures will differ from those in the video. <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
-              </p>
+              <>
+                <p style={{ fontSize: 11, opacity: 0.5, marginBottom: 0, fontStyle: "italic" }}>
+                  Price: {stockData.priceLabel}.{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null} Figures will differ from those in the video.
+                </p>
+                <TiingoCredit />
+              </>
             ) : stockData ? (
               <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 0, fontStyle: "italic" }}>Price and market cap update live &mdash; figures will differ from those in the video.</p>
             ) : null}
@@ -338,9 +349,12 @@ export default async function VideoPage({ params }: Props) {
                   <Link href={`/stock/${encodeURIComponent(ticker)}`} style={exploreLinkStyle("blue")}>
                     {ticker} stock page →
                   </Link>
-                  <Link href={`/stock/${encodeURIComponent(ticker)}/earnings`} style={exploreLinkStyle("gold")}>
-                    {ticker} earnings →
-                  </Link>
+                  {/* #552 COWORK #197: only with a filed SEC set. */}
+                  {(await hasFiledEarnings(ticker)) ? (
+                    <Link href={`/stock/${encodeURIComponent(ticker)}/earnings`} style={exploreLinkStyle("gold")}>
+                      {ticker} earnings →
+                    </Link>
+                  ) : null}
                   <Link href={`/stock/${encodeURIComponent(ticker)}/news`} style={exploreLinkStyle("green")}>
                     {ticker} news →
                   </Link>

@@ -1,27 +1,39 @@
 "use client";
 import { EstimatedValue, ReasonedValue } from "@/app/components/EstimatedValue";
+import { chartHref } from "@/lib/chartHref";
 import { EstimateKey } from "@/app/components/EstimateKey";
 import type { EstimateMark } from "@/app/components/estimateMark";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart, { SHORT_HISTORY_NOTE } from "./StockPriceChart";
+import { DayCandle, DayRange, PeLine, PriceChange, PriceSpark, RsiPane, TrendSpark, VolumeBars } from "./HeaderStripParts";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
+import ConfluenceCard from "./ConfluenceCard";
+import KeyLevelsCard from "./KeyLevelsCard";
+import PerformanceCard from "./PerformanceCard";
+import type { PerfStrip } from "@/lib/ta/performance";
+import LevelsSignals from "./LevelsSignals";
+import { liveBars } from "@/lib/ta/sessionBar";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
 import type { ProfileDividend } from "@/lib/server/secDividend";
 import { isRetiredBlock } from "./retiredBlocks";
+import { ValuationBandsCard, type ValuationBandView } from "./ValuationBands";
 import CompanyProfile, {
   type CompanyProfile as CompanyProfileData,
 } from "@/app/components/CompanyProfile";
 import DilutionHistory, {
   type DilutionHistoryData,
 } from "@/app/components/DilutionHistory";
-import type { ReturnBar } from "@/app/components/ReturnsBarChart";
 import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
+import { dailyReturnBars, monthlyReturnBars, weeklyReturnBars } from "@/lib/closeReturns";
 import ShareButton from "@/app/components/ShareButton";
+import { STRENGTH_CSS, StrengthNote, StrengthPill, useStrengthNote } from "./StrengthBadge";
+import type { StrengthBadge } from "@/lib/strengthBadge";
 
 type Quote = {
   symbol: string;
@@ -74,6 +86,8 @@ type StockValuationData = {
   /** Why a figure is blank, in words; null where it has a value. From SEC. */
   reasons?: Partial<Record<"peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda", string | null>>;
   sourceNote: string;
+  /** "▲ Above sector median (21.5×)" and its note, or null for no line (lib/peSectorLine.ts). */
+  peSector?: { glyph: string; text: string; note: string; median?: number | null } | null;
   /** "TTM to 26 Jul 2026" or "FY2025": which twelve months the P/E is on. */
   peBasis?: string | null;
   /** The derived-Q4 caveat, when the TTM includes one. */
@@ -82,6 +96,8 @@ type StockValuationData = {
   words?: Partial<Record<ValuationKey, string | null>>;
   /** The estimate/derived mark on a figure (lib/server/secEstimates); absent on a filed figure. */
   estimates?: Partial<Record<ValuationKey, EstimateMark | null>>;
+  /** Low / Fair / Rich vs the sector, per multiple (lib/valuationBands.ts); null for no bar. */
+  bands?: Partial<Record<ValuationKey, ValuationBandView | null>>;
 };
 type ValuationKey = "peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda";
 
@@ -168,6 +184,12 @@ type StockSymbolPageClientProps = {
   historyCredit?: ReactNode;
   // Whose bars `initialHistory` is: "tiingo", "fmp" or "none".
   historyProvider?: string;
+  /** The performance strip (#563 COWORK #69), computed server-side from the full series. */
+  performance?: PerfStrip;
+  /** The strength badge (#563 COWORK #105), scored server-side from the same series; absent off Tiingo. */
+  strength?: StrengthBadge | null;
+  /** The server's render time (#563 COWORK #75/#76), for "is today's partial bar in session". */
+  renderedAt?: number;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -235,6 +257,9 @@ function trendLabel(args: { lastClose: number | null; ma50: number | null; ma200
   // asserted for a stock whose trend cannot be computed yet.
   return null;
 }
+
+/** The valuation card as Low / Fair / Rich bars (#552 COWORK #202 item 3); false restores the four tiles. */
+const SHOW_VALUATION_BANDS = true;
 
 function formatValuationMultiple(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
@@ -328,12 +353,8 @@ function formatChangeLabel(change: number | null | undefined, changePercent: num
   return `${sign}${change.toFixed(2)} (${sign}${changePercent.toFixed(2)}%)`;
 }
 
-function changeTone(change: number | null | undefined): "green" | "yellow" | "red" {
-  if (typeof change !== "number") return "yellow";
-  if (change > 0) return "green";
-  if (change < 0) return "red";
-  return "yellow";
-}
+// changeTone retired 2026-10-04 (#563 COWORK #99 §4): the change's colour now
+// comes with its arrow, from lib/headerStrip.ts changeDirection.
 
 type MacroSupportResult = {
   lower: number; upper: number; level: number; distancePct: number; touches: number; volumeRatio: number | null;
@@ -365,33 +386,6 @@ function aggregateWeekly(points: Point[]): Point[] {
     else { buckets.set(key, { date: key, close: point.close, high: Math.max(existing.high ?? existing.close, high), low: Math.min(existing.low ?? existing.close, low), volume: (existing.volume ?? 0) + volume }); }
   }
   return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function fmtShortDate(dateStr: string) {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d);
-}
-
-// Close-over-close percentage change for the last `count` periods in an
-// ascending-by-date points array. Works for daily points directly, or for
-// aggregateWeekly(history) to get week-over-week change — same shape, same
-// math, just a different input series.
-function computeCloseOverCloseReturns(points: Point[], count: number): ReturnBar[] {
-  if (points.length < 2) return [];
-  const bars: ReturnBar[] = [];
-  const start = Math.max(1, points.length - count);
-  for (let i = start; i < points.length; i++) {
-    const prev = points[i - 1].close;
-    const close = points[i].close;
-    if (!(prev > 0) || !Number.isFinite(close)) continue;
-    bars.push({
-      date: points[i].date,
-      label: fmtShortDate(points[i].date),
-      changePercent: ((close - prev) / prev) * 100,
-    });
-  }
-  return bars;
 }
 
 function computeMacroSupport(points: Point[], lastClose: number | null): MacroSupportResult | null {
@@ -703,8 +697,8 @@ function AnalystTargetChart({
 
         {/* Current price marker */}
         <circle cx={leftX} cy={priceY} r={6} fill="#f8fafc" stroke="#06080d" strokeWidth={2} />
-        <text x={leftX} y={priceY - 16} textAnchor="middle" fontSize={10} fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">NOW</text>
-        <text x={leftX} y={priceY + 24} textAnchor="middle" fontSize={13} fontWeight={800} fill="#f8fafc">{`$${priceValue.toFixed(2)}`}</text>
+        <text x={leftX} y={priceY - 16} textAnchor="middle" fontSize="0.75rem" fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">NOW</text>
+        <text x={leftX} y={priceY + 24} textAnchor="middle" fontSize="0.8125rem" fontWeight={800} fill="#f8fafc">{`$${priceValue.toFixed(2)}`}</text>
 
         {/* Target markers + decluttered labels */}
         {targets.map((t) => {
@@ -728,9 +722,9 @@ function AnalystTargetChart({
                   strokeOpacity={0.5}
                 />
               ) : null}
-              <text x={rightX + 14} y={labelY - 3} fontSize={10} fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">{t.label}</text>
-              <text x={rightX + 14} y={labelY + 13} fontSize={14} fontWeight={800} fill={toneColor(tone)}>{`$${t.value.toFixed(2)}`}</text>
-              <text x={rightX + 14} y={labelY + 26} fontSize={10} fill="rgba(226,232,240,0.45)">{`${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%`}</text>
+              <text x={rightX + 14} y={labelY - 3} fontSize="0.75rem" fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">{t.label}</text>
+              <text x={rightX + 14} y={labelY + 13} fontSize="0.875rem" fontWeight={800} fill={toneColor(tone)}>{`$${t.value.toFixed(2)}`}</text>
+              <text x={rightX + 14} y={labelY + 26} fontSize="0.75rem" fill="rgba(226,232,240,0.45)">{`${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%`}</text>
             </g>
           );
         })}
@@ -739,9 +733,9 @@ function AnalystTargetChart({
   );
 }
 
-const sectionLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
-const sectionHeadingStyle: React.CSSProperties = { margin: 0, fontSize: 26, lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
-const miniLabelStyle: React.CSSProperties = { fontSize: 11, opacity: 0.60, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" };
+const sectionLabelStyle: React.CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
+const sectionHeadingStyle: React.CSSProperties = { margin: 0, fontSize: "1.625rem", lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
+const miniLabelStyle: React.CSSProperties = { fontSize: "var(--fs-label)", opacity: 0.60, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" };
 
 function sideCardStyle(): React.CSSProperties {
   return { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, overflow: "hidden", background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
@@ -753,7 +747,14 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote, tiingoCredit, historyCredit, historyProvider, performance, strength, renderedAt }: StockSymbolPageClientProps) {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
+  // THE STRENGTH BADGE (#563 COWORK #105): two copies, one shown (left of Share; under the ticker on a phone).
+  const strengthTop = useStrengthNote();
+  const strengthUnder = useStrengthNote();
+  const strengthTopRow = useRef<HTMLDivElement | null>(null);
+  const strengthUnderRow = useRef<HTMLDivElement | null>(null);
+  const strengthCredit = historyProvider === "tiingo" ? historyCredit : undefined;
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   // Whose bars the chart is showing: the seed's provider, or what the client
   // fetch's /api/history answer says (#553 COWORK #103). Drives the credit.
@@ -961,18 +962,28 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
   const macroSupport = useMemo(() => computeMacroSupport(history, lastClose), [history, lastClose]);
   const macdSignal = useMemo(() => buildMacd(closes), [closes]);
-  const weeklyHistory = useMemo(() => aggregateWeekly(history), [history]);
-  const dailyReturns = useMemo(() => computeCloseOverCloseReturns(history, 20), [history]);
-  const weeklyReturns = useMemo(() => computeCloseOverCloseReturns(weeklyHistory, 12), [weeklyHistory]);
+  // THE SIGNALS COLUMN'S MACD (#563 COWORK #75/#76): the same buildMacd, over
+  // completed sessions plus today's partial bar only while it is in session, so
+  // the pill and its mini chart agree and a stale partial never counts.
+  const macdLive = useMemo(() => {
+    const l = liveBars(history as (Point & { partial?: boolean; label?: string })[], renderedAt ?? NaN);
+    return { tone: buildMacd(l.bars.map((p) => p.close))?.tone ?? null, bars: l.bars, today: l.live && l.phase ? { time: l.time, phase: l.phase } : null };
+  }, [history, renderedAt]);
+  // The Price Action card's three series, from the bars the page already holds,
+  // labelled by the END of each period (lib/closeReturns.ts, #553 COWORK #115):
+  // 20 daily, 12 weekly, 12 complete months (+ the month in progress, kept apart).
+  const dailyReturns = useMemo(() => dailyReturnBars(history, 20), [history]);
+  const weeklyReturns = useMemo(() => weeklyReturnBars(history, 12), [history]);
+  const monthlyReturns = useMemo(() => monthlyReturnBars(history, 12), [history]);
 
   // Shared "Learn the indicators" links. Rendered inside the company-profile
   // right-hand column (under the stat cards) when a profile exists, and as a
   // standalone section otherwise.
   const learnRows = (
     <div className="learn-grid">
-      <Link href="/learn/moving-averages" style={learnRowStyle}><span style={learnDotStyle("blue")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>Moving Averages</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How traders use MA50 and MA200 to judge medium and long-term structure.</div></div></Link>
-      <Link href="/learn/rsi" style={learnRowStyle}><span style={learnDotStyle("green")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>RSI Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How RSI highlights momentum, overbought and oversold conditions.</div></div></Link>
-      <Link href="/learn/macd" style={learnRowStyle}><span style={learnDotStyle("red")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>MACD Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How MACD helps read momentum strength and weakening trend behaviour.</div></div></Link>
+      <Link href="/learn/moving-averages" style={learnRowStyle}><span style={learnDotStyle("blue")} /><div><div style={{ fontWeight: 700, fontSize: "0.875rem" }}>Moving Averages</div><div style={{ fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6, marginTop: 2 }}>How traders use MA50 and MA200 to judge medium and long-term structure.</div></div></Link>
+      <Link href="/learn/rsi" style={learnRowStyle}><span style={learnDotStyle("green")} /><div><div style={{ fontWeight: 700, fontSize: "0.875rem" }}>RSI Guide</div><div style={{ fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6, marginTop: 2 }}>How RSI highlights momentum, overbought and oversold conditions.</div></div></Link>
+      <Link href="/learn/macd" style={learnRowStyle}><span style={learnDotStyle("red")} /><div><div style={{ fontWeight: 700, fontSize: "0.875rem" }}>MACD Guide</div><div style={{ fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6, marginTop: 2 }}>How MACD helps read momentum strength and weakening trend behaviour.</div></div></Link>
     </div>
   );
 
@@ -990,7 +1001,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
   // the company stat cards. Spans the full row when the column collapses to a
   // 2-up grid on mobile.
   const learnIndicatorsAside = (
-    <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+    <div data-reading-owner="c" style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
       <div style={{ ...sectionLabelStyle, marginBottom: 8 }}>Learn the indicators</div>
       {learnRows}
     </div>
@@ -1003,59 +1014,90 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         {/* -- Page header -------------------------------------------- */}
         <header style={{ paddingTop: 24, paddingBottom: 4 }}>
           <div style={stockHeroBoxStyle}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div ref={strengthTopRow} data-strength-row style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span style={stockDeskTagStyle}>Stock Analysis</span>
-            <Link href="/pickers" style={{ fontSize: 12, fontWeight: 600, color: "rgba(148,163,184,0.65)", textDecoration: "none" }}>← Pickers</Link>
-            <div style={{ marginLeft: "auto" }}>
+            <Link href="/pickers" style={{ fontSize: "var(--fs-label)", fontWeight: 600, color: "rgba(148,163,184,0.65)", textDecoration: "none" }}>← Pickers</Link>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              {strength ? <StrengthPill s={strengthTop} badge={strength} place="top" /> : null}
               <ShareButton url={shareUrl} title={shareTitle} text={shareText} />
             </div>
           </div>
+          {strength ? <StrengthNote s={strengthTop} row={strengthTopRow} badge={strength} credit={strengthCredit} place="top" /> : null}
           <div style={{ marginTop: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <TickerLogo symbol={symbol} name={companyName} size={34} radius={8} />
-              <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.05, fontWeight: 800, letterSpacing: "-0.045em" }}>{symbol}</h1>
+              <h1 style={{ margin: 0, fontSize: "2.125rem", lineHeight: 1.05, fontWeight: 800, letterSpacing: "-0.045em" }}>{symbol}</h1>
             </div>
-            {companyName ? <p style={{ margin: "4px 0 0", fontSize: 16, opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
-            {lastClose !== null ? <p style={{ margin: "12px 0 0", fontSize: 16, lineHeight: 1.7, opacity: 0.82, maxWidth: 760 }}>{heroLede}</p> : null}
+            {strength ? (
+              <>
+                <div ref={strengthUnderRow} data-strength-row className="strengthUnderRow">
+                  <StrengthPill s={strengthUnder} badge={strength} place="under" />
+                </div>
+                <StrengthNote s={strengthUnder} row={strengthUnderRow} badge={strength} credit={strengthCredit} place="under" />
+                <style>{STRENGTH_CSS}</style>
+              </>
+            ) : null}
+            {companyName ? <p style={{ margin: "4px 0 0", fontSize: "1rem", opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
+            {lastClose !== null ? <p style={{ margin: "12px 0 0", fontSize: "1rem", lineHeight: 1.7, opacity: 0.82, maxWidth: 760 }}>{heroLede}</p> : null}
           </div>
           {!priceLoading && !err ? (
             <div className="stock-header-stats" style={{ marginTop: 20 }}>
-              <div className="stock-stat-cell">
+              {/* THE CELLS' MINI-GRAPHICS (#563 COWORK #112): each decorative (aria-hidden), faint, behind or beside the figure, in the cell's colour; no transform. */}
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <PriceSpark closes={closes} prevClose={quote?.previousClose} />
                 <div className="stock-stat-label">Price</div>
                 <div className="stock-stat-value">{typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}</div>
-                <div className="stock-stat-sub" style={formatChangeLabel(quote?.change, quote?.changePercentage) ? { color: toneColor(changeTone(quote?.change)), opacity: 0.9, fontWeight: 700 } : undefined}>
-                  {formatChangeLabel(quote?.change, quote?.changePercentage) ?? quote?.date ?? "—"}
+                {/* THE HEADER STRIP (#563 COWORK #99 §4): ▲/▼ beside the signed change, and spoken words for it. */}
+                <div className="stock-stat-sub" style={formatChangeLabel(quote?.change, quote?.changePercentage) ? { opacity: 1 } : undefined}>
+                  {formatChangeLabel(quote?.change, quote?.changePercentage)
+                    ? <PriceChange change={quote?.change} pct={quote?.changePercentage} label={formatChangeLabel(quote?.change, quote?.changePercentage)!} />
+                    : quote?.date ?? "—"}
                 </div>
               </div>
-              <div className="stock-stat-cell">
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <DayCandle open={quote?.open} high={quote?.dayHigh} low={quote?.dayLow} last={quote?.price} />
                 <div className="stock-stat-label">Day range</div>
-                <div className="stock-stat-value" style={{ fontSize: 15 }}>{formatRange(quote?.dayLow, quote?.dayHigh)}</div>
-                <div className="stock-stat-sub">52wk {formatRange(quote?.yearLow, quote?.yearHigh)}</div>
+                <DayRange low={quote?.dayLow} high={quote?.dayHigh} last={quote?.price} />
+                <div className="stock-stat-sub">52wk <span style={{ whiteSpace: "nowrap" }}>{formatRange(quote?.yearLow, quote?.yearHigh)}</span></div>
               </div>
-              <div className="stock-stat-cell">
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <VolumeBars vols={history.map((p) => p.volume)} avg={quote?.avgVolume} colour={toneColor(volumeTone(quote?.volume, quote?.avgVolume))} />
                 <div className="stock-stat-label">Volume</div>
                 <div className="stock-stat-value" style={{ color: toneColor(volumeTone(quote?.volume, quote?.avgVolume)) }}>{formatCompactNumber(quote?.volume)}</div>
                 <div className="stock-stat-sub">{quote?.volumeLabel ? `50-day avg ${formatCompactNumber(quote?.avgVolume)} · ${quote.volumeLabel}` : `Avg ${formatCompactNumber(quote?.avgVolume)}`}</div>
               </div>
-              <div className="stock-stat-cell">
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                {/* The chart window's closes, faint, behind the score (decorative; the number and word are the content). */}
+                <TrendSpark closes={closes.slice(-240)} colour={trendTone ? toneColor(trendTone) : "rgba(203,213,225,0.8)"} />
                 <div className="stock-stat-label">Trend score</div>
                 <div className="stock-stat-value" style={trendTone ? { color: toneColor(trendTone) } : undefined}>{trendScore.known ? `${trendScore.passed}/${trendScore.total}` : "—"}</div>
                 <div className="stock-stat-sub">{trend ?? "Not enough history yet"}</div>
               </div>
-              <div className="stock-stat-cell">
+              <div className="stock-stat-cell" style={{ position: "relative" }}>
+                <RsiPane series={rsi14} colour={toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null))} />
                 <div className="stock-stat-label">RSI (14)</div>
                 <div className="stock-stat-value" style={{ color: toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null)) }}>{typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}</div>
                 <div className="stock-stat-sub">{typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought" : lastRsi <= 30 ? "Oversold" : "Neutral") : "—"}</div>
               </div>
               {!valuationLoading && valuation ? (
-                <div className="stock-stat-cell">
+                <div className="stock-stat-cell" style={{ position: "relative", paddingBottom: 17 }}>
+                  {/* A's numeric sector median (#781); no quartiles exist, so no band. ~4 px clear of the words above it (#563 COWORK #116). */}
+                  {valuation.peRatio != null && valuation.peSector ? <PeLine pe={valuation.peRatio} median={valuation.peSector.median} /> : null}
                   <div className="stock-stat-label">P/E ({valuation.peBasis ?? "TTM"})</div>
                   <div className="stock-stat-value">
                     {valuation.peRatio != null
                       ? formatValuationMultiple(valuation.peRatio)
                       : <ReasonedValue text={valuation.words?.peRatio ?? "—"} reason={valuation.reasons?.peRatio} />}
                   </div>
-                  <div className="stock-stat-sub">See valuation ↓</div>
+                  {/* P/E VS ITS SECTOR (#552 COWORK #147 §2): the glyph and the
+                      words carry it, in the page's ordinary ink (a comparison,
+                      not a verdict); the note names the peers and the date. */}
+                  {/* A baseline row, so the glyph keeps to its first word when the words wrap (#563 COWORK #116). */}
+                  <div className="stock-stat-sub" data-pe-sector={valuation.peSector ? "" : undefined}>
+                    {valuation.peSector
+                      ? <span style={{ display: "flex", alignItems: "baseline", columnGap: "0.3em" }}><span aria-hidden="true">{valuation.peSector.glyph} </span><ReasonedValue text={valuation.peSector.text} reason={valuation.peSector.note} /></span>
+                      : "See valuation ↓"}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -1067,7 +1109,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 { label: "Price above MA200", pass: lastClose !== null && lastMA200 !== null && lastClose > lastMA200 },
                 { label: "MA50 above MA200", pass: lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 },
               ].map((check) => (
-                <span key={check.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: check.pass ? "#86efac" : "rgba(248,113,113,0.80)" }}>
+                <span key={check.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "var(--fs-label)", color: check.pass ? "#86efac" : "rgba(248,113,113,0.80)" }}>
                   <span style={{ fontWeight: 900 }}>{check.pass ? "✓" : "✕"}</span>
                   {check.label}
                 </span>
@@ -1076,17 +1118,18 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           ) : null}
           {!priceLoading && !err && quote?.priceLabel ? (
             // Step 4 (#553 COWORK #56): what the header's price is, and whose.
-            <p style={{ margin: "12px 0 0", fontSize: 12, opacity: 0.6 }}>
+            <p data-fine-print style={{ margin: "12px 0 0", fontSize: "var(--fs-fine)", opacity: 0.6 }}>
               Price: {quote.priceLabel}{tiingoCredit ? <> · {tiingoCredit}</> : null}
             </p>
           ) : null}
+          {/* The 1M–5Y period boxes left the header on 5 Oct 2026 (#563 COWORK #111): they are the Performance card in the left column. */}
           </div>{/* end hero box */}
         </header>
 
         {priceLoading ? (
-          <div style={{ paddingTop: 40, opacity: 0.60, fontSize: 14 }}>Loading chart and price data…</div>
+          <div style={{ paddingTop: 40, opacity: 0.60, fontSize: "var(--fs-read)" }}>Loading chart and price data…</div>
         ) : err ? (
-          <div style={{ paddingTop: 40, opacity: 0.70, fontSize: 14 }}>{err}</div>
+          <div style={{ paddingTop: 40, opacity: 0.70, fontSize: "var(--fs-read)" }}>{err}</div>
         ) : (
           <div className="stock-page-layout" style={{ paddingTop: 24 }}>
 
@@ -1096,87 +1139,121 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               {/* Change stock — desktop only (hidden on mobile via CSS) */}
               <div className="sidebar-change-stock" style={sideCardStyle()}>
                 <div style={sideCardHeaderStyle()}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
-                  <div style={{ marginTop: 3, fontSize: 12, opacity: 0.50, lineHeight: 1.4 }}>Search another ticker to view its stock analysis page.</div>
+                  <div style={{ fontSize: "var(--fs-label)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
+                  <div style={{ marginTop: 3, fontSize: "var(--fs-read)", opacity: 0.6, lineHeight: 1.5 }}>Search another ticker to view its stock analysis page.</div>
                 </div>
                 <div style={sideCardBodyStyle()}>
                   <StockTickerJump currentSymbol={symbol} />
                 </div>
               </div>
 
+              {/* Price zones (#563 COWORK #83/#84): C's confluence card, directly above Key levels. */}
+              <div className="sp-slot sp-confluence">
+                <ConfluenceCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} ma50={typeof lastMA50 === "number" ? lastMA50 : null} ma200={typeof lastMA200 === "number" ? lastMA200 : null} macro={macroSupport ? { lower: macroSupport.lower, upper: macroSupport.upper } : null} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              </div>
+
+              {/* Key levels (#563 COWORK #64): C's card, from the bars already held. */}
+              <div className="sp-slot sp-keylevels">
+                <KeyLevelsCard bars={history} lastPrice={quote?.price ?? null} nowMs={renderedAt} credit={shownProvider === "tiingo" ? historyCredit : undefined} />
+              </div>
+
+              {/* Performance vs the S&P 500 (#563 COWORK #111): C's card, the strip's own figures, under Key levels. */}
+              {performance ? (
+                <div className="sp-slot sp-performance">
+                  <PerformanceCard strip={performance} credit={historyProvider === "tiingo" ? historyCredit : undefined} />
+                </div>
+              ) : null}
+
               {/* Earnings snapshot — sidebar */}
-              <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} />
+              {/* A'S CARD (#563 COWORK #100): its type sizes are A's PR (#552 COWORK #153); the reading-size measure reports it, report-only. */}
+              <div className="sp-slot sp-earnings" data-reading-owner="a">
+                <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} hasFiledEarnings={hasFiledEarnings(symbol)} />
+              </div>
 
             </aside>
 
             {/* ---- MAIN COLUMN ------------------------------------ */}
             <div className="stock-page-main">
 
-              {/* -- Change stock — mobile only, above chart ---------- */}
-              <div className="mobile-change-stock" style={sideCardStyle()}>
-                <div style={sideCardHeaderStyle()}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
-                  <div style={{ marginTop: 3, fontSize: 12, opacity: 0.50, lineHeight: 1.4 }}>Search another ticker to view its stock analysis page.</div>
-                </div>
-                <div style={sideCardBodyStyle()}>
-                  <StockTickerJump currentSymbol={symbol} />
-                </div>
-              </div>
-
               {/* -- Chart section ----------------------------------- */}
-              <section style={{ marginTop: 20 }}>
+              <section className="sp-slot sp-chart" style={{ marginTop: 20 }}>
                 <div style={sectionLabelStyle}>Chart View</div>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
                   <h2 style={sectionHeadingStyle}>{symbol} with MA50 and MA200</h2>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", alignItems: "center", maxWidth: "100%" }}>
-                    <Link href={`/?symbol=${encodeURIComponent(symbol)}`} style={chartLinkStyle("blue")}>Dashboard</Link>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", maxWidth: "100%" }}>
+                    <Link href={chartHref(symbol)} style={chartLinkStyle("blue")}>Dashboard</Link>
                     <Link href={`/stock/${encodeURIComponent(symbol)}/news`} style={chartLinkStyle("red")}>News</Link>
                     <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
                   </div>
                 </div>
-                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} />
+                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} credit={shownProvider === "tiingo" ? historyCredit : null} gapBars={history} />
               </section>
 
               {/* -- Daily / weekly returns --------------------------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-returns" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Price Action</div>
-                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily or weekly close-over-close change</h2>
-                {/* ONE card, Daily | Weekly toggle, Daily first (#552 COWORK #89). Both views server-rendered. */}
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily, weekly or monthly close-over-close change</h2>
+                {/* ONE card, Daily | Weekly | Monthly toggle, Daily first (#552 COWORK #89, #553 COWORK #115). Every view server-rendered. */}
                 <div className="returns-charts-grid">
-                  <ReturnsToggleCard symbol={symbol} daily={dailyReturns} weekly={weeklyReturns} />
+                  <ReturnsToggleCard symbol={symbol} daily={dailyReturns} weekly={weeklyReturns} monthly={monthlyReturns} />
                 </div>
               </section>
 
               {/* -- Technical indicators ---------------------------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-signals" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Technical Indicators</div>
-                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Key levels &amp; signals</h2>
-                <div className="indicator-rows">
-                  {[
-                    { label: "MA50", value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—", sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : "Distance unavailable", tone: metricToneFromPct(ma50Pct), title: closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : undefined },
-                    { label: "MA200", value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—", sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : "Distance unavailable", tone: metricToneFromPct(ma200Pct), title: closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : undefined },
-                    { label: "RSI (14)", value: typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—", sub: typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought zone" : lastRsi <= 30 ? "Oversold zone" : "Neutral zone") : "Momentum unavailable", tone: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
-                    { label: "MACD Signal", value: macdSignal?.label ?? "—", sub: macdSignal?.meta ?? "Momentum unavailable", tone: macdSignal?.tone ?? "yellow" as "green" | "yellow" | "red" },
-                    { label: "Macro Support", value: macroSupport ? `$${macroSupport.lower.toFixed(2)}–$${macroSupport.upper.toFixed(2)}` : "Not identified", sub: macroSupport ? `${macroSupport.distancePct.toFixed(1)}% below price · ${macroSupport.touches} touches` : "No repeated weekly support zone found", tone: supportTone(macroSupport?.distancePct ?? null) },
-                    { label: "Support Quality", value: macroSupport ? `${macroSupport.touches} touches` : "—", sub: macroSupport?.volumeRatio != null ? `${macroSupport.volumeRatio.toFixed(1)}× zone volume` : "Volume data unavailable", tone: supportQualityTone(macroSupport) },
-                  ].map((row) => (
-                    <div key={row.label} className="indicator-row" title={"title" in row ? row.title : undefined}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 110, flex: "0 0 auto" }}>
-                        <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(row.tone), boxShadow: `0 0 5px ${toneColor(row.tone)}66`, flex: "0 0 auto" }} />
-                        <span style={{ fontSize: 14, fontWeight: 700, color: "rgba(226,232,240,0.75)" }}>{row.label}</span>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: toneColor(row.tone) }}>{row.value}</span>
-                        <span style={{ fontSize: 13, opacity: 0.50, marginLeft: 8 }}>{row.sub}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Price levels &amp; signals</h2>
+                {/* #563 COWORK #68: the same figures as pictures, handed over as computed above. */}
+                <LevelsSignals
+                  last={lastClose}
+                  ma50={typeof lastMA50 === "number" ? lastMA50 : null}
+                  ma200={typeof lastMA200 === "number" ? lastMA200 : null}
+                  zone={macroSupport}
+                  zoneMissing="No repeated weekly support zone found"
+                  ma50Missing={closes.length && closes.length < 50 ? SHORT_HISTORY_NOTE : null}
+                  ma200Missing={closes.length && closes.length < 200 ? SHORT_HISTORY_NOTE : null}
+                  rsi={typeof lastRsi === "number" ? lastRsi : null}
+                  macdTone={macdLive.tone}
+                  macdBars={macdLive.bars}
+                  macdToday={macdLive.today}
+                  asOf={history.length ? history[history.length - 1].date : null}
+                  asOfPartial={!!(history[history.length - 1] as { partial?: boolean } | undefined)?.partial}
+                  credit={shownProvider === "tiingo" ? historyCredit : undefined}
+                />
               </section>
 
               {/* -- Valuation multiples (SEC filings, TTM) ----------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-valuation" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Valuation</div>
+                {SHOW_VALUATION_BANDS ? (
+                  // LOW / FAIR / RICH BARS (#552 COWORK #202 item 3), replacing the four tiles below.
+                  <>
+                    <h2 style={{ ...sectionHeadingStyle, marginBottom: 6 }}>{symbol} valuation multiples: low, fair or rich?</h2>
+                    <p style={{ margin: "0 0 8px", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.78)" }}>
+                      Lower may mean cheaper, but compare against the company&apos;s own history and its sector.
+                    </p>
+                    <ValuationBandsCard rows={([
+                      { key: "peRatio", short: "P/E", long: "Price / earnings", basis: valuation?.peBasis ?? "TTM", how: valuation?.peRatio != null ? valuation?.peBasisNote ?? null : null },
+                      { key: "priceToSalesRatio", short: "P/S", long: "Price / sales (revenue)", basis: null, how: valuation?.priceToSalesRatio != null ? valuation?.reasons?.priceToSalesRatio ?? null : null },
+                      { key: "priceToBookRatio", short: "P/B", long: "Price / book value", basis: null, how: valuation?.priceToBookRatio != null ? valuation?.reasons?.priceToBookRatio ?? null : null },
+                      { key: "evToEbitda", short: "EV/EBITDA", long: "Enterprise value / EBITDA", basis: null, how: valuation?.evToEbitda != null ? valuation?.reasons?.evToEbitda ?? null : null },
+                    ] as { key: ValuationKey; short: string; long: string; basis: string | null; how: string | null }[]).map((r) => {
+                      const value = valuation?.[r.key];
+                      return {
+                        ...r,
+                        value,
+                        text: value != null ? formatValuationMultiple(value) : null,
+                        word: valuation?.words?.[r.key],
+                        reason: valuation?.reasons?.[r.key],
+                        est: r.key === "peRatio" ? null : valuation?.estimates?.[r.key as Exclude<ValuationKey, "peRatio">] ?? null,
+                        band: valuation?.bands?.[r.key] ?? null,
+                      };
+                    })} />
+                  </>
+                ) : null}
+                {/* HIDDEN, NOT REMOVED (2026-10-11, #552 COWORK #202 item 3): the four
+                    plain tiles the bars replaced. Flip SHOW_VALUATION_BANDS to restore. */}
+                {SHOW_VALUATION_BANDS ? null : <>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>{symbol} valuation multiples (TTM)</h2>
                 <div className="valuationGrid">
                   {([
@@ -1187,31 +1264,40 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                   ] as { key: ValuationKey; label: string; value: number | null | undefined; reason: string | null | undefined }[]).map((item) => (
                     <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                       <div style={miniLabelStyle}>{item.label}</div>
-                      <div style={{ marginTop: 4, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
+                      <div style={{ marginTop: 4, fontSize: "1.375rem", fontWeight: 800, letterSpacing: "-0.02em" }}>
                         {valuationLoading ? "—" : item.value != null
                           ? <EstimatedValue text={formatValuationMultiple(item.value)} est={valuation?.estimates?.[item.key]} />
                           : <ReasonedValue text={valuation?.words?.[item.key] ?? "—"} reason={item.reason} />}
                       </div>
-                      {/* A FIGURE'S NOTE (its basis, NCI-inclusive equity) is
-                          printed; a REFUSAL'S reason is on hover/tap of the dash
-                          or word instead (#552 COWORK #98 §1). */}
+                      {/* A FIGURE'S NOTE (its basis, NCI-inclusive equity) sits behind a
+                          tap, "How it's calculated", at reading size when open: the card
+                          shows only the figure and its label (owner ruling, #563 COWORK
+                          #104: explanations go behind a tap, not as small text). A
+                          REFUSAL'S reason is on hover/tap of the dash or word instead
+                          (#552 COWORK #98 §1). */}
                       {item.value != null && item.reason ? (
-                        <div style={{ marginTop: 4, fontSize: 11, lineHeight: 1.4, opacity: 0.55 }}>{item.reason}</div>
+                        <details className="valuationHow" style={{ marginTop: 6 }}>
+                          <summary style={{ cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" }}>How it&apos;s calculated</summary>
+                          <div style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" }}>{item.reason}</div>
+                        </details>
                       ) : null}
                     </div>
                   ))}
                 </div>
-                <EstimateKey
+                </>}
+                <div data-reading-owner="a" style={{ display: "contents" }}><EstimateKey
                   marks={[valuation?.estimates?.priceToSalesRatio, valuation?.estimates?.priceToBookRatio, valuation?.estimates?.evToEbitda]}
                   style={{ marginTop: 12 }}
-                />
-                <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>
+                /></div>
+                <div data-fine-print style={{ marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.6, opacity: 0.55 }}>
                   {valuation?.sourceNote ? "From the company's SEC filings and this page's share price." : "Computed from the company's own filings on SEC EDGAR; none are on file for this symbol."}
                 </div>
                 {valuation?.sourceNote ? (
-                  <details style={{ marginTop: 6, fontSize: 12, lineHeight: 1.6, opacity: 0.6 }}>
-                    <summary style={{ cursor: "pointer" }}>How these are calculated</summary>
-                    <div style={{ marginTop: 6 }}>{valuation.sourceNote}</div>
+                  // OPENS AT READING SIZE (#552 COWORK #157 §2): an explanation behind a
+                  // tap, not 12px fine print; the summary at label size.
+                  <details data-valuation-how="" style={{ marginTop: 6 }}>
+                    <summary style={{ cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" }}>How these are calculated</summary>
+                    <div style={{ marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" }}>{valuation.sourceNote}</div>
                   </details>
                 ) : null}
               </section>
@@ -1241,14 +1327,14 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap", marginBottom: 16 }}>
                     <h2 style={sectionHeadingStyle}>{symbol} analyst consensus</h2>
                     {!analystRatingLoading && analystRating?.consensusRating ? (
-                      <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 7, border: toneBorder(consensusTone(analystRating.consensusRating)), background: toneSoftBackground(consensusTone(analystRating.consensusRating)), color: toneColor(consensusTone(analystRating.consensusRating)) }}>
+                      <span style={{ fontSize: "var(--fs-label)", fontWeight: 700, padding: "4px 10px", borderRadius: 7, border: toneBorder(consensusTone(analystRating.consensusRating)), background: toneSoftBackground(consensusTone(analystRating.consensusRating)), color: toneColor(consensusTone(analystRating.consensusRating)) }}>
                         {analystRating.consensusRating}
                         {typeof analystRating.totalAnalysts === "number" ? ` · ${analystRating.totalAnalysts} analysts` : ""}
                       </span>
                     ) : null}
                   </div>
                   {!analystRatingLoading && !analystRating?.consensusRating && analystRating?.targetConsensus == null ? (
-                    <p style={{ margin: 0, fontSize: 13, opacity: 0.55 }}>{analystRating?.sourceNote ?? "Analyst rating data is unavailable right now."}</p>
+                    <p style={{ margin: 0, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", opacity: 0.6 }}>{analystRating?.sourceNote ?? "Analyst rating data is unavailable right now."}</p>
                   ) : (
                     <>
                       {!analystRatingLoading ? (
@@ -1277,8 +1363,8 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                         ].map((item) => (
                           <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                             <div style={miniLabelStyle}>{item.label}</div>
-                            <div style={{ marginTop: 4, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>{item.value}</div>
-                            {item.sub ? <div style={{ marginTop: 2, fontSize: 13, opacity: 0.55 }}>{item.sub}</div> : null}
+                            <div style={{ marginTop: 4, fontSize: "1.375rem", fontWeight: 800, letterSpacing: "-0.02em" }}>{item.value}</div>
+                            {item.sub ? <div style={{ marginTop: 2, fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6 }}>{item.sub}</div> : null}
                           </div>
                         ))}
                       </div>
@@ -1293,7 +1379,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                               { label: "Sell", value: analystRating.sell, tone: "red" as const },
                               { label: "Strong Sell", value: analystRating.strongSell, tone: "red" as const },
                             ].map((item) => (
-                              <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 9, border: toneBorder(item.tone), background: toneSoftBackground(item.tone), fontSize: 13, fontWeight: 700 }}>
+                              <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 9, border: toneBorder(item.tone), background: toneSoftBackground(item.tone), fontSize: "0.8125rem", fontWeight: 700 }}>
                                 <span style={{ opacity: 0.85 }}>{item.label}</span>
                                 <span style={{ color: toneColor(item.tone) }}>{item.value ?? 0}</span>
                               </div>
@@ -1303,13 +1389,13 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                       ) : null}
                     </>
                   )}
-                  <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{analystRating?.sourceNote ?? "Analyst ratings and price targets are provided by Financial Modeling Prep when available."}</div>
+                  <div data-fine-print style={{ marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.6, opacity: 0.55 }}>{analystRating?.sourceNote ?? "Analyst ratings and price targets are provided by Financial Modeling Prep when available."}</div>
                 </section>
               )}
 
 
               {/* -- Chart summaries --------------------------------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-summary" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Chart Summary</div>
                 <div>
                   {[
@@ -1320,8 +1406,8 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                     <div key={i} style={{ padding: "18px 0", borderBottom: i < 2 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", gap: 12, alignItems: "flex-start" }}>
                       <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(item.dot), marginTop: 6, flex: "0 0 auto", boxShadow: `0 0 5px ${toneColor(item.dot)}66` }} />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 5 }}>{item.heading}</div>
-                        <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.8, opacity: 0.78 }}>{item.text}</p>
+                        <div style={{ fontSize: "1rem", fontWeight: 700, marginBottom: 5 }}>{item.heading}</div>
+                        <p style={{ margin: 0, fontSize: "var(--fs-read)", lineHeight: 1.8, opacity: 0.78 }}>{item.text}</p>
                       </div>
                     </div>
                   ))}
@@ -1334,30 +1420,43 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                      column, instead of sitting in its own full-width section
                      further down the page. Falls back to a standalone
                      section when there's no profile to attach it to. -- */}
-              {profile ? (
-                <CompanyProfile
-                  profile={profile}
-                  symbol={symbol}
-                  dividend={dividend}
-                  belowDescription={<DilutionHistory data={shareHistory} symbol={symbol} embedded />}
-                  belowStats={learnIndicatorsAside}
-                />
-              ) : (
-                <>
-                  <DilutionHistory data={shareHistory} symbol={symbol} />
+              <div className="sp-slot sp-profile" data-reading-owner="a">
+                {profile ? (
+                  <CompanyProfile
+                    profile={profile}
+                    symbol={symbol}
+                    dividend={dividend}
+                    belowDescription={<DilutionHistory data={shareHistory} symbol={symbol} embedded />}
+                    belowStats={learnIndicatorsAside}
+                  />
+                ) : (
+                  <>
+                    <DilutionHistory data={shareHistory} symbol={symbol} />
 
-                  {/* -- Learn more (standalone fallback when no company
-                         profile is available to host it in the right column) -- */}
-                  <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-                    <div style={sectionLabelStyle}>Learn More</div>
-                    <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
-                    {learnRows}
-                  </section>
-                </>
-              )}
+                    {/* -- Learn more (standalone fallback when no company
+                           profile is available to host it in the right column) -- */}
+                    <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                      <div style={sectionLabelStyle}>Learn More</div>
+                      <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
+                      {learnRows}
+                    </section>
+                  </>
+                )}
+              </div>
+
+              {/* -- Change stock — phones only (#563 COWORK #82: near the end, after the page's figures) -- */}
+              <div className="mobile-change-stock sp-slot sp-changestock" style={sideCardStyle()}>
+                <div style={sideCardHeaderStyle()}>
+                  <div style={{ fontSize: "var(--fs-label)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
+                  <div style={{ marginTop: 3, fontSize: "var(--fs-read)", opacity: 0.6, lineHeight: 1.5 }}>Search another ticker to view its stock analysis page.</div>
+                </div>
+                <div style={sideCardBodyStyle()}>
+                  <StockTickerJump currentSymbol={symbol} />
+                </div>
+              </div>
 
               {/* -- Explore more ------------------------------------ */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+              <section className="sp-slot sp-explore" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Explore More</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>More stock opportunities</h2>
                 <div className="explore-grid">
@@ -1370,8 +1469,8 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                     <Link key={item.href} href={item.href} style={exploreCardStyle}>
                       <span style={{ width: 7, height: 7, borderRadius: 999, background: item.dot, flex: "0 0 auto" }} />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</div>
-                        <div style={{ fontSize: 12, opacity: 0.50, marginTop: 2 }}>{item.sub}</div>
+                        <div style={{ fontWeight: 700, fontSize: "0.8125rem" }}>{item.label}</div>
+                        <div style={{ fontSize: "var(--fs-read)", lineHeight: 1.5, opacity: 0.6, marginTop: 2 }}>{item.sub}</div>
                       </div>
                     </Link>
                   ))}
@@ -1379,18 +1478,21 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </section>
 
               {/* -- FAQ --------------------------------------------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, paddingBottom: 40 }}>
+              <section className="sp-slot sp-faq" style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, paddingBottom: 40 }}>
                 <div style={sectionLabelStyle}>FAQ</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 18 }}>Common questions about {symbol}</h2>
                 <div style={{ display: "grid", gap: 16 }}>
                   {[
                     { q: "Is this page a buy or sell recommendation?", a: "No. This page is designed to help you review chart structure, momentum and technical context more quickly, but it is not personal financial advice." },
                     { q: "Why can a stock look bullish and overbought at the same time?", a: "Strong trending stocks can still become stretched in the short term. That is why trend traders and dip buyers can read the same chart differently." },
-                    { q: "What should I do next after reading this page?", a: "Open the full dashboard, review the chart in more detail, compare indicators, and decide whether the setup still makes sense within your own process." },
+                    // HEDGED, NOT AN INSTRUCTION (#553 COWORK #54, #80 §2, step 5): the old
+                    // answer told the reader what to do next. It now describes what some
+                    // readers do; the "not a recommendation" answer above stays as it was.
+                    { q: "Where can I see this chart in more detail?", a: "Some readers may open the full dashboard to review the chart in more detail and compare other indicators. This page describes the chart; it does not suggest any action." },
                   ].map((item) => (
                     <div key={item.q}>
-                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{item.q}</h3>
-                      <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: 1.75, opacity: 0.7 }}>{item.a}</p>
+                      <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>{item.q}</h3>
+                      <p style={{ margin: "6px 0 0", fontSize: "var(--fs-read)", lineHeight: 1.75, opacity: 0.75 }}>{item.a}</p>
                     </div>
                   ))}
                 </div>
@@ -1411,12 +1513,13 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           align-items: start;
         }
         .stock-page-main { min-width: 0; }
+        /* THE SIDEBAR SCROLLS WITH THE PAGE (owner ruling, #563 COWORK #86): it is
+           taller than a screen, and a sticky sidebar kept the Earnings snapshot out
+           of view until the end of the main column. */
         .stock-page-sidebar {
           display: flex;
           flex-direction: column;
           gap: 16px;
-          position: sticky;
-          top: 20px;
         }
 
         /* Desktop: show sidebar change stock, hide inline one */
@@ -1424,10 +1527,31 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         .sidebar-change-stock { display: block; }
 
         @media (max-width: 900px) {
-          .stock-page-layout { grid-template-columns: 1fr !important; }
-          .stock-page-sidebar { position: static !important; order: 2; }
-          .stock-page-main { order: 1; }
-          /* Mobile: show inline change stock above chart, hide sidebar one */
+          .stock-page-layout { grid-template-columns: minmax(0, 1fr) !important; gap: 0; }
+          /* PHONES, MOST USEFUL FIRST (#563 COWORK #82). The sidebar and the main
+             column step aside (display: contents), so their sections become one
+             column ordered below. Each section is in the DOM once; desktop and
+             tablet above 900px never read these rules. The phone-only Change
+             stock copy sits near the end of the DOM too, so reading order follows
+             what is seen; Key levels and the Earnings snapshot stay first in the
+             DOM (the sidebar), read before the chart by a screen reader. */
+          .stock-page-sidebar, .stock-page-main { display: contents; }
+          .stock-page-sidebar > *, .stock-page-main > * { order: 85; min-width: 0; }
+          .sp-performance { order: 5; }
+          .sp-chart { order: 10; }
+          .sp-confluence { order: 15; }
+          .sp-keylevels { order: 20; }
+          .sp-signals { order: 30; }
+          .sp-earnings { order: 40; }
+          .sp-valuation { order: 50; }
+          .sp-returns { order: 60; }
+          .sp-summary { order: 70; }
+          .sp-profile { order: 80; }
+          .sp-changestock { order: 90; }
+          .sp-explore { order: 95; }
+          .sp-faq { order: 99; }
+          .sp-confluence, .sp-keylevels, .sp-performance, .sp-earnings, .sp-changestock { margin-top: 24px; }
+          /* Mobile: show the inline change stock, hide the sidebar one */
           .mobile-change-stock { display: block; }
           .sidebar-change-stock { display: none !important; }
         }
@@ -1449,9 +1573,15 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           min-width: 0;
         }
         .stock-stat-cell:last-child { border-right: none; }
-        .stock-stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; opacity: 0.55; }
-        .stock-stat-value { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; line-height: 1; }
-        .stock-stat-sub { font-size: 11px; opacity: 0.48; margin-top: 3px; }
+        .stock-stat-label { font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; opacity: 0.55; }
+        .stock-stat-value { font-size: 1.375rem; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; line-height: 1; }
+        .stock-stat-sub { font-size: var(--fs-label); opacity: 0.48; margin-top: 3px; }
+        /* THE SMALL TEXT OVER THE MINI-GRAPHICS (#563 COWORK #114): the cell's text paints above its
+           graphic (positioned, after it in the DOM; no z-index, no transform: the P/E cell holds A's
+           ReasonedValue), and the small lines carry a halo in the card's colour, so a line passing
+           behind never cuts a letter. */
+        .stock-stat-cell > :not(svg) { position: relative; }
+        .stock-stat-label, .stock-stat-sub, .hsRange { text-shadow: 0 0 2px #080d18, 0 0 2px #080d18, 0 0 4px #080d18; }
         .stock-earnings-cell { flex: 2.2 1 0 !important; min-width: 180px; }
 
         @media (max-width: 640px) {
@@ -1466,7 +1596,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
             border-bottom: 1px solid rgba(255,255,255,0.07);
           }
           .stock-stat-cell:nth-last-child(-n+2) { border-bottom: none; }
-          .stock-stat-value { font-size: 18px !important; }
+          .stock-stat-value { font-size: 1.125rem !important; }
           .stock-earnings-cell { grid-column: 1 / -1; border-bottom: none !important; }
         }
 
@@ -1531,7 +1661,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
 function chartLinkStyle(tone: "blue" | "red" | "green"): React.CSSProperties {
   const map = { blue: { border: "rgba(59,130,246,0.28)", bg: "rgba(59,130,246,0.07)", color: "#bfdbfe" }, red: { border: "rgba(239,68,68,0.28)", bg: "rgba(239,68,68,0.07)", color: "#fecaca" }, green: { border: "rgba(34,197,94,0.28)", bg: "rgba(34,197,94,0.07)", color: "#bbf7d0" } };
   const s = map[tone];
-  return { display: "inline-flex", alignItems: "center", padding: "7px 10px", borderRadius: 9, border: `1px solid ${s.border}`, background: s.bg, color: s.color, textDecoration: "none", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" };
+  return { display: "inline-flex", alignItems: "center", padding: "7px 10px", borderRadius: 9, border: `1px solid ${s.border}`, background: s.bg, color: s.color, textDecoration: "none", fontWeight: 700, fontSize: "var(--fs-label)", whiteSpace: "nowrap" };
 }
 
 function learnDotStyle(tone: "blue" | "green" | "red"): React.CSSProperties {
@@ -1550,6 +1680,6 @@ const exploreCardStyle: React.CSSProperties = { display: "flex", alignItems: "ce
 const stockHeroBoxStyle: React.CSSProperties = { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 24, padding: "22px 24px", background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 54px rgba(0,0,0,0.36)" };
 
 // "Stock Analysis" eyebrow pill — mirrors the NEWS DESK / EARNINGS DESK tags.
-const stockDeskTagStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))", color: "#dbeafe", fontSize: 12, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase" };
+const stockDeskTagStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))", color: "#dbeafe", fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase" };
 
 export type { EarningsPeriodSummary, EarningsYearSummary };

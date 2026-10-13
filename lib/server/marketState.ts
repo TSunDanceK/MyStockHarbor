@@ -37,6 +37,7 @@
 
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { MARKET_DYNAMIC_KEY, snapshotFromDynamic } from "./marketDynamic";
 
 const redis = Redis.fromEnv(PAGE_READ_CACHE);
 
@@ -128,6 +129,17 @@ function buildRows(quotes: StoredQuote[]): MarketStateRow[] {
 }
 
 export async function readMarketState(): Promise<MarketStateSnapshot> {
+  // THE NIGHTLY KEY FIRST (#553 COWORK #173/#190, lib/server/marketDynamic.ts):
+  // the old key below is FMP-derived and frozen since the Tiingo gate. One GET
+  // when the new key is on file, as before; the old key is read only while the
+  // new one is absent or stale (the week of overlap before it is retired).
+  try {
+    const fresh = snapshotFromDynamic(await redis.get(MARKET_DYNAMIC_KEY), Date.now());
+    if (fresh) return fresh;
+  } catch {
+    // fall through to the old key
+  }
+
   let state: StoredState | null = null;
 
   try {

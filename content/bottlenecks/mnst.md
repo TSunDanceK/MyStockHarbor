@@ -26,6 +26,7 @@ supplyChain:
   - name: Third-party co-packers & bottlers network
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Not a single company. Monster owns very little manufacturing capacity
       itself; the majority of its finished beverages are produced by outside
@@ -37,6 +38,7 @@ supplyChain:
   - name: Ball Corporation
     ticker: BALL
     pct: 15
+    grade: some
     blurb: >
       One of the world's largest beverage can makers, supplying the
       specialty aluminum cans (including sleek and resealable-end formats)
@@ -47,6 +49,7 @@ supplyChain:
   - name: Third-party flavor & concentrate suppliers
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. For certain Monster Energy flavors, Monster
       buys proprietary flavor blends and concentrates from outside suppliers
@@ -56,6 +59,7 @@ supplyChain:
   - name: Crown Holdings
     ticker: CCK
     pct: 12
+    grade: some
     blurb: >
       A second major global beverage-can producer that, alongside Ball,
       forms the backbone of North American can supply for companies like
@@ -65,6 +69,7 @@ supplyChain:
   - name: Sweetener, juice & functional ingredient suppliers
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. Monster sources sweeteners, juices, and
       functional ingredients such as taurine and B-vitamins from a range of
@@ -74,6 +79,7 @@ supplyChain:
   - name: Can, bottle, cap & label packaging suppliers
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. Beyond the aluminum can itself, Monster relies
       on outside vendors for caps, labels, PET bottles, trays, and boxes -
@@ -82,6 +88,7 @@ supplyChain:
   - name: Ardagh Metal Packaging
     ticker: AMBP
     pct: 8
+    grade: spread
     blurb: >
       A smaller but globally significant beverage-can producer that adds to
       the very short list of large-scale suppliers capable of meeting
@@ -90,6 +97,7 @@ customers:
   - name: Other Coca-Cola (TCCC) network bottlers & distributors
     ticker: null
     pct: 54
+    grade: hard
     blurb: >
       Not a single company. Since its 2015 strategic alliance with The
       Coca-Cola Company, Monster has said essentially all U.S. distribution
@@ -103,6 +111,7 @@ customers:
   - name: Coca-Cola Europacific Partners
     ticker: CCEP
     pct: 15
+    grade: some
     blurb: >
       One of the world's largest Coca-Cola bottlers, covering Western Europe
       and Asia-Pacific; Monster's disclosures have listed it among its
@@ -111,6 +120,7 @@ customers:
   - name: Coca-Cola Consolidated
     ticker: COKE
     pct: 10
+    grade: some
     blurb: >
       The largest independent Coca-Cola bottler in the United States,
       distributing Monster products across a substantial share of its U.S.
@@ -118,6 +128,7 @@ customers:
   - name: Reyes Holdings
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       A private company with no public ticker. Monster's own filings name
       Reyes Holdings among its major non-alcohol distribution customers.
@@ -128,6 +139,7 @@ customers:
   - name: Club stores & e-commerce retailers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company. Warehouse clubs and online retailers that
       Monster sells to more directly, outside the full-service bottler
@@ -137,6 +149,7 @@ customers:
   - name: Retail grocery, convenience & specialty wholesalers
     ticker: null
     pct: 2
+    grade: spread
     blurb: >
       Not a single company. A smaller channel of direct sales to grocery,
       convenience, and specialty wholesale accounts that sits outside the
@@ -144,6 +157,7 @@ customers:
   - name: Alcohol distributors, value stores & other channels
     ticker: null
     pct: 2
+    grade: spread
     blurb: >
       Not a single company. Covers Monster's smaller alcohol-beverage
       distribution relationships and value-channel retail sales, a minor

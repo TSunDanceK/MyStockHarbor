@@ -39,6 +39,7 @@ supplyChain:
   - name: Sanofi
     ticker: SNY
     pct: 35
+    grade: hard
     blurb: >
       Sanofi co-develops and co-commercializes Dupixent, Kevzara, and
       Praluent with Regeneron under a decades-long alliance; Sanofi funds
@@ -47,6 +48,7 @@ supplyChain:
   - name: Bayer AG
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Bayer co-commercializes EYLEA outside the US, funding half of ex-US
       development costs in exchange for an even split of ex-US profits;
@@ -55,6 +57,7 @@ supplyChain:
   - name: Fujifilm Diosynth Biotechnologies (FUJIFILM Holdings)
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Under a 10-year, $3 billion-plus deal announced in 2025, Fujifilm
       Diosynth is building out biologics manufacturing capacity for
@@ -64,6 +67,7 @@ supplyChain:
   - name: Novo Nordisk (Catalent Indiana)
     ticker: NVO
     pct: 20
+    grade: some
     blurb: >
       Regeneron's EYLEA HD fill-finish manufacturing runs through a
       former Catalent plant in Indiana that Novo Nordisk acquired in
@@ -73,6 +77,7 @@ customers:
   - name: Sanofi
     ticker: SNY
     pct: 46
+    grade: hard
     blurb: >
       Collaboration revenue from Sanofi came to $5.88 billion in 2025 —
       41.0% of Regeneron's total company revenue — making it, on a
@@ -81,6 +86,7 @@ customers:
   - name: Besse Medical (a Cencora subsidiary)
     ticker: COR
     pct: 22
+    grade: some
     blurb: >
       Besse Medical, a specialty-distribution subsidiary of Cencora, has
       for years been one of Regeneron's two largest pharmaceutical
@@ -90,6 +96,7 @@ customers:
   - name: McKesson Corporation
     ticker: MCK
     pct: 21
+    grade: some
     blurb: >
       McKesson is the other of Regeneron's two dominant wholesaler
       customers, distributing EYLEA, Dupixent, Libtayo, and Regeneron's
@@ -97,6 +104,7 @@ customers:
   - name: Bayer AG
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Bayer's ex-US EYLEA collaboration profit-share payments came to
       $1.42 billion in 2025 — 9.9% of Regeneron's total company revenue;

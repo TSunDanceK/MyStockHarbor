@@ -141,18 +141,10 @@ check(
   /days\.add\(dayStamp\(nowMs\)\)/.test(evict) && !/incr\(/.test(evict),
   "an INCR would let one day's two runs manufacture two days of corroboration"
 );
-check(
-  "reappearing in the screener clears the evidence",
-  /clearAbsence\(universe\.filter/.test(job),
-  "the rule is 'absent on N days recently', not 'absent on N days ever'"
-);
-check(
-  "a failed screener read does not start a sweep",
-  /if \(!result\.ok \|\| !result\.symbols\.length\)/.test(job) &&
-    /sweep\.skipped = "screener-unavailable"/.test(job),
-  "a failed read returns no symbols, which would read as the ENTIRE universe " +
-    "being absent and start corroboration against every symbol at once"
-);
+// RETIRED 2026-10-12 (#553 COWORK #212): "reappearing in the screener clears the evidence" pinned the screener absence
+// sweep in warm-screener-fundamentals, which went with that job's FMP leg.
+// RETIRED 2026-10-12 (#553 COWORK #212): "a failed screener read does not start a sweep" pinned the screener absence
+// sweep in warm-screener-fundamentals, which went with that job's FMP leg.
 
 // ── 2. The key list is complete, and stays complete ─────────────────────────
 console.log("\n2. Every per-symbol key pattern is in the cleanup list");
@@ -584,16 +576,17 @@ console.log("\n4. Pool-only IPO symbols stay outside the sweep");
 // reason and never learns this depended on them not being there.
 check(
   "the sweep's candidate set is the warm targets, not the price pool",
+  // Since 2026-10-12 the stale-bar pass is the sweep that iterates it.
   /getWarmTargetSymbols\(/.test(job) &&
     !/readPricePoolBulk\(universe\)/.test(job) &&
-    /const missing = universe\.filter/.test(job),
+    /await staleBarPass\(universe, /.test(job),
   "iterating the pool instead would sweep every pool-only symbol, including " +
     "IPOs admitted under 8d option 2 — which are absent from the screener by " +
     "construction and have no history to defend themselves with"
 );
 check(
-  "the pool is read only for symbols already shortlisted from the universe",
-  /readPricePoolBulk\(missing\)/.test(job),
+  "the pool supplies no candidates (the job reads no pool rows at all since 2026-10-12)",
+  !/readPricePoolBulk\(/.test(job),
   "the pool supplies EVIDENCE about candidates; it must never supply the " +
     "candidates"
 );
@@ -802,18 +795,9 @@ const pushIdx = job.indexOf("sweep.presetHandEdit.push(symbol);");
 const claimIdx = job.indexOf("if (await claimPresetHandEditAlarm(symbol))");
 const contIdx = handIdx === -1 ? -1 : job.indexOf("continue;", handIdx);
 const evictIdx = job.indexOf("await evictSymbol(symbol);");
-check(
-  "the sweep decides through evictionAction, and hand-edit returns before it",
-  /const action = evictionAction\(symbol, days, failStreak, row\?\.failAt, nowMs\);/.test(job) &&
-    !/shouldEvict/.test(job) &&
-    handIdx !== -1 &&
-    contIdx !== -1 &&
-    evictIdx !== -1 &&
-    contIdx < evictIdx,
-  `hand-edit branch at ${handIdx}, its continue at ${contIdx}, evictSymbol at ` +
-    `${evictIdx} — the branch has to LEAVE the iteration, not merely log before ` +
-    `deleting the keys anyway`
-);
+// RETIRED 2026-10-12 (#553 COWORK #212): "the sweep decides through evictionAction, and hand-edit returns before it" pinned the screener absence
+// sweep in warm-screener-fundamentals, which went with that job's FMP leg.
+// The stale-bar and SEC routes' hand-edit ordering is asserted in section 7.
 check(
   "the symbol is recorded on every run, and only the shouting is rationed",
   pushIdx !== -1 && claimIdx !== -1 && pushIdx < claimIdx &&
@@ -1063,7 +1047,9 @@ const warm = readCodeOnly("app/api/jobs/warm-picker-universe/route.ts");
 // file: these routes record twice, and the catch-block record carries only
 // { error }. Three assertions in #416 passed against a record that could never
 // have held the fields they were testing for.
-const recIdx = job.indexOf('await recordJobRun("warm-screener-fundamentals", result.ok, {');
+// Since 2026-10-12 (#553 COWORK #212) the summary is built as `summary` and
+// recorded with recordJobRun("warm-screener-fundamentals", true, summary).
+const recIdx = /await recordJobRun\("warm-screener-fundamentals", true, summary\);/.test(job) ? job.indexOf("const summary = {") : -1;
 const record = recIdx === -1 ? "" : job.slice(recIdx);
 check(
   "the sweep's run record was located",
@@ -1071,8 +1057,8 @@ check(
   "anchored on the summary call — the catch-block record carries only { error }"
 );
 check(
-  "the record names the stale-bar signal separately from the metadata one",
-  /absentAndFailing: sweep\.absent,/.test(record) &&
+  "the record names the stale-bar signal separately from the SEC one",
+  /secUnlisted: sweep\.secUnlisted/.test(record) &&
     /staleBarred: sweep\.staleBarred,/.test(record) &&
     /barStampsRead: sweep\.barStampsRead,/.test(record),
   "absentAndFailing: 0 beside staleBarred: 6 says the metadata signal went " +
@@ -1082,7 +1068,7 @@ check(
 );
 check(
   "the record attributes the DESTRUCTIVE half to a signal as well",
-  /evictedByAbsence: sweep\.evictedByAbsence,/.test(record) &&
+  /evictedBySecListing: sweep\.evictedBySecListing,/.test(record) &&
     /evictedByStaleBars: sweep\.evictedByStaleBars,/.test(record),
   "a rising `evicted` that cannot be traced to the rule that caused it is the " +
     "one number on this record that costs data"
@@ -1318,7 +1304,7 @@ check(
 // where the numbers come from is asserted below.
 check(
   "the record says which SIGNAL set a tombstone, not just how many",
-  /tombstonedByAbsence: /.test(job) && /tombstonedByStaleBars: /.test(job),
+  /tombstonedBySecListing: /.test(job) && /tombstonedByStaleBars: /.test(job),
   "an absence tombstone is belt-and-braces (that symbol is gone from the " +
     "screener anyway); a stale-bar tombstone is load-bearing (that symbol WILL " +
     "be re-offered). Folded into one count a rising number reads as neither"
@@ -1369,21 +1355,21 @@ check(
 );
 check(
   "the run record no longer aliases the eviction counters",
-  !/tombstonedByAbsence: sweep\.evictedByAbsence/.test(job) &&
+  !/tombstonedBySecListing: sweep\.evictedBySecListing/.test(job) &&
     !/tombstonedByStaleBars: sweep\.evictedByStaleBars/.test(job) &&
-    /tombstonedByAbsence: sweep\.tombstonedByAbsence,/.test(job) &&
+    /tombstonedBySecListing: sweep\.tombstonedBySecListing,/.test(job) &&
     /tombstonedByStaleBars: sweep\.tombstonedByStaleBars,/.test(job),
   "the two numbers are allowed to differ now, and the run that makes them " +
     "differ is the one worth reading"
 );
 check(
   "every eviction site tallies the flag it got back",
-  // THREE since #553 COWORK #20 added the SEC-listing route (secListing.ts).
-  (job.match(/if \(evicted\.tombstoned\) sweep\.tombstoned/g) ?? []).length === 3 &&
-    /if \(evicted\.tombstoned\) sweep\.tombstonedByAbsence\+\+;/.test(job) &&
+  // TWO since 2026-10-12 (#553 COWORK #212): the absence route went with the
+  // screener's FMP leg; the stale-bar and SEC-listing routes remain.
+  (job.match(/if \(evicted\.tombstoned\) sweep\.tombstoned/g) ?? []).length === 2 &&
     /if \(evicted\.tombstoned\) sweep\.tombstonedByStaleBars\+\+;/.test(job) &&
     /if \(evicted\.tombstoned\) sweep\.tombstonedBySecListing\+\+;/.test(job),
-  "three call sites, three signals — tallying one and aliasing another would " +
+  "two call sites, two signals — tallying one and aliasing another would " +
     "reintroduce the defect on whichever half nobody checked"
 );
 

@@ -218,6 +218,48 @@ const FRED_SERIES: Record<string, { id: string; quote: "usd-per-unit" | "unit-pe
   // therefore had no rate. Where both sources existed, they agreed to within
   // 0.56% (median 0.055%) over 453 days.
   TWD: { id: "DEXTAUS", quote: "unit-per-usd" },
+  // DEXINUS is INDIAN RUPEES and DEXMXUS MEXICAN PESOS to one U.S. DOLLAR
+  // (#552, COWORK #132 (c)). INR and MXN had ECB only, and ECB timing out on
+  // both in the 3 Oct 20:22 UTC sec-facts run blanked those filers' sets.
+  // MEASURED (relay fred-inr-mxn, 2026-10-03), each from 2019-01-02 to
+  // 2026-09-25: 1,933 daily rows, zero "." placeholders.
+  //   DEXINUS last 95.81, so INR per USD. Against the ECB cross over 1,907
+  //     shared days: median 0.048%, p95 0.241%, max 1.19%.
+  //   DEXMXUS last 17.6932, so MXN per USD. Against the ECB cross: median
+  //     0.257%, p95 0.930%, max 2.66% (peso volatility between the two fixing
+  //     times; ECB fixes at 14:15 CET, H.10 at noon New York).
+  // ECB stays the fallback for both.
+  INR: { id: "DEXINUS", quote: "unit-per-usd" },
+  MXN: { id: "DEXMXUS", quote: "unit-per-usd" },
+  // DEXCHUS is CHINESE YUAN RENMINBI to one U.S. DOLLAR (#552, COWORK #140).
+  // ECB, CNY's only route until now, timed out in the 3 Oct 22:49 UTC run;
+  // the FX guard kept BABA, TCOM and BIDU's stored sets. MEASURED (relay
+  // fred-cny, 2026-10-04): 1,933 daily rows from 2019-01-02 to 2026-09-25,
+  // zero "." placeholders, last 6.711, so CNY per USD. Against the ECB cross
+  // over 1,907 shared days: median 0.037%, p95 0.198%, max 1.62%. ECB stays
+  // the fallback.
+  CNY: { id: "DEXCHUS", quote: "unit-per-usd" },
+  // DEXKOUS is SOUTH KOREAN WON to one U.S. DOLLAR, DEXSFUS SOUTH AFRICAN RAND
+  // to one U.S. DOLLAR (#552 COWORK #151). ECB, their only route until now,
+  // timed out in the 4 Oct 16:20 UTC sec-facts run; the FX guard kept LPL's,
+  // KEP's (KRW) and HMY's (ZAR) stored sets. ECB timed out twice more while
+  // they were being measured. MEASURED (relay fred-krw-zar, 2026-10-04): each
+  // 1,933 daily rows from 2019-01-02 to 2026-09-25, zero "." placeholders.
+  //   DEXKOUS last 1356.51, so KRW per USD. Against the ECB cross: median
+  //     0.134%, p95 0.480%, max 1.74%.
+  //   DEXSFUS last 16.3021, so ZAR per USD. Against the ECB cross over 1,907
+  //     shared days: median 0.287%, p95 0.989%, max 2.69% (rand volatility
+  //     between the two fixing times, as with MXN).
+  // ECB stays the fallback for both.
+  KRW: { id: "DEXKOUS", quote: "unit-per-usd" },
+  ZAR: { id: "DEXSFUS", quote: "unit-per-usd" },
+  // DEXSIUS is SINGAPORE DOLLARS to one U.S. DOLLAR (#552 COWORK #157 §3). ECB,
+  // SGD's only route until now, timed out in the 5 Oct 04:20 UTC sec-facts run;
+  // the FX guard kept TLIH's stored set. MEASURED (relay fred-sgd, 2026-10-05):
+  // 1,933 daily rows from 2019-01-02 to 2026-09-25, zero "." placeholders, last
+  // 1.2771, so SGD per USD. Against the ECB cross over 1,907 shared days: median
+  // 0.082%, p95 0.306%, max 1.23%. ECB stays the fallback.
+  SGD: { id: "DEXSIUS", quote: "unit-per-usd" },
 };
 
 /**

@@ -24,6 +24,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 30
+    grade: hard
     blurb: >
       NVIDIA's disclosed foundry partner for producing its semiconductor
       wafers at leading-edge nodes, and the provider of CoWoS advanced
@@ -33,6 +34,7 @@ supplyChain:
   - name: SK hynix
     ticker: SKHY
     pct: 14
+    grade: some
     blurb: >
       A leading supplier of the HBM (high-bandwidth memory) stacked onto
       NVIDIA's data-center GPUs, and historically NVIDIA's primary HBM3E
@@ -42,12 +44,14 @@ supplyChain:
   - name: Micron Technology
     ticker: MU
     pct: 11
+    grade: some
     blurb: >
       A second major HBM and memory supplier to NVIDIA, ramping HBM4
       production for NVIDIA's next-generation GPU platforms as demand for
       high-bandwidth memory continues to outstrip supply.
   - name: Samsung Electronics
     pct: 8
+    grade: spread
     blurb: >
       An alternate foundry and memory supplier named alongside TSMC and SK
       Hynix in NVIDIA's own filings, though it currently supplies a smaller
@@ -55,6 +59,7 @@ supplyChain:
       the Korea Exchange with no proper US-listed ticker.
   - name: Hon Hai Precision Industry (Foxconn)
     pct: 10
+    grade: some
     blurb: >
       NVIDIA's named contract manufacturer for assembly, testing, and
       packaging of finished systems, including being the first supplier to
@@ -63,6 +68,7 @@ supplyChain:
   - name: ASE Technology Holding
     ticker: ASX
     pct: 6
+    grade: spread
     blurb: >
       A key outsourced semiconductor assembly and test (OSAT) partner
       supporting the advanced packaging capacity NVIDIA needs to keep pace
@@ -70,6 +76,7 @@ supplyChain:
   - name: Broadcom
     ticker: AVGO
     pct: 6
+    grade: spread
     blurb: >
       Supplies PCIe switch and retimer silicon and other networking
       components used across NVIDIA's AI server platforms to link GPUs
@@ -77,6 +84,7 @@ supplyChain:
   - name: Amphenol
     ticker: APH
     pct: 5
+    grade: spread
     blurb: >
       Manufactures the high-speed connectors and cable assemblies - including
       NVLink interconnects - used to wire together NVIDIA's multi-GPU
@@ -84,12 +92,14 @@ supplyChain:
   - name: Vertiv Holdings
     ticker: VRT
     pct: 5
+    grade: spread
     blurb: >
       Supplies power distribution and liquid-cooling infrastructure for the
       dense AI data centers that NVIDIA's highest-power GPU systems require.
   - name: Texas Instruments
     ticker: TXN
     pct: 5
+    grade: spread
     blurb: >
       Provides power-management and voltage-regulation chips used on NVIDIA
       GPU boards and reference designs to deliver stable power to the GPU
@@ -98,6 +108,7 @@ customers:
   - name: Microsoft
     ticker: MSFT
     pct: 19
+    grade: some
     blurb: >
       Azure's large-scale AI infrastructure buildout - supporting OpenAI,
       Copilot, and Microsoft's own AI services - makes it one of NVIDIA's
@@ -105,6 +116,7 @@ customers:
   - name: Meta Platforms
     ticker: META
     pct: 15
+    grade: some
     blurb: >
       Builds enormous GPU clusters in-house to train and run its Llama
       models and ad-ranking systems, buying NVIDIA GPUs in huge volume
@@ -112,12 +124,14 @@ customers:
   - name: Amazon
     ticker: AMZN
     pct: 13
+    grade: some
     blurb: >
       AWS deploys NVIDIA GPU instances at scale for its cloud AI customers,
       even as it develops its own competing Trainium and Inferentia chips.
   - name: Alphabet (Google)
     ticker: GOOGL
     pct: 12
+    grade: some
     blurb: >
       Google Cloud sells NVIDIA GPU instances to enterprise AI customers
       alongside Google's own TPUs, and Google's internal AI teams are large
@@ -125,6 +139,7 @@ customers:
   - name: Oracle
     ticker: ORCL
     pct: 9
+    grade: spread
     blurb: >
       Oracle Cloud Infrastructure has aggressively expanded AI infrastructure
       capacity - including large, multi-billion-dollar GPU cluster deals -
@@ -132,6 +147,7 @@ customers:
   - name: CoreWeave
     ticker: CRWV
     pct: 8
+    grade: spread
     blurb: >
       A GPU-focused "neocloud" that rents out NVIDIA GPU capacity to AI labs
       and enterprises, making it one of NVIDIA's largest customers by
@@ -139,12 +155,14 @@ customers:
   - name: Dell Technologies
     ticker: DELL
     pct: 8
+    grade: spread
     blurb: >
       A top OEM partner that integrates and resells NVIDIA GPUs inside its
       enterprise AI server lineup.
   - name: Super Micro Computer
     ticker: SMCI
     pct: 7
+    grade: spread
     blurb: >
       A high-volume systems integrator that builds and ships GPU-dense AI
       servers, making it one of NVIDIA's largest direct hardware customers
@@ -152,12 +170,14 @@ customers:
   - name: Hewlett Packard Enterprise
     ticker: HPE
     pct: 5
+    grade: spread
     blurb: >
       Sells NVIDIA-powered AI servers through its enterprise hardware lines
       to corporate and government AI buyers.
   - name: Tesla
     ticker: TSLA
     pct: 4
+    grade: spread
     blurb: >
       Has historically purchased large volumes of NVIDIA GPUs for AI model
       training, even as it invests in its own custom silicon.

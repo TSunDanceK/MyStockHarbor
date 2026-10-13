@@ -57,6 +57,36 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["breakout"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "Two breakout rules, one combined list",
+      paragraphs: [
+        "This page is a union of two separate tests. A stock appears if it passes the full all-time-high breakout rule set or the full three-month-high breakout rule set. It is the complete membership of each test, not just the top 20 that the dedicated pages show, so this list is usually longer and less filtered.",
+        "The all-time-high test asks whether the last close is within 1% of the highest close in the loaded history. That history runs up to about five years of daily closes, so the “all-time high” here is a long-window high rather than a true lifetime peak, and intraday highs are ignored. The three-month test compares the last close with the highest close over 63 bars ending five bars ago, and counts a stock within 0.5% of that level.",
+        "Both tests run on daily bars of end-of-day prices, where the newest bar is the previous session’s close.",
+      ],
+    },
+    {
+      heading: "Making sense of the order",
+      paragraphs: [
+        "Rows are sorted by conditions met, meaning how many of the tracked screener conditions a stock satisfies at once, not by breakout strength. A name near the top may simply be ticking several other boxes too, such as sitting above its moving averages or showing a volume spike. Opening a row’s chart can help show which of those other conditions are doing the work.",
+        "It can help to note which of the two rules a stock passed. A name pressing a multi-year high is in a different position from one reclaiming a three-month range, and the chart usually makes the difference obvious within a few seconds. Pressing ‘See more’ only expands the list; it doesn’t change who is on it.",
+        "A hypothetical row shows how the union works. Suppose a stock closed at $98 against a five-year closing high of $100: that is 98% of the peak, just outside the 1% allowance, so the long-window rule passes it by. If its highest close over the 63 bars ending five sessions ago was $98.30, though, the same close is about 99.7% of that level and the three-month rule lets it in.",
+        "The two dedicated breakout pages each rank their qualifiers by a score built from recency, volume and liquidity and keep only 20, whereas this page keeps every qualifier from both and lets the conditions-met count decide the order.",
+      ],
+    },
+    {
+      heading: "What a breakout flag cannot tell you",
+      paragraphs: [
+        "Both tests allow a close slightly below the reference high, so some names have not cleared their level yet. Closes only are used, which means a move that broke out intraday and reversed will not count, and one that is already fading may still be listed until the next rebuild. Pages refresh hourly from data a session old. Breakouts also tend to fail fairly often, and nothing in this rule checks whether the move will hold.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/3-month-high-breakout-stocks", label: "3-month high breakout stocks" },
+    { href: "/all-time-high-breakout-stocks", label: "All-time high breakout stocks" },
+    { href: "/volume-spike-stocks", label: "Volume spike stocks" },
+  ],
   relatedGuide: {
     href: "/breakout-stocks",
     label: "our guide to breakout stocks",

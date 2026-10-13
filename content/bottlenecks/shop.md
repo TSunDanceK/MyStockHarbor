@@ -39,6 +39,7 @@ supplyChain:
   - name: Google Cloud (Alphabet)
     ticker: GOOGL
     pct: 35
+    grade: hard
     blurb: >
       Since 2019, Shopify has migrated the majority of its data-center
       workloads onto Google Cloud, running its platform on Google
@@ -48,6 +49,7 @@ supplyChain:
   - name: Stripe
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Stripe has powered Shopify Payments' underlying card-processing
       infrastructure for nearly a decade and also built the Stripe
@@ -58,6 +60,7 @@ supplyChain:
   - name: Adyen
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Adyen is Shopify's preferred enterprise payments partner, providing
       card processing, digital-wallet (Apple Pay, Google Pay) and local
@@ -68,6 +71,7 @@ supplyChain:
   - name: Flexport
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Since acquiring Shopify Logistics (including the Deliverr fulfillment
       network) in 2023, Flexport has served as Shopify's official
@@ -78,6 +82,7 @@ customers:
   - name: Global-e Online
     ticker: GLBE
     pct: 20
+    grade: some
     blurb: >
       Global-e is Shopify's exclusive, multi-year strategic partner for
       cross-border commerce, handling international checkout, currency
@@ -88,6 +93,7 @@ customers:
   - name: Amazon
     ticker: AMZN
     pct: 15
+    grade: some
     blurb: >
       Amazon's Buy with Prime integration lets Shopify merchants offer
       Prime shipping and one-click checkout directly within Shopify
@@ -96,6 +102,7 @@ customers:
   - name: Mattel
     ticker: MAT
     pct: 15
+    grade: some
     blurb: >
       Mattel became one of the first brands to run on Commerce Components
       by Shopify, the headless enterprise offering aimed at very large
@@ -104,6 +111,7 @@ customers:
   - name: Coty
     ticker: COTY
     pct: 12
+    grade: some
     blurb: >
       Global beauty group Coty is a named enterprise retailer running on
       Shopify's platform, part of the wave of large public consumer brands
@@ -112,6 +120,7 @@ customers:
   - name: Steve Madden
     ticker: SHOO
     pct: 12
+    grade: some
     blurb: >
       Footwear and accessories retailer Steve Madden runs its e-commerce
       operations on Shopify, another named enterprise account central to
@@ -119,6 +128,7 @@ customers:
   - name: Staples
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Office-supply retailer Staples is a named enterprise customer on
       Shopify's platform. A private company with no public ticker (taken
@@ -126,6 +136,7 @@ customers:
   - name: Glossier
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Beauty brand Glossier is a marquee direct-to-consumer enterprise
       account and frequently cited Shopify Plus case study. A private

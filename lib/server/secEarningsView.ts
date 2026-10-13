@@ -11,6 +11,7 @@ import {
 import { storedInReportingCurrency } from "./secCurrency";
 import { SEC_FIELDS, revenueLineIncompleteValues, type Statement } from "./secFields";
 import type { AnnualForm } from "./annualOnly";
+import { splitAdjusted, type SplitAdjustment } from "./secSplitAdjust";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 
@@ -161,6 +162,11 @@ export function epsBasisNote(accounting: "IFRS" | "US GAAP" | null): string {
     "figure that excludes one-off charges; the two can differ substantially.";
 }
 
+/** The hero's one short line (#552 COWORK #124); epsBasisNote is its tap note. */
+export function epsBasisShort(accounting: "IFRS" | "US GAAP" | null): string {
+  return accounting === "IFRS" ? "EPS is IFRS, as filed." : accounting === "US GAAP" ? "EPS is GAAP, as filed." : "EPS is as filed.";
+}
+
 /** The US GAAP wording — what every stock used to get, IFRS filers included. */
 export const GAAP_EPS_NOTE = epsBasisNote("US GAAP");
 
@@ -184,6 +190,11 @@ export function epsStandardWord(accounting: "IFRS" | "US GAAP" | null): string {
  * difference between a figure a reader can check against the 10-Q and one they
  * cannot.
  */
+/** A rate filer's year (#552 COWORK #208 rule 2), the owner's wording. */
+export const DIVIDEND_RATE_YEAR_NOTE = "This company files its dividend as a per-quarter rate, so no full-year total is shown.";
+/** A dividend quarter withheld by rule 1 (rate filer) or rule 3 (across a split). Hedged: it names both. */
+export const DIVIDEND_QUARTER_WITHHELD_NOTE = "Not shown: this quarter is not filed on its own, and working it out from the company\u2019s other filed figures would not give a reliable result here (it files a per-quarter rate, or the figures sit on either side of a share split).";
+
 export function derivationNote(
   derived: Cell["derived"],
   /**
@@ -198,8 +209,14 @@ export function derivationNote(
    * 2026-09-22 §1.2 item 4). Omitted context keeps the cash-flow wording, which
    * is what every caller got before this parameter existed.
    */
-  context: { statement?: Statement | null; fp?: string | null } = {}
+  context: { statement?: Statement | null; fp?: string | null; key?: string | null } = {}
 ): string | null {
+  // DIVIDENDS PER SHARE HAVE THEIR OWN WITHHELD REASONS (#552 COWORK #208,
+  // secSplitAdjust's dividend-basis pass): the revenue sentence below is about
+  // scopes, which is not why a dividend figure is held back.
+  if (derived === "withheld" && context.key === "dividendsDeclaredPerShare") {
+    return context.fp === "FY" ? DIVIDEND_RATE_YEAR_NOTE : DIVIDEND_QUARTER_WITHHELD_NOTE;
+  }
   switch (derived) {
     case "differenced":
       if (context.statement === "income") {
@@ -212,6 +229,11 @@ export function derivationNote(
       return "Derived: net income divided by this quarter's weighted average share count.";
     case "ambiguous":
       return "The filer reports this separately for each share class and the filing does not say which is which, so no single figure is shown.";
+    // A DERIVED Q4 THAT CROSSES SCOPES (#552 COWORK #196/#200). The value is
+    // null; this is the tap note under "Not reported". Hedged: the filings
+    // show the mismatch, they do not say why.
+    case "withheld":
+      return "Not shown: Q4 is not filed on its own, and the full-year figure minus the first nine months gives a result that does not fit this company\u2019s other quarters. The filed figures suggest the annual and quarterly revenue lines cover different scopes.";
     default:
       return null;
   }
@@ -520,6 +542,85 @@ export const isPct = (v: Pct): v is number => typeof v === "number" && Number.is
 export const isCrossing = (v: Pct): v is PctCrossing =>
   typeof v === "string" && v in CROSSING_WORDS;
 
+// ── NOT MEANINGFUL ON A TINY BASE (#552 COWORK #212) ───────────────────────
+//
+// JOBY Q2 FY2026: $38.6M of revenue against $15k a year earlier printed
+// "+257,493.3%", and an operating margin change of "▲1,118,418.2 pt"; ACHR's
+// $5.0M of revenue an operating margin of "−5,584.0%". All arithmetically
+// right, none of them a rate a reader can use. Measured over every stored set
+// (CODE-A #229): these rules mark 73 latest periods, none in the top-200 cut.
+//
+// A DISPLAY RULE, NOT A DATA RULE. The view keeps every figure as filed and
+// carries a marker beside it; the score reads the figures and is unchanged
+// (owner ruling, #535 COWORK #23: large growth off a real base keeps scoring;
+// its own small-base floor is REVENUE_BASE_FLOOR_USD in secPresentation).
+// Dollar figures and EPS are never marked.
+
+/** Revenue under this (USD), now or a year earlier, carries no meaningful ratio. */
+export const NOT_MEANINGFUL_REVENUE_USD = 1_000_000;
+/** A growth rate or a margin beyond ±this (percent) is the same artefact on a larger base. */
+export const NOT_MEANINGFUL_PCT = 1_000;
+/** The tap note under an n/m growth figure. */
+export const NOT_MEANINGFUL_GROWTH_REASON = "Year-ago revenue was too small for a meaningful comparison";
+/**
+ * The tap note when the year-earlier period is on file with NO revenue (zero,
+ * or none tagged) and this period has some (#552 COWORK #213 item 3): "Turned
+ * profitable" is profit's word, and a revenue column must not borrow it.
+ */
+export const NOT_MEANINGFUL_NO_BASE_REASON = "No revenue a year earlier";
+/** The tap note under an n/m margin, or an n/m margin change. */
+export const NOT_MEANINGFUL_MARGIN_REASON = "Revenue is too small for a meaningful margin";
+/** What every surface prints in place of the figure. */
+export const NOT_MEANINGFUL_TEXT = "n/m";
+
+const tinyRevenue = (usd: number | null | undefined) =>
+  typeof usd === "number" && Number.isFinite(usd) && usd > 0 && usd < NOT_MEANINGFUL_REVENUE_USD;
+
+/**
+ * Revenue growth that is not meaningful: the year-ago revenue (USD) is under
+ * NOT_MEANINGFUL_REVENUE_USD, or the rate is beyond ±NOT_MEANINGFUL_PCT. Only a
+ * number can be n/m — a crossing already says what happened instead.
+ */
+export function revenueGrowthNotMeaningful(growth: Pct, yearAgoRevenueUsd: number | null | undefined): boolean {
+  if (!isPct(growth)) return false;
+  return tinyRevenue(yearAgoRevenueUsd) || Math.abs(growth) > NOT_MEANINGFUL_PCT;
+}
+
+/**
+ * WHY a revenue growth figure prints "n/m", or null when it stands (#552
+ * COWORK #213): no revenue in a year-earlier period that IS on file (ACHR's $0,
+ * JOBY's FY2023 from about $0), else the tiny-base rule above. The view keeps
+ * its Pct as computed — a crossing word included — so the score reads what it
+ * always read; every surface shows the reason instead.
+ */
+export function revenueGrowthNotMeaningfulReason(
+  growth: Pct,
+  nowRevenueUsd: number | null | undefined,
+  yearAgoRevenueUsd: number | null | undefined,
+  yearAgoOnFile: boolean,
+): string | null {
+  const now = typeof nowRevenueUsd === "number" && Number.isFinite(nowRevenueUsd) && nowRevenueUsd > 0;
+  if (yearAgoOnFile && now && (yearAgoRevenueUsd == null || yearAgoRevenueUsd === 0)) return NOT_MEANINGFUL_NO_BASE_REASON;
+  return revenueGrowthNotMeaningful(growth, yearAgoRevenueUsd) ? NOT_MEANINGFUL_GROWTH_REASON : null;
+}
+
+/** A margin that is not meaningful: its period's revenue (USD) is tiny, or it is beyond ±NOT_MEANINGFUL_PCT. */
+export function marginNotMeaningful(margin: number | null | undefined, revenueUsd: number | null | undefined): boolean {
+  if (typeof margin !== "number" || !Number.isFinite(margin)) return false;
+  return tinyRevenue(revenueUsd) || Math.abs(margin) > NOT_MEANINGFUL_PCT;
+}
+
+/** A margin's change in points is not meaningful when EITHER end's margin is not. */
+export function marginChangeNotMeaningful(
+  now: { margin: number | null | undefined; revenueUsd: number | null | undefined },
+  then: { margin: number | null | undefined; revenueUsd: number | null | undefined },
+): boolean {
+  return marginNotMeaningful(now.margin, now.revenueUsd) || marginNotMeaningful(then.margin, then.revenueUsd);
+}
+
+/** Per margin, and per margin change against the year-earlier period, whether it is n/m. */
+export type MarginsNotMeaningful = { gross: boolean; operating: boolean; net: boolean; grossChange: boolean; operatingChange: boolean };
+
 // ── the view ────────────────────────────────────────────────────────────────
 
 export type ViewCell = Cell & {
@@ -575,7 +676,7 @@ const view = (p: StoredPeriod | null | undefined, key: string, label: string): V
   const c = cell(p, key);
   return {
     ...c, key, label,
-    derivedNote: derivationNote(c.derived, { statement: STATEMENT_OF.get(key) ?? null, fp: p?.fp ?? null }),
+    derivedNote: derivationNote(c.derived, { statement: STATEMENT_OF.get(key) ?? null, fp: p?.fp ?? null, key }),
     perShare: PER_SHARE_KEYS.has(key),
   };
 };
@@ -662,6 +763,19 @@ export function largeNonOperating(rows: ViewCell[]): { amount: number } | null {
   if (Math.abs(nonOp) <= Math.abs(op) || Math.abs(nonOp) <= rev * LARGE_NON_OPERATING_SHARE_OF_REVENUE) return null;
   return { amount: nonOp };
 }
+/**
+ * CAN THE RULE ABOVE BE RUN ON THESE ROWS AT ALL (#552 COWORK #117)? It needs
+ * revenue above zero, operating income, and a non-operating figure (tagged, or
+ * pre-tax less operating). Without them largeNonOperating returns null for
+ * "can't tell", which must not read as "checked, none": a pre-revenue filer
+ * with a large non-operating gain would draw an untagged profit bar.
+ */
+export function oneOffCheckable(rows: ViewCell[]): boolean {
+  const v = (k: string) => rows.find((r) => r.key === k)?.val ?? null;
+  const rev = v("revenue"), op = v("operatingIncome"), pre = v("preTaxIncome");
+  const nonOp = v("nonOperatingIncomeExpense") ?? (pre !== null && op !== null ? pre - op : null);
+  return nonOp !== null && op !== null && rev !== null && rev > 0;
+}
 /** The marker's words, or null. One source for the rows and the snapshot's EPS-growth tile (#552 COWORK #60). */
 export function largeNonOperatingNote(rows: ViewCell[]): string | null {
   const big = largeNonOperating(rows);
@@ -734,6 +848,10 @@ export type SecEarningsView = {
   snapshot: {
     revenue: ViewCell;
     revenueYoY: Pct;
+    /** TRUE when revenueYoY prints "n/m" (#552 COWORK #212/#213). Optional: hand-built views omit it. */
+    revenueYoYNotMeaningful?: boolean;
+    /** Why, when it does: revenueGrowthNotMeaningfulReason. */
+    revenueYoYNotMeaningfulReason?: string | null;
     epsDiluted: ViewCell;
     epsYoY: Pct;
     netIncome: ViewCell;
@@ -801,6 +919,14 @@ export type SecEarningsView = {
     net: number | null;
     /** TRUE when revenueLineIncomplete: the three margins are refused, by name. */
     marginsRefused: boolean;
+    /** Which of the figures print "n/m" (#552 COWORK #212). Optional: hand-built views omit it. */
+    notMeaningful?: MarginsNotMeaningful;
+    /**
+     * The operating margin against the same period a year earlier, in
+     * percentage points. Null when either margin is absent or refused, or no
+     * year-earlier period is on file. Optional: hand-built views omit it.
+     */
+    operatingYoYpp?: number | null;
   }[];
   /**
    * THE ANCHOR'S OWN KIND: "quarter" normally, "year" for a filer that
@@ -830,6 +956,12 @@ export type SecEarningsView = {
    */
   tableBasis: PeriodBasis;
   /**
+   * The proven splits this view's per-share figures were moved through, and
+   * the periods moved (#552 COWORK #187 §1). Null when nothing moved. Optional:
+   * hand-built views omit it.
+   */
+  splitAdjustment?: SplitAdjustment | null;
+  /**
    * Up to five fiscal years, oldest first. Rendered on EVERY stock as its own
    * card, and it is the only growth table an annual-only filer has.
    */
@@ -839,6 +971,9 @@ export type SecEarningsView = {
     comparedWith: string | null;
     revenue: ViewCell;
     revenueYoY: Pct;
+    /** TRUE when revenueYoY prints "n/m" (#552 COWORK #212/#213). Optional. */
+    revenueYoYNotMeaningful?: boolean;
+    revenueYoYNotMeaningfulReason?: string | null;
     epsDiluted: ViewCell;
     epsYoY: Pct;
     gross: number | null;
@@ -846,12 +981,19 @@ export type SecEarningsView = {
     net: number | null;
     /** TRUE when revenueLineIncomplete: the three margins are refused, by name. */
     marginsRefused: boolean;
+    /** Which of the margins print "n/m" (#552 COWORK #212). Optional. */
+    notMeaningful?: MarginsNotMeaningful;
+    /** The year's net income in dollars, as filed (#563 COWORK #36: the Years profit chart). */
+    netIncome: ViewCell;
   }[];
   growth: {
     label: string;
     /** The period the percentages are measured against, or null when none is on file. */
     comparedWith: string | null;
     revenueYoY: Pct;
+    /** TRUE when revenueYoY prints "n/m" (#552 COWORK #212/#213). Optional. */
+    revenueYoYNotMeaningful?: boolean;
+    revenueYoYNotMeaningfulReason?: string | null;
     epsYoY: Pct;
   }[];
   cashQuality: {
@@ -879,6 +1021,13 @@ export type SecEarningsView = {
      */
     months: number | null;
   };
+  /**
+   * OPERATING CASH FLOW AND NET INCOME, the newest 8 table periods, OLDEST
+   * FIRST (#552 COWORK #169): the quality card's "OCF as % of net income"
+   * chart. The stored periods the tables already walk; no new read. A ratio of
+   * two figures from one period, so a conversion rate cancels.
+   */
+  cashHistory: { label: string; end: string; ocf: number | null; netIncome: number | null }[];
   balance: {
     asOf: string;
     cash: ViewCell;
@@ -891,6 +1040,12 @@ export type SecEarningsView = {
     shortTermInvestments: ViewCell;
     totalDebt: number | null;
     totalDebtMissing: string | null;
+    /**
+     * The current debt line, set ONLY when no long-term line is on the same
+     * balance sheet -- the case where total debt is withheld (#552 COWORK #192
+     * ruling B). Rendered as "Short-term debt", never as a total.
+     */
+    shortTermDebtOnly: number | null;
     netCash: number | null;
     netCashMissing: string | null;
     currentRatio: number | null;
@@ -908,6 +1063,24 @@ export type SecEarningsView = {
   /** Days between the balance-sheet instant and the income-statement period end. */
   balanceSheetSpreadDays: number | null;
   incomeStatement: ViewCell[];
+  /**
+   * THE TRAFFIC LIGHTS' BASE (#552 COWORK #137 §2): the income lines of the
+   * latest period and of the period it is compared with (the same quarter a
+   * year earlier, or the prior fiscal year: `priorYearOf`, as the growth rows),
+   * IN THE REPORTING CURRENCY, so a rate move never colours a line. Gross
+   * profit is computed where it is not filed, as the table does. Null when no
+   * comparison period is on file. See lib/lineTrend.ts for the rules.
+   */
+  incomeTrendBase: {
+    label: string;
+    nowLabel: string;
+    now: Record<string, number | null>;
+    then: Record<string, number | null>;
+    /** Either period's revenue line is incomplete in its tagged data (revenueLineIncomplete). */
+    revenueIncomplete: boolean;
+    /** Each period's one-off flag, by the SAME rule as view.oneOffs: true flagged, "unchecked" not checkable. */
+    oneOff: { now: boolean | "unchecked"; then: boolean | "unchecked" };
+  } | null;
   /**
    * Whether the stored expense lines actually sum to the filed operating income.
    * Measured to fail on 5 of 32 probe quarters (ARM, MU) by 1-7%, always because
@@ -939,6 +1112,17 @@ export type SecEarningsView = {
     epsDiluted: ViewCell;
     netIncome: ViewCell;
   }[];
+  /**
+   * THE ONE-OFF NOTE PER PERIOD (#563 COWORK #36 blocker), label → note, for
+   * every period on the table basis AND every stored fiscal year (#552 COWORK
+   * #117) where largeNonOperating fires: the SAME rule and words as the latest
+   * period's marker, run on each period's own income rows. Absent label and
+   * not in oneOffUnchecked = checked, none. The Growth & margins picture draws
+   * its profit chart only with this (lib/growthVisuals.ts).
+   */
+  oneOffs: Record<string, string>;
+  /** Labels whose rows the rule cannot be run on (oneOffCheckable false): no profit bar is drawn for them. */
+  oneOffUnchecked: string[];
   ttmRevenue: number | null;
   ttmNetIncome: number | null;
   coverShares: StoredFactSet["cover"];
@@ -1065,6 +1249,31 @@ export function isConsecutive(newer: StoredPeriod, older: StoredPeriod): boolean
 const pctOf = (part: number | null, whole: number | null) =>
   part === null || whole === null || whole === 0 ? null : (part / whole) * 100;
 
+/**
+ * One period's n/m markers against its year-earlier period (#552 COWORK #212):
+ * the revenue growth, each margin, and the gross and operating changes. The
+ * $1M floor reads the USD figures (`valueOf(p)`); the growth rate is the one
+ * the view already computed, in the reporting currency.
+ */
+const periodNotMeaningful = (p: StoredPeriod, prior: StoredPeriod | null, revenueYoY: Pct) => {
+  const m = marginsOf(p), was = prior ? marginsOf(prior) : null;
+  const rev = valueOf(p, "revenue"), revBefore = prior ? valueOf(prior, "revenue") : null;
+  const reason = revenueGrowthNotMeaningfulReason(revenueYoY, rev, revBefore, prior !== null);
+  return {
+    revenueYoYNotMeaningful: reason !== null,
+    revenueYoYNotMeaningfulReason: reason,
+    notMeaningful: {
+      gross: marginNotMeaningful(m.gross, rev),
+      operating: marginNotMeaningful(m.operating, rev),
+      net: marginNotMeaningful(m.net, rev),
+      grossChange: was !== null && m.gross !== null && was.gross !== null
+        && marginChangeNotMeaningful({ margin: m.gross, revenueUsd: rev }, { margin: was.gross, revenueUsd: revBefore }),
+      operatingChange: was !== null && m.operating !== null && was.operating !== null
+        && marginChangeNotMeaningful({ margin: m.operating, revenueUsd: rev }, { margin: was.operating, revenueUsd: revBefore }),
+    } satisfies MarginsNotMeaningful,
+  };
+};
+
 /** The three margins of one period, or all three refused when its revenue line is incomplete. */
 const marginsOf = (p: StoredPeriod) => {
   if (revenueLineIncomplete(p)) return { gross: null, operating: null, net: null, marginsRefused: true };
@@ -1156,6 +1365,9 @@ export function buildSecEarningsView(
     cik?: string | null;
   } = {},
 ): SecEarningsView | null {
+  // PER-SHARE FIGURES ON TODAY'S SHARE BASIS (#552 COWORK #187 §1): a split the
+  // filer proved moves the old-basis periods' EPS and DPS. See secSplitAdjust.
+  set = splitAdjusted(set);
   const annualFiler = opts.annualForm ?? null;
   // ── A SET THAT IS NOT IN DOLLARS DOES NOT RENDER ─────────────────────────
   //
@@ -1332,7 +1544,7 @@ export function buildSecEarningsView(
   const rows = measured.filter((r) => hasSomething(r) && hasComparator(r)).slice(0, renderLimit);
   const shown = rows.map((r) => r.p);
 
-  const margins = rows.map(({ p, gross, operating, net, marginsRefused }, i) => ({
+  const margins = rows.map(({ p, prior, gross, operating, net, marginsRefused, revenueYoY }, i) => ({
     label: periodLabel(p),
     // TRUE when the row OLDER than this one is not the immediately preceding
     // fiscal quarter. `shown` is newest-first, so the older neighbour is i + 1.
@@ -1346,6 +1558,14 @@ export function buildSecEarningsView(
     // filing is absent from the store or present with nothing in it.
     gapAfter: annualOnly ? false : shown[i + 1] ? !isConsecutive(p, shown[i + 1]) : false,
     gross, operating, net, marginsRefused,
+    notMeaningful: periodNotMeaningful(p, prior, revenueYoY).notMeaningful,
+    // THE MARGIN'S OWN YEAR-ON-YEAR MOVE, in points (#552 COWORK #187 §2): the
+    // trend card counts the periods that actually widened or narrowed, so it
+    // needs each period against its year-earlier one, not the window's median.
+    operatingYoYpp: (() => {
+      const before = prior ? marginsOf(prior).operating : null;
+      return operating !== null && before !== null ? operating - before : null;
+    })(),
   })).reverse();
 
   const growth = rows.map(({ p, prior, revenueYoY, epsYoY }) => ({
@@ -1355,6 +1575,8 @@ export function buildSecEarningsView(
     // same wrong base was visible in one place and silent in the other.
     comparedWith: prior ? periodLabel(prior) : null,
     revenueYoY,
+    revenueYoYNotMeaningful: periodNotMeaningful(p, prior, revenueYoY).revenueYoYNotMeaningful,
+    revenueYoYNotMeaningfulReason: periodNotMeaningful(p, prior, revenueYoY).revenueYoYNotMeaningfulReason,
     epsYoY,
   })).reverse();
 
@@ -1434,10 +1656,15 @@ export function buildSecEarningsView(
       end: p.e,
       comparedWith: prior ? periodLabel(prior) : null,
       revenue: view(p, "revenue", "Revenue"),
-      revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
+      // IN THE REPORTING CURRENCY, like the quarterly rows (#552 COWORK #187
+      // §2, SONY: this table read -2.6% on USD-converted years while the trend
+      // card read -3.7% in yen -- the gap was the currency move). See `home`.
+      revenueYoY: yoy(valueOf(home(p), "revenue"), valueOf(home(prior), "revenue")),
       epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
-      epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
+      epsYoY: yoy(valueOf(home(p), "epsDiluted"), valueOf(home(prior), "epsDiluted")),
       ...marginsOf(p),
+      netIncome: view(p, "netIncome", "Net income"),
+      ...periodNotMeaningful(p, prior, yoy(valueOf(home(p), "revenue"), valueOf(home(prior), "revenue"))),
     };
   }).reverse();
 
@@ -1483,7 +1710,14 @@ export function buildSecEarningsView(
   const bsAt = balanceSheetInstant(set);
   const std = valueOf(bsAt, "shortTermDebt");
   const ltd = valueOf(bsAt, "longTermDebt");
-  const totalDebt = std === null && ltd === null ? null : (std ?? 0) + (ltd ?? 0);
+  // TOTAL DEBT ONLY WITH A LONG-TERM LINE ON THIS BALANCE SHEET (#552 COWORK
+  // #192 ruling B). ORCL's newest 10-Q tags its current notes ($7.6B) and no
+  // undimensioned long-term line, so the old "whichever exists" sum read
+  // "Total debt $7.6B" against roughly $130B. A current line alone is shown
+  // as what it is -- short-term debt, labelled -- and Total stays blank. Both
+  // lines come from the one instant (bsAt), so they share a date by construction.
+  const totalDebt = ltd === null ? null : (std ?? 0) + ltd;
+  const shortTermDebtOnly = ltd === null && std !== null ? std : null;
   /**
    * ── CASH, AND THE ONE SUBSTITUTE THAT IS ALLOWED FOR IT ──────────────────
    *
@@ -1545,6 +1779,17 @@ export function buildSecEarningsView(
     ["sharesDiluted", "Diluted shares"],
   ];
   const incomeRows = withNonOperatingMarker(withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(latest, k, label)))));
+  // EACH PERIOD'S OWN INCOME ROWS, for the per-period one-off check: the table
+  // basis's periods and every stored fiscal year (#552 COWORK #117). Labels are
+  // distinct across the two ("Q1 FY2026" / "FY2025"); a label in both is one row.
+  const oneOffRowsOf = (p: StoredPeriod) => withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(p, k, label))));
+  const oneOffFlag = (p: StoredPeriod): boolean | "unchecked" => {
+    const rows = oneOffRowsOf(p);
+    return !oneOffCheckable(rows) ? "unchecked" : largeNonOperatingNote(rows) !== null;
+  };
+  const oneOffRows: [string, ViewCell[]][] = [...new Map(
+    [...q, ...set.years].map((p) => [periodLabel(p), oneOffRowsOf(p)] as const)
+  )];
 
   // Does the stored breakdown actually reach the filed operating income? If it
   // does not, the card says the waterfall is partial rather than presenting a
@@ -1606,6 +1851,15 @@ export function buildSecEarningsView(
       // them on converted values would put the FX move in the headline while
       // the table below it read correctly.
       revenueYoY: yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
+      ...(() => {
+        const reason = revenueGrowthNotMeaningfulReason(
+          yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
+          valueOf(latest, "revenue"),
+          valueOf(yearAgo, "revenue"),
+          yearAgo !== null,
+        );
+        return { revenueYoYNotMeaningful: reason !== null, revenueYoYNotMeaningfulReason: reason };
+      })(),
       epsDiluted: view(latest, "epsDiluted", `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(home(latest), "epsDiluted"), valueOf(home(yearAgo), "epsDiluted")),
       netIncome: view(latest, "netIncome", "Net income"),
@@ -1630,6 +1884,10 @@ export function buildSecEarningsView(
     annual: annualRows,
     margins,
     growth,
+    // The NEWEST 8 by date, whatever order the store keeps, then oldest first.
+    cashHistory: [...q].sort((a, b) => (a.e < b.e ? 1 : a.e > b.e ? -1 : 0)).slice(0, 8)
+      .map((p) => ({ label: periodLabel(p), end: p.e, ocf: valueOf(p, "operatingCashFlow"), netIncome: valueOf(p, "netIncome") }))
+      .reverse(),
     cashQuality: {
       operatingCashFlow: ocf,
       capex,
@@ -1680,6 +1938,7 @@ export function buildSecEarningsView(
           shortTermInvestments: view(bsAt, "shortTermInvestments", "Short-term investments"),
           totalDebt,
           totalDebtMissing: missingOf([["short-term debt", std], ["long-term debt", ltd]]),
+          shortTermDebtOnly,
           netCash: liquid === null || totalDebt === null ? null : liquid - totalDebt,
           netCashMissing: missingOf([
             ["cash and short-term investments", liquid],
@@ -1701,6 +1960,24 @@ export function buildSecEarningsView(
         }
       : null,
     incomeStatement: incomeRows,
+    incomeTrendBase: yearAgo
+      ? (() => {
+          const figures = (p: StoredPeriod) => {
+            const h = home(p);
+            const out: Record<string, number | null> = Object.fromEntries(PL.map(([k]) => [k, valueOf(h, k)]));
+            if (out.grossProfit === null && h) out.grossProfit = nullableDiff(h);
+            return out;
+          };
+          return {
+            label: periodLabel(yearAgo),
+            nowLabel: periodLabel(latest),
+            now: figures(latest),
+            then: figures(yearAgo),
+            revenueIncomplete: revenueLineIncomplete(latest) || revenueLineIncomplete(yearAgo),
+            oneOff: { now: oneOffFlag(latest), then: oneOffFlag(yearAgo) },
+          };
+        })()
+      : null,
     largeNonOperating: largeNonOperating(incomeRows) !== null,
     largeNonOperatingNote: largeNonOperatingNote(incomeRows),
     incomeStatementComplete,
@@ -1736,10 +2013,16 @@ export function buildSecEarningsView(
         epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
         netIncome: view(p, "netIncome", "Net income"),
       })),
+    oneOffs: Object.fromEntries(
+      oneOffRows.map(([label, rows]) => [label, largeNonOperatingNote(rows)] as const)
+        .filter((e): e is readonly [string, string] => e[1] !== null)
+    ),
+    oneOffUnchecked: oneOffRows.filter(([, rows]) => !oneOffCheckable(rows)).map(([label]) => label),
     ttmRevenue: ttm(q, "revenue"),
     ttmNetIncome: ttm(q, "netIncome"),
     coverShares: set.cover,
     asOf: set.at,
+    splitAdjustment: (set as { spa?: SplitAdjustment }).spa ?? null,
   };
 }
 

@@ -43,6 +43,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 22
+    grade: some
     blurb: >
       Roper's 10-K discloses reliance on third-party cloud infrastructure
       to host its many SaaS products, with AWS among the named providers
@@ -50,12 +51,14 @@ supplyChain:
   - name: Microsoft Corporation (Azure)
     ticker: MSFT
     pct: 18
+    grade: some
     blurb: >
       A second named cloud infrastructure provider Roper's software
       brands depend on to deliver their applications to customers.
   - name: Sole-source medical & industrial component suppliers
     ticker: null
     pct: 20
+    grade: hard
     blurb: >
       Not a single company. Roper's 10-K discloses that some products
       across its smaller Technology Enabled Products segment - including
@@ -65,12 +68,14 @@ supplyChain:
   - name: Alphabet Inc. (Google Cloud)
     ticker: GOOGL
     pct: 12
+    grade: some
     blurb: >
       A third named cloud infrastructure provider supporting Roper's
       software portfolio alongside AWS and Azure.
   - name: Oracle
     ticker: ORCL
     pct: 10
+    grade: some
     blurb: >
       A fourth cloud infrastructure provider named in Roper's 10-K
       alongside AWS, Azure, and Google Cloud as vendors its SaaS products
@@ -78,6 +83,7 @@ supplyChain:
   - name: Bolt-on acquisition pipeline
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       Not a single company. Roper's growth model depends on continually
       finding and integrating niche, founder-led software businesses -
@@ -88,6 +94,7 @@ customers:
   - name: Application Software segment customers
     ticker: null
     pct: 57
+    grade: hard
     blurb: >
       Not a single company. Vertafore, Aderant, Deltek, Frontline
       Education, CentralReach, and Roper's other application-software
@@ -97,6 +104,7 @@ customers:
   - name: Technology Enabled Products segment customers
     ticker: null
     pct: 23
+    grade: some
     blurb: >
       Not a single company. Verathon's medical devices, Neptune's water
       meters, and CIVCO's radiotherapy accessories sell to hospitals,
@@ -106,6 +114,7 @@ customers:
   - name: Network Software segment customers
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. ConstructConnect, DAT, Foundry, iPipeline,
       and Roper's other network-software brands connect buyers and

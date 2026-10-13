@@ -44,12 +44,19 @@ console.log("1. the client always settles");
     ["a malformed reply", async () => null, "poll"],
     ["another visitor's fill in flight", async () => ({ ok: false, refused: "in-flight" }), "poll"],
     ["queued for the job", async () => ({ ok: true, outcome: "queued" }), "poll"],
-    ["busy", async () => ({ ok: true, outcome: "busy" }), "poll"],
+    // …these end on the QUEUED sentence: no fill was started, so polling for
+    // one would only end in "taking longer than expected" (#552 COWORK #132).
+    ["busy (the minute budget spent)", async () => ({ ok: true, outcome: "busy" }), "queued"],
+    ["deferred (a scheduled SEC job's window)", async () => ({ ok: true, outcome: "deferred" }), "queued"],
+    ["a person over the shared visitor cap", async () => ({ ok: false, refused: "visitor-cap" }), "queued"],
+    ["a verified crawler (queued behind people)", async () => ({ ok: false, refused: "crawler" }), "queued"],
     // …and these end the sequence.
     ["a bot refusal (no fill is coming from it)", async () => ({ ok: false, refused: "bot" }), "slow"],
     ["filled", async () => ({ ok: true, outcome: "filled" }), "filled"],
     ["no usable data", async () => ({ ok: true, outcome: "no-data" }), "none"],
-    ["an over-limit address", async () => ({ ok: false, refused: "ip-limit" }), "waiting"],
+    ["one address over its hourly attempts (nothing queued)", async () => ({ ok: false, refused: "attempt-ip" }), "waiting"],
+    ["a visitor that could not be counted (fails closed)", async () => ({ ok: false, refused: "visitor-unknown" }), "waiting"],
+    ["the site over its day's fills", async () => ({ ok: false, refused: "day-limit" }), "waiting"],
   ];
   for (const [name, call, want] of cases) {
     const got = phase(await within(S.settleColdFill(call, TIMEOUT)));
@@ -58,6 +65,8 @@ console.log("1. the client always settles");
   check("the ceiling is about 12 s", S.COLD_FILL_SETTLE_MS === 12_000, String(S.COLD_FILL_SETTLE_MS));
   check("the fallback is the ruled sentence",
     S.COLD_FILL_WORDS.slow === "This is taking longer than usual; figures will appear once the company's filings are read.");
+  check("the queued sentence is the ruled one (COWORK #132), hedged on hours, not minutes",
+    S.COLD_FILL_WORDS.queued === "SEC filing figures for this company are being prepared; they may take a few hours to appear.");
 
   // MUTATION: the timer removed. The hung case must then NOT settle, or the
   // assertion above is not what is guarding it.
@@ -82,10 +91,11 @@ console.log("\n2. the component goes through the settle rule");
 console.log("\n3. the day counters");
 {
   const action = readCodeOnly("app/stock/[symbol]/coldFillAction.ts");
-  const attemptAt = action.indexOf("await countColdFillAttempt(");
+  // The FIRST counter is the address's (#552 COWORK #147).
+  const attemptAt = action.indexOf("await countColdFillIpAttempt(");
   const firstRefuse = action.indexOf("return refuse(");
   check("every refusal after the attempt counter is counted by word", attemptAt > 0 && firstRefuse > attemptAt &&
-    !/return \{ ok: false, refused: (limited|botRefusal|dayRefusal|"in-flight") \}/.test(action));
+    !/return \{ ok: false, refused: (ipLimited|limited|botRefusal|visitorRefusal|dayRefusal|"in-flight") \}/.test(action));
   check("the free refusals are not counted (they return before any counter)",
     /if \(early\) return \{ ok: false, refused: early \};/.test(action) && action.indexOf("if (early)") < attemptAt);
   check("every fill outcome is counted", /await countColdFillOutcome\(outcome\);/.test(action));
@@ -99,8 +109,11 @@ console.log("\n4. what Google is sent");
   const sm = readCodeOnly("app/sitemap.ts");
   check("the sitemap asks the pages' own rule for every curated symbol", /sitemapSecState\(stockSymbols\)/.test(sm));
   check("/stock/X and /stock/X/earnings both drop an awaiting symbol",
-    /stockSymbols\.filter\(renderable\)/.test(sm) && /!etfSymbols\.has\(symbol\) && renderable\(symbol\)/.test(sm));
-  check("an unanswerable read keeps everything (null → nothing dropped)", /!sec\?\.awaiting\.has\(symbol\)/.test(sm));
+    // Each through its page's own predicate since #553 COWORK #143 (lib/stockPageRobots.ts).
+    /stockSymbols\.filter\(renderable\)/.test(sm) && /!etfSymbols\.has\(symbol\) && earningsRenderable\(symbol\)/.test(sm) &&
+    /stockPageIndexable\(\{ hasData: hasData\(symbol\), awaitingSecRead: awaiting\(symbol\)(?:, filed: [^}]+)? \}\)/.test(sm) &&
+    /earningsPageIndexable\(\{ hasCik: cikForSymbol\(symbol\) !== null, awaitingSecRead: awaiting\(symbol\)(?:, filed: [^}]+)? \}\)/.test(sm));
+  check("an unanswerable read keeps everything (null → nothing dropped)", /const awaiting = \(symbol: string\) => Boolean\(sec\?\.awaiting\.has\(symbol\)\);/.test(sm) && /eodLast === null \|\| /.test(sm));
   check("/earnings lastmod is when the figures changed, never a re-read time", /sec\?\.changedAt\.get\(symbol\)/.test(sm) && !/verifiedAt|manifest/i.test(sm));
   const store = readCodeOnly("lib/server/secFactStore.ts");
   const w = store.slice(store.indexOf("export async function writeFactSet"));
@@ -119,7 +132,7 @@ console.log("\n4. what Google is sent");
   const idx = readCodeOnly("app/api/jobs/sec-daily-index/route.ts");
   check("the daily index seeds every curated symbol", /\.\.\.PRESET_UNIVERSE, \.\.\.priorityStocks, \.\.\.uniqueEtfs,/.test(idx));
   const earn = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
-  check("a no-CIK earnings page (LAZR) is noindex", /index: cikForSymbol\(clean\) !== null && !\(await awaitingSecRead\(clean\)\)/.test(earn));
+  check("a no-CIK earnings page (LAZR) is noindex, unless it is a fund the site lists (#552 COWORK #155)", /index: earningsPageIndexable\(\{ hasCik: cikForSymbol\(clean\) !== null \|\| isSiteFund\(clean\), awaitingSecRead: await awaitingSecRead\(clean\)(?:, filed: [^}]+)? \}\)/.test(earn));
 }
 
 if (failures) {

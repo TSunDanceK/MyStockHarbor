@@ -115,7 +115,10 @@ export async function getInternalNewsPayload(
   //
   // AND THE SAME SNAPSHOT FLOOR UNDER IT since step 7 — see the longer note on
   // the stock news page. resolveProfile adds no I/O: the snapshot is bundled.
-  const fundamentals = (await readCachedFundamentalsBulk([symbol])).get(symbol) ?? null;
+  // `raw` (#553 COWORK #103 / #690 follow-up, 2026-10-03): only the sector and
+  // industry are read here, so the read-time SEC x Tiingo cap/P/E overlay is
+  // skipped -- it changes neither field and costs the pool reads.
+  const fundamentals = (await readCachedFundamentalsBulk([symbol], { raw: true })).get(symbol) ?? null;
   const profile = resolveProfile(symbol, fundamentals);
   const sectorBucket = bucketFor(
     sectorSlugFromLabel(profile.sector),

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { chartHref } from "@/lib/chartHref";
 import Link from "next/link";
 import LearnShell from "@/app/learn/LearnShell";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
@@ -87,7 +88,7 @@ export default function BestStockIndicatorsForBeginnersPage() {
             <div style={{ fontWeight: 900, fontSize: 20 }}>Try these indicators on MyStockHarbor</div>
             <p style={{ marginTop: 10, opacity: 0.86, lineHeight: 1.6 }}>The MyStockHarbor dashboard helps you quickly check trend, divergence, momentum, and stretch across multiple indicators in one place. Explore the <Link href="/pickers" style={{ color: "#60a5fa", fontWeight: 800, textDecoration: "none" }}>Find Your Next Stock</Link> page to practise with real chart examples.</p>
             <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Link href="/" style={ctaPrimaryStyle()}>Open the Dashboard →</Link>
+              <Link href={chartHref()} style={ctaPrimaryStyle()}>Open the Dashboard →</Link>
               <Link href="/pickers" style={ctaSecondaryStyle()}>Browse Stock Ideas →</Link>
             </div>
           </section>

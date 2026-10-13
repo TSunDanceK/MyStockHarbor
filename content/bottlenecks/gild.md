@@ -33,6 +33,7 @@ supplyChain:
   - name: Diversified API, Drug-Product & Raw-Material Contract Manufacturers
     ticker: null
     pct: 40
+    grade: hard
     blurb: >
       Not a single company. Gilead's SEC filings state it uses multiple
       third-party contract manufacturers and back-up manufacturing sites for
@@ -42,6 +43,7 @@ supplyChain:
   - name: Yuhan Corporation
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       A major South Korean pharmaceutical manufacturer that has supplied
       active pharmaceutical ingredients for Gilead's HIV medicines since
@@ -52,6 +54,7 @@ supplyChain:
   - name: Pfizer, Inc.
     ticker: PFE
     pct: 10
+    grade: some
     blurb: >
       Pfizer entered a multi-year contract manufacturing agreement to
       produce and supply Veklury (remdesivir) from its McPherson, Kansas
@@ -60,6 +63,7 @@ supplyChain:
   - name: Flamma S.p.A.
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A private, family-owned Italian fine-chemical manufacturer that has
       produced active pharmaceutical ingredients and intermediates for
@@ -68,6 +72,7 @@ supplyChain:
   - name: Apheresis Centers & Cell-Therapy Logistics Network
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. Gilead's Kite unit depends on a network of
       hospital apheresis centers, couriers and specialty shippers to collect
@@ -78,6 +83,7 @@ customers:
   - name: McKesson Corporation
     ticker: MCK
     pct: 25
+    grade: some
     blurb: >
       One of the "big three" US pharmaceutical wholesalers through which
       Gilead's own SEC filings disclose that roughly 90% of its US product
@@ -86,6 +92,7 @@ customers:
   - name: Cencora, Inc.
     ticker: COR
     pct: 23
+    grade: some
     blurb: >
       Formerly AmerisourceBergen, Cencora is one of the three large US
       wholesale distributors Gilead names in its SEC filings as together
@@ -94,6 +101,7 @@ customers:
   - name: Cardinal Health, Inc.
     ticker: CAH
     pct: 15
+    grade: some
     blurb: >
       The third of the three major US wholesale distributors Gilead
       identifies as its primary channel to pharmacies and hospitals;
@@ -102,6 +110,7 @@ customers:
   - name: Other Distributors, Payors & Institutional Customers
     ticker: null
     pct: 37
+    grade: hard
     blurb: >
       Not a single company. This covers Gilead's remaining revenue outside
       the three big US wholesalers, including non-US distributors,

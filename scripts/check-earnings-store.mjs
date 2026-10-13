@@ -25,7 +25,8 @@ const check = (label, ok, detail = "") => {
 
 const store = readCodeOnly("lib/server/earningsStore.ts");
 const render = readCodeOnly("lib/latest-earnings-data.ts");
-const cron = readCodeOnly("app/api/jobs/warm-earnings/route.ts");
+// The cron writer (warm-earnings) was retired 2026-10-12 (#553 COWORK #212);
+// the render path is the store's one writer now.
 
 console.log("\n=== 1. The render path reads the store ===\n");
 
@@ -50,34 +51,29 @@ check(
   "a serverless request can end before a detached promise resolves, so the store would silently never fill"
 );
 
-console.log("\n=== 2. One store, one shape ===\n");
+console.log("\n=== 2. One store, one shape (one writer since the cron's retirement) ===\n");
 
 check(
   "the key prefix is defined once, in the store",
   /EARNINGS_REDIS_KEY_PREFIX = "msh:pickers:earnings:v1:"/.test(store) &&
-    !/= "msh:pickers:earnings:v1:"/.test(cron),
+    !/= "msh:pickers:earnings:v1:"/.test(render),
   "two literals is how a rename fixes one writer and orphans the other's rows"
-);
-check(
-  "the cron imports the shared key rather than redeclaring it",
-  /STORE_KEY_PREFIX/.test(cron),
-  "the store is shared, so its address has to be too"
 );
 check(
   "the normaliser is defined once, in the store",
   /export function normalizeEarningsRows/.test(store) &&
-    !/^function normalizeEarningsRows/m.test(cron),
+    !/^function normalizeEarningsRows/m.test(render),
   "two normalisers could disagree about what a null EPS is, in rows both sides write"
 );
 check(
-  "both writers use it",
-  /normalizeEarningsRows/.test(cron) && /normalizeEarningsRows/.test(render),
+  "the writer uses it",
+  /normalizeEarningsRows/.test(render),
   "a row written by one writer must be a row the other would have written"
 );
 check(
   "the TTL rule is defined once, in the store",
   /export function computeEarningsTtlSeconds/.test(store) &&
-    !/^function computeEarningsTtlSeconds/m.test(cron),
+    !/^function computeEarningsTtlSeconds/m.test(render),
   "a render-path write on a flat TTL would outlive the report it describes"
 );
 

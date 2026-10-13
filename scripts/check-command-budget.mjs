@@ -46,7 +46,8 @@ check(
 
 check(
   "history reads in bounded chunks",
-  /HISTORY_MGET_CHUNK/.test(history) && /redis\.mget</.test(history),
+  // The chunked MGETs go out on the 20 s bulk client (#553 COWORK #155/#156).
+  /HISTORY_MGET_CHUNK/.test(history) && /(?:\bredis|\(bulkRedis \?\? redis\))\.mget</.test(history),
   "an unbounded mget over the universe is one reply, and a history entry can carry 1400 bars"
 );
 

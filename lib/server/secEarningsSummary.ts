@@ -12,6 +12,12 @@ export type SecEarningsSummary = {
   hasStructuredData: boolean;
   tone: "green" | "yellow" | "red";
   toneLabel: string;
+  /**
+   * THE NEXT REPORT, from the same snapshot (#563 COWORK #134, the dashboard's
+   * analyser): its value line ("~19–25 Oct") or headline, and whether it is an
+   * estimate (it carries a hedge). No extra read.
+   */
+  nextReport?: { text: string; estimated: boolean } | null;
 };
 
 const PAINT = { good: "green", neutral: "yellow", weak: "red" } as const;
@@ -20,7 +26,11 @@ export async function secEarningsSummary(symbol: string): Promise<SecEarningsSum
   try {
     const snap = await getSecEarningsSnapshot(symbol);
     if (!snap.available) return { hasStructuredData: false, tone: "yellow", toneLabel: "Unavailable" };
-    return { hasStructuredData: true, tone: PAINT[snap.tone], toneLabel: snap.toneLabel };
+    const nr = snap.nextReport;
+    return {
+      hasStructuredData: true, tone: PAINT[snap.tone], toneLabel: snap.toneLabel,
+      nextReport: nr && (nr.kind === "due" || nr.kind === "expected") ? { text: nr.value ?? nr.headline, estimated: nr.hedge !== null } : null,
+    };
   } catch {
     return { hasStructuredData: false, tone: "yellow", toneLabel: "Unavailable" };
   }

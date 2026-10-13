@@ -117,6 +117,12 @@ const SEEN_KEY = "msh:dynamic-universe:v2:seen";
 // the live warm-target universe is 759 against a 700 analysis cap, and why
 // scripts/check-price-tiers.mjs sizes the pre-open buffer against their SUM.
 // ─────────────────────────────────────────────────────────────────────────────
+// NOT RAISED WITH THE SIZE SLICE (2026-10-06, #553 COWORK #186 asked for 750).
+// Two gates hold it at 700 until a decision with a fresh measurement behind it:
+// check-redis-bandwidth (the bandwidth projection was measured at 700, so
+// raising the cap means re-taking it first) and check-screener-pool (the cap
+// moves at step 7c, not alongside the pool). The size slice (topByCap.ts) fits
+// inside 700 by displacing the lowest-scoring dynamic names (CODE-B #158).
 export const ANALYSIS_UNIVERSE_CAP = 700;
 
 // EXPORTED so app/api/jobs/warm-earnings can derive the largest universe the

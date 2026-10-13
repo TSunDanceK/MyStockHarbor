@@ -3,6 +3,7 @@ import DescendingTrianglesClient, {
   type PlaysPayload,
 } from "./DescendingTrianglesClient";
 import { getDescendingTrianglesData } from "@/lib/server/descendingTrianglesBuilder";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 
 // ISR rather than force-dynamic. `force-dynamic` shipped Cache-Control:
 // no-store, so every visit and every crawl paid a full serverless render of
@@ -91,7 +92,14 @@ export default async function DescendingTrianglesPage() {
           __html: JSON.stringify(jsonLd),
         }}
       />
-      <DescendingTrianglesClient initialPayload={initialPayload} />
+      {/* THE LINKED CREDIT (#553 B4). Handed over always, SHOWN by the client
+          only while the payload on screen records that its bars came from
+          Tiingo (payload.history, lib/playsPublic.ts), not merely because
+          PRICE_PROVIDER_PICKERS is on (#553 COWORK #103, 2026-10-03). */}
+      <DescendingTrianglesClient
+        initialPayload={initialPayload}
+        marketDataCredit={<TiingoLink />}
+      />
     </>
   );
 }

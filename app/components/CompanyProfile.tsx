@@ -230,15 +230,13 @@ export default function CompanyProfile({
    * note above: this component cannot reach lib/server at runtime.
    */
   dividend: ProfileDividend;
-  // Optional extra content (e.g. the share-dilution chart) rendered directly
-  // under the description paragraph, in the same flowing column as the
-  // description (i.e. beside/below the floated stat sidebar — see the layout
-  // note on the render block below). Falls back to normal in-flow placement
-  // (after the description) when there are no stat rows.
+  // Optional extra content (the share-dilution chart) rendered FULL WIDTH
+  // under the description and the floated stat sidebar (#552 COWORK #88 §1).
+  // On phones it follows the description, before the stat boxes.
   belowDescription?: ReactNode;
-  // Optional extra content (e.g. the "Learn the indicators" links) rendered
-  // as the LAST item inside the stat sidebar (since 2026-09-22). Sits last in
-  // the reading order on every breakpoint.
+  // Optional extra content (the "Learn the indicators" links) rendered FULL
+  // WIDTH under the dilution chart (#552 COWORK #88 §1). Last in the reading
+  // order on every breakpoint.
   belowStats?: ReactNode;
 }) {
   const name = profile.companyName || symbol;
@@ -303,7 +301,10 @@ export default function CompanyProfile({
     // per-share dividend tag" is a claim about one filer. The reason it is
     // hidden for is carried on the payload (ProfileDividend.why) so a probe
     // can read it even though nothing renders it.
-    { label: "Dividend", value: dividendValue },
+    // "AS FILED" (#552 COWORK #162): the figure is the declared per-share
+    // dividend, or the paid one where that is all the filer tags; the set does
+    // not record which, so the label claims neither.
+    { label: "Dividends per share (as filed)", value: dividendValue },
     { label: "Exchange", value: profile.exchange },
     { label: "Country", value: profile.country },
     { label: "IPO date", value: fmtDate(profile.ipoDate) },
@@ -353,12 +354,12 @@ export default function CompanyProfile({
         <p key={i} style={i === 0 ? descStyle : { ...descStyle, marginTop: 12 }}>{para}</p>
       ))}
       {profile.descriptionAttribution ? (
-        <p style={descAttributionStyle}>{profile.descriptionAttribution}</p>
+        <p style={descAttributionStyle} data-fine-print="">{profile.descriptionAttribution}</p>
       ) : null}
     </div>
   ) : (
     <div className="cp-desc">
-      <p style={descAttributionStyle}>{NO_DESCRIPTION_LINE}</p>
+      <p style={descAttributionStyle} data-fine-print="">{NO_DESCRIPTION_LINE}</p>
     </div>
   );
 
@@ -392,51 +393,35 @@ export default function CompanyProfile({
       <div style={eyebrowStyle}>Company profile</div>
       <h2 style={headingStyle}>About {name}</h2>
 
-      {/* Desktop: the stat boxes are FLOATED to the right (fixed 260px) and
-          everything else — description and belowDescription (share-dilution
-          chart) — runs down the page in normal flow beside them, continuing
-          full-width underneath once it outruns the sidebar. belowStats
-          ("Learn the indicators") is inside the sidebar; see below.
+      {/* THE LAYOUT (#552 COWORK #88 §1, the owner's ruling; the "full-width
+          restack" fallback the original layout note named):
 
-          This used to be a `1fr 260px` grid, but the two columns can't be
-          balanced by any static content split: FMP descriptions range from
-          ~450 to ~2,150 characters, which is a ~640px swing in the left
-          column's height against a sidebar that's a near-fixed ~1,000px.
-          Short-description tickers (e.g. PAC) left a ~520px hole; long ones
-          (AAPL) overshot instead. A float has no fixed row height, so the
-          flow simply wraps under the sidebar when it's longer and the
-          leftover gap collapses to <100px at both ends of that range.
+            desktop: the description, with the stat boxes FLOATED right
+                     (260px) beside it; then a clear; then the dilution chart
+                     FULL WIDTH; then "Learn the indicators" FULL WIDTH.
+            phones:  description → dilution → stat boxes (2-up) → learn links.
 
-          `belowDescription` gets `display: flow-root` so it forms its own
-          block formatting context: block boxes don't shrink
-          around floats on their own (only line boxes do), so without a BFC a
-          full-width chart would render *underneath* the sidebar instead of
-          beside it.
+          The chart used to sit in the narrower flow column beside the float,
+          which left a gap under short descriptions (PAC) and a cramped chart
+          beside long ones (AAPL). A full-width block after the clear cannot
+          leave a gap at any description length.
 
           Mobile: the float is dropped and the container becomes a flex
-          column, with `order` restoring the original reading order
-          (description → dilution → stat boxes 2-up → learn links), since the
-          stat boxes have to come first in the DOM for the float to work.
+          column, with `order` restoring the reading order, since the stat
+          boxes have to come first in the DOM for the float to work.
 
           NB: the CSS block at the bottom of this file is a template literal —
           no backticks in its comments, or the literal closes early and the
           build fails to parse. */}
-      {/* "LEARN THE INDICATORS" SITS INSIDE THE STAT SIDEBAR NOW (brief
-          2026-09-22 §2.5). It used to follow the dilution chart in the
-          FLOWING column, so with IPO date and Website hidden the sidebar got
-          shorter and the gap under it grew. Inside .cp-stats it is the last
-          thing in the sidebar on desktop; on mobile .cp-stats is order 3,
-          so the reading order is still description → dilution → stats →
-          learn links, with the links spanning both grid columns. */}
       {hasDescription && hasRows ? (
         <div className="cp-flow">
           <div className="cp-stats">
             {statBoxes}
-            {belowStats ? <div className="cp-below-stats">{belowStats}</div> : null}
           </div>
           {descriptionBlock}
-          {belowDescription ? <div className="cp-below-desc">{belowDescription}</div> : null}
           <div className="cp-clear" />
+          {belowDescription ? <div className="cp-full cp-full-chart">{belowDescription}</div> : null}
+          {belowStats ? <div className="cp-full cp-full-learn">{belowStats}</div> : null}
         </div>
       ) : hasDescription ? (
         <>
@@ -458,7 +443,7 @@ export default function CompanyProfile({
           the rows, PR 3 the description, which carries its own line under
           the paragraph). The sources are the ones the composer actually used
           for THIS symbol, so a row that hid does not get credited. */}
-      <div style={sourceStyle}>
+      <div style={sourceStyle} data-fine-print="">
         {profile.sources?.length
           ? `${profile.sources.map((s) => `${s.field}: ${s.source}`).join(" · ")}.`
           : null}
@@ -475,22 +460,11 @@ export default function CompanyProfile({
           flex-direction: column;
           gap: 10px;
         }
-        /* New block formatting contexts so these sit BESIDE the floated
-           sidebar (narrowed) rather than sliding underneath it. */
-        .cp-below-desc { display: flow-root; }
-        /* 284px = the sidebar's 260px + its 24px margin. A block that starts
-           beside the float is already narrowed to exactly this; the cap only
-           bites for a description long enough to push the chart past the
-           bottom of the sidebar, and keeps the chart the same width on every
-           ticker rather than jumping to full-bleed on the wordiest ones. */
-        .cp-below-desc { max-width: calc(100% - 284px); }
-        /* belowStats is the last item in the stat sidebar (see the render
-           block). It inherits the sidebar's 260px width and 10px gap; the
-           extra top margin separates the link list from the last stat card. */
-        .cp-below-stats { margin-top: 8px; }
-        /* Keeps the data-source line (and anything after the section) below
-           the sidebar when the flow column is the shorter of the two. */
+        /* Ends the float: everything after it runs the full width. */
         .cp-clear { clear: both; }
+        /* The chart and the learn links, full width, one after the other. */
+        .cp-full { display: block; }
+        .cp-full-learn { margin-top: 24px; }
 
         @media (max-width: 720px) {
           .cp-flow {
@@ -501,13 +475,10 @@ export default function CompanyProfile({
           /* DOM order is stats-first (float requirement); restore the
              reading order description → dilution → stats → learn links. */
           .cp-desc { order: 1; }
-          .cp-below-desc { order: 2; }
+          .cp-full-chart { order: 2; }
           .cp-stats { order: 3; }
-          /* Inside the 2-up stat grid on mobile, so it spans both columns
-             and still reads last. */
-          .cp-below-stats { grid-column: 1 / -1; margin-top: 8px; }
+          .cp-full-learn { order: 4; margin-top: 0 !important; }
           .cp-clear { display: none !important; }
-          .cp-below-desc { max-width: none !important; }
           .cp-stats {
             float: none !important;
             width: auto !important;
@@ -529,14 +500,14 @@ export default function CompanyProfile({
   );
 }
 
-const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
-const headingStyle: CSSProperties = { margin: 0, fontSize: 26, lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
+const eyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
+const headingStyle: CSSProperties = { margin: 0, fontSize: "1.625rem", lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
 /** Shown where the filing gives no usable description (#552 COWORK #57). */
 export const NO_DESCRIPTION_LINE = "Description not available from the filing.";
-const descStyle: CSSProperties = { margin: 0, fontSize: 16, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
-const descAttributionStyle: CSSProperties = { margin: "10px 0 0", fontSize: 12, lineHeight: 1.5, fontStyle: "italic", color: "rgba(148,163,184,0.72)" };
+const descStyle: CSSProperties = { margin: 0, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.82)" };
+const descAttributionStyle: CSSProperties = { margin: "10px 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, fontStyle: "italic", color: "rgba(148,163,184,0.72)" };
 const gridStyle: CSSProperties = { marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 };
 const cellStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", minWidth: 0 };
-const cellLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
-const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: 15, fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
-const sourceStyle: CSSProperties = { marginTop: 12, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.55)" };
+const cellLabelStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
+const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: "0.9375rem", fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
+const sourceStyle: CSSProperties = { marginTop: 12, fontSize: "var(--fs-fine)", lineHeight: 1.5, color: "rgba(203,213,225,0.55)" };

@@ -35,6 +35,7 @@ supplyChain:
   - name: Flex Ltd.
     ticker: FLEX
     pct: 22
+    grade: some
     blurb: >
       Flex is Palo Alto Networks' electronics manufacturing services
       partner, named in Palo Alto Networks' SEC filings as the company that
@@ -45,6 +46,7 @@ supplyChain:
   - name: Marvell Technology, Inc.
     ticker: MRVL
     pct: 17
+    grade: some
     blurb: >
       Palo Alto Networks' firewall appliances are built around Cavium (now
       part of Marvell) OCTEON multi-core processors that handle high-speed
@@ -54,6 +56,7 @@ supplyChain:
   - name: Intel Corporation
     ticker: INTC
     pct: 9
+    grade: spread
     blurb: >
       Management-plane functions on many Palo Alto Networks appliances,
       ranging from lower-power chips on entry-level models to server-grade
@@ -63,6 +66,7 @@ supplyChain:
   - name: Alphabet Inc. (Google Cloud)
     ticker: GOOGL
     pct: 19
+    grade: some
     blurb: >
       Cortex Data Lake, the pipeline that ingests and processes security
       telemetry for Palo Alto Networks' Cortex XDR and XSIAM security
@@ -72,6 +76,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 15
+    grade: some
     blurb: >
       Palo Alto Networks runs its VM-Series virtual firewalls and
       integrates Prisma Cloud natively with Amazon Web Services, and the
@@ -81,6 +86,7 @@ supplyChain:
   - name: Microsoft Corporation (Azure)
     ticker: MSFT
     pct: 10
+    grade: some
     blurb: >
       Microsoft Azure hosts a meaningful share of Palo Alto Networks'
       cloud-delivered Prisma Cloud and VM-Series workloads, and the Azure
@@ -89,6 +95,7 @@ supplyChain:
   - name: Limited-source hardware component suppliers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company. Palo Alto Networks' own annual report warns
       that its hardware products contain key components sourced from a
@@ -99,6 +106,7 @@ customers:
   - name: Ingram Micro Holding Corporation
     ticker: INGM
     pct: 19
+    grade: some
     blurb: >
       Ingram Micro has been named Palo Alto Networks' Global Distribution
       Partner of the Year and is an authorized Palo Alto Networks
@@ -109,6 +117,7 @@ customers:
   - name: TD SYNNEX Corporation
     ticker: SNX
     pct: 13
+    grade: some
     blurb: >
       TD SYNNEX is an authorized global distributor for Palo Alto Networks,
       aggregating orders from a large base of resellers and managed service
@@ -117,6 +126,7 @@ customers:
   - name: Arrow Electronics, Inc.
     ticker: ARW
     pct: 9
+    grade: spread
     blurb: >
       Through its Arrow ECS enterprise computing solutions division, Arrow
       Electronics distributes Palo Alto Networks products and runs
@@ -126,6 +136,7 @@ customers:
   - name: Broader reseller & systems-integrator channel
     ticker: null
     pct: 59
+    grade: spread
     blurb: >
       Not a single company. Beyond its largest named distributors, Palo
       Alto Networks reaches the market through thousands of additional

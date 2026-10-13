@@ -188,8 +188,13 @@ console.log("\n5. THE PAGE CONSUMES IT — the assertion the last two fixes lack
   check("...feeding it the month visibility #483 shipped and nothing read",
     /monthVisibility:\s*getMonthVisibility\(/.test(src),
     "this is the signal whose absence from the page WAS the bug");
-  check("...and the completeness flag",
-    /complete:\s*dateComplete/.test(src));
+  // SINCE THE WEEK PAGE (#552 COWORK #170) the rows ARE the day's candidates,
+  // read straight from the month index: nothing is quoted, so nothing can be
+  // incomplete, and `true` is the true answer. Passing true for rows built any
+  // other way would be the defect, so the two are asserted together.
+  check("...and the completeness flag (the day blob's, or true where the rows are the candidates themselves)",
+    /complete:\s*dateComplete/.test(src) ||
+      (/items:\s*cands\.map\(/.test(src) && /totalCandidates:\s*cands\.length/.test(src) && /complete:\s*true/.test(src)));
 
   // THE REGRESSION ITSELF, spelled as the thing to stay absent. Any resurrection
   // of a count-shaped branch on usListedCount is the bug returning.

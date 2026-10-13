@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { chartHref } from "@/lib/chartHref";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -194,7 +195,7 @@ export default async function HeadlinesPage() {
         <div style={{ maxWidth: 1160, margin: "0 auto" }}>
           <div style={{ marginBottom: 24 }}>
             <Link
-              href="/"
+              href={chartHref()}
               style={{
                 color: "#93c5fd",
                 textDecoration: "none",

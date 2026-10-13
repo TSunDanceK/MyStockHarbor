@@ -33,6 +33,7 @@ supplyChain:
   - name: Lectra (Gerber Technology)
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Supplies the YuniquePLM, AccuMark pattern-design, AccuNest
       marker-optimization, and GERBERcutter automated-cutting systems that
@@ -42,6 +43,7 @@ supplyChain:
   - name: Diversified fabric & textile mill network
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Not a single company - Cintas' 10-K discloses purchasing the fabric
       used in its uniforms "from several suppliers" without naming them,
@@ -50,6 +52,7 @@ supplyChain:
   - name: Diversified third-party garment manufacturers
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Not a single company - alongside its own manufacturing plants,
       Cintas' 10-K discloses it "sources finished products from many
@@ -58,6 +61,7 @@ supplyChain:
   - name: Diversified safety, medical & fire-suppression equipment suppliers
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Not a single company - the first-aid supplies, medical kits, and
       fire-extinguisher and alarm equipment that stock Cintas' First Aid
@@ -67,6 +71,7 @@ customers:
   - name: Uniform Rental and Facility Services
     ticker: null
     pct: 77
+    grade: hard
     blurb: >
       Not a single company - Cintas' largest reportable segment, covering
       uniform rental plus mats, restroom and hygiene supplies, and other
@@ -75,6 +80,7 @@ customers:
   - name: First Aid and Safety Services
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company - Cintas' first-aid cabinets, safety supplies,
       and compliance-training business, its fastest-growing segment at
@@ -82,6 +88,7 @@ customers:
   - name: Fire Protection Services and Uniform Direct Sale
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Not a single company - Cintas' combined fire-extinguisher and
       sprinkler-inspection business plus its direct sale (rather than

@@ -29,63 +29,74 @@ supplyChain:
   - name: NVIDIA
     ticker: NVDA
     pct: 30
+    grade: hard
     blurb: >
       Oracle buys huge volumes of Nvidia GPUs to build out OCI's AI compute
       capacity for its cloud customers.
   - name: AMD
     ticker: AMD
     pct: 18
+    grade: some
     blurb: >
       Oracle began deploying tens of thousands of AMD AI chips in its cloud
       in 2025 to diversify away from sole reliance on Nvidia.
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 10
+    grade: some
     blurb: >
       The foundry behind the Nvidia and AMD chips Oracle depends on to build
       OCI's AI infrastructure.
   - name: Vertiv Holdings
     ticker: VRT
     pct: 10
+    grade: some
     blurb: >
       Supplies power and cooling infrastructure for Oracle's rapidly
       expanding data centers.
   - name: Super Micro Computer
     ticker: SMCI
     pct: 8
+    grade: spread
     blurb: >
       Integrates GPUs into the AI server systems Oracle deploys across OCI.
   - name: Dell Technologies
     ticker: DELL
     pct: 8
+    grade: spread
     blurb: >
       Supplies server hardware used across parts of Oracle's cloud
       infrastructure.
   - name: Intel
     ticker: INTC
     pct: 8
+    grade: spread
     blurb: >
       Supplies server CPUs used across Oracle's cloud and database
       infrastructure.
   - name: Micron Technology
     ticker: MU
     pct: 5
+    grade: spread
     blurb: >
       Supplies memory used across Oracle's server infrastructure.
   - name: Broadcom
     ticker: AVGO
     pct: 2
+    grade: spread
     blurb: >
       Supplies networking silicon used across Oracle's data centers.
   - name: Equinix
     ticker: EQIX
     pct: 1
+    grade: spread
     blurb: >
       Provides colocation facilities supporting some OCI regions.
 customers:
   - name: OpenAI
     ticker: null
     pct: 35
+    grade: hard
     blurb: >
       Signed a multi-year Oracle Cloud Infrastructure compute deal reported
       to be worth up to roughly $300 billion over its term - one of the
@@ -94,53 +105,62 @@ customers:
   - name: xAI
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Elon Musk's AI company is among the large AI labs reported to be
       buying OCI compute capacity. A private company with no public ticker.
   - name: Meta Platforms
     ticker: META
     pct: 10
+    grade: some
     blurb: >
       Uses OCI capacity to supplement its own data-center buildout for AI
       workloads.
   - name: ByteDance
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       TikTok's parent company is a reported OCI customer. A private company
       with no public ticker.
   - name: Uber Technologies
     ticker: UBER
     pct: 6
+    grade: spread
     blurb: >
       A long-time Oracle applications and database customer.
   - name: FedEx
     ticker: FDX
     pct: 6
+    grade: spread
     blurb: >
       Runs core logistics and enterprise systems on Oracle software and
       cloud infrastructure.
   - name: Bank of America
     ticker: BAC
     pct: 6
+    grade: spread
     blurb: >
       A major enterprise customer for Oracle's database and applications
       software.
   - name: AT&T
     ticker: T
     pct: 6
+    grade: spread
     blurb: >
       Uses Oracle enterprise software and infrastructure across its
       operations.
   - name: Cigna
     ticker: CI
     pct: 6
+    grade: spread
     blurb: >
       A major healthcare customer for Oracle's enterprise database and
       applications software.
   - name: US federal government
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Federal agencies are large, long-standing customers of Oracle's
       database and cloud infrastructure products. Not a publicly traded

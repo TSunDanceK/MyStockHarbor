@@ -6,7 +6,12 @@ import { LESSONS } from "@/app/learn/lessons";
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { SECTORS, sectorNewsPath } from "@/lib/sectors";
 import { NOINDEX_PICKER_PAGES } from "@/lib/noindexPickerPages";
-import { sitemapSecState } from "@/lib/server/secColdFetch";
+import { cikForSymbol, sitemapSecState } from "@/lib/server/secColdFetch";
+import { readTiingoEodLast } from "@/lib/server/marketData/read";
+import { earningsPageIndexable, stockPageIndexable } from "@/lib/stockPageRobots";
+import { filedEarningsSet } from "@/lib/server/filedEarnings";
+import { hasFiledEarningsIn } from "@/lib/filedEarningsLinks";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 
 // REGENERATED AT MOST DAILY (#535 COWORK #21): the stock entries below depend
 // on which symbols have a stored SEC set, and that changes as the jobs fill
@@ -51,6 +56,7 @@ const mainPages = [
 const marketPages = [
   // Market overview / analysis pages
   "/markets/spx",
+  "/markets/qqq",
 ];
 
 const seoGuides = [
@@ -144,6 +150,19 @@ const seoGuides = [
   // version is the one that survives rather than the weekly/0.8 default.
   "/sector",
   ...SECTORS.map((sector) => sectorNewsPath(sector.slug)),
+  // THE SCREENERS THAT WERE NEVER LISTED (#553 COWORK #202, 2026-10-11). These
+  // picker pages were missing from this array entirely, so leaving the noindex
+  // list could not put them in the sitemap. /bullish-rsi-divergence-stocks
+  // left it in batch 1 (5 Oct) and was never listed until now.
+  "/atr-spike-stocks",
+  "/bearish-macd-divergence-stocks",
+  "/bearish-rsi-divergence-stocks",
+  "/breakout-signal-stocks",
+  "/bullish-macd-divergence-stocks",
+  "/bullish-rsi-divergence-stocks",
+  "/stocks-above-50-day-moving-average",
+  "/stocks-below-200-day-moving-average",
+  "/stocks-below-50-day-moving-average",
 ];
 
 // coreMegaCaps / retailInterestStocks / recognizableMidCaps / etfs and the
@@ -298,8 +317,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Unanswerable (null) keeps everything, as before this rule: a Redis blip
   // must not empty the sitemap. Measured 2026-09-23: SPY, QQQ and DIA were
   // the three; companyfacts 404s for them, now stored as the empty answer.
-  const sec = await sitemapSecState(stockSymbols);
-  const renderable = (symbol: string) => !sec?.awaiting.has(symbol);
+  //
+  // AND THE PAGES' OWN PREDICATE (#553 COWORK #143): the robots tag and this
+  // entry both come from lib/stockPageRobots.ts, so a URL is never listed while
+  // its page says noindex. hasData here is "the symbol has stored daily bars"
+  // (eod-last, one Data Cache read); unreadable (null) keeps everything, as above.
+  const [sec, eodLast, filedSet] = await Promise.all([
+    sitemapSecState(stockSymbols),
+    readTiingoEodLast().catch(() => null),
+    filedEarningsSet(),
+  ]);
+  const awaiting = (symbol: string) => Boolean(sec?.awaiting.has(symbol));
+  const hasData = (symbol: string) => eodLast === null || Boolean(eodLast[toDashed(symbol)]);
+  const renderable = (symbol: string) => stockPageIndexable({ hasData: hasData(symbol), awaitingSecRead: awaiting(symbol) });
+  // AND A FILED SET (#552 COWORK #197): an earnings URL with no filed period
+  // is noindex, so it is not listed. Unreadable (null) keeps everything, as above.
+  const earningsRenderable = (symbol: string) =>
+    earningsPageIndexable({ hasCik: cikForSymbol(symbol) !== null, awaitingSecRead: awaiting(symbol), filed: filedSet ? hasFiledEarningsIn(filedSet, symbol) : null });
   // lastmod only where a truthful one exists: when the stored figures last
   // changed (stamped by writeFactSet, which runs only on a change). Never a
   // re-read time, which moves daily; absent stays absent.
@@ -330,7 +364,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const etfSymbols = new Set<string>(uniqueEtfs);
 
   const stockEarningsEntries: MetadataRoute.Sitemap = stockSymbols
-    .filter((symbol) => !etfSymbols.has(symbol) && renderable(symbol))
+    .filter((symbol) => !etfSymbols.has(symbol) && earningsRenderable(symbol))
     .map((symbol) => ({
       url: toAbsoluteUrl(`/stock/${symbol}/earnings`),
       ...figuresChangedAt(symbol),

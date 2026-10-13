@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { chartHref } from "@/lib/chartHref";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -73,7 +74,7 @@ const SECTIONS: { href: string; title: string; body: string }[] = [
     body: "Every covered company has its own page: price action and technical context, company profile, financial statements, valuation and dividend detail, plus dedicated views for its earnings history and its news. Apple’s page is linked here as an example.",
   },
   {
-    href: "/dashboard",
+    href: chartHref(),
     title: "Charting dashboard",
     body: "Three chart modes — a fast built-in chart, a full interactive chart with drawing tools and indicators, and a TradingView embed — plus trend and momentum scoring for context.",
   },

@@ -38,6 +38,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 45
+    grade: hard
     blurb: >
       CrowdStrike's own 10-K names AWS as a primary third-party data
       center it relies on to host and operate the Falcon platform,
@@ -46,6 +47,7 @@ supplyChain:
   - name: Microsoft Corporation
     ticker: MSFT
     pct: 30
+    grade: hard
     blurb: >
       Falcon's endpoint sensor runs as a kernel-level driver on Microsoft
       Windows - the exact architectural dependency behind the July 2024
@@ -54,6 +56,7 @@ supplyChain:
   - name: NVIDIA Corporation
     ticker: NVDA
     pct: 15
+    grade: some
     blurb: >
       CrowdStrike's Charlotte AI agentic-security features run on NVIDIA
       infrastructure and Nemotron models under a publicly announced
@@ -61,6 +64,7 @@ supplyChain:
   - name: Third-party colocation facility providers
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. CrowdStrike's own 10-K discloses reliance on
       third-party colocation data centers alongside AWS to host and
@@ -69,6 +73,7 @@ customers:
   - name: Amazon.com, Inc. (AWS Marketplace)
     ticker: AMZN
     pct: 45
+    grade: hard
     blurb: >
       CrowdStrike became the first cloud-native cybersecurity ISV to
       exceed $1 billion in sales through AWS Marketplace in calendar
@@ -78,6 +83,7 @@ customers:
   - name: Microsoft Corporation (Azure Marketplace)
     ticker: MSFT
     pct: 20
+    grade: some
     blurb: >
       CrowdStrike lists Falcon on Azure Marketplace as a secondary
       cloud-marketplace sales channel, though without a disclosed dollar
@@ -85,6 +91,7 @@ customers:
   - name: Alphabet Inc. (Google Cloud Marketplace)
     ticker: GOOGL
     pct: 15
+    grade: some
     blurb: >
       Falcon Cloud Security is also listed on Google Cloud Marketplace,
       the smallest and most recent of CrowdStrike's three hyperscaler
@@ -92,6 +99,7 @@ customers:
   - name: Channel partner & systems-integrator network
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. CrowdStrike describes a "partner-first"
       go-to-market strategy built on a broad network of resellers,

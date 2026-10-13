@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { chartHref } from "@/lib/chartHref";
 import Link from "next/link";
 import PickersClient from "./PickersClient";
 import { positiveLastEarningsHidden } from "@/lib/positiveLastEarnings";
@@ -8,8 +9,9 @@ import PageShareBar from "@/app/components/PageShareBar";
 import { getAllPosts } from "@/lib/blog";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { pickersWithoutBars } from "@/lib/pickersPublic";
+import { publicPickersPayload } from "@/lib/pickerPerf";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import TiingoCredit from "@/app/components/TiingoCredit";
 
 const pickersJsonLd = {
   "@context": "https://schema.org",
@@ -118,8 +120,10 @@ async function fetchInitialPickersPayload(): Promise<PickersPayload | null> {
     // NO BARS INTO THIS PAGE'S CLIENT PROPS (#553 COWORK #105): PickersClient
     // draws no chart, so the ~72 bars per record would only ride along in the
     // HTML. Same filter as the /api/pickers answer, so the mount refresh
-    // replaces like with like.
-    return pickersWithoutBars(await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
+    // replaces like with like. Nor Tiingo returns (signalRecords[].perf, #553
+    // COWORK #107): PickersClient has no Performance tab, so `perf` too would
+    // only ride along in the HTML/RSC props.
+    return publicPickersPayload(pickersWithoutBars(await getPickersData(SITE_ORIGIN))) as unknown as PickersPayload;
   } catch {
     return null;
   }
@@ -218,11 +222,7 @@ export default async function PickersPage() {
             {/* THE CREDIT ON THE HUB TOO (#553 COWORK #92): the cards show prices
                 from the same Pickers build, so the hub carries the same linked
                 credit as every result page, under the same switch. */}
-            {priceProviderFor("PICKERS") === "tiingo" ? (
-              <p className="pickersCredit" style={{ margin: "12px 2px 0", fontSize: 12, color: "rgba(148,163,184,0.8)" }}>
-                <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
-              </p>
-            ) : null}
+            {priceProviderFor("PICKERS") === "tiingo" ? <TiingoCredit style={{ margin: "12px 2px 0" }} /> : null}
           </div>
         </section>
 
@@ -249,7 +249,7 @@ export default async function PickersPage() {
 
         {/* Support cards */}
         <section style={{ marginTop: 22, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, width: "100%", boxSizing: "border-box" }}>
-          <Link href="/" style={{ ...supportCardStyle, border: "1px solid rgba(250,204,21,0.18)", background: "rgba(24,20,8,0.60)" }}>
+          <Link href={chartHref()} style={{ ...supportCardStyle, border: "1px solid rgba(250,204,21,0.18)", background: "rgba(24,20,8,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(250,204,21,0.24)", background: "rgba(250,204,21,0.08)", fontSize: 14, flex: "0 0 auto" }}>📈</span>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#fefce8" }}>Open the dashboard</div>

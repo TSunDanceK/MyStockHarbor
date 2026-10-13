@@ -51,6 +51,7 @@ supplyChain:
   - name: ASML
     ticker: ASML
     pct: 24
+    grade: some
     blurb: >
       ASML is the only company on earth that makes EUV lithography systems,
       so there is no second source at any price. SK hynix disclosed an order
@@ -62,6 +63,7 @@ supplyChain:
   - name: Applied Materials
     ticker: AMAT
     pct: 13
+    grade: some
     blurb: >
       Applied Materials supplies the deposition, CMP and epitaxy steps that
       build up every DRAM and NAND layer SK hynix produces. In March 2026
@@ -72,6 +74,7 @@ supplyChain:
   - name: TSMC
     ticker: TSM
     pct: 12
+    grade: some
     blurb: >
       This is SK hynix's most unusual dependency: TSMC manufactures the
       logic base die that sits underneath its HBM4 stacks, under a
@@ -82,6 +85,7 @@ supplyChain:
   - name: Lam Research
     ticker: LRCX
     pct: 12
+    grade: some
     blurb: >
       Lam dominates the deep-silicon etch that cuts the through-silicon vias
       running vertically through an HBM stack, and the high-aspect-ratio
@@ -92,6 +96,7 @@ supplyChain:
   - name: Tokyo Electron
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Tokyo Electron holds an overwhelming share of the coater/developer
       "track" tools that feed wafers through a lithography scanner, which
@@ -103,6 +108,7 @@ supplyChain:
   - name: KLA Corporation
     ticker: KLAC
     pct: 7
+    grade: spread
     blurb: >
       KLA holds roughly 70% of the process-control market, and HBM yield is
       fundamentally an inspection-and-metrology problem — finding the defect
@@ -112,6 +118,7 @@ supplyChain:
   - name: SK Siltron
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       The world's third-largest silicon wafer maker and, until recently,
       SK hynix's affiliated in-house wafer supplier. That changed in July
@@ -121,6 +128,7 @@ supplyChain:
   - name: Hanmi Semiconductor
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Hanmi builds the thermal-compression bonders that physically stack HBM
       dies, and was SK hynix's exclusive TC bonder supplier until 2024, when
@@ -132,6 +140,7 @@ supplyChain:
   - name: ASMPT
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       ASMPT was brought in as a third TC bonder source for HBM3E in late
       2024 and scaled quickly: by December 2025 SK hynix was running roughly
@@ -142,6 +151,7 @@ supplyChain:
   - name: Namics Corporation
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       A small Japanese chemicals firm that is arguably SK hynix's single
       most concentrated dependency. Namics supplies, under an exclusive
@@ -154,6 +164,7 @@ customers:
   - name: NVIDIA
     ticker: NVDA
     pct: 22
+    grade: some
     blurb: >
       SK hynix's largest customer, disclosed in its Nasdaq prospectus at
       23.9% of 2025 revenue without being named; press reporting matching
@@ -164,6 +175,7 @@ customers:
   - name: Microsoft
     ticker: MSFT
     pct: 13
+    grade: some
     blurb: >
       Microsoft buys SK hynix HBM3E for its in-house Maia accelerators and
       was reported in 2026 to have signed a three-year DDR5 long-term
@@ -173,6 +185,7 @@ customers:
   - name: Alphabet (Google)
     ticker: GOOGL
     pct: 11
+    grade: some
     blurb: >
       Google is a major buyer of both commodity DRAM and the HBM stacked
       onto its Ironwood-generation TPUs, and was reported in 2026 to have
@@ -182,6 +195,7 @@ customers:
   - name: Xiaomi & China's smartphone makers
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Chinese buyers accounted for 24.6% of SK hynix's first-half 2026
       revenue, more than quadrupling year on year. Xiaomi is the launch
@@ -191,6 +205,7 @@ customers:
   - name: Amazon
     ticker: AMZN
     pct: 8
+    grade: spread
     blurb: >
       AWS is one of the largest server-memory buyers in the world and a
       buyer of SK hynix DRAM and enterprise SSDs for its data-center fleet.
@@ -200,6 +215,7 @@ customers:
   - name: Dell Technologies
     ticker: DELL
     pct: 7
+    grade: spread
     blurb: >
       Dell is a long-standing server and PC memory customer, and in April
       2026 became the first customer for SK hynix's 321-layer QLC client
@@ -208,6 +224,7 @@ customers:
   - name: Meta Platforms
     ticker: META
     pct: 7
+    grade: spread
     blurb: >
       Meta's AI infrastructure build-out makes it a substantial buyer of
       server DRAM, HBM and high-capacity enterprise storage, the last of
@@ -217,6 +234,7 @@ customers:
   - name: OpenAI
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       OpenAI named SK hynix in its own October 2025 announcement of the
       Stargate memory partnership, under which SK hynix and Samsung
@@ -227,6 +245,7 @@ customers:
   - name: Tesla
     ticker: TSLA
     pct: 5
+    grade: spread
     blurb: >
       Package images from Tesla's AI5 chip tapeout in 2026 showed SK hynix
       DRAM on the module, with Samsung supplying LPDDR5X alongside it —
@@ -235,6 +254,7 @@ customers:
   - name: Enterprise server & storage OEMs
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Beyond the named hyperscalers, SK hynix sells DRAM modules and
       enterprise SSDs into the broader server and storage channel — HPE,

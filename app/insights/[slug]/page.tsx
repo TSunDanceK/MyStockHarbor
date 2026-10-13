@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getPostBySlug, getRelatedPosts } from "@/lib/blog";
+import { getPostBySlug } from "@/lib/blog";
 import { getOrCreateInsightSnapshot } from "@/lib/insightSnapshots";
 import { remark } from "remark";
 import html from "remark-html";
-import InsightPostClient from "./InsightPostClient";
 import { submitInsightToIndexNowOnce } from "@/lib/indexnowAuto";
-import RelatedInsights from "@/app/components/RelatedInsights";
+import { getInsightPageDataCached, isInsightFixture, readInsightSource } from "@/lib/server/insightPage";
+import InsightPage from "./InsightPage";
+import { hasFiledEarnings } from "@/lib/server/filedEarnings";
 
 // Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
 // forced a full serverless render of a frozen article on every single crawl.
@@ -77,11 +77,28 @@ type Props = {
   params: Promise<{ slug: string }>;
 };
 
+/**
+ * The post, or a preview-only fixture (#563 COWORK #133) shaped like one.
+ * Throws when neither exists.
+ */
+function postFor(slug: string): ReturnType<typeof getPostBySlug> {
+  try {
+    return getPostBySlug(slug);
+  } catch (error) {
+    if (!isInsightFixture(slug)) throw error;
+    const { n } = readInsightSource(slug);
+    return {
+      slug, title: n.title, date: n.date, excerpt: n.summary, symbol: n.symbol, timeframe: n.timeframe, chartBars: null, chartIndicators: [],
+      overallBreakdown: "", latestNews: "", latestEarnings: "", investorUsefulInfo: "", content: "",
+    };
+  }
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
 
   try {
-    const post = getPostBySlug(slug);
+    const post = postFor(slug);
 
     const title = `${post.title} | MyStockHarbor`;
 
@@ -103,6 +120,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const publishedTime = post.date
       ? new Date(post.date).toISOString()
       : new Date().toISOString();
+    // CHANGES ONLY WHEN THE TEXT DOES (#563 COWORK #138): the post's own `updated`, else its date.
+    const updated = (() => { try { return readInsightSource(slug).n.updated; } catch { return null; } })();
+    const modifiedTime = updated ? new Date(updated).toISOString() : publishedTime;
 
     return {
       title,
@@ -110,7 +130,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       alternates: {
         canonical: url,
       },
-      robots: {
+      // A preview fixture is never indexed.
+      robots: isInsightFixture(slug) ? { index: false, follow: false } : {
         index: true,
         follow: true,
       },
@@ -132,7 +153,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         locale: "en_GB",
         type: "article",
         publishedTime,
-        modifiedTime: publishedTime,
+        modifiedTime,
         authors: ["https://www.mystockharbor.com"],
         section: "Stock Market Insights",
         tags: post.symbol
@@ -186,36 +207,32 @@ export default async function InsightPostPage({ params }: Props) {
   let post: ReturnType<typeof getPostBySlug>;
 
   try {
-    post = getPostBySlug(slug);
+    post = postFor(slug);
   } catch {
     notFound();
   }
 
-  const processedContent = await remark().use(html).process(post.content);
-  const contentHtml = processedContent.toString();
+  // THE PAGE (#563 COWORK #132/#133): one template for every post, its
+  // figures from lib/server/insightPage.ts. The post's own text is rendered
+  // from its markdown as written.
+  const data = await getInsightPageDataCached(post.slug);
+  const md = async (src: string | null) => (src ? (await remark().use(html).process(src)).toString() : null);
+  const [whatHappened, why, originalRest] = await Promise.all([md(data.n.whatHappened), md(data.n.why), md(data.n.originalRest)]);
 
-  // getOrCreateInsightSnapshot builds a fresh snapshot (live quote + history +
-  // symbol lookup) on a Redis cache miss -- i.e. for every brand-new post.
-  // InsightPostClient already renders correctly with snapshot === null (see
-  // its `hasSnapshot`/"Archived snapshot" fallbacks), so guard this call: a
-  // transient upstream failure here (FMP outage, Redis hiccup, or anything
-  // else in the fetch chain) should degrade to a snapshot-less page, never
-  // take down the whole post with an uncaught 500. This was exactly the
-  // failure mode that made brand-new Insight posts 500 after the 2026-07-20
-  // BotID site-wide expansion started 403-ing this snapshot build's internal
-  // data calls -- now fixed at the source in lib/insightSnapshots.ts, but
-  // this try/catch stays as a safety net against the next thing that can go
-  // wrong in that chain.
+  // "CHART WHEN PUBLISHED": the frozen snapshot (B's reader, its contract
+  // unchanged) drawn as a thumbnail, its closes cut at the snapshot date;
+  // without one, the stored bars cut at the publish date. A failure here
+  // degrades to the bars' version, never a 500.
   let snapshot: Awaited<ReturnType<typeof getOrCreateInsightSnapshot>> = null;
-
   try {
-    snapshot = await getOrCreateInsightSnapshot({
-      slug: post.slug,
-      symbol: post.symbol ?? null,
-    });
+    snapshot = await getOrCreateInsightSnapshot({ slug: post.slug, symbol: post.symbol ?? null });
   } catch (error) {
     console.error("getOrCreateInsightSnapshot failed:", error);
   }
+  const frozen = snapshot?.chartPoints?.length ? snapshot.chartPoints.slice(-120).map((p) => p.close) : null;
+  const thumb = frozen && frozen.length > 1 ? frozen : data.thumb;
+  // Its caption names the thumbnail's last session, not the post's date (#563 COWORK #177).
+  const thumbTo = frozen && frozen.length > 1 ? snapshot?.chartPoints?.at(-1)?.date ?? null : data.thumbTo;
 
   const insightUrl = `https://www.mystockharbor.com/insights/${post.slug}`;
   const stockUrl = post.symbol
@@ -226,16 +243,23 @@ export default async function InsightPostPage({ params }: Props) {
     ? new Date(post.date).toISOString()
     : new Date().toISOString();
 
+  // ARTICLE + BREADCRUMB (#563 COWORK #138): dateModified moves only when the
+  // post's text does (its frontmatter `updated`), never on the daily data
+  // refresh; the image is the hero's picture.
+  const modifiedTime = data.n.updated ? new Date(data.n.updated).toISOString() : publishedTime;
+  const heroImage = data.art.kind === "library" ? `https://www.mystockharbor.com${data.art.art.src}` : `${insightUrl}/opengraph-image`;
+  const sym = data.n.symbol;
   const insightJsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "BlogPosting",
+        "@type": "Article",
         "@id": `${insightUrl}#article`,
         headline: post.title,
         description: post.excerpt,
+        image: [heroImage],
         datePublished: publishedTime,
-        dateModified: publishedTime,
+        dateModified: modifiedTime,
         mainEntityOfPage: {
           "@type": "WebPage",
           "@id": `${insightUrl}#webpage`,
@@ -275,17 +299,18 @@ export default async function InsightPostPage({ params }: Props) {
         "@type": "BreadcrumbList",
         "@id": `${insightUrl}#breadcrumb`,
         itemListElement: [
+          // Insights › TICKER › the post.
           {
             "@type": "ListItem",
             position: 1,
-            name: "Home",
-            item: "https://www.mystockharbor.com/",
+            name: "Insights",
+            item: "https://www.mystockharbor.com/insights",
           },
           {
             "@type": "ListItem",
             position: 2,
-            name: "Insights",
-            item: "https://www.mystockharbor.com/insights",
+            name: sym,
+            item: `https://www.mystockharbor.com/stock/${sym}`,
           },
           {
             "@type": "ListItem",
@@ -302,17 +327,6 @@ export default async function InsightPostPage({ params }: Props) {
     console.error("IndexNow auto-submit failed:", error);
   });
 
-  // Deterministic, no-I/O related-posts selection for the "More Insights"
-  // cross-linking module (see lib/blog.ts getRelatedPosts +
-  // app/components/RelatedInsights.tsx). Mirrors the "Explore More Stocks"
-  // pattern already shipped on /stock/[symbol] (getRelatedSymbols +
-  // RelatedStocks.tsx) — individual insight posts previously had exactly
-  // one inbound internal link (their listing on the paginated /insights
-  // archive), so this gives every post page a small, stable set of links
-  // from OTHER post pages too. getAllPosts()/readSortedPosts() is already a
-  // local content-file read used elsewhere on this page — no new I/O.
-  const relatedPosts = getRelatedPosts(post.slug, post.symbol ?? null, 8);
-
   return (
     <>
       <script
@@ -322,55 +336,7 @@ export default async function InsightPostPage({ params }: Props) {
         }}
       />
 
-      <InsightPostClient
-        post={{
-          slug: post.slug,
-          title: post.title,
-          date: post.date,
-          excerpt: post.excerpt,
-          symbol: post.symbol ?? null,
-          timeframe: post.timeframe,
-          chartBars: post.chartBars,
-          chartIndicators: post.chartIndicators,
-          overallBreakdown: post.overallBreakdown,
-          latestNews: post.latestNews,
-          latestEarnings: post.latestEarnings,
-          investorUsefulInfo: post.investorUsefulInfo,
-          contentHtml,
-        }}
-        snapshot={snapshot}
-      />
-
-      {/* -- View full stock analysis -----------------------------------
-             Small, single, real <Link> to this post's own stock page.
-             A July 2026 GSC audit found individual insight posts never
-             link to their own /stock/[symbol] page — this closes that gap
-             with a minimal addition rather than a whole new module. Kept
-             here (server-rendered, in page.tsx) rather than threaded
-             through the large InsightPostClient.tsx (~60KB) client
-             component, to keep this change small and safe. -- */}
-      {post.symbol && (
-        <div style={{ background: "#06080d" }}>
-          <div style={{ maxWidth: 1240, margin: "0 auto", padding: "20px 20px 0", boxSizing: "border-box" }}>
-            <Link
-              href={`/stock/${post.symbol.toUpperCase()}`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                fontSize: 14,
-                fontWeight: 800,
-                letterSpacing: "-0.01em",
-                color: "#93c5fd",
-                textDecoration: "none",
-              }}
-            >
-              View full {post.symbol.toUpperCase()} stock analysis →
-            </Link>
-          </div>
-        </div>
-      )}
-
-      <RelatedInsights posts={relatedPosts} />
+      <InsightPage d={data} html={{ whatHappened, why, originalRest }} thumb={thumb} thumbTo={thumbTo} hasFiledEarnings={await hasFiledEarnings(data.n.symbol)} />
     </>
   );
 }

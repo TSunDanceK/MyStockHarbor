@@ -118,7 +118,8 @@ check("the builder's rules hold", b.length === 0);
 // The nightly window must hold what the build slices: `const days = N` bars.
 {
   const jobs = stripComments(read("lib/server/marketData/jobs.ts"), { file: "lib/server/marketData/jobs.ts" });
-  const bars = Number(/export const EOD_WINDOW_BARS = (\d+);/.exec(jobs)?.[1]);
+  // The window moved to eodWindow.ts (shared with the stock-page cold fill, #553 COWORK #121).
+  const bars = Number(/export const EOD_WINDOW_BARS = (\d+);/.exec(read("lib/server/marketData/eodWindow.ts"))?.[1]);
   const days = Number(/const days = (\d+);/.exec(stripComments(builderSrc, { file: BUILDER }))?.[1]);
   check("the nightly window (bars) holds every bar the build slices", bars >= days && days > 0, `${bars} >= ${days}`);
 }
@@ -128,7 +129,8 @@ function routeRules(src) {
   const code = stripComments(src, { file: ROUTE });
   const fails = [];
   const want = (label, ok) => { if (!ok) fails.push(label); };
-  want("the route hands runTiingoEod the Pickers onBars hook", /runTiingoEod\(Date\.now\(\), pickersOnBars\(req, startedAt, onBars\)\)/.test(code));
+  // #563 COWORK #96: optionally wrapped by Market Mood's withMood, which runs first and then calls it.
+  want("the route hands runTiingoEod the Pickers onBars hook", /runTiingoEod\(Date\.now\(\), (?:withMood\()?pickersOnBars\(req, startedAt, onBars\)(?:, mood\))?\)/.test(code));
   want("the hook builds only with PRICE_PROVIDER_PICKERS=tiingo", /priceProviderFor\("PICKERS"\) !== "tiingo"\)\s*\{[\s\S]*?return;/.test(code));
   want("...and only with time left in the function", /left < PICKERS_BUILD_MIN_LEFT_MS\)\s*\{[\s\S]*?return;/.test(code));
   want("...as one forced build over the in-memory bars", /getPickersData\([\s\S]{0,80}?\{ forceRefresh: true, eodBars: bars \}\)/.test(code));

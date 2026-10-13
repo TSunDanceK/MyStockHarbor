@@ -39,6 +39,7 @@ supplyChain:
   - name: GE Vernova Inc.
     ticker: GEV
     pct: 22
+    grade: some
     blurb: >
       Baker Hughes' own 10-K names GE Vernova directly as a critical
       supplier under a long-term heavy-duty gas turbine agreement, plus a
@@ -47,6 +48,7 @@ supplyChain:
   - name: GE Aerospace
     ticker: GE
     pct: 18
+    grade: some
     blurb: >
       Alongside GE Vernova, GE Aerospace is named in the same 10-K risk
       factor as a critical aeroderivative-turbine supplier through the
@@ -55,6 +57,7 @@ supplyChain:
   - name: Carpenter Technology Corporation
     ticker: CRS
     pct: 15
+    grade: some
     blurb: >
       A leading US producer of the nickel- and titanium-based specialty
       alloys Baker Hughes' 10-K flags as constrained raw materials for its
@@ -62,6 +65,7 @@ supplyChain:
   - name: Allegheny Technologies Incorporated
     ticker: ATI
     pct: 13
+    grade: some
     blurb: >
       A major supplier of titanium and nickel superalloys used in the
       high-performance components Baker Hughes builds for turbines and
@@ -69,6 +73,7 @@ supplyChain:
   - name: Kennametal Inc.
     ticker: KMT
     pct: 12
+    grade: some
     blurb: >
       A leading maker of tungsten carbide cutting and wear components,
       one of the specific materials Baker Hughes names as a constrained
@@ -76,6 +81,7 @@ supplyChain:
   - name: Materion Corporation
     ticker: MTRN
     pct: 12
+    grade: some
     blurb: >
       Materion is a leading US supplier of beryllium, a specialty metal
       Baker Hughes explicitly names in its 10-K as a raw material with
@@ -83,6 +89,7 @@ supplyChain:
   - name: Element Six (Anglo American)
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Element Six, a De Beers/Anglo American subsidiary, is a leading
       maker of synthetic diamond cutters used in Baker Hughes' drill bits;
@@ -92,6 +99,7 @@ customers:
   - name: Saudi Arabian Oil Company (Saudi Aramco)
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       The world's largest oil producer and a recurring, large, publicly
       announced contract awarder to Baker Hughes' OFSE and IET segments;
@@ -100,6 +108,7 @@ customers:
   - name: Abu Dhabi National Oil Company (ADNOC)
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       A major Middle Eastern national oil company that regularly awards
       Baker Hughes large oilfield-services and gas-technology contracts;
@@ -107,12 +116,14 @@ customers:
   - name: Cheniere Energy, Inc.
     ticker: LNG
     pct: 13
+    grade: some
     blurb: >
       The largest US LNG exporter and a major buyer of Baker Hughes' IET
       liquefaction equipment across its Gulf Coast export terminals.
   - name: ExxonMobil Corporation
     ticker: XOM
     pct: 11
+    grade: some
     blurb: >
       One of the largest global oil majors and a recurring, long-standing
       customer for Baker Hughes' oilfield services and equipment across
@@ -120,6 +131,7 @@ customers:
   - name: Chevron Corporation
     ticker: CVX
     pct: 10
+    grade: some
     blurb: >
       A major oil-major customer for Baker Hughes' drilling, completions,
       and production equipment, including in the Permian Basin and
@@ -127,6 +139,7 @@ customers:
   - name: Venture Global, Inc.
     ticker: VG
     pct: 10
+    grade: some
     blurb: >
       A fast-growing US LNG exporter that has awarded Baker Hughes
       significant liquefaction equipment contracts as it builds out new
@@ -134,6 +147,7 @@ customers:
   - name: Petróleo Brasileiro S.A. (Petrobras)
     ticker: PBR
     pct: 9
+    grade: spread
     blurb: >
       Brazil's national oil company and a major, recurring customer for
       Baker Hughes' offshore and subsea equipment, particularly in the
@@ -141,6 +155,7 @@ customers:
   - name: Petróleos Mexicanos (Pemex)
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Baker Hughes' own 10-K discloses that its primary Mexican customer
       — almost certainly Pemex — made up 7-10% of gross receivables in
@@ -148,6 +163,7 @@ customers:
   - name: Woodside Energy Group Ltd
     ticker: WDS
     pct: 6
+    grade: spread
     blurb: >
       An Australian LNG and oil producer that has awarded Baker Hughes
       equipment contracts for its export projects; it trades as a real
@@ -155,6 +171,7 @@ customers:
   - name: NextDecade Corporation
     ticker: NEXT
     pct: 4
+    grade: spread
     blurb: >
       A smaller US LNG developer whose Rio Grande LNG project has awarded
       Baker Hughes liquefaction equipment contracts as it builds out new

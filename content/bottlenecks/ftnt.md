@@ -33,6 +33,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 20
+    grade: some
     blurb: >
       Fortinet's 10-K names TSMC as the foundry operator that fabricates
       the FortiASIC security-processor silicon, via Fortinet's ASIC
@@ -41,6 +42,7 @@ supplyChain:
   - name: Toshiba America Electronic Components
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Named directly in Fortinet's 10-K as one of two contract
       manufacturers that build its proprietary FortiASIC chips. Parent
@@ -49,6 +51,7 @@ supplyChain:
   - name: Renesas Electronics America
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Named alongside Toshiba America in Fortinet's 10-K as the second
       contract manufacturer building its custom ASICs. Parent Renesas
@@ -57,6 +60,7 @@ supplyChain:
   - name: Wistron Corporation
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A contract manufacturer named in Fortinet's 10-K that builds its
       security appliances, part of the roughly 87% of hardware made in
@@ -65,6 +69,7 @@ supplyChain:
   - name: Accton Technology Corporation
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       An appliance contract manufacturer named in Fortinet's 10-K,
       reinforcing the geographic concentration risk the filing itself
@@ -72,30 +77,35 @@ supplyChain:
   - name: Broadcom
     ticker: AVGO
     pct: 9
+    grade: spread
     blurb: >
       Named in Fortinet's 10-K as a supplier of networking and wireless
       chips used across its security appliances.
   - name: Intel Corporation
     ticker: INTC
     pct: 8
+    grade: spread
     blurb: >
       Named in Fortinet's 10-K as both a CPU and memory-component supplier
       for its hardware appliances.
   - name: Marvell Technology
     ticker: MRVL
     pct: 7
+    grade: spread
     blurb: >
       Named in Fortinet's 10-K as a networking and wireless-chip supplier
       for its appliances.
   - name: Micron Technology
     ticker: MU
     pct: 6
+    grade: spread
     blurb: >
       Named in Fortinet's 10-K as a memory supplier for its security
       appliances.
   - name: Taiwan ODM group (IBASE, MSI, Senao)
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       A cluster of smaller contract manufacturers named directly in
       Fortinet's 10-K alongside Accton and Wistron. All are listed only on
@@ -104,6 +114,7 @@ customers:
   - name: TD Synnex Corporation
     ticker: SNX
     pct: 28
+    grade: some
     blurb: >
       Named directly in Fortinet's 10-K distributor list and widely
       reported as one of its top-tier global distributors, contributing to
@@ -111,6 +122,7 @@ customers:
   - name: Ingram Micro Holding Corporation
     ticker: INGM
     pct: 27
+    grade: some
     blurb: >
       Named directly in Fortinet's 10-K distributor list and repeatedly
       recognized as a "Fortinet Distributor of the Year" - one of the
@@ -118,6 +130,7 @@ customers:
   - name: Arrow Electronics
     ticker: ARW
     pct: 20
+    grade: some
     blurb: >
       Named directly in Fortinet's 10-K distributor list, reselling
       Fortinet security hardware through its enterprise-computing solutions
@@ -125,6 +138,7 @@ customers:
   - name: Exclusive Networks
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Named directly in Fortinet's 10-K distributor list, a
       cybersecurity-specialist value-added distributor across EMEA and
@@ -132,6 +146,7 @@ customers:
   - name: US government & public-sector customers
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Fortinet's 10-K discloses that a portion of its revenue comes from
       sales to government organizations, without naming a specific

@@ -188,6 +188,93 @@ console.log("\nDIRECTION — normalised in the adapter, so no call site can inve
     "",
     (m) => m.fredSource().supports("TWD")
   );
+  // INR and MXN (#552 COWORK #132 (c)): the real DEXINUS / DEXMXUS values for
+  // 2026-09-25 (relay fred-inr-mxn). Before these, ECB was their only route,
+  // and its timeout blanked those filers' sets.
+  // CNY (#552 COWORK #140): DEXCHUS for 2026-09-25 (relay fred-cny), likewise.
+  // KRW and ZAR (#552 COWORK #151): DEXKOUS / DEXSFUS for 2026-09-25 (relay fred-krw-zar).
+  // SGD (#552 COWORK #157 §3): DEXSIUS for 2026-09-25 (relay fred-sgd).
+  for (const [ccy, id, val] of [["INR", "DEXINUS", "95.81"], ["MXN", "DEXMXUS", "17.6932"], ["CNY", "DEXCHUS", "6.711"], ["KRW", "DEXKOUS", "1356.51"], ["ZAR", "DEXSFUS", "16.3021"], ["SGD", "DEXSIUS", "1.2771"]]) {
+    const r = await fx.fredSource(stub(csv(id, val))).fetchSeries(ccy, "2026-09-01", "2026-09-30");
+    check(`${id} (${ccy} per USD) is INVERTED to USD per ${ccy}`, near(r[0]?.usdPerUnit, 1 / Number(val), 1e-12),
+      `got ${r[0]?.usdPerUnit?.toFixed(6)} (expected ${(1 / Number(val)).toFixed(6)})`);
+    check(`FRED supports ${ccy} (ECB is now the fallback, not the only route)`, fx.fredSource().supports(ccy));
+  }
+  await underMutation(
+    "INR taken as USD per unit (a ~9,000x error on IBN, HDB, WIT)",
+    'INR: { id: "DEXINUS", quote: "unit-per-usd" }',
+    'INR: { id: "DEXINUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXINUS", "95.81"))).fetchSeries("INR", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 95.81, 1e-12);
+    }
+  );
+  await underMutation(
+    "CNY taken as USD per unit (a ~45x error on BABA, TCOM, BIDU)",
+    'CNY: { id: "DEXCHUS", quote: "unit-per-usd" }',
+    'CNY: { id: "DEXCHUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXCHUS", "6.711"))).fetchSeries("CNY", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 6.711, 1e-12);
+    }
+  );
+  await underMutation(
+    "CNY dropped from the FRED map",
+    '  CNY: { id: "DEXCHUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("CNY")
+  );
+  await underMutation(
+    "KRW taken as USD per unit (a ~1.8 million-fold error on LPL, KEP)",
+    'KRW: { id: "DEXKOUS", quote: "unit-per-usd" }',
+    'KRW: { id: "DEXKOUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXKOUS", "1356.51"))).fetchSeries("KRW", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 1356.51, 1e-12);
+    }
+  );
+  await underMutation(
+    "ZAR taken as USD per unit (a ~266x error on HMY)",
+    'ZAR: { id: "DEXSFUS", quote: "unit-per-usd" }',
+    'ZAR: { id: "DEXSFUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXSFUS", "16.3021"))).fetchSeries("ZAR", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 16.3021, 1e-12);
+    }
+  );
+  await underMutation(
+    "SGD taken as USD per unit (a ~1.6x error on TLIH)",
+    'SGD: { id: "DEXSIUS", quote: "unit-per-usd" }',
+    'SGD: { id: "DEXSIUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXSIUS", "1.2771"))).fetchSeries("SGD", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 1.2771, 1e-12);
+    }
+  );
+  await underMutation(
+    "SGD dropped from the FRED map",
+    '  SGD: { id: "DEXSIUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("SGD")
+  );
+  await underMutation(
+    "KRW dropped from the FRED map",
+    '  KRW: { id: "DEXKOUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("KRW")
+  );
+  await underMutation(
+    "ZAR dropped from the FRED map",
+    '  ZAR: { id: "DEXSFUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("ZAR")
+  );
+  await underMutation(
+    "MXN dropped from the FRED map",
+    '  MXN: { id: "DEXMXUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("MXN")
+  );
   await underMutation(
     "every series treated as USD-per-unit (the 1.92x error on CNI)",
     'usdPerUnit: quote === "usd-per-unit" ? val : 1 / val',

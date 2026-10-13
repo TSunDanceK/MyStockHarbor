@@ -34,6 +34,7 @@ supplyChain:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 30
+    grade: hard
     blurb: >
       Autodesk's 10-K describes running its cloud products on "a
       combination of co-located hosting facilities and increasingly
@@ -44,6 +45,7 @@ supplyChain:
   - name: Microsoft (Azure)
     ticker: MSFT
     pct: 20
+    grade: some
     blurb: >
       Powers Fusion's AI-generated photorealistic rendering through Azure
       OpenAI Service and models like GPT-image-1, part of a broader
@@ -52,6 +54,7 @@ supplyChain:
   - name: NVIDIA Corporation
     ticker: NVDA
     pct: 18
+    grade: some
     blurb: >
       A 15-plus-year technology partnership: NVIDIA GPUs accelerate Maya's
       viewport and final rendering and underpin generative-design and
@@ -60,6 +63,7 @@ supplyChain:
   - name: Apple Inc.
     ticker: AAPL
     pct: 8
+    grade: spread
     blurb: >
       The App Store is the sole distribution channel for Autodesk's iOS
       companion apps, including Autodesk Construction Cloud Docs and
@@ -67,12 +71,14 @@ supplyChain:
   - name: Alphabet Inc. (Google Play)
     ticker: GOOGL
     pct: 8
+    grade: spread
     blurb: >
       Google Play is the Android distribution channel for the same
       Autodesk mobile apps.
   - name: Tata Technologies Limited
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A named systems-integrator and reseller for Autodesk's manufacturing
       Product Innovation Platform. Trades on India's National Stock
@@ -80,6 +86,7 @@ supplyChain:
   - name: Addnode Group AB (Symetri)
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Addnode's own press materials describe its Symetri unit as
       "Autodesk's largest partner globally" following its 2025 Team D3
@@ -89,6 +96,7 @@ customers:
   - name: TD Synnex Corporation
     ticker: SNX
     pct: 50
+    grade: hard
     blurb: >
       Autodesk's largest distributor by a wide margin, disclosed in its
       10-K as accounting for 39%, 33%, and 14% of net revenue in fiscal
@@ -97,6 +105,7 @@ customers:
   - name: Symetri (Addnode Group)
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Self-described as "Autodesk's largest partner globally" after its
       2025 Team D3 acquisition expanded its reach into US reseller
@@ -105,6 +114,7 @@ customers:
   - name: Rand Worldwide (IMAGINiT Technologies)
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       A longstanding Autodesk Platinum Club reseller and repeat "Reseller
       of the Quarter" honoree across AEC and manufacturing accounts. No
@@ -112,6 +122,7 @@ customers:
   - name: Graitec Group (Applied Software)
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A large Autodesk Platinum Solution Provider and reseller across
       North America and Europe. A privately held, France-headquartered
@@ -119,6 +130,7 @@ customers:
   - name: Other resellers & distributors
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Not a single company - Autodesk sells through roughly 1,170
       resellers and distributors worldwide, together representing about

@@ -156,7 +156,7 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
             background: "rgba(15,23,42,0.72)",
             color: "#f8fafc",
             padding: "0 14px",
-            fontSize: 15,
+            fontSize: "0.9375rem",
             fontWeight: 900,
             outline: "none",
             textTransform: "uppercase",
@@ -167,7 +167,7 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
         <TickerJumpDropdown open={open} results={results} onChoose={chooseResult} nav={nav} />
 
         {!selected?.symbol && query.trim() ? (
-          <div style={{ marginTop: 7, fontSize: 12, color: "rgba(248,113,113,0.92)", fontWeight: 800 }}>
+          <div style={{ marginTop: 7, fontSize: "var(--fs-read)", color: "rgba(248,113,113,0.92)", fontWeight: 800 }}>
             Select a valid ticker from the dropdown.
           </div>
         ) : null}

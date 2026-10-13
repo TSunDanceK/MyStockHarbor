@@ -58,6 +58,8 @@ type MiniPickerCandleChartProps = {
   tone?: "green" | "red" | "yellow" | "orange" | "blue";
   overlay?: ChartOverlay;
   supportResistanceZone?: SupportResistanceZone;
+  /** The row's bars are still being fetched (#553 COWORK #214). */
+  loading?: boolean;
 };
 
 function toneBorder(tone?: MiniPickerCandleChartProps["tone"]) {
@@ -225,13 +227,16 @@ export default function MiniPickerCandleChart({
   tone = "green",
   overlay = "none",
   supportResistanceZone,
+  loading = false,
 }: MiniPickerCandleChartProps) {
   const cleanPoints = points.filter(
     (point) => point && point.date && Number.isFinite(point.close)
   );
 
   if (cleanPoints.length < 4) {
-    return <div style={emptyStyle}>Chart preview unavailable</div>;
+    // Bars are fetched per visible row since #553 COWORK #214; while they are
+    // in flight the box says so rather than "unavailable".
+    return <div style={emptyStyle}>{loading ? "Loading chart…" : "Chart preview unavailable"}</div>;
   }
 
   const visibleLimit = supportResistanceZone ? 104 : 64;

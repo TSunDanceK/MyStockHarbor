@@ -129,6 +129,10 @@ const NextResponse = {
 let lastBuildStats = null;
 export const resetMemo = () => { memo = null; lastBuildStats = null; };
 export const readStats = () => lastBuildStats;
+// The public-shape filter (#553 COWORK #103): identity here, since this bench
+// measures which payload is served, not its shape. Its own check runs the real
+// one (scripts/check-fmpoff-plays-perf.mjs).
+const publicPickersPayload = (d) => d;
 // The no-bars filter (#553 COWORK #105): identity here, since this bench
 // measures which payload is served, not its shape. Its own check runs the real
 // one (scripts/check-pickers-api-no-bars.mjs).
@@ -383,8 +387,9 @@ check(
 );
 check(
   "the cache is read unconditionally in both paths",
-  (code.match(/const cached = await readPickersCache\(\);/g) || []).length === 2 &&
-    !/forceRefresh \? null : await readPickersCache\(\)/.test(code),
+  // The reader takes its meter caller since #553 COWORK #214; still unconditional.
+  (code.match(/const cached = await readPickersCache\((\{ caller: [^)]*\})?\);/g) || []).length === 2 &&
+    !/forceRefresh \? null : await readPickersCache\(/.test(code),
   "the conditional read is what disabled all three fallbacks at once"
 );
 

@@ -124,6 +124,62 @@ export function buildReceiverGroups(
   return out;
 }
 
+// ── "Who is receiving most" (#563 COWORK #124) ─────────────────────────────
+// The sidebar's five largest build-out sales lines, read off panel 2's own
+// lines: no new record, no new read. What qualifies, so the ranking is honest
+// (each rule asserted by scripts/check-capex-receiving.mjs):
+//   * supplier groups only -- "Cloud & data centres" are the spenders;
+//   * no "Broad line" -- its data-centre share can't be separated;
+//   * no "New line" -- no prior year to stand on;
+//   * USD lines only -- amounts are shown as filed, never converted, so a EUR
+//     line can't be ranked against a dollar one.
+// Ranked by the filed amount. Nothing says who paid whom.
+
+/** The group whose lines are the spenders' own sales, never ranked as receivers. */
+export const SPENDER_GROUP = "cloud-datacentres";
+
+export type TopReceiverView = {
+  id: string;
+  ticker: string;
+  name: string;
+  /** The filed line, with its sub-label once verified, as panel 2 shows it. */
+  line: string;
+  fyTo: string;
+  amount: string;
+  stale: boolean;
+};
+
+export function buildTopReceivers(
+  entries: PresentEntry[],
+  figures: Record<string, PresentFigure | undefined>,
+  companyName: (ticker: string) => string = () => "",
+  show = 5
+): TopReceiverView[] {
+  const picked: Array<{ e: PresentEntry; f: PresentFigure }> = [];
+  for (const e of entries) {
+    const f = figures[e.id];
+    if (!f) continue;
+    if (e.group === SPENDER_GROUP) continue;
+    if (e.broad) continue;
+    if (f.changePct === null) continue;
+    if (f.currency !== "USD") continue;
+    picked.push({ e, f });
+  }
+  picked.sort((a, b) => b.f.current - a.f.current);
+  return picked.slice(0, show).map(({ e, f }) => {
+    const sub = e.subLabel && f.subLabelOk ? e.subLabel.text : null;
+    return {
+      id: e.id,
+      ticker: e.ticker,
+      name: companyName(e.ticker) || e.ticker,
+      line: sub ? `${e.filedLabel} — ${sub}` : e.filedLabel,
+      fyTo: fyToLabel(f.fyEnd),
+      amount: formatAmount(f.current, f.currency),
+      stale: Boolean(f.staleSince),
+    };
+  });
+}
+
 export type ContractView = {
   ticker: string;
   /** Our directory name for the company ("General Dynamics"); the ticker when there is none. */

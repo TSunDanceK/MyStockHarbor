@@ -66,6 +66,38 @@ const config: PickerResultConfig = {
   presetFilters: ["athBreakoutPick"],
   sectionIncludes: ["all-time high breakout"],
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "How this breakout screen defines a high",
+      paragraphs: [
+        "This page lists stocks closing at or very near the top of their price history. A stock that keeps reaching fresh highs is often described as showing relative strength, meaning it has held up better than much of the market, and this screen is a quick way to see which names are in that position right now.",
+        "The rule is short. A stock needs at least 120 daily bars, and its latest close must be at least 99% of the highest close in its loaded history. In other words, a stock within 1% of its peak qualifies even if it has not quite matched it.",
+        "The “all-time high” used here is the highest closing price in up to about five years of loaded daily data. Intraday highs are ignored, and a stock that peaked more than five years ago may be measured against a nearer, lower high instead, so the reference is not a true all-time high in every case.",
+      ],
+    },
+    {
+      heading: "Why only twenty names, and in what order",
+      paragraphs: [
+        "Only the top 20 qualifying stocks are shown, ranked by a score that blends four ingredients: how recent the breakout is, the latest volume compared with its 20-day average, liquidity (how heavily the stock trades), and extension, or how far price has run beyond the prior high.",
+        "Recency is measured in days since a close at least 0.1% above the prior high. That figure feeds the score but does not decide membership, so a stock can sit just under its peak for a while and still appear, only lower down the list.",
+        "When reading the results, the chart link marks the reference high, which can help show whether price is holding near that line or drifting back beneath it. Comparing volume across rows may also hint at which moves had broad participation behind them, while a large extension can mean price has already moved a long way from the level.",
+      ],
+    },
+    {
+      heading: "Where breakout lists can mislead",
+      paragraphs: [
+        "Breakouts fail often. A stock may close near its high one day and slip back into its old range the next, and this screen has no way to tell a lasting move from a brief one. It works from daily bars of end-of-day prices, so the newest data point is the previous session’s close, and the page rebuilds hourly.",
+        "The five-year window can also flatter a stock that is merely recovering toward an older peak set outside that window. A longer chart might reveal overhead resistance the screen cannot see. News, earnings and valuation sit outside the rule entirely.",
+        "Because the list stops at 20, a qualifying stock with a weak score may be left off entirely. For a broader view, the breakout signals page combines this full rule set with the three-month high rule, without the top-20 cut.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/3-month-high-breakout-stocks", label: "3-month high breakout stocks" },
+    { href: "/breakout-signal-stocks", label: "Breakout signal stocks" },
+    { href: "/best-trend-score-stocks", label: "Best trend score stocks" },
+    { href: "/volume-spike-stocks", label: "Volume spike stocks" },
+  ],
 };
 
 export default function Page() {

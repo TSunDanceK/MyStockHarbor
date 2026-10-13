@@ -4,6 +4,10 @@ import type { InsightSnapshot, InsightSnapshotPoint } from "@/lib/blog";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { fetchQuoteSnapshotForRender, type Quote } from "@/lib/server/quoteData";
 import { searchSymbols, type SymbolRow } from "@/lib/server/symbolSearch";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { readTiingoHistory } from "@/lib/server/marketData/read";
+import type { EodBar } from "@/lib/server/marketData/types";
+import { pickSurfacePrice } from "@/lib/server/tiingoSurfacePrice";
 
 type Point = {
   date: string;
@@ -198,10 +202,59 @@ function normalizeSnapshot(input: unknown): InsightSnapshot | null {
   };
 }
 
+/** The derived (owned) figures, from one daily series. Shared by both paths. */
+function deriveFromPoints(points: Point[]) {
+  const closes = points.map((p) => p.close);
+  const weeklyCloses = buildWeeklyCloses(points);
+  const ma50 = movingAverage(closes, 50);
+  const ma200 = movingAverage(closes, 200);
+  const weeklyMA200 = movingAverage(weeklyCloses, 200);
+
+  const lastClose = points.length ? points[points.length - 1].close : null;
+  const lastMA50 = lastNum(ma50);
+  const lastMA200 = lastNum(ma200);
+  const lastWeeklyMA200 = lastNum(weeklyMA200);
+
+  const trend = trendLabel({
+    lastClose,
+    ma50: typeof lastMA50 === "number" ? lastMA50 : null,
+    ma200: typeof lastMA200 === "number" ? lastMA200 : null,
+  });
+
+  const ma50Pct = pctFromBase(
+    lastClose,
+    typeof lastMA50 === "number" ? lastMA50 : null
+  );
+  const ma200Pct = pctFromBase(
+    lastClose,
+    typeof lastMA200 === "number" ? lastMA200 : null
+  );
+  const weeklyMA200Pct = pctFromBase(
+    lastClose,
+    typeof lastWeeklyMA200 === "number" ? lastWeeklyMA200 : null
+  );
+
+  const round4 = (n: number | null) =>
+    typeof n === "number" ? Number(n.toFixed(4)) : null;
+
+  return {
+    trend,
+    lastMA50: round4(lastMA50),
+    lastMA200: round4(lastMA200),
+    lastWeeklyMA200: round4(lastWeeklyMA200),
+    ma50Pct: round4(ma50Pct),
+    ma200Pct: round4(ma200Pct),
+    weeklyMA200Pct: round4(weeklyMA200Pct),
+  };
+}
+
 // Builds a new Insight post's SEO snapshot (price, trend, MA levels, chart
 // points) once, then caches it in Redis forever (see
 // getOrCreateInsightSnapshot below) so the post's initial HTML always has
 // real data embedded for crawlers, per the rendering policy (claude/RENDERING_POLICY.md).
+//
+// THE FMP PATH. Used when PRICE_PROVIDER_CHARTS is not "tiingo", and as the
+// fallback while FMP_API_KEY is still set (see resolveInsightSnapshot).
 //
 // This used to self-fetch the public /api/quote, /api/history and
 // /api/symbols routes over HTTP (`fetch(`${baseUrl}/api/...`)`). Once those
@@ -238,36 +291,6 @@ async function buildSnapshot(symbol: string): Promise<InsightSnapshot> {
     }))
     .filter((p) => p.date && Number.isFinite(p.close));
 
-  const closes = points.map((p) => p.close);
-  const weeklyCloses = buildWeeklyCloses(points);
-  const ma50 = movingAverage(closes, 50);
-  const ma200 = movingAverage(closes, 200);
-  const weeklyMA200 = movingAverage(weeklyCloses, 200);
-
-  const lastClose = points.length ? points[points.length - 1].close : null;
-  const lastMA50 = lastNum(ma50);
-  const lastMA200 = lastNum(ma200);
-  const lastWeeklyMA200 = lastNum(weeklyMA200);
-
-  const trend = trendLabel({
-    lastClose,
-    ma50: typeof lastMA50 === "number" ? lastMA50 : null,
-    ma200: typeof lastMA200 === "number" ? lastMA200 : null,
-  });
-
-  const ma50Pct = pctFromBase(
-    lastClose,
-    typeof lastMA50 === "number" ? lastMA50 : null
-  );
-  const ma200Pct = pctFromBase(
-    lastClose,
-    typeof lastMA200 === "number" ? lastMA200 : null
-  );
-  const weeklyMA200Pct = pctFromBase(
-    lastClose,
-    typeof lastWeeklyMA200 === "number" ? lastWeeklyMA200 : null
-  );
-
   const exact = symbolResults.find(
     (r) => (r.symbol ?? "").toUpperCase() === symbol
   );
@@ -281,43 +304,278 @@ async function buildSnapshot(symbol: string): Promise<InsightSnapshot> {
       typeof quoteData?.price === "number" && Number.isFinite(quoteData.price)
         ? quoteData.price
         : null,
-    trend,
-    lastMA50: typeof lastMA50 === "number" ? Number(lastMA50.toFixed(4)) : null,
-    lastMA200:
-      typeof lastMA200 === "number" ? Number(lastMA200.toFixed(4)) : null,
-    lastWeeklyMA200:
-      typeof lastWeeklyMA200 === "number"
-        ? Number(lastWeeklyMA200.toFixed(4))
-        : null,
-    ma50Pct: typeof ma50Pct === "number" ? Number(ma50Pct.toFixed(4)) : null,
-    ma200Pct:
-      typeof ma200Pct === "number" ? Number(ma200Pct.toFixed(4)) : null,
-    weeklyMA200Pct:
-      typeof weeklyMA200Pct === "number"
-        ? Number(weeklyMA200Pct.toFixed(4))
-        : null,
-  chartPoints: points.slice(-2000),
+    ...deriveFromPoints(points),
+    chartPoints: points.slice(-2000),
   };
+}
+
+// ---------------------------------------------------------------------------
+// THE TIINGO PATH (#553 CODE-B #94 B2), behind PRICE_PROVIDER_CHARTS.
+//
+// WHY CHARTS. The snapshot is a frozen daily chart plus the levels read off
+// it, built from one symbol's stored daily history -- the same input, and the
+// same switch, as the stock page's chart (step 3). No new surface.
+//
+// THE CONTRACT (Tiingo licence §7). Raw Tiingo values -- prices, OHLC bars,
+// volumes -- may only be stored under msh:tiingo:, because that prefix is all
+// scripts/tiingo-purge.mjs deletes on termination. The snapshot key
+// (insight-snapshot:<slug>) has NO TTL and is OUTSIDE that prefix, so on this
+// path it holds ONLY derived ("owned") figures: the trend label and the three
+// MA distances in %, plus the post's symbol, company name and the as-of date
+// of the bar they were computed on (TIINGO_RECORD_FIELDS, exhaustively).
+//
+// EVERYTHING PRICED IS READ AT RENDER, from the stored bars through the Data
+// Cache (readTiingoHistory): the chart points (bars up to the as-of date, so
+// the chart stays the frozen setup the article describes), the "last price"
+// (pickSurfacePrice over those bars: "close, 29 Sep 2026"), and the MA levels
+// (that close and the owned % distance: level = close / (1 + pct/100), exact,
+// and still exact after a split since both sides are split-adjusted). If the
+// bars are gone (purged, or the symbol left the universe) the page renders
+// without the snapshot block.
+//
+// NEVER A NULL-PRICE RECORD. No usable bars -> nothing is written, so a later
+// render retries once the nightly job has the symbol.
+//
+// FMP-ERA SNAPSHOTS stay as they are: they are FMP data, not Tiingo's, so no
+// contract term reaches them, and their frozen values are what the articles
+// were written against.
+// ---------------------------------------------------------------------------
+
+/** Every key a persisted Tiingo-path record may hold. Nothing priced. */
+export const TIINGO_RECORD_FIELDS = [
+  "source",
+  "symbol",
+  "companyName",
+  "snapshotDate",
+  "trend",
+  "ma50Pct",
+  "ma200Pct",
+  "weeklyMA200Pct",
+] as const;
+
+export type TiingoSnapshotRecord = {
+  source: "tiingo";
+  symbol: string;
+  companyName: string;
+  /** YYYY-MM-DD of the stored bar the derived fields were computed on. */
+  snapshotDate: string;
+  trend: string;
+  ma50Pct: number | null;
+  ma200Pct: number | null;
+  weeklyMA200Pct: number | null;
+};
+
+function isTiingoRecord(raw: unknown): raw is TiingoSnapshotRecord {
+  if (!raw || typeof raw !== "object") return false;
+  const r = raw as Record<string, unknown>;
+  return (
+    r.source === "tiingo" &&
+    typeof r.snapshotDate === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(r.snapshotDate)
+  );
+}
+
+function barsToPoints(bars: readonly EodBar[]): Point[] {
+  return bars
+    .map(([date, , high, low, close, volume]) => ({
+      date: String(date ?? ""),
+      close: Number(close),
+      high: Number.isFinite(high) ? Number(high) : undefined,
+      low: Number.isFinite(low) ? Number(low) : undefined,
+      volume: Number.isFinite(volume) ? Number(volume) : undefined,
+    }))
+    .filter((p) => p.date && Number.isFinite(p.close) && p.close > 0);
+}
+
+const pctOrNull = (n: unknown): number | null =>
+  typeof n === "number" && Number.isFinite(n) ? n : null;
+
+/**
+ * Pure: the record to persist for a new post, or null when the bars give no
+ * usable close (then nothing is written). Built field by field from
+ * TIINGO_RECORD_FIELDS' list, never by spreading a priced object.
+ */
+export function buildTiingoRecord(
+  symbol: string,
+  bars: readonly EodBar[] | null | undefined,
+  companyName: string
+): TiingoSnapshotRecord | null {
+  const points = barsToPoints(bars ?? []);
+  if (points.length < 2) return null;
+  const d = deriveFromPoints(points);
+  return {
+    source: "tiingo",
+    symbol,
+    companyName,
+    snapshotDate: points[points.length - 1].date,
+    trend: d.trend,
+    ma50Pct: d.ma50Pct,
+    ma200Pct: d.ma200Pct,
+    weeklyMA200Pct: d.weeklyMA200Pct,
+  };
+}
+
+function levelFromPct(price: number, pct: number | null): number | null {
+  if (pct === null || pct <= -100) return null;
+  const level = price / (1 + pct / 100);
+  return Number.isFinite(level) ? Number(level.toFixed(4)) : null;
+}
+
+/**
+ * Pure: a persisted record plus the stored bars, as the page shows it. Null
+ * when the bars no longer reach the as-of date (the block is then omitted).
+ */
+export function hydrateTiingoSnapshot(
+  record: TiingoSnapshotRecord,
+  bars: readonly EodBar[] | null | undefined,
+  nowMs: number
+): InsightSnapshot | null {
+  const upTo = (bars ?? []).filter((b) => String(b?.[0] ?? "") <= record.snapshotDate);
+  const points = barsToPoints(upTo);
+  if (points.length < 2) return null;
+  const surface = pickSurfacePrice(null, upTo as EodBar[], nowMs);
+  if (!surface) return null;
+
+  const ma50Pct = pctOrNull(record.ma50Pct);
+  const ma200Pct = pctOrNull(record.ma200Pct);
+  const weeklyMA200Pct = pctOrNull(record.weeklyMA200Pct);
+
+  return {
+    symbol: String(record.symbol ?? ""),
+    companyName: typeof record.companyName === "string" ? record.companyName : "",
+    snapshotDate: record.snapshotDate,
+    price: surface.price,
+    priceLabel: surface.label,
+    source: "tiingo",
+    trend: typeof record.trend === "string" ? record.trend : undefined,
+    lastMA50: levelFromPct(surface.price, ma50Pct),
+    lastMA200: levelFromPct(surface.price, ma200Pct),
+    lastWeeklyMA200: levelFromPct(surface.price, weeklyMA200Pct),
+    ma50Pct,
+    ma200Pct,
+    weeklyMA200Pct,
+    chartPoints: points.slice(-2000),
+  };
+}
+
+/** What resolveInsightSnapshot reads and writes through. Injected by the checks. */
+export type InsightSnapshotDeps = {
+  redis: {
+    get: (key: string) => Promise<unknown>;
+    set: (key: string, value: unknown) => Promise<unknown>;
+  } | null;
+  env: Record<string, string | undefined>;
+  nowMs: number;
+  /** Stored Tiingo bars (Data Cache), never a live Tiingo call. */
+  readBars: (symbol: string) => Promise<EodBar[] | null>;
+  companyName: (symbol: string) => Promise<string>;
+  buildFmp: (symbol: string) => Promise<InsightSnapshot>;
+};
+
+/** A snapshot worth keeping forever: a real price. */
+function hasUsablePrice(s: InsightSnapshot | null): s is InsightSnapshot {
+  return Boolean(s && typeof s.price === "number" && Number.isFinite(s.price) && s.price > 0);
+}
+
+export async function resolveInsightSnapshot(
+  args: { slug: string; symbol?: string | null },
+  deps: InsightSnapshotDeps
+): Promise<InsightSnapshot | null> {
+  const { slug, symbol } = args;
+  if (!slug || !symbol) return null;
+
+  const { redis } = deps;
+  if (!redis) return null;
+
+  const sym = symbol.toUpperCase();
+  const key = `insight-snapshot:${slug}`;
+  const raw = await redis.get(key);
+
+  // A Tiingo-path record: derived fields stored, priced fields read now.
+  if (isTiingoRecord(raw)) {
+    const bars = await deps.readBars(sym).catch(() => null);
+    return hydrateTiingoSnapshot(raw, bars, deps.nowMs);
+  }
+
+  // An FMP-era snapshot: served as stored (FMP data, no Tiingo term applies).
+  const existing = normalizeSnapshot(raw);
+  if (existing) return existing;
+
+  let toWrite: TiingoSnapshotRecord | InsightSnapshot | null = null;
+  let shown: InsightSnapshot | null = null;
+
+  if (priceProviderFor("CHARTS", deps.env) === "tiingo") {
+    const bars = await deps.readBars(sym).catch(() => null);
+    const record = buildTiingoRecord(sym, bars, bars ? await deps.companyName(sym).catch(() => "") : "");
+    if (record) {
+      toWrite = record;
+      shown = hydrateTiingoSnapshot(record, bars, deps.nowMs);
+    } else if (!deps.env.FMP_API_KEY) {
+      // No stored bars and no FMP: nothing to show, nothing written, retried next render.
+      return null;
+    }
+  }
+
+  if (!toWrite) {
+    const snapshot = await deps.buildFmp(sym);
+    shown = snapshot;
+    // Never a null-price snapshot forever: shown this once, rebuilt next render.
+    if (hasUsablePrice(snapshot)) toWrite = snapshot;
+  }
+
+  if (toWrite) await redis.set(key, toWrite);
+
+  return shown;
+}
+
+// ---------------------------------------------------------------------------
+// WHAT THE CLIENT IS SENT (#553 COWORK #103, a #693 nit). Up to 2000 points go
+// to InsightPostClient in the page's RSC payload. The client reads date and
+// close for every chart; it reads high and low ONLY in stochastic() and atr()
+// (Stochastic(14,3), ATR(14)) and volume ONLY in vwma() and the Volume panel
+// (VWMA(20), Volume). Its weekly aggregation folds high/low/volume too, but
+// only those same indicators read the result, and PriceChart draws a line
+// chart here (no chartType is passed), so its candle reads never run. So each
+// post is sent the fields its own indicators read, nothing else. Applied at
+// render, after the snapshot is resolved: no stored record (FMP-era or
+// Tiingo) is changed. scripts/check-fmpoff-insight-snapshot.mjs renders the
+// client with full and trimmed points, per indicator, and needs them equal.
+// ---------------------------------------------------------------------------
+const READS_HIGH_LOW: ReadonlySet<string> = new Set(["Stochastic(14,3)", "ATR(14)"]);
+const READS_VOLUME: ReadonlySet<string> = new Set(["VWMA(20)", "Volume"]);
+
+/** Pure: the chart points with only the fields this post's indicators read. */
+export function trimChartPointsForClient(
+  points: readonly InsightSnapshotPoint[] | null | undefined,
+  indicators: readonly string[] | null | undefined
+): InsightSnapshotPoint[] {
+  const list = indicators ?? [];
+  const highLow = list.some((i) => READS_HIGH_LOW.has(i));
+  const volume = list.some((i) => READS_VOLUME.has(i));
+  return (points ?? []).map((p) => {
+    const out: InsightSnapshotPoint = { date: p.date, close: p.close };
+    if (highLow && p.high !== undefined) out.high = p.high;
+    if (highLow && p.low !== undefined) out.low = p.low;
+    if (volume && p.volume !== undefined) out.volume = p.volume;
+    return out;
+  });
+}
+
+async function companyNameFor(symbol: string): Promise<string> {
+  const rows = (await searchSymbols(symbol, "")) as SymbolRow[];
+  return rows.find((r) => (r.symbol ?? "").toUpperCase() === symbol)?.name ?? "";
 }
 
 export async function getOrCreateInsightSnapshot(args: {
   slug: string;
   symbol?: string | null;
 }) {
-  const { slug, symbol } = args;
-  if (!slug || !symbol) return null;
-
-  const redis = getRedisClient();
-  if (!redis) return null;
-
-  const key = `insight-snapshot:${slug}`;
-
-  const existing = normalizeSnapshot(await redis.get(key));
-  if (existing) return existing;
-
-  const snapshot = await buildSnapshot(symbol.toUpperCase());
-
-  await redis.set(key, snapshot);
-
-  return snapshot;
+  return resolveInsightSnapshot(args, {
+    redis: getRedisClient(),
+    env: process.env,
+    nowMs: Date.now(),
+    readBars: async (s) => (await readTiingoHistory(s))?.bars ?? null,
+    companyName: companyNameFor,
+    buildFmp: buildSnapshot,
+  });
 }

@@ -9,7 +9,7 @@ import {
   TREND_HELPER_COLORS,
 } from "@/lib/ta/trendHelper";
 import TradingViewChartEmbed from "./TradingViewChartEmbed";
-import { utcMonthDay } from "@/lib/utcDate";
+import { utcDay, utcMonthDay } from "@/lib/utcDate";
 
 type Point = {
   date: string;
@@ -214,38 +214,51 @@ type Props = {
    * keeps its height and type size instead of scaling up. Layout only.
    */
   viewWidth?: number;
+  /**
+   * A MARKED BAR (#563 COWORK #155, the insight page's slider): a thin vertical
+   * line at bar `index` and a dot on its close, so a control outside the chart
+   * can show where it points. Optional; nothing is drawn without it.
+   */
+  marker?: number | null;
 };
 
-// Fixed, non-interactive brand watermark rendered on top of the chart
-// area (SVG or TradingView embed). Positioned via CSS against the
-// chart's own fixed-height wrapper -- not against any data-derived SVG
-// coordinate -- so it never shifts when the user zooms, pans, or changes
-// the visible bar count; only the chart content underneath it changes.
-// Sits right at the top edge of the chart box, horizontally, out of the
-// way of the price action below. Opacity is kept low so it reads as a
-// background mark rather than interfering with the data.
+/** The price plot's horizontal inset in viewBox units: a control lining up with the x-axis uses these. */
+export const PRICE_CHART_PAD = { left: 34, right: 54, width: 760 } as const;
+
+// Fixed, non-interactive brand watermark (#563 COWORK #166 d): IN ITS OWN
+// STRIP above the plot, never over it. It used to sit 2 px from the top of the
+// chart box, but the SVG scales with its width, so its 24-unit top padding is
+// about 9 px on a phone: the text crossed the top price gridline (and could
+// cross a high candle). The strip is fixed in CSS px, not viewBox units, so it
+// is the same at every width and timeframe (D, W, M), whatever is drawn below,
+// and over the TradingView embed too. Opacity stays low: a mark, not a label.
+export const WATERMARK_STRIP_PX = 20;
 function ChartWatermark() {
   return (
     <div
       aria-hidden="true"
+      data-chart-watermark=""
       style={{
         position: "absolute",
-        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        height: WATERMARK_STRIP_PX,
         display: "flex",
-        alignItems: "flex-start",
+        alignItems: "center",
         justifyContent: "center",
-        paddingTop: 2,
         pointerEvents: "none",
         userSelect: "none",
         overflow: "hidden",
-        zIndex: 2,
       }}
     >
       <span
         style={{
-          fontSize: "clamp(13px, 3vw, 22px)",
+          // 12 px floor: the site minimum on phones (#563 COWORK #174); 15 px from ~625 px up, as before.
+          fontSize: "clamp(12px, 2.4vw, 15px)",
+          lineHeight: 1,
           fontWeight: 800,
-          color: "rgba(148,163,184,0.20)",
+          color: "rgba(148,163,184,0.32)",
           letterSpacing: "0.04em",
           whiteSpace: "nowrap",
         }}
@@ -296,6 +309,7 @@ export default function PriceChart(props: Props) {
     showTradeLink = true,
     hideSourceToggle = false,
     viewWidth,
+    marker = null,
   } = props;
 
   const width = viewWidth && viewWidth > 0 ? viewWidth : 760;
@@ -319,6 +333,7 @@ export default function PriceChart(props: Props) {
     if (!isTradingViewControlled) setInternalShowTradingView(next);
   }
 
+  // The same numbers as PRICE_CHART_PAD (scripts/check-insight-page.mjs holds them equal).
   const padL = 34;
   const padR = 54;
   const padT = 24;
@@ -697,7 +712,7 @@ export default function PriceChart(props: Props) {
 
   return (
     <div style={{ width: "100%" }}>
-      <div style={{ position: "relative", width: "100%" }}>
+      <div data-chart-box="" style={{ position: "relative", width: "100%", paddingTop: WATERMARK_STRIP_PX }}>
       {showTradingView ? (
         <TradingViewChartEmbed symbol={symbol} height={Math.max(height, 480)} />
       ) : (
@@ -729,7 +744,7 @@ export default function PriceChart(props: Props) {
             <text
               x={width - padR + 6}
               y={t.y + 4}
-              fontSize={11}
+              fontSize="0.75rem"
               fill="currentColor"
               opacity="0.6"
             >
@@ -783,7 +798,7 @@ export default function PriceChart(props: Props) {
                   <text
                     x={padL + 8}
                     y={Math.max(padT + 13, yMid - 7)}
-                    fontSize="11"
+                    fontSize="0.75rem"
                     fill={color}
                     fontWeight="800"
                     opacity="0.95"
@@ -794,6 +809,13 @@ export default function PriceChart(props: Props) {
               );
             })
           : null}
+
+        {marker !== null && marker >= 0 && marker < series.length && Number.isFinite(series[marker]?.close) ? (
+          <g data-chart-marker={marker} pointerEvents="none">
+            <line x1={x(marker)} x2={x(marker)} y1={padT} y2={padT + priceH} stroke="rgba(147,197,253,0.75)" strokeWidth={1.2} />
+            <circle data-chart-marker-dot="" cx={x(marker)} cy={yMain(series[marker].close)} r={4.5} fill="#60a5fa" stroke="#0b1220" strokeWidth={1.5} />
+          </g>
+        ) : null}
 
         {referenceLines.map((line, idx) => {
           if (typeof line.price !== "number" || !Number.isFinite(line.price)) return null;
@@ -817,7 +839,7 @@ export default function PriceChart(props: Props) {
               <text
                 x={width - padR - 6}
                 y={Math.max(padT + 13, y - 6)}
-                fontSize="11"
+                fontSize="0.75rem"
                 fill={color}
                 fontWeight="800"
                 opacity="0.95"
@@ -842,7 +864,7 @@ export default function PriceChart(props: Props) {
             <text
               x={t.x}
               y={height - 10}
-              fontSize={11}
+              fontSize="0.75rem"
               fill="currentColor"
               opacity="0.6"
               textAnchor="middle"
@@ -1275,10 +1297,11 @@ export default function PriceChart(props: Props) {
             gap: 12,
           }}
         >
-          <div style={{ fontSize: 12, opacity: 0.7 }}>
+          <div data-fine-print style={{ fontSize: "var(--fs-fine)", opacity: 0.7 }}>
             {showTradingView
               ? `Live TradingView chart for ${symbol}`
-              : `From ${series[0].date} → ${series[series.length - 1].date}`}
+              : // 2026-10-03 (#553 COWORK #113/#114): ISO dates read as "20 Oct 2025" now.
+                `From ${utcDay(series[0].date) ?? series[0].date} → ${utcDay(series[series.length - 1].date) ?? series[series.length - 1].date}`}
           </div>
 
           {!hideSourceToggle ? (
@@ -1306,7 +1329,7 @@ export default function PriceChart(props: Props) {
                 background: !showTradingView ? "rgba(167,139,250,0.28)" : "transparent",
                 color: !showTradingView ? "#ede9fe" : "#8a97ad",
                 fontWeight: 700,
-                fontSize: 12,
+                fontSize: "0.75rem",
                 cursor: "pointer",
                 boxShadow: !showTradingView ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none",
                 whiteSpace: "nowrap",
@@ -1325,7 +1348,7 @@ export default function PriceChart(props: Props) {
                 background: showTradingView ? "rgba(167,139,250,0.28)" : "transparent",
                 color: showTradingView ? "#ede9fe" : "#8a97ad",
                 fontWeight: 700,
-                fontSize: 12,
+                fontSize: "0.75rem",
                 cursor: "pointer",
                 boxShadow: showTradingView ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none",
                 whiteSpace: "nowrap",
@@ -1365,7 +1388,7 @@ export default function PriceChart(props: Props) {
                   color: "#dbeafe",
                   textDecoration: "none",
                   fontWeight: 800,
-                  fontSize: 12,
+                  fontSize: "0.75rem",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -1389,7 +1412,7 @@ export default function PriceChart(props: Props) {
                   color: "#dcfce7",
                   textDecoration: "none",
                   fontWeight: 800,
-                  fontSize: 12,
+                  fontSize: "0.75rem",
                   whiteSpace: "nowrap",
                 }}
               >

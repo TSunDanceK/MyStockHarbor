@@ -1,5 +1,7 @@
 "use client";
 
+import { chartHref } from "@/lib/chartHref";
+
 export default function PickersError({ reset }: { reset: () => void }) {
   return (
     <main
@@ -34,7 +36,7 @@ export default function PickersError({ reset }: { reset: () => void }) {
         </button>
 
         <a
-          href="/"
+          href={chartHref()}
           style={{
             display: "inline-block",
             marginLeft: 12,

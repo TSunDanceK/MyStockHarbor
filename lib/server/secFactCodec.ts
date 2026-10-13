@@ -15,7 +15,7 @@
 // whose own hash differs treats the record as UNREADABLE and refetches. An order
 // change becomes a cache miss instead of a wrong number.
 import { SEC_FIELD_KEYS, secChainsHash, secFieldsHash } from "./secFields";
-import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION } from "./secExtract";
+import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION, SEC_SHARE_VERSION } from "./secExtract";
 import type { CoverShares, ExtractResult, PeriodRecord } from "./secExtract";
 import type { FxConversion } from "./secCurrency";
 
@@ -42,7 +42,8 @@ export type StoredPeriod = {
   v: (number | null)[];
   /**
    * Derivation codes, positional, ONE CHARACTER EACH, joined into one string.
-   * "F" as-filed · "D" differenced · "C" computed · "A" ambiguous · "-" absent.
+   * "F" as-filed · "D" differenced · "C" computed · "A" ambiguous ·
+   * "W" withheld (a derived Q4 that crosses scopes, value null) · "-" absent.
    *
    * A STRING, NOT AN ARRAY: 46 one-character array entries cost ~230 bytes of
    * JSON per period against 46. The page needs this on every cell it renders --
@@ -166,6 +167,8 @@ export type StoredFactSet = {
    * SEC_LABEL_VERSION; `h` and `c` cannot see a labelling change.
    */
   lv?: number;
+  /** The SHARE-SERIES shape this set was written under. Absent = 1. See SEC_SHARE_VERSION. */
+  sv?: number;
   /**
    * The QUARTER RETENTION WINDOW this set was written under.
    *
@@ -215,6 +218,14 @@ export type StoredFactSet = {
    */
   as?: [string, number][];
   /**
+   * The filer's split evidence, `[periodEnd, restated ÷ originally filed]`
+   * (ExtractResult.shareRestated). Optional, and NOT in contentHashOf for the
+   * reason `as` is not: it fills in as each set is refreshed.
+   */
+  asr?: [string, number][];
+  /** Period ends re-filed unchanged (ExtractResult.shareRefiled). Optional; not in contentHashOf. */
+  asf?: string[];
+  /**
    * Field keys the payload published NO chain concept for, in any period.
    * See ExtractResult.untagged. OPTIONAL: absent means "written before the
    * marker existed", which is UNKNOWN — a reader must never treat it as
@@ -252,10 +263,10 @@ export type StoredFactSet = {
 };
 
 const CODE: Record<string, string> = {
-  "as-filed": "F", differenced: "D", computed: "C", ambiguous: "A",
+  "as-filed": "F", differenced: "D", computed: "C", ambiguous: "A", withheld: "W",
 };
-export const DERIVATION_OF: Record<string, "as-filed" | "differenced" | "computed" | "ambiguous" | null> = {
-  F: "as-filed", D: "differenced", C: "computed", A: "ambiguous", "-": null,
+export const DERIVATION_OF: Record<string, "as-filed" | "differenced" | "computed" | "ambiguous" | "withheld" | null> = {
+  F: "as-filed", D: "differenced", C: "computed", A: "ambiguous", W: "withheld", "-": null,
 };
 
 export function encodePeriod(p: PeriodRecord): StoredPeriod {
@@ -332,12 +343,15 @@ export function encodeFactSet(
     cu: result.refusedUnits,
     cc: result.conceptChoice,
     ...(result.annualShares?.length ? { as: result.annualShares } : {}),
+    ...(result.shareRestated?.length ? { asr: result.shareRestated } : {}),
+    ...(result.shareRefiled?.length ? { asf: result.shareRefiled } : {}),
     ...(result.untagged ? { nt: result.untagged } : {}),
     ...(result.readNamespaces ? { rns: result.readNamespaces } : {}),
     ...(result.summedSga?.length ? { sg: result.summedSga } : {}),
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
     lv: SEC_LABEL_VERSION,
+    sv: SEC_SHARE_VERSION,
     cur: result.reportingCurrency,
     fx: fx?.conversion,
     notes: result.notes,
@@ -362,7 +376,7 @@ const INDEX_OF = new Map(SEC_FIELD_KEYS.map((k, i) => [k, i]));
 /** One cell: the value and how it came to be. */
 export type Cell = {
   val: number | null;
-  derived: "as-filed" | "differenced" | "computed" | "ambiguous" | null;
+  derived: "as-filed" | "differenced" | "computed" | "ambiguous" | "withheld" | null;
 };
 
 /**

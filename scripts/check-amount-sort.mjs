@@ -41,7 +41,8 @@ const shown = (r) =>
   visibleText(html(React.createElement(M.CellValue, { cell: { val: r.val }, compact: true })));
 
 console.log("1. what each row reads as");
-const EXPECT_TEXT = { big: "$1.98B", mid: "$480.5M", zero: "$0.0M", neg: "-$0.4M", none: "Not reported" };
+// ZERO IS "$0" since #552 COWORK #213 item 2 (under $0.1M reads in thousands; nothing is "$0").
+const EXPECT_TEXT = { big: "$1.98B", mid: "$480.5M", zero: "$0", neg: "-$0.4M", none: "Not reported" };
 for (const r of ROWS) check(`${r.id} reads "${EXPECT_TEXT[r.id]}"`, shown(r) === EXPECT_TEXT[r.id], shown(r));
 check('no "$0.01B"-style small B anywhere in the rule',
   M.scaledAmount(10_000_000) === "$10.0M" && M.scaledAmount(999_949_999) === "$999.9M",

@@ -47,6 +47,7 @@ supplyChain:
   - name: Maxon Group
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       This privately held Swiss precision-motor maker supplies more than
       thirty DC micromotors integrated into each da Vinci system's arms and
@@ -59,6 +60,7 @@ supplyChain:
   - name: NVIDIA
     ticker: NVDA
     pct: 20
+    grade: some
     blurb: >
       NVIDIA's Blackwell computing platform, Clara healthcare software stack
       and Omniverse simulation tools underpin the da Vinci 5's roughly
@@ -70,6 +72,7 @@ supplyChain:
   - name: Surgical Science Sweden AB
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       This Swedish simulation-software company is now bundled with every
       da Vinci 5 system sold worldwide under a multi-year (2025–2028)
@@ -82,6 +85,7 @@ supplyChain:
   - name: Sole- and single-source component suppliers
     ticker: null
     pct: 50
+    grade: hard
     blurb: >
       Intuitive's own SEC filings acknowledge that it buys many mechanical,
       electronic and optical components — from precision-machined metal
@@ -95,6 +99,7 @@ customers:
   - name: HCA Healthcare
     ticker: HCA
     pct: 8
+    grade: spread
     blurb: >
       As the largest for-profit hospital operator in the US, HCA has
       negotiated pricing arrangements with Intuitive across its hospital
@@ -106,6 +111,7 @@ customers:
   - name: Kaiser Permanente
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       One of the largest integrated, nonprofit health systems in the US,
       Kaiser Permanente operates a large fleet of da Vinci systems across
@@ -115,6 +121,7 @@ customers:
   - name: U.S. Veterans Affairs & Department of Defense hospitals
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Government-run VA and military treatment facilities purchase da Vinci
       systems and instruments through federal procurement channels rather
@@ -123,6 +130,7 @@ customers:
   - name: Northwell Health
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       As New York State's largest health system, Northwell negotiates da
       Vinci purchasing and service contracts across its many hospitals as a
@@ -131,6 +139,7 @@ customers:
   - name: Advocate Health
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       Formed from the merger of Advocate Aurora Health and Atrium Health,
       Advocate Health is one of the largest nonprofit health systems in the
@@ -140,6 +149,7 @@ customers:
   - name: Other independent U.S. hospitals, surgery centers & smaller health systems
     ticker: null
     pct: 43
+    grade: spread
     blurb: >
       The bulk of Intuitive's US revenue comes from thousands of individual
       hospitals, academic medical centers and ambulatory surgery centers
@@ -148,6 +158,7 @@ customers:
   - name: International hospital systems & distributors
     ticker: null
     pct: 32
+    grade: hard
     blurb: >
       Roughly one-third of Intuitive's total revenue now comes from outside
       the United States, spread across hospitals and, in some markets,

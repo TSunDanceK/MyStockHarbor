@@ -1,4 +1,7 @@
 import { getBuySignalCount } from "@/lib/signalCounts";
+import { chartHrefFrom } from "@/lib/chartHref";
+import { qualifiesBuySignal, qualifiesSellSignal } from "@/lib/pickerScreenRules";
+import type { EpsGrowthView } from "@/lib/epsGrowthView";
 import { attachTrendHelper } from "@/lib/ta/trendHelper";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -7,19 +10,24 @@ import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
 import HowToCollapse from "@/app/components/HowToCollapse";
 import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
+import { pageRanking } from "@/lib/pickerRanking";
 import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGrid";
 import ScanFooter from "@/app/components/ScanFooter";
 import { PickerFilterProvider, PickerFilterUrlSync } from "@/app/components/PickerFilterContext";
-import { getCompanyNameMap } from "@/lib/server/companyNames";
+import { cleanName, getCompanyNameMap } from "@/lib/server/companyNames";
 import { resolveProfileBulk } from "@/lib/server/staticProfile";
 import { excludedFromFundamentals } from "@/lib/server/pickerEquity";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
+import { rowBars, type ChartLite } from "@/lib/pickerChartLite";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { isRegularSessionOpen } from "@/lib/server/marketHours";
 import { recordAboveFold } from "@/lib/server/priceTiers";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import {
   applySecEarnings,
+  payoutRateMark,
+  secPickerWhy,
+  secPickerWords,
   applySecPickerRow,
   pickersFundamentalsSource,
   readSecPickerRows,
@@ -27,12 +35,23 @@ import {
   SEC_PICKER_FIELDS,
 } from "@/lib/server/pickersSecFundamentals";
 import { HIDDEN_FIELD_KEYS } from "@/lib/pickerHiddenFields";
+import type { CellWhyCode, CellWhyColumn } from "@/lib/pickerCellWhy";
+import type { EstimateMark } from "@/app/components/estimateMark";
+import { gridCompanyName } from "@/lib/server/secTickerNames";
+import { toDotted } from "@/lib/symbolSpellings.mjs";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
-import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
+import { applyPerf, type PerfFields, type PerfRow } from "@/lib/pickerPerf";
+import TiingoCredit from "@/app/components/TiingoCredit";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
 import { CATEGORY_FIELDS, valueSatisfies, type Predicate } from "@/lib/screenerFields";
+import { PickerEmptyGuardError, emptyGuardLine, implausibleEmpty } from "@/lib/pickerEmptyGuard";
+
+// The six valuation cells of a listing that is not a common share (#553 COWORK #168).
+const NOT_COMMON_WHY: Partial<Record<CellWhyColumn, CellWhyCode>> = {
+  marketCap: "notCommon", ev: "notCommon", pe: "notCommon", ps: "notCommon", pb: "notCommon", pfcf: "notCommon",
+};
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -65,6 +84,11 @@ export type PickerResultConfig = {
   // one generated sentence is thin content -- see
   // claude/preset-pages-universe-blocker-2026-08-04.md.
   bodySections?: { heading: string; paragraphs: string[] }[];
+  // RELATED SCREENS (#553 COWORK #200 item 1): two to four other picker pages
+  // named at the end of the write-up, server-rendered links, so a reader (and
+  // a crawler) moves between screens that answer neighbouring questions.
+  // scripts/check-screener-copy.mjs checks each points at a real picker route.
+  relatedScreens?: { href: string; label: string }[];
   // Which results tab to open on. Defaults to "general". Set it to the tab
   // holding the metric this page screens on, so the number the page is named
   // after is visible on arrival rather than a click away — dividend growth,
@@ -123,6 +147,13 @@ export type PickerResultConfig = {
   //
   // WHERE THIS IS APPLIED MATTERS AND IS NOT OBVIOUS -- see applyOrderBy.
   orderBy?: { field: keyof ResultEntry; dir: "asc" | "desc"; label: string };
+  // THE RANKING, NAMED ON THE PAGE (#553 COWORK #161), for a page whose order
+  // comes from its pickers section rather than `orderBy` (which names itself).
+  // Only where the section's sort is one plain key -- the trend flips (most
+  // recent first) and the SEC earnings growth (EPS growth) -- never a page
+  // ranked by an opaque composite. `label` completes "Ranked by …"; `short`
+  // completes "Back to … ranking".
+  rankedBy?: { label: string; short: string };
   // "allSymbols" pages: show the whole list on load instead of hiding until a
   // condition is checked (used by the plain "All Stocks" / Stock Screener page).
   showAllImmediately?: boolean;
@@ -170,6 +201,8 @@ type PickerSectionItem = {
    * below with attachTrendHelper.
    */
   trendSeries?: { dates: string[]; line: number[]; state: number[] };
+  /** The Earnings Growth page's column (#553 COWORK #186 ruling 1). */
+  epsGrowth?: EpsGrowthView;
 };
 
 type PickerSection = {
@@ -182,9 +215,13 @@ type PickerSection = {
 
 type SignalRecord = {
   symbol?: string;
+  /** B6: the build's 1W..1Y returns from stored Tiingo bars (lib/pickerPerf.ts). */
+  perf?: PerfRow;
   note?: string;
   tone?: PickerTone;
   chartPoints?: MiniCandlePoint[];
+  /** The bars' summary; the bars themselves are fetched per visible row (#553 COWORK #214). */
+  chartLite?: ChartLite | null;
   score?: number;
   dashboardHref?: string;
 
@@ -276,15 +313,25 @@ export type ResultEntryFlags = {
 
 export type ResultEntry = ResultEntryFlags & {
   symbol: string;
+  /** Section members on /stocks-with-strong-earnings-growth only (lib/epsGrowthView). */
+  epsGrowth?: EpsGrowthView;
   companyName?: string;
   note: string;
   tone: PickerTone;
   stockHref: string;
   chartHref: string;
+  /**
+   * Full bars ONLY where a section item carries its own (the weekly cards).
+   * Every other row ships `chartLite` instead, and the grid fetches the candles
+   * for the rows it draws from /api/picker-charts (#553 COWORK #214, cut 1).
+   */
   chartPoints: MiniCandlePoint[];
+  chartLite?: ChartLite | null;
+  /** The Trend Helper series, attached by the grid once a row's bars are fetched. */
+  trendSeries?: { dates: string[]; line: number[]; state: number[] };
   badge?: string;
   // Which of the composite's six checks actually fired for this stock,
-  // strongest first. The screener's membership rule is "2 or more of six", so a
+  // strongest first. The screener's membership rule is "RSI plus one more of six", so a
   // count alone ("3 oversold") leaves a reader unable to tell WHICH three -- and
   // in particular unable to tell whether RSI was among them, which is what
   // /stock/[symbol] means when it says the same word.
@@ -339,6 +386,9 @@ export type ResultEntry = ResultEntryFlags & {
   perf6m?: number;
   perfYtd?: number;
   perf1y?: number;
+  /** B6 (#553 CODE-B #94): the close the returns run to, and why each empty one is empty. */
+  perfAsOf?: PerfFields["perfAsOf"];
+  perfWhy?: PerfFields["perfWhy"];
   /**
    * "sec" when this row's Market Cap / PS / PB / EV / P/FCF / Revenue /
    * Op. Income / Net Income / FCF / Div ($) / Div Yield / Div Growth came from
@@ -346,6 +396,24 @@ export type ResultEntry = ResultEntryFlags & {
    * take Payout Ratio as filed rather than recomputing it from EPS.
    */
   fundamentalsFrom?: "sec";
+  /** Div ($) is the latest quarter annualised; the trailing total it sits below (#553 COWORK #184 item 1). */
+  divCut?: { ttm: number };
+  /** A special dividend left out of Div ($), yield and growth (#553 COWORK #184 item 1). */
+  divSpecial?: number;
+  /** Grid column key -> lib/pickerCellWhy.ts code, for each empty filings cell (#553 COWORK #69). */
+  cellWhy?: Partial<Record<CellWhyColumn, CellWhyCode>>;
+  /**
+   * A's word for a refused cell ("Loss", "Not meaningful", "Neg."), by grid
+   * column, from secValuation's REFUSAL_CELL_WORD (#553 COWORK #102). Shipped
+   * as data because the grid may not import the server module.
+   */
+  cellWord?: Partial<Record<CellWhyColumn, string>>;
+  /**
+   * An estimated (≈) or derived figure's mark, by grid column (#553 COWORK
+   * #102, A's layer). The grid renders a marked figure only through A's
+   * EstimatedValue, with EstimateKey under the table.
+   */
+  cellEst?: Partial<Record<CellWhyColumn, EstimateMark>>;
   /**
    * What period the filed P/E and EPS cover, and the Payout's: "TTM to 30 Jun
    * 2026" or "FY2025" (#553 COWORK #21). The grid shows it as the cell's
@@ -381,23 +449,12 @@ function cleanSymbol(value: unknown) {
   return String(value || "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
 }
 
-// Routes "Open chart" links to /dashboard -- works correctly on both mobile and desktop.
+// Routes "Chart" links to the dashboard's analyser, symbol loaded (#563 COWORK #151).
 function chartHrefFor(symbol: string, href?: string) {
-  const fallback = `/dashboard?symbol=${encodeURIComponent(symbol)}`;
-  const raw = href && href.trim() ? href.trim() : "";
-
-  // Rewrite legacy /?symbol= links to /dashboard?symbol=
-  const normalised = raw.startsWith("/?symbol=")
-    ? raw.replace("/?symbol=", "/dashboard?symbol=")
-    : raw.startsWith("/?")
-    ? raw.replace("/?", "/dashboard?")
-    : raw;
-
-  const base = normalised.startsWith("/dashboard") ? normalised : fallback;
-  return base.includes("#chart") ? base : `${base}#chart`;
+  return chartHrefFrom(href, symbol);
 }
 
-// Inserts extra deep-link query params ahead of the "#chart" fragment.
+// Inserts extra deep-link query params ahead of the "#analyser" fragment.
 function withExtraChartParams(base: string, extra: Record<string, string | number>) {
   const hashIdx = base.indexOf("#");
   const beforeHash = hashIdx >= 0 ? base.slice(0, hashIdx) : base;
@@ -686,6 +743,7 @@ function entriesFromSection(args: {
       stockHref: `/stock/${encodeURIComponent(symbol)}`,
       chartHref: chartHrefForEntry(args.configHref, symbol, item.dashboardHref || record?.dashboardHref, item),
       chartPoints,
+      chartLite: record?.chartLite ?? null,
       badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
       firedIndicators: item.firedIndicators,
       reasons: getFlagReasons(flags, ALL_REASON_DEFS),
@@ -732,7 +790,8 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
       // 0: getBuySignalCount gates the whole score on aboveMA200, so a stock
       // below its MA200 scores 0 while getReasons would still return chips for
       // any other conditions it happens to meet.
-      const qualifies = score > 0;
+      // ON THE PAGE: above MA200 and at least 2 more (#553 COWORK #186 ruling 2).
+      const qualifies = qualifiesBuySignal(score);
       const reasons = qualifies ? getReasons(record, BUY_REASON_DEFS) : [];
       return {
         symbol,
@@ -743,6 +802,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        chartLite: record.chartLite ?? null,
         // Same Signals column, same source, same rule as the universe branch --
         // this page feeds the identical grid, so leaving it out showed a blank
         // column on every row of /top-stocks-with-buy-signals.
@@ -764,7 +824,9 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
       // Same reasoning as buySignals above -- blank the note, score pill and
       // chips for rows meeting no bearish conditions, since they're only
       // visible once Sell Signals has been unticked.
-      const qualifies = score > 0;
+      // ON THE PAGE: 2+ of the 5, one of them a reading rather than a plain
+      // below-MA state (#553 COWORK #186 ruling 3).
+      const qualifies = qualifiesSellSignal(record, score);
       const reasons = qualifies ? getReasons(record, SELL_REASON_DEFS) : [];
       return {
         symbol,
@@ -775,6 +837,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        chartLite: record.chartLite ?? null,
         // As above -- /top-stocks-with-sell-signals feeds the same grid.
         firedIndicators: firedIndicatorsFor(record, signalsSource),
         ...flagsFromRecord(record),
@@ -806,6 +869,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        chartLite: record.chartLite ?? null,
         // Which checks fired, for the Signals column. This is the UNIVERSE
         // path, so without it the column populated only for the ~20 rows a page
         // that also appear in a section (which carry their own firedIndicators
@@ -873,11 +937,16 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         // join rather than two that can disagree.
         if (item.trendSeries && entry.chartPoints.length) {
           entry.chartPoints = attachTrendHelper(entry.chartPoints, item.trendSeries);
+        } else if (item.trendSeries) {
+          // No bars on the row any more (cut 1): the grid attaches the line,
+          // with the same attachTrendHelper, once it has fetched the bars.
+          entry.trendSeries = item.trendSeries;
         }
         if (item.tone) entry.tone = item.tone;
         const badge = [item.timeframe, item.indicator].filter(Boolean).join(" · ");
         if (badge) entry.badge = badge;
         if (item.firedIndicators?.length) entry.firedIndicators = item.firedIndicators;
+        if (item.epsGrowth) entry.epsGrowth = item.epsGrowth;
         return { entry, rank: hit.rank };
       });
 
@@ -938,8 +1007,8 @@ function buildCategoryFlags(sections: PickerSection[], signalRecords: SignalReco
 
   for (const record of signalRecords) {
     if (!record.symbol) continue;
-    if (getBuySignalCount(record) > 0) setFlag(record.symbol, "hasBuySignal");
-    if (getSellSignalCount(record) > 0) setFlag(record.symbol, "hasSellSignal");
+    if (qualifiesBuySignal(getBuySignalCount(record))) setFlag(record.symbol, "hasBuySignal");
+    if (qualifiesSellSignal(record, getSellSignalCount(record))) setFlag(record.symbol, "hasSellSignal");
   }
 
   return flags;
@@ -963,20 +1032,18 @@ function valueForPredicateField(entry: ResultEntry, field: string): unknown {
   if (field !== "price" && field !== "changePct" && field !== "volume") return direct;
   if (typeof direct === "number" && Number.isFinite(direct)) return direct;
 
-  const points = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
-  const last = points[points.length - 1];
-  if (!last) return undefined;
+  // The bars or, since #553 COWORK #214, their summary: the same rowBars the grid reads.
+  const bars = rowBars(entry);
+  if (!bars.closes.length && bars.lastVolume === null) return undefined;
 
   if (field === "price") {
-    return Number.isFinite(last.close) ? last.close : undefined;
+    return bars.lastClose ?? undefined;
   }
   if (field === "volume") {
-    return typeof last.volume === "number" && Number.isFinite(last.volume) ? last.volume : undefined;
+    return bars.lastVolume ?? undefined;
   }
 
-  const prev = points.length > 1 ? points[points.length - 2] : undefined;
-  const lastClose = Number.isFinite(last.close) ? last.close : null;
-  const prevClose = prev && Number.isFinite(prev.close) ? prev.close : null;
+  const { lastClose, prevClose } = bars;
   return lastClose != null && prevClose != null && prevClose !== 0
     ? ((lastClose - prevClose) / prevClose) * 100
     : undefined;
@@ -1069,7 +1136,9 @@ async function getPickerData(config: PickerResultConfig) {
     // URL. That self-request looked like an anonymous bot to our own Vercel
     // firewall; going in-process removes it entirely. See
     // claude/pickers-firewall-selfblock-2026-07-17.md.
-    const payload = (await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
+    // The page's own name on the bandwidth meter (#553 COWORK #214): "pg-" + its slug.
+    const caller = `pg-${config.href.replace(/^\//, "").replace(/[^a-z0-9-]/g, "-")}`.slice(0, 40);
+    const payload = (await getPickersData(SITE_ORIGIN, { caller })) as unknown as PickersPayload;
     const sections = Array.isArray(payload.sections) ? payload.sections : [];
     const signalRecords = Array.isArray(payload.signalRecords) ? payload.signalRecords : [];
 
@@ -1104,6 +1173,9 @@ async function getPickerData(config: PickerResultConfig) {
     // is a real state (a cold pool) and must not render as a fabricated range.
     let priceOldestTs: number | null = null;
     let priceNewestTs: number | null = null;
+    // Step 5 (#553 COWORK #98): on PRICE_PROVIDER_POOL=tiingo the Volume column
+    // is the last EOD bar's consolidated volume, and the footer says so.
+    let volumeLabel: string | null = null;
 
     // Merge in category-membership flags (Buy Signals, Sell Signals, Best
     // Trend, Divergence, ATH Breakouts, 3-Month Highs, Macro S/R) so
@@ -1122,12 +1194,22 @@ async function getPickerData(config: PickerResultConfig) {
       const nameMap = await getCompanyNameMap();
       if (nameMap.size) {
         for (const entry of entries) {
-          const name = nameMap.get(entry.symbol);
+          const name = nameMap.get(entry.symbol) ?? nameMap.get(toDotted(entry.symbol));
           if (name) entry.companyName = name;
         }
       }
     } catch {
       // names are optional
+    }
+    // THE COMMITTED FLOOR (#553 COWORK #69: MKC-V showed no name). The live
+    // directory spells dual-class and preferred listings dotted (MKC.V) while
+    // the universe is dashed, and the directory can be unreachable; a row the
+    // live map misses takes the committed directory snapshot's name, else SEC's
+    // registrant name (gridCompanyName), never an invented one.
+    for (const entry of entries) {
+      if (entry.companyName) continue;
+      const name = cleanName(gridCompanyName(entry.symbol));
+      if (name) entry.companyName = name;
     }
 
     // One switch for where Market Cap comes from (see the filings overlay).
@@ -1189,6 +1271,7 @@ async function getPickerData(config: PickerResultConfig) {
           if (p.price != null) entry.price = p.price;
           if (p.changePct != null) entry.changePct = p.changePct;
           if (p.volume != null) entry.volume = p.volume;
+          if (p.volume != null && p.volumeLabel) volumeLabel = p.volumeLabel;
           if (p.marketCap != null && !secMarketCap) entry.marketCap = p.marketCap;
           if (p.pe != null) entry.peRatio = p.pe;
           // THE SPREAD, NOT A SINGLE MOMENT. Rows on one page are refreshed on
@@ -1217,6 +1300,10 @@ async function getPickerData(config: PickerResultConfig) {
     // for the list-view tabs. Redis-ONLY read (see stockDataCache) -- warmed by
     // the warm-stock-data cron, so a page render never spends an FMP call. Any
     // symbol not yet warmed just shows "--" in those tab columns.
+    // THE PERFORMANCE TAB ON TIINGO (#553 CODE-B #94 B6). With the Pickers on
+    // Tiingo the five returns come from the build (signalRecords[].perf,
+    // computed from the stored EOD bars), never from FMP's stockDataCache.
+    const perfOnTiingo = priceProviderFor("PICKERS") === "tiingo";
     try {
       const extra = await readCachedStockDataBulk(entries.map((e) => e.symbol));
       if (extra.size) {
@@ -1241,15 +1328,25 @@ async function getPickerData(config: PickerResultConfig) {
           if (d.rating) entry.rating = d.rating;
           if (d.analystCount != null) entry.analystCount = d.analystCount;
           if (d.priceTarget != null) entry.priceTarget = d.priceTarget;
-          if (d.perf1w != null) entry.perf1w = d.perf1w;
-          if (d.perf1m != null) entry.perf1m = d.perf1m;
-          if (d.perf6m != null) entry.perf6m = d.perf6m;
-          if (d.perfYtd != null) entry.perfYtd = d.perfYtd;
-          if (d.perf1y != null) entry.perf1y = d.perf1y;
+          if (!perfOnTiingo) {
+            if (d.perf1w != null) entry.perf1w = d.perf1w;
+            if (d.perf1m != null) entry.perf1m = d.perf1m;
+            if (d.perf6m != null) entry.perf6m = d.perf6m;
+            if (d.perfYtd != null) entry.perfYtd = d.perfYtd;
+            if (d.perf1y != null) entry.perf1y = d.perf1y;
+          }
         }
       }
     } catch {
       // extended data is optional
+    }
+    {
+      const perfBySymbol = new Map<string, PerfRow>();
+      for (const record of signalRecords) {
+        const symbol = cleanSymbol(record.symbol);
+        if (symbol && record.perf) perfBySymbol.set(symbol, record.perf);
+      }
+      for (const entry of entries) applyPerf(entry, perfBySymbol.get(entry.symbol), perfOnTiingo);
     }
 
     // HIDDEN FIELDS ARE NOT SHIPPED (lib/pickerHiddenFields.ts, 2026-09-23).
@@ -1273,7 +1370,15 @@ async function getPickerData(config: PickerResultConfig) {
         const secRows = await readSecPickerRows(entries.map((e) => e.symbol));
         for (const entry of entries) {
           const row = secRows.get(entry.symbol);
-          if (!row) continue;
+          if (!row) {
+            // NOT A COMMON SHARE (#553 COWORK #168 item 2): a preferred or a
+            // note has no stock ratios to show, so its valuation cells read
+            // "n/a" with the reason, not the missing-data dash.
+            if (excludedFromFundamentals(entry.symbol) === "debt-or-preferred") {
+              entry.cellWhy = { ...entry.cellWhy, ...NOT_COMMON_WHY };
+            }
+            continue;
+          }
           const shown = valueForPredicateField(entry, "price");
           const figures = applySecPickerRow(row, typeof shown === "number" ? shown : null);
           const rec = entry as unknown as Record<string, unknown>;
@@ -1298,6 +1403,28 @@ async function getPickerData(config: PickerResultConfig) {
             else delete entry.payoutBasis;
           }
           entry.fundamentalsFrom = "sec";
+          // THE DIVIDEND'S MARK (#553 COWORK #184 item 1): only beside a figure shown.
+          if (row.div?.cut && figures.divPerShare !== null) entry.divCut = row.div.cut;
+          else delete entry.divCut;
+          if (row.div?.special && figures.divPerShare !== null) entry.divSpecial = row.div.special;
+          else delete entry.divSpecial;
+          // WHY EACH EMPTY CELL IS EMPTY (#553 COWORK #69): a short code per
+          // refused column, read from A's refusals; the grid turns it into a
+          // reason on hover or tap (lib/pickerCellWhy.ts holds the words).
+          const why = secPickerWhy(row, typeof shown === "number" ? shown : null, figures, earnings, entry.industry);
+          if (Object.keys(why).length) entry.cellWhy = why;
+          else delete entry.cellWhy;
+          // A's WORDS AND MARKS (#553 COWORK #102): the word for a refused
+          // cell where A gives one, and the mark on an estimated or derived
+          // figure. Both are data; the grid renders them.
+          const words = secPickerWords(why);
+          if (Object.keys(words).length) entry.cellWord = words;
+          else delete entry.cellWord;
+          // A rate filer's payout divides its estimated Div ($): marked too (COWORK #210).
+          const payoutMark = payoutRateMark(row, earnings);
+          const marks = payoutMark ? { ...figures.marks, payout: payoutMark } : figures.marks;
+          if (marks) entry.cellEst = marks;
+          else delete entry.cellEst;
         }
       } catch {
         // A failed read leaves the stored values, as before this block existed.
@@ -1345,10 +1472,25 @@ async function getPickerData(config: PickerResultConfig) {
           )
         : entries;
 
+    // THE EMPTY-BUILD GUARD (#553 COWORK #155, lib/pickerEmptyGuard.ts): a
+    // fundamental screen that matches nothing because its field is missing
+    // is not published. At runtime the throw keeps the last good ISR render;
+    // at build there is none, so the empty box ships with noindex.
+    let emptyGuardNoindex = false;
+    const guard = implausibleEmpty(presetPredicates, entries, seoEntries.length, valueForPredicateField);
+    if (guard.tripped) {
+      const atBuild = process.env.NEXT_PHASE === "phase-production-build";
+      if (!atBuild) throw new PickerEmptyGuardError(emptyGuardLine(config.href, guard, false));
+      console.warn(emptyGuardLine(config.href, guard, true));
+      emptyGuardNoindex = true;
+    }
+
     return {
+      emptyGuardNoindex,
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
       priceOldestTs,
       priceNewestTs,
+      volumeLabel,
       universeSize: typeof payload.universeSize === "number" ? payload.universeSize : null,
       dynamicUniverseCount: typeof payload.dynamicUniverseCount === "number" ? payload.dynamicUniverseCount : null,
       entries,
@@ -1456,8 +1598,14 @@ const ORDERED_PICKER_HREFS = new Set<string>([
 ]);
 
 export default async function PickerResultPage({ config }: { config: PickerResultConfig }) {
-  const { entries, seoEntries, updatedAt, priceOldestTs, priceNewestTs, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
+  const { entries, seoEntries, updatedAt, priceOldestTs, priceNewestTs, volumeLabel, universeSize, dynamicUniverseCount, foundCount, emptyGuardNoindex } = await getPickerData(config);
+  // The price column is Tiingo's when either switch is on: PICKERS (the
+  // history and signals, step 2) or POOL (the price, % change and volume,
+  // step 5). Either way the footer carries the linked credit (COWORK #92).
+  const tiingoPrices = priceProviderFor("PICKERS") === "tiingo" || priceProviderFor("POOL") === "tiingo";
+  const priceWindow = formatPriceWindow(priceOldestTs, priceNewestTs);
   const initialVisibleCount = config.maxItems ?? 36;
+  const ranking = pageRanking(config);
 
   // THE ROWS THIS PAGE ACTUALLY PUTS ON SCREEN, recorded for the price-tier
   // signal. Everything past initialVisibleCount sits behind "Show more"
@@ -1557,6 +1705,9 @@ export default async function PickerResultPage({ config }: { config: PickerResul
   return (
     <WatermarkVisibilityProvider>
       <main className="pickerResultPage">
+        {/* Build-time trip of the empty-build guard: an empty fundamental
+            screen is never indexed (React hoists this into <head>). */}
+        {emptyGuardNoindex ? <meta name="robots" content="noindex, follow" /> : null}
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
         <style>{`
@@ -1612,8 +1763,11 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .screenerProse { margin-top: 40px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.08); max-width: 780px; }
         .screenerProseBlock + .screenerProseBlock { margin-top: 28px; }
         .screenerProse h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.3; font-weight: 800; color: #e2e8f0; letter-spacing: -0.01em; }
-        .screenerProse p { margin: 0 0 12px; font-size: 14.5px; line-height: 1.75; color: rgba(226,232,240,0.78); }
+        /* Read text: the reading floor (--fs-read / --lh-read, #553 COWORK #152). */
+        .screenerProse p { margin: 0 0 12px; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(226,232,240,0.78); }
         .screenerProse p:last-child { margin-bottom: 0; }
+        .screenerRelated { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: var(--fs-read); line-height: var(--lh-read); }
+        .screenerRelated a { color: #7dd3fc; }
 
         .screenerGuideLink { margin-top: 28px; padding: 16px 18px; border: 1px solid rgba(96,165,250,0.28); border-radius: 16px; background: rgba(59,130,246,0.08); max-width: 780px; }
         .screenerGuideEyebrow { display: block; font-size: 10.5px; font-weight: 900; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(147,197,253,0.85); margin-bottom: 6px; }
@@ -1622,7 +1776,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         @media (max-width: 640px) {
           .screenerProse { margin-top: 32px; padding-top: 22px; }
           .screenerProse h2 { font-size: 17.5px; }
-          .screenerProse p { font-size: 14px; line-height: 1.7; }
+          .screenerProse p { font-size: var(--fs-read); line-height: var(--lh-read); }
         }
 
         .seeMoreWrap { margin-top: 20px; display: flex; justify-content: center; }
@@ -1689,7 +1843,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .chgUp { color: #4ade80; font-weight: 800; }
         .chgDown { color: #f87171; font-weight: 800; }
         .muted { color: rgba(148,163,184,0.55); }
-        .basisFy { margin-left: 4px; font-size: 0.72em; letter-spacing: 0.02em; color: rgba(148,163,184,0.75); }
+        /* .basisFy (the "FY" marker) is styled in PickerResultsGrid: it now sits BEFORE the figure (#553 COWORK #90). */
         @keyframes pickerHighlightPulse {
           0% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
           15% { box-shadow: 0 0 0 4px rgba(245,197,66,0.35); border-color: #f5c542; }
@@ -1806,6 +1960,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
 
                 <PickerResultsGrid
                   entries={entries}
+                  ranking={ranking}
                   initialVisibleCount={initialVisibleCount}
                   configHref={config.href}
                   configTitle={config.title}
@@ -1860,6 +2015,18 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                         ))}
                       </div>
                     ))}
+                    {config.relatedScreens?.length ? (
+                      <div className="screenerProseBlock">
+                        <h2>Related screens</h2>
+                        <ul className="screenerRelated">
+                          {config.relatedScreens.map((r) => (
+                            <li key={r.href}>
+                              <Link href={r.href}>{r.label}</Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </section>
                 ) : null}
 
@@ -1878,10 +2045,11 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                   universeSize={universeSize}
                   poolSize={dynamicUniverseCount}
                   updatedLabel={formatUpdatedAt(updatedAt)}
-                  priceLabel={formatPriceWindow(priceOldestTs, priceNewestTs)}
-                  marketDataCredit={priceProviderFor("PICKERS") === "tiingo" ? TIINGO_CREDIT : null}
-                  marketDataHref={priceProviderFor("PICKERS") === "tiingo" ? TIINGO_URL : null}
+                  priceLabel={priceWindow && volumeLabel ? `${priceWindow} · volume ${volumeLabel}` : priceWindow}
                 />
+                {/* THE CREDIT IN THE CARD'S CORNER (#553 COWORK #200 item 2): "powered by
+                    Tiingo", linked, under the same switch as the old status-line credit. */}
+                {tiingoPrices ? <TiingoCredit style={{ margin: "4px 12px 0" }} /> : null}
 
                 <HideWatermarksBar />
               </div>

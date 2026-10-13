@@ -52,6 +52,10 @@ export type InsightSnapshot = {
   ma50Pct?: number | null;
   ma200Pct?: number | null;
   weeklyMA200Pct?: number | null;
+  /** Tiingo path only: what the price is ("close, 29 Sep 2026"), read at render. */
+  priceLabel?: string;
+  /** Set when the priced fields were read at render from stored Tiingo bars. */
+  source?: "tiingo";
   chartPoints: InsightSnapshotPoint[];
 };
 
@@ -142,7 +146,7 @@ function readSortedPosts(): BlogPost[] {
       slug,
       title: String(data.title || ""),
       date: formatFrontmatterDate(data.date),
-      excerpt: String(data.excerpt || ""),
+      excerpt: String(data.excerpt || data.summary || ""), // a new-format post (#563 COWORK #132) has a summary, no excerpt
       symbol: data.symbol ? String(data.symbol) : null,
       timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
       chartBars: normalizeChartBars(data.chartBars),
@@ -298,7 +302,7 @@ export function getPostBySlug(slug: string): BlogPostFull {
     slug,
     title: String(data.title || ""),
     date: formatFrontmatterDate(data.date),
-    excerpt: String(data.excerpt || ""),
+    excerpt: String(data.excerpt || data.summary || ""), // a new-format post (#563 COWORK #132) has a summary, no excerpt
     symbol: data.symbol ? String(data.symbol) : null,
     timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
     chartBars: normalizeChartBars(data.chartBars),

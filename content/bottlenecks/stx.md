@@ -42,6 +42,7 @@ supplyChain:
   - name: In-house heads & media production (Seagate)
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Not a single company. Seagate builds a large share of its own
       recording heads and magnetic media rather than buying them from
@@ -51,6 +52,7 @@ supplyChain:
   - name: Broadcom Inc.
     ticker: AVGO
     pct: 18
+    grade: some
     blurb: >
       Seagate's hard drives typically run controller and preamplifier
       silicon from Broadcom, one of a small number of merchant chipmakers
@@ -59,6 +61,7 @@ supplyChain:
   - name: Nidec Corporation
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Japan's Nidec is the dominant global supplier of spindle motors for
       hard disk drives, and Seagate purchases spindle motors from outside
@@ -68,6 +71,7 @@ supplyChain:
   - name: Hoya Corporation
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Hoya is a leading maker of glass substrates used in hard drive
       platters, including the glass media adopted for Seagate's newer HAMR
@@ -78,6 +82,7 @@ supplyChain:
   - name: Resonac Holdings (formerly Showa Denko)
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Resonac has partnered with Seagate since 2021 to jointly develop the
       heat-assisted magnetic recording (HAMR) media used in Seagate's
@@ -88,6 +93,7 @@ supplyChain:
   - name: TDK Corporation
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Through its SAE Magnetics subsidiary, TDK has long supplied recording
       heads to hard drive makers, supplementing the heads Seagate produces
@@ -97,6 +103,7 @@ supplyChain:
   - name: Contract PCB assemblers
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Not a single company. Seagate outsources assembly of the printed
       circuit boards used in its disk drives, SSDs and storage subsystems
@@ -105,6 +112,7 @@ supplyChain:
   - name: Aluminum & specialty substrate suppliers
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Not a single company. Seagate sources aluminum disk substrates and
       other specialty media inputs from a limited pool of outside vendors
@@ -114,6 +122,7 @@ customers:
   - name: Amazon.com, Inc.
     ticker: AMZN
     pct: 20
+    grade: some
     blurb: >
       AWS is widely reported as one of Seagate's largest buyers of
       mass-capacity nearline drives for cloud data centers, and Seagate
@@ -122,6 +131,7 @@ customers:
   - name: Microsoft Corporation
     ticker: MSFT
     pct: 17
+    grade: some
     blurb: >
       Microsoft's Azure cloud build-out is one of the largest sources of
       demand for Seagate's high-capacity Exos and HAMR-based Mozaic
@@ -130,6 +140,7 @@ customers:
   - name: Alphabet Inc. (Google)
     ticker: GOOGL
     pct: 14
+    grade: some
     blurb: >
       Google Cloud is among the hyperscale operators reported to be
       qualifying and purchasing Seagate's latest high-capacity HAMR drives
@@ -137,6 +148,7 @@ customers:
   - name: Meta Platforms, Inc.
     ticker: META
     pct: 11
+    grade: some
     blurb: >
       Meta's data centers, which store enormous volumes of user and AI
       training data, are a significant outlet for Seagate's nearline hard
@@ -145,6 +157,7 @@ customers:
   - name: Other cloud & enterprise data-center customers
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       Not a single company. Additional cloud service providers and
       enterprise storage system builders round out Seagate's data-center
@@ -153,6 +166,7 @@ customers:
   - name: Dell Technologies Inc.
     ticker: DELL
     pct: 8
+    grade: spread
     blurb: >
       Dell has historically been one of Seagate's largest single customers,
       once accounting for around 10-12% of Seagate's consolidated revenue
@@ -161,6 +175,7 @@ customers:
   - name: IT distributors
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. Seagate sells a meaningful share of its drives
       through independent electronics and IT distributors, who resell to
@@ -168,6 +183,7 @@ customers:
   - name: Retail & consumer channel
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Not a single company. Branded external drives, NAS drives and gaming
       storage sold through retail and e-commerce outlets make up a smaller

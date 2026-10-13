@@ -50,15 +50,15 @@ const JOB_RUN_TTL_SECONDS = 60 * 60 * 24 * 8;
  * recordJobRun("<key>") call somewhere in the tree. A declaration nothing checks
  * is just a second thing that can be wrong.
  */
+// RETIRED 2026-10-12 (#553 COWORK #212, owner GO): warm-fundamentals,
+// warm-stock-data and warm-earnings. FMP ended and each only skipped
+// ("no FMP_API_KEY"); their crons and routes are gone.
 export const JOBS = {
-  "warm-fundamentals": { label: "Fundamentals (hourly, :22)", instrumented: true, cron: "22 * * * *" },
   // MOVED 06:50 -> 07:50 so the delisting sweep reads bar stamps the SAME
   // morning's warm-picker-universe (07:02) wrote, instead of yesterday's.
   // scripts/check-bar-stamp-ordering.mjs asserts the ordering and the margin.
   "warm-screener-fundamentals": { label: "Screener fundamentals (daily 07:50)", instrumented: true, cron: "50 7 * * *" },
   "warm-price-pool": { label: "Price pool (every 5 min)", instrumented: true, cron: "*/5 * * * *" },
-  "warm-stock-data": { label: "Stock data (every 10 min, :07)", instrumented: true, cron: "7-57/10 * * * *" },
-  "warm-earnings": { label: "Earnings (daily 07:15)", instrumented: true, cron: "15 7 * * *" },
   "warm-picker-universe": { label: "Picker universe (daily 07:02)", instrumented: true, cron: "2 7 * * *" },
   // Relay B, 2026-09-23: the picker pages' SEC fundamentals. Reads stored fact
   // sets only (no upstream call); 05:35 is after sec-facts' 04:20 refresh.
@@ -118,6 +118,12 @@ export const JOBS = {
   // 00:45 is after Tiingo's evening corrections; 02:45 retries a night whose
   // date had not landed, and is one GET when the first run completed.
   "tiingo-eod": { label: "Tiingo EOD history re-pull (daily 00:45, retry 02:45)", instrumented: true, cron: "45 0,2 * * *" },
+  // The stock-page cold fill (#553 COWORK #121/#123). Tiingo's supported-ticker
+  // list, the cold fill's admission set, daily after the EOD retry.
+  "tiingo-supported": { label: "Tiingo supported-ticker list (daily 03:25)", instrumented: true, cron: "25 3 * * *" },
+  // Fills symbols the cold fill queued (crawlers, capped visitors, timeouts),
+  // around the clock, so "it may take a few minutes" holds at night too.
+  "tiingo-cold-queue": { label: "Tiingo cold-fill queue (every 10 min from :03)", instrumented: true, cron: "3-59/10 * * * *" },
 } as const;
 
 /**

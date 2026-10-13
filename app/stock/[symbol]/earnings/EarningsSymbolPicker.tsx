@@ -169,7 +169,7 @@ export default function EarningsSymbolPicker({
 
           .earningsSymbolPickerInput {
             min-height: 48px !important;
-            font-size: 16px !important;
+            font-size: var(--fs-read) !important;
           }
 
           .earningsSymbolPickerButton {
@@ -180,7 +180,7 @@ export default function EarningsSymbolPicker({
       `}</style>
       <div
         style={{
-          fontSize: 12,
+          fontSize: "var(--fs-label)",
           fontWeight: 950,
           letterSpacing: "0.08em",
           textTransform: "uppercase",
@@ -193,8 +193,8 @@ export default function EarningsSymbolPicker({
 
       <div
         style={{
-          fontSize: 13,
-          lineHeight: 1.5,
+          fontSize: "var(--fs-read)",
+          lineHeight: "var(--lh-read)",
           color: "rgba(241,245,249,0.66)",
           marginBottom: 10,
         }}
@@ -240,7 +240,7 @@ export default function EarningsSymbolPicker({
               background: "rgba(15,23,42,0.72)",
               color: "#f8fafc",
               padding: "0 14px",
-              fontSize: 15,
+              fontSize: "0.9375rem",
               fontWeight: 900,
               outline: "none",
               textTransform: "uppercase",
@@ -254,7 +254,7 @@ export default function EarningsSymbolPicker({
             <div
               style={{
                 marginTop: 7,
-                fontSize: 12,
+                fontSize: "var(--fs-read)",
                 color: "rgba(248,113,113,0.92)",
                 fontWeight: 800,
               }}
@@ -277,6 +277,7 @@ export default function EarningsSymbolPicker({
             background:
               "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
             color: "#dbeafe",
+            fontSize: "var(--fs-label)",
             fontWeight: 900,
             cursor: canGo ? "pointer" : "not-allowed",
             opacity: canGo ? 1 : 0.45,

@@ -12,10 +12,11 @@
 import { Redis } from "@upstash/redis";
 import { reportDatesKey, type StoredReportDates } from "./secReportDatesStore";
 import { outlookFrom } from "./symbolOutlook";
+import { JOB_REDIS_OPTS } from "./redisCacheMode";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(JOB_REDIS_OPTS)
     : null;
 
 /** PURE: is this outlook "poll every 2 hours"? */

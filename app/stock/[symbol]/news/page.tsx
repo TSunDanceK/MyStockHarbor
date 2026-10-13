@@ -41,11 +41,13 @@ import {
   type SecEarningsSnapshot,
 } from "@/lib/server/secEarningsSnapshot";
 import SharedLatestEarningsCard from "@/app/components/LatestEarningsCard";
+import { hasFiledEarnings } from "@/lib/server/filedEarnings";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
-import { readSurfacePrice, TIINGO_CREDIT, TIINGO_URL, type SurfacePrice } from "@/lib/server/tiingoSurfacePrice";
+import { readSurfacePrice, type SurfacePrice } from "@/lib/server/tiingoSurfacePrice";
+import TiingoCredit, { TiingoLink } from "@/app/components/TiingoCredit";
 
 export const runtime = "nodejs";
 
@@ -638,7 +640,9 @@ export default async function StockNewsPage({ params }: Props) {
   // resolveProfile falls through to the SEC classification leg — still no network
   // request, still no throw, and it logs any symbol that neither leg answers for.
   const endFundamentals = beginTiming("page", `fundamentals ${upper}`);
-  const fundamentals = (await readCachedFundamentalsBulk([upper])).get(upper) ?? null;
+  // `raw` (#690 follow-up, 2026-10-03): profile fields only (sector,
+  // industry), which the read-time cap/P/E overlay never changes.
+  const fundamentals = (await readCachedFundamentalsBulk([upper], { raw: true })).get(upper) ?? null;
   endFundamentals();
   const profile = resolveProfile(upper, fundamentals);
   const artBucket = bucketFor(
@@ -769,7 +773,7 @@ export default async function StockNewsPage({ params }: Props) {
                     {/* What the figure is and where it is from (#553 COWORK #56,
                         #563 COWORK #31 §4-5): the credit is linked. */}
                     <div style={{ marginTop: 4, fontSize: 11, opacity: 0.6, lineHeight: 1.4 }}>
-                      {heroPrice.label} · <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                      {heroPrice.label} · <TiingoLink />
                     </div>
                   </>
                 ) : quote?.price != null ? (
@@ -848,7 +852,7 @@ export default async function StockNewsPage({ params }: Props) {
                     would be empty far more often than it used to be.
 
                 An empty card beside a full snapshot is worse than no card. */}
-            <SharedLatestEarningsCard snapshot={earningsSnapshot} symbol={upper} pageToken={mintQuoteToken()} />
+            <SharedLatestEarningsCard snapshot={earningsSnapshot} symbol={upper} pageToken={mintQuoteToken()} hasFiledEarnings={await hasFiledEarnings(upper)} />
             <section style={sidebarCardStyle}>
               <div style={sectionEyebrowStyle}>Chart context</div>
               <h2 style={sectionTitleSmallStyle}>Technical Picture</h2>
@@ -857,11 +861,7 @@ export default async function StockNewsPage({ params }: Props) {
                 <p style={bodyCopyStyle}>{technicalRead.momentumText}</p>
                 <p style={bodyCopyStyle}>{technicalRead.levelText}</p>
                 {/* The linked credit on the Tiingo history path (#563 COWORK #31 §5). */}
-                {historySource === "tiingo" ? (
-                  <p style={{ ...bodyCopyStyle, fontSize: 12, opacity: 0.7 }}>
-                    <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
-                  </p>
-                ) : null}
+                {historySource === "tiingo" ? <TiingoCredit /> : null}
               </div>
             </section>
           </aside>

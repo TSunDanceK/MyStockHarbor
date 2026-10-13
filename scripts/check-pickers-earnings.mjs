@@ -88,6 +88,17 @@ async function suite(mod, code) {
   const f = mod.applySecEarnings(fyOnly, PRICE);
   ok("a fiscal-year EPS with that year's payout: shown, labelled FY", close(f.payoutRatio, fyPair) && f.payoutBasis === `FY${y.fy}`, JSON.stringify(f));
 
+  // A SPECIAL DIVIDEND IS LEFT OUT (#553 COWORK #184 item 1, PGR): a quarter
+  // over 3x the largest of the other three is taken at their median.
+  const spec = JSON.parse(JSON.stringify(aapl));
+  const di = idx("dividendsDeclaredPerShare");
+  const r = spec.quarters.slice(0, 4).map((q) => q.v[di]);
+  spec.quarters[2].v[di] = r[2] * 20;
+  const others = [r[0], r[1], r[3]].sort((x, z) => x - z);
+  const regular = r[0] + r[1] + others[1] + r[3];
+  const sp = earn(spec);
+  ok("a special dividend is left out of the TTM payout", close(sp.payoutRatio, (regular / inputs.eps.val) * 100), JSON.stringify(sp));
+
   // A loss has no payout, in either period.
   const loss = JSON.parse(JSON.stringify(mixed));
   loss.years[0].v[idx("epsDiluted")] = -1;
@@ -148,9 +159,12 @@ async function suite(mod, code) {
     /const earnings = applySecEarnings\(row, [^)]*\);\s*if \(earnings\) \{\s*for \(const field of SEC_EARNINGS_FIELDS\) \{\s*const v = earnings\[field\];\s*if \(v === null\) delete rec\[field\];/.test(code.page));
   ok("the page carries the basis to the grid", /entry\.epsBasis = earnings\.epsBasis/.test(code.page) && /entry\.payoutBasis = earnings\.payoutBasis/.test(code.page));
   ok("the grid takes a filings row's payout as filed", /if \(e\.fundamentalsFrom === "sec"\) return num\(e\.payoutRatio\);/.test(code.grid));
-  ok("P/E and EPS cells carry their basis", /basisCell\(numCell\(num\(e\.peRatio\)\), num\(e\.peRatio\), e\.epsBasis\)/.test(code.grid) && /basisCell\(numCell\(num\(e\.epsTtm\)\), num\(e\.epsTtm\), e\.epsBasis\)/.test(code.grid));
+  ok("P/E and EPS cells carry their basis", /basisCell\(numCell\(num\(e\.peRatio\)\), num\(e\.peRatio\), e\.epsBasis, inert\)/.test(code.grid) && /basisCell\(numCell\(num\(e\.epsTtm\)\), num\(e\.epsTtm\), e\.epsBasis, inert\)/.test(code.grid));
   ok("a withheld figure shows its reason on hover", /return basis \? <span className="muted" title=\{basis\}>–<\/span> : MUTED;/.test(code.grid));
-  ok("a fiscal-year figure is marked FY", /basis\.startsWith\("FY"\) \? <span className="basisFy">FY<\/span>/.test(code.grid));
+  // #553 COWORK #90: the marker moved into PickerCellMarks.tsx, BEFORE the
+  // figure; check-pickers-cell-why.mjs renders it and asserts the order.
+  ok("a fiscal-year figure is marked FY", /return <BasisCell value=\{value\} basis=\{basis\} inert=\{inert\} \/>;/.test(code.grid) &&
+    /\{fy \? \(\s*<TipMark text=\{fyMarkWords\(basis\)\}[^>]*className="basisFy"/.test(fs.readFileSync("app/components/PickerCellMarks.tsx", "utf8")));
   ok("the header explains the column", /title=\{col\.tip\}/.test(code.grid));
   // 5. The preview reads and writes its own copy (#553 COWORK #60), so the
   // production job's 05:35 rewrite cannot erase a seeded preview.
@@ -175,7 +189,11 @@ const mut = (label, s, from, to) => {
   return s.replace(from, () => to);
 };
 const MUTANTS = [
-  ["payout divides FY dividends by TTM EPS", () => [mut("period", src, `if (dps && dps.basis === "four-quarters" && dps.periodEnd === eps.periodEnd) {`, `if (dps) {`), code]],
+  // Was "payout divides FY dividends by TTM EPS" (`if (dps) {`): since #553
+  // COWORK #184 item 1 the four quarters are read by dividendRead, whose period
+  // is the quarters' own, so that mutant is equivalent. The FY/TTM mix stays
+  // pinned by the "mixed periods" assertions; this one pins the special.
+  ["payout keeps a special dividend", () => [mut("special", src, `return { val: (read.four.regular / eps.val) * 100,`, `return { val: ((read.four.regular + read.four.special) / eps.val) * 100,`), code]],
   ["a fiscal-year loss still gets a payout", () => [mut("loss", src, `if (e === null || e <= 0 || d === null) return null;`, `if (e === null || d === null) return null;`), code]],
   ["ADS EPS shown", () => [mut("ads", src, `const epsTtm = usd && !ads && eps ? eps.val : null;`, `const epsTtm = usd && eps ? eps.val : null;`), code]],
   ["the basis always reads TTM", () => [mut("label", src, "const label = b.basis === \"fiscal-year\" ? (b.fiscalYear ? `FY${b.fiscalYear}` : `FY to ${date}`) : `TTM to ${date}`;", "const label = `TTM to ${date}`;"), code]],
@@ -187,9 +205,9 @@ const MUTANTS = [
   ["a TTM row shows the fiscal-year payout (labelled only)", () => [mut("withhold", src, `const payout = periodsDiffer ? null : filed;`, `const payout = filed;`), code]],
   ["withheld with no reason", () => [mut("reason", src, `: periodsDiffer ? PAYOUT_PERIODS_DIFFER : null,`, `: null,`), code]],
   ["the withheld dash has no tooltip", () => [src, { ...code, grid: mut("tip", code.grid, `return basis ? <span className="muted" title={basis}>–</span> : MUTED;`, `return MUTED;`) }]],
-  ["the row drops A's refusals (raw per-ordinary FY EPS gets a P/E)", () => [mut("refusals", src, `    inputs: { shares: inputs.shares, refusals: inputs.refusals },\n    m: multipleInputs(set),`, `    inputs: { shares: inputs.shares, refusals: [] },\n    m: multipleInputs(set),`), code]],
+  ["the row drops A's refusals (raw per-ordinary FY EPS gets a P/E)", () => [mut("refusals", src, `    inputs: { shares: inputs.shares, refusals: inputs.refusals, ...(inputs.sic ? { sic: inputs.sic } : {}) },\n    m: multipleInputs(set),`, `    inputs: { shares: inputs.shares, refusals: [], ...(inputs.sic ? { sic: inputs.sic } : {}) },\n    m: multipleInputs(set),`), code]],
   ["an unconverted currency keeps its EPS (and so a P/E)", () => [mut("usd", mut("usd-read", src, `const pe = usd ? ok(peRatio(inputs, price)) : null;`, `const pe = ok(peRatio(inputs, price));`), `      eps: null,\n      payout: null,`, `      eps: inputs.eps,\n      payout: null,`), code]],
-  ["no FY marker", () => [src, { ...code, grid: mut("fy", code.grid, `<span className="basisFy">FY</span>`, `null`) }]],
+  ["no FY marker", () => [src, { ...code, grid: mut("fy", code.grid, `return <BasisCell value={value} basis={basis} inert={inert} />;`, `return value;`) }]],
 ];
 
 let survived = 0;

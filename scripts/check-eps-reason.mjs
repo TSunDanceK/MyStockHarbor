@@ -57,8 +57,11 @@ for (const [sym, words, short] of [["BRK.B", CLASS, "Per share class"], ["MPLX",
   check(`${sym}: view.epsReason`, view.epsReason === words, String(view.epsReason));
   const q4 = /^Q4 /.test(view.latestLabel);
   if (!q4) {
-    check(`${sym}: income statement names it`, render("SecIncomeStatementCard", view).includes(words));
-    check(`${sym}: snapshot card names it`, render("SecSnapshotCard", view).includes(words));
+    // THE SHORT WORD, THE REASON ITS NOTE (#552 COWORK #124): the cell reads
+    // the short form and the full reason rides on the same element.
+    const named = (raw) => raw.includes(`>${short}<`) && raw.includes(words.replace(/'/g, "&#x27;"));
+    check(`${sym}: income statement names it`, named(renderRaw("SecIncomeStatementCard", view)));
+    check(`${sym}: snapshot card names it`, named(renderRaw("SecSnapshotCard", view)));
     const score = S.scoreFromSec(S.buildSecEarningsView(set), sym, { status: "ready", set, cold: false });
     const snap = S.buildSecEarningsSnapshot({ symbol: sym, view: S.buildSecEarningsView(set), score, reported: null, nextReport: { kind: "none" } });
     check(`${sym}: stock-page tile names it`, snap.eps.emptyReason === words, String(snap.eps.emptyReason));

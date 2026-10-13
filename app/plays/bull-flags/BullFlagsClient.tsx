@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import React, { useEffect, useMemo, useState } from "react";
+import { chartHrefFrom } from "@/lib/chartHref";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ScreenerShell from "@/app/components/ScreenerShell";
 import TimeframeFilterDropdown from "@/app/components/TimeframeFilterDropdown";
 import { useWatermarkHidden } from "@/app/components/WatermarkVisibility";
+import { playsBarsFromTiingo, resolvePlaysRefresh, type PlaysHistoryInfo } from "@/lib/playsPublic";
+import { readBullFlagsPagePayload } from "@/app/plays/playsPagePayload";
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
 
@@ -73,6 +76,10 @@ export type PlaysPayload = {
   dynamicUniversePreview?: string[];
   estimatedApiCalls?: number;
   sections?: PlaySection[];
+  /** Where the scan's bars came from (#553 B4); the credit follows it. */
+  history?: PlaysHistoryInfo;
+  /** Set by the public route when it removed the Tiingo bars (lib/playsPublic.ts). */
+  chartPointsWithheld?: boolean;
   error?: string;
 };
 
@@ -183,10 +190,9 @@ function PlayChartWatermark() {
   );
 }
 
+// Lands on the analyser with the play's symbol and timeframe (#563 COWORK #151).
 function toChartHref(href: string) {
-  if (!href) return "/#chart";
-  if (href.includes("#chart")) return href;
-  return `${href}#chart`;
+  return chartHrefFrom(href);
 }
 
 function useIsNarrowScreen() {
@@ -212,8 +218,11 @@ function useIsNarrowScreen() {
 
 export default function BullFlagsClient({
   initialPayload,
+  marketDataCredit,
 }: {
   initialPayload?: PlaysPayload | null;
+  /** The linked Tiingo credit, rendered by the server page when the scan is on Tiingo (#553 B4). */
+  marketDataCredit?: React.ReactNode;
 } = {}) {
   const initial = normalizeInitialPayload(initialPayload);
 
@@ -235,6 +244,15 @@ export default function BullFlagsClient({
     "ALL" | "M" | "W" | "D"
   >("ALL");
   const isNarrow = useIsNarrowScreen();
+  // THE CREDIT FOLLOWS THE BARS (#553 COWORK #103, 2026-10-03): shown only
+  // while the payload on screen records that its bars came from Tiingo.
+  const [history, setHistory] = useState<PlaysHistoryInfo>(initialPayload?.history ?? null);
+  // The scan on screen whose items still carry their bars (the server props).
+  const shownWithBars = useRef<string | null>(
+    initialPayload && !initialPayload.chartPointsWithheld && typeof initialPayload.updatedAt === "string"
+      ? initialPayload.updatedAt
+      : null
+  );
 
   async function loadPlays(force = false, options: { silent?: boolean } = {}) {
     const silent = options.silent ?? false;
@@ -252,9 +270,26 @@ export default function BullFlagsClient({
 
       if (!res.ok) throw new Error("Plays API failed");
 
-      const data = (await res.json()) as PlaysPayload;
+      const routeData = (await res.json()) as PlaysPayload;
 
-      if (data?.error) throw new Error(data.error);
+      if (routeData?.error) throw new Error(routeData.error);
+
+      // THE ROUTE CARRIES NO TIINGO BARS (#553 COWORK #103, 2026-10-03). The
+      // scan already on screen keeps its server-rendered bars; a newer one
+      // is read in-process through the page's server action, never through
+      // public JSON (lib/playsPublic.ts).
+      const data = await resolvePlaysRefresh(
+        routeData,
+        shownWithBars.current,
+        async () => (await readBullFlagsPagePayload()) as unknown as PlaysPayload | null
+      );
+
+      if (!data) return;
+      if (data.error) throw new Error(data.error);
+
+      shownWithBars.current =
+        !data.chartPointsWithheld && typeof data.updatedAt === "string" ? data.updatedAt : null;
+      setHistory(data.history ?? null);
 
       setSections(Array.isArray(data?.sections) ? data.sections : []);
       setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
@@ -278,6 +313,8 @@ export default function BullFlagsClient({
 
       if (!force && !silent) {
         setSections([]);
+        setHistory(null);
+        shownWithBars.current = null;
         setUpdatedAt(null);
         setUniverseSize(null);
         setDynamicUniverseCount(null);
@@ -362,6 +399,7 @@ export default function BullFlagsClient({
         <>
           Current scan · Universe {universeSize == null ? "Live" : universeSize}
           {dynamicUniverseCount == null ? "" : ` (+${dynamicUniverseCount} dynamic)`} · Macro {macroCount} · Weekly {weeklyCount} · Daily {dailyCount} · Top score {topScore == null ? "—" : topScore} · Updated {formatDate(updatedAt)}
+          {marketDataCredit && playsBarsFromTiingo(history) ? <> · {marketDataCredit}</> : null}
         </>
       }
     >
@@ -505,6 +543,7 @@ export default function BullFlagsClient({
                   gap: isNarrow ? 12 : 14,
                 }}
               >
+                <style>{PLAY_CARD_LINK_CSS}</style>
                 {section.items.map((item) => (
                   <article
                     key={`${section.title}-${item.symbol}-${item.timeframe}`}
@@ -515,6 +554,10 @@ export default function BullFlagsClient({
                       background:
                         "linear-gradient(180deg, rgba(15,23,42,0.86), rgba(2,6,23,0.94))",
                       boxShadow: "0 16px 36px rgba(0,0,0,0.22)",
+                      // A column, so the quiet link sits at the card's foot
+                      // and cards in a row end level (#553 COWORK #162).
+                      display: "flex",
+                      flexDirection: "column",
                     }}
                   >
                     <div
@@ -617,7 +660,15 @@ export default function BullFlagsClient({
                       </div>
                     </div>
 
-                    <MiniPlayChart item={item} />
+                    {/* The chart opens the full chart too (#553 COWORK #162),
+                        under the same name as the link below. */}
+                    <a
+                      href={toChartHref(item.dashboardHref)}
+                      aria-label={`Open full chart for ${item.symbol}`}
+                      className="playChartArea"
+                    >
+                      <MiniPlayChart item={item} />
+                    </a>
 
                     <p
                       style={{
@@ -631,24 +682,17 @@ export default function BullFlagsClient({
                       {item.note}
                     </p>
 
+                    {/* HIDDEN 2026-10-05 (#553 COWORK #162, owner): the full-width
+                        filled "Open full chart" button (with its per-pattern tint)
+                        made the card look "built for a kid". A quiet link at the
+                        foot instead, the tone of the other picker cards; the
+                        44 px tap area is padding, not a box. */}
                     <a
                       href={toChartHref(item.dashboardHref)}
-                      style={{
-                        marginTop: 14,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        textDecoration: "none",
-                        borderRadius: 14,
-                        padding: "11px 12px",
-                        background: "rgba(34,197,94,0.24)",
-                        border: "1px solid rgba(34,197,94,0.42)",
-                        color: "#dcfce7",
-                        fontSize: 13,
-                        fontWeight: 950,
-                      }}
+                      aria-label={`Open full chart for ${item.symbol}`}
+                      className="playOpenLink"
                     >
-                      Open full chart
+                      Open full chart →
                     </a>
                   </article>
                 ))}
@@ -659,6 +703,19 @@ export default function BullFlagsClient({
     </ScreenerShell>
   );
 }
+
+// The chart-play card's quiet link and clickable chart (#553 COWORK #162).
+const PLAY_CARD_LINK_CSS = `
+.playChartArea { display: block; color: inherit; text-decoration: none; border-radius: 12px; }
+.playChartArea:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+.playOpenLink {
+  margin-top: auto; align-self: flex-end; display: inline-flex; align-items: center; min-height: 44px;
+  padding: 6px 2px 0; color: #7dd3fc; font-size: var(--fs-label); font-weight: 700; text-decoration: none;
+  background: none; border: 0;
+}
+.playOpenLink:hover, .playOpenLink:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.playOpenLink:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; border-radius: 2px; }
+`;
 
 function MiniPlayChart({ item }: { item: PlayItem }) {
   const isNarrow = useIsNarrowScreen();

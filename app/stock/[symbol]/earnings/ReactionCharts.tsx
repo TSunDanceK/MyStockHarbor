@@ -7,6 +7,8 @@
 // SingleValueBarChart are unchanged; DriftBarChart replaces the line chart
 // "Did the move hold?" drew (owner review of AVAV, round 2).
 import type React from "react";
+import { ReactionDaySlider } from "./ReactionDaySlider";
+import type { ReactionDayRow } from "./reactionDays";
 
 // Nominal width (in "user units") for the chart SVGs below. Choosing a
 // realistic pixel-scale number here -- rather than an abstract 0-100 -- and
@@ -238,12 +240,14 @@ const pct1 = (v: number | null) => (v == null || !Number.isFinite(v) ? "—" : p
  * company's own SEC filings.
  */
 export function PriceReactionCard({
-  symbol, latest, reaction, drift, datesFromSec, uncoveredLabels, noPriceHistoryNote,
+  symbol, latest, reaction, drift, days = [], datesFromSec, uncoveredLabels, noPriceHistoryNote,
 }: {
   symbol: string;
   latest: { label: string; reactionPct: number | null; volumeMultiple: number | null; volumeSessions?: number | null } | null;
   reaction: SingleBarPoint[];
   drift: DriftQuarter[];
+  /** The day slider's rows (#552 COWORK #189); empty keeps the fixed 1/5/20 chart. */
+  days?: ReactionDayRow[];
   datesFromSec: boolean;
   uncoveredLabels: string[];
   noPriceHistoryNote: string;
@@ -287,7 +291,15 @@ export function PriceReactionCard({
       ) : (
         <p>Not enough price history is available yet to chart the reaction around earnings.</p>
       )}
-      {hasAnyDrift ? (
+      {days.length > 0 ? (
+        // THE DAY SLIDER REPLACES THE FIXED 1 / 5 / 20 BARS (#552 COWORK #189):
+        // the same three horizons are its presets, and every day between is a drag away.
+        <div className="chartBlock" data-day-slider-block="">
+          <div className="chartBlockTitle">Did the move hold?</div>
+          <div className="chartBlockSub">Drag a report to any of the 30 trading days after it: the figure is that day&apos;s close against the close before the report. S&amp;P is SPY over the same days.</div>
+          <ReactionDaySlider rows={days} />
+        </div>
+      ) : hasAnyDrift ? (
         <div className="chartBlock">
           <div className="chartBlockTitle">Did the move hold?</div>
           <div className="chartBlockSub">Price vs. the pre-earnings close, after 1, 5 and 20 trading days.</div>

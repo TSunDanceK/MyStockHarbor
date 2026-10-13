@@ -78,13 +78,13 @@ async function suite(M) {
   // Pure helpers.
   ok("a pipeline counts as its length", M.upstashCommandCount(`${REDIS}/pipeline`, JSON.stringify([[1], [2], [3]])) === 3);
   ok("a single command counts as 1", M.upstashCommandCount(`${REDIS}/`, JSON.stringify(["get", "k"])) === 1);
-  ok("the run record is recognised", M.isRunRecordWrite(JSON.stringify(["set", "msh:job-run:v1:warm-stock-data", "{}"])));
+  ok("the run record is recognised", M.isRunRecordWrite(JSON.stringify(["set", "msh:job-run:v1:warm-pickers-sec", "{}"])));
   ok("other writes are not", !M.isRunRecordWrite(JSON.stringify(["set", "msh:other", "{}"])));
   ok("an auto-pipelined batch of only run-record SETs is", M.isRunRecordWrite(JSON.stringify([["set", "msh:job-run:v1:ipo-refresh", "{}"]])));
   ok("a batch mixing a run-record SET with other commands is NOT", !M.isRunRecordWrite(JSON.stringify([["set", "msh:job-run:v1:ipo-refresh", "{}"], ["get", "k"]])));
-  ok("kill switch: explicit false disables", M.jobEnabledIn({ "warm-stock-data": false }, "warm-stock-data") === false);
-  ok("kill switch: { enabled: false } disables", M.jobEnabledIn({ "warm-stock-data": { enabled: false } }, "warm-stock-data") === false);
-  ok("kill switch: anything else is enabled", M.jobEnabledIn({ "warm-stock-data": "no" }, "warm-stock-data") && M.jobEnabledIn(null, "warm-stock-data"));
+  ok("kill switch: explicit false disables", M.jobEnabledIn({ "warm-pickers-sec": false }, "warm-pickers-sec") === false);
+  ok("kill switch: { enabled: false } disables", M.jobEnabledIn({ "warm-pickers-sec": { enabled: false } }, "warm-pickers-sec") === false);
+  ok("kill switch: anything else is enabled", M.jobEnabledIn({ "warm-pickers-sec": "no" }, "warm-pickers-sec") && M.jobEnabledIn(null, "warm-pickers-sec"));
 
   // 1. A normal run passes through and is counted.
   reset();
@@ -176,7 +176,8 @@ failures += base.length;
 
 // ── 2. wiring ────────────────────────────────────────────────────────────────
 console.log("\n=== 2. every guarded job's route exports the guarded GET ===");
-const JOBS = ["warm-stock-data", "warm-fundamentals", "warm-screener-fundamentals", "warm-picker-universe", "warm-pickers-sec", "ipo-refresh"];
+// warm-stock-data and warm-fundamentals retired 2026-10-12 (#553 COWORK #212).
+const JOBS = ["warm-screener-fundamentals", "warm-picker-universe", "warm-pickers-sec", "ipo-refresh"];
 for (const job of JOBS) {
   const route = read(`app/api/jobs/${job}/route.ts`);
   const pass = new RegExp(`export const GET = guardJob\\("${job}", handleGET\\);`).test(route) && !/export async function GET\b/.test(route);

@@ -165,7 +165,7 @@ const rules = {
     /if \(priceProviderFor\("NEWS_TECH", env\) !== "tiingo"\) return null;/.test(src) &&
     /readTiingoHistory\(/.test(src) && !/readTiingoPool|fetch\(|tiingo\.com/.test(src),
   "news tech: the linked credit, and one source for the technical text": (src) =>
-    /historySource === "tiingo" \? \(\s*<p[^>]*>\s*<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src) &&
+    /historySource === "tiingo" \? <TiingoCredit \/> : null/.test(src) &&
     /const technicalPrice = historySource === "tiingo" \? heroPrice\?\.price \?\? lastClose : quote\?\.price \?\? lastClose;/.test(src) &&
     /buildTechnicalRead\(\{ symbol: upper, price: technicalPrice,/.test(src),
   "the AI routes read no price source": (src) => !PRICE_READS.test(src),
@@ -191,9 +191,9 @@ const rules = {
   // 4. credit
   "SPX: the linked credit under the chart": (src) => /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src),
   "video page: the linked credit with the label": (src) =>
-    /stockData\?\.priceLabel/.test(src) && /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src),
+    /\{stockData\?\.priceLabel \? \(\s*<>\s*<p [^>]*>\s*Price: \{stockData\.priceLabel\}[\s\S]*?<\/p>\s*<TiingoCredit \/>\s*<\/>/.test(src),
   "news hero: the label and the linked credit": (src) =>
-    /\{heroPrice\.label\}/.test(src) && /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src),
+    /\{heroPrice\.label\} · <TiingoLink \/>/.test(src),
   // 5. SPY says so
   "SPX: the approved caption, shown only for SPY": (src) =>
     /chartSeries === "SPY" \?/.test(src) &&
@@ -210,7 +210,7 @@ const rules = {
     /ma50Note: ma50 === null \? SHORT_HISTORY_NOTE : null/.test(src) && /ma200Note: ma200 === null \? SHORT_HISTORY_NOTE : null/.test(src),
   // 7. PR 2 follow-ups (#563 COWORK #45)
   "videos: a withheld market cap says why, in A's words": (src) =>
-    /import \{ marketCap, peRatio, REFUSAL_WORDS \} from "@\/lib\/server\/secValuation";/.test(src) &&
+    /import \{[^}]*\bREFUSAL_WORDS\b[^}]*\} from "@\/lib\/server\/secValuation";/.test(src) &&
     /cap && cap\.ok \? null\s*: cap && !cap\.ok \? capitalise\(cap\.detail \?\? REFUSAL_WORDS\[cap\.why\]\)\s*: NO_SEC_SHARE_COUNT_NOTE/.test(src),
   "video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows": (src) =>
     /label: "Market cap", value: stockData\.marketCap \?\? "—", note: stockData\.marketCap \? null : stockData\.marketCapNote \?\? null/.test(src) &&
@@ -219,9 +219,21 @@ const rules = {
   "video page: the tile notes open on tap, keyboard and hover (A's ReasonedValue)": (src) =>
     /note: stockData\.ma50Note/.test(src) && /note: stockData\.ma200Note/.test(src) && /import \{ ReasonedValue \} from "@\/app\/components\/EstimatedValue";/.test(src) &&
     /<ReasonedValue text=\{value\} reason=\{note\} \/>/.test(src) && !/title=\{note/.test(src),
+  // 9. FY P/E fallback (#563 COWORK #50): only on "not on file", A's gate, labelled
+  //    with A's one copy of the FY wording (#552 COWORK #117), never a local one
+  "videos: the P/E falls back to the full year only when twelve months aren't on file": (src) =>
+    /import \{ fyPeLabel, fyPeNote, fyPeRatio, marketCap, peRatio, REFUSAL_WORDS \} from "@\/lib\/server\/secValuation";/.test(src) &&
+    /ttmPe && !ttmPe\.ok && ttmPe\.why === "no-twelve-month-eps" \? fyPeRatio\(valuation, surface\.price\) : null/.test(src) &&
+    /const pe = usesFy \? fyPe : ttmPe;/.test(src) &&
+    /peLabel: usesFy && valuation\?\.fyEps \? fyPeLabel\(valuation\.fyEps\) : null/.test(src) &&
+    /peNote: usesFy && valuation\?\.fyEps \? fyPeNote\(valuation\.fyEps\) : null/.test(src) &&
+    !/function fyPe(Label|Note)\(|P\/E \(FY|aren't on file/.test(src),
+  "video page: the P/E tile takes the FY label and note": (src) =>
+    /label: stockData\.peLabel \?\? "P\/E \(TTM\)"/.test(src) && /note: stockData\.peNote \?\? null/.test(src),
   // 8. B13 (#563 COWORK #46): the news price never falls back to Yahoo
   "news data: the quote is FMP only, with no Yahoo quote left": (src) =>
-    /async function fetchQuote\(symbol: string\): Promise<Quote \| null> \{\s*return fetchFmpQuote\(symbol\);\s*\}/.test(src) &&
+    // B's #553 COWORK #132 (spend cut 2) adds a NEWS_HERO=tiingo early return; still FMP-only, no Yahoo.
+    /async function fetchQuote\(symbol: string\): Promise<Quote \| null> \{\s*(?:\/\/[^\n]*\n\s*)*(?:if \(priceProviderFor\("NEWS_HERO"\) === "tiingo"\) return null;\s*)?return fetchFmpQuote\(symbol\);\s*\}/.test(src) &&
     !/fetchYahooQuote|meta\.regularMarketPrice/.test(src),
   "news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close": (src) =>
     /\{heroPrice \? \(/.test(src) && /\) : quote\?\.price != null \? \(/.test(src) &&
@@ -253,6 +265,8 @@ const sourceOf = {
   "videos: a withheld market cap says why, in A's words": FILES.video,
   "video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows": FILES.videoPage,
   "news data: the quote is FMP only, with no Yahoo quote left": FILES.newsData,
+  "videos: the P/E falls back to the full year only when twelve months aren't on file": FILES.video,
+  "video page: the P/E tile takes the FY label and note": FILES.videoPage,
   "news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close": FILES.news,
 };
 const srcFor = (name) => [sourceOf[name]].flat().map((f) => (name.includes("caption") ? raw(f) : code(f))).join("\n");
@@ -271,7 +285,7 @@ const mutants = [
   ["news tech: the Tiingo history only through the NEWS_TECH gate, Yahoo kept as the fallback", (s) => s.replace('return { points: await fetchYahooHistory(symbol), source: "yahoo" };', 'return { points: [], source: "yahoo" };')],
   ["news tech: the reader is gated and reads only the stored history", (s) => s.replace('if (priceProviderFor("NEWS_TECH", env) !== "tiingo") return null;', "")],
   ["news tech: the linked credit, and one source for the technical text", (s) => s.replace("price: technicalPrice,", "price: quote?.price ?? lastClose,")],
-  ["news tech: the linked credit, and one source for the technical text", (s) => s.replace(/historySource === "tiingo" \? \(\s*<p([^>]*)>\s*<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, 'historySource === "tiingo" ? (<p$1>{TIINGO_CREDIT}')],
+  ["news tech: the linked credit, and one source for the technical text", (s) => s.replace('historySource === "tiingo" ? <TiingoCredit /> : null', "null")],
   ["the AI routes read no price source", (s) => `${s}\nconst p = getDailyHistory("X");`],
   ["the news AI components get no hero price", (s) => s.replace("<AiInsightCard", "<AiInsightCard heroPrice={heroPrice}")],
   ["SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept", (s) => s.replace('priceProviderFor("SPX") === "tiingo"', "true")],
@@ -279,8 +293,8 @@ const mutants = [
   ["videos: gated, FMP path kept after a Tiingo miss", (s) => s.replace("if (tiingo) return tiingo;", "return tiingo;")],
   ["videos: market cap and P/E through A's modules, not copied", (s) => s.replace("peRatio(valuation, surface.price)", "surface.price / 20")],
   ["news hero: gated, and the FMP title reads skipped only when Tiingo answered", (s) => s.replace('priceProviderFor("NEWS_HERO") !== "tiingo") return null', "false) return null")],
-  ["SPX: the linked credit under the chart", (s) => s.replace("<a href={TIINGO_URL}", "<span data-href={TIINGO_URL}")],
-  ["video page: the linked credit with the label", (s) => s.replace(/<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "{TIINGO_CREDIT}")],
+  ["SPX: the linked credit under the chart", (s) => s.replaceAll("<a href={TIINGO_URL}", "<span data-href={TIINGO_URL}")],
+  ["video page: the linked credit with the label", (s) => s.replace("<TiingoCredit />", "")],
   ["news hero: the label and the linked credit", (s) => s.replace("{heroPrice.label}", "")],
   ["SPX: the approved caption, shown only for SPY", (s) => s.replace("Levels quoted in the text refer to the S&amp;P 500 index.", "")],
   ["SPX chart: the symbol is passed through, not fixed to SPX", (s) => s.replace("symbol={symbol}", 'symbol="SPX"')],
@@ -292,6 +306,12 @@ const mutants = [
   ["videos: a withheld market cap says why, in A's words", (s) => s.replace("capitalise(cap.detail ?? REFUSAL_WORDS[cap.why])", "null")],
   ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace(", note: stockData.marketCap ? null : stockData.marketCapNote ?? null", "")],
   ["video page: the cap tile explains its dash, and the caption names the cap rule only when a cap shows", (s) => s.replace('{stockData.marketCap ? " Market cap is the SEC cover-page share count times that price." : null}', " Market cap is the SEC cover-page share count times that price.")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace('ttmPe.why === "no-twelve-month-eps" ? fyPeRatio', "true ? fyPeRatio")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace("const pe = usesFy ? fyPe : ttmPe;", "const pe = ttmPe;")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace("peNote: usesFy && valuation?.fyEps ? fyPeNote(valuation.fyEps) : null", "peNote: null")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => s.replace("? fyPeLabel(valuation.fyEps) : null", "? null : null")],
+  ["videos: the P/E falls back to the full year only when twelve months aren't on file", (s) => `${s}\nexport function fyPeNote(e: unknown) { return "local copy"; }\n`],
+  ["video page: the P/E tile takes the FY label and note", (s) => s.replace('label: stockData.peLabel ?? "P/E (TTM)"', 'label: "P/E (TTM)"')],
   ["news data: the quote is FMP only, with no Yahoo quote left", (s) => s.replace("  return fetchFmpQuote(symbol);\n}", "  return (await fetchFmpQuote(symbol)) ?? fetchYahooQuote(symbol);\n}")],
   ["news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close", (s) => s.replace("<div style={heroMetricValueStyle}>{formatMoney(quote.price)}</div>", "<div style={heroMetricValueStyle}>{formatMoney(quote?.price ?? lastClose)}</div>")],
   ["news hero: Tiingo, then FMP, then a hedged no-price state, never a stored close", (s) => s.replace("{NEWS_HERO_NO_PRICE}</div>", "{formatMoney(lastClose)}</div>")],

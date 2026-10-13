@@ -42,6 +42,7 @@ supplyChain:
   - name: Aluminum Producers (Global Market)
     ticker: null
     pct: 35
+    grade: hard
     blurb: >
       Not a single company. Modine's 10-K states it buys aluminum from
       "several domestic and foreign suppliers." Aluminum is the core material
@@ -52,6 +53,7 @@ supplyChain:
   - name: Third-Party Fabricated Components & Electronics
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Not a single company. Modine's 10-K warns it "uses a limited number of
       suppliers for certain components" beyond raw metals — including
@@ -61,6 +63,7 @@ supplyChain:
   - name: Copper Producers (Global Market)
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. Copper tube-and-fin heat exchangers, electrical
       windings, and the copper piping inside Modine's coolant distribution
@@ -70,6 +73,7 @@ supplyChain:
   - name: Data-Center Cooling Component Supply
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. In the fourth quarter of fiscal 2026, Modine
       disclosed it began experiencing shortages of specific data-center
@@ -79,6 +83,7 @@ supplyChain:
   - name: Steel & Stainless Steel/Nickel Suppliers (Global Market)
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company. Steel and nickel-bearing stainless steel go into
       structural frames, cabinets, and select heat-exchanger and data-center
@@ -88,6 +93,7 @@ customers:
   - name: Confidential Hyperscale/AI Data-Center Customer
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Modine's fiscal 2026 10-K discloses that one unnamed "global technology
       customer" in its Climate Solutions/Data Centers business accounted for
@@ -100,6 +106,7 @@ customers:
   - name: Volkswagen Group
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       Volkswagen Group — via its Traton subsidiary brands MAN, Scania, and
       International/Navistar, plus Audi and Porsche — is named directly in
@@ -110,6 +117,7 @@ customers:
   - name: Volvo Group
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       AB Volvo — parent of Mack Trucks and Renault Trucks, both named in
       Modine's disclosed top-customer list — buys engine cooling modules and
@@ -119,6 +127,7 @@ customers:
   - name: Stellantis
     ticker: STLA
     pct: 13
+    grade: some
     blurb: >
       Stellantis — the automaker formed from Chrysler, Fiat, Peugeot-Citroën,
       and VM Motori — is named directly in Modine's 10-K as one of its ten
@@ -127,6 +136,7 @@ customers:
   - name: Caterpillar
     ticker: CAT
     pct: 12
+    grade: some
     blurb: >
       Caterpillar is a named top-ten Modine customer, sourcing engine cooling
       packages and thermal management systems for its construction and mining
@@ -135,6 +145,7 @@ customers:
   - name: Deere & Company
     ticker: DE
     pct: 10
+    grade: some
     blurb: >
       Deere & Company is a named top-ten Modine customer, buying radiators
       and cooling packages for its agricultural and construction equipment;
@@ -143,6 +154,7 @@ customers:
   - name: Trane Technologies
     ticker: TT
     pct: 6
+    grade: spread
     blurb: >
       Trane Technologies is named among Modine's top-ten customers, reflecting
       sales from Modine's HVAC Technologies business supplying coils and
@@ -150,6 +162,7 @@ customers:
   - name: Carrier Global
     ticker: CARR
     pct: 4
+    grade: spread
     blurb: >
       Carrier Global is also named among Modine's largest disclosed
       customers, buying heat-transfer coils and components for its commercial

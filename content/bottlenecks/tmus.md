@@ -33,6 +33,7 @@ supplyChain:
   - name: Ericsson
     ticker: ERIC
     pct: 19
+    grade: some
     blurb: >
       Ericsson is one of T-Mobile's two primary radio access network (RAN)
       vendors, supplying much of the 5G equipment behind T-Mobile's network
@@ -40,6 +41,7 @@ supplyChain:
   - name: Nokia
     ticker: NOK
     pct: 17
+    grade: some
     blurb: >
       Nokia is T-Mobile's other core RAN and network infrastructure
       partner, supplying 5G radio and core equipment and working with
@@ -47,6 +49,7 @@ supplyChain:
   - name: Apple
     ticker: AAPL
     pct: 15
+    grade: some
     blurb: >
       The iPhone is the dominant device sold through T-Mobile's stores and
       online channels, accounting for the large majority of smartphones
@@ -54,6 +57,7 @@ supplyChain:
   - name: Samsung Electronics
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Samsung is T-Mobile's other major handset supplier, providing Galaxy
       smartphones that make up most of the non-Apple devices sold across
@@ -63,6 +67,7 @@ supplyChain:
   - name: Crown Castle
     ticker: CCI
     pct: 10
+    grade: some
     blurb: >
       Crown Castle is one of T-Mobile's largest tower and small-cell
       landlords, tied to a long-term strategic leasing agreement covering
@@ -70,6 +75,7 @@ supplyChain:
   - name: American Tower
     ticker: AMT
     pct: 8
+    grade: spread
     blurb: >
       American Tower leases cell site space to T-Mobile across its
       nationwide tower portfolio, making it one of the carrier's key
@@ -77,6 +83,7 @@ supplyChain:
   - name: SBA Communications
     ticker: SBAC
     pct: 6
+    grade: spread
     blurb: >
       SBA Communications is another major publicly traded tower operator
       that leases site space to T-Mobile, rounding out the trio of tower
@@ -84,6 +91,7 @@ supplyChain:
   - name: Nvidia
     ticker: NVDA
     pct: 5
+    grade: spread
     blurb: >
       Nvidia supplies AI computing hardware for T-Mobile's AI-RAN push, a
       joint effort with Ericsson and Nokia to bring AI processing into the
@@ -91,6 +99,7 @@ supplyChain:
   - name: U.S. spectrum licenses (FCC)
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Not a single company. T-Mobile's network depends on wireless
       spectrum licenses issued by the Federal Communications Commission,
@@ -100,6 +109,7 @@ supplyChain:
   - name: Other network, device & IT suppliers
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       Not a single company. T-Mobile also relies on a broader group of
       smaller equipment, billing, device, and data-transport vendors to
@@ -108,6 +118,7 @@ customers:
   - name: Postpaid customers
     ticker: null
     pct: 79
+    grade: hard
     blurb: >
       Not a single company. Postpaid consumer and business subscribers
       generate the large majority of T-Mobile's service revenue, spread
@@ -116,6 +127,7 @@ customers:
   - name: Prepaid customers
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Not a single company. Prepaid subscribers, served through brands
       including Metro by T-Mobile, generate a meaningful share of service
@@ -123,6 +135,7 @@ customers:
   - name: Wholesale & MVNO partners
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Not a single company. T-Mobile sells network capacity on a wholesale
       basis to mobile virtual network operators that resell service under

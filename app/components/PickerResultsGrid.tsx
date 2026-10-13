@@ -9,6 +9,16 @@ import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pick
 import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
 import { valueSatisfies } from "@/lib/screenerFields";
 import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
+import { NOT_APPLICABLE_CODES, cellMark, cellWhyWords, compareForSort, dividendMark } from "@/lib/pickerCellWhy";
+import { BasisCell, CellWhyNote, TipMark, WhyMark } from "@/app/components/PickerCellMarks";
+import { perfAsOfLabel, perfWhyText, type PerfKey } from "@/lib/pickerPerf";
+import { EstimateCell, PickerEstimateKey, estimateMarksShown } from "@/app/components/PickerEstimateMarks";
+import { fmtZ, latestStretch } from "@/lib/stretch";
+import { compareEpsGrowth, epsGrowthText, epsGrowthTip } from "@/lib/epsGrowthView";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
+import { rowBars } from "@/lib/pickerChartLite";
+import { usePickerBars } from "@/app/components/usePickerBars";
+import { attachTrendHelper } from "@/lib/ta/trendHelper";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -89,9 +99,12 @@ function chartOverlayForEntry(configHref: string, configTitle: string, entry: Re
   // There is no client fallback, so a page routed here without that series
   // draws nothing rather than drawing something wrong.
   //
-  // The WEEKLY flip pages are excluded on purpose: their flip is weekly and this
-  // line is daily, so it would contradict the flip date in the same row.
-  if (href.includes("trend-flip") && !href.includes("weekly")) return "trendHelper" as const;
+  // The WEEKLY flip pages draw it too since #553 COWORK #186 ruling 6: their
+  // cards are weekly candles with the WEEKLY line (pickersBuilder's
+  // weeklyFlipPoints / weeklyTrendSeries), so the colour changes on the flip
+  // week the row prints. Before that they were excluded, because a daily line
+  // would have contradicted the weekly flip date.
+  if (href.includes("trend-flip")) return "trendHelper" as const;
   if (href.includes("best-trend")) return "trend" as const;
   // The 50-day pages drew bare candles: the chart has always computed ma50 (and
   // falls back to a local SMA when the payload omits it) but only ever drew it
@@ -281,27 +294,33 @@ const DEFAULT_METRIC_BY_TAB: Record<TabKey, string> = {
 
 type SortState = { key: string; dir: "asc" | "desc" } | null;
 
+/** The phone Sort list's entry for the page's own ranking (#553 COWORK #161). */
+const RANKING_OPTION = "__ranking";
+
 type DerivedRow = {
   price: number | null;
   changePct: number | null;
   volume: number | null;
   ma200: number | null;
+  /** z20 from the row's stored closes (#553 COWORK #144): the oversold/overbought pages' Stretch column. */
+  stretch: number | null;
 };
 
 // Price / % change / volume come from the ~15-min price pool when present
 // (attached server-side), falling back to the end-of-day close/volume from
 // chartPoints on a pool miss. 200 MA always comes from chartPoints.
+// SINCE #553 COWORK #214 the row usually carries the bars' summary (chartLite)
+// instead of the bars; rowBars reads whichever is there, the same way the
+// server's predicate twin does.
 function deriveRow(entry: ResultEntry): DerivedRow {
-  const pts = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
-  const last = pts.length ? pts[pts.length - 1] : undefined;
-  const prev = pts.length > 1 ? pts[pts.length - 2] : undefined;
-  const eodClose = last && Number.isFinite(last.close) ? last.close : null;
-  const prevClose = prev && Number.isFinite(prev.close) ? prev.close : null;
+  const bars = rowBars(entry);
+  const eodClose = bars.lastClose;
+  const prevClose = bars.prevClose;
   const eodChangePct =
     eodClose != null && prevClose != null && prevClose !== 0
       ? ((eodClose - prevClose) / prevClose) * 100
       : null;
-  const eodVolume = last && typeof last.volume === "number" && Number.isFinite(last.volume) ? last.volume : null;
+  const eodVolume = bars.lastVolume;
 
   // Zero is treated as MISSING for price and volume, not as data.
   //
@@ -325,8 +344,10 @@ function deriveRow(entry: ResultEntry): DerivedRow {
     typeof entry.volume === "number" && Number.isFinite(entry.volume) && entry.volume > 0
       ? entry.volume
       : eodVolume;
-  const ma200 = last && typeof last.ma200 === "number" && Number.isFinite(last.ma200) ? last.ma200 : null;
-  return { price, changePct, volume, ma200 };
+  const ma200 = bars.lastMa200;
+  // The stored end-of-day closes, never the live pool price: z20 is a closing measure.
+  const stretch = latestStretch(bars.closes);
+  return { price, changePct, volume, ma200, stretch };
 }
 
 function num(v: unknown): number | null {
@@ -411,6 +432,43 @@ const ICON_LIST = (
   </CtrlIcon>
 );
 
+// THE PREVIEW BUTTON'S THUMBNAILS (#553 COWORK #161, owner pick B). The old
+// "Charts" pill was a hidden feature; the button now shows what it does: a
+// 3 x 2 grid of mini line charts (decorative, not real data) on a dark tile,
+// or, in chart view, a small table of rows. aria-hidden: the label says it.
+const MINI_LINES: { d: string; up: boolean }[] = [
+  { d: "M2 14 L7 11 L11 12 L16 6 L20 4", up: true },
+  { d: "M2 5 L6 8 L11 7 L15 12 L20 14", up: false },
+  { d: "M2 12 L6 13 L10 8 L15 9 L20 5", up: true },
+  { d: "M2 6 L7 7 L11 11 L15 10 L20 13", up: false },
+  { d: "M2 13 L6 9 L10 11 L15 7 L20 6", up: true },
+  { d: "M2 9 L6 6 L11 10 L15 9 L20 4", up: true },
+];
+const THUMB_CHARTS = (
+  <svg className="viewThumb" viewBox="0 0 74 42" aria-hidden="true" focusable="false">
+    <rect x="0" y="0" width="74" height="42" rx="6" fill="#0b1220" />
+    {MINI_LINES.map((m, i) => (
+      <g key={i} transform={`translate(${2 + (i % 3) * 24} ${2 + Math.floor(i / 3) * 20})`}>
+        <rect width="22" height="18" rx="3" fill="#111a2e" />
+        <path d={m.d} fill="none" stroke={m.up ? "#22c55e" : "#ef4444"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    ))}
+  </svg>
+);
+const THUMB_TABLE = (
+  <svg className="viewThumb" viewBox="0 0 74 42" aria-hidden="true" focusable="false">
+    <rect x="0" y="0" width="74" height="42" rx="6" fill="#0b1220" />
+    <rect x="6" y="6" width="62" height="6" rx="2" fill="#1e293b" />
+    {[16, 24, 32].map((y) => (
+      <g key={y}>
+        <rect x="6" y={y} width="16" height="4" rx="1.5" fill="#64748b" />
+        <rect x="27" y={y} width="24" height="4" rx="1.5" fill="#334155" />
+        <rect x="56" y={y} width="12" height="4" rx="1.5" fill="#38bdf8" />
+      </g>
+    ))}
+  </svg>
+);
+
 // A table with a header row and columns: the menu swaps which set of figures
 // the results carry, and that is the thing it swaps.
 const ICON_METRICS = (
@@ -447,6 +505,19 @@ function pctCell(v: number | null): ReactNode {
   if (v == null || !Number.isFinite(v)) return MUTED;
   const up = v >= 0;
   return <span className={up ? "chgUp" : "chgDown"}>{up ? "+" : ""}{v.toFixed(2)}%</span>;
+}
+// A PERFORMANCE CELL SAYS WHY IT IS EMPTY, AND THE WHY IS TRUE (#553 CODE-B
+// #94 B6). The reason is the row's own code (lib/pickerPerf.ts): "Not enough
+// price history for this period" only where the stored history really starts
+// after the period does. A computed return names the close it runs to.
+function perfCell(e: ResultEntry, key: PerfKey): ReactNode {
+  const v = num(e[key]);
+  if (v == null || !Number.isFinite(v)) {
+    const why = perfWhyText(e.perfWhy?.[key]);
+    return why ? <span className="muted" title={why}>–</span> : MUTED;
+  }
+  const asOf = perfAsOfLabel(e.perfAsOf);
+  return asOf ? <span title={asOf}>{pctCell(v)}</span> : pctCell(v);
 }
 function plainPctCell(v: number | null): ReactNode {
   if (v == null || !Number.isFinite(v)) return MUTED;
@@ -571,8 +642,72 @@ type Col = {
   /** Header tooltip, for a column whose meaning needs one line of explanation. */
   tip?: string;
   get: (e: ResultEntry, d: DerivedRow) => string | number | null;
-  cell: (e: ResultEntry, d: DerivedRow) => ReactNode;
+  /** `inert`: inside the phone row's toggle button, where a nested control is invalid. */
+  cell: (e: ResultEntry, d: DerivedRow, inert?: boolean) => ReactNode;
+  /** A row whose empty `get` still has a cell of its own (the small-base EPS change). */
+  ownCell?: (e: ResultEntry) => boolean;
+  /** Breaks a tie the column's own sort leaves (both empty, or equal). */
+  tie?: (a: ResultEntry, b: ResultEntry) => number;
 };
+
+// ── WHY A CELL IS EMPTY (#553 COWORK #69) ───────────────────────────────────
+// Every "–" carries its reason on hover (title) and on tap (a small popover),
+// and a figure that doesn't apply (a bank's Ent. Value, P/S, P/FCF) reads
+// "n/a" in a lighter tone. Filings columns take the code the page attached
+// (entry.cellWhy, from A's refusals); every other dash gets its column's line.
+const COLUMN_DASH_WHY: Record<string, string> = {
+  name: "No company name on file for this listing",
+  industry: "Industry not classified yet",
+  signals: "None of the tracked conditions is met",
+  price: "No current price for this stock",
+  change: "No current price for this stock",
+  volume: "No volume for the latest session",
+  ma200: "Not enough price history for a 200-day average",
+  stretch: "Not enough price history for a 20-day average",
+  epsg: "Not on this screen: no like-for-like filed EPS growth of at least the screen's cut, with revenue up",
+};
+
+/** The Stretch column's header tip (#553 COWORK #144). */
+export const STRETCH_TIP = "Stretch: how many standard deviations the last close sits from its 20-day average. Negative is below, positive above. A description, not a forecast.";
+
+const PERF_KEYS = new Set<string>(["perf1w", "perf1m", "perf6m", "perfYtd", "perf1y"]);
+
+/**
+ * The reason for an empty cell in column `key`, the mark it shows ("–", or a
+ * word cell: "Loss", "Neg.", "n/a" -- #553 COWORK #94), and whether it is "n/a".
+ */
+export function cellWhyFor(e: Pick<ResultEntry, "cellWhy" | "perfWhy" | "cellWord">, key: string): { text: string; mark: string; word: boolean; na: boolean } {
+  // The Performance columns carry their own TRUE reason, computed from the
+  // stored bars at build time (lib/pickerPerf.ts, #553 CODE-B #94 B6), never a
+  // blanket "not enough history".
+  if (PERF_KEYS.has(key)) {
+    const text = perfWhyText(e.perfWhy?.[key as PerfKey]) ?? cellWhyWords(null);
+    return { text, ...cellMark(key, null), na: false };
+  }
+  const code = (e.cellWhy as Record<string, string> | undefined)?.[key];
+  // A's word for this cell, where the page shipped one (#553 COWORK #102).
+  const aWord = (e.cellWord as Record<string, string> | undefined)?.[key];
+  if (code) return { text: cellWhyWords(code), ...cellMark(key, code, aWord), na: NOT_APPLICABLE_CODES.has(code) };
+  return { text: COLUMN_DASH_WHY[key] ?? cellWhyWords(null), ...cellMark(key, null), na: false };
+}
+
+const isEmptyValue = (v: string | number | null) =>
+  v == null || v === "" || (typeof v === "number" && !Number.isFinite(v));
+
+/** A column whose empty cells explain themselves. Exported for the check. */
+export function withWhy(col: Col): Col {
+  if (col.key === "symbol") return col;
+  const filled = col.cell;
+  return {
+    ...col,
+    cell: (e, d, inert) => {
+      if (col.ownCell?.(e)) return filled(e, d, inert);
+      if (!isEmptyValue(col.get(e, d))) return filled(e, d, inert);
+      const why = cellWhyFor(e, col.key);
+      return <WhyMark text={why.text} mark={why.mark} word={why.word} na={why.na} inert={inert} />;
+    },
+  };
+}
 
 // ── THE PERIOD A FILED FIGURE COVERS (#553 COWORK #21) ─────────────────────
 // P/E, EPS and Payout from the filings cover four quarters for most filers and
@@ -581,19 +716,15 @@ type Col = {
 // the cell's tooltip names it ("TTM to 30 Jun 2026" / "FY2025"), and a
 // fiscal-year figure carries a small "FY" so a reader skimming the column sees
 // which numbers are a year old without hovering.
-const BASIS_TIP = "Trailing twelve months from the filings where filed quarterly, else the latest fiscal year (marked FY). Hover a value for its period.";
+const BASIS_TIP = "Trailing twelve months from the filings where filed quarterly, else the latest fiscal year (marked FY before the figure). Hover a value for its period.";
 
-function basisCell(value: ReactNode, v: number | null, basis: string | undefined): ReactNode {
+function basisCell(value: ReactNode, v: number | null, basis: string | undefined, inert?: boolean): ReactNode {
   // A withheld figure (payout whose period differs from the row's EPS, #553
   // COWORK #60) arrives as a null with its reason in `basis`: "–", hover to see why.
   if (v == null || !Number.isFinite(v)) return basis ? <span className="muted" title={basis}>–</span> : MUTED;
   if (!basis) return value;
-  return (
-    <span title={basis}>
-      {value}
-      {basis.startsWith("FY") ? <span className="basisFy">FY</span> : null}
-    </span>
-  );
+  // #553 COWORK #90: "FY" BEFORE the number, in a fixed-width slot (PickerCellMarks).
+  return <BasisCell value={value} basis={basis} inert={inert} />;
 }
 
 // Compact price line for a phone row.
@@ -608,12 +739,17 @@ const SPARK_H = 22;
 const SPARK_MAX_POINTS = 40;
 
 function sparkCloses(entry: ResultEntry): number[] {
+  // The last SPARK_MAX_POINTS bars' finite closes, from the bars or their summary.
   const pts = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
-  const out: number[] = [];
-  for (const p of pts.slice(-SPARK_MAX_POINTS)) {
-    if (typeof p.close === "number" && Number.isFinite(p.close)) out.push(p.close);
+  if (pts.length) {
+    const out: number[] = [];
+    for (const p of pts.slice(-SPARK_MAX_POINTS)) {
+      if (typeof p.close === "number" && Number.isFinite(p.close)) out.push(p.close);
+    }
+    return out;
   }
-  return out;
+  const c = entry.chartLite?.c ?? [];
+  return c.slice(-SPARK_MAX_POINTS).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
 }
 
 function Sparkline({ closes, up }: { closes: number[]; up: boolean }) {
@@ -683,6 +819,7 @@ export default function PickerResultsGrid({
   collapseReasons = false,
   defaultTab = "general",
   screenerControl = null,
+  ranking = null,
 }: {
   entries: ResultEntry[];
   initialVisibleCount?: number;
@@ -715,7 +852,12 @@ export default function PickerResultsGrid({
   // for "which screener", one for "how to view it" -- stacked on top of each
   // other. They're one decision, so they're now one row.
   screenerControl?: ReactNode;
+  // The page's default order in words (PickerResultPage's pageRanking, #553
+  // COWORK #161). Shown above the results while no column sort is applied, and
+  // the way back to it once one is.
+  ranking?: { label: string; short: string } | null;
 }) {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const { predicates, selectedFilters, setMatchCount, setConditionCounts, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   // A page configured to open on a hidden tab opens on General instead.
@@ -762,8 +904,9 @@ export default function PickerResultsGrid({
   // is showing fields that no longer exist on Financials.
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
 
+  // #552 COWORK #197: on an earnings page a row opens the earnings view only with a filed SEC set; otherwise its chart.
   const cardHrefFor = (entry: ResultEntry) =>
-    isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
+    isEarnings && hasFiledEarnings(entry.symbol) ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
 
   // Every entry is stamped with the PAGE's tone server-side (see buildEntries in
   // PickerResultPage.tsx), which is correct right up until the visitor filters
@@ -799,7 +942,7 @@ export default function PickerResultsGrid({
       sortType: "str",
       get: (e) => e.symbol ?? "",
       cell: (e) => {
-        const href = isEarnings ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : e.chartHref;
+        const href = isEarnings && hasFiledEarnings(e.symbol) ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : e.chartHref;
         return (
           <a href={href} className="listSym" onClick={(ev) => ev.stopPropagation()}>
             <span className="dot" style={{ background: toneColour(displayTone ?? e.tone) }} aria-hidden="true" />
@@ -839,7 +982,7 @@ export default function PickerResultsGrid({
     const volume: Col = { key: "volume", label: "Volume", sortType: "num", get: (_e, d) => d.volume, cell: (_e, d) => volCell(d.volume) };
     // Which of the six composite checks fired, strongest first.
     //
-    // The oversold/overbought screeners select on "2 or more of six", so the
+    // The oversold/overbought screeners select on "RSI plus at least one more of six", so the
     // existing note ("3 oversold") tells a reader how many fired and never
     // which. That matters most for RSI: /stock/[symbol] says "Overbought" when
     // RSI >= 70 and nothing else, so the same word on the two pages can rest on
@@ -893,24 +1036,80 @@ export default function PickerResultsGrid({
         );
       },
     };
-    const pe: Col = { key: "pe", label: "PE Ratio", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.peRatio), cell: (e) => basisCell(numCell(num(e.peRatio)), num(e.peRatio), e.epsBasis) };
+    const pe: Col = { key: "pe", label: "PE Ratio", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.peRatio), cell: (e, _d, inert) => basisCell(numCell(num(e.peRatio)), num(e.peRatio), e.epsBasis, inert) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
+    // STRETCH (#553 COWORK #144, the study's option (a)): only on the two pages
+    // that screen for it. "-2.3" below, "+2.3" above; sortable on the number.
+    const stretch: Col = {
+      key: "stretch",
+      label: "Stretch (z20)",
+      tip: STRETCH_TIP,
+      sortType: "num",
+      get: (_e, d) => d.stretch,
+      cell: (_e, d) => (d.stretch == null ? MUTED : <span style={{ fontVariantNumeric: "tabular-nums" }}>{d.stretch < 0 ? "-" : "+"}{fmtZ(d.stretch)}</span>),
+    };
+    const stretchPage = /oversold|overbought/i.test(configHref);
+    // EPS GROWTH (YoY) (#553 COWORK #186 ruling 1), on the earnings growth page
+    // only. Sorting it puts the % ranking first, the small-base group (shown in
+    // $, no %) next and rows with no figure last, A-Z -- the page's own default
+    // order (lib/epsGrowthView.compareEpsGrowth), whichever way it is sorted.
+    const epsGrowthPage = /strong-earnings-growth/i.test(configHref);
+    const epsg: Col = {
+      key: "epsg",
+      label: "EPS growth (YoY)",
+      sortType: "num",
+      get: (e) => (e.epsGrowth && !e.epsGrowth.small ? e.epsGrowth.pct : null),
+      ownCell: (e) => !!e.epsGrowth?.small,
+      tie: compareEpsGrowth,
+      cell: (e, _d, inert) => {
+        const g = e.epsGrowth;
+        if (!g) return MUTED;
+        return (
+          <span className="basisCell">
+            <TipMark text={epsGrowthTip(g)} label="EPS growth" className="epsgTag" inert={inert}>{g.label}</TipMark>{" "}
+            <span className={g.small ? "muted" : g.pct >= 0 ? "chgUp" : "chgDown"}>{epsGrowthText(g)}</span>
+          </span>
+        );
+      },
+    };
 
-    const perf1w: Col = { key: "perf1w", label: "1W", sortType: "num", get: (e) => num(e.perf1w), cell: (e) => pctCell(num(e.perf1w)) };
-    const perf1m: Col = { key: "perf1m", label: "1M", sortType: "num", get: (e) => num(e.perf1m), cell: (e) => pctCell(num(e.perf1m)) };
-    const perf6m: Col = { key: "perf6m", label: "6M", sortType: "num", get: (e) => num(e.perf6m), cell: (e) => pctCell(num(e.perf6m)) };
-    const perfYtd: Col = { key: "perfYtd", label: "YTD", sortType: "num", get: (e) => num(e.perfYtd), cell: (e) => pctCell(num(e.perfYtd)) };
-    const perf1y: Col = { key: "perf1y", label: "1Y", sortType: "num", get: (e) => num(e.perf1y), cell: (e) => pctCell(num(e.perf1y)) };
+    const perf1w: Col = { key: "perf1w", label: "1W", sortType: "num", get: (e) => num(e.perf1w), cell: (e) => perfCell(e, "perf1w") };
+    const perf1m: Col = { key: "perf1m", label: "1M", sortType: "num", get: (e) => num(e.perf1m), cell: (e) => perfCell(e, "perf1m") };
+    const perf6m: Col = { key: "perf6m", label: "6M", sortType: "num", get: (e) => num(e.perf6m), cell: (e) => perfCell(e, "perf6m") };
+    const perfYtd: Col = { key: "perfYtd", label: "YTD", sortType: "num", get: (e) => num(e.perfYtd), cell: (e) => perfCell(e, "perfYtd") };
+    const perf1y: Col = { key: "perf1y", label: "1Y", sortType: "num", get: (e) => num(e.perf1y), cell: (e) => perfCell(e, "perf1y") };
 
-    const ev: Col = { key: "ev", label: "Ent. Value", sortType: "num", get: (e) => num(e.enterpriseValue), cell: (e) => capCell(num(e.enterpriseValue)) };
+    // ≈ / "derived" (#553 COWORK #102): a marked figure renders through A's
+    // EstimatedValue (EstimateCell); `get` stays the number, so sorting and
+    // filtering are unchanged.
+    const ev: Col = { key: "ev", label: "Ent. Value", sortType: "num", get: (e) => num(e.enterpriseValue), cell: (e, _d, inert) => <EstimateCell text={fmtCap(num(e.enterpriseValue))} est={e.cellEst?.ev} inert={inert} empty={MUTED} /> };
     const fwdpe: Col = { key: "fwdpe", label: "Forward PE", sortType: "num", get: (e, d) => forwardPe(e, d), cell: (e, d) => numCell(forwardPe(e, d)) };
     const ps: Col = { key: "ps", label: "PS Ratio", sortType: "num", get: (e, d) => psRatio(e, d), cell: (e, d) => numCell(psRatio(e, d)) };
-    const pb: Col = { key: "pb", label: "PB Ratio", sortType: "num", get: (e) => num(e.pbRatio), cell: (e) => numCell(num(e.pbRatio)) };
+    const pb: Col = { key: "pb", label: "PB Ratio", sortType: "num", get: (e) => num(e.pbRatio), cell: (e, _d, inert) => <EstimateCell text={fmtNum(num(e.pbRatio))} est={e.cellEst?.pb} inert={inert} empty={MUTED} /> };
     const pfcf: Col = { key: "pfcf", label: "P/FCF", sortType: "num", get: (e, d) => pfcfRatio(e, d), cell: (e, d) => numCell(pfcfRatio(e, d)) };
 
-    const dps: Col = { key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare), cell: (e) => dollarCell(num(e.divPerShare)) };
-    const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e, d) => divYieldPct(e, d), cell: (e, d) => plainPctCell(divYieldPct(e, d)) };
-    const payout: Col = { key: "payout", label: "Payout Ratio", tip: BASIS_TIP, sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d) => basisCell(plainPctCell(payoutRatioPct(e, d)), payoutRatioPct(e, d), e.fundamentalsFrom === "sec" ? e.payoutBasis : undefined) };
+    // "cut" / "+ special" beside the figure, the reason on tap (#553 COWORK #184 item 1).
+    const dps: Col = {
+      key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare),
+      cell: (e, _d, inert) => {
+        // A rate filer's figure is the latest filed rate × 4: A's estimate mark (#553 COWORK #210).
+        if (e.cellEst?.dps) {
+          const v = num(e.divPerShare);
+          return <EstimateCell text={v == null || !Number.isFinite(v) ? null : `$${v.toFixed(2)}`} est={e.cellEst.dps} inert={inert} empty={MUTED} />;
+        }
+        const mark = dividendMark(e);
+        if (!mark) return dollarCell(num(e.divPerShare));
+        return (
+          <span className="basisCell">
+            <TipMark text={mark.tip} label="Dividend" className="epsgTag" inert={inert}>{mark.tag}</TipMark>{" "}
+            {dollarCell(num(e.divPerShare))}
+          </span>
+        );
+      },
+    };
+    const pctText = (v: number | null) => (v == null || !Number.isFinite(v) ? null : `${v.toFixed(2)}%`);
+    const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e, d) => divYieldPct(e, d), cell: (e, d, inert) => (e.cellEst?.dyield ? <EstimateCell text={pctText(divYieldPct(e, d))} est={e.cellEst.dyield} inert={inert} empty={MUTED} /> : plainPctCell(divYieldPct(e, d))) };
+    const payout: Col = { key: "payout", label: "Payout Ratio", tip: BASIS_TIP, sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d, inert) => basisCell(e.cellEst?.payout ? <EstimateCell text={pctText(payoutRatioPct(e, d))} est={e.cellEst.payout} inert={inert} empty={MUTED} /> : plainPctCell(payoutRatioPct(e, d)), payoutRatioPct(e, d), e.fundamentalsFrom === "sec" ? e.payoutBasis : undefined, inert) };
     const dgrowth: Col = { key: "dgrowth", label: "Div Growth", sortType: "num", get: (e) => num(e.divGrowth), cell: (e) => pctCell(num(e.divGrowth)) };
     const freq: Col = { key: "freq", label: "Payout Freq.", sortType: "str", get: (e) => e.payoutFreq ?? "", cell: (e) => textCell(e.payoutFreq) };
 
@@ -918,7 +1117,7 @@ export default function PickerResultsGrid({
     const opinc: Col = { key: "opinc", label: "Op. Income", sortType: "num", get: (e) => num(e.operatingIncome), cell: (e) => moneyCell(num(e.operatingIncome)) };
     const netinc: Col = { key: "netinc", label: "Net Income", sortType: "num", get: (e) => num(e.netIncome), cell: (e) => moneyCell(num(e.netIncome)) };
     const fcf: Col = { key: "fcf", label: "FCF", sortType: "num", get: (e) => num(e.freeCashFlow), cell: (e) => moneyCell(num(e.freeCashFlow)) };
-    const eps: Col = { key: "eps", label: "EPS", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.epsTtm), cell: (e) => basisCell(numCell(num(e.epsTtm)), num(e.epsTtm), e.epsBasis) };
+    const eps: Col = { key: "eps", label: "EPS", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.epsTtm), cell: (e, _d, inert) => basisCell(numCell(num(e.epsTtm)), num(e.epsTtm), e.epsBasis, inert) };
 
     const rating: Col = { key: "rating", label: "Rating", sortType: "str", get: (e) => e.rating ?? "", cell: (e) => textCell(e.rating) };
     const analysts: Col = { key: "analysts", label: "Analysts", sortType: "num", get: (e) => num(e.analystCount), cell: (e) => numCell(num(e.analystCount), 0) };
@@ -933,15 +1132,22 @@ export default function PickerResultsGrid({
       financials: [symbol, name, marketCap, revenue, opinc, netinc, fcf, eps],
       analysts: [symbol, name, marketCap, rating, analysts, price, ptgt, ptups],
     };
+    // Stretch sits after % Change on the two stretch pages only.
+    if (stretchPage) sets.general.splice(sets.general.indexOf(change) + 1, 0, stretch);
+    // EPS growth sits after % Change, and after EPS on Financials, on that page only.
+    if (epsGrowthPage) {
+      sets.general.splice(sets.general.indexOf(change) + 1, 0, epsg);
+      sets.financials.push(epsg);
+    }
     // THE REGISTRY, APPLIED ONCE: every tab drops the hidden columns, so a
     // hidden column cannot be rendered, sorted or picked as a phone headline.
     for (const tab of Object.keys(sets) as TabKey[]) {
-      sets[tab] = sets[tab].filter((col) => !HIDDEN_COLUMN_KEYS.has(col.key));
+      sets[tab] = sets[tab].filter((col) => !HIDDEN_COLUMN_KEYS.has(col.key)).map(withWhy);
     }
     return sets;
     // displayTone is a real dependency: the symbol cell renders the dot, so
     // without it the table keeps the tone it was first built with.
-  }, [isEarnings, displayTone]);
+  }, [isEarnings, displayTone, configHref, hasFiledEarnings]);
 
   const activeColumns = columnSets[activeTab];
 
@@ -993,27 +1199,14 @@ export default function PickerResultsGrid({
   const sortedEntries = useMemo(() => {
     const sortCol = sort ? activeColumns.find((c) => c.key === sort.key) : null;
     if (!sortCol || !sort) return filteredEntries;
-    const factor = sort.dir === "asc" ? 1 : -1;
     const copy = filteredEntries.slice();
+    // compareForSort (lib/pickerCellWhy.ts): an empty cell -- "–" or a word
+    // cell such as "Loss" -- sinks below every figure both ways, never as zero.
     copy.sort((a, b) => {
       const da = derivedByEntry.get(a) ?? deriveRow(a);
       const db = derivedByEntry.get(b) ?? deriveRow(b);
-      const av = sortCol.get(a, da);
-      const bv = sortCol.get(b, db);
-      if (sortCol.sortType === "str") {
-        const as = (av as string) || "";
-        const bs = (bv as string) || "";
-        if (!as && !bs) return 0;
-        if (!as) return 1;
-        if (!bs) return -1;
-        return factor * as.localeCompare(bs);
-      }
-      const an = av as number | null;
-      const bn = bv as number | null;
-      if (an == null && bn == null) return 0;
-      if (an == null) return 1;
-      if (bn == null) return -1;
-      return factor * (an - bn);
+      if (sortCol.tie) return compareForSort(sortCol.get(a, da), sortCol.get(b, db), sortCol.sortType, sort.dir) || sortCol.tie(a, b);
+      return compareForSort(sortCol.get(a, da), sortCol.get(b, db), sortCol.sortType, sort.dir);
     });
     return copy;
   }, [filteredEntries, sort, activeColumns, derivedByEntry]);
@@ -1075,6 +1268,32 @@ export default function PickerResultsGrid({
   }, [conditionCounts, setConditionCounts]);
 
   const shown = sortedEntries.slice(0, visibleCount);
+
+  // THE CANDLES, FOR THE ROWS THAT DRAW ONE (#553 COWORK #214, cut 1): the
+  // chart view's visible cards, or an expanded phone row. A row that carries
+  // its own bars (a weekly card) needs no fetch.
+  const barsWanted = shown
+    .filter((e) => !e.chartPoints.length && (viewMode === "chart" || expandedRows.has(e.symbol)))
+    .map((e) => e.symbol);
+  const fetchedBars = usePickerBars(barsWanted);
+  const barsFor = (entry: ResultEntry) => {
+    if (entry.chartPoints.length) return { points: entry.chartPoints, loading: false };
+    const got = fetchedBars[entry.symbol];
+    if (got === undefined) return { points: [], loading: true };
+    const points = got ?? [];
+    return { points: entry.trendSeries && points.length ? attachTrendHelper(points, entry.trendSeries) : points, loading: false };
+  };
+
+  // THE MARKS ON SCREEN (#553 COWORK #102), for the key: the table's columns
+  // on every shown row; on a phone, the headline column, plus every metric
+  // column of an expanded row. At most a page of rows: computed per render.
+  const headKeys = headlineColumn ? [headlineColumn.key] : [];
+  const shownEstimateMarks = estimateMarksShown(shown, (e) =>
+    showMobileRows
+      ? (expandedRows.has(e.symbol) ? [...headKeys, ...metricColumns.map((c) => c.key)] : headKeys)
+      : activeColumns.map((c) => c.key)
+  );
+
   const hasMore = visibleCount < sortedEntries.length;
 
   // Synced top + bottom horizontal scrollbars (grey /insights style). The top
@@ -1190,6 +1409,20 @@ export default function PickerResultsGrid({
           </div>
         ) : null}
         <ScreenerFilterBar matched={filteredEntries.length} total={entries.length} />
+        {/* THE DEFAULT ORDER, SAID (#553 COWORK #161). A re-sorted table looked
+            like a wrong ranking because nothing named the right one. */}
+        {ranking && viewMode === "list" ? (
+          sort ? (
+            <p className="rankLine">
+              Sorted by {activeColumns.find((c) => c.key === sort.key)?.label ?? "a column"}.{" "}
+              <button type="button" className="rankBack" onClick={() => setSort(null)}>
+                Back to {ranking.short} ranking
+              </button>
+            </p>
+          ) : (
+            <p className="rankLine">Ranked by {ranking.label}</p>
+          )
+        ) : null}
       </div>
 
       {/* One control row: which screener, which view, which data tab, which
@@ -1203,14 +1436,26 @@ export default function PickerResultsGrid({
           screener list. */}
       <div className="screenerControls">
         {screenerControl}
+        {/* THE PREVIEW BUTTON (#553 COWORK #161): a thumbnail of what the
+            other view looks like, a bold label and a hint. The docked phone
+            bar keeps the thumbnail and a one-word label; the hint drops. */}
         <button
           type="button"
-          className="viewToggle"
+          className="viewToggle viewPreview"
           onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
-          aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+          aria-pressed={viewMode === "chart"}
+          aria-label={viewMode === "list" ? "View results as charts" : "View results as table"}
         >
-          {viewMode === "list" ? ICON_CHARTS : ICON_LIST}
-          <span className="viewToggleLabel">{viewMode === "list" ? "Charts" : "List"}</span>
+          {viewMode === "list" ? THUMB_CHARTS : THUMB_TABLE}
+          <span className="viewToggleText">
+            <span className="viewToggleLabel">
+              <span className="viewLabelLong">{viewMode === "list" ? "View as charts" : "View as table"}</span>
+              <span className="viewLabelShort">{viewMode === "list" ? "Charts" : "Table"}</span>
+            </span>
+            <span className="viewToggleHint">
+              {viewMode === "list" ? "Every result as a mini price chart" : "Back to the sortable table"}
+            </span>
+          </span>
         </button>
         <span className="ctrlBreak" aria-hidden="true" />
         {viewMode === "list" ? (
@@ -1245,8 +1490,12 @@ export default function PickerResultsGrid({
                 nothing to decode and nothing to cram. */}
             <select
               className="tabSelect"
-              value={`${sortKey}:${sortDir}`}
+              value={!sort ? RANKING_OPTION : `${sortKey}:${sortDir}`}
               onChange={(e) => {
+                if (e.target.value === RANKING_OPTION) {
+                  setSort(null);
+                  return;
+                }
                 const [key, dir] = e.target.value.split(":");
                 const col = metricColumns.find((c) => c.key === key);
                 if (!col) return;
@@ -1254,6 +1503,14 @@ export default function PickerResultsGrid({
               }}
               aria-label="Sort results"
             >
+              {/* UNSORTED READS AS THE PAGE'S ORDER (#553 COWORK #184 item 4): with
+                  no ranking to name, the list showed "Market Cap (high to low)"
+                  over rows that were not in market-cap order. */}
+              {ranking ? (
+                <option value={RANKING_OPTION}>{sort ? `Back to ${ranking.short} ranking` : `Ranked by ${ranking.label}`}</option>
+              ) : (
+                <option value={RANKING_OPTION}>{sort ? "Back to the page's order" : "The page's order"}</option>
+              )}
               {metricColumns.flatMap((col) => {
                 // Biggest-first for figures, A-Z for names: the order you'd want
                 // if you picked that column and said nothing else.
@@ -1290,7 +1547,10 @@ export default function PickerResultsGrid({
               // message says N/A rather than promising the number is on its way.
               const panelColumns = metricColumns.filter((col) => {
                 const value = col.get(entry, d);
-                return value != null && value !== "";
+                // AN EXPLAINED GAP IS SHOWN (#553 COWORK #69): a filings
+                // figure refused for a stated reason stays in the panel, as a
+                // dash (or n/a) the reader can tap for why.
+                return (value != null && value !== "") || Boolean(entry.cellWhy?.[col.key as keyof NonNullable<ResultEntry["cellWhy"]>]);
               });
               const closes = sparkCloses(entry);
               // Direction comes from the day's % change where we have it, so
@@ -1336,10 +1596,10 @@ export default function PickerResultsGrid({
                         {headlineColumn ? (
                           <>
                             <span className="mRowLabel">{headlineColumn.label}</span>
-                            <span className="mRowValue">{headlineColumn.cell(entry, d)}</span>
+                            <span className="mRowValue">{headlineColumn.cell(entry, d, true)}</span>
                           </>
                         ) : null}
-                        {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d)}</span> : null}
+                        {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d, true)}</span> : null}
                       </span>
                       <span className="mRowChev" aria-hidden="true">{open ? "▲" : "▼"}</span>
                     </button>
@@ -1353,7 +1613,8 @@ export default function PickerResultsGrid({
                       {closes.length > 1 ? (
                         <div className="mRowChart">
                           <MiniPickerCandleChart
-                            points={entry.chartPoints}
+                            points={barsFor(entry).points}
+                            loading={barsFor(entry).loading}
                             tone={displayTone ?? tone}
                             overlay={chartOverlayForEntry(configHref, configTitle, entry)}
                             supportResistanceZone={entry.supportResistanceZone}
@@ -1377,7 +1638,7 @@ export default function PickerResultsGrid({
                           earnings view, so that destination leads here rather
                           than disappearing with the link. */}
                       <div className="mRowActions">
-                        {isEarnings ? (
+                        {isEarnings && hasFiledEarnings(entry.symbol) ? (
                           <Link href={`${entry.stockHref}/earnings`} className="mRowAction">Earnings</Link>
                         ) : null}
                         <Link href={entry.chartHref} className="mRowAction">Chart</Link>
@@ -1478,7 +1739,8 @@ export default function PickerResultsGrid({
                     />
                   ) : null}
                   <MiniPickerCandleChart
-                    points={entry.chartPoints}
+                    points={barsFor(entry).points}
+                    loading={barsFor(entry).loading}
                     tone={displayTone ?? tone}
                     overlay={chartOverlayForEntry(configHref, configTitle, entry)}
                     supportResistanceZone={entry.supportResistanceZone}
@@ -1511,6 +1773,20 @@ export default function PickerResultsGrid({
         </div>
       ) : null}
 
+      {/* THE TABLE NOTE (#553 COWORK #69 item 4), wherever cells are shown.
+          2026-10-03 (#553 COWORK #103): the owner's single line
+          (CELL_WHY_TABLE_NOTE, kept) said "SEC filings" under every tab and
+          "Hover" on a phone; it is now the active tab's note, with "Tap" on
+          touch screens (CellWhyNote). */}
+      {shown.length && (showMobileRows || viewMode === "list") ? (
+        <CellWhyNote tab={activeTab} />
+      ) : null}
+      {/* A's KEY (#553 COWORK #102) for the ≈ / "derived" marks a reader can
+          see: nothing when none is shown, only the kinds that are. */}
+      {shown.length && (showMobileRows || viewMode === "list") ? (
+        <PickerEstimateKey marks={shownEstimateMarks} />
+      ) : null}
+
       <style>{`
         .screenerControls {
           display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -1521,8 +1797,66 @@ export default function PickerResultsGrid({
            hidden anyway (the tab row and column headers do those jobs there), so
            a break would just leave a gap under a lone view-mode button. */
         .ctrlBreak { display: none; }
+        /* #553 COWORK #69: a dash (or n/a) that explains itself. The dotted
+           underline says "there is more here"; the popover is the tap path,
+           since a phone has no hover. */
+        .whyMark { position: relative; cursor: help; text-decoration: underline dotted rgba(148,163,184,0.45); text-underline-offset: 3px; }
+        .whyMark:focus-visible { outline: 1px solid rgba(96,165,250,0.7); outline-offset: 2px; border-radius: 2px; }
+        /* #553 COWORK #94: a word cell ("Loss", "Neg.", "n/a") in the lighter tone. */
+        .whyWord { color: rgba(148,163,184,0.5); font-size: 0.86em; letter-spacing: 0.02em; }
+        /* #553 COWORK #90: "FY" BEFORE the figure, in a fixed-width slot, so the
+           digits keep the cell's right edge with or without it. */
+        .basisCell { display: inline-flex; align-items: baseline; justify-content: flex-end; }
+        .basisSlot { display: inline-block; width: 2.2em; text-align: left; flex: 0 0 auto; }
+        .basisFy { position: relative; cursor: help; font-size: 0.72em; letter-spacing: 0.02em; color: rgba(148,163,184,0.75); text-decoration: underline dotted rgba(148,163,184,0.45); text-underline-offset: 3px; }
+        .basisFy:focus-visible { outline: 1px solid rgba(96,165,250,0.7); outline-offset: 2px; border-radius: 2px; }
+        /* EPS growth's period tag (#553 COWORK #186 ruling 1): the basisFy look, tap for the periods compared. */
+        .epsgTag { position: relative; cursor: help; margin-right: 6px; font-size: 0.72em; letter-spacing: 0.02em; color: rgba(148,163,184,0.75); text-decoration: underline dotted rgba(148,163,184,0.45); text-underline-offset: 3px; white-space: nowrap; }
+        .epsgTag:focus-visible { outline: 1px solid rgba(96,165,250,0.7); outline-offset: 2px; border-radius: 2px; }
+        /* #553 COWORK #103 (2026-10-03): was centred (left: 50%) and up to 70vw
+           wide, so a mark near either edge of a 360 px screen pushed it off
+           the page. Now anchored to the mark's right edge (the grid's figures
+           are right-aligned), capped at the viewport less an 8 px gutter each
+           side, and nudged by --why-shift (PickerCellMarks' clampPop) if it
+           still pokes past an edge. */
+        .whyPop {
+          position: absolute; z-index: 30; right: 0; left: auto; top: calc(100% + 6px); transform: translateX(var(--why-shift, 0px));
+          width: max-content; max-width: min(260px, calc(100vw - 16px)); white-space: normal; text-align: left;
+          padding: 7px 9px; border-radius: 8px; font-size: 12px; font-weight: 500; line-height: 1.35;
+          color: #e2e8f0; background: #0f172a; border: 1px solid rgba(148,163,184,0.35);
+          box-shadow: 0 6px 18px rgba(0,0,0,0.35); text-decoration: none;
+        }
+        .cellWhyNote { margin: 10px 2px 0; font-size: 12px; line-height: 1.45; color: rgba(148,163,184,0.8); }
+        /* "Hover for why." on a pointer, "Tap for why." on touch (#553 COWORK #103). */
+        .cellWhyTap { display: none; }
+        @media (hover: none), (pointer: coarse) {
+          .cellWhyHover { display: none; }
+          .cellWhyTap { display: inline; }
+        }
 
         .viewToggleLabel { display: inline; }
+
+        .rankLine { margin: 6px 0 0; font-size: var(--fs-label); color: rgba(148,163,184,0.95); }
+        .rankBack {
+          margin-left: 4px; padding: 0; border: 0; background: none; cursor: pointer;
+          font: inherit; font-weight: 700; color: #7dd3fc; text-decoration: underline; text-underline-offset: 3px;
+        }
+        .rankBack:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; border-radius: 2px; }
+
+        /* The preview button (#553 COWORK #161). An accent border and a faint
+           accent fill so it reads as a button, not a chip. */
+        .viewToggle.viewPreview {
+          display: inline-flex; align-items: center; gap: 10px; min-height: 44px;
+          padding: 6px 14px 6px 6px; border-radius: 12px; text-align: left;
+          border: 1px solid rgba(56,189,248,0.55); background: rgba(56,189,248,0.08); color: #e2e8f0;
+        }
+        .viewToggle.viewPreview:hover { background: rgba(56,189,248,0.14); border-color: rgba(56,189,248,0.8); }
+        .viewToggle.viewPreview:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+        .viewThumb { width: 74px; height: 42px; flex: 0 0 auto; display: block; }
+        .viewToggleText { display: flex; flex-direction: column; gap: 2px; }
+        .viewLabelLong { font-size: var(--fs-label); font-weight: 800; color: #f1f5f9; }
+        .viewLabelShort { display: none; }
+        .viewToggleHint { font-size: var(--fs-label); font-weight: 500; color: rgba(148,163,184,0.9); white-space: nowrap; }
 
         /* Sized here rather than on the viewBox so one number moves every icon
            in the bar. 15px on desktop, where it sits beside a label on a pill;
@@ -1534,26 +1868,41 @@ export default function PickerResultsGrid({
 
         .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
 
-        .mRows { margin-top: 12px; display: grid; gap: 8px; }
+        /* minmax(0, 1fr), NOT the implicit auto column (#553 COWORK #147). An
+           auto track sizes to the widest row's max-content, so one long company
+           name made every row 427-564 px wide inside a 359 px box at 390 px,
+           and .resultWrap's overflow clip hid the figures and the chevron. */
+        .mRows { margin-top: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+        /* 2026-10-03 (#553 COWORK #107/#109): was overflow: hidden, which clipped
+           a why-popover (or A's estimate note) opened on an expanded row's
+           bottom fields. The row's own background and border follow
+           border-radius without clipping; the only child that paints to the
+           edge is the toggle's tap highlight, so IT carries the corners
+           (13px = the row's 14px less its 1px border). */
         .mRow {
+          min-width: 0;
           border: 1px solid rgba(255,255,255,0.09); border-radius: 14px;
           background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-          overflow: hidden;
+          overflow: visible;
         }
         .mRow.open { border-color: rgba(96,165,250,0.4); }
         .mRowTop { display: flex; }
-        /* The entire collapsed row is the button. */
+        /* The entire collapsed row is the button. min-width: 0 because a
+           flex item's default (auto) is its content width, so the name could
+           not shrink and ellipsis never applied (#553 COWORK #147). */
         .mRowToggle {
-          flex: 1 1 auto; display: flex; width: 100%; align-items: center; gap: 10px;
+          flex: 1 1 auto; min-width: 0; display: flex; width: 100%; align-items: center; gap: 10px;
           padding: 11px 12px; border: none; background: none;
           font-family: inherit; color: inherit; cursor: pointer; text-align: left;
+          border-radius: 13px;
         }
+        .mRow.open .mRowToggle { border-radius: 13px 13px 0 0; }
         .mRowToggle:active { background: rgba(255,255,255,0.03); }
         .mRowId { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
         .mRowId .dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
         .mRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #eaf2ff; }
         .mRowName {
-          min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-size: 12px; font-weight: 700; color: rgba(148,163,184,0.9);
         }
         .mRowSpark { flex: 0 0 auto; display: block; width: 54px; height: 22px; opacity: 0.9; }
@@ -1569,7 +1918,7 @@ export default function PickerResultsGrid({
           padding: 4px 12px 12px;
           display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px;
         }
-        .mRowChart { grid-column: 1 / -1; margin: 8px 0 2px; }
+        .mRowChart { grid-column: 1 / -1; min-width: 0; margin: 8px 0 2px; }
         .mRowField {
           display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
           padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.055); min-width: 0;
@@ -1642,6 +1991,12 @@ export default function PickerResultsGrid({
           }
           .screenerControls .viewToggle { flex: 0 0 auto; }
           .mSortWrap { min-width: 0; }
+          /* The docked bar: the thumbnail, smaller, and one word; no hint. */
+          .screenerControls .viewPreview .viewThumb { width: 40px; height: 23px; }
+          .screenerControls .viewPreview .viewToggleText { align-items: center; }
+          .screenerControls .viewPreview .viewLabelLong,
+          .screenerControls .viewPreview .viewToggleHint { display: none; }
+          .screenerControls .viewPreview .viewLabelShort { display: inline; }
         }
         @media (max-width: 430px) {
           /* Two columns of label+value stops fitting once the labels are this

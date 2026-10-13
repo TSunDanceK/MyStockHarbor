@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift, grabFunction } from "./lib/earnings-plan.mjs";
+import { splitAdjustSource } from "./lib/split-adjust-source.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -251,6 +252,7 @@ console.log("\n7b. the YoY base is a FISCAL MATCH, run rather than read");
       strip("lib/server/fxRates.ts"),
       strip("lib/server/secCurrency.ts"),
       strip("lib/server/secFactCodec.ts"),
+      splitAdjustSource(),
       strip(VIEW),
     ].join("\n"),
     "",
@@ -396,7 +398,7 @@ return lift(
    unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), "toneForGrowth")),
    unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), "toneForMarginDelta")),
    // THE SMALL-BASE / NOT-MEANINGFUL RULES (#535 COWORK #20), from their source.
-   ...["MARGIN_MEANINGFUL_FLOOR_PCT", "MARGIN_MEANINGFUL_MOVE_PP", "MARGIN_NOT_MEANINGFUL", "REVENUE_BASE_FLOOR_USD", "SMALL_REVENUE_BASE"].map((n) =>
+   ...["MARGIN_MEANINGFUL_FLOOR_PCT", "MARGIN_MEANINGFUL_MOVE_PP", "MARGIN_NOT_MEANINGFUL", "MARGIN_NOT_MEANINGFUL_HERE", "REVENUE_BASE_FLOOR_USD", "SMALL_REVENUE_BASE"].map((n) =>
      (readCodeOnly("lib/server/secPresentation.ts").match(new RegExp(`export const ${n} = [^;]+;`)) ?? [""])[0].replace("export const", "const")),
    ...["marginMoveMeaningful", "priorRevenueFrom", "revenueBaseTooSmall", "marginMoveVerb"].map((n) =>
      unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), n))),
@@ -651,9 +653,13 @@ console.log("\n7g. explanations a phone can read, and three periods declared");
     const rest = cardsRaw.slice(start);
     return rest.slice(0, rest.indexOf("\nexport ", 1));
   })();
-  const intro = growthCard.slice(growthCard.indexOf("<p>"), growthCard.indexOf("</p>"));
+  // UNDER "About these figures" since #563 COWORK #56: a <details> in the
+  // server-rendered card, so the sentence is text a tap opens, never a title.
+  const about = growthCard.slice(growthCard.indexOf('<details className="gvAbout">'));
+  const intro = about.slice(about.indexOf("<p>"), about.indexOf("</p>"));
   check("the gap marker is explained in visible text, not only in a title",
-    intro.length > 200 && /marked <strong>gap<\/strong>/.test(intro) &&
+    growthCard.includes('<details className="gvAbout">') &&
+      intro.length > 200 && /marked <strong>gap<\/strong>/.test(intro) &&
       /not a consecutive run/.test(intro),
     `intro ${intro.length}b — a title attribute cannot be reached on a touch screen`);
   // THE THREE PERIODS. Said only when they are genuinely far apart, so a
@@ -805,6 +811,8 @@ console.log("\n7i. the meta description describes the page, not the price chart"
       [
         "const cleanSymbol = (s) => String(s).toUpperCase();",
         "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
+        // B3: the title reads through historyForSurface; gate unset, it is the FMP read.
+        "const historyForSurface = async (_surface, _symbol, fmp) => ({ points: await fmp(), provider: \"fmp\" });",
         "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
         // A SEED WITH A TREND IN IT. The point is that one is AVAILABLE and
         // still does not reach the description — a stub returning null would
@@ -815,9 +823,16 @@ console.log("\n7i. the meta description describes the page, not the price chart"
         // no-registrant state is a 200 rather than a 404 and a 200 that can be
         // indexed as thin content is the cost of that. "NOCIK" is the symbol
         // that resolves to nothing; everything else resolves.
-        'const cikForSymbol = (s) => (String(s).toUpperCase() === "NOCIK" ? null : "0000320193");',
+        'const cikForSymbol = (s) => (["NOCIK", "NOCIKFUND"].includes(String(s).toUpperCase()) ? null : "0000320193");',
+        // A FUND THE SITE LISTS WITH NO CIK OF ITS OWN (#552 COWORK #155): "NOCIKFUND".
+        'const isSiteFund = (s) => String(s).toUpperCase() === "NOCIKFUND";',
+        // THE SHARED PREDICATE, from its source (lib/stockPageRobots.ts), not a copy.
+        unexport(grabFunction(readCodeOnly("lib/stockPageRobots.ts"), "earningsPageIndexable")),
         // NOT YET READ (#535 COWORK #13): "COLDX" has a CIK and no stored set.
         'const awaitingSecRead = async (s) => String(s).toUpperCase() === "COLDX";',
+        // NO FILED SET (#552 COWORK #197): "NOSET" (and the fund) are off the
+        // filed list; "BLIPX" is a list that could not be read (null).
+        'const filedEarningsKnown = async (s) => { const u = String(s).toUpperCase(); return u === "BLIPX" ? null : !["NOSET", "NOCIKFUND"].includes(u); };',
         grabFunction(src, "generateMetadata"),
       ].join("\n") + "\nexport { generateMetadata };"
     );
@@ -836,6 +851,9 @@ console.log("\n7i. the meta description describes the page, not the price chart"
       withCik.robots?.index === true, JSON.stringify(withCik.robots));
     check("a symbol with no registrant is noindex",
       without.robots?.index === false, JSON.stringify(without.robots));
+    const fund = await runMeta(pageRaw, labels[0], "NOCIKFUND");
+    check("a fund the site lists is indexable with no CIK of its own, as SPY is (#552 COWORK #155)",
+      fund.robots?.index === true, JSON.stringify(fund.robots));
     check("...and still follow, so a crawler is not stranded",
       without.robots?.follow === true,
       "the card links to a stock page that renders");
@@ -843,6 +861,19 @@ console.log("\n7i. the meta description describes the page, not the price chart"
     const cold = await runMeta(pageRaw, labels[0], "COLDX");
     check("a cold symbol not yet read is noindex (#535 COWORK #13)",
       cold.robots?.index === false && cold.robots?.follow === true, JSON.stringify(cold.robots));
+    // #552 COWORK #197: a symbol with a CIK but no filed set keeps its page and is noindex.
+    const noSet = await runMeta(pageRaw, labels[0], "NOSET");
+    check("a symbol with no filed set is noindex, still follow (#552 COWORK #197)",
+      noSet.robots?.index === false && noSet.robots?.follow === true, JSON.stringify(noSet.robots));
+    const blip = await runMeta(pageRaw, labels[0], "BLIPX");
+    check("…an unreadable filed list (null) leaves the page indexable", blip.robots?.index === true, JSON.stringify(blip.robots));
+    const FILED_IN = ", filed: isSiteFund(clean) ? null : await filedEarningsKnown(clean)";
+    const mutSrc = pageRaw.replace(FILED_IN, "");
+    check("MUTATION: the filed input dropped → the no-set page indexable again (caught)",
+      mutSrc !== pageRaw && (await runMeta(mutSrc, labels[0], "NOSET")).robots?.index === true);
+    const fundMut = pageRaw.replace(FILED_IN, ", filed: await filedEarningsKnown(clean)");
+    check("MUTATION: the fund bypass dropped → the listed fund goes noindex (caught; COWORK #155 holds)",
+      fundMut !== pageRaw && (await runMeta(fundMut, labels[0], "NOCIKFUND")).robots?.index === false);
   }
 
   const metaSrc = grabFunction(pageRaw, "generateMetadata");
@@ -929,12 +960,16 @@ console.log("\n7i. the meta description describes the page, not the price chart"
     [
       "const cleanSymbol = (s) => String(s).toUpperCase();",
       "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
+      "const historyForSurface = async (_surface, _symbol, fmp) => ({ points: await fmp(), provider: \"fmp\" });",
       "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
       "const computeIndicatorSeed = () => ({ lastClose: 200, trend: \"Uptrend\" });",
       // Same stub and same reason as runMeta above — the mutation harness lifts
       // the SAME function, so it needs the same closure.
       'const cikForSymbol = (s) => (String(s).toUpperCase() === "NOCIK" ? null : "0000320193");',
+      'const isSiteFund = () => false;',
+      unexport(grabFunction(readCodeOnly("lib/stockPageRobots.ts"), "earningsPageIndexable")),
       'const awaitingSecRead = async () => false;',
+      'const filedEarningsKnown = async () => true;',
       restoreLeak(metaSrc),
     ].join("\n") + "\nexport { generateMetadata };"
   );
@@ -971,7 +1006,7 @@ const entryUnguarded = (src) => {
 check("an off-manifest symbol reads its entry only through entry?. before `if (entry)` (TSM)",
   entryUnguarded(jobRaw).length === 0, entryUnguarded(jobRaw).join(" "));
 check("...and CATCHES the restatement line's `entry.needsReverify` restored",
-  entryUnguarded(jobRaw.replace("!entry?.needsReverify", "!entry.needsReverify")).includes("entry.needsReverify"));
+  entryUnguarded(jobRaw.replace("Boolean(entry?.needsReverify)", "Boolean(entry.needsReverify)")).includes("entry.needsReverify"));
 check("it is registered as a cron",
   JSON.parse(fs.readFileSync("vercel.json", "utf8")).crons.some((c) => c.path === "/api/jobs/sec-facts"));
 

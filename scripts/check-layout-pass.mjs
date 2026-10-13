@@ -83,11 +83,12 @@ console.log("\n3. a large non-operating item (GOOGL Q2 FY2026)");
   const CARDS = fs.readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8");
   const tileSaysIt = (src) => {
     const i = src.indexOf('label="YoY EPS growth"');
-    return i > 0 && /view\.largeNonOperatingNote && s\.epsYoY != null \? <div className="metricSubNote">\{view\.largeNonOperatingNote\}<\/div>/.test(src.slice(i, i + 600));
+    // THE FIGURE'S TAP NOTE since #552 COWORK #124, not a line under it.
+    return i > 0 && /note=\{view\.largeNonOperatingNote && s\.epsYoY != null \? view\.largeNonOperatingNote : null\}/.test(src.slice(i, i + 600));
   };
-  check("the YoY EPS growth tile shows the note beneath the figure when the marker fires", tileSaysIt(CARDS));
+  check("the YoY EPS growth tile carries the note on the figure when the marker fires", tileSaysIt(CARDS));
   check("MUTATION: the tile note removed → caught",
-    !tileSaysIt(CARDS.replace('{view.largeNonOperatingNote && s.epsYoY != null ? <div className="metricSubNote">{view.largeNonOperatingNote}</div> : null}', "")));
+    !tileSaysIt(CARDS.replace("note={view.largeNonOperatingNote && s.epsYoY != null ? view.largeNonOperatingNote : null}", "note={null}")));
 }
 
 console.log("\n4. the balance-sheet date is never an opening balance (CHT)");

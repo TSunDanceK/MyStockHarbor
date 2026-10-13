@@ -75,7 +75,44 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["trendFlipBearishWeekly"],
   sectionIncludes: ["bearish trend flip stocks (weekly)"],
+  // Named on the page (#553 COWORK #161): the section sorts by bars since
+  // the flip, newest first, ties A to Z (pickersBuilder).
+  rankedBy: { label: "most recent weekly Trend Helper flip, newest first", short: "newest flip" },
   maxItems: 36,
+  bodySections: [
+    {
+      heading: "How the weekly bearish rule works",
+      paragraphs: [
+        "Here the Trend Helper Slow line, a 55-period Hull moving average, is calculated on weekly closes. A bearish state confirms once two weekly closes in a row finish below the line while it is sloping down. Until that happens, a stock that was in a bullish weekly state stays bullish, even through a sharp weekly drop.",
+        "The screen lists stocks where that confirmation happened within the last three closed weeks. The unfinished current week is left out of the calculation entirely, and a stock’s first confirmation in the loaded history is ignored, because a first reading is not a flip from anything.",
+      ],
+    },
+    {
+      heading: "Why a weekly turn reads differently",
+      paragraphs: [
+        "On weekly bars, two confirming closes take at least two weeks to form, so a flip here describes a change in the larger trend rather than a short pullback. It may matter more to someone thinking in months than in days. It can also arrive late: a stock may already be well off its highs by the time the weekly state catches up.",
+        "Rows run from the most recent flip down, with same-week flips sorted A–Z, and each names the week of confirmation. New weeks usually appear about a day after they close, once the following session’s data lands. Checking whether the stock is still above or below its 200-day average, and whether the daily trend has already turned back up, can add context.",
+      ],
+    },
+    {
+      heading: "Limits worth keeping in mind",
+      paragraphs: [
+        "The rule cannot tell a lasting downtrend from a long sideways range, and in a range it can flip back and forth over a few months. It does not look at earnings or news. It also drops stocks once the flip is more than three weeks old, so an established weekly downtrend may not be listed at all. A weekly bearish flip is a description of past closes, not a forecast of the weeks ahead.",
+      ],
+    },
+    {
+      heading: "Following one weekly row",
+      paragraphs: [
+        "Consider a stock in a long weekly uptrend that has a rough quarter. Its weekly Slow line flattens, then starts to point lower; one week ends beneath it, and a second week does the same. That second week is the confirmation, and the row names it. If the decline had happened while the line was still pointing up, the stock could have fallen a long way with no flip recorded, one reason this screen can trail the price.",
+        "It differs from the daily bearish trend flip page mainly in what it filters out. A two-day slide under the daily line can register there and reverse within a fortnight, whereas here a stock needs two full weeks of closes on the wrong side. Seeing a stock on the daily bearish list but not here may simply mean the larger weekly trend has not changed, at least so far.",
+      ],
+    },
+  ],
+  relatedScreens: [
+    { href: "/stocks-with-bearish-trend-flip", label: "Daily bearish trend flips" },
+    { href: "/stocks-with-weekly-bullish-trend-flip", label: "Weekly bullish trend flips" },
+    { href: "/stocks-below-200-day-moving-average", label: "Stocks below the 200-day moving average" },
+  ],
 };
 
 export default function Page() {

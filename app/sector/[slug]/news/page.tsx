@@ -1,7 +1,10 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { closeDayLabel, lastCloseLabel } from "@/lib/server/marketData/eodLast";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 
 import { SECTORS, getSectorBySlug, sectorNewsPath } from "@/lib/sectors";
 import { getSectorNewsBaseData, type SectorNewsBaseData } from "@/lib/sector-news-data";
@@ -34,6 +37,8 @@ import { bucketFor, planCardArt, type CardArt } from "@/lib/server/news/art";
 import { withGenericFallback } from "@/lib/server/news/artTags";
 import { newsAttribution, hasPublisherExcerpt } from "@/lib/news-attribution";
 import NewsCardArt from "@/app/components/NewsCardArt";
+import SectorSpark from "@/app/sector/SectorSpark";
+import { filedEarningsGate } from "@/lib/server/filedEarnings";
 
 export const runtime = "nodejs";
 
@@ -78,6 +83,13 @@ type Props = {
 
 const SITE = "https://www.mystockharbor.com";
 
+// HIDDEN 2026-10-05 (owner, in chat): "who reports next" -- the Earnings This
+// Week card and the read's "N names reporting in the next week" sentence (it
+// keys off the empty list) -- is too hard to keep accurate. Hidden, not
+// deleted: flip this to bring it back. The descriptions' "who reports next" /
+// "upcoming earnings" wording was dropped with it.
+const SHOW_WHO_REPORTS_NEXT = false;
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const sector = getSectorBySlug(slug);
@@ -88,7 +100,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const url = `${SITE}${sectorNewsPath(sector.slug)}`;
   const title = `${sector.name} Sector News, Sentiment Score & What It Means | MyStockHarbor`;
-  const description = `Latest ${sector.name.toLowerCase()} sector news with beginner-friendly summaries. Sector news score, most-mentioned stocks, breadth, movers and who reports next.`;
+  const description = `Latest ${sector.name.toLowerCase()} sector news with beginner-friendly summaries. Sector news score, most-mentioned stocks, breadth and movers.`;
 
   return {
     title,
@@ -222,7 +234,7 @@ export default async function SectorNewsPage({ params }: Props) {
   const [performance, movers, earnings, breadth] = await Promise.all([
     getSectorPerformanceRow(sector.slug),
     getSectorMovers(sector.slug),
-    getSectorEarningsThisWeek(sector.slug),
+    SHOW_WHO_REPORTS_NEXT ? getSectorEarningsThisWeek(sector.slug) : Promise.resolve([] as SectorEarningsEntry[]),
     getSectorBreadth(sector.slug),
   ]);
 
@@ -230,9 +242,12 @@ export default async function SectorNewsPage({ params }: Props) {
 
   // Outside the regular session the card shows the LAST session's move, and
   // says so (#553 COWORK #12) -- never "today" for a number that is not.
-  const lastSession = performance?.dayBasis === "last-session";
-  const dayTitle = lastSession ? "Last Session" : "Sector Today";
-  const sessionLabel = lastSession ? sessionDateLabel(performance?.sessionDate) : null;
+  // On Tiingo (step 5, #553 COWORK #98 ruling 4) the move is the stored EOD
+  // close's, all day: "Last close · 1 Oct".
+  const lastClose = performance?.dayBasis === "last-close";
+  const lastSession = performance?.dayBasis === "last-session" || lastClose;
+  const dayTitle = lastClose ? "Last Close" : lastSession ? "Last Session" : "Sector Today";
+  const sessionLabel = lastClose ? lastCloseLabel(performance?.sessionDate) : lastSession ? sessionDateLabel(performance?.sessionDate) : null;
   const rankLine =
     typeof performance?.rank === "number"
       ? lastSession
@@ -242,6 +257,13 @@ export default async function SectorNewsPage({ params }: Props) {
         ? sessionLabel
         : "Ranking unavailable";
 
+  // Step 5 (#553 COWORK #92/#98): the linked credit wherever a Tiingo-built
+  // figure shows (PRICE_PROVIDER_POOL=tiingo).
+  const tiingoCredit =
+    priceProviderFor("POOL") === "tiingo" ? (
+      <TiingoLink />
+    ) : null;
+
   const leadSummary = buildSectorLead({
     sector,
     newsScore,
@@ -249,7 +271,7 @@ export default async function SectorNewsPage({ params }: Props) {
     constituentCount: constituents.length,
     dayMove: performance?.day ?? null,
     rank: performance?.rank ?? null,
-    lastSession: lastSession ? sessionDateLabel(performance?.sessionDate) : null,
+    lastSession: lastClose ? closeDayLabel(performance?.sessionDate) : lastSession ? sessionDateLabel(performance?.sessionDate) : null,
   });
 
   const sectorRead = buildSectorRead({
@@ -312,7 +334,7 @@ export default async function SectorNewsPage({ params }: Props) {
                   "@id": `${url}#collection`,
                   url,
                   name: `${sector.name} Sector News`,
-                  description: `Latest ${sector.name.toLowerCase()} sector news with a sector news score, most-mentioned stocks, breadth and upcoming earnings.`,
+                  description: `Latest ${sector.name.toLowerCase()} sector news with a sector news score, most-mentioned stocks and breadth.`,
                   isPartOf: { "@id": `${SITE}/#website` },
                   hasPart: structuredNews([...detailedNews, ...compactNews]),
                 },
@@ -384,6 +406,7 @@ export default async function SectorNewsPage({ params }: Props) {
                   </div>
                   <div style={miniScoreLabelStyle}>
                     {rankLine}
+                    {lastClose && tiingoCredit ? <> · {tiingoCredit}</> : null}
                   </div>
                 </div>
                 <div style={miniScoreCardStyle(newsScore.tone)}>
@@ -411,6 +434,9 @@ export default async function SectorNewsPage({ params }: Props) {
                   </div>
                 </div>
               </div>
+
+              {/* The 3-month line (#553 COWORK #167/#180): server-drawn path only, absent when not on file. */}
+              <SectorSpark v={performance?.spark} variant="strip" />
 
               <div style={coverageNoteStyle}>
                 Constituent-weighted across the {constituents.length} largest {sector.name.toLowerCase()}{" "}
@@ -480,8 +506,10 @@ export default async function SectorNewsPage({ params }: Props) {
               </section>
 
               <MostMentionedCard mentions={mentions} sectorName={sector.name} />
-              <SectorEarningsCard entries={earnings} sectorName={sector.name} label={earningsScore.label} />
-              <SectorMoversCard movers={movers} sectorName={sector.name} />
+              {SHOW_WHO_REPORTS_NEXT ? (
+                <SectorEarningsCard entries={earnings} sectorName={sector.name} label={earningsScore.label} />
+              ) : null}
+              <SectorMoversCard movers={movers} sectorName={sector.name} credit={tiingoCredit} />
               <SectorBreadthCard breadth={breadth} sectorName={sector.name} />
             </aside>
           </section>
@@ -851,7 +879,7 @@ function MostMentionedCard({
   );
 }
 
-function SectorEarningsCard({
+async function SectorEarningsCard({
   entries,
   sectorName,
   label,
@@ -860,6 +888,8 @@ function SectorEarningsCard({
   sectorName: string;
   label: string;
 }) {
+  // #552 COWORK #197: a row links to earnings only with a filed SEC set; otherwise the same row, unlinked.
+  const hasFiledEarnings = await filedEarningsGate();
   return (
     <section style={sidebarCardStyle}>
       <div style={sectionEyebrowStyle}>Next seven days</div>
@@ -869,7 +899,7 @@ function SectorEarningsCard({
       {entries.length ? (
         <>
           <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-            {entries.slice(0, 6).map((entry) => (
+            {entries.slice(0, 6).map((entry) => hasFiledEarnings(entry.symbol) ? (
               <Link
                 key={entry.symbol}
                 href={`/stock/${encodeURIComponent(entry.symbol)}/earnings`}
@@ -878,6 +908,11 @@ function SectorEarningsCard({
                 <span style={listRowSymbolStyle}>{entry.symbol}</span>
                 <span style={listRowValueStyle}>{formatDate(entry.date)}</span>
               </Link>
+            ) : (
+              <div key={entry.symbol} style={listRowStyle}>
+                <span style={listRowSymbolStyle}>{entry.symbol}</span>
+                <span style={listRowValueStyle}>{formatDate(entry.date)}</span>
+              </div>
             ))}
           </div>
           <div style={sourceFooterStyle}>
@@ -897,15 +932,17 @@ function SectorEarningsCard({
   );
 }
 
-function SectorMoversCard({ movers, sectorName }: { movers: SectorMovers; sectorName: string }) {
+function SectorMoversCard({ movers, sectorName, credit }: { movers: SectorMovers; sectorName: string; credit?: ReactNode }) {
   const hasRows = movers.gainers.length > 0 || movers.losers.length > 0;
 
   return (
     <section style={sidebarCardStyle}>
       <div style={sectionEyebrowStyle}>
-        {movers.dayBasis === "last-session"
-          ? `Inside the sector · last session${sessionDateLabel(movers.sessionDate) ? ` (${sessionDateLabel(movers.sessionDate)})` : ""}`
-          : "Inside the sector today"}
+        {movers.dayBasis === "last-close"
+          ? `Inside the sector · ${lastCloseLabel(movers.sessionDate) ?? "Last close"}`
+          : movers.dayBasis === "last-session"
+            ? `Inside the sector · last session${sessionDateLabel(movers.sessionDate) ? ` (${sessionDateLabel(movers.sessionDate)})` : ""}`
+            : "Inside the sector today"}
       </div>
       <h2 style={sectionTitleSmallStyle}>Top Movers</h2>
 
@@ -938,9 +975,18 @@ function SectorMoversCard({ movers, sectorName }: { movers: SectorMovers; sector
             ))}
           </div>
           <div style={sourceFooterStyle}>
-            From {movers.sampled} {sectorName.toLowerCase()} names. This page is cached for 30
-            minutes and the underlying quotes rotate every ~15, so treat these as end-of-period
-            rather than live prices.
+            {movers.dayBasis === "last-close" ? (
+              <>
+                From {movers.sampled} {sectorName.toLowerCase()} names: consolidated closing prices
+                from the nightly end-of-day data, not live prices.{credit ? <> {credit}</> : null}
+              </>
+            ) : (
+              <>
+                From {movers.sampled} {sectorName.toLowerCase()} names. This page is cached for 30
+                minutes and the underlying quotes rotate every ~15, so treat these as end-of-period
+                rather than live prices.
+              </>
+            )}
           </div>
         </>
       ) : (

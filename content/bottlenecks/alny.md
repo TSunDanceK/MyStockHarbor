@@ -29,6 +29,7 @@ supplyChain:
   - name: Alnylam's In-House Manufacturing (Norton & Cambridge, MA)
     ticker: null
     pct: 35
+    grade: hard
     blurb: >
       Alnylam manufactures the majority of its own siRNA drug substance
       internally at its Norton, Massachusetts facility — recently expanded
@@ -41,6 +42,7 @@ supplyChain:
   - name: Single-Source Raw Material & Reagent Suppliers
     ticker: null
     pct: 18
+    grade: hard
     blurb: >
       Alnylam's own risk disclosures warn that certain raw materials and
       components used to build its RNAi medicines — including the
@@ -52,6 +54,7 @@ supplyChain:
   - name: International Fill-Finish & Packaging Contract Manufacturers
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Alnylam's own filings state it "strategically leverages international
       partnerships throughout our supply chain, including finish and fill,
@@ -62,6 +65,7 @@ supplyChain:
   - name: Device & Primary-Packaging Component Suppliers
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Amvuttra, Givlaari and Oxlumo are all delivered via prefilled syringe
       or vial for subcutaneous injection, requiring specialized device and
@@ -71,6 +75,7 @@ supplyChain:
   - name: Agilent Technologies
     ticker: A
     pct: 12
+    grade: some
     blurb: >
       Agilent has supplied nucleic-acid active pharmaceutical ingredient to
       Alnylam since 2007 and signed a five-year commercial manufacturing
@@ -82,6 +87,7 @@ supplyChain:
   - name: Arbutus Biopharma
     ticker: ABUS
     pct: 8
+    grade: spread
     blurb: >
       Arbutus (formerly Tekmira/Protiva) licensed its lipid nanoparticle
       (LNP) delivery technology to Alnylam, underpinning Onpattro
@@ -94,6 +100,7 @@ customers:
   - name: All Other Distributors, Specialty Pharmacies & Health Systems (combined)
     ticker: null
     pct: 38
+    grade: hard
     blurb: >
       The remainder of Alnylam's rapidly growing product revenue — driven
       overwhelmingly by Amvuttra's growth in transthyretin amyloidosis,
@@ -104,6 +111,7 @@ customers:
   - name: Cencora (AmerisourceBergen)
     ticker: COR
     pct: 24
+    grade: some
     blurb: >
       Alnylam's own 10-K discloses that a single unnamed distributor
       ("Distributor A") accounted for 27%-33% of total revenue between 2021
@@ -115,6 +123,7 @@ customers:
   - name: Novartis
     ticker: NVS
     pct: 15
+    grade: some
     blurb: >
       Novartis licenses Alnylam's inclisiran technology and sells it as
       Leqvio, the first RNAi therapeutic approved to lower LDL cholesterol,
@@ -124,6 +133,7 @@ customers:
   - name: Roche
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Roche is co-developing and co-commercializing zilebesiran, Alnylam's
       investigational RNAi therapeutic for hypertension, under a 2023 deal
@@ -135,6 +145,7 @@ customers:
   - name: Regeneron Pharmaceuticals
     ticker: REGN
     pct: 8
+    grade: spread
     blurb: >
       Under a broad 2019 collaboration targeting ocular and central nervous
       system diseases, Regeneron funds and co-develops RNAi programs built
@@ -143,6 +154,7 @@ customers:
   - name: Vir Biotechnology
     ticker: VIR
     pct: 5
+    grade: spread
     blurb: >
       Vir Biotechnology licenses Alnylam's RNAi platform for
       infectious-disease programs targeting chronic hepatitis B and D, an

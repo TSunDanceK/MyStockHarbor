@@ -28,6 +28,7 @@ supplyChain:
   - name: Ichor Holdings
     ticker: ICHR
     pct: 18
+    grade: some
     blurb: >
       Ichor designs and builds the gas delivery systems and fluid-handling
       modules at the heart of Lam's etch and deposition tools. Lam Research
@@ -38,6 +39,7 @@ supplyChain:
   - name: Ultra Clean Holdings
     ticker: UCTT
     pct: 18
+    grade: some
     blurb: >
       UCT manufactures the precision subsystems, chassis, and gas and
       chemical delivery modules that Lam assembles into finished systems
@@ -48,6 +50,7 @@ supplyChain:
   - name: MKS Instruments
     ticker: MKSI
     pct: 15
+    grade: some
     blurb: >
       MKS supplies the RF power delivery systems, pressure and flow control
       subsystems, and plasma generation hardware that regulate conditions
@@ -58,6 +61,7 @@ supplyChain:
   - name: Advanced Energy Industries
     ticker: AEIS
     pct: 10
+    grade: some
     blurb: >
       Advanced Energy is a longtime supplier of RF and DC plasma power
       delivery systems used to strike and sustain the plasmas inside Lam's
@@ -67,6 +71,7 @@ supplyChain:
   - name: Specialty chamber-component and precision-parts suppliers
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Lam's own SEC filings disclose that certain components and
       sub-assemblies -- specialty ceramics, electrostatic chucks, edge
@@ -77,6 +82,7 @@ supplyChain:
   - name: Broader outsourced manufacturing and materials supply base
     ticker: null
     pct: 17
+    grade: some
     blurb: >
       The remainder of Lam's bill of materials and outsourced production is
       spread across a wide global base of contract manufacturers, logistics
@@ -86,6 +92,7 @@ customers:
   - name: Samsung Electronics
     ticker: null
     pct: 17
+    grade: some
     blurb: >
       Samsung has been named one of Lam's two most significant customers in
       every fiscal year from 2023 through 2025, historically representing
@@ -96,6 +103,7 @@ customers:
   - name: Taiwan Semiconductor Manufacturing Company (TSMC)
     ticker: TSM
     pct: 15
+    grade: some
     blurb: >
       TSMC has been named alongside Samsung as one of Lam's two most
       significant customers in every fiscal year from 2023 through 2025,
@@ -104,6 +112,7 @@ customers:
   - name: SK hynix
     ticker: SKHY
     pct: 8
+    grade: spread
     blurb: >
       SK hynix was named among Lam's most significant customers in Lam's
       FY2020-2022 filings and remains a major buyer of etch and deposition
@@ -113,6 +122,7 @@ customers:
   - name: Micron Technology
     ticker: MU
     pct: 7
+    grade: spread
     blurb: >
       Micron was named among Lam's most significant customers in prior
       fiscal-year filings and continues to be a large buyer of memory
@@ -121,6 +131,7 @@ customers:
   - name: Intel
     ticker: INTC
     pct: 5
+    grade: spread
     blurb: >
       Intel was named among Lam's most significant customers in earlier
       fiscal-year filings, buying etch and deposition tools for its logic
@@ -129,6 +140,7 @@ customers:
   - name: Kioxia
     ticker: null
     pct: 6
+    grade: spread
     blurb: >
       Kioxia, Japan's leading NAND flash maker, was named among Lam's most
       significant customers in earlier fiscal-year filings and remains a
@@ -137,6 +149,7 @@ customers:
   - name: China-based foundries and memory makers (SMIC, YMTC, CXMT, Hua Hong and others)
     ticker: null
     pct: 27
+    grade: some
     blurb: >
       Chinese customers as a group made up roughly a third of Lam's annual
       revenue in fiscal 2025, and Yangtze Memory Technologies was named
@@ -147,6 +160,7 @@ customers:
   - name: All other global logic, memory and foundry customers
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       The remainder of Lam's revenue is spread across other foundry, logic,
       and memory manufacturers worldwide, none individually large enough

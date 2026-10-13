@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { chartHref } from "@/lib/chartHref";
 import Link from "next/link";
 import LearnShell from "@/app/learn/LearnShell";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
@@ -60,7 +61,7 @@ export default function HowToReadStockChartsPage() {
             <div style={{ fontWeight: 900, fontSize: 20 }}>Use MyStockHarbor to practise</div>
             <p style={{ margin: "10px 0 0", opacity: 0.86, lineHeight: 1.65 }}>MyStockHarbor was built to make chart reading easier for beginner and intermediate users. You can quickly check trend, stretch, momentum, divergence, and market context in one place.</p>
             <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Link href="/" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "13px 18px", borderRadius: 14, border: "1px solid rgba(34,197,94,0.45)", background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.18))", color: "#f8fafc", textDecoration: "none", fontWeight: 900, minHeight: 48, boxShadow: "0 10px 24px rgba(0,0,0,0.22)", whiteSpace: "nowrap" }}>Open the Dashboard →</Link>
+              <Link href={chartHref()} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "13px 18px", borderRadius: 14, border: "1px solid rgba(34,197,94,0.45)", background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.18))", color: "#f8fafc", textDecoration: "none", fontWeight: 900, minHeight: 48, boxShadow: "0 10px 24px rgba(0,0,0,0.22)", whiteSpace: "nowrap" }}>Open the Dashboard →</Link>
               <Link href="/learn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "13px 18px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", textDecoration: "none", fontWeight: 900, minHeight: 48, whiteSpace: "nowrap" }}>Explore Learn Page →</Link>
             </div>
           </section>

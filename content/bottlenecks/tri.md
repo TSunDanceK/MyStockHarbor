@@ -40,6 +40,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 35
+    grade: hard
     blurb: >
       Thomson Reuters named AWS its preferred cloud provider in a 2020
       multi-year deal, migrating core platforms including Westlaw,
@@ -48,6 +49,7 @@ supplyChain:
   - name: Microsoft Corporation
     ticker: MSFT
     pct: 20
+    grade: some
     blurb: >
       CoCounsel, Thomson Reuters' generative-AI legal assistant, is
       embedded directly inside Microsoft Word, Outlook, Teams, and
@@ -56,6 +58,7 @@ supplyChain:
   - name: OpenAI
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Thomson Reuters has tested a custom large language model from
       OpenAI inside CoCounsel as part of a broader multi-model AI
@@ -63,6 +66,7 @@ supplyChain:
   - name: Public court & government-record systems
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. Westlaw, Practical Law, and Thomson Reuters'
       other legal-research products are built on a foundation of court
@@ -71,6 +75,7 @@ supplyChain:
   - name: Print production & distribution vendors
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. Third-party printing, binding, and physical
       distribution vendors support Thomson Reuters' Global Print segment,
@@ -79,6 +84,7 @@ customers:
   - name: Legal Professionals segment
     ticker: null
     pct: 38
+    grade: hard
     blurb: >
       Not a single company. Westlaw, Practical Law, and other legal
       research and workflow products sold to law firms, courts, and
@@ -87,6 +93,7 @@ customers:
   - name: Corporates segment
     ticker: null
     pct: 27
+    grade: some
     blurb: >
       Not a single company. Compliance, risk, and legal-workflow products
       sold directly to corporate legal, tax, and compliance departments
@@ -94,6 +101,7 @@ customers:
   - name: Tax, Audit & Accounting segment
     ticker: null
     pct: 17
+    grade: some
     blurb: >
       Not a single company. ONESOURCE, Checkpoint, and related products
       sold to accounting firms, corporate tax departments, and auditors
@@ -101,6 +109,7 @@ customers:
   - name: London Stock Exchange Group
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Thomson Reuters' one real named large customer relationship: a
       30-year Reuters News content-licensing agreement with LSEG running
@@ -110,6 +119,7 @@ customers:
   - name: Other Reuters News subscribers & Global Print
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Not a single company. The remainder of the Reuters News segment's
       media and wire subscribers, plus Thomson Reuters' smaller Global

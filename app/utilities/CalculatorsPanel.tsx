@@ -9,7 +9,6 @@ import {
   baseResultBoxStyle,
   labelStyle,
   resultLabelStyle,
-  utilityIconStyle,
   calloutCardStyle,
   toNum,
   fmtMoney,
@@ -326,7 +325,6 @@ export default function CalculatorsPanel() {
 
         <div style={{ marginTop: 18, ...calloutCardStyle("blue") }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <div style={utilityIconStyle("blue")}>ℹ️</div>
             <div style={{ fontWeight: 900 }}>What this tool does</div>
           </div>
           <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
@@ -337,7 +335,6 @@ export default function CalculatorsPanel() {
 
         <div style={{ marginTop: 14, ...calloutCardStyle("red") }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <div style={utilityIconStyle("red")}>⚠</div>
             <div style={{ fontWeight: 900 }}>Why it matters</div>
           </div>
           <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
@@ -483,7 +480,6 @@ export default function CalculatorsPanel() {
         </div>
         <div style={{ marginTop: 18, ...calloutCardStyle("green") }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <div style={utilityIconStyle("green")}>✅</div>
             <div style={{ fontWeight: 900 }}>What this tool does</div>
           </div>
           <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
@@ -494,7 +490,6 @@ export default function CalculatorsPanel() {
 
         <div style={{ marginTop: 14, ...calloutCardStyle("yellow") }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <div style={utilityIconStyle("yellow")}>📏</div>
             <div style={{ fontWeight: 900 }}>Why it matters</div>
           </div>
           <div style={{ opacity: 0.84, lineHeight: 1.6 }}>

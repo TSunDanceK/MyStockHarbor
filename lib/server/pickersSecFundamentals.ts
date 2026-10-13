@@ -9,8 +9,10 @@
 //
 //   Market Cap      price × cover-page shares          secValuation.marketCap
 //   PS Ratio        cap ÷ TTM revenue (guarded)        secValuation.valuationMultiples
-//   PB Ratio        cap ÷ latest equity                secValuation.valuationMultiples
-//   Ent. Value      cap + short + long debt − cash     the evEbitda inputs, all present
+//   PB Ratio        cap ÷ latest equity                secValuation.valuationMultiples (or
+//                                                      "derived": total equity − filed NCI)
+//   Ent. Value      cap + short + long debt − cash     secEstimates.enterpriseValueOf (filed,
+//                                                      or ≈ when only short-term debt is untagged)
 //   P/FCF           cap ÷ TTM (OCF − capex)            below
 //   Revenue         TTM, refused by revenueLineIncomplete (imported, via multipleInputs)
 //   Op. Income, Net Income, FCF    TTM                 secValuation.twelveMonthsOf
@@ -47,22 +49,32 @@
 // to end. Only a symbol with NO row at all (the job has not reached it) keeps
 // the old values, and that is the pre-merge state rather than a steady one.
 import { Redis } from "@upstash/redis";
+import { symbolSpellings } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { recordRedisRead } from "./redisBandwidth";
 import { readFactSet } from "./secFactStore";
-import { valueOf, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
+import { cell, valueOf, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
+import { DIVIDEND_RATE_YEAR_NOTE, isConsecutive } from "./secEarningsView";
 import {
   marketCap,
   multipleInputs,
   peRatio,
+  REFUSAL_CELL_WORD,
   twelveMonthsOf,
   valuationInputs,
   valuationMultiples,
   type EpsBasis,
   type FilerFacts,
   type MultipleInputs,
+  type ValuationFigure,
   type ValuationInputs,
+  type ValuationRefusal,
 } from "./secValuation";
+import { enterpriseValueOf, reportWindowMark, type Estimate } from "./secEstimates";
+import { isBankOrInsurer, type CellWhyCode, type CellWhyColumn } from "../pickerCellWhy";
+import { secGrowthFacts, type SecGrowthFacts } from "./pickersSecEarningsGrowth";
+import { splitAdjusted, type DividendBasis } from "./secSplitAdjust";
 
 export const PICKERS_SEC_KEY = "msh:pickers:sec-fundamentals:v1";
 /**
@@ -87,6 +99,10 @@ export const PICKERS_SEC_TTL_SECONDS = 3 * 24 * 60 * 60;
  * before (the FMP warm jobs keep running until this is verified -- the owner's
  * rule that FMP stays on until each replacement is). Anything else reads SEC.
  * An env read, so a change needs a production redeploy to take effect.
+ *
+ * FMP IS CANCELLED (2026-10-06, #553 COWORK #170/#171). Flipping this back
+ * would read nothing without a new FMP key, and the purge removed the FMP rows
+ * it served.
  */
 export function pickersFundamentalsSource(): "sec" | "fmp" {
   return process.env.PICKERS_FUNDAMENTALS === "fmp" ? "fmp" : "sec";
@@ -126,7 +142,12 @@ export type SecPickerRow = {
   unit: SecPickerUnit;
   /** When the job built it (ms). */
   at: number;
-  inputs: Pick<ValuationInputs, "shares" | "refusals">;
+  /**
+   * `sic` (#553 COWORK #102, 2026-10-03): the filer's SIC, for A's bank gate on
+   * the ≈ Ent. Value (secEstimates.enterpriseValueOf). Absent on a row written
+   * before it existed, or for a filer with none: no estimate (fail-closed).
+   */
+  inputs: Pick<ValuationInputs, "shares" | "refusals" | "sic">;
   m: MultipleInputs;
   operatingIncome: number | null;
   netIncome: number | null;
@@ -141,12 +162,33 @@ export type SecPickerRow = {
   eps?: EpsBasis | null;
   /** Payout from one period only, or null. Same optionality as `eps`. */
   payout?: PayoutBasis | null;
+  /**
+   * The latest filed period against a year earlier, for the Strong Earnings
+   * Growth list's membership (pickersSecEarningsGrowth.ts, #553 CODE-B #94 B5,
+   * 2026-10-03), or the reason there is none. Same optionality as `eps`: a row
+   * written before it existed is simply not a member until the job rewrites it.
+   */
+  growth?: SecGrowthFacts | null;
+  /**
+   * What the Div ($) cell carries besides its figure (#553 COWORK #184 item 1),
+   * absent when neither applies (and on a row written before it existed):
+   *   cut      the latest quarter, annualised, is the figure shown; `ttm` is the
+   *            trailing total it sits below
+   *   special  a special dividend left out of the figure, yield and growth
+   *   ifrs     an IFRS-only filer with no dividend figure: IFRS publishes no
+   *            per-share dividend tag (A's secDividend gate), so "–" is by design
+   *   rate     a per-quarter-rate filer (#553 COWORK #210): Div ($) is `q`, the
+   *            latest quarterly rate it filed (period ending `end`), times 4 --
+   *            an estimate, and so are the yield and payout built on it
+   */
+  div?: { cut?: { ttm: number }; special?: number; ifrs?: true; rate?: { q: number; end: string } };
 };
 
 /** A payout ratio (PERCENT) whose dividend and EPS cover the same period. */
 export type PayoutBasis = {
   val: number;
-  basis: "four-quarters" | "fiscal-year";
+  /** A rate filer's payout (#553 COWORK #210) takes its EPS's basis, "year-to-date" included. */
+  basis: EpsBasis["basis"];
   periodEnd: string;
   fiscalYear?: number | null;
 };
@@ -165,9 +207,12 @@ export type PayoutBasis = {
  */
 export function samePeriodPayout(set: StoredFactSet, eps: EpsBasis | null): PayoutBasis | null {
   if (eps && eps.basis === "four-quarters" && eps.val > 0) {
-    const dps = twelveMonthsOf(set, ["dividendsDeclaredPerShare"]);
-    if (dps && dps.basis === "four-quarters" && dps.periodEnd === eps.periodEnd) {
-      return { val: (dps.vals.dividendsDeclaredPerShare / eps.val) * 100, basis: "four-quarters", periodEnd: eps.periodEnd };
+    // THE REGULAR DIVIDEND OVER FOUR QUARTERS (#553 COWORK #184 item 1): a Q4
+    // stated only inside the 10-K is derived (NSC read "–" beside a $11.72
+    // EPS), and a special dividend is left out (PGR).
+    const read = dividendRead(set);
+    if (read.four && read.four.periodEnd === eps.periodEnd) {
+      return { val: (read.four.regular / eps.val) * 100, basis: "four-quarters", periodEnd: eps.periodEnd };
     }
   }
   const y = set.years[0];
@@ -216,6 +261,26 @@ export type SecPickerFigures = {
   divGrowth: number | null;
 };
 
+/**
+ * ESTIMATES ON PICKERS (#553 COWORK #102, A's layer from #696). Pickers opts
+ * into A's estimate layer for the two columns it has a back-tested method for:
+ *   Ent. Value  ≈ when only short-term debt is untagged (M2, enterpriseValueOf)
+ *   PB Ratio    "derived" from total equity less the filed NCI (M6a)
+ * Every other column is filed or refused, as before. The opt-in is only safe
+ * because the grid renders each marked figure through A's EstimatedValue and
+ * puts EstimateKey under the table (app/components/PickerEstimateMarks.tsx):
+ * an estimate never reaches the page without its mark. The mark travels as
+ * A's EstimateMark (kind + note), keyed by grid column.
+ */
+const PICKERS_VALUATION_OPTS = { withEstimates: true } as const;
+
+/** A figure's mark as the client renders it: A's EstimateMark shape. */
+export type SecPickerMark = Pick<Estimate, "kind" | "note">;
+/** The columns that can carry one, by grid column key. */
+export type SecPickerMarks = Partial<Record<"ev" | "pb" | "dps" | "dyield" | "payout", SecPickerMark>>;
+
+const markOf = (e: Estimate | undefined): SecPickerMark | null => (e ? { kind: e.kind, note: e.note } : null);
+
 /** The fields applySecPickerRow owns, in one place for the page and the check. */
 export const SEC_PICKER_FIELDS: (keyof SecPickerFigures)[] = [
   "marketCap", "psRatio", "pbRatio", "enterpriseValue", "pfcfRatio", "revenue",
@@ -241,12 +306,114 @@ function fourQuartersFrom(set: StoredFactSet, key: string, offset: number): numb
   return (parts as number[]).reduce((a, b) => a + b, 0);
 }
 
+// ── THE DIVIDEND, READ ONCE (#553 COWORK #184 item 1, 2026-10-07) ──────────
+// Read-only census, relay run 37549087272, over 437 payers:
+//   - 88 state Q4's dividend only inside the fiscal year (NSC: Q4 "–", FY
+//     $5.40), so no four quarters were on file and payout fell to the fiscal
+//     year, then was withheld beside a TTM EPS. Q4 is now derived: the fiscal
+//     year less its first three quarters, when all four are on file.
+//   - a special dividend (PGR's Q4 $13.60 beside $0.10 quarters) read as
+//     regular: +184% growth and a 6.55% yield. A quarter over SPECIAL_MULTIPLE
+//     times the largest of the other three is a special; their median stands
+//     in for its regular part, the rest is left out of figure, yield, growth.
+//   - a cut (FMC $0.58 to $0.08, LYB $1.37 to $0.69) kept the trailing total:
+//     FMC read 27% yield. When the latest regular quarter is under CUT_SHARE of
+//     the three before (their median), Div ($) is the latest quarter x4, marked.
+// The split basis (BKNG, 25:1) is A's splitAdjusted, applied to the whole set
+// in buildSecPickerRow before any of this.
+
 /**
- * Dividend growth, percent: the newest TTM against the TTM before it, else the
- * newest fiscal year against the one before. Null when either side is missing
- * or the older one is not positive -- growth from nothing is not a percentage.
+ * A quarter over this multiple of the largest other quarter of the four is a
+ * special dividend. 4, not 3: FMC's Q4 as stored ($1.74) is exactly 3x its
+ * old $0.58 rate, while the specials in the census sit well clear (PGR 136x,
+ * CNA about 4.5x).
+ */
+export const SPECIAL_MULTIPLE = 4;
+/** The latest regular quarter under this share of the three before it is a cut. */
+export const CUT_SHARE = 0.9;
+
+const median = (xs: number[]) => {
+  const a = [...xs].sort((x, y) => x - y);
+  return a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+};
+
+/**
+ * Declared DPS per stored quarter, newest first, in the reporting currency,
+ * with a Q4 the filer states only inside the 10-K derived as the fiscal year
+ * less its Q1-Q3. Null where neither is on file.
+ */
+export function quarterlyDps(set: StoredFactSet): (number | null)[] {
+  return set.quarters.map((q) => {
+    const own = valueOf(home(set, q), "dividendsDeclaredPerShare");
+    if (own !== null || q.fp !== "Q4" || q.fy == null) return own;
+    const y = set.years.find((x) => x.e === q.e);
+    const yDps = y ? valueOf(home(set, y), "dividendsDeclaredPerShare") : null;
+    if (yDps === null) return null;
+    const parts = ["Q1", "Q2", "Q3"].map((fp) => {
+      const p = set.quarters.find((x) => x.fy === q.fy && x.fp === fp);
+      return p ? valueOf(home(set, p), "dividendsDeclaredPerShare") : null;
+    });
+    if (parts.some((v) => v === null)) return null;
+    const derived = yDps - (parts as number[]).reduce((a, b) => a + b, 0);
+    return derived >= 0 ? Math.round(derived * 1e6) / 1e6 : null;
+  });
+}
+
+/** Four consecutive quarters of DPS from `offset`, split into regular and special. */
+function fourDps(set: StoredFactSet, dps: (number | null)[], offset: number): { regular: number; special: number; quarters: number[]; periodEnd: string } | null {
+  const four = set.quarters.slice(offset, offset + 4);
+  if (four.length < 4 || !four.every((q, i) => i === 0 || isConsecutive(four[i - 1], q))) return null;
+  const vals = dps.slice(offset, offset + 4);
+  if (vals.some((v) => v === null)) return null;
+  const v = vals as number[];
+  // AGAINST THE LARGEST OF THE OTHER THREE, not the median of all four: after
+  // a cut (FMC $0.58 -> $0.08) the median falls and an ordinary old quarter
+  // would read as a special. Its regular part is the others' median.
+  let special = 0;
+  const regular = v.map((x, i) => {
+    const others = v.filter((_, j) => j !== i);
+    const top = Math.max(...others);
+    if (top > 0 && x > SPECIAL_MULTIPLE * top) { const m = median(others); special += x - m; return m; }
+    return x;
+  });
+  return { regular: regular.reduce((a, b) => a + b, 0), special, quarters: regular, periodEnd: four[0].e };
+}
+
+export type DividendRead = {
+  /** Four quarters on file: the regular total, the special left out, the period. */
+  four: { regular: number; special: number; periodEnd: string } | null;
+  /** The latest regular quarter is a cut: what Div ($) shows, and the trailing total. */
+  cut: { annualised: number; ttm: number } | null;
+  /** Regular growth over the four quarters before, percent, or null. */
+  growth: number | null;
+};
+
+/** Pure. The figures behind Div ($), Div Growth and Payout. */
+export function dividendRead(set: StoredFactSet): DividendRead {
+  const dps = quarterlyDps(set);
+  const now = fourDps(set, dps, 0);
+  const prior = fourDps(set, dps, 4);
+  let cut: DividendRead["cut"] = null;
+  if (now && now.quarters[0] > 0) {
+    const before = median(now.quarters.slice(1));
+    if (before > 0 && now.quarters[0] < CUT_SHARE * before) cut = { annualised: now.quarters[0] * 4, ttm: now.regular };
+  }
+  return {
+    four: now ? { regular: now.regular, special: now.special, periodEnd: now.periodEnd } : null,
+    cut,
+    growth: now && prior && prior.regular > 0 ? ((now.regular - prior.regular) / prior.regular) * 100 : null,
+  };
+}
+
+/**
+ * Dividend growth, percent: the newest regular four quarters against the four
+ * before (dividendRead), else the newest fiscal year against the one before.
+ * Null when either side is missing or the older one is not positive -- growth
+ * from nothing is not a percentage.
  */
 function dividendGrowth(set: StoredFactSet): number | null {
+  const read = dividendRead(set);
+  if (read.growth !== null) return read.growth;
   const now = fourQuartersFrom(set, "dividendsDeclaredPerShare", 0);
   const prior = fourQuartersFrom(set, "dividendsDeclaredPerShare", 4);
   if (now !== null && prior !== null && prior > 0) return ((now - prior) / prior) * 100;
@@ -255,13 +422,57 @@ function dividendGrowth(set: StoredFactSet): number | null {
   return a !== null && b !== null && b > 0 ? ((a - b) / b) * 100 : null;
 }
 
+// ── A PER-QUARTER-RATE FILER'S DIVIDEND (#553 COWORK #210, 2026-10-12) ──────
+// A's #848 (#552 COWORK #208) found 25 filers whose every dividend frame states
+// the quarter's RATE (BKNG, CEG, V): their "year" is one quarter's rate and
+// their differenced quarters read $0, so A's splitAdjusted now withholds both
+// and stamps the set `dvr.rate`. Pickers then had no four quarters and no year:
+// Div ($), yield, growth and payout read "–". Cowork's ruling (COWORK #210):
+//   Div ($)  the latest filed rate x 4, marked as an estimate;
+//   Growth   that rate against the rate filed for the same quarter a year before;
+//   Payout   rate x 4 over twelve months of EPS, marked as the Div ($) is.
+// The rate must be one the filer filed itself (as-filed, positive) in the
+// newest four stored quarters: an older one is not "the latest rate".
+
+/** The latest quarterly rate a rate filer filed, and the same quarter's rate a year before. */
+export type DividendRate = { rate: number; periodEnd: string; prior: number | null };
+
+const DPS_KEY = "dividendsDeclaredPerShare";
+const filedRate = (set: StoredFactSet, p: StoredPeriod | undefined): number | null => {
+  const c = cell(home(set, p), DPS_KEY);
+  return c.derived === "as-filed" && typeof c.val === "number" && c.val > 0 ? c.val : null;
+};
+
+/** Pure. Null unless A's dividend-basis pass classed the (split-adjusted) set a rate filer. */
+export function dividendRateRead(set: StoredFactSet & { dvr?: DividendBasis }): DividendRate | null {
+  if (!set.dvr?.rate) return null;
+  const q = set.quarters.slice(0, 4).find((p) => filedRate(set, p) !== null);
+  if (!q) return null;
+  const before = q.fy == null ? undefined : set.quarters.find((p) => p.fy === q.fy! - 1 && p.fp === q.fp);
+  return { rate: filedRate(set, q)!, periodEnd: q.e, prior: filedRate(set, before) };
+}
+
+/**
+ * The mark on a rate filer's Div ($), yield and payout: A's estimate sign, the
+ * owner's wording. BUILT IN secEstimates, as every mark is (check-estimates):
+ * through A's plain { kind: "estimate", note } builder, which is named for the
+ * report window -- a dividend-named builder there is A's to add.
+ */
+export const DIVIDEND_RATE_MARK: SecPickerMark = reportWindowMark(
+  `${DIVIDEND_RATE_YEAR_NOTE} Estimate: the latest quarterly rate it filed \u00d7 4.`
+);
+
 /** WRITE half. Pure. */
 export function buildSecPickerRow(
-  set: StoredFactSet,
+  filed: StoredFactSet,
   today: string,
   filer: FilerFacts,
   nowMs: number
 ): SecPickerRow {
+  // PER-SHARE FIGURES ON TODAY'S SHARE BASIS (#553 COWORK #184 item 1): A's
+  // splitAdjusted, the same the stock page applies. BKNG (25:1) read $9.64 a
+  // share and +2,437% growth from pre-split dividends. Idempotent (stamped).
+  const set = splitAdjusted(filed);
   const inputs = valuationInputs(set, today, filer);
   const unit = unitOf(set);
   if (!moneyIsUsd(unit)) {
@@ -271,7 +482,7 @@ export function buildSecPickerRow(
       v: 1,
       at: nowMs,
       unit,
-      inputs: { shares: inputs.shares, refusals: inputs.refusals },
+      inputs: { shares: inputs.shares, refusals: inputs.refusals, ...(inputs.sic ? { sic: inputs.sic } : {}) },
       m: { revenue: null, revenueIncomplete: false, ebitda: null, balanceSheet: null },
       operatingIncome: null,
       netIncome: null,
@@ -282,47 +493,76 @@ export function buildSecPickerRow(
       // the row carries nothing derived from a figure it refused.
       eps: null,
       payout: null,
+      growth: secGrowthFacts(set, today, filer, inputs.refusals),
     };
   }
   const oi = twelveMonthsOf(set, ["operatingIncome"]);
   const ni = twelveMonthsOf(set, ["netIncome"]);
   const cf = twelveMonthsOf(set, ["operatingCashFlow", "capex"]);
   const dps = twelveMonthsOf(set, ["dividendsDeclaredPerShare"]);
+  const read = dividendRead(set);
+  const rate = dividendRateRead(set);
+  // Div ($): a rate filer shows its latest filed rate x 4 (COWORK #210); a cut
+  // the latest quarter annualised; else the regular four quarters (Q4 derived,
+  // specials out); else twelveMonthsOf's figure as before.
+  const divPerShare = rate
+    ? Math.round(rate.rate * 4 * 1e6) / 1e6
+    : read.cut ? read.cut.annualised : read.four ? read.four.regular : dps ? dps.vals.dividendsDeclaredPerShare : null;
+  const tx = Array.isArray(set.tx) ? set.tx : [];
+  const div: NonNullable<SecPickerRow["div"]> = {
+    ...(divPerShare === null && tx.includes("ifrs-full") && !tx.includes("us-gaap") ? { ifrs: true as const } : {}),
+    ...(!rate && read.cut ? { cut: { ttm: read.cut.ttm } } : {}),
+    ...(!rate && read.four && read.four.special > 0 ? { special: Math.round(read.four.special * 1e4) / 1e4 } : {}),
+    ...(rate ? { rate: { q: rate.rate, end: rate.periodEnd } } : {}),
+  };
+  const eps = inputs.eps;
   return {
     v: 1,
     at: nowMs,
     unit,
-    inputs: { shares: inputs.shares, refusals: inputs.refusals },
+    inputs: { shares: inputs.shares, refusals: inputs.refusals, ...(inputs.sic ? { sic: inputs.sic } : {}) },
     m: multipleInputs(set),
     operatingIncome: oi ? oi.vals.operatingIncome : null,
     netIncome: ni ? ni.vals.netIncome : null,
     // capex is stored as the positive payment (PaymentsToAcquire...); abs() so a
     // filer that tags it negative cannot turn FCF into OCF + capex.
     freeCashFlow: cf ? cf.vals.operatingCashFlow - Math.abs(cf.vals.capex) : null,
-    divPerShare: dps ? dps.vals.dividendsDeclaredPerShare : null,
-    divGrowth: dividendGrowth(set),
-    eps: inputs.eps,
-    payout: samePeriodPayout(set, inputs.eps),
+    divPerShare,
+    divGrowth: rate ? (rate.prior ? ((rate.rate - rate.prior) / rate.prior) * 100 : null) : dividendGrowth(set),
+    eps,
+    // A rate filer's payout is the annualised rate over the row's own twelve
+    // months of EPS, so it carries that EPS's period (never "periods differ").
+    payout: rate
+      ? eps && eps.val > 0 && divPerShare !== null
+        ? { val: (divPerShare / eps.val) * 100, basis: eps.basis, periodEnd: eps.periodEnd }
+        : null
+      : samePeriodPayout(set, eps),
+    growth: secGrowthFacts(set, today, filer, inputs.refusals),
+    ...(Object.keys(div).length ? { div } : {}),
   };
 }
 
 const ok = (f: { ok: true; val: number } | { ok: false } | null): number | null =>
   f && f.ok ? f.val : null;
 
-/** READ half. Pure. `price` is the price the page shows for the row. */
-export function applySecPickerRow(row: SecPickerRow, price: number | null): SecPickerFigures {
+/**
+ * READ half. Pure. `price` is the price the page shows for the row. `marks`
+ * names each figure that is an estimate or derived (absent when none); a
+ * marked figure must be rendered with it.
+ */
+export function applySecPickerRow(row: SecPickerRow, price: number | null): SecPickerFigures & { marks?: SecPickerMarks } {
   // BELT AND BRACES: a row whose money is not in dollars yields no money
   // figure here either, whatever its fields hold.
   const usd = moneyIsUsd(row.unit);
-  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: null, refusals: row.inputs.refusals };
+  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: null, refusals: row.inputs.refusals, sic: row.inputs.sic ?? null };
   const cap = ok(marketCap(inputs, price));
-  const mult = valuationMultiples(inputs, row.m, price);
+  const mult = valuationMultiples(inputs, row.m, price, PICKERS_VALUATION_OPTS);
 
-  const bs = row.m.balanceSheet;
-  const enterpriseValue =
-    cap !== null && bs && bs.shortTermDebt !== null && bs.longTermDebt !== null && bs.cash !== null
-      ? cap + bs.shortTermDebt + bs.longTermDebt - bs.cash
-      : null;
+  // A's ONE EV (secEstimates): every line filed → the filed figure; ONLY
+  // short-term debt untagged, and not a bank by SIC → the M2 estimate, marked;
+  // anything else → null.
+  const evFig = enterpriseValueOf(cap, row.m.balanceSheet, row.inputs.sic ?? null);
+  const enterpriseValue = evFig.val;
 
   // P/FCF is refused on a non-positive FCF, like P/E on a loss: a negative
   // multiple sorts to the top of a cheapest-first column.
@@ -338,7 +578,19 @@ export function applySecPickerRow(row: SecPickerRow, price: number | null): SecP
       : null;
 
   const money = <T,>(v: T | null): T | null => (usd ? v : null);
+  // A MARK ONLY BESIDE A FIGURE THAT IS SHOWN: none on a refused or non-dollar cell.
+  const marks: SecPickerMarks = {};
+  const evMark = usd && evFig.val !== null ? markOf(evFig.est) : null;
+  if (evMark) marks.ev = evMark;
+  const pbMark = usd && mult.pb?.ok ? markOf(mult.pb.est) : null;
+  if (pbMark) marks.pb = pbMark;
+  // A rate filer's Div ($) is an estimate, and the yield divides it (COWORK #210).
+  if (usd && row.div?.rate && row.divPerShare !== null) {
+    marks.dps = DIVIDEND_RATE_MARK;
+    if (divYield !== null) marks.dyield = DIVIDEND_RATE_MARK;
+  }
   return {
+    ...(Object.keys(marks).length ? { marks } : {}),
     marketCap: cap,
     psRatio: money(ok(mult.ps)),
     pbRatio: money(ok(mult.pb)),
@@ -375,12 +627,20 @@ export const PAYOUT_PERIODS_DIFFER = "Not shown: the EPS and dividend periods di
 
 export const SEC_EARNINGS_FIELDS: ("peRatio" | "epsTtm" | "payoutRatio")[] = ["peRatio", "epsTtm", "payoutRatio"];
 
+/** The payout cell's mark: a rate filer's payout shown divides its estimated Div ($) (COWORK #210). */
+export function payoutRateMark(row: Pick<SecPickerRow, "div">, earnings: SecEarningsFigures | null): SecPickerMark | null {
+  return row.div?.rate && earnings?.payoutRatio != null ? DIVIDEND_RATE_MARK : null;
+}
+
 /**
  * READ half for the three. NULL (not a figures object) for a row written
  * before they moved: the page then leaves the stored values, exactly as for a
  * symbol with no row. Pure.
  */
-export function applySecEarnings(row: SecPickerRow, price: number | null): SecEarningsFigures | null {
+export function applySecEarnings(
+  row: Pick<SecPickerRow, "unit" | "inputs" | "eps" | "payout">,
+  price: number | null
+): SecEarningsFigures | null {
   if (!("eps" in row)) return null;
   const usd = moneyIsUsd(row.unit);
   const eps = row.eps ?? null;
@@ -403,6 +663,142 @@ export function applySecEarnings(row: SecPickerRow, price: number | null): SecEa
   };
 }
 
+/**
+ * A's REFUSAL, AS THE GRID'S CODE (#553 COWORK #69). Every ValuationRefusal
+ * has one: the Record type makes a new refusal a type error here until it is
+ * given a code, and scripts/check-pickers-cell-why.mjs checks each code has
+ * words in lib/pickerCellWhy.ts.
+ */
+export const WHY_FOR_REFUSAL: Record<ValuationRefusal, CellWhyCode> = {
+  "no-cover-share-count": "noShr",
+  "multi-class-share-count-is-ambiguous": "multi",
+  "ads-ratio-makes-shares-incomparable": "adsS",
+  "ads-ratio-makes-eps-incomparable": "adsE",
+  "ticker-is-a-debt-security": "debt",
+  "share-count-is-stale": "shOld",
+  "no-twelve-month-eps": "noEps",
+  "eps-period-is-stale": "epsOld",
+  "share-basis-changed": "basis",
+  "eps-is-zero-or-negative": "epsNeg",
+  "eps-near-zero": "eps0",
+  "no-twelve-month-revenue": "noRev",
+  "revenue-line-incomplete": "revInc",
+  "no-balance-sheet-equity": "noEq",
+  "equity-tagged-only-incl-nci": "eqNci",
+  "equity-is-zero-or-negative": "eqNeg",
+  "equity-too-small-for-pb": "eqSmall",
+  "enterprise-value-input-missing": "evIn",
+  "ebitda-is-zero-or-negative": "ebitNeg",
+};
+
+/**
+ * WHY EACH EMPTY CELL IS EMPTY (#553 COWORK #69). Pure. For every grid column
+ * this row leaves empty -- the same `figures` and `earnings` the page applies
+ * -- the code of the reason, taken from A's refusal where there is one. A
+ * column with a figure gets no entry. `industry` is A's label for the row: a
+ * bank or insurer's empty Ent. Value, P/S and P/FCF read "n/a", not "–".
+ */
+export function secPickerWhy(
+  row: SecPickerRow,
+  price: number | null,
+  figures: SecPickerFigures,
+  earnings: SecEarningsFigures | null,
+  industry: string | null | undefined
+): Partial<Record<CellWhyColumn, CellWhyCode>> {
+  const out: Partial<Record<CellWhyColumn, CellWhyCode>> = {};
+  const usd = moneyIsUsd(row.unit);
+  const refusals = row.inputs.refusals;
+  const priced = price !== null && Number.isFinite(price) && price > 0;
+  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: row.eps ?? null, refusals, sic: row.inputs.sic ?? null };
+  const capFig = marketCap(inputs, price);
+  const why = (f: ValuationFigure | null | undefined): CellWhyCode | null => (f && !f.ok ? WHY_FOR_REFUSAL[f.why] : null);
+  // The cap's reason is every cap-based column's reason, as in valuationMultiples.
+  const capWhy: CellWhyCode = refusals.includes("ticker-is-a-debt-security")
+    ? "debt"
+    : why(capFig) ?? (priced ? "noCap" : "noPx");
+  const bank = isBankOrInsurer(industry);
+  const set = (col: CellWhyColumn, v: number | null, code: () => CellWhyCode) => {
+    if (v === null) out[col] = code();
+  };
+  const money = (code: () => CellWhyCode) => () => (usd ? code() : "fx");
+
+  set("marketCap", figures.marketCap, () => capWhy);
+  const mult = valuationMultiples(inputs, row.m, price, PICKERS_VALUATION_OPTS);
+  set("ps", figures.psRatio, () => (bank ? "naPs" : figures.marketCap === null ? capWhy : usd ? why(mult.ps) ?? "noRev" : "fx"));
+  set("pb", figures.pbRatio, () => (figures.marketCap === null ? capWhy : usd ? why(mult.pb) ?? "noEq" : "fx"));
+  set("ev", figures.enterpriseValue, () => (bank ? "naEv" : figures.marketCap === null ? capWhy : usd ? "evIn" : "fx"));
+  set("pfcf", figures.pfcfRatio, () =>
+    bank ? "naFcf" : figures.marketCap === null ? capWhy : !usd ? "fx" : row.freeCashFlow === null ? "noFcf" : row.freeCashFlow === 0 ? "fcf0" : "fcfNeg");
+  set("revenue", figures.revenue, money(() => (row.m.revenueIncomplete ? "revInc" : "noRev")));
+  set("opinc", figures.operatingIncome, money(() => "noOpi"));
+  set("netinc", figures.netIncome, money(() => "noNi"));
+  set("fcf", figures.freeCashFlow, money(() => "noFcf"));
+  const noDiv = (): CellWhyCode => (row.div?.ifrs ? "divIfrs" : "noDiv");
+  set("dps", figures.divPerShare, money(noDiv));
+  set("dyield", figures.divYield, money(() => (row.divPerShare === null ? noDiv() : "noPx")));
+  set("dgrowth", figures.divGrowth, money(() => "noDg"));
+
+  // P/E, EPS and Payout only where the page applies them (a row written before
+  // they moved keeps its stored figures, and so has no reason to give).
+  if (earnings) {
+    const ads = refusals.includes("ads-ratio-makes-eps-incomparable");
+    set("pe", earnings.peRatio, money(() => why(peRatio(inputs, price)) ?? (priced ? "noEps" : "noPx")));
+    set("eps", earnings.epsTtm, money(() =>
+      ads ? "adsE" : refusals.includes("eps-period-is-stale") ? "epsOld" : "noEps"));
+    // "Loss" (#553 COWORK #184 item 1): no payout ratio on a loss, said in a word.
+    const loss = !ads && row.eps != null && row.eps.val <= 0;
+    set("payout", earnings.payoutRatio, money(() =>
+      ads ? "adsE" : loss ? "payLoss" : earnings.payoutBasis === PAYOUT_PERIODS_DIFFER ? "payMix" : "noPay"));
+  }
+  return out;
+}
+
+/**
+ * A's WORD FOR A REFUSED CELL, BY GRID CODE (#553 COWORK #102, matching the
+ * stock page): REFUSAL_CELL_WORD read through WHY_FOR_REFUSAL, so the strings
+ * live once, in secValuation. "Loss" (EPS not positive), "Not meaningful"
+ * (EPS near zero, an incomplete revenue line, book equity under 1% of market
+ * value), "Neg." (equity not positive).
+ */
+export const REFUSAL_WORD_BY_CODE: Partial<Record<CellWhyCode, string>> = {
+  ...Object.fromEntries(
+    (Object.keys(REFUSAL_CELL_WORD) as ValuationRefusal[]).map((r) => [WHY_FOR_REFUSAL[r], REFUSAL_CELL_WORD[r] as string])
+  ),
+  // PAYOUT ON A LOSS (#553 COWORK #184 item 1): KHC, LYB, WTRG and MAA read
+  // "–". A's word for EPS that isn't positive, so it reads as P/E does.
+  payLoss: REFUSAL_CELL_WORD["eps-is-zero-or-negative"] as string,
+};
+
+/**
+ * WHERE A's WORDS APPLY: the valuation multiples, and in each only the codes
+ * A's refusal for THAT multiple can produce (what secPickerWhy sets there), as
+ * on the stock page. A refusal shown in a figure column (Revenue on an
+ * incomplete line, say) or any other code stays a dash with its reason. Exact
+ * per column so each tab's table note can name exactly the words it can show
+ * (scripts/check-pickers-cell-why.mjs derives them from this map).
+ */
+export const REFUSAL_WORD_CODES: Readonly<Partial<Record<CellWhyColumn, readonly CellWhyCode[]>>> = {
+  pe: ["epsNeg", "eps0"],
+  ps: ["revInc"],
+  pb: ["eqNeg", "eqSmall"],
+  payout: ["payLoss"],
+};
+
+/**
+ * THE WORD EACH REFUSED CELL SHOWS, WHERE A GIVES ONE. Pure, server-side, so
+ * the client grid (which may not import secValuation) receives the word as
+ * data beside the code. B's own word cells ("Neg." for negative FCF and the
+ * bank/insurer "n/a") stay in lib/pickerCellWhy.ts: neither is an A refusal.
+ */
+export function secPickerWords(why: Partial<Record<CellWhyColumn, CellWhyCode>>): Partial<Record<CellWhyColumn, string>> {
+  const out: Partial<Record<CellWhyColumn, string>> = {};
+  for (const [col, code] of Object.entries(why) as [CellWhyColumn, CellWhyCode][]) {
+    const word = REFUSAL_WORD_CODES[col]?.includes(code) ? REFUSAL_WORD_BY_CODE[code] : undefined;
+    if (word) out[col] = word;
+  }
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────────────── I/O
 
 const redis =
@@ -423,23 +819,115 @@ function isRow(v: unknown): v is SecPickerRow {
  * malformed field is simply absent from the map; a Redis failure is an empty
  * map (the page then keeps its previous values, the pre-merge state).
  */
+//
+// BOTH SPELLINGS, STILL ONE HMGET (#553 COWORK #168 item 2, from A's census in
+// CODE-A #177): the grid asks for BRK.B while the warm job writes the row
+// under the Tiingo universe's BRK-B, so all six valuation cells were empty for
+// a spelling reason alone. Each symbol's dot/dash twin rides in the same
+// HMGET via symbolSpellings (more fields, not more commands); the asked
+// spelling wins, and the
+// row is returned under the symbol the caller asked for.
 export async function readSecPickerRows(symbols: string[]): Promise<Map<string, SecPickerRow>> {
   const out = new Map<string, SecPickerRow>();
-  const fields = [...new Set(symbols.filter(Boolean))];
-  if (!redis || !fields.length) return out;
+  const asked = [...new Set(symbols.filter(Boolean))];
+  if (!redis || !asked.length) return out;
+  const spellingsOf = (sym: string): string[] => symbolSpellings(sym);
+  const fields = [...new Set(asked.flatMap(spellingsOf))];
   try {
     const raw = (await redis.hmget(pickersSecKey(), ...fields)) as unknown;
-    const get = (sym: string, i: number): unknown =>
-      Array.isArray(raw) ? raw[i] : raw && typeof raw === "object" ? (raw as Record<string, unknown>)[sym] : null;
+    // Metered per field asked (#553 COWORK #214, cut 3): the reply is sized by
+    // the rows that exist, but an absent field costs a null, so this is a ceiling.
+    await recordRedisRead("sec-fundamentals", fields.length, "sec-picker-rows");
+    const byField = new Map<string, unknown>();
+    fields.forEach((f, i) =>
+      byField.set(f, Array.isArray(raw) ? raw[i] : raw && typeof raw === "object" ? (raw as Record<string, unknown>)[f] : null)
+    );
     const staleBefore = Date.now() - PICKERS_SEC_TTL_SECONDS * 1000;
-    fields.forEach((sym, i) => {
-      const row = get(sym, i);
-      if (isRow(row) && row.at >= staleBefore) out.set(sym, row);
-    });
+    for (const sym of asked) {
+      for (const f of spellingsOf(sym)) {
+        const row = byField.get(f);
+        if (isRow(row) && row.at >= staleBefore) {
+          out.set(sym, row);
+          break;
+        }
+      }
+    }
   } catch {
     // Absent, not an error the reader sees.
   }
   return out;
+}
+
+// ── THE POOL OVERLAY'S CAP AND P/E (#553 CODE-B #94 B8, #683 Q1) ─────────────
+//
+// On PRICE_PROVIDER_POOL=tiingo the pool rows' price is Tiingo's, and their
+// market cap and P/E used to be the FMP row's, frozen once FMP stops. They are
+// now this hash's cover-page shares and twelve-month EPS against the ROW'S OWN
+// price -- A's marketCap() and, through applySecEarnings, A's peRatio(), with
+// their named refusals. A refusal, or no row, is null: never the FMP figure.
+//
+// THE BULK SOURCE IS THIS HASH, READ WHOLE. The overlay is read for hundreds of
+// symbols per render, so it does not HMGET per page: tiingoPool.ts wraps
+// loadSecCapRows in the Data Cache (one HGETALL per miss, like the Tiingo pool
+// and EOD blobs beside it), and the projection below keeps only what a cap and
+// a P/E need, so the cached entry stays small.
+
+/** The price-independent cap and P/E inputs of one row. JSON-safe. */
+export type SecCapRow = Pick<SecPickerRow, "v" | "unit" | "at" | "inputs" | "eps">;
+
+/** Pure. `eps` stays absent on a row written before P/E moved (see applySecEarnings). */
+export function toSecCapRow(row: SecPickerRow): SecCapRow {
+  const out: SecCapRow = { v: 1, unit: row.unit, at: row.at, inputs: { shares: row.inputs.shares, refusals: row.inputs.refusals } };
+  if ("eps" in row) out.eps = row.eps ?? null;
+  return out;
+}
+
+/**
+ * Pure. Market cap and P/E at `price`, or null for each refused or missing
+ * figure. The cap is A's marketCap() on the cover-page shares (as
+ * applySecPickerRow does); the P/E is applySecEarnings's, so a row that predates
+ * P/E, or is not in dollars, has none.
+ */
+export function secCapAndPe(
+  row: SecCapRow | null | undefined,
+  price: number | null
+): { marketCap: number | null; pe: number | null } {
+  if (!row) return { marketCap: null, pe: null };
+  const inputs: ValuationInputs = { shares: row.inputs.shares, eps: null, refusals: row.inputs.refusals };
+  return {
+    marketCap: ok(marketCap(inputs, price)),
+    pe: applySecEarnings(row, price)?.peRatio ?? null,
+  };
+}
+
+/** Pure. An HGETALL of the hash -> the projected rows, stale and malformed rows dropped. */
+export function parseSecCapHash(raw: Record<string, unknown> | null, nowMs: number): Record<string, SecCapRow> {
+  const out: Record<string, SecCapRow> = {};
+  const staleBefore = nowMs - PICKERS_SEC_TTL_SECONDS * 1000;
+  for (const [field, value] of Object.entries(raw ?? {})) {
+    let v: unknown = value;
+    if (typeof v === "string") {
+      try { v = JSON.parse(v); } catch { continue; }
+    }
+    if (isRow(v) && v.at >= staleBefore) out[field] = toSecCapRow(v);
+  }
+  return out;
+}
+
+/**
+ * ONE HGETALL of this deployment's hash. Only ever called through the Data
+ * Cache wrapper in tiingoPool.ts (readSecCapRows), never per page view.
+ */
+export async function loadSecCapRows(): Promise<Record<string, SecCapRow> | null> {
+  if (!redis) return null;
+  // READ-ONLY, SO THE PRODUCTION HASH ON EVERY DEPLOYMENT (#553 COWORK #110,
+  // 2026-10-03). The preview-only key exists to keep a PR's job WRITES apart;
+  // it fills only from an explicit seed and goes stale in 3 days, so a preview
+  // reading it showed "—" for every cap. Only cap/P/E inputs are projected.
+  const raw = await redis.hgetall<Record<string, unknown>>(PICKERS_SEC_KEY);
+  // The census's 2.56 MB HGETALL (#553 COWORK #214, cut 3): every row, per Data Cache miss.
+  await recordRedisRead("sec-fundamentals", raw ? Object.keys(raw).length : 0, "sec-cap-rows");
+  return raw ? parseSecCapHash(raw, Date.now()) : null;
 }
 
 export type WarmPickersSecResult = {
@@ -451,8 +939,47 @@ export type WarmPickersSecResult = {
   commands: number;
   /** Rows for symbols no longer targeted, removed after the write (COWORK #60). */
   pruned?: number;
-  /** Why the prune was skipped, when it was. */
+  /** Why the prune was skipped, when it was ("time-budget" after an early stop). */
   pruneSkipped?: string | null;
+  /** How long the run took, ms (#553 COWORK #113/#114), by the run's clock. */
+  durationMs?: number;
+};
+
+/**
+ * THE RUN'S TIME BUDGET (#553 COWORK #113/#114, 2026-10-03). The route's
+ * maxDuration is 300 s; ~2,600 sequential GETs can approach it, and a run
+ * killed by the platform writes neither its last batch nor the EXPIRE. So the
+ * job stops READING once this much time has passed, then still flushes what
+ * it has, sets the EXPIRE, and reports stoppedEarly: "time-budget". The prune
+ * is SKIPPED on an early stop (pruneSkipped: "time-budget"): it would compare
+ * the stored rows against the full target list, and nothing was wrong with the
+ * rows of the symbols this run simply did not reach.
+ */
+export const WARM_PICKERS_SEC_BUDGET_MS = 240_000;
+/**
+ * Commands kept back when the job guard's budget runs low: the last HSET, the
+ * EXPIRE and the run record, with room (#553 COWORK #124).
+ */
+export const WARM_PICKERS_SEC_COMMAND_RESERVE = 20;
+
+/** The module's client, read through a function so warmPickersSec can name its local `redis`. */
+const moduleRedis = (): WarmPickersSecRedis | null => redis;
+
+/** What warmPickersSec needs from Redis, so a check can stub it. */
+export type WarmPickersSecRedis = Pick<Redis, "hset" | "hkeys" | "hdel" | "expire">;
+
+/** Injectable for checks only; production passes nothing. */
+export type WarmPickersSecDeps = {
+  /** ms clock; default Date.now. */
+  clock?: () => number;
+  budgetMs?: number;
+  redis?: WarmPickersSecRedis | null;
+  readFactSet?: (symbol: string) => Promise<StoredFactSet | null>;
+  /**
+   * Commands the job guard still allows this run, or null outside a guarded
+   * run. The route passes jobGuard's guardCommandsLeft; checks pass a stub.
+   */
+  commandsLeft?: () => number | null;
 };
 
 /** Below this share of the hash's current rows, today's targets look like a bad read. */
@@ -481,14 +1008,17 @@ export function rowsToPrune(stored: string[], targets: string[]): { drop: string
 
 /**
  * The daily job's work. RUNAWAY GUARDS, stated as numbers:
- *   - at most MAX_SYMBOLS_PER_RUN symbols (the universe is ~850 today);
+ *   - at most MAX_SYMBOLS_PER_RUN symbols (warm targets ~850 plus the Tiingo
+ *     universe ~2,580, overlapping; ~2,600 distinct);
  *   - one GET per symbol (readFactSet) + one HSET per 100 symbols + one EXPIRE;
  *   - the FIRST Redis write error stops the run -- a failing store is not
  *     retried 850 times.
  *   - then 1 HKEYS + 1 HDEL to drop rows no longer targeted (rowsToPrune).
- * So a run costs about 850 + 9 + 1 + 2 ≈ 862 commands, and cannot exceed ~2,052.
+ * So a run costs about 2,600 + 26 + 1 + 2 ≈ 2,630 commands, and cannot exceed ~3,033.
  */
-export const MAX_SYMBOLS_PER_RUN = 2_000;
+// 3,000 (#553 COWORK #110, 2026-10-03): the targets now include the Tiingo
+// universe (~2,580) so the pool overlay can cap every row it prices.
+export const MAX_SYMBOLS_PER_RUN = 3_000;
 
 export async function warmPickersSec(
   symbols: string[],
@@ -497,12 +1027,32 @@ export async function warmPickersSec(
   // A callback, so this module stays free of JSON imports like secValuation.
   filerFor: (symbol: string) => FilerFacts,
   nowMs = Date.now(),
-  key = pickersSecKey()
+  key = pickersSecKey(),
+  deps: WarmPickersSecDeps = {}
 ): Promise<WarmPickersSecResult> {
+  const clock = deps.clock ?? Date.now;
+  const budgetMs = deps.budgetMs ?? WARM_PICKERS_SEC_BUDGET_MS;
+  const commandsLeft = deps.commandsLeft ?? (() => null);
+  // Named `redis` on purpose: the write-site registry (scripts/check-redis-write-sites.mjs)
+  // finds this job's HSET/EXPIRE/HDEL by that name.
+  const redis: WarmPickersSecRedis | null = deps.redis !== undefined ? deps.redis : moduleRedis();
+  const readSet = deps.readFactSet ?? readFactSet;
+  const startedAt = clock();
   const result: WarmPickersSecResult = {
     ok: true, symbols: 0, written: 0, noFactSet: 0, stoppedEarly: null, commands: 0,
   };
-  if (!redis) return { ...result, ok: false, stoppedEarly: "no-redis" };
+  // THE FACT-SET GETS, METERED (#553 COWORK #214, cut 3): ~17 KB each, ~2,600 a
+  // run, and the largest read this job makes. Recorded once, when the run ends
+  // by any path; the route flushes. A's readFactSet is the stock page's
+  // reader too and is A's to meter there.
+  let factSetsRead = 0;
+  const done = () => {
+    result.durationMs = Math.max(0, clock() - startedAt);
+    if (factSetsRead) void recordRedisRead("sec-facts", factSetsRead, "warm-pickers-sec");
+    factSetsRead = 0;
+    return result;
+  };
+  if (!redis) return { ...done(), ok: false, stoppedEarly: "no-redis" };
 
   const list = [...new Set(symbols.filter(Boolean))].slice(0, MAX_SYMBOLS_PER_RUN);
   result.symbols = list.length;
@@ -526,26 +1076,46 @@ export async function warmPickersSec(
   };
 
   for (const symbol of list) {
-    const set = await readFactSet(symbol).catch(() => null);
+    // THE TIME BUDGET: no new read once it is spent; what was read is kept.
+    if (clock() - startedAt >= budgetMs) {
+      result.stoppedEarly = "time-budget";
+      break;
+    }
+    // THE COMMAND BUDGET (#553 COWORK #124): stop short of the job guard's
+    // per-run ceiling, keeping a reserve for the final flush and EXPIRE. Run
+    // into the guard instead and every later request throws -- the rows in
+    // hand, the EXPIRE and the summary line were all lost that way on the
+    // first widened run (3 Oct, 21:25 UTC).
+    const left = commandsLeft();
+    if (left != null && left <= WARM_PICKERS_SEC_COMMAND_RESERVE) {
+      result.stoppedEarly = "command-budget";
+      break;
+    }
+    const set = await readSet(symbol).catch(() => null);
     result.commands++;
+    if (set) factSetsRead++;
     if (!set) {
       result.noFactSet++;
       continue;
     }
     batch[symbol] = buildSecPickerRow(set, today, filerFor(symbol), nowMs);
-    if (Object.keys(batch).length >= 100 && !(await flush())) return result;
+    if (Object.keys(batch).length >= 100 && !(await flush())) return done();
   }
-  if (!(await flush())) return result;
+  if (!(await flush())) return done();
 
   // Drop the rows of symbols no longer targeted: 1 HKEYS + 1 multi-key HDEL.
-  try {
-    const stored = ((await redis.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
+  // Not after an early stop: the unread symbols' rows are not stale.
+  if (result.stoppedEarly === "time-budget" || result.stoppedEarly === "command-budget") {
+    result.pruneSkipped = result.stoppedEarly;
+    console.warn(`[warm-pickers-sec] prune skipped: ${result.stoppedEarly}`);
+  } else try {
+    const stored = ((await redis.hkeys(key)) ?? []).map(String);
     result.commands++;
     const { drop, skipped } = rowsToPrune(stored, list);
     result.pruneSkipped = skipped;
     if (skipped) console.warn(`[warm-pickers-sec] prune skipped: ${skipped}`);
     if (drop.length) {
-      result.pruned = await redis.hdel(PICKERS_SEC_KEY, ...drop);
+      result.pruned = await redis.hdel(key, ...drop);
       result.commands++;
     } else {
       result.pruned = 0;
@@ -561,5 +1131,5 @@ export async function warmPickersSec(
   } catch {
     // The rows carry their own `at`; a missed EXPIRE is not a correctness issue.
   }
-  return result;
+  return done();
 }

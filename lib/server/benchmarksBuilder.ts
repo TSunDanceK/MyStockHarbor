@@ -12,10 +12,6 @@
 // module and stay perfectly consistent.
 
 import { CRYPTO_MODE_ENABLED } from "../cryptoMode";
-import { Redis } from "@upstash/redis";
-import { fmpFetch } from "./fmpUsage";
-import { PAGE_READ_CACHE } from "./redisCacheMode";
-import { withRedisTimeout } from "./redisGuardTimeout";
 import { timingCache, beginTiming } from "./timing";
 import { readTiingoPool, readTiingoHistory } from "./marketData/read";
 import { pickSurfacePrice } from "./tiingoSurfacePrice";
@@ -45,76 +41,20 @@ export type BenchPayload = {
 };
 
 const CACHE_MS = 5 * 60_000;
+
+/** The panel's label when no tile has a price (#553 COWORK #210): the tiles are hidden. */
+export const BENCHMARKS_UNAVAILABLE = "Benchmark prices are unavailable right now";
 const cache = new Map<string, { at: number; payload: BenchPayload }>();
 
-// Durable second layer behind the per-instance Map above.
-//
-// The Map is scoped to one serverless instance and dies with it, and
-// fetchFmpQuote passes cache:"no-store" so the Next Data Cache cannot help
-// either. A miss therefore costs FOUR live FMP calls, on a code path that
-// both / and /dashboard render through -- so at real traffic most renders
-// were paying that, which is the TTFB story rather than any route config.
-// Redis makes one instance's fetch serve every other instance.
-const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv(PAGE_READ_CACHE)
-    : null;
-
-const REDIS_PREFIX = "msh:benchmarks";
-
-// Retained well beyond CACHE_MS on purpose. After 5 minutes an entry stops
-// being served as fresh, but keeping it lets a failed FMP round degrade to
-// real (if slightly old) prices instead of to a payload of nulls.
-const REDIS_TTL_SECONDS = 24 * 60 * 60;
-
-type RedisEntry = { at: number; payload: BenchPayload };
-
-// A payload whose every row is null is what a total FMP failure produces.
-// It must never be cached: before this module had a shared cache it poisoned
-// one instance for 5 minutes, but writing it to Redis would poison EVERY
-// instance, and for as long as the entry lives. Adding a durable cache
-// without this check would make an outage worse, not better.
+// A payload whose every row is null has nothing to show: the Tiingo read then
+// answers null and the tiles are hidden (see the end of getBenchmarksDataInner).
 function hasRealData(payload: BenchPayload): boolean {
   return payload.items.some((item) => item.close !== null);
-}
-
-async function readRedis(scope: string): Promise<RedisEntry | null> {
-  if (!redis) {
-    timingCache("benchmarks", "redis", "skip", "no-credentials");
-    return null;
-  }
-  const entry = await withRedisTimeout(
-    () => redis.get<RedisEntry>(`${REDIS_PREFIX}:${scope}`),
-    null,
-    "benchmarks",
-    `scope=${scope}`
-  );
-  if (!entry || typeof entry.at !== "number" || !entry.payload) {
-    timingCache("benchmarks", "redis", "miss", scope);
-    return null;
-  }
-  timingCache("benchmarks", "redis", "hit", scope);
-  return entry;
-}
-
-async function writeRedis(scope: string, entry: RedisEntry): Promise<void> {
-  if (!redis) return;
-  try {
-    await redis.set(`${REDIS_PREFIX}:${scope}`, entry, { ex: REDIS_TTL_SECONDS });
-  } catch (err) {
-    // Never fail a render over a cache write.
-    console.error(`[benchmarks] redis write failed scope=${scope}:`, err);
-  }
 }
 
 const FRESH_HEADERS = {
   "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
 };
-
-function toNum(x: unknown): number | null {
-  const n = typeof x === "number" ? x : typeof x === "string" ? Number(x) : NaN;
-  return Number.isFinite(n) ? n : null;
-}
 
 // ETFs, NAMED AS ETFs (#553 COWORK #32 §3, owner ruling): the tile is the fund,
 // not the index. Tiingo licenses no index levels, and an "index level" is never
@@ -127,40 +67,12 @@ export const BENCH_DEFS_STOCK = [
   { key: "iwm", label: "IWM · Russell 2000 ETF", symbol: "IWM" },
 ] as const;
 
-const BENCH_DEFS_CRYPTO = [
-  { key: "btc", label: "Bitcoin (BTC)",  symbol: "BTCUSD" },
-  { key: "eth", label: "Ethereum (ETH)", symbol: "ETHUSD" },
-  { key: "sol", label: "Solana (SOL)",   symbol: "SOLUSD" },
-  { key: "trx", label: "TRON (TRX)",     symbol: "TRXUSD" },
-] as const;
-
-function getBenchDefs(scope: string) {
-  return scope === "crypto" ? BENCH_DEFS_CRYPTO : BENCH_DEFS_STOCK;
-}
-
-async function fetchFmpQuote(symbol: string, apiKey: string): Promise<any | null> {
-  try {
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fmpFetch(url, {
-      cache: "no-store",
-      headers: { accept: "application/json" },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    // FMP returns an array for /stable/quote
-    const row = Array.isArray(json) ? json[0] : json;
-    return row ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * STEP 4 (#553 COWORK #71), behind PRICE_PROVIDER_STOCK_PAGE: the four ETF rows
  * from the Tiingo pool (SPY/QQQ/DIA/IWM are pool members since #666) and their
  * stored closes, through the Data Cache. Each tile is the newer of the IEX trade
  * and the close, labelled; its change is against the previous session's
- * consolidated close. Null when no tile has a price, so FMP stays the fallback.
+ * consolidated close. Null when no tile has a price: the tiles are then hidden.
  */
 async function getBenchmarksTiingo(nowMs: number): Promise<BenchPayload | null> {
   const [pool, ...histories] = await Promise.all([
@@ -236,8 +148,8 @@ async function getBenchmarksDataInner(
 
   // The Tiingo tiles. Held in this instance's Map only, never written to
   // msh:benchmarks:* -- a Tiingo price must not be stored outside msh:tiingo:
-  // (contract §7, the purge). The Data Cache already shares the reads across
-  // instances, so the Redis layer below has nothing to add here.
+  // (contract §7, the purge). The Data Cache shares the reads across
+  // instances.
   if (scope === "stock" && stockPageOnTiingo()) {
     const tiingo = await getBenchmarksTiingo(Date.now()).catch(() => null);
     if (tiingo) {
@@ -246,86 +158,15 @@ async function getBenchmarksDataInner(
     }
   }
 
-  // Second layer: another instance's recent fetch, or this instance's own
-  // from before it was recycled. Promoted into the Map so the rest of this
-  // instance's requests do not re-read Redis.
-  const stored = await readRedis(scope);
-  if (stored && Date.now() - stored.at < CACHE_MS) {
-    cache.set(scope, { at: stored.at, payload: stored.payload });
-    return { data: stored.payload, headers: FRESH_HEADERS };
-  }
-
-  const apiKey = process.env.FMP_API_KEY;
-  const defs = getBenchDefs(scope);
-
-  if (!apiKey) {
-    // A stale-but-real payload beats an empty one even here: the page shows
-    // real prices with an older timestamp rather than four blank tiles.
-    if (stored) {
-      console.error("[benchmarks] FMP_API_KEY is not set -- serving stale cached payload");
-      return { data: stored.payload, headers: {} };
-    }
-    const payload: BenchPayload = {
-      updatedAt: new Date().toISOString(),
-      scope: scope === "crypto" ? "Crypto Benchmarks" : "Benchmarks",
-      items: [],
-    };
-
-    return { data: payload, headers: {}, status: 500 };
-  }
-
-  // Fire all 4 in parallel — same pattern as the working /api/quote route
-  const rows = await Promise.all(defs.map((d) => fetchFmpQuote(d.symbol, apiKey)));
-
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
-  const timeStr = now.toISOString().slice(11, 19);
-
-  const items: BenchItem[] = defs.map((d, i) => {
-    const r = rows[i];
-    return {
-      key: d.key,
-      label: d.label,
-      symbol: d.symbol,
-      date: r ? dateStr : null,
-      time: r ? timeStr : null,
-      close: toNum(r?.price),
-      prevClose: toNum(r?.previousClose),
-      // FMP's /stable/quote endpoint returns `changePercentage` (no "s").
-      // `changesPercentage` was the legacy v3 field name — kept as a
-      // defensive fallback in case a symbol ever routes through an
-      // older response shape.
-      changePct: toNum(r?.changePercentage ?? r?.changesPercentage),
-    };
-  });
-
-  const payload: BenchPayload = {
-    updatedAt: now.toISOString(),
-    scope: scope === "crypto" ? "Crypto Benchmarks" : "Benchmarks",
-    items,
+  // NO FMP FALLBACK, AND NO 500 (2026-10-12, #553 COWORK #210). FMP ended with
+  // the key; this was its quote fetch, and the msh:benchmarks:* layer that only
+  // ever held FMP payloads (a Tiingo price is never written there). With no
+  // Tiingo price -- the pool and all four histories empty, STOCK_PAGE off
+  // Tiingo, or the crypto scope switched on -- the tiles are HIDDEN: no items,
+  // a 200, and the panel's label saying why. Not cached, so the next request
+  // asks Tiingo again.
+  return {
+    data: { updatedAt: "", scope: BENCHMARKS_UNAVAILABLE, items: [] },
+    headers: {},
   };
-
-  // Total FMP failure. Serve the stale copy rather than four blank tiles,
-  // and do NOT cache the null payload -- see hasRealData.
-  if (!hasRealData(payload)) {
-    if (stored) {
-      const ageMin = Math.round((Date.now() - stored.at) / 60_000);
-      console.error(
-        `[benchmarks] all ${defs.length} FMP quotes failed for scope=${scope}; ` +
-          `serving stale cached payload ${ageMin}m old`
-      );
-      return { data: stored.payload, headers: {} };
-    }
-    console.error(
-      `[benchmarks] all ${defs.length} FMP quotes failed for scope=${scope} ` +
-        `with no cached copy -- returning a payload of nulls, not caching it`
-    );
-    return { data: payload, headers: {}, status: 500 };
-  }
-
-  const entry: RedisEntry = { at: Date.now(), payload };
-  cache.set(scope, entry);
-  await writeRedis(scope, entry);
-
-  return { data: payload, headers: FRESH_HEADERS };
 }

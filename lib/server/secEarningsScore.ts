@@ -22,7 +22,7 @@ import {
 import type { ColdResult } from "./secColdFetch";
 import type { EarningsTone as PresentationTone } from "./secPresentation";
 import {
-  MARGIN_NOT_MEANINGFUL, SMALL_REVENUE_BASE, marginMoveMeaningful, marginMoveVerb,
+  MARGIN_NOT_MEANINGFUL, MARGIN_NOT_MEANINGFUL_HERE, SMALL_REVENUE_BASE, marginMoveMeaningful, marginMoveVerb,
   pinCoverage, revenueBaseTooSmall, scoreCoverage, toneForGrowth, toneForMarginDelta, type ScoreCoverage,
 } from "./secPresentation";
 
@@ -186,11 +186,18 @@ function scoreExplanation(view: SecEarningsView, basis: PeriodBasis = "quarter")
   // OFF A VERY SMALL BASE (#535 COWORK #20 rule 2): the figure is stated, with
   // why it is not a signal, and it carries no tone into the "though" below.
   const smallBase = revenueBaseTooSmall(s?.revenue?.val ?? null, rev);
-  const revTone = smallBase ? null : toneForGrowth(rev);
+  // A GROWTH THE PAGE PRINTS AS n/m (#552 COWORK #212/#214) IS NOT A NUMBER
+  // HERE EITHER. JOBY's reason read "Revenue grew 257493.3% against Q2
+  // FY2025, off a very small base" beside a page that prints n/m. The meaning
+  // stays, the figure goes, and like the small base it lends no tone to the
+  // sentence. TEXT ONLY: what is scored is decided below, unchanged.
+  const notMeaningful = Boolean(s?.revenueYoYNotMeaningful);
+  const revTone = smallBase || notMeaningful ? null : toneForGrowth(rev);
   if (isPct(rev) && base) {
     const verb = rev >= 0 ? `revenue grew ${rev.toFixed(1)}%` : `revenue fell ${Math.abs(rev).toFixed(1)}%`;
     clauses.push(
-      smallBase ? `${verb} against ${base}, ${SMALL_REVENUE_BASE}`
+      notMeaningful ? `revenue ${rev >= 0 ? "rose" : "fell"} from a very small base in ${base}, so the growth rate isn't meaningful`
+      : smallBase ? `${verb} against ${base}, ${SMALL_REVENUE_BASE}`
         : revTone === "good" ? `revenue grew ${rev.toFixed(1)}% against ${base}`
           : revTone === "weak" ? `revenue fell ${Math.abs(rev).toFixed(1)}% against ${base}`
             : `revenue was roughly flat against ${base}`
@@ -202,15 +209,15 @@ function scoreExplanation(view: SecEarningsView, basis: PeriodBasis = "quarter")
   // 658.1pp" was that. The words say so and the tone stays out of "though".
   const meaningful = pair !== null && marginMoveMeaningful(pair.prior, pair.latest);
   const mTone = meaningful ? toneForMarginDelta(pp) : null;
-  if (pair && pp !== null) {
+  // A MARGIN THAT ISN'T MEANINGFUL GETS ITS OWN SENTENCE (#552 COWORK #95):
+  // "…is not meaningful — revenue is too small relative to costs, though the
+  // quarter was loss-making" read as if the loss were a surprise against it.
+  const marginNotMeaningful = pair !== null && pp !== null && !meaningful;
+  if (pair && pp !== null && meaningful) {
     // "Widened"/"narrowed" only where both margins are positive; a negative
     // margin moving towards zero "improved" (rule 3).
-    const verb = meaningful ? marginMoveVerb(pair.prior, pair.latest, mTone) : null;
-    clauses.push(
-      !meaningful ? `operating margin is ${MARGIN_NOT_MEANINGFUL}`
-        : verb ? `operating margin ${verb} ${Math.abs(pp).toFixed(1)}pp`
-          : "operating margin held steady"
-    );
+    const verb = marginMoveVerb(pair.prior, pair.latest, mTone);
+    clauses.push(verb ? `operating margin ${verb} ${Math.abs(pp).toFixed(1)}pp` : "operating margin held steady");
   }
   const ni = s?.netIncome?.val ?? null;
   const opInc = s?.operatingIncome?.val ?? null;
@@ -220,6 +227,11 @@ function scoreExplanation(view: SecEarningsView, basis: PeriodBasis = "quarter")
   const profit = ni === null ? null
     : ni > 0 ? (opInc !== null && opInc < 0 ? `the ${w.one} was profitable after non-operating items` : `the ${w.one} was profitable`)
       : `the ${w.one} was loss-making`;
+  if (marginNotMeaningful) {
+    const lead = clauses.length ? `${clauses.join(" and ")}. ` : "";
+    const sentence = `${lead[0]?.toUpperCase() ?? ""}${lead.slice(1)}Operating margin is ${MARGIN_NOT_MEANINGFUL_HERE}${profit ? `, and ${profit}` : ""}.`;
+    return `${sentence} Later filings may show whether that continues.`;
+  }
   if (!clauses.length) {
     return profit
       ? `${profit[0].toUpperCase()}${profit.slice(1)}; later filings may show more.`
@@ -431,6 +443,13 @@ function noScoreReason(symbol: string, cold: ColdResult, hasSet: boolean): strin
   // will be. For a preferred or a baby bond there is nothing of its own to
   // read, ever -- the filings on that CIK belong to the issuer, and that is
   // the point of refusing them.
+  // A FUND OR A CENSUS-NAMED NOTE (#552 COWORK #151): settled, not pending.
+  // The same words as the earnings page's SecNotShownCard (NOT_SHOWN_WORDS).
+  if (cold.status === "not-shown") {
+    return cold.kind === "fund"
+      ? "SEC filing figures aren't shown for funds and trusts. Their filings describe the fund, not a company's earnings."
+      : "SEC filing figures aren't shown for this security. Its filings describe the issuer, not this security.";
+  }
   if (cold.status === "not-issuer-equity") {
     const parent = cold.siblings.filter((x) => !/[-.]/.test(x)).sort((a, b) => a.length - b.length)[0];
     return cold.reason === "derivative-of-issuer"

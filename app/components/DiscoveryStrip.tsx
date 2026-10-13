@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 type DiscoveryData = {
   insight: { slug: string; symbol: string | null } | null;
@@ -74,18 +75,20 @@ const TILE_DEFS: Array<Omit<Tile, "href"> & { defaultHref: string }> = [
     // estimates, so there is no beat, miss or surprise to decode.
     text: "Revenue, EPS & margins — as filed",
     accent: "#22d3ee",
-    defaultHref: "/stock/AAPL/earnings",
+    // The calendar, not a fixed symbol's earnings page (#552 COWORK #197): a
+    // stock's earnings page is linked only once its filed set is known.
+    defaultHref: "/earnings-calendar",
   },
 ];
 
-function resolveHref(key: string, defaultHref: string, data: DiscoveryData | null): string {
+function resolveHref(key: string, defaultHref: string, data: DiscoveryData | null, hasFiledEarnings: (symbol: string) => boolean): string {
   switch (key) {
     case "insights":
       return data?.insight ? `/insights/${data.insight.slug}` : defaultHref;
     case "news":
       return data?.newsSymbol ? `/stock/${encodeURIComponent(data.newsSymbol)}/news` : defaultHref;
     case "earnings":
-      return data?.earningsSymbol
+      return data?.earningsSymbol && hasFiledEarnings(data.earningsSymbol)
         ? `/stock/${encodeURIComponent(data.earningsSymbol)}/earnings`
         : defaultHref;
     default:
@@ -94,6 +97,7 @@ function resolveHref(key: string, defaultHref: string, data: DiscoveryData | nul
 }
 
 export default function DiscoveryStrip() {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const [data, setData] = useState<DiscoveryData | null>(null);
 
   useEffect(() => {
@@ -115,7 +119,7 @@ export default function DiscoveryStrip() {
 
   const tiles: Tile[] = TILE_DEFS.map(({ defaultHref, ...tile }) => ({
     ...tile,
-    href: resolveHref(tile.key, defaultHref, data),
+    href: resolveHref(tile.key, defaultHref, data, hasFiledEarnings),
   }));
 
   return (

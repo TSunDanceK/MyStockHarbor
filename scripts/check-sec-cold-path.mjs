@@ -186,17 +186,29 @@ check("no-cik renders a state rather than 404-ing",
   !/notFound\(\)/.test(pageCode) && /<SecNoRegistrantCard/.test(pageCode),
   "a symbol whose stock page renders must not 404 on its earnings page");
 check("...and that state is noindex, so not 404-ing cannot create thin content",
-  /index: cikForSymbol\(clean\) !== null/.test(pageCode),
+  /index: earningsPageIndexable\(\{ hasCik: cikForSymbol\(clean\) !== null \|\| isSiteFund\(clean\),/.test(pageCode),
   "the sibling page's rule, for the sibling page's reason: this route is enumerated");
 check("...and the work bound still sits before any fetch",
-  /const cik = cikForSymbol\(clean\);\s*\n\s*if \(!cik\) return \{ status: "no-cik" \};/.test(code),
+  /const cik = cikForSymbol\(clean\);[\s\S]{0,600}?\n\s*if \(!cik\) return isSiteFund\(clean\) \? \{ status: "not-shown", kind: "fund", primary: null \} : \{ status: "no-cik" \};/.test(code),
   "the gate, not the response, is what stops an arbitrary string doing work");
 
 console.log("\n3. the timeout");
 
 check("the fetch is wrapped in a timeout", /withTimeout\(\s*fetchAndStore/.test(code));
 check("the timeout is a named constant, not a literal at the call site",
-  /SEC_COLD_TIMEOUT_MS = \d/.test(code) && /SEC_COLD_TIMEOUT_MS\s*[,)]/.test(code));
+  /SEC_COLD_TIMEOUT_MS = \d/.test(code) && /withTimeout\(fetchAndStore\(clean, cik\), SEC_COLD_FILL_BUDGET_MS,/.test(code));
+// COMPANYFACTS' OWN DEADLINE (#552 COWORK #187 §5, POOL): bounded, longer than
+// the shared 5s, and the fill's budget is it plus room for the small requests.
+{
+  const facts = Number((code.match(/SEC_COLD_FACTS_DEADLINE_MS = ([\d_]+)/) ?? [])[1]?.replace(/_/g, ""));
+  check("companyfacts has its own bounded deadline, 10s-30s", facts >= 10_000 && facts <= 30_000, `${facts}ms`);
+  check("only the companyfacts read passes it; every other cold request keeps the shared deadline",
+    /companyfacts\/CIK\$\{cik\}\.json`, \{[\s\S]{0,400}?\}, SEC_COLD_FACTS_DEADLINE_MS\);/.test(code) && (code.match(/SEC_COLD_FACTS_DEADLINE_MS\)/g) ?? []).length === 1);
+  check("MUTATION: companyfacts back on the shared 5s deadline → caught",
+    !/companyfacts\/CIK\$\{cik\}\.json`, \{[\s\S]{0,400}?\}, SEC_COLD_FACTS_DEADLINE_MS\);/.test(code.replace("}, SEC_COLD_FACTS_DEADLINE_MS);", "});")));
+  check("the fill's budget is the companyfacts deadline plus the shared one",
+    /export const SEC_COLD_FILL_BUDGET_MS = SEC_COLD_FACTS_DEADLINE_MS \+ SEC_COLD_TIMEOUT_MS;/.test(code));
+}
 const ms = Number((code.match(/SEC_COLD_TIMEOUT_MS = ([\d_]+)/) ?? [])[1]?.replace(/_/g, ""));
 // Bounded both ways: long enough that a slow-but-real response lands, short
 // enough that the render cannot be what a 71-second news render was.
@@ -222,7 +234,7 @@ console.log("\n4. the budget counts FETCHES, not requests");
 // the function it is in, so a new one in resolveFactSetForRender fails and a
 // new one inside the budget does not.
 {
-  const FETCH_SCOPED = ["claimColdFetch", "bumpExhaustion"];
+  const FETCH_SCOPED = ["claimColdFetch", "bumpExhaustion", "paceSecRequest"];
   const spans = FETCH_SCOPED.map((fn) => {
     const start = code.indexOf(`function ${fn}(`);
     if (start < 0) return { fn, start: -1, end: -1 };
@@ -343,24 +355,47 @@ for (const api of DYNAMIC_APIS) {
     "a dynamic API inside this ISR route is a 500, not a slower page");
 }
 check('no import from "next/headers"', !/from "next\/headers"/.test(code));
-check("the fetch does not carry an explicit no-store hint",
-  !/cache: "no-store"/.test(code),
-  "one such hint opts the whole route out of static rendering");
+// NO-STORE IS NOW REQUIRED, AND ONLY IN secFetch (#552 COWORK #181). The 500
+// was a no-store fetch IN THE RENDER; the render no longer fetches (asserted
+// below), and every fetch is the server action's, through secFetch.
+const secFetchFn = grabFunction(code, "secFetch") ?? "";
+const fetchRule = (fn, mod) =>
+  /cache: "no-store"/.test(fn) && /signal: AbortSignal\.timeout\(deadlineMs\)/.test(fn) && /deadlineMs(: number)? = SEC_COLD_FETCH_DEADLINE_MS/.test(fn) &&
+  !/next: \{ revalidate/.test(mod) && (mod.match(/\bfetch\(/g) ?? []).length === 1;
+check("every cold SEC request is one fetch, in secFetch: no-store, a fresh per-request deadline, no revalidate hint",
+  fetchRule(secFetchFn, code), "Next refetches a revalidate entry with the caller's signal stripped (#553 CODE-B #150)");
+check("MUTATION: the revalidate hint back → caught",
+  !fetchRule(secFetchFn, code.replace('headers: { "User-Agent": SEC_UA } });', 'headers: { "User-Agent": SEC_UA }, next: { revalidate: 3600 } });')));
+check("MUTATION: the deadline dropped → caught",
+  !fetchRule(secFetchFn.replace(", signal: AbortSignal.timeout(deadlineMs)", ""), code));
+check("the render never fetches and carries no no-store",
+  !/\bfetch\(|secFetch\(|no-store/.test(render), "a no-store fetch in this ISR render was the measured 500");
 check("the Redis client is PAGE_READ_CACHE-guarded",
   /Redis\.fromEnv\(\{ \.\.\.PAGE_READ_CACHE/.test(code),
   "@upstash/redis sends no-store by default, which is the same defect wearing " +
     "a different hat");
-// A FETCH REVALIDATE BELOW THE SEGMENT'S SHORTENS THE SEGMENT'S. Next takes the
-// minimum, so a 60 here would quietly re-render every stock page every minute.
-check("the fetch's revalidate is a named constant, not a literal",
-  /next: \{ revalidate: SEC_COLD_FETCH_REVALIDATE \}/.test(code));
-const layout = fs.readFileSync("app/stock/[symbol]/layout.tsx", "utf8");
-const segRevalidate = Number((layout.match(/^export const revalidate = (\d+)/m) ?? [])[1]);
-const fetchRevalidate = Number((code.match(/SEC_COLD_FETCH_REVALIDATE = (\d+)/) ?? [])[1]);
-check("...and it is not shorter than the segment's own revalidate",
-  Number.isFinite(segRevalidate) && fetchRevalidate >= segRevalidate,
-  `fetch ${fetchRevalidate}s vs segment ${segRevalidate}s — Next takes the minimum, ` +
-    "so a shorter one here would shorten every /stock/* page's window");
+// THE DEADLINE BITES, AGAINST A SERVER THAT NEVER FINISHES. secFetch lifted
+// with its pacing (no Redis: unpaced) and a short deadline, pointed at a local
+// server that sends headers and then stalls the body.
+{
+  const http = await import("node:http");
+  const server = http.createServer((_req, res) => { res.writeHead(200, { "content-type": "application/json" }); res.write("{"); });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${server.address().port}/stall`;
+  const unit = (fn) => lift(`const redis = null; const SEC_COLD_FETCH_DEADLINE_MS = 300; const SEC_COLD_PACE_TRIES = 1; const SEC_COLD_REQUESTS_PER_SECOND = 1; const coldPaceKey = () => "k";\n${grabFunction(code, "paceSecRequest")}\n${fn}\nexport { secFetch };`);
+  const timed = async (fn) => {
+    const t0 = Date.now();
+    try { const res = await (await unit(fn)).secFetch(url, {}); await res.text(); return { threw: false, ms: Date.now() - t0 }; }
+    catch (e) { return { threw: true, ms: Date.now() - t0, name: `${e?.name}: ${e?.message}`.slice(0, 160) }; }
+  };
+  const got = await timed(secFetchFn);
+  check("a stalled body aborts at the deadline and throws a timeout", got.threw && /TimeoutError|AbortError|aborted/i.test(got.name) && got.ms >= 250 && got.ms < 2_000, `${got.name} after ${got.ms} ms`);
+  const unbounded = secFetchFn.replace(", signal: AbortSignal.timeout(deadlineMs)", "");
+  const race = await Promise.race([timed(unbounded), new Promise((r) => setTimeout(() => r({ hung: true }), 1_500))]);
+  check("MUTATION: without the signal the same request hangs → caught", race.hung === true);
+  server.closeAllConnections?.(); server.close();
+}
+
 // THE SWALLOW IS WHAT MADE THE 500 INVISIBLE. Both catches read as handled
 // timeouts while Next failed the route underneath. FIRST STATEMENT IN THE
 // CATCH, not merely present: a rethrow after `await enqueue(clean)` would have

@@ -34,6 +34,7 @@ supplyChain:
   - name: The Coca-Cola Company
     ticker: KO
     pct: 42
+    grade: hard
     blurb: >
       CCEP exists to bottle Coca-Cola system brands under long-term bottler's
       agreements with The Coca-Cola Company, which sells CCEP the concentrate
@@ -44,6 +45,7 @@ supplyChain:
   - name: Ball Corporation
     ticker: BALL
     pct: 13
+    grade: some
     blurb: >
       Ball is one of the world's largest makers of aluminum beverage cans and
       a long-running packaging partner to Coca-Cola bottlers in Europe,
@@ -53,6 +55,7 @@ supplyChain:
   - name: Crown Holdings
     ticker: CCK
     pct: 9
+    grade: spread
     blurb: >
       Crown operates beverage can manufacturing plants across Europe,
       including Spain and the UK, supplying aluminum cans to major
@@ -61,6 +64,7 @@ supplyChain:
   - name: Ardagh Metal Packaging
     ticker: AMBP
     pct: 7
+    grade: spread
     blurb: >
       Ardagh Metal Packaging is a major European and global supplier of
       aluminum beverage cans, and its affiliated Ardagh Group glass business
@@ -69,6 +73,7 @@ supplyChain:
   - name: O-I Glass
     ticker: OI
     pct: 6
+    grade: spread
     blurb: >
       O-I Glass is the world's largest maker of glass containers and a
       long-standing supplier to Coca-Cola system bottlers for glass bottle
@@ -77,6 +82,7 @@ supplyChain:
   - name: Alpla
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Alpla is a major global producer of PET plastic bottles and preforms
       used across CCEP's still and sparkling drink ranges. A privately held
@@ -84,6 +90,7 @@ supplyChain:
   - name: Regional sugar and sweetener suppliers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       CCEP sources sugar, high-fructose alternatives and low/no-calorie
       sweeteners from a mix of regional beet-sugar cooperatives and cane
@@ -93,6 +100,7 @@ supplyChain:
   - name: Logistics, energy and other packaging/ingredient suppliers
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       A long tail of trucking and freight providers, electricity and gas
       utilities powering CCEP's roughly 80-plus manufacturing sites, and
@@ -102,6 +110,7 @@ customers:
   - name: Tesco
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Tesco is the largest grocery retailer in Great Britain, CCEP's single
       biggest national market, and a major stocking partner for Coca-Cola
@@ -111,6 +120,7 @@ customers:
   - name: Carrefour
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Carrefour is one of the largest hypermarket and supermarket groups in
       France and Spain, two of CCEP's core European territories, giving it
@@ -120,6 +130,7 @@ customers:
   - name: Woolworths Group
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Woolworths is Australia's largest supermarket chain and, alongside
       Coles, forms a retail duopoly that dominates grocery distribution in
@@ -128,6 +139,7 @@ customers:
   - name: Coles Group
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Coles is Australia's other major supermarket chain, together with
       Woolworths accounting for the large majority of Australian grocery
@@ -136,6 +148,7 @@ customers:
   - name: Schwarz Gruppe (Lidl & Kaufland)
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Schwarz Gruppe, owner of the Lidl and Kaufland discount chains, is one
       of Europe's largest grocery retailers by store count and a significant
@@ -144,6 +157,7 @@ customers:
   - name: Mercadona
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Mercadona is Spain's largest supermarket chain and a key retail
       partner in CCEP's Iberia territory. A privately held, family-owned
@@ -151,6 +165,7 @@ customers:
   - name: McDonald's and other foodservice/QSR chains
     ticker: MCD
     pct: 8
+    grade: spread
     blurb: >
       Quick-service restaurant chains led by McDonald's are major
       fountain-drink and bottled-beverage customers for CCEP across its
@@ -159,6 +174,7 @@ customers:
   - name: Costco Wholesale
     ticker: COST
     pct: 6
+    grade: spread
     blurb: >
       Costco's club-format warehouses in the UK, Spain and Australia are a
       growing bulk-sales channel for CCEP's multipack cans and bottles,
@@ -166,6 +182,7 @@ customers:
   - name: Independent grocers, convenience stores and other retail/on-premise
     ticker: null
     pct: 22
+    grade: spread
     blurb: >
       Beyond its largest named retail partners, CCEP sells through thousands
       of independent supermarkets, convenience stores, petrol forecourts,

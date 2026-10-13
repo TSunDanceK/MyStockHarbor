@@ -29,6 +29,7 @@
 // The bulk file is fetched first, but ONLY as the gate that tonight's date has
 // landed; its rows are not stored. If it has not landed, the run stops and the
 // 02:45 retry tries again. A night already complete is skipped (1 GET).
+import { inflateRawSync } from "node:zlib";
 import { revalidateTag } from "next/cache";
 import { Redis } from "@upstash/redis";
 import { PRICE_POOL_KEY } from "../pricePool";
@@ -37,29 +38,45 @@ import { lastSessionDate } from "../lastSession";
 import {
   EOD_TAG,
   PRICES_TAG,
+  TIINGO_EOD_LAST_KEY,
   TIINGO_EOD_META_KEY,
   TIINGO_EOD_TTL_SECONDS,
   TIINGO_QUOTES_KEY,
   TIINGO_QUOTES_META_FIELD,
   TIINGO_QUOTES_TTL_SECONDS,
+  TIINGO_UNIVERSE_KEY,
+  TIINGO_REQUESTED_KEY,
+  TIINGO_SUPPORTED_KEY,
+  TIINGO_SUPPORTED_MARKER,
+  TIINGO_SUPPORTED_TTL_SECONDS,
+  TIINGO_COLD_NODATA_KEY,
   tiingoEodKey,
 } from "./keys";
+import { eodLastRow } from "./eodLast";
+import { EOD_WINDOW_BARS, EOD_MIN_BARS, eodStartDate } from "./eodWindow";
+import { parseTiingoUniverse } from "../tiingoUniverse";
 import {
   TiingoHttpError,
   TiingoRefused,
   fetchEodHistory,
   fetchEodLanded,
   fetchIexQuotes,
+  fetchSupportedTickers,
   reserveTiingoRequests,
   tiingoCallRefusal,
 } from "./tiingo";
 import type { EodBar, StoredEod } from "./types";
+import type { SupportedTickerRow } from "./tiingo";
 import { isDebtListing, retickeredOut } from "./universe";
 import { isPriceExcluded } from "../../priceExcluded.mjs";
 import { loadTickerMap } from "../secTickerMap";
 import { readLastSeenCiks } from "../secListing";
-import { lookupBySpelling } from "../../symbolSpellings.mjs";
+import { lookupBySpelling, toDashed } from "../../symbolSpellings.mjs";
 import { pctOfRequestLimit } from "../chunkByBytes";
+import { JOB_REDIS_OPTS } from "../redisCacheMode";
+import { writeSectorSparks } from "../sectorSparks";
+import { writeInsightCandidates } from "../insightCandidates";
+import { writeMarketDynamic } from "../marketDynamic";
 
 /**
  * THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step.
@@ -69,27 +86,9 @@ import { pctOfRequestLimit } from "../chunkByBytes";
  */
 export const QUOTE_CADENCE_MINUTES = 15;
 
-/**
- * The window we keep, as today's FMP history does: MAX_CACHED_HISTORY_DAYS is a
- * BAR count (1,400 sessions), not calendar days.
- *
- * FIXED 2026-09-30 (#553 step 2). This read 1,400 CALENDAR days, about 960
- * bars. The step 2 parity run caught it: Weekly MA200 (200 weekly closes) went
- * 39 -> 0 on Tiingo's bars, and the all-time-high screens saw a shorter past.
- * So the request now covers EOD_WINDOW_BARS sessions (252 a year, plus 2%) and
- * the stored series keeps the last EOD_WINDOW_BARS of them.
- */
-export const EOD_WINDOW_BARS = 1400;
-export const EOD_WINDOW_DAYS = Math.ceil(((EOD_WINDOW_BARS * 365.25) / 252) * 1.02);
-/**
- * Fewer bars than this is not a history, and is not stored (mirrors
- * historyCache's MIN_QUALIFIED_POINTS). Measured on the first night
- * (2026-09-26, CODE-B #50): Tiingo answered BK with 5 rows since 2022 and the
- * job stored them as BK's history, which a chart or MA200 would have read as
- * the whole record. A short answer now deletes the key instead, so a reader
- * falls back to FMP rather than to a truncated series.
- */
-export const EOD_MIN_BARS = 30;
+// The stored window (EOD_WINDOW_BARS / _DAYS, EOD_MIN_BARS, eodStartDate) lives
+// in eodWindow.ts, shared with the stock-page cold fill; re-exported here.
+export { EOD_WINDOW_BARS, EOD_WINDOW_DAYS, EOD_MIN_BARS, eodStartDate } from "./eodWindow";
 /** A night is "landed" when at least this share of the universe has tonight's date in the bulk file. */
 export const EOD_LANDED_SHARE = 0.9;
 const EOD_CONCURRENCY = 8;
@@ -105,7 +104,7 @@ const EOD_WRITE_CHUNK = 25;
 const EOD_BUDGET_MS = 240_000;
 
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv(JOB_REDIS_OPTS) : null;
 
 function mustRedis(): Redis {
   if (!redis) throw new Error("no redis");
@@ -113,15 +112,25 @@ function mustRedis(): Redis {
 }
 
 /**
- * The universe: the price pool's fields (dashed), less debt listings (CCZ and
- * the other exchange-traded notes, #553 COWORK #60 -- see universe.ts), the
- * dated PRICE_EXCLUDED list (lib/priceExcluded.ts, COWORK #61) and any ticker
- * SEC has moved to another (retickeredOut, COWORK #70). 1 HKEYS, plus 1 HMGET
- * of last-seen CIKs when some pool symbol is missing from SEC's live map.
+ * The universe: msh:tiingo:universe:v1 (step 5, #553 COWORK #98 ruling 2: the
+ * symbols-only list warm-price-pool writes with no FMP call), or, while that
+ * key is absent, the price pool's fields (dashed) as before. Either way, less
+ * debt listings (CCZ and the other exchange-traded notes, #553 COWORK #60 --
+ * see universe.ts), the dated PRICE_EXCLUDED list (lib/priceExcluded.ts,
+ * COWORK #61) and any ticker SEC has moved to another (retickeredOut, COWORK
+ * #70). 1 GET, plus 1 HKEYS only when the key is absent, plus 1 HMGET of
+ * last-seen CIKs when some symbol is missing from SEC's live map.
  */
-async function universe(): Promise<{ symbols: string[]; retickered: string[]; retickerGuard: string }> {
-  const keys = await mustRedis().hkeys(PRICE_POOL_KEY);
-  const pool = [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
+async function universe(): Promise<{ symbols: string[]; retickered: string[]; retickerGuard: string; universeSource: string }> {
+  const stored = parseTiingoUniverse(await mustRedis().get<unknown>(TIINGO_UNIVERSE_KEY));
+  const keys = stored ? stored.symbols : await mustRedis().hkeys(PRICE_POOL_KEY);
+  const universeSource = stored ? "tiingo-universe" : "pool-hkeys";
+  // THE COLD-FILLED SYMBOLS (#553 COWORK #121 §4): kept fresh while people view
+  // them, capped at 1,000 and dropped after 30 days unviewed (coldFill.ts).
+  // 1 ZRANGE; an unreadable set just leaves them out of this run.
+  const requestedRaw = await mustRedis().zrange<string[]>(TIINGO_REQUESTED_KEY, 0, -1).catch(() => [] as string[]);
+  const requested = Array.isArray(requestedRaw) ? requestedRaw : [];
+  const pool = [...new Set([...keys, ...requested].map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
     .filter((s) => !isDebtListing(s) && !isPriceExcluded(s))
     .sort();
   const live = loadTickerMap();
@@ -129,7 +138,7 @@ async function universe(): Promise<{ symbols: string[]; retickered: string[]; re
   const lastSeen = unlisted.length ? await readLastSeenCiks(unlisted) : new Map<string, string>();
   const r = retickeredOut(pool, live, lastSeen);
   if (r.dropped.length) console.warn(`[tiingo] retickered, not sent: ${r.dropped.map((d) => `${d.symbol}->${d.listed.join("/")}`).join(" ")}`);
-  return { symbols: r.keep, retickered: r.dropped.map((d) => d.symbol), retickerGuard: r.guard };
+  return { symbols: r.keep, retickered: r.dropped.map((d) => d.symbol), retickerGuard: r.guard, universeSource };
 }
 
 function refusalResult(err: unknown) {
@@ -144,8 +153,8 @@ export async function runTiingoQuotes(nowMs = Date.now()) {
   if (!isActiveMarketWindow(new Date(nowMs))) return { ok: true, skipped: "outside-market-window" };
   const refusal = tiingoCallRefusal();
   if (refusal) return { ok: true, skipped: `tiingo: ${refusal}` };
-  const { symbols, retickered, retickerGuard } = await universe();
-  if (!symbols.length) return { ok: false, error: "empty universe" };
+  const { symbols, retickered, retickerGuard, universeSource } = await universe();
+  if (!symbols.length) return { ok: false, error: "empty universe", universeSource };
   let fetched;
   try {
     fetched = await fetchIexQuotes(symbols, nowMs);
@@ -173,14 +182,11 @@ export async function runTiingoQuotes(nowMs = Date.now()) {
     bytesWritten: Object.entries(fields).reduce((n, [k, v]) => n + k.length + v.length, 0),
     retickered,
     retickerGuard,
+    universeSource,
   };
 }
 
 // ── nightly ─────────────────────────────────────────────────────────────────
-
-export function eodStartDate(nowMs: number): string {
-  return new Date(nowMs - EOD_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
-}
 
 /** Tonight's date has landed for enough of the universe. Exported for the checks. */
 export function eodLanded(counts: Map<string, number>, expected: string, universeSize: number): boolean {
@@ -205,10 +211,10 @@ export async function runTiingoEod(
 
   const meta = await r.get<{ asOf?: string } | string>(TIINGO_EOD_META_KEY);
   const metaAsOf = typeof meta === "string" ? (JSON.parse(meta) as { asOf?: string }).asOf : meta?.asOf;
-  if (metaAsOf === expected) return { ok: true, skipped: "already-complete", asOf: expected };
+  if (metaAsOf === expected) return { ok: true, skipped: "already-complete", asOf: expected, ...(await backfillEod(nowMs, started)) };
 
-  const { symbols, retickered, retickerGuard } = await universe();
-  if (!symbols.length) return { ok: false, error: "empty universe" };
+  const { symbols, retickered, retickerGuard, universeSource } = await universe();
+  if (!symbols.length) return { ok: false, error: "empty universe", universeSource };
 
   let bytesDownloaded = 0;
   let requests = 0;
@@ -307,7 +313,39 @@ export async function runTiingoEod(
     shortOrEmpty,
     retickered,
     retickerGuard,
+    universeSource,
   };
+  // THE NEWEST BAR PER SYMBOL, ONE HASH (step 5, #553 COWORK #98): what every
+  // pool reader and the sector pages read instead of 1,400-bar histories (see
+  // eodLast.ts). A complete night only, written whole: DEL + HSET + EXPIRE, 3
+  // commands in one request of ~150 B a symbol (~0.45 MB at 3,000). A symbol
+  // that failed tonight drops out until tomorrow; its reader keeps the IEX row
+  // and IEX's prevClose, or FMP's row.
+  let eodLastRows = 0;
+  if (complete) {
+    const fields: Record<string, string> = {};
+    for (const [sym, b] of bars) {
+      const row = eodLastRow(b);
+      if (row) fields[sym] = JSON.stringify(row);
+    }
+    eodLastRows = Object.keys(fields).length;
+    if (eodLastRows) {
+      const p = r.pipeline();
+      p.del(TIINGO_EOD_LAST_KEY);
+      p.hset(TIINGO_EOD_LAST_KEY, fields);
+      p.expire(TIINGO_EOD_LAST_KEY, TIINGO_EOD_TTL_SECONDS);
+      await p.exec();
+    }
+  }
+  // THE /sector CARDS' 3-MONTH LINES (#553 COWORK #167): from the bars already
+  // in memory, a complete night only. +1 SET; never fails the job.
+  const sectorSparks = complete ? await writeSectorSparks(r, bars, nowMs) : null;
+  // THE INSIGHT WRITER'S CANDIDATES (#553 COWORK #181): tickers and event
+  // labels from the same bars, a complete night only. +1 SET; never fails the job.
+  const insightCandidates = complete ? await writeInsightCandidates(r, bars, expected, nowMs) : null;
+  // THE MARKET STATE FROM THESE BARS (#553 COWORK #173/#190): the builders'
+  // movers and dynamic symbols, replacing the frozen FMP key. +1 SET; never fails the job.
+  const marketDynamic = complete ? await writeMarketDynamic(r, bars, expected, nowMs) : null;
   // Only a complete night stamps the meta key, so the 02:45 retry re-runs a partial one.
   if (complete) await r.set(TIINGO_EOD_META_KEY, JSON.stringify(summary), { ex: TIINGO_EOD_TTL_SECONDS });
   if (bars.size) revalidateTag(EOD_TAG, "max");
@@ -320,7 +358,88 @@ export async function runTiingoEod(
     bytesDownloaded,
     bytesWritten,
     largestWriteRequestBytes,
+    eodLastRows,
+    sectorSparks,
+    insightCandidates,
+    marketDynamic,
     ms: Date.now() - started,
+  };
+}
+
+// ── backfill (a complete night, a wider universe) ───────────────────────────
+// #553 COWORK #124. The universe grew (5b, ~760 -> ~2,600) AFTER the night was
+// marked complete, so the run answered "already-complete" and the new symbols
+// waited for the next night. Now an already-complete run fetches the universe
+// symbols with NO entry in eod-last (the newest-bar hash every pool reader
+// uses), up to EOD_BACKFILL_PER_RUN, and adds them to it. A manual run repeats
+// until `backfilled` is 0; the 02:45 retry does the same each night.
+//
+// Same per-symbol path and the same shared limiter as the night itself.
+// Symbols Tiingo answers short or empty for stay missing (they are not stored
+// as histories) and are retried by later runs: `backfillNoData` counts them.
+//
+// Commands: HKEYS eod-last (1) + the universe's own reads; per 100 symbols, 4
+// for the limiter, 4 SET pipelines of 25 (100) and 1 HSET.
+
+/** Symbols one backfill run fetches at most: ~32 s at the 2 Oct rate, 1,000 Tiingo requests. */
+export const EOD_BACKFILL_PER_RUN = 1_000;
+
+async function backfillEod(nowMs: number, started: number) {
+  const r = mustRedis();
+  const { symbols } = await universe();
+  const have = new Set(((await r.hkeys(TIINGO_EOD_LAST_KEY)) ?? []).map(String));
+  const missing = symbols.filter((s) => !have.has(s));
+  const todo = missing.slice(0, EOD_BACKFILL_PER_RUN);
+  if (!todo.length) return { backfilled: 0, backfillMissing: 0 };
+  const start = eodStartDate(nowMs);
+  const bars = new Map<string, EodBar[]>();
+  let noData = 0;
+  let failed = 0;
+  let stoppedBy: string | null = null;
+  try {
+    await reserveTiingoRequests(todo.length, nowMs);
+  } catch (err) {
+    return { backfilled: 0, backfillMissing: missing.length, backfillStoppedBy: err instanceof TiingoRefused ? err.reason : "limiter error" };
+  }
+  let next = 0;
+  const worker = async () => {
+    while (!stoppedBy && next < todo.length) {
+      if (Date.now() - started > EOD_BUDGET_MS) { stoppedBy = "time budget"; return; }
+      const sym = todo[next++];
+      try {
+        const got = await fetchEodHistory(sym, start);
+        if (got.bars.length >= EOD_MIN_BARS) bars.set(sym, got.bars.slice(-EOD_WINDOW_BARS));
+        else noData++;
+      } catch (err) {
+        failed++;
+        if (err instanceof TiingoHttpError && err.status === 429) stoppedBy = "HTTP 429";
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: EOD_CONCURRENCY }, worker));
+  const entries = [...bars.entries()];
+  for (let i = 0; i < entries.length; i += EOD_WRITE_CHUNK) {
+    const p = r.pipeline();
+    const fields: Record<string, string> = {};
+    for (const [sym, b] of entries.slice(i, i + EOD_WRITE_CHUNK)) {
+      const value: StoredEod = { asOf: b[b.length - 1][0], fetchedAt: nowMs, basis: "split", bars: b };
+      p.set(tiingoEodKey(sym), JSON.stringify(value), { ex: TIINGO_EOD_TTL_SECONDS });
+      const row = eodLastRow(b);
+      if (row) fields[sym] = JSON.stringify(row);
+    }
+    // Added to the night's summary hash, so a pool reader sees the symbol now
+    // and the next backfill run does not fetch it again. HSET keeps the
+    // hash's TTL from the night that wrote it.
+    if (Object.keys(fields).length) p.hset(TIINGO_EOD_LAST_KEY, fields);
+    await p.exec();
+  }
+  if (entries.length) revalidateTag(EOD_TAG, "max");
+  return {
+    backfilled: entries.length,
+    backfillMissing: missing.length - entries.length,
+    backfillNoData: noData,
+    backfillFailed: failed,
+    backfillStoppedBy: stoppedBy,
   };
 }
 
@@ -336,4 +455,67 @@ export function runSummary(result: Record<string, unknown>): Record<string, stri
     out[k] = v === null || v === undefined ? null : typeof v === "object" ? JSON.stringify(v) : (v as string | number | boolean);
   }
   return out;
+}
+
+// ── supported tickers (daily) ───────────────────────────────────────────────
+// THE COLD FILL'S ADMISSION LIST (#553 COWORK #121 §2): only a ticker Tiingo
+// carries may cost a cold-fill call, so random strings never do. Tiingo's own
+// daily file, filtered to what a US stock page can show: USD-priced stocks and
+// ETFs still trading (an endDate within SUPPORTED_RECENT_DAYS).
+
+/** A ticker whose endDate is older than this is treated as no longer trading. */
+export const SUPPORTED_RECENT_DAYS = 14;
+/** Fewer rows than this after the filter is a bad file, not a list: keep yesterday's. */
+export const SUPPORTED_MIN_ROWS = 5_000;
+const SUPPORTED_SADD_CHUNK = 5_000;
+
+/** Pure: the symbols to keep, in our dashed upper-case spelling. Exported for the checks. */
+export function supportedSymbols(rows: SupportedTickerRow[], nowMs: number): string[] {
+  const since = new Date(nowMs - SUPPORTED_RECENT_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const out = new Set<string>();
+  for (const r of rows) {
+    if (r.priceCurrency !== "USD") continue;
+    if (r.assetType !== "Stock" && r.assetType !== "ETF") continue;
+    if (!r.endDate || r.endDate < since) continue;
+    const sym = r.ticker.trim().toUpperCase();
+    if (/^[A-Z0-9][A-Z0-9.-]{0,9}$/.test(sym)) out.add(toDashed(sym));
+  }
+  return [...out].sort();
+}
+
+/**
+ * Replace msh:tiingo:supported:v1 whole: build a temp set, then RENAME over the
+ * live one (so a reader never sees half a list), EXPIRE, and clear the no-data
+ * set (a symbol Tiingo answered empty for gets one more try a day). 1 Tiingo
+ * request; Redis: DEL + ceil(n/5,000) SADD + 1 SADD marker + RENAME + EXPIRE +
+ * DEL, ~12 commands a run at ~30,000 symbols.
+ */
+export async function runTiingoSupported(nowMs = Date.now()) {
+  // The one job also allowed on Preview (#553 COWORK #127): see tiingo.ts.
+  const refusal = tiingoCallRefusal(process.env, "supported-list");
+  if (refusal) return { ok: true, skipped: `tiingo: ${refusal}` };
+  let fetched;
+  try {
+    fetched = await fetchSupportedTickers((b) => inflateRawSync(b), nowMs);
+  } catch (err) {
+    const r = refusalResult(err);
+    if (r) return r;
+    throw err;
+  }
+  const symbols = supportedSymbols(fetched.rows, nowMs);
+  if (symbols.length < SUPPORTED_MIN_ROWS) {
+    return { ok: false, error: "too few supported symbols; kept the stored list", rows: fetched.rows.length, kept: symbols.length };
+  }
+  const r = mustRedis();
+  const tmp = `${TIINGO_SUPPORTED_KEY}:building`;
+  await r.del(tmp);
+  for (let i = 0; i < symbols.length; i += SUPPORTED_SADD_CHUNK) {
+    const chunk = symbols.slice(i, i + SUPPORTED_SADD_CHUNK);
+    await r.sadd(tmp, chunk[0], ...chunk.slice(1));
+  }
+  await r.sadd(tmp, TIINGO_SUPPORTED_MARKER);
+  await r.rename(tmp, TIINGO_SUPPORTED_KEY);
+  await r.expire(TIINGO_SUPPORTED_KEY, TIINGO_SUPPORTED_TTL_SECONDS);
+  await r.del(TIINGO_COLD_NODATA_KEY);
+  return { ok: true, rows: fetched.rows.length, symbols: symbols.length, bytesDownloaded: fetched.bytes };
 }

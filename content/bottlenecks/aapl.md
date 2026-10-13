@@ -37,6 +37,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 26
+    grade: some
     blurb: >
       TSMC is the sole fabricator of Apple's custom A-series and M-series
       chips on the most advanced process nodes available. No other foundry
@@ -46,6 +47,7 @@ supplyChain:
   - name: Hon Hai Precision Industry (Foxconn)
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Foxconn is Apple's largest contract assembler, handling the majority
       of iPhone final assembly plus significant Mac and iPad volume across
@@ -54,6 +56,7 @@ supplyChain:
   - name: Samsung Electronics
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Supplies OLED display panels and DRAM/NAND memory for iPhone and
       other devices. Despite competing with Apple in smartphones, it
@@ -63,6 +66,7 @@ supplyChain:
   - name: Qualcomm
     ticker: QCOM
     pct: 9
+    grade: spread
     blurb: >
       Long the primary supplier of premium 5G modem chips for iPhone.
       Apple's own in-house modem effort has faced repeated delays, keeping
@@ -70,6 +74,7 @@ supplyChain:
   - name: LG Display
     ticker: LPL
     pct: 7
+    grade: spread
     blurb: >
       A second-source OLED panel supplier that gives Apple pricing
       leverage and supply redundancy alongside Samsung Display, though it
@@ -77,6 +82,7 @@ supplyChain:
   - name: Broadcom
     ticker: AVGO
     pct: 7
+    grade: spread
     blurb: >
       Supplies RF front-end and wireless connectivity chips under a
       multi-year custom-component agreement; Apple has publicly committed
@@ -84,6 +90,7 @@ supplyChain:
   - name: Sony Group
     ticker: SONY
     pct: 6
+    grade: spread
     blurb: >
       The dominant supplier of CMOS image sensors used in iPhone cameras.
       Sony's sensor technology lead makes shifting sourcing at scale
@@ -91,6 +98,7 @@ supplyChain:
   - name: Skyworks Solutions
     ticker: SWKS
     pct: 5
+    grade: spread
     blurb: >
       Provides RF front-end modules for cellular connectivity. Apple is
       Skyworks' largest customer, reflecting a specialized, tightly
@@ -98,6 +106,7 @@ supplyChain:
   - name: Corning
     ticker: GLW
     pct: 4
+    grade: spread
     blurb: >
       Manufactures the specialty cover glass used on iPhone under a
       long-running supply relationship backed by funding from Apple's
@@ -105,6 +114,7 @@ supplyChain:
   - name: Luxshare Precision
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       A fast-growing Chinese assembler now handling a meaningful and
       increasing share of AirPods and iPhone assembly alongside Foxconn.
@@ -113,6 +123,7 @@ customers:
   - name: AT&T
     ticker: T
     pct: 16
+    grade: some
     blurb: >
       One of the "Big Three" US carriers financing and activating the
       large majority of US iPhone sales through installment plans and
@@ -120,12 +131,14 @@ customers:
   - name: Verizon
     ticker: VZ
     pct: 16
+    grade: some
     blurb: >
       Alongside AT&T and T-Mobile, part of the Big Three US carriers that
       together account for roughly three-quarters of US iPhone sell-through.
   - name: China Mobile
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       The world's largest carrier by subscribers and a critical
       distribution and financing channel for iPhone across mainland China,
@@ -135,6 +148,7 @@ customers:
   - name: T-Mobile US
     ticker: TMUS
     pct: 13
+    grade: some
     blurb: >
       The fastest-growing of the Big Three US carriers by postpaid share,
       and a major iPhone distribution channel through its retail footprint
@@ -142,6 +156,7 @@ customers:
   - name: Vodafone Group
     ticker: VOD
     pct: 9
+    grade: spread
     blurb: >
       A major pan-European and emerging-market carrier reselling iPhone
       across dozens of countries, giving Apple carrier reach outside the
@@ -149,6 +164,7 @@ customers:
   - name: Best Buy
     ticker: BBY
     pct: 9
+    grade: spread
     blurb: >
       The largest US consumer-electronics big-box retailer selling
       iPhone, Mac, and iPad at retail — a significant non-carrier reseller
@@ -156,6 +172,7 @@ customers:
   - name: SoftBank Corp
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       One of Japan's three major wireless carriers and a long-standing
       iPhone distribution partner in a market where Apple holds an
@@ -164,6 +181,7 @@ customers:
   - name: China Telecom
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       A major state-owned Chinese carrier and iPhone distribution channel
       alongside China Mobile and China Unicom in Apple's important China
@@ -172,6 +190,7 @@ customers:
   - name: Other global carriers & retailers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company — the long tail of hundreds of regional
       carriers, resellers, and retail partners (Deutsche Telekom, KDDI,

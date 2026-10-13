@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { chartHref } from "@/lib/chartHref";
 import type { Metadata } from "next";
 
 const PAGE_TITLE = "Stock Scanners Explained | How Traders Screen for Setups | MyStockHarbor";
@@ -325,7 +326,7 @@ export default function StockScannersPage() {
             </Link>
 
             <Link
-              href="/"
+              href={chartHref()}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

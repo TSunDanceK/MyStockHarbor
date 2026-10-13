@@ -27,6 +27,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 55
+    grade: hard
     blurb: >
       TSMC is Marvell's primary silicon foundry, fabricating the vast
       majority of its advanced custom ASICs and networking chips, including
@@ -39,6 +40,7 @@ supplyChain:
   - name: ASE Technology Holding
     ticker: ASX
     pct: 20
+    grade: some
     blurb: >
       ASE Technology, the world's largest outsourced semiconductor assembly
       and test (OSAT) provider, is a named partner in Marvell's advanced
@@ -49,6 +51,7 @@ supplyChain:
   - name: Amkor Technology
     ticker: AMKR
     pct: 15
+    grade: some
     blurb: >
       Amkor is another named advanced-packaging collaborator on Marvell's
       custom AI accelerator platform, and its growing US-based (Arizona)
@@ -59,6 +62,7 @@ supplyChain:
   - name: Other assembly & test subcontractors
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Marvell's SEC filings disclose that it also outsources packaging and
       test work to smaller subcontractors located in Taiwan, Canada, Korea,
@@ -69,6 +73,7 @@ customers:
   - name: Amazon (AWS)
     ticker: AMZN
     pct: 20
+    grade: some
     blurb: >
       Amazon Web Services is widely understood to be Marvell's single
       largest customer, corresponding to the direct account Marvell's 10-K
@@ -81,6 +86,7 @@ customers:
   - name: Distribution channel (unnamed distributor)
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Marvell's 10-K discloses that a single unnamed distributor
       ("Distributor A") accounted for 37% of fiscal 2026 net revenue, its
@@ -92,6 +98,7 @@ customers:
   - name: Microsoft
     ticker: MSFT
     pct: 15
+    grade: some
     blurb: >
       Microsoft is one of Marvell's largest hyperscale cloud customers,
       using Marvell's networking, optical DSP, and custom silicon products
@@ -102,6 +109,7 @@ customers:
   - name: Other cloud & networking customers
     ticker: null
     pct: 35
+    grade: hard
     blurb: >
       The remainder of Marvell's revenue comes from a broader set of cloud,
       telecom, and enterprise networking customers — including Google

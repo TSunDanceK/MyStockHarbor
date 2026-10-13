@@ -121,7 +121,6 @@ const KNOWN_MISSING = new Set([
   "claude/universe-architecture-audit-2026-08-06.md",
   "claude/video-page-quote-selfblock-fix-2026-07-21.md",
   "claude/popular-searches-universe-spec-2026-07-23.md",
-  "claude/health-check-firewall-indexing-analytics-2026-08-17.md",
   "claude/stock-page-consolidation.md",
   "claude/PICKERS_ACCORDION_REDESIGN.md",
   "claude/picker-columns-needed-2026-08-22.md",

@@ -66,7 +66,7 @@ export default function ColdFill(
   const refresh = view === "gave-up"
     ? <button type="button" className="coldFillRefresh" onClick={() => run.current?.retry()}>Refresh</button>
     : null;
-  const style = <style>{`.coldFillRefresh { display: inline-flex; align-items: center; min-height: 36px; margin-left: 10px; padding: 6px 14px; border-radius: 10px; border: 1px solid rgba(59,130,246,0.40); background: rgba(59,130,246,0.14); color: #dbeafe; font-weight: 800; font-size: 13px; cursor: pointer; }`}</style>;
+  const style = <style>{`.coldFillRefresh { display: inline-flex; align-items: center; min-height: 36px; margin-left: 10px; padding: 6px 14px; border-radius: 10px; border: 1px solid rgba(59,130,246,0.40); background: rgba(59,130,246,0.14); color: #dbeafe; font-weight: 800; font-size: var(--fs-label); cursor: pointer; }`}</style>;
 
   if (bare) return <p style={textStyle} aria-live="polite" data-cold-fill={view}>{words}{refresh}{style}</p>;
   return (

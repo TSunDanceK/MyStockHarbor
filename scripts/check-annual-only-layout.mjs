@@ -67,7 +67,7 @@ console.log("\n2. annual mode renders no quarterly-only element");
   const snap = visibleText(html(React.createElement(M.SecSnapshotCard, { view })));
   check("the snapshot is the fiscal year, not a quarter", /FY\d{4}/.test(snap) && !/\bQ[1-4] FY/.test(snap));
   const page = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
-  check("the page gates the quarterly growth card on tableBasis", /secView\.tableBasis === "year" \? null : <SecGrowthMarginsCard/.test(page));
+  check("the page gates the quarterly growth card on tableBasis", /secView\.tableBasis === "year" \? null : (?:<div className="orderGrowth">)?<SecGrowthMarginsCard/.test(page));
   check("the page hides the reaction card below three annual reactions",
     /const hidePriceReaction = secEvents\.length === 0 \|\| \(annualForm !== null && reactionEvents\.length < ANNUAL_REACTION_MIN\);/.test(page) && /data\.hidePriceReaction \? null : <PriceReactionCard/.test(page));
   check("the page prints the note and labels the score", /annualOnlyNote\(data\.annualForm\)/.test(page) && /basisNote=\{data\.annualForm \? "Based on full fiscal years\." : null\}/.test(page));

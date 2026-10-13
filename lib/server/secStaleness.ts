@@ -20,7 +20,7 @@
 // entries that most need re-reading are precisely the ones with no value for
 // it. Reading absence as "current" is how a migration finishes without doing
 // anything. Each default below is the state BEFORE that field existed.
-import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION } from "./secExtract";
+import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION, SEC_SHARE_VERSION } from "./secExtract";
 import { secChainsHash } from "./secFields";
 
 /**
@@ -50,6 +50,12 @@ export type StaleInput = {
    * nothing selecting it.
    */
   lv?: number;
+  /**
+   * SEC_SHARE_VERSION the set's share series was written under. Absent = 1.
+   * Its own reason for the same cause as `lv`: the share fields are not in
+   * contentHash, so nothing else moves when they change (#552 COWORK #132).
+   */
+  sv?: number;
 };
 
 /**
@@ -84,6 +90,7 @@ export function needsReread(e: StaleInput): boolean {
     (e.w ?? 8) < SEC_QUARTER_WINDOW ||
     (e.y ?? 5) < SEC_YEAR_WINDOW ||
     (e.lv ?? 1) < SEC_LABEL_VERSION ||
+    (e.sv ?? 1) < SEC_SHARE_VERSION ||
     (e.c ?? null) !== secChainsHash()
   );
 }
@@ -95,11 +102,12 @@ export function needsReread(e: StaleInput): boolean {
  * it is one chain edit or a genuine window migration, and a boolean cannot say
  * which. Returns an empty array when the entry is current.
  */
-export function staleReasons(e: StaleInput): ("quarters" | "years" | "chains" | "labels")[] {
-  const out: ("quarters" | "years" | "chains" | "labels")[] = [];
+export function staleReasons(e: StaleInput): ("quarters" | "years" | "chains" | "labels" | "shares")[] {
+  const out: ("quarters" | "years" | "chains" | "labels" | "shares")[] = [];
   if ((e.w ?? 8) < SEC_QUARTER_WINDOW) out.push("quarters");
   if ((e.y ?? 5) < SEC_YEAR_WINDOW) out.push("years");
   if ((e.lv ?? 1) < SEC_LABEL_VERSION) out.push("labels");
+  if ((e.sv ?? 1) < SEC_SHARE_VERSION) out.push("shares");
   if ((e.c ?? null) !== secChainsHash()) out.push("chains");
   return out;
 }

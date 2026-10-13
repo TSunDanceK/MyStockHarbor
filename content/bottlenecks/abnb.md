@@ -42,6 +42,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 35
+    grade: hard
     blurb: >
       Airbnb's platform - compute, storage, and databases - runs
       primarily on Amazon Web Services, a deep and long-standing
@@ -50,6 +51,7 @@ supplyChain:
   - name: Adyen N.V.
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Widely reported as a primary payment processor handling Airbnb's
       multi-country, multi-currency transactions. Trades primarily on
@@ -58,6 +60,7 @@ supplyChain:
   - name: Visa Inc.
     ticker: V
     pct: 12
+    grade: some
     blurb: >
       A core payment card network rail Airbnb's 10-K discloses relying
       on, alongside other card networks, to process guest payments and
@@ -65,6 +68,7 @@ supplyChain:
   - name: Stripe, Inc.
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Powers bank-linked payment processing for Airbnb through a public
       partnership using Stripe's Financial Connections and Link
@@ -72,18 +76,21 @@ supplyChain:
   - name: PayPal Holdings
     ticker: PYPL
     pct: 10
+    grade: some
     blurb: >
       Offered as a guest payment method and historically tied to
       Airbnb's payment infrastructure through its Braintree platform.
   - name: Mastercard Inc.
     ticker: MA
     pct: 8
+    grade: spread
     blurb: >
       A second core payment card network rail Airbnb's 10-K discloses
       relying on to process guest payments.
   - name: Alphabet Inc. (Google Play)
     ticker: GOOGL
     pct: 7
+    grade: spread
     blurb: >
       Google Play is a critical app-distribution channel for Airbnb's
       Android app, alongside broader infrastructure like Google Maps
@@ -91,6 +98,7 @@ supplyChain:
   - name: Apple Inc. (App Store)
     ticker: AAPL
     pct: 6
+    grade: spread
     blurb: >
       The iOS App Store is a critical distribution channel for Airbnb's
       mobile app - one of the "major technology companies" Airbnb's 10-K
@@ -99,6 +107,7 @@ customers:
   - name: North America
     ticker: null
     pct: 42
+    grade: hard
     blurb: >
       Airbnb's largest single geographic revenue region and its original
       home market, though now under half of total revenue as
@@ -106,6 +115,7 @@ customers:
   - name: Europe, Middle East & Africa
     ticker: null
     pct: 39
+    grade: hard
     blurb: >
       Airbnb's second-largest region and its largest international
       market cluster, reflecting deep host and guest density across
@@ -113,11 +123,13 @@ customers:
   - name: Latin America
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A smaller but fast-growing regional revenue base for Airbnb.
   - name: Asia-Pacific
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Airbnb's smallest reported region by revenue, and a stated
       strategic growth priority for the company.

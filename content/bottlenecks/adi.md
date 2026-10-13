@@ -48,6 +48,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 26
+    grade: some
     blurb: >
       TSMC is Analog Devices' primary external wafer foundry, a
       relationship spanning more than three decades. ADI has expanded
@@ -58,6 +59,7 @@ supplyChain:
   - name: Other third-party wafer foundries
     ticker: null
     pct: 16
+    grade: some
     blurb: >
       Not a single company. Beyond TSMC, ADI sources wafers from a mix of
       additional third-party foundries for specialty and trailing-edge
@@ -67,6 +69,7 @@ supplyChain:
   - name: ASE Technology Holding
     ticker: ASX
     pct: 20
+    grade: some
     blurb: >
       ASE is one of the world's largest outsourced semiconductor assembly
       and test providers and a long-time ADI packaging partner, previously
@@ -77,6 +80,7 @@ supplyChain:
   - name: Amkor Technology
     ticker: AMKR
     pct: 14
+    grade: some
     blurb: >
       Amkor is a major outsourced assembly and test partner for ADI,
       handling packaging technologies ranging from standard formats to
@@ -86,6 +90,7 @@ supplyChain:
   - name: Other assembly & test subcontractors
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Not a single company. ADI discloses that it makes extensive use of
       third-party subcontractors for assembly and testing beyond its named
@@ -94,6 +99,7 @@ supplyChain:
   - name: Semiconductor materials & equipment suppliers
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. ADI's own internal factories in Massachusetts,
       Washington, Oregon, and Ireland, along with its foundry and OSAT
@@ -104,6 +110,7 @@ customers:
   - name: Industrial end-market customers
     ticker: null
     pct: 40
+    grade: spread
     blurb: >
       Not a single company. Industrial applications - including factory
       automation, test and measurement, aerospace and defense, and
@@ -113,6 +120,7 @@ customers:
   - name: Automotive OEMs & Tier-1 suppliers
     ticker: null
     pct: 27
+    grade: some
     blurb: >
       Not a single company. Automotive has been ADI's fastest-growing major
       end market in recent periods, supplying chips for battery
@@ -121,6 +129,7 @@ customers:
   - name: Arrow Electronics
     ticker: ARW
     pct: 10
+    grade: spread
     blurb: >
       Arrow Electronics is ADI's strategic global distribution channel
       partner, reselling ADI chips to a broad base of downstream buyers.
@@ -130,6 +139,7 @@ customers:
   - name: Consumer & Digital Health customers
     ticker: null
     pct: 12
+    grade: some
     blurb: >
       Not a single company. This end market covers consumer electronics and
       digital health and wearable devices, a smaller but steady slice of
@@ -137,6 +147,7 @@ customers:
   - name: Communications infrastructure customers
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       Not a single company. Communications customers, largely wireless and
       wireline network infrastructure equipment makers, round out ADI's

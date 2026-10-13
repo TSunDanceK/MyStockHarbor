@@ -24,6 +24,7 @@ import { deriveEventType } from "./eventType";
 import { newsUserAgent } from "./userAgent";
 import { beginTiming } from "../timing";
 import type { NewsItem, NewsProvider } from "./types";
+import { cachedOutsideText } from "../outsideFetch";
 
 const GLOBENEWSWIRE_URL =
   "https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire---Public-Companies";
@@ -224,12 +225,10 @@ async function pollAll(): Promise<NewsItem[]> {
         // prnewswire answers either way and gets the header for consistency;
         // that half is UNTESTED — nothing measured says what prnewswire does
         // with a UA attached, only that it does not need one.
-        const res = await fetch(source.url, {
-          headers: { "user-agent": newsUserAgent() },
-          next: { revalidate: 3600 },
-        });
-        if (!res.ok) return [];
-        return parseWireFeed(await res.text(), source);
+        // Bounded, and cached by our own entry rather than Next's fetch cache,
+        // whose refresh ran with no deadline (lib/server/outsideFetch.ts, #553
+        // COWORK #171). Still one poll per hour for every caller.
+        return parseWireFeed(await cachedOutsideText(3600)(source.url, { "user-agent": newsUserAgent() }), source);
       } catch {
         return [];
       } finally {

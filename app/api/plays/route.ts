@@ -36,6 +36,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { isUnwantedBot } from "@/lib/botid-guard";
+import { publicPlaysPayload } from "@/lib/playsPublic";
 import {
   getClientIp,
   checkBackfillLockout,
@@ -91,5 +92,9 @@ export async function GET(req: NextRequest) {
     debugSymbol,
   });
 
-  return NextResponse.json(data, { status: status ?? 200, headers });
+  // NO TIINGO BARS IN PUBLIC JSON (#553 COWORK #103, 2026-10-03). This answer
+  // is public and CDN-cacheable, so every item's chartPoints is removed
+  // unless the payload was built from FMP. The page renders its charts from
+  // its own in-process read (server props / app/plays/playsPagePayload.ts).
+  return NextResponse.json(publicPlaysPayload(data), { status: status ?? 200, headers });
 }

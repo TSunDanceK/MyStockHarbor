@@ -35,6 +35,7 @@ supplyChain:
   - name: Framatome
     ticker: null
     pct: 24
+    grade: some
     blurb: >
       Manufactures "PROtect" accident-tolerant nuclear fuel - chromium-coated
       rods and chromia pellets - for Constellation's Calvert Cliffs Unit 2
@@ -44,6 +45,7 @@ supplyChain:
   - name: Westinghouse Electric Company
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       The dominant industry fabricator of fuel for pressurized-water
       reactors, the design used by several Constellation plants including
@@ -53,6 +55,7 @@ supplyChain:
   - name: Global Nuclear Fuel
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       A GE-Hitachi/Toshiba joint venture that has supplied fuel services
       under a named contract for Constellation's Nine Mile Point boiling-
@@ -62,6 +65,7 @@ supplyChain:
   - name: GE Vernova
     ticker: GEV
     pct: 18
+    grade: some
     blurb: >
       Supplied a named engineering contract for an extended power uprate at
       Constellation's Nine Mile Point Unit 2, and its GE-Hitachi Nuclear
@@ -70,6 +74,7 @@ supplyChain:
   - name: Global uranium mining, conversion & enrichment supply chain
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       Not a single company - Constellation's 10-K describes sourcing
       uranium concentrates, conversion, and enrichment services from "a
@@ -80,6 +85,7 @@ customers:
   - name: Meta Platforms
     ticker: META
     pct: 27
+    grade: some
     blurb: >
       Signed a 20-year power purchase agreement in 2025 for roughly 1,121
       megawatts (rising to about 1,151 MW with a plant uprate) from the
@@ -88,6 +94,7 @@ customers:
   - name: Microsoft
     ticker: MSFT
     pct: 26
+    grade: some
     blurb: >
       Signed a 20-year power purchase agreement in 2024 for the full 835
       megawatts of the restarted Three Mile Island Unit 1 - rebranded the
@@ -96,6 +103,7 @@ customers:
   - name: US federal government
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Constellation signed a 10-year, roughly $840 million contract with
       the General Services Administration - described as the largest in
@@ -105,6 +113,7 @@ customers:
   - name: CyrusOne
     ticker: null
     pct: 17
+    grade: some
     blurb: >
       Signed a February 2026 agreement for a 760-megawatt data-center
       campus at the Freestone Energy Center in Texas, gas-fired capacity
@@ -114,6 +123,7 @@ customers:
   - name: Walmart
     ticker: WMT
     pct: 8
+    grade: spread
     blurb: >
       Signed a long-term wholesale power agreement for 176 megawatts,
       including a 30 MW uprate, from the Dresden Clean Energy Center to

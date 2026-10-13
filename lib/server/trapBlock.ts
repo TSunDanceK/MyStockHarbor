@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { withRedisTimeout } from "./redisGuardTimeout";
+import { PAGE_TIMEOUT_OPTS } from "./redisCacheMode";
 
 /**
  * Redis-backed temporary block list for the honeypot trap
@@ -28,7 +29,7 @@ import { withRedisTimeout } from "./redisGuardTimeout";
 // dropped packet, which is the only retry that can help here.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv({ retry: { retries: 1, backoff: () => 50 } })
+    ? Redis.fromEnv({ ...PAGE_TIMEOUT_OPTS, retry: { retries: 1, backoff: () => 50 } })
     : null;
 
 const IP_PREFIX = "msh:trap-block:ip:v1";

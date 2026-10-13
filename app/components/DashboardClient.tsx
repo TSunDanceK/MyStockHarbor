@@ -1,7 +1,9 @@
 "use client";
 
 import { CRYPTO_MODE_ENABLED } from "@/lib/cryptoMode";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { holdOnAnalyser, scrollMotion, wantsAnalyser } from "@/lib/chartHref";
+import FiledEarningsChart, { FILED_EARNINGS_CSS } from "@/app/dashboard/FiledEarningsChart";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
@@ -11,6 +13,9 @@ import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
 import TickerLogo from "@/app/components/TickerLogo";
+import { ETF_NAMES } from "@/lib/etfNames";
+import KeyLevelsCard from "@/app/stock/[symbol]/KeyLevelsCard";
+import ConfluenceCard from "@/app/stock/[symbol]/ConfluenceCard";
 import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
 import { indicatorRead, INDICATOR_MANUAL, type ReadUnit } from "@/lib/indicatorRead";
 import { activeRowStyle } from "@/lib/listboxNav";
@@ -40,7 +45,7 @@ type InternalNewsCard = { title: string; source: string | null; pubDate: string 
 // "Neutral tone \u00b7 Mixed / range" from a different code path entirely.
 export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string | null; newsScoreLabel: string | null; newsScoreValue: number | null; cards: InternalNewsCard[]; ctaHref: string; changePct?: number | null; sparkPoints?: number[]; };
 // FROM THE SEC SNAPSHOT (lib/server/secEarningsSummary.ts) since 2026-09-23: the band label ("Good", "Mixed", "Weak", "Unavailable").
-export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: string; };
+export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: string; nextReport?: { text: string; estimated: boolean } | null; };
 // `provider`: whose bars `history` is, as /api/history reported it ("tiingo" drives the chart credit, #553 COWORK #103).
 type CachedSymbolData = { quote: Quote | null; history: Point[]; provider?: string | null; };
 type DivergenceState = "bullish" | "bearish" | "none";
@@ -57,6 +62,92 @@ type TrendScore = { total: number; passed: number; known: boolean; details: { na
 // VWMA need 20, MA50 needs 50, so a 30-bar listing genuinely runs five of six.
 type StretchScore = { total: number; flagged: number; ran: number; oversold: number; overbought: number; details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[]; };
 type AssetType = "stock" | "crypto";
+/** What app/dashboard/page.tsx hands down for the landing (#563 COWORK #134). */
+export type DashboardLandingProps = {
+  market: React.ReactNode;
+  cards: React.ReactNode;
+  /** Stock pages on Bottlenecks, for the "Who depends on who" point; null hides the count. */
+  mapped: number | null;
+  /** Symbol → its Bottlenecks page slug, for the analyser's link. */
+  bottlenecks: Record<string, string>;
+  css: string;
+};
+type AnalyserTab = "chart" | "levels" | "zones" | "earnings" | "news";
+// THE ICON TABS (#563 COWORK #161, laid out by #164 D): an icon BESIDE the
+// short label on one line at 641 px and up, the icon stacked OVER it at 640 px
+// and under. The full name is the accessible name and the tooltip (aria-label
+// and title). On a phone a horizontal strip, never page sideways-scroll, if
+// 320 px still cannot fit them.
+const ANALYSER_TABS: { key: AnalyserTab; label: string; short: string; icon: string }[] = [
+  { key: "chart", label: "Chart", short: "Chart", icon: "M3 17l5-6 4 3 6-8M3 21h18" },
+  { key: "levels", label: "Key levels", short: "Levels", icon: "M3 6h18M3 12h18M3 18h18" },
+  { key: "zones", label: "Price zones", short: "Zones", icon: "M3 8h18v4H3zM3 15h18v3H3z" },
+  { key: "earnings", label: "Filed earnings", short: "Earnings", icon: "M5 20V11M10 20V6M15 20v-7M20 20V9" },
+  { key: "news", label: "News", short: "News", icon: "M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M8 9h5M8 13h5" },
+];
+/** The landing's hero and analyser styles (the server cards bring their own, LANDING_CSS). */
+const LANDING_CLIENT_CSS = `
+.dlHero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px;padding:20px 0 8px;align-items:stretch;}
+.dlHeroLeft{display:flex;flex-direction:column;justify-content:center;padding:26px;border:1px solid #1f2b44;border-radius:20px;background:linear-gradient(160deg,rgba(37,99,235,0.16),rgba(13,20,34,0.96) 55%,rgba(16,185,129,0.08));min-width:0;}
+.dlHeroLeft>.dlEyebrow{margin-top:0;}
+.dlH1{margin:8px 0 0;font-size:2.75rem;line-height:1.08;font-weight:800;letter-spacing:-0.02em;}
+.dlLead{margin:14px 0 0;font-size:1.0625rem;line-height:1.6;color:#cbd5e1;max-width:620px;}
+.dlSearch{margin-top:18px;height:56px;flex:0 0 auto;}
+.dlSearch input{font-size:1rem;min-width:0;}
+.dlSearch .msh-go{height:40px;padding:0 18px;font-size:var(--fs-read);}
+.dlTry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;}
+.dlTryLabel{font-size:var(--fs-label);color:#8a97ad;}
+.dlTryChip{padding:6px 12px;border-radius:999px;border:1px solid #222c40;background:#0f1624;color:#eaf0fa;font-weight:800;font-size:var(--fs-label);cursor:pointer;text-decoration:none;}
+.dlTryChip:hover{border-color:#27406f;}
+.dlAnalyser{scroll-margin-top:16px;margin:30px 0 14px;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;}
+.dlAnalyserCard{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;padding:18px;border:1px solid #222c40;border-radius:20px;background:#0a101c;min-width:0;}
+.dlAnalyserHead{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0;}
+.dlAnHeadRow{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;min-width:0;}
+.dlAnId{display:flex;align-items:center;gap:6px 12px;min-width:0;flex-wrap:wrap;}
+.dlAnSym{font-size:1.5rem;font-weight:900;line-height:1;letter-spacing:-0.01em;}
+.dlAnName{margin-top:3px;font-size:var(--fs-label);color:#8a97ad;max-width:min(30ch,100%);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dlAnPrice{font-size:1.5rem;font-weight:900;font-variant-numeric:tabular-nums;margin-left:6px;}
+.dlChange{flex:0 1 280px;height:42px;min-width:0;max-width:100%;box-sizing:border-box;}
+.dlAnId{flex:1 1 auto;}
+.dlChange input{font-size:var(--fs-read);min-width:0;}
+.dlVerdict{margin:0;font-size:1.125rem;line-height:1.6;color:#cbd5e1;max-width:900px;}
+.dlVerdict strong{color:#f1f5f9;}
+.dlChipsRow{display:flex;flex-wrap:wrap;gap:8px;}
+.dlInfoChip{display:inline-flex;gap:8px;align-items:baseline;padding:8px 12px;border:1px solid #222c40;border-radius:12px;background:#0f1624;color:#eaf0fa;font-size:var(--fs-read);font-weight:700;text-decoration:none;}
+.dlInfoLabel{font-size:var(--fs-label);color:#8a97ad;text-transform:uppercase;letter-spacing:.05em;font-weight:800;}
+.dlAnalyserCard .msh-grid,.dlAnalyserCard .msh-mobile-only{margin:0;}
+.dlTabs{display:flex;flex-wrap:nowrap;gap:8px;}
+.dlTab{flex:1 1 0;min-width:0;display:inline-flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;padding:9px 12px;border-radius:10px;border:1px solid #222c40;background:#0f1624;color:#cbd5e1;font-weight:800;font-size:var(--fs-label);white-space:nowrap;cursor:pointer;}
+.dlTab[aria-selected="true"]{border-color:#2f6bff;background:#13213f;color:#fff;}
+.dlTabIcon{display:block;width:18px;height:18px;flex:0 0 auto;}
+@media(max-width:640px){.dlTab{flex-direction:column;gap:4px;padding:8px 6px;}}
+@media(max-width:480px){.dlTabs{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;gap:4px;}.dlTabs::-webkit-scrollbar{display:none;}.dlTab{flex:1 0 auto;padding:6px 6px;gap:3px;}.dlTabIcon{width:16px;height:16px;}}
+@media(max-width:859px){.dlHero{grid-template-columns:minmax(0,1fr);}}
+/* THE CHART TOOLBAR ON A PHONE, TWO LINES (#563, after #164 put the chart inside the analyser card):
+   line 1 the mode switch, then + and − on the right; line 2 Indicator, line/candle, D/W/M.
+   Tighter gaps and padding; the groups shrink rather than stack. 640 px and under only:
+   the desktop toolbar is untouched. !important: the controls carry inline styles. */
+@media(max-width:640px){
+.dlTb{padding:10px!important;}
+.dlTbHead{gap:6px!important;flex-wrap:nowrap!important;}
+.dlTbTitle{display:none!important;}
+.dlTbRow{flex-wrap:nowrap!important;gap:5px!important;min-width:0;}
+.dlTbRow[data-tb-line="1"]{flex:1 1 auto;}
+.dlTbRow[data-tb-line="2"]{margin-top:8px!important;}
+.dlTbSeg{flex:0 1 auto!important;min-width:0;padding:2px!important;gap:2px!important;}
+.dlTbSegBtn{padding:6px 7px!important;min-width:0!important;}
+.dlTbZoom{margin-left:auto;gap:4px!important;}
+.dlTbBtn{padding:6px 9px!important;}
+.dlTbInd{flex:1 1 auto!important;min-width:0!important;}
+.dlTbIndBtn{padding:8px 9px!important;}
+.dlTbTf{flex:0 0 auto;}
+}
+/* Headroom on the narrowest phones (320 px and a little under). */
+@media(max-width:360px){.dlTbSegBtn{padding:6px 5px!important;}.dlTbBtn{padding:6px 7px!important;}.dlTbRow{gap:4px!important;}}
+@media(max-width:560px){.dlSearch{padding:0 8px;gap:6px;}.dlSearch .msh-go{padding:0 12px;}.dlHeroLeft{padding:18px;}.dlH1{font-size:2rem;}.dlVerdict{font-size:var(--fs-read);}.dlAnalyserCard{padding:12px;}.dlChange{flex:1 1 100%;}}
+`;
+/** The landing's Try chips (the brief's four). */
+const TRY_SYMBOLS = ["NVDA", "TSLA", "JPM", "AMZN"];
 
 function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null); let sum = 0;
@@ -242,7 +333,7 @@ function toneRank(t: OverviewItem["tone"]) { if (t === "red") return 4; if (t ==
 function renderFlagsMeter(opts: { flagged: number; total: number; color: string; isDark: boolean }) {
   const { flagged, total, color, isDark } = opts;
   const st = Math.max(1, Math.min(20, Math.floor(total))), sf = Math.max(0, Math.min(st, Math.floor(flagged)));
-  return (<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}><div style={{ display: "flex", gap: 6 }}>{Array.from({ length: st }).map((_, i) => <span key={i} style={{ width: 14, height: 6, borderRadius: 999, background: i < sf ? color : isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)", border: isDark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(0,0,0,0.10)" }} />)}</div><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>{sf}/{st}</div></div>);
+  return (<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{Array.from({ length: st }).map((_, i) => <span key={i} style={{ width: 14, height: 6, borderRadius: 999, background: i < sf ? color : isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)", border: isDark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(0,0,0,0.10)" }} />)}</div><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>{sf}/{st}</div></div>);
 }
 // ran === 0 means none of the checks executed. "Calm" is a real reading and the
 // intensity <= 1 arm would otherwise claim it from zero evidence -- the tag half
@@ -286,6 +377,8 @@ function buildStretchScore(a: { lastClose: number | null; rsi14: number | null; 
 
 const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "AAPL", name: "Apple Inc." }, { symbol: "ABBV", name: "AbbVie Inc." }, { symbol: "ABT", name: "Abbott Laboratories" }, { symbol: "ADBE", name: "Adobe Inc." }, { symbol: "AMZN", name: "Amazon.com Inc." }, { symbol: "AVGO", name: "Broadcom Inc." }, { symbol: "BAC", name: "Bank of America" }, { symbol: "BRK.B", name: "Berkshire Hathaway B" }, { symbol: "COST", name: "Costco Wholesale" }, { symbol: "CRM", name: "Salesforce Inc." }, { symbol: "CSCO", name: "Cisco Systems" }, { symbol: "CVX", name: "Chevron Corp." }, { symbol: "DIS", name: "Walt Disney Co." }, { symbol: "GOOGL", name: "Alphabet Inc. Class A" }, { symbol: "HD", name: "Home Depot" }, { symbol: "INTC", name: "Intel Corp." }, { symbol: "JNJ", name: "Johnson & Johnson" }, { symbol: "JPM", name: "JPMorgan Chase" }, { symbol: "KO", name: "Coca-Cola Co." }, { symbol: "LLY", name: "Eli Lilly & Co." }, { symbol: "MA", name: "Mastercard Inc." }, { symbol: "MCD", name: "McDonald's Corp." }, { symbol: "META", name: "Meta Platforms" }, { symbol: "MRK", name: "Merck & Co." }, { symbol: "MSFT", name: "Microsoft Corp." }, { symbol: "NFLX", name: "Netflix Inc." }, { symbol: "NVDA", name: "NVIDIA Corp." }, { symbol: "ORCL", name: "Oracle Corp." }, { symbol: "PEP", name: "PepsiCo Inc." }, { symbol: "PG", name: "Procter & Gamble" }, { symbol: "PYPL", name: "PayPal Holdings" }, { symbol: "QCOM", name: "Qualcomm Inc." }, { symbol: "SBUX", name: "Starbucks Corp." }, { symbol: "T", name: "AT&T Inc." }, { symbol: "TGT", name: "Target Corp." }, { symbol: "TSLA", name: "Tesla Inc." }, { symbol: "TXN", name: "Texas Instruments" }, { symbol: "UNH", name: "UnitedHealth Group" }, { symbol: "V", name: "Visa Inc." }, { symbol: "VZ", name: "Verizon Communications" }, { symbol: "WFC", name: "Wells Fargo" }, { symbol: "WMT", name: "Walmart Inc." }, { symbol: "XOM", name: "Exxon Mobil Corp." },
+  // The curated ETFs' names (#563 COWORK #142 §3): a fund's quote carries none.
+  ...Object.entries(ETF_NAMES).map(([symbol, name]) => ({ symbol, name })),
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
 const CRYPTO_PRESETS: { symbol: string; name: string }[] = [
@@ -365,6 +458,7 @@ export default function DashboardClient({
   tiingoCredit = null,
   historyCredit = null,
   initialHistoryProvider = null,
+  landing = null,
 }: {
   defaultSymbol?: string;
   initialQuote?: Quote | null;
@@ -385,6 +479,13 @@ export default function DashboardClient({
   // Whose bars `initialHistory` is ("tiingo", "fmp" or "none"); the credit
   // shows only beside a series that is Tiingo's (#553 COWORK #103).
   initialHistoryProvider?: string | null;
+  /**
+   * THE LANDING (#563 COWORK #134): /dashboard only. With it, the page leads
+   * with the hero, "Market right now" and the cards (server-rendered, passed
+   * in), and this analyser moves below them as "{SYM} at a glance". Without it
+   * (the home page), the layout is unchanged.
+   */
+  landing?: DashboardLandingProps | null;
 }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [assetType, setAssetType] = useState<AssetType>("stock");
@@ -441,7 +542,7 @@ export default function DashboardClient({
   // pre-existing client-fetch-on-mount behaviour for that symbol below --
   // no regression, the seed is simply unused in that case.
   const seedMatchesSymbol = symbol === defaultSymbol;
-  const [symbolName, setSymbolName] = useState(() => (seedMatchesSymbol ? initialSymbolName : ""));
+  const [symbolName, setSymbolName] = useState(() => (seedMatchesSymbol ? initialSymbolName || ETF_NAMES[defaultSymbol.toUpperCase()] || "" : ""));
   const [activeTimeframe, setActiveTimeframe] = useState("D");
   const [visibleBars, setVisibleBars] = useState(75);
   const [windowOffset, setWindowOffset] = useState(0);
@@ -473,6 +574,11 @@ export default function DashboardClient({
   const [query, setQuery] = useState(symbol);
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
+  // TWO SEARCH BOXES ON THE LANDING (#563 COWORK #164 D): the hero's and the
+  // analyser's "Change stock…". They share the one query and result list, so
+  // only the box last focused shows the query and its dropdown.
+  const [searchFrom, setSearchFrom] = useState<"hero" | "change">("hero");
+  const focusSearch = (from: "hero" | "change") => { if (from !== searchFrom) { setSearchFrom(from); setQuery(""); } setOpen(true); };
   const searchBoxRef = useRef<HTMLDivElement>(null);
   const mobileSearchBoxRef = useRef<HTMLDivElement>(null);
   const [bench, setBench] = useState<BenchPayload | null>(initialBenchmarks);
@@ -480,6 +586,9 @@ export default function DashboardClient({
   const [earningsSummary, setEarningsSummary] = useState<StockEarningsSummary | null>(() => (seedMatchesSymbol ? initialEarningsSummary : null));
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  // THE ANALYSER'S TABS AND ITS ANCHOR (#563 COWORK #134), landing mode only.
+  const [tab, setTab] = useState<AnalyserTab>("chart");
+  const analyserRef = useRef<HTMLElement>(null);
   // WIDE CHART (#553 COWORK #27, layout only; lib/dashboardWide.ts). The chart
   // spans both columns and the Overview + Breakdown cards sit below it, side
   // by side. Remembered per viewer; renders normally without storage.
@@ -578,6 +687,16 @@ export default function DashboardClient({
   const selectedTimeframe = useMemo(() => TIMEFRAMES.find(t => t.label === activeTimeframe) ?? TIMEFRAMES[0], [activeTimeframe]);
   const COLORS = useMemo(() => ({ isDark: true, pageBg: "#0a0f1a", pageFg: "#eaf0fa", mutedFg: "#8a97ad", mutedFg2: "#5f6b80", cardBg: "#141b2b", cardFg: "#eaf0fa", cardBg2: "#0f1624", border: "#222c40", borderSoft: "#1a2336", controlBg: "#0f1624", controlBgSolid: "#0f1624", controlBorder: "#222c40", controlFg: "#eaf0fa", blue: "#2f6bff", blueSoft: "#13213f", blueBorder: "#27406f", green: "#16c784", greenSoft: "#0f2a23", greenBorder: "#1c4a3c", amber: "#f5a524", amberSoft: "#2c2310", amberBorder: "#3a2f10", red: "#f04444", yellowBorder: "rgba(234,179,8,0.38)", yellowBg: "rgba(234,179,8,0.10)", yellowText: "#fde68a" }), []);
 
+  // A CHART LINK LANDS ON THE ANALYSER (#563 COWORK #134, #151, #152):
+  // chartHref's #analyser, the older #chart, or a ?symbol= deep link. A layout
+  // effect, so the first jump lands before the first paint after hydration and
+  // the hero never flashes; holdOnAnalyser then keeps it there while the page
+  // settles (the router's own scroll, images, fonts) until the reader moves.
+  const deepSymbol = searchParams.get("symbol");
+  useLayoutEffect(() => {
+    if (!landing || !wantsAnalyser(window.location.hash, deepSymbol)) return;
+    return holdOnAnalyser(() => analyserRef.current);
+  }, [landing, deepSymbol]);
   useEffect(() => { const r = () => setIsMobile(window.innerWidth <= 768); r(); window.addEventListener("resize", r); return () => window.removeEventListener("resize", r); }, []);
   useEffect(() => { if (symbolName.trim()) return; const list = assetType === "crypto" ? CRYPTO_PRESETS : PRESET_TICKERS; const f = list.find(x => x.symbol.toUpperCase() === symbol.toUpperCase()); if (f?.name) setSymbolName(f.name); }, [symbol, symbolName, assetType]);
   useEffect(() => { setChartInterval(selectedTimeframe.interval); setVisibleBars(selectedTimeframe.defaultVisibleBars); setWindowOffset(0); }, [symbol, selectedTimeframe]);
@@ -770,7 +889,8 @@ export default function DashboardClient({
     return () => { c = true; clearTimeout(t); };
   }, [query, assetType]);
   useEffect(() => { let c = false; async function lb() { if (seededBenchRef.current) { seededBenchRef.current = false; return; } try { const scope = assetType === "crypto" ? "crypto" : "stock"; const r = await fetch(`/api/benchmarks?scope=${scope}`); if (!r.ok) throw new Error(""); const raw = (await r.json()) as any; if (!c) setBench({ updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(), scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks", items: Array.isArray(raw?.items) ? raw.items : [], ...(raw?.provider === "tiingo" ? { provider: "tiingo" as const } : {}) }); } catch { if (!c) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] }); } } lb(); return () => { c = true; }; }, [assetType]);
-  useEffect(() => { const h = typeof window !== "undefined" ? window.location.hash : ""; if (h !== "#chart" || !historyAll.length) return; const t = window.setTimeout(() => { chartSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); setHighlightChart(true); setTimeout(() => setHighlightChart(false), 1200); }, 80); return () => window.clearTimeout(t); }, [historyAll, symbol]);
+  // The older #chart link: with a landing, holdOnAnalyser already keeps the analyser in view (#152).
+  useEffect(() => { const h = typeof window !== "undefined" ? window.location.hash : ""; if (h !== "#chart" || !historyAll.length || landing) return; const t = window.setTimeout(() => { chartSectionRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }); setHighlightChart(true); setTimeout(() => setHighlightChart(false), 1200); }, 80); return () => window.clearTimeout(t); }, [historyAll, symbol, landing]);
   useEffect(() => { if (assetType === "crypto") { setNews(null); return; } if (seededNewsRef.current) { seededNewsRef.current = false; return; } let c = false; async function ln() { try { const r = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`); if (!r.ok) throw new Error(""); if (!c) setNews((await r.json()) as NewsPayload); } catch { if (!c) setNews(null); } } ln(); return () => { c = true; }; }, [symbol, assetType]);
   useEffect(() => { if (assetType === "crypto") { setEarningsSummary(null); return; } if (seededEarningsRef.current) { seededEarningsRef.current = false; return; } let c = false; async function le() { setEarningsSummary(null); try { const r = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" }); if (!r.ok) throw new Error(""); if (!c) setEarningsSummary((await r.json()) as StockEarningsSummary); } catch { if (!c) setEarningsSummary(null); } } le(); return () => { c = true; }; }, [symbol, assetType]);
 
@@ -862,6 +982,13 @@ export default function DashboardClient({
   const customMode = selectedIndicators.length > 0;
   function chartIndicatorLabel(v: Overlay[]) { return !v.length ? "Overview" : v.join(", "); }
   function chooseSymbol(s: string, name?: string, nextAssetType?: AssetType) { const c = s.trim().toUpperCase(); if (!c) return; symbolWasChosenRef.current = true; if (nextAssetType) setAssetType(nextAssetType); setSymbol(c); setSymbolName(name?.trim() ? name.trim() : ""); setQuery(c); setResults([]); setOpen(false); setActiveTimeframe("D"); setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); }
+  // THE HERO'S SEARCH (#563 COWORK #134): the same chooseSymbol routing, then
+  // down to the analyser, where the answer is.
+  function pickFromHero(sym: string, name?: string) {
+    chooseSymbol(sym, name, "stock");
+    setTab("chart");
+    if (landing) requestAnimationFrame(() => analyserRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }));
+  }
   function switchAssetType(next: AssetType) {
     if (next === assetType) return;
     if (next === "crypto") { chooseSymbol(DEFAULT_CRYPTO_SYMBOL, CRYPTO_PRESETS[0]?.name, "crypto"); return; }
@@ -968,9 +1095,9 @@ export default function DashboardClient({
   // switch.
   function TimeframeToggle() {
     return (
-      <div style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }} role="group" aria-label="Timeframe">
+      <div className="dlTbSeg" data-tb="timeframe" style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }} role="group" aria-label="Timeframe">
         {TIMEFRAMES.map(t => (
-          <button key={t.label} type="button" onClick={() => setActiveTimeframe(t.label)} aria-pressed={activeTimeframe === t.label}
+          <button key={t.label} type="button" className="dlTbSegBtn" onClick={() => setActiveTimeframe(t.label)} aria-pressed={activeTimeframe === t.label}
             style={{ border: "none", borderRadius: 7, padding: isMobile ? "6px 10px" : "7px 13px", background: activeTimeframe === t.label ? COLORS.blue : "transparent", color: activeTimeframe === t.label ? "#fff" : COLORS.mutedFg, fontWeight: 800, fontSize: 12, cursor: "pointer", letterSpacing: "0.02em", minWidth: isMobile ? 30 : 34 }}>
             {t.label}
           </button>
@@ -994,9 +1121,9 @@ export default function DashboardClient({
   // bracket button and the ⤢ expand button were removed to save space.
   function ChartToolbar() {
     const zBtn: React.CSSProperties = { padding: "7px 11px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, lineHeight: 1, fontSize: 14 };
-    return (<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", flex: "0 0 auto" }}>
-      <button type="button" onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" aria-label="Zoom in" style={zBtn}>+</button>
-      <button type="button" onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" aria-label="Zoom out" style={zBtn}>−</button>
+    return (<div className="dlTbZoom" data-tb="zoom" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", flex: "0 0 auto" }}>
+      <button type="button" className="dlTbBtn" onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" aria-label="Zoom in" style={zBtn}>+</button>
+      <button type="button" className="dlTbBtn" onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" aria-label="Zoom out" style={zBtn}>−</button>
     </div>);
   }
 
@@ -1024,8 +1151,8 @@ export default function DashboardClient({
     const tc = toneToColor(trendToneFromScore(trendScore), true), sc = toneToColor(compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0, stretchScore.ran).tone, true);
     return (<SectionCard title={`${symbol} Overview`} allowOverflow right={assetType === "stock" ? <Link href={`/stock/${encodeURIComponent(symbol)}`} style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>Company Overview →</Link> : null}>
       <div style={{ display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || "Name unavailable"}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || (landing ? "" : "Name unavailable")}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 10 }}>
           {/* Both scores now carry `known`. Stretch reports out of the number of
               checks that actually ran, not out of six, and the tone tag it feeds is
               guarded on the same count. See compositeToneFromCounts. */}
@@ -1083,10 +1210,11 @@ export default function DashboardClient({
     const items = customMode ? selectedBreakdownRows : overviewItems;
     const bc = items.filter((i: any) => i.tone === "green").length, rc = items.filter((i: any) => i.tone === "red").length, nc = items.length - bc - rc;
     const sl = customMode ? "Custom indicators" : `Mixed · ${bc} bullish · ${rc} bearish · ${nc} neutral`;
-    return (<section style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, overflow: "hidden" }}>
-      <button type="button" onClick={() => setBreakdownOpen(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "none", background: "none", color: COLORS.cardFg, cursor: "pointer", textAlign: "left" }}>
+    // ON THE LANDING, COLLAPSED BY DEFAULT AT EVERY WIDTH (#563 COWORK #164 D): "Breakdown ▸".
+    return (<section data-breakdown={breakdownOpen ? "open" : "collapsed"} style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, overflow: "hidden" }}>
+      <button type="button" aria-expanded={breakdownOpen} onClick={() => setBreakdownOpen(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "none", background: "none", color: COLORS.cardFg, cursor: "pointer", textAlign: "left" }}>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: COLORS.blueSoft, border: `1px solid ${COLORS.blueBorder}`, display: "grid", placeItems: "center", flex: "0 0 auto" }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9cc0ff" strokeWidth="2.2" strokeLinecap="round"><path d="M4 19V5M4 19h16M9 16V9M14 16V6M19 16v-4" /></svg></div>
-        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 14 }}>Indicator Breakdown</div><div style={{ fontSize: 12, color: COLORS.mutedFg, marginTop: 1 }}>{sl}</div></div>
+        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 14 }}>{landing ? <>Breakdown <span aria-hidden="true">{breakdownOpen ? "▾" : "▸"}</span></> : "Indicator Breakdown"}</div><div style={{ fontSize: 12, color: COLORS.mutedFg, marginTop: 1 }}>{sl}</div></div>
         <div style={{ display: "flex", gap: 3, flex: "0 0 auto" }}>{Array.from({ length: Math.min(bc, 4) }).map((_, i) => <span key={`b${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.green }} />)}{Array.from({ length: Math.min(rc, 4) }).map((_, i) => <span key={`r${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.red }} />)}{Array.from({ length: Math.min(nc, 4) }).map((_, i) => <span key={`n${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.mutedFg2 }} />)}</div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={COLORS.mutedFg} strokeWidth="2.4" strokeLinecap="round" style={{ flex: "0 0 auto", transform: breakdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.25s ease" }}><path d="M6 9l6 6 6-6" /></svg>
       </button>
@@ -1109,9 +1237,9 @@ export default function DashboardClient({
       { key: "tradingview", label: "TradingView" },
     ];
     return (
-      <div style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flexWrap: "nowrap" }} role="group" aria-label="Chart mode">
+      <div className="dlTbSeg" data-tb="mode" style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flexWrap: "nowrap" }} role="group" aria-label="Chart mode">
         {modes.map(m => (
-          <button key={m.key} type="button" onClick={() => selectChartMode(m.key)} aria-pressed={chartMode === m.key}
+          <button key={m.key} type="button" className="dlTbSegBtn" onClick={() => selectChartMode(m.key)} aria-pressed={chartMode === m.key}
             style={{ border: "none", borderRadius: 7, padding: compact ? "6px 9px" : "7px 12px", background: chartMode === m.key ? "rgba(167,139,250,0.28)" : "transparent", color: chartMode === m.key ? "#ede9fe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartMode === m.key ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none", whiteSpace: "nowrap" }}>
             {m.label}
           </button>
@@ -1162,14 +1290,19 @@ export default function DashboardClient({
     return <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} viewWidth={full ? undefined : basicViewWidth} />;
   }
 
+  // THE ANALYSER'S TABS TAKE THE CHART'S PLACE on the landing (#563 COWORK
+  // #134); everywhere else ChartPanel is the price chart, as before.
   function ChartPanel() {
+    return landing ? AnalyserTabs() : <PriceChartPanel />;
+  }
+  function PriceChartPanel() {
     const modeTitle = chartMode === "tradingview" ? `TradingView · ${symbol}` : chartMode === "interactive" ? `Interactive · ${symbol}` : `Price · ${chartIndicatorName}`;
     return (<div id="chart" ref={chartSectionRef} style={{ scrollMarginTop: 24 }}>
       <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
-        <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
-            {!isMobile ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}><WideChartButton /><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div></div> : null}
-            <div style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="dlTb" data-chart-toolbar="" style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
+          <div className="dlTbHead" style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
+            {!isMobile ? <div className="dlTbTitle" style={{ display: "flex", alignItems: "center", gap: 10 }}><WideChartButton /><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div></div> : null}
+            <div className="dlTbRow" data-tb-line="1" style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChartModeSwitcher compact={isMobile} />
               {/* On Basic: the zoom + / − controls ride on this (mode-switch)
                   line so the toolbar fits in 2 lines on phone portrait. D/W/M
@@ -1181,9 +1314,9 @@ export default function DashboardClient({
             </div>
           </div>
           {chartMode === "basic" ? (
-            <div style={{ marginTop: 12, display: "flex", gap: isMobile ? 7 : 10, alignItems: "center", flexWrap: "wrap" }}>
-              <div style={{ position: "relative", flex: isMobile ? "0 1 auto" : 1, minWidth: isMobile ? 116 : 160 }} ref={indicatorMenuRef}>
-                <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator"}</span><span>▾</span></button>
+            <div className="dlTbRow" data-tb-line="2" style={{ marginTop: 12, display: "flex", gap: isMobile ? 7 : 10, alignItems: "center", flexWrap: "wrap" }}>
+              <div className="dlTbInd" style={{ position: "relative", flex: isMobile ? "0 1 auto" : 1, minWidth: isMobile ? 116 : 160 }} ref={indicatorMenuRef}>
+                <button type="button" className="dlTbIndBtn" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator"}</span><span>▾</span></button>
                 {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? 250 : 300, maxWidth: "84vw", maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
                   <button type="button" onClick={clearIndicatorSelection} style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Clear all · Overview</button>
                   {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map(group => <div key={group.title}><div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>{group.opts.map(opt => (
@@ -1193,8 +1326,8 @@ export default function DashboardClient({
                   ))}</div>)}
                 </div> : null}
               </div>
-              <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" onClick={() => setChartType(type)} title={type === "line" ? "Line" : "Candles"} aria-label={type === "line" ? "Line" : "Candles"} aria-pressed={chartType === type} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 7, padding: "6px 11px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? LINE_ICON : CANDLE_ICON}</button>)}</div>
-              <div style={{ flex: "0 0 auto" }}><TimeframeToggle /></div>
+              <div className="dlTbSeg" data-tb="type" style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" className="dlTbSegBtn" onClick={() => setChartType(type)} title={type === "line" ? "Line" : "Candles"} aria-label={type === "line" ? "Line" : "Candles"} aria-pressed={chartType === type} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 7, padding: "6px 11px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? LINE_ICON : CANDLE_ICON}</button>)}</div>
+              <div className="dlTbTf" style={{ flex: "0 0 auto" }}><TimeframeToggle /></div>
             </div>
           ) : null}
         </div>
@@ -1254,7 +1387,7 @@ export default function DashboardClient({
           <div style={{ fontSize: isMobile ? 19 : 20, fontWeight: 800, marginTop: 9, fontVariantNumeric: "tabular-nums", color: ac, whiteSpace: "nowrap" }}>{pt != null ? `${isUp ? "▲" : "▼"} ${pt}` : "—"}</div>
           <div style={{ marginTop: 6, display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{pr}</span>
-            <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{it.priceLabel ?? (it.date && it.time ? `${it.date} ${it.time}` : "—")}</span>
+            <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{/* #553 COWORK #101 nit: the FMP tiles read "as of 3 Oct 2026, 00:12 UTC", not the raw "2026-10-03 00:12:06". */}{it.priceLabel ?? (it.date && it.time ? `as of ${utcStamp(`${it.date}T${it.time}Z`) ?? `${it.date} ${it.time}`}` : "—")}</span>
           </div>
         </button>
       );
@@ -1354,6 +1487,125 @@ export default function DashboardClient({
     </div></SectionCard>);
   }
 
+  // ── THE LANDING (#563 COWORK #134) ──────────────────────────────────────
+  // The hero's search is the header search's markup and handlers (one
+  // `query`, one result list), so its routing is unchanged; a pick then
+  // scrolls down to the analyser.
+  //
+  // CALLED AS A FUNCTION, NEVER MOUNTED AS <LandingHero /> (#563 COWORK #148
+  // §1). It is declared inside this component, so as a JSX element it would be
+  // a NEW component type on every render: each keystroke (setQuery) remounted
+  // the input and threw the focus out. Called directly, its elements are part
+  // of this component's own tree and the input keeps its identity.
+  // scripts/measure-dashboard-search.mjs types into it key by key.
+  function LandingHero() {
+    return (
+      <div className="dlHeroLeft">
+        <p className="dlEyebrow" style={{ color: "#93c5fd" }}>MyStockHarbor</p>
+        <h1 className="dlH1">Stock research from the filings, not the hype.</h1>
+        <p className="dlLead">Every figure traced to an SEC filing, every chart explained in plain English, with supply-chain maps you won&apos;t find elsewhere.</p>
+        <div className="msh-searchbox dlSearch" ref={searchBoxRef}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+          <input value={searchFrom === "hero" ? query : ""} onChange={e => { setSearchFrom("hero"); setQuery(e.target.value); setOpen(true); }} onFocus={() => focusSearch("hero")} {...navDesk.inputAria} aria-label="Search a ticker or company" onKeyDown={e => { if (navDesk.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) pickFromHero(f.symbol, f.name); } }} placeholder="Search a ticker or company… e.g. TSLA" />
+          <button className="msh-go" type="button" onClick={() => { if (results[0]) pickFromHero(results[0].symbol, results[0].name); }}>Analyse</button>
+          {open && searchFrom === "hero" && results.length > 0 ? <div {...navDesk.listProps} aria-label="Ticker search results" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navDesk.optionProps(i)} onClick={() => pickFromHero(r.symbol, r.name)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navDesk.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
+        </div>
+        <div className="dlTry">
+          <span className="dlTryLabel">Try:</span>
+          {TRY_SYMBOLS.map((t) => <button key={t} type="button" className="dlTryChip" onClick={() => pickFromHero(t)}>{t}</button>)}
+        </div>
+      </div>
+    );
+  }
+
+  /** The plain-English verdict over the Chart Summary: the regime, then how stretched. */
+  const verdictHead = (() => {
+    const t = overviewMeta.trend;
+    if (!t) return null;
+    const tw = t === "Uptrend" ? "In an uptrend" : t === "Downtrend" ? "In a downtrend" : "In a range";
+    const f = stretchScore.ran ? stretchScore.flagged : null;
+    return `${tw}${f === null ? "" : f === 0 ? ", not stretched" : f <= 2 ? ", slightly stretched" : ", stretched"}.`;
+  })();
+
+  // THE ANALYSER CARD'S HEAD (#563 COWORK #164 D): the symbol, its name and
+  // price, a compact "Change stock…" search (the landing's second search box,
+  // on the shared query: see searchFrom), then the plain-English verdict.
+  // Called, never mounted (its input must keep its identity, as the hero's).
+  function AnalyserHead() {
+    return (
+      <div className="dlAnalyserHead">
+        <div className="dlAnHeadRow">
+          <div className="dlAnId" data-analyser-id="">
+            <TickerLogo symbol={symbol} size={36} radius={9} />
+            <div style={{ minWidth: 0 }}>
+              <div className="dlAnSym">{symbol}</div>
+              {symbolName ? <div className="dlAnName" title={symbolName} data-fine-print="">{symbolName}</div> : null}
+            </div>
+            <div className="dlAnPrice" data-analyser-price="">{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div>
+          </div>
+          <div className="msh-searchbox dlChange" ref={mobileSearchBoxRef} data-change-stock="">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+            <input value={searchFrom === "change" ? query : ""} onChange={e => { setSearchFrom("change"); setQuery(e.target.value); setOpen(true); }} onFocus={() => focusSearch("change")} {...navMobile.inputAria} aria-label="Change stock" onKeyDown={e => { if (navMobile.onKeyDown(e)) return; if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) chooseSymbol(f.symbol, f.name, "stock"); } }} placeholder="Change stock…" />
+            {open && searchFrom === "change" && results.length > 0 ? <div {...navMobile.listProps} aria-label="Ticker search results" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map((r, i) => <button key={`${r.symbol}-${r.exchange}`} type="button" tabIndex={-1} {...navMobile.optionProps(i)} onClick={() => chooseSymbol(r.symbol, r.name, "stock")} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, ...(navMobile.active === i ? activeRowStyle(true) : null) }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
+          </div>
+        </div>
+        <p className="dlVerdict" data-verdict="">{verdictHead ? <strong>{verdictHead} </strong> : null}{chartSummaryText}</p>
+      </div>
+    );
+  }
+
+  /** The card's foot (#164 D): the next report, the Supply map and stock page links. */
+  function AnalyserFoot() {
+    const mapSlug = assetType === "stock" ? landing?.bottlenecks[symbol] ?? null : null;
+    const next = assetType === "stock" ? earningsSummary?.nextReport ?? null : null;
+    if (!next && !mapSlug && assetType !== "stock") return null;
+    return (
+      <div className="dlChipsRow" data-analyser-links="">
+        {next ? <span className="dlInfoChip" data-next-report=""><span className="dlInfoLabel">Next report</span> {next.text}{next.estimated ? " (estimated)" : ""}</span> : null}
+        {mapSlug ? <Link className="dlInfoChip" href={`/bottlenecks/${mapSlug}`} prefetch={false} data-bottlenecks-link=""><span className="dlInfoLabel">On Bottlenecks</span> Supply map →</Link> : null}
+        {assetType === "stock" ? <Link className="dlInfoChip" href={`/stock/${encodeURIComponent(symbol)}`} prefetch={false}><span className="dlInfoLabel">Full breakdown</span> {symbol} stock page →</Link> : null}
+      </div>
+    );
+  }
+
+  // The Key levels and Price zones tabs read DAILY bars, the stock page's
+  // cards on the same history this chart already loaded: no extra read.
+  const dailyKeyBars = useMemo(() => activeTimeframe !== "D" ? [] : historyAll
+    .filter((p) => [p.open, p.high, p.low, p.close].every((v) => typeof v === "number" && Number.isFinite(v)))
+    .map((p) => ({ date: p.date, open: p.open as number, high: p.high as number, low: p.low as number, close: p.close })), [historyAll, activeTimeframe]);
+
+  function AnalyserTabs() {
+    const needDaily = <SectionCard><p className="dlEmpty">Key levels and price zones read daily bars. Switch the chart to D to see them for {symbol}.</p></SectionCard>;
+    const macroSupport = supportResistanceZones.find((z) => z.kind === "support") ?? null;
+    let body: React.ReactNode;
+    if (tab === "chart") body = <PriceChartPanel />;
+    else if (tab === "levels") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <KeyLevelsCard bars={dailyKeyBars} lastPrice={lastClose} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
+    else if (tab === "zones") body = activeTimeframe !== "D" ? needDaily : dailyKeyBars.length ? <ConfluenceCard bars={dailyKeyBars} lastPrice={lastClose} ma50={typeof lastMA50 === "number" ? lastMA50 : null} ma200={typeof lastMA200 === "number" ? lastMA200 : null} macro={macroSupport ? { lower: macroSupport.lower, upper: macroSupport.upper } : null} credit={historyProvider === "tiingo" ? historyCredit : undefined} /> : <SectionCard><p className="dlEmpty">No daily price history is loaded for {symbol} yet.</p></SectionCard>;
+    // THE STOCK PAGE'S EARNINGS SNAPSHOT (#563 COWORK #160, replacing #154 §6's
+    // custom chart), fetched only while this tab is open.
+    // SectionCard is declared in this render, so it is CALLED, not mounted: mounted,
+    // it is a new component type each render and the chart would remount and refetch.
+    else if (tab === "earnings") body = SectionCard({
+      title: `${symbol} filed earnings`,
+      children: assetType !== "stock" ? <p className="dlEmpty" data-filed-empty="">Filed figures not available for {symbol}.</p>
+        : <FiledEarningsChart symbol={symbol} />,
+    });
+    else body = <NewsPanel />;
+    return (
+      <div className="msh-col dlTabbed">
+        <div className="dlTabs" role="tablist" aria-label={`${symbol} analyser views`}>
+          {ANALYSER_TABS.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} aria-label={t.label} title={t.label} data-tab={t.key} className="dlTab" onClick={() => setTab(t.key)}>
+              <svg className="dlTabIcon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={t.icon} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <span className="dlTabShort" aria-hidden="true">{t.short}</span>
+            </button>
+          ))}
+        </div>
+        <div role="tabpanel" aria-label={ANALYSER_TABS.find((t) => t.key === tab)?.label}>{body}</div>
+      </div>
+    );
+  }
+
   function MobileHero() {
     return (<section style={{ marginBottom: 14, border: `1px solid ${COLORS.border}`, borderRadius: 18, background: COLORS.cardBg, overflow: "hidden" }}>
       <div style={{ padding: "16px 14px 14px", background: "linear-gradient(180deg, rgba(47,107,255,0.14), rgba(10,15,26,0))" }}>
@@ -1403,7 +1655,15 @@ export default function DashboardClient({
       `}</style>
 
 
+      {landing ? <style>{landing.css + LANDING_CLIENT_CSS + FILED_EARNINGS_CSS}</style> : null}
       <div className="msh-wrap">
+        {landing ? (
+          <div className="dlHero" data-landing="">
+            {LandingHero()}
+            {landing.market}
+          </div>
+        ) : null}
+        {!landing ? (<>
         <div className="msh-hero">
           <div className="msh-hero-lead"><h1>Analyze any stock</h1><p>Search a ticker for its full breakdown, or scan for fresh ideas.</p></div>
           {/* Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62). */}
@@ -1424,36 +1684,66 @@ export default function DashboardClient({
         </div>
 
         <div className="msh-mobile-only">{isMobile ? MobileHero() : null}</div>
+        </>) : null}
 
-        <DashboardTicker />
+        {/* THE LIVE TICKER TAPE is gone from the landing (#563 COWORK #164 A): its top
+            item is the screens card's "Biggest mover" line. Elsewhere it stays. */}
+        {landing ? null : <DashboardTicker credit={tiingoCredit} />}
 
-        {err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null}
+        {landing ? landing.cards : null}
 
-        <div ref={deskGridRef} className={`msh-grid msh-desktop-only${wideChart ? " msh-grid-wide" : ""}`} data-wide-chart={wideChart ? "1" : "0"}>
-          {wideChart ? (
+        {(() => {
+          const errBox = err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null;
+          // On the landing the Breakdown is collapsed at every width (#164 D); elsewhere the desktop card stays.
+          const breakdown = landing ? <MobileBreakdownAccordion /> : <BreakdownPanel />;
+          const grids = (
             <>
-              <div className="msh-col msh-wide-chart"><ChartPanel /></div>
-              <div className="msh-wide-cards"><OverviewPanel /><BreakdownPanel /></div>
+              <div ref={deskGridRef} className={`msh-grid msh-desktop-only${wideChart ? " msh-grid-wide" : ""}`} data-wide-chart={wideChart ? "1" : "0"}>
+                {wideChart ? (
+                  <>
+                    <div className="msh-col msh-wide-chart"><ChartPanel /></div>
+                    <div className="msh-wide-cards"><OverviewPanel />{breakdown}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="msh-col"><OverviewPanel />{breakdown}</div>
+                    <div className="msh-col"><ChartPanel /></div>
+                  </>
+                )}
+              </div>
+              <div className="msh-mobile-only" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
+                <OverviewPanel />
+                <ChartPanel />
+                <MobileBreakdownAccordion />
+              </div>
             </>
-          ) : (
-            <>
-              <div className="msh-col"><OverviewPanel /><BreakdownPanel /></div>
-              <div className="msh-col"><ChartPanel /></div>
-            </>
-          )}
-        </div>
+          );
+          // D. "ANALYSE ANY STOCK" (#164 D): an H2, then ONE card holding the head, the
+          // tabs, the overview and the chart, the collapsed Breakdown and the links.
+          // #analyser is still every chartHref link's target.
+          return landing ? (
+            <section id="analyser" ref={analyserRef} className="dlAnalyser" aria-labelledby="dlAnalyserTitle">
+              <h2 id="dlAnalyserTitle" className="dlH2">Analyse any stock</h2>
+              <div className="dlAnalyserCard" data-analyser-card="">
+                {AnalyserHead()}
+                {errBox}
+                {grids}
+                {AnalyserFoot()}
+              </div>
+            </section>
+          ) : <>{errBox}{grids}</>;
+        })()}
 
-        <div className="msh-mobile-only" style={{ display: "grid", gap: 14 }}>
-          <OverviewPanel />
-          <ChartPanel />
-          <MobileBreakdownAccordion />
-        </div>
-
-        <div className="msh-lower">
-          <BenchmarksPanel />
-          <NewsPanel />
-          <InsightsPanel />
-        </div>
+        {/* The landing's cards carry the news and the insight, and "Market today"
+            the benchmarks' figures (#164 A: the Market Benchmarks row is gone from
+            the landing); the analyser's own news is its News tab. */}
+        {landing ? null : (
+          <div className="msh-lower">
+            <BenchmarksPanel />
+            <NewsPanel />
+            <InsightsPanel />
+          </div>
+        )}
       </div>
 
       {expanded ? (

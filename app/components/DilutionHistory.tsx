@@ -21,6 +21,19 @@ export type DilutionHistoryData = {
    * names no basis.
    */
   basis?: "annual+quarters" | "quarter" | "year";
+  /** The series' corrections and its 3-year figure (lib/server/secShareHistory.ts, #552 COWORK #89). */
+  gaps?: { from: string; to: string }[];
+  splits?: { date: string; ratio: number }[];
+  dropped?: string[];
+  startedAfter?: { date: string; reason: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; ratio?: number };
+  /** Fiscal-year-average points, by date (#552 COWORK #136); the rest are quarterly. */
+  yearEnds?: string[];
+  /** Fiscal years left out as another basis, by date. */
+  refusedYears?: string[];
+  withheld?:
+    | { reason: "units-unconfirmed"; factor: number | null }
+    | { reason: "cut-too-short"; factor: null; cut?: "unexplained-split-step" | "scale-step" | "listing" | "unmatched-split"; since?: string };
+  threeYear?: { pct: number; base: SharePoint; end?: SharePoint } | { pct: null; reason: "too-short" };
 };
 
 function fmtShares(value: number | null) {
@@ -30,6 +43,13 @@ function fmtShares(value: number | null) {
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return value.toFixed(0);
+}
+
+/** "27 Dec 2025": the 3-year window's own ends, to the day (#552 COWORK #120). */
+function fmtDateDay(value: string) {
+  const d = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return value;
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
 }
 
 function fmtDateShort(value: string | null) {
@@ -48,8 +68,12 @@ function fmtDateShort(value: string | null) {
  * stable-share large cap. The axis now spans at least ±2.5% around the mean,
  * widened to take in the data; it is NOT anchored at zero, so real dilution
  * (a 15% rise) still fills the chart.
+ *
+ * ±10% SINCE #552 COWORK #136: at ±2.5% AAPL's −5.5% over two and a half years
+ * filled the whole plot and read as dramatic as a doubling. At ±10% a 5% drift
+ * takes about a quarter of the height, and a heavy diluter (+100%) still fills it.
  */
-export const SHARE_AXIS_MIN_HALF_SPAN = 0.025;
+export const SHARE_AXIS_MIN_HALF_SPAN = 0.1;
 
 export function shareAxis(values: number[]): { lo: number; hi: number } {
   const minV = Math.min(...values);
@@ -72,42 +96,109 @@ export function formatShareChange(changePercent: number | null): string {
 }
 
 /**
- * A SERIES THE CHART CANNOT SUMMARISE YET (#552 COWORK #89, interim guard).
- *
- * The annual points are as filed, so a split leaves older years on the old
- * basis: AMZN reads 494M then 10,005M at its 20:1 split, and PAC's count goes
- * x1000 from 2017 ("+96,037%"). Measured over 916 charted series (CODE-A #94):
- * 99 step at a whole split ratio, 65 step by more than 100x, 33 have a gap of
- * more than 15 months (GDDY 2016 -> 2023, drawn as a straight "rise").
- *
- * DETECTION ONLY, the probe's own rules: a step within 3% of a whole split
- * ratio either way, a step over 100x either way, or consecutive points more
- * than SHARE_GAP_MAX_DAYS apart. The line is still drawn; the "Since" and
- * Trend figures are withheld. The full fix (restated comparatives, broken
- * lines, the 3-year trend) replaces this after the purge. A real one-year
- * doubling also matches the 2x ratio and is withheld with the rest: hiding a
- * true figure for a week is the cheaper error than printing a false one.
+ * THE TREND, FROM THE LAST 3 YEARS (#552 COWORK #88/#89 §5). The colour and
+ * the words come from the 3-year figure, never first-vs-last: GDDY rose to its
+ * IPO and has shrunk its count ever since. Hedged: a description of the count,
+ * never a judgement. Within ±SHARE_FLAT_PCT it is "roughly unchanged".
  */
-export const SHARE_SPLIT_RATIOS = [2, 3, 4, 5, 8, 10, 15, 20, 25, 40, 50];
-export const SHARE_SPLIT_TOLERANCE = 0.03;
-export const SHARE_SCALE_MAX_STEP = 100;
-export const SHARE_GAP_MAX_DAYS = 460;
-
-export function shareHistoryDefect(points: SharePoint[]): "scale-step" | "split-step" | "gap" | null {
-  let found: "split-step" | "gap" | null = null;
-  for (let i = 1; i < points.length; i++) {
-    const r = points[i].shares / points[i - 1].shares;
-    if (!Number.isFinite(r) || r <= 0) continue;
-    if (r > SHARE_SCALE_MAX_STEP || r < 1 / SHARE_SCALE_MAX_STEP) return "scale-step";
-    if (!found && SHARE_SPLIT_RATIOS.some((k) => Math.abs(r / k - 1) < SHARE_SPLIT_TOLERANCE || Math.abs(r * k - 1) < SHARE_SPLIT_TOLERANCE)) found = "split-step";
-    const days = (Date.parse(points[i].date) - Date.parse(points[i - 1].date)) / 86_400_000;
-    if (!found && days > SHARE_GAP_MAX_DAYS) found = "gap";
-  }
-  return found;
+export const SHARE_FLAT_PCT = 1;
+export function threeYearWords(pct: number | null, phrase: string = LAST_3_YEARS): { label: string; tone: "up" | "down" | "flat" | "none" } {
+  if (pct === null || !Number.isFinite(pct)) return { label: "Recent history too short", tone: "none" };
+  if (pct > SHARE_FLAT_PCT) return { label: `Share count has risen over ${phrase}`, tone: "up" };
+  if (pct < -SHARE_FLAT_PCT) return { label: `Share count has fallen over ${phrase}`, tone: "down" };
+  return { label: `Share count roughly unchanged over ${phrase}`, tone: "flat" };
 }
 
-/** What the two withheld cells say instead. */
-export const SHARE_HISTORY_WITHHELD = "Share history needs a correction; figures hidden for now";
+/**
+ * THE SPAN, NAMED AS LONG AS IT IS (#552 COWORK #141). The trend window's base
+ * may sit up to 6 months before the 3-year cut, and its end up to 6 months
+ * before the newest point, so a "3-year" figure can span 3½ years (BKNG: Dec
+ * 2022 to Jun 2026). Within ±3 months of 3 years, ending at the newest point,
+ * it is "the last 3 years"; otherwise its length to the quarter-year, "3½ years".
+ */
+export const LAST_3_YEARS = "the last 3 years";
+export const SPAN_3_YEARS_TOLERANCE_DAYS = 92;
+export function spanPhrase(baseDate: string, endDate: string, endIsNewest: boolean): string {
+  const d = (Date.parse(endDate) - Date.parse(baseDate)) / 86_400_000;
+  if (endIsNewest && Math.abs(d - 3 * 365.25) <= SPAN_3_YEARS_TOLERANCE_DAYS) return LAST_3_YEARS;
+  const q = Math.round((d / 365.25) * 4) / 4;
+  const whole = Math.floor(q);
+  const frac = ["", "¼", "½", "¾"][Math.round((q - whole) * 4)];
+  return `${whole}${frac} years`;
+}
+
+/**
+ * THE HEADLINE OVER THE CHART (#552 COWORK #136 (b)): the move in words, with
+ * an arrow, hedged. From the 3-year figure where there is one, else since the
+ * first point. Direction is in the arrow AND the words, never colour alone.
+ */
+/**
+ * THE SAME SPAN AS THE TILE (#552 COWORK #138): where the 3-year window's end
+ * stepped back from the newest point to find a base (COWORK #120), the
+ * headline names that window, as the tile does, rather than "the last 3 years".
+ */
+export const NEWEST_SPAN_WORDS = "the newest span on file";
+
+export function shareHeadline(
+  three: { pct: number; from: string; to: string; endIsNewest: boolean; phrase: string } | null,
+  sincePct: number | null,
+  since: string | null,
+): string | null {
+  const pct = three ? three.pct : sincePct;
+  if (pct === null || !Number.isFinite(pct)) return null;
+  const when = three
+    ? three.phrase === LAST_3_YEARS
+      ? `over ${LAST_3_YEARS}`
+      : `over ${three.phrase}, from ${three.from} to ${three.to}${three.endIsNewest ? "" : `, ${NEWEST_SPAN_WORDS}`},`
+    : since ? `since ${since}` : "";
+  // "–", NOT "≈": that glyph is reserved for estimates (check-estimate-glyph-reserved).
+  if (Math.abs(pct) <= SHARE_FLAT_PCT) return `– Share count roughly unchanged ${when.replace(/,$/, "")}`.trim();
+  return pct < 0
+    ? `▼ Down ${Math.abs(pct).toFixed(1)}% ${when.replace(/,$/, "")}, which may reflect buybacks`
+    : `▲ Up ${pct.toFixed(1)}% ${when.replace(/,$/, "")}: more shares can spread the same earnings and ownership thinner`;
+}
+
+/** "20-for-1" / "1-for-10". */
+export function splitWords(ratio: number): string {
+  return ratio >= 1 ? `${Math.round(ratio)}-for-1` : `1-for-${Math.round(1 / ratio)}`;
+}
+
+/**
+ * WHY NO CHART (#552 COWORK #121): the filed counts couldn't be confirmed in
+ * the units the cover page uses. Said instead of drawing a count that may be
+ * off by a thousand times.
+ */
+export function withheldWords(w: NonNullable<DilutionHistoryData["withheld"]>): string {
+  // A SERIES THE CORRECTIONS CUT BELOW THREE POINTS (#552 COWORK #132 (d)).
+  if (w.reason === "cut-too-short") {
+    if (w.cut === "listing") return "Not drawn: fewer than three share counts have been filed since the company's first report after listing, too few to show a trend.";
+    if (w.cut) return `Not drawn: an earlier step in the filed share counts couldn't be matched to a split the company restated, and the counts since${w.since ? ` ${fmtDateShort(w.since)}` : ""} are too few to show a trend.`;
+    return "Not drawn: after leaving out filed figures that were off by a factor of 100 or more, too few share counts remain to show a trend.";
+  }
+  return w.factor !== null
+    ? `Not drawn: the share counts in this company's filings don't agree with the count on its latest cover page (they differ by a factor of 300 or more), so we can't confirm which units they're in.`
+    : "Not drawn: the filed share counts jump by more than 100 times at one point, and there's no cover-page count to confirm which side is in the right units.";
+}
+
+/** The notes the source line carries for a corrected series (#552 COWORK #89 §1–4). */
+export function seriesNotes(data: DilutionHistoryData): string[] {
+  const out: string[] = [];
+  for (const s of data.splits ?? []) {
+    // NO DATE (#552 COWORK #138): s.date is where the step sits in the series
+    // (a fiscal year-end), not when the split took effect, and the stored set
+    // carries no effective date. AAPL read "Sept 2012" for its June 2014 7-for-1.
+    out.push(`Earlier counts are adjusted for a ${splitWords(s.ratio)} split, using the company's own restated figures.`);
+  }
+  const st = data.startedAfter;
+  if (st?.reason === "listing") out.push("Starts at the company's first report after listing.");
+  else if (st?.reason === "unmatched-split") out.push(`Starts ${fmtDateShort(st.date)}: the company restated its earlier counts for a ${splitWords(st.ratio ?? 1)} split, but the step before this point doesn't match it, so the chart doesn't draw across it.`);
+  else if (st) out.push(`Starts ${fmtDateShort(st.date)}: an earlier step in the filed counts couldn't be matched to a split the company restated, so the chart doesn't draw across it.`);
+  const dropped = data.dropped ?? [];
+  if (dropped.length === 1) out.push(`The filed figure for ${fmtDateShort(dropped[0])} is left out: it was off by a factor of 100 or more from the figures either side.`);
+  else if (dropped.length > 1) out.push(`${dropped.length} filed figures (${dropped.map((d) => fmtDateShort(d)).join(", ")}) are left out: each was off by a factor of 100 or more from the figures either side.`);
+  if (data.gaps?.length) out.push("A break in the line marks more than 15 months with no filing data.");
+  return out;
+}
 
 const GREEN = "#22c55e";
 const RED = "#ef4444";
@@ -129,6 +220,16 @@ export default function DilutionHistory({
   embedded?: boolean;
 }) {
   const points = data?.points ?? [];
+  if (data?.withheld) {
+    const said = (
+      <>
+        <div style={eyebrowStyle}>Share dilution</div>
+        <h2 style={embedded ? embeddedHeadingStyle : headingStyle}>{symbol} shares outstanding over time</h2>
+        <p style={subStyle} data-share-withheld="">{withheldWords(data.withheld)}</p>
+      </>
+    );
+    return embedded ? <div style={{ marginTop: 24 }}>{said}</div> : <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>{said}</section>;
+  }
   // Need a real spread of points to show a meaningful trend — a single
   // snapshot (or FMP returning nothing usable) isn't a "history".
   if (points.length < 3) return null;
@@ -137,15 +238,26 @@ export default function DilutionHistory({
   const last = points[points.length - 1];
   const changePercent =
     first.shares > 0 ? ((last.shares - first.shares) / first.shares) * 100 : null;
-  const defect = shareHistoryDefect(points);
-  const isDilution = !defect && typeof changePercent === "number" && changePercent > 0.05;
-  const isBuyback = !defect && typeof changePercent === "number" && changePercent < -0.05;
-  const trendColor = isDilution ? RED : isBuyback ? GREEN : BLUE;
-  const trendLabel = isDilution
-    ? "More shares outstanding"
-    : isBuyback
-    ? "Fewer shares outstanding (buybacks)"
-    : "Roughly flat";
+  // THE 3-YEAR FIGURE DRIVES THE COLOUR AND THE WORDS (#552 COWORK #89 §5).
+  // A payload built before it existed reads as "too short": no colour claim.
+  const threePct = data?.threeYear && data.threeYear.pct !== null ? data.threeYear.pct : null;
+  // THE WINDOW'S ACTUAL ENDS, NEVER "LATEST" (#552 COWORK #120): the end may
+  // step back up to 6 months from the newest point to find a base.
+  const threeSpan = data?.threeYear && data.threeYear.pct !== null && data.threeYear.end ? data.threeYear : null;
+  // WHEN THE END STEPPED BACK, THE TILE SAYS SO (#552 COWORK #138), and the
+  // headline names the same span: one window, stated the same way twice.
+  const endIsNewest = threeSpan ? threeSpan.end!.date === last.date : true;
+  const threeWindow = threeSpan
+    ? `${fmtDateDay(threeSpan.base.date)} to ${fmtDateDay(threeSpan.end!.date)}${endIsNewest ? "" : ` · ${NEWEST_SPAN_WORDS}`}`
+    : null;
+  const phrase = threeSpan ? spanPhrase(threeSpan.base.date, threeSpan.end!.date, endIsNewest) : LAST_3_YEARS;
+  const trend = threeYearWords(threePct, phrase);
+  const headline = shareHeadline(
+    threeSpan ? { pct: threeSpan.pct as number, from: fmtDateShort(threeSpan.base.date) ?? threeSpan.base.date, to: fmtDateShort(threeSpan.end!.date) ?? threeSpan.end!.date, endIsNewest, phrase } : null,
+    changePercent,
+    fmtDateShort(first.date),
+  );
+  const trendColor = trend.tone === "up" ? RED : trend.tone === "down" ? GREEN : BLUE;
 
   // -- Chart geometry (server-rendered SVG, no client JS) --------------------
   // viewBox is a fixed aspect ratio; actual rendered size always scales to
@@ -165,19 +277,35 @@ export default function DilutionHistory({
   const { lo: minV, hi: maxV } = shareAxis(values);
   const span = maxV - minV;
   const axisTicks = [maxV, (maxV + minV) / 2, minV].map((v, i) => ({ v, y: padTop + (i / 2) * plotH }));
-  const denom = points.length > 1 ? points.length - 1 : 1;
+  // X IS TIME, NOT THE POINT'S INDEX: a 7-year hole (GDDY 2016 -> 2023) used
+  // to take the same width as one quarter, which hid it.
+  const t0 = Date.parse(first.date), t1 = Date.parse(last.date);
+  const tSpan = t1 > t0 ? t1 - t0 : 1;
 
-  const coords = points.map((p, i) => {
-    const x = padX + (i / denom) * plotW;
+  const coords = points.map((p) => {
+    const x = padX + ((Date.parse(p.date) - t0) / tSpan) * plotW;
     const y = padTop + (1 - (p.shares - minV) / span) * plotH;
     return { x, y, p };
   });
 
-  const polyline = coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
-  const areaPath =
-    `M ${coords[0].x.toFixed(1)} ${(padTop + plotH).toFixed(1)} ` +
-    coords.map((c) => `L ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" ") +
-    ` L ${coords[coords.length - 1].x.toFixed(1)} ${(padTop + plotH).toFixed(1)} Z`;
+  // THE LINE BREAKS AT EVERY GAP (#552 COWORK #89 §4): one segment per run of
+  // points with no gap between them, and never a straight line across a hole.
+  const gapStarts = new Set((data?.gaps ?? []).map((g) => g.from));
+  const segments: (typeof coords)[] = [[]];
+  for (const c of coords) {
+    segments[segments.length - 1].push(c);
+    if (gapStarts.has(c.p.date)) segments.push([]);
+  }
+  const drawn = segments.filter((seg) => seg.length > 0);
+  const baseY = (padTop + plotH).toFixed(1);
+  const lineOf = (seg: typeof coords) => seg.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
+  const areaOf = (seg: typeof coords) =>
+    `M ${seg[0].x.toFixed(1)} ${baseY} ` + seg.map((c) => `L ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" ") + ` L ${seg[seg.length - 1].x.toFixed(1)} ${baseY} Z`;
+  const gapLabels = (data?.gaps ?? []).map((g) => {
+    const a = coords.find((c) => c.p.date === g.from), b = coords.find((c) => c.p.date === g.to);
+    return a && b ? { x: (a.x + b.x) / 2, key: g.from } : null;
+  }).filter((g): g is { x: number; key: string } => g !== null);
+  const notes = data ? seriesNotes(data) : [];
 
   const gradientId = `dilutionArea-${symbol}${embedded ? "-embedded" : ""}`;
 
@@ -192,7 +320,13 @@ export default function DilutionHistory({
         buybacks.
       </p>
 
-      <div style={{ marginTop: 18 }}>
+      {headline ? (
+        <div style={{ marginTop: 14, fontSize: "var(--fs-read)", fontWeight: 800, lineHeight: "var(--lh-read)", color: trendColor }} data-share-headline="">
+          {headline}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: headline ? 10 : 18 }}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           width={width}
@@ -207,15 +341,24 @@ export default function DilutionHistory({
               <stop offset="100%" stopColor={trendColor} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <path d={areaPath} fill={`url(#${gradientId})`} />
-          <polyline
-            points={polyline}
-            fill="none"
-            stroke={trendColor}
-            strokeWidth={2.25}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
+          {drawn.map((seg, i) => (
+            <g key={`seg-${i}`} data-share-segment="">
+              {seg.length > 1 ? <path d={areaOf(seg)} fill={`url(#${gradientId})`} /> : null}
+              <polyline
+                points={lineOf(seg)}
+                fill="none"
+                stroke={trendColor}
+                strokeWidth={2.25}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            </g>
+          ))}
+          {gapLabels.map((g) => (
+            <text key={`gap-${g.key}`} x={g.x} y={padTop + plotH / 2} fontSize="0.75rem" fill="rgba(203,213,225,0.55)" textAnchor="middle" data-share-gap="">
+              no filing data
+            </text>
+          ))}
           {coords.map((c, i) => (
             <circle key={i} cx={c.x} cy={c.y} r={i === coords.length - 1 ? 3.5 : 2} fill={trendColor}>
               {/* ONE STRING: React renders an array child of <title> with a warning. */}
@@ -223,14 +366,14 @@ export default function DilutionHistory({
             </circle>
           ))}
           {axisTicks.map((t, i) => (
-            <text key={`axis-${i}`} x={width - 2} y={t.y + 4} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="end">
+            <text key={`axis-${i}`} x={width - 2} y={t.y + 4} fontSize="0.75rem" fill="rgba(203,213,225,0.55)" textAnchor="end">
               {fmtShares(t.v)}
             </text>
           ))}
-          <text x={padX} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)">
+          <text x={padX} y={height - 8} fontSize="0.75rem" fill="rgba(203,213,225,0.55)">
             {fmtDateShort(first.date)}
           </text>
-          <text x={padX + plotW} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="end">
+          <text x={padX + plotW} y={height - 8} fontSize="0.75rem" fill="rgba(203,213,225,0.55)" textAnchor="end">
             {fmtDateShort(last.date)}
           </text>
         </svg>
@@ -241,33 +384,39 @@ export default function DilutionHistory({
           <div style={cellLabelStyle}>Shares outstanding (latest)</div>
           <div style={cellValueStyle}>{fmtShares(last.shares)}</div>
         </div>
-        {defect ? (
-          // THE TWO CELLS GO TOGETHER: a Trend label read from the same broken
-          // first-vs-last comparison would be the same wrong figure in words.
-          <div className="dh-withheld" style={cellStyle} data-share-history-defect={defect}>
-            <div style={cellLabelStyle}>Since {fmtDateShort(first.date)} · Trend</div>
-            <div style={{ ...cellValueStyle, fontSize: 13 }}>{SHARE_HISTORY_WITHHELD}</div>
+        {/* THE TWO FIGURES SIDE BY SIDE (#552 COWORK #89 §5): the last 3
+            years, which carries the colour and the words, and since the first
+            point, in plain ink. */}
+        <div style={cellStyle} data-share-three-year="">
+          {/* THE SAME SPAN AS THE HEADLINE AND THE DATE LINE (#552 COWORK #141). */}
+          <div style={cellLabelStyle}>Over {phrase}</div>
+          <div style={{ ...cellValueStyle, color: trendColor }}>
+            {threePct === null ? "—" : formatShareChange(threePct)}
           </div>
-        ) : (
-          <>
-            <div style={cellStyle}>
-              <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
-              <div style={{ ...cellValueStyle, color: trendColor }}>
-                {formatShareChange(changePercent)}
-              </div>
+          <div style={{ marginTop: 4, fontSize: "var(--fs-label)", lineHeight: 1.4, color: "rgba(203,213,225,0.72)" }}>{trend.label}</div>
+          {threeWindow ? (
+            <div style={{ marginTop: 2, fontSize: "var(--fs-fine)", lineHeight: 1.4, color: "rgba(203,213,225,0.55)" }} data-fine-print="" data-share-three-window="">
+              {threeWindow}
             </div>
-            <div style={cellStyle}>
-              <div style={cellLabelStyle}>Trend</div>
-              <div style={{ ...cellValueStyle, color: trendColor, fontSize: 13 }}>{trendLabel}</div>
-            </div>
-          </>
-        )}
+          ) : null}
+        </div>
+        <div style={cellStyle}>
+          <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
+          <div style={cellValueStyle}>{formatShareChange(changePercent)}</div>
+        </div>
       </div>
 
-      <div style={sourceStyle}>
+      {/* BEHIND A TAP, NOT FINE PRINT (#552 COWORK #157 §2, the owner's standing
+          rule): how the series is built, at reading size when open. */}
+      <details data-share-how="" style={howStyle}>
+        <summary style={howSummaryStyle}>How it&apos;s calculated</summary>
+        <div style={howBodyStyle}>
         {data?.basis === "annual+quarters" ? (
-          // THE OWNER'S WORDING (#517).
-          <>Annual share counts from SEC filings, latest quarters appended. {symbol} — {points.length} data points
+          // THE BASIS, SAID (#552 COWORK #136): quarterly averages plus
+          // fiscal-year averages, which fill the year-ends no quarter covers.
+          <>Weighted-average basic shares from {symbol}&apos;s own SEC filings: quarterly averages plus{" "}
+          {data.yearEnds?.length ?? 0} fiscal-year average{(data.yearEnds?.length ?? 0) === 1 ? "" : "s"} (a year&apos;s
+          figure averages all twelve months; a fourth quarter has no share count of its own) — {points.length} data points
           from {fmtDateShort(first.date)} to {fmtDateShort(last.date)}.</>
         ) : (
           <>Weighted-average basic shares from {symbol}&apos;s own SEC filings
@@ -281,7 +430,12 @@ export default function DilutionHistory({
         {data?.basis === "quarter"
           ? " Covers the last 12 quarters on file; fourth quarters have no separately filed share count and are not plotted."
           : data?.basis === "year" ? " Covers the fiscal years on file." : ""}
-      </div>
+        {data?.refusedYears?.length
+          ? ` ${data.refusedYears.length === 1 ? "One fiscal-year figure is" : `${data.refusedYears.length} fiscal-year figures are`} left out: outside the range of that year's own quarterly figures, so likely on another basis.`
+          : null}
+        {notes.length ? <> {notes.join(" ")}</> : null}
+        </div>
+      </details>
 
       <style>{`
         .dh-stats-row {
@@ -290,10 +444,8 @@ export default function DilutionHistory({
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 10px;
         }
-        .dh-withheld { grid-column: span 2; }
         @media (max-width: 640px) {
           .dh-stats-row { grid-template-columns: 1fr !important; }
-          .dh-withheld { grid-column: auto; }
         }
       `}</style>
     </>
@@ -310,11 +462,13 @@ export default function DilutionHistory({
   );
 }
 
-const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
-const headingStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
-const embeddedHeadingStyle: CSSProperties = { margin: 0, fontSize: 17, lineHeight: 1.2, letterSpacing: "-0.02em", fontWeight: 700 };
-const subStyle: CSSProperties = { marginTop: 10, marginBottom: 0, fontSize: 14, lineHeight: 1.7, color: "rgba(241,245,249,0.72)", maxWidth: 760 };
+const eyebrowStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
+const headingStyle: CSSProperties = { margin: 0, fontSize: "1.375rem", lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
+const embeddedHeadingStyle: CSSProperties = { margin: 0, fontSize: "1.0625rem", lineHeight: 1.2, letterSpacing: "-0.02em", fontWeight: 700 };
+const subStyle: CSSProperties = { marginTop: 10, marginBottom: 0, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(241,245,249,0.72)", maxWidth: 760 };
 const cellStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", minWidth: 0 };
-const cellLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
-const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: 14, fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
-const sourceStyle: CSSProperties = { marginTop: 12, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.55)" };
+const cellLabelStyle: CSSProperties = { fontSize: "var(--fs-label)", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
+const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: "0.875rem", fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
+const howStyle: CSSProperties = { marginTop: 12 };
+const howSummaryStyle: CSSProperties = { cursor: "pointer", fontSize: "var(--fs-label)", fontWeight: 700, color: "rgba(147,197,253,0.85)" };
+const howBodyStyle: CSSProperties = { marginTop: 6, fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: "rgba(226,232,240,0.85)" };

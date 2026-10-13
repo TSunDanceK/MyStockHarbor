@@ -37,6 +37,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 50
+    grade: hard
     blurb: >
       Datadog's 10-K states it "outsource[s] substantially all" of its
       infrastructure to third-party hosting, and its own competition
@@ -45,6 +46,7 @@ supplyChain:
   - name: Microsoft Corporation (Azure)
     ticker: MSFT
     pct: 20
+    grade: some
     blurb: >
       Named in Datadog's 10-K as a cloud infrastructure provider it both
       relies on and competes with; part of a multi-cloud hosting strategy
@@ -52,6 +54,7 @@ supplyChain:
   - name: Alphabet Inc. (Google Cloud Platform)
     ticker: GOOGL
     pct: 15
+    grade: some
     blurb: >
       The third hyperscaler named in Datadog's 10-K competition section,
       rounding out its multi-cloud hosting footprint and reducing
@@ -59,6 +62,7 @@ supplyChain:
   - name: Open-source software ecosystem
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. Datadog's 10-K discloses that it uses open
       source software throughout its services and even licenses its own
@@ -68,6 +72,7 @@ customers:
   - name: AI-native customer cohort (incl. largest customer)
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Datadog's FY2025 10-K discloses that an "AI-native" cohort -
       including its single largest customer - drove about seven
@@ -78,6 +83,7 @@ customers:
   - name: Enterprise customers ($100k+ ARR)
     ticker: null
     pct: 50
+    grade: hard
     blurb: >
       Not a single company. Datadog's largest disclosed customer-size
       cohort - roughly 4,550 accounts as of Q4 2025, including many
@@ -86,6 +92,7 @@ customers:
   - name: Mid-market, SMB & self-serve customers
     ticker: null
     pct: 40
+    grade: spread
     blurb: >
       Not a single company. The bulk of Datadog's tens of thousands of
       customers by count, paying through usage-based self-serve

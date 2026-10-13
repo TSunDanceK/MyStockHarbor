@@ -36,6 +36,7 @@ supplyChain:
   - name: Westinghouse Electric Company
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Holds a long-term nuclear fuel supply contract, recently extended, to
       fabricate reactor fuel for AEP subsidiary Indiana Michigan Power's
@@ -46,6 +47,7 @@ supplyChain:
   - name: Core Natural Resources, Inc.
     ticker: CNR
     pct: 25
+    grade: some
     blurb: >
       The successor to CONSOL Energy after its 2025 merger with Arch
       Resources; CONSOL previously purchased AEP's own Ohio and West
@@ -55,6 +57,7 @@ supplyChain:
   - name: Natural gas producers & interstate pipeline network
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company - the Appalachian Basin producers and interstate
       pipeline systems that deliver gas to AEP's combined-cycle plants, a
@@ -63,6 +66,7 @@ supplyChain:
   - name: Grid, turbine & transformer equipment manufacturers
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       Not a single company - the small handful of global manufacturers,
       including GE Vernova, Siemens Energy, and Mitsubishi Power for gas
@@ -73,6 +77,7 @@ supplyChain:
   - name: Diversified coal supply network
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company - additional coal suppliers under contract
       across AEP's fleet in West Virginia, Kentucky, Ohio, and Indiana
@@ -83,6 +88,7 @@ customers:
   - name: Diversified residential, commercial & industrial customer base
     ticker: null
     pct: 55
+    grade: hard
     blurb: >
       Not a single company - AEP's traditional base of roughly 5.5 million
       residential, commercial, and industrial retail customers across 11
@@ -91,6 +97,7 @@ customers:
   - name: Amazon (Amazon Web Services)
     ticker: AMZN
     pct: 14
+    grade: some
     blurb: >
       Named alongside Google, Microsoft, and Meta as a hyperscale
       stakeholder in AEP Ohio's contested large-load data-center tariff
@@ -99,6 +106,7 @@ customers:
   - name: Alphabet Inc. (Google)
     ticker: GOOGL
     pct: 12
+    grade: some
     blurb: >
       Identified as one of the hyperscale data-center operators
       represented in AEP Ohio's contested large-load tariff proceeding,
@@ -107,6 +115,7 @@ customers:
   - name: Microsoft Corporation
     ticker: MSFT
     pct: 10
+    grade: some
     blurb: >
       Named alongside Amazon, Google, and Meta as a hyperscale stakeholder
       in AEP Ohio's data-center tariff case, reflecting Microsoft's AI
@@ -114,6 +123,7 @@ customers:
   - name: Meta Platforms, Inc.
     ticker: META
     pct: 9
+    grade: spread
     blurb: >
       One of the hyperscale operators identified in AEP Ohio's large-load
       tariff dispute, part of a wave of data-center demand that grew AEP's

@@ -5,8 +5,11 @@ import { RECEIVER_ENTRIES, RECEIVER_GROUPS, readReceiversRecord } from "@/lib/se
 import { readContractsRecord } from "@/lib/server/capexContracts";
 import { readSpendingRecord } from "@/lib/server/capexSpending";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
+import WhyFollowMoney from "./WhyFollowMoney";
+import WhoIsReceivingMost from "./WhoIsReceivingMost";
+import CapexLogoRow from "./CapexLogoRow";
 import { normaliseCompanyName } from "@/lib/server/news/companyName";
-import { buildContractRows, buildInsights, buildReceiverGroups, buildSpendingRows, formatAmount, type Insights, type ReceiverView, type SpendingView } from "@/lib/capexPresent";
+import { buildContractRows, buildInsights, buildReceiverGroups, buildSpendingRows, buildTopReceivers, formatAmount, type Insights, type ReceiverView, type SpendingView, type TopReceiverView } from "@/lib/capexPresent";
 
 // Capex -- "Follow the money" (Relay C, #563). Phase 1 panels, each from a
 // filed or published source, side by side and deliberately NOT connected:
@@ -50,11 +53,18 @@ export default async function CapexPage() {
     contracts,
     companyName,
   });
+  // "Who is receiving most" (#563 COWORK #124): panel 2's same lines, no new read.
+  const topReceivers = buildTopReceivers(RECEIVER_ENTRIES, receivers?.rows ?? {}, companyName);
 
   return (
     <main style={mainStyle}>
       <div className="capexWrap">
-        <section style={heroStyle}>
+        <section className="capexHero" data-capex-hero="" style={heroStyle}>
+          {/* THE HERO PICTURE (#563 COWORK #166 e): the coins image from the news
+              art set, under the insight heroes' own shade so the text stays legible. Decorative. */}
+          <img className="capexHeroImg" src="/news-art/any-cash-04.webp" srcSet="/news-art/any-cash-04-sm.webp 320w, /news-art/any-cash-04.webp 1200w" sizes="(max-width: 1100px) 100vw, 1100px" width={1200} height={675} alt="" aria-hidden="true" loading="eager" decoding="async" />
+          <div className="capexHeroShade" aria-hidden="true" />
+          <div className="capexHeroBody">
           <div style={tagStyle}>BOTTLENECKS · CAPEX</div>
           <h1 style={titleStyle}>Follow the money</h1>
           <p style={leadStyle}>
@@ -66,6 +76,7 @@ export default async function CapexPage() {
             <a href="#spending" style={chipStyle}>Who is spending</a>
             <a href="#receiving" style={chipStyle}>Who is receiving</a>
             <a href="#contracts" style={chipStyle}>Federal contracts</a>
+          </div>
           </div>
         </section>
 
@@ -202,7 +213,7 @@ export default async function CapexPage() {
         </section>
 
         </div>
-        <InsightColumn insights={insights} contractsWindow={contracts?.window ?? null} />
+        <InsightColumn insights={insights} topReceivers={topReceivers} contractsWindow={contracts?.window ?? null} />
         </div>
 
         <p style={footnoteStyle}>
@@ -213,6 +224,9 @@ export default async function CapexPage() {
 
       <style>{`
         .capexWrap { max-width: 1240px; margin: 0 auto; padding: 28px 16px 56px; }
+        .capexHeroImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: right center; }
+        .capexHeroShade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,8,13,0.15) 0%, rgba(6,8,13,0.72) 55%, rgba(6,8,13,0.96) 100%); }
+        .capexHeroBody { position: relative; }
         /* Two columns like the earnings page: panels left, insight cards right.
            Under 980px one column, the cards ABOVE the panels (#563 COWORK #12). */
         .capexGrid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.85fr); gap: 22px; align-items: start; }
@@ -233,7 +247,6 @@ export default async function CapexPage() {
         .cardName { color: rgba(241,245,249,0.65); font-size: 12.5px; margin-left: 6px; }
         .cardAmt { font-weight: 900; }
         .shareTrack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.06); margin-top: 10px; }
-        .bulletList { margin: 10px 0 0 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; line-height: 1.6; color: rgba(241,245,249,0.8); }
         .spKey { margin: 12px 0 0 0; font-size: 12.5px; font-weight: 800; color: rgba(196,181,253,0.9); }
         .spRow { padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); display: grid; gap: 8px; }
         .spHead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 14px; }
@@ -320,7 +333,7 @@ function SpendingRow({ row, firstYear, lastYear }: { row: SpendingView; firstYea
 
 // The right column (#563 COWORK #12): each card reads one of the page's three
 // records, names its source and year, and never links one panel to another.
-function InsightColumn({ insights: x, contractsWindow }: { insights: Insights; contractsWindow: { start: string; end: string } | null }) {
+function InsightColumn({ insights: x, topReceivers, contractsWindow }: { insights: Insights; topReceivers: TopReceiverView[]; contractsWindow: { start: string; end: string } | null }) {
   const shareColors = ["#a78bfa", "#60a5fa", "#34d399"];
   return (
     <aside className="capexSide">
@@ -351,24 +364,23 @@ function InsightColumn({ insights: x, contractsWindow }: { insights: Insights; c
         </section>
       ) : null}
 
+      {/* Why it matters (#563 COWORK #110): directly under "Where the money is going", the page's one explanation. */}
+      <WhyFollowMoney />
+
       {x.topSpenders.length ? (
         <section className="capexCard">
           <div className="cardEyebrow">Who is spending most</div>
           <h3>Largest reported capex, {x.year}</h3>
           <ul className="cardList">
-            {x.topSpenders.map((t) => (
-              <li key={t.ticker}>
-                <span>
-                  <Link href={`/stock/${encodeURIComponent(t.ticker)}`}>{t.ticker}</Link>
-                  <span className="cardName">{t.name}</span>
-                </span>
-                <span className="cardAmt">{t.amount}</span>
-              </li>
-            ))}
+            {/* Each company with its logo (#563 COWORK #130), as on the /bottlenecks leaderboard. */}
+            {x.topSpenders.map((t) => <CapexLogoRow key={t.ticker} ticker={t.ticker} name={t.name} amount={t.amount} />)}
           </ul>
           <p className="cardSource">Source: each company&apos;s cash-flow statement filed with the SEC, calendar {x.year}.</p>
         </section>
       ) : null}
+
+      {/* Who is receiving most (#563 COWORK #124): directly under "Who is spending most". */}
+      <WhoIsReceivingMost rows={topReceivers} />
 
       {x.fastest ? (
         <section className="capexCard">
@@ -420,15 +432,6 @@ function InsightColumn({ insights: x, contractsWindow }: { insights: Insights; c
         </section>
       ) : null}
 
-      <section className="capexCard">
-        <div className="cardEyebrow">What it means</div>
-        <h3>Reading this page</h3>
-        <ul className="bulletList">
-          <li>Rising capex can signal that companies expect demand to grow; it can also weigh on free cash flow in the short term.</li>
-          <li>Capex as a share of revenue shows how much of each sales dollar is being reinvested.</li>
-          <li>Spending by buyers and sales by suppliers are shown side by side; the page does not link them.</li>
-        </ul>
-      </section>
     </aside>
   );
 }
@@ -479,7 +482,7 @@ const mainStyle: CSSProperties = {
   color: "#f1f5f9",
   fontFamily: "system-ui, Arial",
 };
-const heroStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 28, padding: 22, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))" };
+const heroStyle: CSSProperties = { position: "relative", overflow: "hidden", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 28, padding: 22, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))" };
 const tagStyle: CSSProperties = { display: "inline-flex", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "rgba(59,130,246,0.14)", color: "#dbeafe", fontSize: 12, fontWeight: 950, letterSpacing: "0.08em" };
 const titleStyle: CSSProperties = { margin: "14px 0 0 0", fontSize: 40, lineHeight: 1.04, letterSpacing: "-0.05em" };
 const leadStyle: CSSProperties = { margin: "14px 0 0 0", maxWidth: 820, fontSize: 16, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };

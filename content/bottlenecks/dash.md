@@ -41,6 +41,7 @@ supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
     pct: 40
+    grade: hard
     blurb: >
       DoorDash's platform infrastructure runs primarily on Amazon Web
       Services, including its payment service built on EC2 within AWS
@@ -49,6 +50,7 @@ supplyChain:
   - name: Stripe, Inc.
     ticker: null
     pct: 25
+    grade: some
     blurb: >
       Powers merchant payment processing and payouts, and is DoorDash's
       partner for a 2026 pilot bringing stablecoin-based payouts to
@@ -57,6 +59,7 @@ supplyChain:
   - name: Alphabet Inc. (Google Play)
     ticker: GOOGL
     pct: 20
+    grade: some
     blurb: >
       Google Play is a critical distribution channel for DoorDash's Android
       app, one of the two app-store gatekeepers DoorDash depends on to
@@ -64,6 +67,7 @@ supplyChain:
   - name: Apple Inc. (App Store)
     ticker: AAPL
     pct: 15
+    grade: some
     blurb: >
       The iOS App Store is a critical distribution channel for DoorDash's
       mobile app, alongside Google Play one of the two gatekeepers
@@ -72,6 +76,7 @@ customers:
   - name: Diversified consumer & independent merchant base
     ticker: null
     pct: 50
+    grade: hard
     blurb: >
       Not a single company - the tens of millions of individual diners and
       the large number of independent restaurant, grocery, and retail
@@ -80,6 +85,7 @@ customers:
   - name: McDonald's Corporation
     ticker: MCD
     pct: 16
+    grade: some
     blurb: >
       Signed a long-term global strategic partnership with DoorDash to
       power McDelivery, one of the largest and most publicly touted
@@ -87,6 +93,7 @@ customers:
   - name: Chipotle Mexican Grill, Inc.
     ticker: CMG
     pct: 13
+    grade: some
     blurb: >
       An early and heavily promoted DoorDash restaurant partner - Chipotle
       reported nearly a 700% increase in delivery orders after launching on
@@ -95,6 +102,7 @@ customers:
   - name: Seven & I Holdings (7-Eleven)
     ticker: null
     pct: 11
+    grade: some
     blurb: >
       7-Eleven's US convenience-store operations are a named enterprise
       partner in DoorDash's grocery and retail delivery push. Seven & I
@@ -103,6 +111,7 @@ customers:
   - name: Walgreens Boots Alliance
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A named enterprise partner for on-demand pharmacy and convenience
       delivery through DoorDash. Taken private by Sycamore Partners in

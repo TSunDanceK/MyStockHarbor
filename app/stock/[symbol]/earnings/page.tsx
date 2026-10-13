@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
 import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
+import { reactionDayRows } from "./reactionDays";
+import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
+import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";
+import { TiingoLink } from "@/app/components/TiingoCredit";
 import {
   computeIndicatorSeed,
   type Point,
@@ -9,10 +13,12 @@ import {
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
-import { awaitingSecRead, cikForSymbol, resolveFactSetForRender } from "@/lib/server/secColdFetch";
+import { awaitingSecRead, cikForSymbol, isSiteFund, resolveFactSetForRender } from "@/lib/server/secColdFetch";
+import { earningsPageIndexable } from "@/lib/stockPageRobots";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import ColdFill from "../ColdFill";
-import { buildSecEarningsView, epsBasisNote, periodWords } from "@/lib/server/secEarningsView";
+import { buildSecEarningsView, epsBasisNote, epsBasisShort, periodWords } from "@/lib/server/secEarningsView";
+import { ReasonedValue } from "@/app/components/EstimatedValue";
 // ONLY WHAT THIS FILE RENDERS. The tone words, the band note, the trend
 // median and the waterfall gate are imported by SecEarningsCards.tsx, which is
 // where they are drawn; re-importing them here would just be a second name for
@@ -38,7 +44,7 @@ import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
   SecTrendSummaryCard, SecValuationCard,
-  SecPendingCard, SecNoXbrlCard, SecNoQuartersCard, SecNotIssuerEquityCard,
+  SecPendingCard, SecNoXbrlCard, SecNoQuartersCard, SecNotIssuerEquityCard, SecNotShownCard,
   SecNoRegistrantCard, SecScoreCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
@@ -50,6 +56,7 @@ import { adsRatioFor } from "@/lib/server/secAdsMap";
 import { nonEquityListingOf, citedCoverFor } from "@/lib/server/secPrimaryListing";
 import NextReportCard from "./NextReportCard";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
+import { filedEarningsGate, filedEarningsKnown } from "@/lib/server/filedEarnings";
 import { NO_PRICE_HISTORY_NOTE, reactionBarLabels } from "@/lib/server/secReportDates";
 import { PriceReactionCard, type DriftQuarter, type SingleBarPoint } from "./ReactionCharts";
 
@@ -102,6 +109,8 @@ type EarningsReactionPoint = {
    * back to this report. See NO_PRICE_HISTORY_NOTE.
    */
   reason: "uncovered" | null;
+  /** The base and reaction sessions in the bars (see computeEarningsReactionDetail). */
+  anchor?: { baseIdx: number; reactIdx: number } | null;
 };
 
 
@@ -144,8 +153,11 @@ const REACTION_SESSION_GAP_DAYS = 7;
 /** Sessions of volume the average needs before a multiple is shown. */
 const VOLUME_MIN_SESSIONS = 20;
 
-function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; volumeSessions?: number | null; drift5Pct: number | null; drift20Pct: number | null; drift5Pending: boolean; drift20Pending: boolean; reason: "uncovered" | null } {
-  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null, drift5Pending: false, drift20Pending: false, reason: null as "uncovered" | null };
+function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; volumeSessions?: number | null; drift5Pct: number | null; drift20Pct: number | null; drift5Pending: boolean; drift20Pending: boolean; reason: "uncovered" | null; anchor: { baseIdx: number; reactIdx: number } | null } {
+  // `anchor` is the base and reaction sessions chosen below -- the day slider
+  // (#552 COWORK #189) walks from the same two, so this stays the one home of
+  // the after-close / before-open rule.
+  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null, drift5Pending: false, drift20Pending: false, reason: null as "uncovered" | null, anchor: null };
   /** The series does not reach this report — a fact about the bars, not the filing. */
   const uncovered = { ...empty, reason: "uncovered" as const };
   if (!row.date || !points.length) return empty;
@@ -230,7 +242,7 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   // horizon: the chart draws a "not yet" marker rather than a bar or a gap.
   const drift5Pending = drift5Pct === null && reactionPct !== null && reactIdx + 4 > points.length - 1;
   const drift20Pending = drift20Pct === null && reactionPct !== null && reactIdx + 19 > points.length - 1;
-  return { reactionPct, volumeMultiple, volumeSessions, drift5Pct, drift20Pct, drift5Pending, drift20Pending, reason: null };
+  return { reactionPct, volumeMultiple, volumeSessions, drift5Pct, drift20Pct, drift5Pending, drift20Pending, reason: null, anchor: { baseIdx, reactIdx } };
 }
 
 
@@ -288,7 +300,10 @@ async function getEarningsData(symbol: string) {
   // FMP fallback the dates arrive in the same round trip that would have to
   // carry them, so bounding would mean a second sequential read — worse than
   // the thing it saves. That path keeps the full series.
-  const BAR_WINDOW_DAYS = 45;
+  // 50, not 45 (#552 COWORK #189): the day slider walks 30 TRADING days past the
+  // reaction session, which is about 42 calendar days plus holidays. The read
+  // is one value per symbol whatever the range, so this costs no command.
+  const BAR_WINDOW_DAYS = 50;
   const shiftIso = (iso: string, days: number) =>
     new Date(Date.parse(iso) + days * 86400000).toISOString().slice(0, 10);
   const barWindow = (() => {
@@ -300,17 +315,24 @@ async function getEarningsData(symbol: string) {
     };
   })();
 
-  const [cold, dailyHistory, latestBars] = await Promise.all([
+  // ── STEP 3 ON THIS PAGE, B3 (#553 CODE-B table; #552 COWORK #108/#112) ──
+  // The reaction chart and the title follow PRICE_PROVIDER_CHARTS through B's
+  // historyForSurface, exactly as /stock does; the valuation price follows the
+  // same gate through readSurfacePrice (the newer of the EOD close and the IEX
+  // trade, labelled). Unset, every read below is what it was.
+  const onTiingo = historyOnTiingo("CHARTS");
+  const [cold, chartHistory, latestBars, surfacePrice, spyHistory] = await Promise.all([
     resolveFactSetForRender(symbol),
     // THE ~110 KB MEASUREMENT THAT ASKED FOR A BOUNDED RANGE now lives on
     // getDailyBars in lib/server/historyCache.ts, with the thing it justifies —
     // including what a range does NOT save, which is the Redis read itself:
     // bars are one value per symbol, so the GET returns every bar whatever
     // range is asked for. What it saves is everything downstream of it.
-    barWindow
-      ? getDailyBars(symbol, barWindow.from, barWindow.to, { caller: "stock-earnings" })
-          .catch(() => [] as Point[])
-      : getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
+    historyForSurface("CHARTS", symbol, () =>
+      barWindow
+        ? getDailyBars(symbol, barWindow.from, barWindow.to, { caller: "stock-earnings" })
+        : getDailyHistory(symbol, { caller: "stock-earnings" })
+    ).catch(() => ({ points: [] as Point[], provider: "none" as const })),
     // ── THE WHOLE SERIES, FOR ITS LAST BAR AND NOTHING ELSE ─────────────────
     //
     // The valuation card needs the MOST RECENT close. The window above is
@@ -327,12 +349,23 @@ async function getEarningsData(symbol: string) {
     // entries of this Promise.all start in the same tick, so the second finds
     // the first's promise already registered and awaits it. One read, two
     // shapes of answer.
-    getDailyHistory(symbol, { caller: "stock-earnings-valuation" }).catch(() => [] as Point[]),
+    //
+    // ON TIINGO this read is skipped: readSurfacePrice below is the price.
+    onTiingo ? Promise.resolve([] as Point[]) : getDailyHistory(symbol, { caller: "stock-earnings-valuation" }).catch(() => [] as Point[]),
+    onTiingo ? readSurfacePrice(symbol).catch(() => null) : Promise.resolve(null),
     // NO FMP FALLBACK (#535 COWORK #18 §3, 2026-09-23). A fourth read here
     // fetched FMP's /earnings when the filings had not been read, and the
     // reaction card then said "Dates here come from an earnings calendar"
     // (BYND, LAZR). With no SEC dates the card is hidden instead — see
     // hidePriceReaction.
+    // SPY OVER THE SAME DAYS, for the day slider's "vs the market" figure (#552
+    // COWORK #189). The same surface and window as the symbol's bars; only its
+    // percentages reach the page.
+    historyForSurface("CHARTS", "SPY", () =>
+      barWindow
+        ? getDailyBars("SPY", barWindow.from, barWindow.to, { caller: "stock-earnings-spy" })
+        : getDailyHistory("SPY", { caller: "stock-earnings-spy" })
+    ).catch(() => ({ points: [] as Point[], provider: "none" as const })),
   ]);
   // ── THE ANNUAL-ONLY LAYOUT (#535 COWORK #15) ─────────────────────────────
   // A 20-F/40-F filer whose newest stored quarter is over 6 months old: the page is about
@@ -427,10 +460,22 @@ async function getEarningsData(symbol: string) {
   const barLabels = reactionBarLabels(barRows, (end) => storedLabels.get(end));
   const reactionRows = barRows.map((b, i) => ({ label: barLabels[i], row: b.row }));
 
+  // THE REACTION BARS: closes only (today's partial Tiingo bar is not a day's
+  // reaction), and on Tiingo the full series cut to the same window the FMP
+  // read asks for, so both providers walk the same bars.
+  const dailyHistory: Point[] = (chartHistory.points as (Point & { partial?: true })[])
+    .filter((p) => !p.partial && (!barWindow || (p.date >= barWindow.from && p.date <= barWindow.to)));
   const priceReactionQuarters: EarningsReactionPoint[] = reactionRows.map(({ label, row }) => ({
     label,
-    ...computeEarningsReactionDetail(row, dailyHistory as Point[]),
+    ...computeEarningsReactionDetail(row, dailyHistory),
   }));
+  // THE DAY SLIDER (#552 COWORK #189): percentages only, from the same anchors.
+  const spyDaily: Point[] = (spyHistory.points as (Point & { partial?: true })[]).filter((p) => !p.partial);
+  const reactionDays = reactionDayRows(
+    reactionRows.map(({ label, row }, i) => ({ label, date: String(row.date), time: row.time, anchor: priceReactionQuarters[i].anchor ?? null })),
+    dailyHistory,
+    spyDaily,
+  );
 
   // ── THE NEXT REPORT ──────────────────────────────────────────────────────
   //
@@ -475,14 +520,23 @@ async function getEarningsData(symbol: string) {
   const valuation = cold.status === "ready"
     ? valuationInputs(cold.set, todayIso, { annualForm: registrantFor(symbol)?.annualForm ?? null, ads: adsRatioFor(symbol), nonEquity: nonEquityListingOf(symbol), citedCover: citedCoverFor(symbol) })
     : { shares: null, eps: null, refusals: [] };
+  // ON TIINGO: readSurfacePrice's price and its own label ("close, 29 Sep
+  // 2026" or "last IEX trade, 14:05 ET"); its date is the ET trading day, which
+  // the card's staleness test reads as before. A miss shows no price: there is
+  // no FMP fallback on the Tiingo path (#552 COWORK #108 item 2).
   const lastBar = (latestBars as Point[]).at(-1) ?? null;
-  const latestClose = typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
-  const latestCloseOn = lastBar?.date ?? null;
+  const latestClose = onTiingo
+    ? surfacePrice?.price ?? null
+    : typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
+  const latestCloseOn = onTiingo ? surfacePrice?.date ?? null : lastBar?.date ?? null;
+  const latestPriceLabel = onTiingo ? surfacePrice?.label ?? null : null;
+  /** The linked credit shows when any figure on the page is Tiingo's. */
+  const pricesFromTiingo = chartHistory.provider === "tiingo" || (onTiingo && surfacePrice !== null);
 
   return {
     earningsRows, completedRows, latest, next, nextReport,
-    priceReactionQuarters, score, secView, cold, annualForm, hidePriceReaction,
-    valuation, latestClose, latestCloseOn,
+    priceReactionQuarters, reactionDays, score, secView, cold, annualForm, hidePriceReaction,
+    valuation, latestClose, latestCloseOn, latestPriceLabel, pricesFromTiingo,
     /**
      * THE DATE THIS RENDER RAN, read once here rather than inside a component.
      * A card that called Date.now() itself would be untestable and would also
@@ -508,7 +562,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // NO FMP QUOTE (#535 COWORK #18 §3, 2026-09-23). fetchQuoteForMeta read
   // FMP's /stable/quote into seed.price, and the title never read it: it
   // prints seed.lastClose, the newest bar of getDailyHistory.
-  const rawHistory = await getDailyHistory(clean, { caller: "stock-earnings-meta" }).catch(() => []);
+  // THE TITLE FOLLOWS PRICE_PROVIDER_CHARTS too (B3), as /stock's does.
+  const rawHistory = await historyForSurface("CHARTS", clean, () => getDailyHistory(clean, { caller: "stock-earnings-meta" }))
+    .then((h) => h.points.filter((p) => !p.partial), () => [] as Point[]);
   const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
   const seed = computeIndicatorSeed(points, "", null, null);
   const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
@@ -549,7 +605,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       //
       // AND NOINDEX WHILE A COLD SYMBOL IS NOT YET READ (#535 COWORK #13): the
       // page says "not yet read" until a set is stored, and that is thin too.
-      index: cikForSymbol(clean) !== null && !(await awaitingSecRead(clean)),
+      //
+      // A FUND THE SITE LISTS IS INDEXED WITH OR WITHOUT ITS OWN CIK (#552
+      // COWORK #155): VUG takes the same fund card as SPY, so the same rule.
+      // Through the shared predicate (lib/stockPageRobots.ts), as the sitemap is.
+      //
+      // AND NOINDEX WITHOUT A FILED SET (#552 COWORK #197): the page keeps its
+      // "not available" state for a symbol with no filed period, but is not
+      // offered for indexing -- the same rule that drops its earnings links.
+      // Unknown (the list unreadable) leaves this input out of the decision, and
+      // so does a listed fund: it shows the fund card, not "not available", and
+      // stays indexed per COWORK #155 (its earnings links still go: no filed set).
+      index: earningsPageIndexable({ hasCik: cikForSymbol(clean) !== null || isSiteFund(clean), awaitingSecRead: await awaitingSecRead(clean), filed: isSiteFund(clean) ? null : await filedEarningsKnown(clean) }),
       follow: true,
     },
     alternates: { canonical: `https://www.mystockharbor.com/stock/${clean}/earnings` },
@@ -562,6 +629,8 @@ export default async function StockEarningsPage({ params }: Props) {
   const { symbol } = await params;
   const clean = cleanSymbol(symbol);
   const data = await getEarningsData(clean);
+  // #552 COWORK #197: an issuer/parent is linked to its earnings page only with a filed set.
+  const hasFiledEarnings = await filedEarningsGate();
 
   // THE CIK GATE IS NO LONGER A 404 — see SecNoRegistrantCard.
   //
@@ -583,6 +652,13 @@ export default async function StockEarningsPage({ params }: Props) {
   // HOW MUCH OF THE SCORE RAN. Shared with the sidebar card — see coverageOf.
   const coverage = coverageOf(score);
   const secView = data.secView;
+  // THE SNAPSHOT RENDERS EXACTLY WHEN THE SEC CARDS DO (#552 COWORK #166): the
+  // same conditions as the main column's chain below, which it left for the
+  // top of the right column.
+  const snapshotView =
+    !noRegistrant && data.cold.status !== "not-shown" && data.cold.status !== "not-issuer-equity" && data.cold.status !== "no-xbrl"
+      ? secView
+      : null;
 
   const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
   const driftQuarters: DriftQuarter[] = data.priceReactionQuarters.map((q) => ({
@@ -622,38 +698,49 @@ export default async function StockEarningsPage({ params }: Props) {
         .earningsPage { min-height: 100vh; background: radial-gradient(circle at top left, rgba(59,130,246,0.12), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,0.09), transparent 26%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
         .earningsWrap { max-width: 1240px; margin: 0 auto; padding: 24px 18px 52px; }
         .topLinks { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-        .topLinks a, .earningsSearchRow button, .actionLink { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(59,130,246,0.32); background: rgba(59,130,246,0.10); color: #dbeafe; text-decoration: none; font-weight: 900; font-size: 13px; cursor: pointer; }
+        .topLinks a, .earningsSearchRow button, .actionLink { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(59,130,246,0.32); background: rgba(59,130,246,0.10); color: #dbeafe; text-decoration: none; font-weight: 900; font-size: var(--fs-label); cursor: pointer; }
         .topLinks a.green, .actionLink.green { border-color: rgba(34,197,94,0.32); background: rgba(34,197,94,0.10); color: #dcfce7; }
         .hero { border: 1px solid rgba(255,255,255,0.08); border-radius: 28px; padding: 24px; background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(6,10,18,0.98)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 38px rgba(0,0,0,0.24); display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 24px; align-items: stretch; }
         .heroTopBar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-        .eyebrow, .smallLabel { font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.08em; color: #93c5fd; }
-        .hero h1 { margin: 12px 0 0; font-size: 46px; line-height: 1.04; letter-spacing: -0.055em; }
-        .hero p { margin: 12px 0 0; color: rgba(226,232,240,0.80); line-height: 1.7; font-size: 16px; max-width: 760px; }
+        .eyebrow, .smallLabel { font-size: var(--fs-label); font-weight: 950; text-transform: uppercase; letter-spacing: 0.08em; color: #93c5fd; }
+        .hero h1 { margin: 12px 0 0; font-size: 2.875rem; line-height: 1.04; letter-spacing: -0.055em; }
+        .hero p { margin: 12px 0 0; color: rgba(226,232,240,0.80); line-height: var(--lh-read); font-size: var(--fs-read); max-width: 760px; }
         .scoreCard { border: 1px solid ${toneColor(score.tone)}55; border-radius: 22px; padding: 18px; background: linear-gradient(135deg, ${toneBg(score.tone)}, rgba(255,255,255,0.026)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.045); }
         .scoreTop { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-        .scorePill { display: inline-flex; align-items: center; justify-content: center; border: 1px solid ${toneColor(score.tone)}66; background: ${toneBg(score.tone)}; color: ${toneColor(score.tone)}; border-radius: 999px; padding: 8px 11px; font-weight: 950; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .scorePill { display: inline-flex; align-items: center; justify-content: center; border: 1px solid ${toneColor(score.tone)}66; background: ${toneBg(score.tone)}; color: ${toneColor(score.tone)}; border-radius: 999px; padding: 8px 11px; font-weight: 950; font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.06em; }
         .scoreNumberRow { margin-top: 14px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-        .scoreNumber { font-size: 48px; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
-        .scoreWatermark { font-size: 15px; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }
+        .scoreNumber { font-size: 3rem; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
+        .scoreWatermark { font-size: 0.9375rem; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }
         .scoreBar { position: relative; margin-top: 18px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, #ef4444, #facc15, #22c55e); overflow: hidden; }
         /* A PARTIAL SCORE READS AS INK, NOT AS A VERDICT — see the card. */
         .scorePillPartial { background: rgba(148,163,184,0.14); border-color: rgba(148,163,184,0.38); color: #cbd5e1; letter-spacing: 0.01em; }
         .scoreNumberPartial { color: rgba(226,232,240,0.62); }
-        /* The span the score could actually have landed in, under the needle. */
-        .scoreReach { position: absolute; top: 0; bottom: 0; background: rgba(2,6,23,0.55); border-left: 1px solid rgba(226,232,240,0.45); border-right: 1px solid rgba(226,232,240,0.45); }
+        /* The span the score could actually have landed in: OUTLINED at full
+           strength, the unreachable ends dimmed (#552 COWORK #95). */
+        .scoreReach { position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: transparent; border: 2px solid #f8fafc; border-radius: 999px; }
+        .scoreOut { position: absolute; top: 0; bottom: 0; background: rgba(2,6,23,0.62); }
+        .scoreReachLabelRow { position: relative; height: 16px; margin-top: 4px; }
+        .scoreReachLabel { position: absolute; top: 0; text-align: center; font-size: var(--fs-label); font-weight: 800; color: rgba(226,232,240,0.80); white-space: nowrap; }
+        .scoreSummary { margin: 10px 0 0; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(226,232,240,0.86); }
         .scoreReachNote { color: rgba(226,232,240,0.78); }
+        /* A NATIVE DROPDOWN FOR THE DETAIL (#552 COWORK #95/#96/#97): in the
+           server HTML, keyboard-operable, with a visible focus ring. */
+        .cardDetails { margin-top: 12px; }
+        .cardDetails > summary { cursor: pointer; font-size: var(--fs-label); font-weight: 800; color: #93c5fd; list-style-position: inside; border-radius: 6px; }
+        .cardDetails > summary:focus-visible { outline: 2px solid #93c5fd; outline-offset: 3px; }
+        .nextEstimateWord { font-size: 0.875rem; font-weight: 700; color: rgba(226,232,240,0.72); letter-spacing: 0; }
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
-        .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
+        .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: var(--fs-label); font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
         .metricCard { padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.02); }
-        .trendTag { font-size: 0.55em; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.75; margin-right: 2px; }
-        .trendLatest { display: block; margin-top: 4px; font-size: 15px; font-weight: 900; letter-spacing: -0.02em; }
-        .trendLatest .trendTag { font-size: 10px; }
+        .trendTag { font-size: var(--fs-label); font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.75; margin-right: 2px; }
+        .trendLatest { display: block; margin-top: 4px; font-size: 0.9375rem; font-weight: 900; letter-spacing: -0.02em; }
+        .trendLatest .trendTag { font-size: var(--fs-label); }
         .cellShort { text-decoration: none; cursor: help; border-bottom: 1px dotted rgba(148,163,184,0.55); white-space: nowrap; }
         .crossTip { text-decoration: none; cursor: help; border-bottom: 1px dotted rgba(148,163,184,0.6); }
-        .hero p.heroNote { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(148,163,184,0.85); }
-        .infoTip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 6px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.45); color: rgba(226,232,240,0.85); font-size: 10px; font-weight: 900; font-style: normal; text-transform: none; letter-spacing: 0; cursor: help; vertical-align: 1px; }
+        .hero p.heroNote { margin-top: 10px; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(148,163,184,0.85); }
+        .infoTip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 6px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.45); color: rgba(226,232,240,0.85); font-size: var(--fs-label); font-weight: 900; font-style: normal; text-transform: none; letter-spacing: 0; cursor: help; vertical-align: 1px; }
         .infoTip:focus { outline: 2px solid #93c5fd; outline-offset: 2px; }
-        .infoTipText { display: none; position: absolute; right: -6px; bottom: calc(100% + 8px); z-index: 5; width: min(260px, 72vw); padding: 9px 11px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.35); background: #0f172a; color: #e2e8f0; font-size: 12px; font-weight: 600; line-height: 1.5; text-align: left; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+        .infoTipText { display: none; position: absolute; right: -6px; bottom: calc(100% + 8px); z-index: 5; width: min(260px, 72vw); padding: 9px 11px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.35); background: #0f172a; color: #e2e8f0; font-size: var(--fs-read); font-weight: 600; line-height: var(--lh-read); text-align: left; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
         .infoTip:hover .infoTipText, .infoTip:focus .infoTipText { display: block; }
         .contentGrid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr); gap: 22px; align-items: start; }
         /* ── THE COLUMNS MUST BE ALLOWED TO BE NARROWER THAN THEIR CONTENT ───
@@ -705,53 +792,50 @@ export default async function StockEarningsPage({ params }: Props) {
         .card, .scoreCard { min-width: 0; }
         .card { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); overflow: visible; }
         .card h2, .card h3 { margin: 8px 0 0; letter-spacing: -0.035em; line-height: 1.15; }
-        .card h2 { font-size: 26px; } .card h3 { font-size: 22px; }
-        .card p { color: rgba(226,232,240,0.82); line-height: 1.7; }
+        .card h2 { font-size: 1.625rem; } .card h3 { font-size: 1.375rem; }
+        .card p { color: rgba(226,232,240,0.82); font-size: var(--fs-read); line-height: var(--lh-read); }
+        /* FINE PRINT ONLY (#552 COWORK #153): source and as-of lines, marked data-fine-print. */
+        .earningsPage [data-fine-print], .earningsPage .card p[data-fine-print] { font-size: var(--fs-fine); line-height: 1.5; }
         .metricGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; overflow: visible; }
         .metricLabelWrap { position: relative; display: inline-flex; align-items: center; gap: 7px; max-width: 100%; overflow: visible; }
-        .metricLabel { font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(203,213,225,0.72); }
-        .metricHelp { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 999px; border: 1px solid rgba(147,197,253,0.30); background: #1e293b; color: #dbeafe; font-size: 11px; font-weight: 950; line-height: 1; cursor: help; z-index: 20; flex: 0 0 auto; }
-        .metricHelpBubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 260px; max-width: min(260px, 72vw); padding: 11px 12px; border-radius: 13px; border: 1px solid rgba(147,197,253,0.22); background: #020617; color: #e5e7eb; box-shadow: 0 18px 44px rgba(0,0,0,0.55); font-size: 12px; font-weight: 750; letter-spacing: 0; line-height: 1.55; text-transform: none; text-align: left; opacity: 0; visibility: hidden; pointer-events: none; white-space: normal; z-index: 9999; }
+        .metricLabel { font-size: var(--fs-label); font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(203,213,225,0.72); }
+        .metricHelp { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 999px; border: 1px solid rgba(147,197,253,0.30); background: #1e293b; color: #dbeafe; font-size: var(--fs-label); font-weight: 950; line-height: 1; cursor: help; z-index: 20; flex: 0 0 auto; }
+        .metricHelpBubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 260px; max-width: min(260px, 72vw); padding: 11px 12px; border-radius: 13px; border: 1px solid rgba(147,197,253,0.22); background: #020617; color: #e5e7eb; box-shadow: 0 18px 44px rgba(0,0,0,0.55); font-size: var(--fs-read); font-weight: 750; letter-spacing: 0; line-height: var(--lh-read); text-transform: none; text-align: left; opacity: 0; visibility: hidden; pointer-events: none; white-space: normal; z-index: 9999; }
         .metricHelpBubble::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border-width: 7px; border-style: solid; border-color: #020617 transparent transparent transparent; }
         .metricHelp:hover .metricHelpBubble, .metricHelp:focus .metricHelpBubble, .metricHelp:focus-visible .metricHelpBubble { opacity: 1; visibility: visible; }
-        .metricValue { margin-top: 8px; font-size: 24px; font-weight: 950; letter-spacing: -0.035em; }
-        .earningsDataNote { margin: 10px 0 0; color: rgba(148,163,184,0.78); font-size: 12px; line-height: 1.45; }
-        .metricSub { margin-top: 8px; font-size: 12px; line-height: 1.5; color: rgba(226,232,240,0.66); }
+        .metricValue { margin-top: 8px; font-size: 1.5rem; font-weight: 950; letter-spacing: -0.035em; }
+        .earningsDataNote { margin: 10px 0 0; color: rgba(148,163,184,0.78); font-size: var(--fs-read); line-height: var(--lh-read); }
+        .metricSub { margin-top: 8px; font-size: var(--fs-label); line-height: 1.5; color: rgba(226,232,240,0.66); }
         .metricSubNote { margin-top: 4px; font-style: italic; color: rgba(251,191,36,0.85); }
         .trendDots { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
         .trendDot { text-align: center; min-width: 52px; }
         .trendDot span { display: inline-flex; width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 0 6px rgba(255,255,255,0.04); }
-        .trendDot strong { display: block; margin-top: 9px; font-size: 11px; color: rgba(241,245,249,0.86); }
-        .chartLegend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 11px; font-weight: 800; color: rgba(226,232,240,0.72); }
+        .trendDot strong { display: block; margin-top: 9px; font-size: var(--fs-label); color: rgba(241,245,249,0.86); }
+        .chartLegend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: var(--fs-label); font-weight: 800; color: rgba(226,232,240,0.72); }
         .chartLegend span { display: inline-flex; align-items: center; gap: 6px; }
         .chartLegend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
         .chartRow { display: flex; align-items: stretch; gap: 8px; }
         .chartPlot { flex: 1 1 auto; min-width: 0; }
         .chartScale { position: relative; width: 66px; flex: 0 0 auto; border-left: 1px solid rgba(255,255,255,0.08); }
-        .chartScale span { position: absolute; right: 4px; left: 4px; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.62); white-space: nowrap; text-align: right; overflow: visible; }
+        .chartScale span { position: absolute; right: 4px; left: 4px; font-size: var(--fs-fine); font-weight: 800; color: rgba(203,213,225,0.62); white-space: nowrap; text-align: right; overflow: visible; }
         .chartScale .scaleTop { top: 0; }
         .chartScale .scaleMid { top: 50%; transform: translateY(-50%); }
         .chartScale .scaleBottom { bottom: 0; }
         .chartScaleSpacer { width: 66px; flex: 0 0 auto; }
         .chartCategories { display: flex; flex: 1 1 auto; min-width: 0; margin-top: 6px; }
         .chartCategories .catShort { display: none; }
-        .chartCategories > span { flex: 1 1 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
+        .chartCategories > span { flex: 1 1 0; text-align: center; font-size: var(--fs-fine); font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
         /* ── THE NEW MARKS ──────────────────────────────────────────────────
            Thin bars, 4px rounded data-ends anchored to the baseline, a 2px
            surface gap between adjacent fills, and recessive tracks. Text stays
            in the page's ink tokens — never the series colour — so a value is
            readable whether or not its mark's hue reaches the reader. */
-        .toneChip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid; font-size: 11px; font-weight: 900; letter-spacing: 0.02em; white-space: nowrap; }
+        .toneChip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid; font-size: var(--fs-label); font-weight: 900; letter-spacing: 0.02em; white-space: nowrap; }
         .toneChip i { display: inline-block; width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto; }
 
-        .hbarList { margin-top: 14px; display: grid; gap: 12px; }
-        .hbarRow { display: grid; gap: 6px; }
-        .hbarHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-        .hbarLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); }
-        .hbarValue { font-size: 14px; font-weight: 950; color: #f1f5f9; letter-spacing: -0.02em; white-space: nowrap; }
-        .hbarSub { font-size: 11px; color: rgba(148,163,184,0.72); }
-        .hbarTrack { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.05); overflow: hidden; }
-        .hbarFill { display: block; height: 100%; border-radius: 999px; }
+        /* NOTHING WIDER THAN THE CARD (#552 COWORK #97): grid and flex
+           children get min-width: 0, the track is the content box's width,
+           and a long label wraps instead of pushing its figure off the edge. */
 
         .gmChart { margin-top: 10px; display: flex; align-items: stretch; gap: 2px; height: 148px; }
         .gmCol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
@@ -761,39 +845,64 @@ export default async function StockEarningsPage({ params }: Props) {
         .gmUp { bottom: 50%; }
         .gmDown { top: 50%; }
         .gmNone { position: absolute; left: 30%; right: 30%; top: calc(50% - 1px); height: 2px; border-radius: 999px; background: rgba(148,163,184,0.35); }
-        .gmTick { margin-top: 7px; font-size: 10px; font-weight: 800; color: rgba(148,163,184,0.72); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .gmTick { margin-top: 7px; font-size: var(--fs-fine); font-weight: 800; color: rgba(148,163,184,0.72); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .waterfall { margin-top: 12px; display: grid; gap: 8px; }
-        .wfRow { display: grid; grid-template-columns: minmax(96px, 22%) 1fr minmax(64px, auto); align-items: center; gap: 10px; }
-        .wfLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); }
+        /* THE LABEL COLUMN SIZES TO ITS TEXT (#552 COWORK #168): the bars carry
+           the statement's own labels ("Selling, general & admin"), which a 22%
+           column wrapped. Where the card is too narrow for label, track and
+           figure on one line, the label and figure share the first line and
+           the track runs full width under them, so nothing truncates. */
+        .incomeCard { container-type: inline-size; }
+        .wfRow { display: grid; grid-template-columns: max-content minmax(2.5rem, 1fr) max-content; align-items: center; gap: 10px; min-width: 0; }
+        .wfLabel { font-size: var(--fs-label); font-weight: 850; color: rgba(203,213,225,0.80); min-width: 0; white-space: nowrap; }
+        @container (max-width: 22rem) {
+          .wfRow { grid-template-columns: minmax(0, 1fr) max-content; grid-template-areas: "label value" "track track"; row-gap: 4px; }
+          .wfRow .wfLabel { grid-area: label; white-space: normal; }
+          .wfRow .wfValue { grid-area: value; }
+          .wfRow .wfTrack { grid-area: track; }
+        }
+        .wfSubtotal .wfLabel, .wfSubtotal .wfValue { color: #dbeafe; }
+        .incomeTableHeading { margin: 4px 0 2px; font-size: var(--fs-label); font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(203,213,225,0.72); }
         .wfTrack { position: relative; height: 12px; border-radius: 4px; background: rgba(255,255,255,0.04); overflow: hidden; }
         .wfZero { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 1px solid rgba(226,232,240,0.55); }
         .wfBar { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
-        .wfValue { font-size: 12px; font-weight: 900; color: #e2e8f0; text-align: right; white-space: nowrap; }
+        .wfValue { font-size: var(--fs-label); font-weight: 900; color: #e2e8f0; text-align: right; white-space: nowrap; }
         .wfTotal .wfLabel, .wfTotal .wfValue { color: #dbeafe; }
         .wfTotal { border-top: 1px solid rgba(255,255,255,0.10); padding-top: 8px; }
 
         .trendGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+        /* THE TREND TILES (#552 COWORK #124/#125): four rows in every tile, so
+           Typical and Latest share baselines and a left edge across the three,
+           and the pills sit on one row at the bottom. */
+        .trendTile { display: grid; grid-template-rows: auto auto auto 1fr; row-gap: 6px; min-width: 0; font-variant-numeric: tabular-nums; }
+        .trendTileLabel { min-height: 2.6em; }
+        .trendTileValue { margin-top: 0; white-space: nowrap; overflow-wrap: normal; }
+        .trendTile .trendChipRow { align-self: end; margin-top: 6px; }
+        .metricValue, .wfValue { font-variant-numeric: tabular-nums; }
+        .cardDetailsBody { margin-top: 8px; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(203,213,225,0.72); }
+        .cardDetailsBody p { margin: 0 0 6px; }
         .trendCell { display: grid; gap: 4px; align-content: start; }
         .trendChipRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-        .trendCount { font-size: 11px; color: rgba(148,163,184,0.75); }
-        @media (max-width: 520px) { .gmChart { height: 120px; } .wfRow { grid-template-columns: minmax(74px, 30%) 1fr minmax(56px, auto); } }
+        .trendCount { font-size: var(--fs-label); color: rgba(148,163,184,0.75); }
+        .trendLatestWord { margin-top: 4px; font-size: var(--fs-label); font-weight: 700; }
+        @media (max-width: 520px) { .gmChart { height: 120px; } }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }
-        .chartBlockSub { font-size: 12px; color: rgba(148,163,184,0.85); margin-bottom: 8px; }
-        .chartBlockTitle { font-size: 13px; font-weight: 900; color: rgba(226,232,240,0.85); margin-bottom: 4px; }
+        .chartBlockSub { font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(148,163,184,0.85); margin-bottom: 8px; }
+        .chartBlockTitle { font-size: var(--fs-read); font-weight: 900; color: rgba(226,232,240,0.85); margin-bottom: 4px; }
         .yearGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-        .yearBadge { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 13px; padding: 10px 12px; font-size: 13px; font-weight: 950; border: 1px solid rgba(255,255,255,0.10); }
+        .yearBadge { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 13px; padding: 10px 12px; font-size: var(--fs-label); font-weight: 950; border: 1px solid rgba(255,255,255,0.10); }
         .historyTable { width: 100%; border-collapse: separate; border-spacing: 0 10px; margin-top: 14px; }
-        .historyTable th { text-align: left; color: rgba(203,213,225,0.68); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 10px; }
-        .historyTable td { background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 10px; font-size: 13px; }
+        .historyTable th { text-align: left; color: rgba(203,213,225,0.68); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 10px; }
+        .historyTable td { background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 10px; font-size: var(--fs-label); }
         .historyTable td:first-child { border-left: 1px solid rgba(255,255,255,0.07); border-radius: 12px 0 0 12px; font-weight: 900; }
         .historyTable td:last-child { border-right: 1px solid rgba(255,255,255,0.07); border-radius: 0 12px 12px 0; }
         /* THE FIVE-YEAR TABLE, TIGHTER. Eight columns in a 571px main column
            (1024px, beside the side column) overflowed at the shared padding;
            these fit it without forcing nowrap on anything. */
-        .annualTable th { padding: 0 6px; letter-spacing: 0.04em; font-size: 10.5px; }
-        .annualTable td { padding: 11px 6px; font-size: 12.5px; }
+        .annualTable th { padding: 0 6px; letter-spacing: 0.04em; font-size: var(--fs-label); }
+        .annualTable td { padding: 11px 6px; font-size: var(--fs-label); }
         /* THE COLUMN A CROSSING LANDS IN gets room for its longest phrase
            ("Loss both periods"), so the headers wrap before it does. */
         .annualTable .colCross { min-width: 112px; }
@@ -801,58 +910,150 @@ export default async function StockEarningsPage({ params }: Props) {
            tighter still, so all eight columns and the crossing phrase fit. */
         .annualBox { container-type: inline-size; }
         @container (max-width: 640px) {
-          .annualTable th { padding: 0 3px; font-size: 10px; letter-spacing: 0.02em; }
-          .annualTable td { padding: 10px 3px; font-size: 12px; }
+          .annualTable th { padding: 0 3px; font-size: var(--fs-fine); letter-spacing: 0.02em; }
+          .annualTable td { padding: 10px 3px; font-size: var(--fs-fine); }
           .annualTable .colCross { min-width: 108px; }
         }
         .sideColumn { position: sticky; top: 18px; display: grid; gap: 16px; min-width: 0; }
         .bulletList { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
-        .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); line-height: 1.65; }
+        .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); font-size: var(--fs-read); line-height: var(--lh-read); }
         .bulletList li::before { content: ""; width: 9px; height: 9px; border-radius: 999px; margin-top: 8px; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.10); }
         .estimateGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
         .estimateGridStacked { grid-template-columns: 1fr; }
         @media (max-width: 980px) { .hero, .contentGrid { grid-template-columns: 1fr; } .sideColumn { position: static; } .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        /* THE SNAPSHOT IN THE RIGHT COLUMN (#552 COWORK #166): two tiles across,
+           one across where the card is too narrow for two whole figures; a
+           figure never wraps or cuts. */
+        /* In the stylesheet, not inline: an inline display would beat the phone
+           block's rule below that lets the columns step aside (#552 COWORK #166). */
+        .mainColumn { display: grid; gap: 18px; min-width: 0; }
+        .snapshotCard { container-type: inline-size; }
+        .sideColumn .snapshotGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .snapshotGrid .metricValue { white-space: nowrap; word-break: normal; }
+        @container (max-width: 330px) { .snapshotGrid { grid-template-columns: 1fr !important; } }
+        /* QUALITY OF EARNINGS AND BALANCE SHEET (#552 COWORK #169): tiles 2 × 2,
+           1 across where a figure would wrap; the charts share the card's width. */
+        .qualityCard, .balanceCard { container-type: inline-size; }
+        .qualityGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .qualityGrid .metricValue { white-space: nowrap; word-break: normal; }
+        /* A WORD IN A TILE (#552 COWORK #176, INTC): "Loss both periods", "Not
+           reported" at the reading size, allowed to wrap, never out of the
+           tile. Numbers keep the big size and nowrap above. */
+        .metricGrid .metricValue.metricWord { font-size: var(--fs-read); font-weight: 800; line-height: 1.35; letter-spacing: 0; white-space: normal; word-break: normal; overflow-wrap: anywhere; }
+        @container (max-width: 300px) { .qualityGrid { grid-template-columns: 1fr !important; } }
+        .qualityLead { margin: 10px 0 0; }
+        .conversionSub, .conversionLegend { margin: 2px 0 10px; color: rgba(148,163,184,0.9) !important; }
+        .conversionLegend { margin-top: 8px; }
+        /* THE CONVERSION CHART IN HTML: its labels follow the root size. */
+        .convChart { --conv-plot: 7.5rem; --conv-axis: calc(var(--fs-fine) * 2.9); position: relative; display: grid; gap: 4px; max-width: 34rem; padding: 0 6px; }
+        .convSlot { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+        .convPlot { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; width: 100%; height: calc(var(--conv-plot) + 1.5em); font-size: var(--fs-label); }
+        .convBar { position: relative; display: block; width: min(1.6rem, 70%); border-radius: 3px 3px 0 0; }
+        .convBreak { position: absolute; left: -1px; right: -1px; top: 18%; height: 7px; background: linear-gradient(135deg, transparent 35%, #0b1220 35%, #0b1220 65%, transparent 65%) 0 0 / 7px 7px repeat-x; }
+        /* THE DAY SLIDER (#552 COWORK #189). Two columns, stacked on a phone. */
+        .rds { margin-top: 10px; }
+        .rdsAll { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; font-size: var(--fs-label); color: #cbd5e1; margin-bottom: 8px; }
+        .rdsAll .rdsRange { flex: 1 1 10rem; max-width: 22rem; }
+        .rdsReset { background: none; border: 0; padding: 0; color: #93c5fd; font: inherit; text-decoration: underline; cursor: pointer; }
+        .rdsRows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+        .rdsRow { display: grid; grid-template-columns: minmax(8.5rem, 11rem) minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+        .rdsWhen { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+        .rdsLabel { font-weight: 800; color: #f1f5f9; font-size: var(--fs-read); }
+        .rdsDate { color: #94a3b8; font-size: var(--fs-label); }
+        .rdsTag { font-size: var(--fs-fine); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.4); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+        .rdsControl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; }
+        .rdsRange { width: 100%; accent-color: #60a5fa; min-height: 24px; }
+        .rdsReadout { font-size: var(--fs-read); color: #e2e8f0; overflow-wrap: anywhere; }
+        .rdsTo { color: #94a3b8; font-size: var(--fs-label); }
+        .rdsMarket { color: #94a3b8; font-size: var(--fs-label); }
+        /* THE STOCK'S % ONLY (#552 COWORK #202 item 2): the shared up/down tones; S&P stays neutral above. */
+        .rdsPct[data-dir="up"] { color: ${toneColor("good")}; }
+        .rdsPct[data-dir="down"] { color: ${toneColor("weak")}; }
+        .rdsBar { position: relative; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.05); }
+        .rdsZero { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: rgba(226,232,240,0.5); }
+        .rdsFill { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+        @media (max-width: 560px) { .rdsRow { grid-template-columns: minmax(0, 1fr); } }
+        .convPct { font-weight: 800; color: #cbd5e1; white-space: nowrap; line-height: 1.5; }
+        .convLoss { font-weight: 700; color: #94a3b8; line-height: 1.5; }
+        .convLatest .convPct, .convLatest .convPeriod { color: #f8fafc; font-weight: 900; }
+        .convLatest .convBar { box-shadow: 0 0 0 1.5px #f8fafc; }
+        .convPeriod { display: flex; flex-direction: column; justify-content: center; height: var(--conv-axis); line-height: 1.35; font-size: var(--fs-fine); color: #94a3b8; white-space: nowrap; border-top: 1px solid rgba(148,163,184,0.35); width: 100%; text-align: center; }
+        @container (max-width: 22rem) { .convChart { gap: 2px; padding: 0 4px; } .convPct { font-size: var(--fs-fine); letter-spacing: -0.03em; } }
+        .convLine { position: absolute; left: 0; right: 0; border-top: 1.5px dashed rgba(226,232,240,0.7); pointer-events: none; }
+        .ratioMeter > .balanceRowHead { font-size: var(--fs-read); }
+        .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+        .balanceRows { position: relative; display: grid; gap: 10px; padding: 4px 0; }
+        .balanceRowHead { min-height: calc(var(--fs-label) * 1.5); line-height: 1.5; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: var(--fs-label); color: rgba(226,232,240,0.82); }
+        .balanceRowHead span { min-width: 0; }
+        .balanceRowHead strong { white-space: nowrap; color: #f8fafc; }
+        .balanceTrack { position: relative; display: flex; height: 22px; margin-top: 4px; border-radius: 6px; background: rgba(148,163,184,0.12); overflow: hidden; }
+        .balanceSeg { box-sizing: border-box; flex: 0 0 auto; display: flex; align-items: center; height: 100%; padding: 0 6px; overflow: hidden; white-space: nowrap; font-size: var(--fs-fine); font-weight: 800; color: #052e16; }
+        /* Over the two tracks only, never over the row figures: past the first
+           row's head (its line height) and the track's 4px margin. */
+        .balanceGap { position: absolute; top: calc(8px + var(--fs-label) * 1.5); bottom: 4px; border: 1.5px dashed; border-radius: 6px; pointer-events: none; }
+        .balanceGapLabel { margin-top: 4px; font-size: var(--fs-label); font-weight: 900; white-space: nowrap; }
+        .balanceLegend { margin: 8px 0 0; font-size: var(--fs-label) !important; line-height: 1.6; color: rgba(203,213,225,0.82) !important; }
+        .ratioMeter { margin-top: 18px; }
+        .meterTrack { position: relative; height: 8px; margin-top: 10px; border-radius: 999px; background: rgba(148,163,184,0.22); }
+        .meterMark { position: absolute; top: -5px; bottom: -5px; border-left: 1.5px dashed rgba(226,232,240,0.75); }
+        .meterDot { position: absolute; top: 50%; width: 14px; height: 14px; margin-left: -7px; transform: translateY(-50%); border-radius: 999px; background: #93c5fd; border: 2px solid #0f172a; }
+        .meterScale { position: relative; display: flex; justify-content: space-between; margin-top: 6px; font-size: var(--fs-label); color: rgba(148,163,184,0.9); }
+        .meterMarkLabel { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+        .balanceTotals { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); font-size: var(--fs-read); }
+        .balanceTotals .metricSub { margin-top: 0; margin-bottom: 4px; }
+        /* THE PHONE ORDER (#552 COWORK #166), C's pattern from the stock page
+           (check-stock-phone-order): the two columns step aside and their
+           cards order by CSS, so the phone reads Next report, Growth &
+           Margins, the snapshot, then the rest in DOM order. Desktop is
+           untouched: nothing outside this block orders or uses contents. */
+        @media (max-width: 980px) {
+          .contentGrid { gap: 18px; }
+          .mainColumn, .sideColumn { display: contents; }
+          .orderNext { order: -3; }
+          .orderGrowth { order: -2; }
+          .orderSnapshot { order: -1; }
+        }
         @media (max-width: 720px) {
           .earningsPage, .earningsPage * { box-sizing: border-box; }
           .earningsWrap { width: 100%; padding: 14px 10px 38px; overflow-x: hidden; }
           .topLinks { display: grid; grid-template-columns: 1fr; justify-content: stretch; gap: 8px; margin-bottom: 12px; }
           .topLinks a, .actionLink { width: 100%; min-height: 44px; padding: 10px 12px; text-align: center; }
           .hero { padding: 16px; border-radius: 20px; gap: 18px; }
-          .hero h1 { margin-top: 10px; font-size: clamp(29px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }
-          .hero p { font-size: 14px; line-height: 1.65; }
+          .hero h1 { margin-top: 10px; font-size: clamp(1.8125rem, 9vw, 2.25rem); line-height: 1.08; letter-spacing: -0.045em; }
+          .hero p { font-size: var(--fs-read); line-height: var(--lh-read); }
           .scoreCard, .card { width: 100%; min-width: 0; border-radius: 18px; padding: 15px; }
           .scoreTop { align-items: flex-start; }
           .scoreNumberRow { margin-top: 18px; }
-          .scoreNumber { font-size: 42px; }
+          .scoreNumber { font-size: 2.625rem; }
           .scoreNeedle { left: calc(${score.score}% - 8px); width: 16px; height: 22px; }
           .contentGrid { gap: 16px; }
-          .card h2 { font-size: 23px; } .card h3 { font-size: 20px; }
-          .card p, .bulletList li { font-size: 14px; line-height: 1.6; }
+          .card h2 { font-size: 1.4375rem; } .card h3 { font-size: 1.25rem; }
+          .card p, .bulletList li { font-size: var(--fs-read); line-height: var(--lh-read); }
           .yearGrid, .earningsSearchRow, .estimateGrid { grid-template-columns: 1fr; }
           .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
           .metricCard { padding: 10px !important; border-radius: 14px !important; }
-          .metricValue { font-size: 18px; word-break: break-word; }
-          .metricLabel { font-size: 9.5px; }
-          .metricSub { font-size: 10.5px; margin-top: 5px; }
-          .metricHelp { width: 14px; height: 14px; font-size: 9px; }
+          .metricValue { font-size: 1.125rem; word-break: break-word; }
+          .metricLabel { font-size: var(--fs-label); }
+          .metricSub { font-size: var(--fs-label); margin-top: 5px; }
+          .metricHelp { width: 18px; height: 18px; font-size: var(--fs-label); }
           .metricHelpBubble { position: fixed; left: 12px; right: 12px; bottom: auto; top: 92px; transform: none; width: auto; max-width: none; }
           .metricHelpBubble::after { display: none; }
           .trendDots { gap: 12px; justify-content: flex-start; }
           .trendDot { min-width: 48px; }
           .chartScale { width: 58px; }
           .chartScaleSpacer { width: 58px; }
-          .chartScale span { font-size: 10px; left: 2px; right: 2px; }
-          .chartCategories span { font-size: 9.5px; }
+          .chartScale span { font-size: var(--fs-fine); left: 2px; right: 2px; }
+          .chartCategories span { font-size: var(--fs-fine); }
           .chartCategories .catLong { display: none; }
           .chartCategories .catShort { display: inline; white-space: nowrap; line-height: 1.25; }
           .historyTable { display: block; width: 100%; border-spacing: 0; margin-top: 12px; }
           .historyTable thead { display: none; }
           .historyTable tbody, .historyTable tr, .historyTable td { display: block; width: 100%; }
           .historyTable tr { margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; background: rgba(255,255,255,0.035); overflow: hidden; }
-          .historyTable td { display: flex; align-items: center; justify-content: space-between; gap: 14px; border: none; border-bottom: 1px solid rgba(255,255,255,0.07); border-radius: 0; background: transparent; padding: 11px 12px; font-size: 13px; text-align: right; }
+          .historyTable td { display: flex; align-items: center; justify-content: space-between; gap: 14px; border: none; border-bottom: 1px solid rgba(255,255,255,0.07); border-radius: 0; background: transparent; padding: 11px 12px; font-size: var(--fs-label); text-align: right; }
           .historyTable td:first-child, .historyTable td:last-child { border-radius: 0; border-left: none; border-right: none; }
           .historyTable td:last-child { border-bottom: none; }
-          .historyTable td::before { content: ""; flex: 0 0 auto; color: rgba(203,213,225,0.70); font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }
+          .historyTable td::before { content: ""; flex: 0 0 auto; color: rgba(203,213,225,0.70); font-size: var(--fs-label); font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }
           /* READ FROM THE CELL, NOT FROM ITS POSITION. These used to be seven
              nth-child rules naming the estimate columns that were retired on
              2026-09-15. There are now two tables on this page with different
@@ -862,12 +1063,12 @@ export default async function StockEarningsPage({ params }: Props) {
           .historyTable td::before { content: attr(data-label); }
           /* THE FY LABEL IS THE CARD'S HEADER on the five-year table, not a
              "Fiscal year" row (owner review of #523). */
-          .annualTable td.rowHead { justify-content: flex-start; font-size: 15px; font-weight: 950; background: rgba(255,255,255,0.03); }
+          .annualTable td.rowHead { justify-content: flex-start; font-size: 0.9375rem; font-weight: 950; background: rgba(255,255,255,0.03); }
           .annualTable td.rowHead::before { content: none; }
           .annualTable .colCross { min-width: 0; }
         }
         @media (max-width: 374px) { .snapshotGrid { grid-template-columns: 1fr !important; } }
-        @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 38px; } }
+        @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 2.375rem; } }
       `}</style>
 
         <div className="earningsWrap">
@@ -896,7 +1097,8 @@ export default async function StockEarningsPage({ params }: Props) {
                   income statement — the same two sentences four times on
                   AVAV. It applies to every EPS on the page, so it sits where
                   the page introduces them; each card keeps a one-line source. */}
-              {secView ? <p className="earningsDataNote heroNote">{epsBasisNote(secView.accounting)}</p> : null}
+              {/* ONE SHORT LINE; THE REST ON TAP (#552 COWORK #124). */}
+              {secView ? <p className="earningsDataNote heroNote"><ReasonedValue text={epsBasisShort(secView.accounting)} reason={epsBasisNote(secView.accounting)} /></p> : null}
               {/* THE ANNUAL-ONLY NOTE (#535 COWORK #15), once, at the top. */}
               {data.annualForm ? <p className="earningsDataNote heroNote">{annualOnlyNote(data.annualForm)}</p> : null}
               <EarningsSymbolPicker currentSymbol={clean} />
@@ -911,11 +1113,14 @@ export default async function StockEarningsPage({ params }: Props) {
           </section>
 
           <section className="contentGrid">
-            <div style={{ display: "grid", gap: 18 }}>
+            <div className="mainColumn">
               {/* EVERY FINANCIAL CARD BELOW READS THE SEC FACT SET. When the
                   symbol has none yet, one honest card says so rather than six
                   cards of dashes. */}
-              {nextReport ? <NextReportCard outlook={nextReport} /> : null}
+              {/* NO NEXT-REPORT BOX FOR A FUND (#552 COWORK #152): a fund has no
+                  earnings date to estimate. A census-named note keeps it: its
+                  card points at the issuer, whose reports these are. */}
+              {nextReport && !(data.cold.status === "not-shown" && data.cold.kind === "fund") ? <div className="orderNext"><NextReportCard outlook={nextReport} /></div> : null}
 
               {/* THREE OUTCOMES, NOT TWO. "no readable XBRL" is a successful
                   fetch of nothing usable -- an IFRS filer, or a company with no
@@ -933,11 +1138,15 @@ export default async function StockEarningsPage({ params }: Props) {
               {noRegistrant ? (
                 <SecNoRegistrantCard symbol={clean} />
               ) :
+               data.cold.status === "not-shown" ? (
+                <SecNotShownCard symbol={clean} kind={data.cold.kind} primary={data.cold.primary} hasFiledEarnings={hasFiledEarnings} />
+              ) :
                data.cold.status === "not-issuer-equity" ? (
                 <SecNotIssuerEquityCard
                   symbol={clean}
                   reason={data.cold.reason}
                   siblings={data.cold.siblings}
+                  hasFiledEarnings={hasFiledEarnings}
                 />
               ) :
                data.cold.status === "no-xbrl" ? (
@@ -965,7 +1174,10 @@ export default async function StockEarningsPage({ params }: Props) {
               ) :
                !secView ? <SecPendingCard symbol={clean} /> : (
                 <>
-                  <SecSnapshotCard view={secView} pending={data.pendingResults} />
+                  {/* THE SNAPSHOT MOVED TO THE TOP OF THE RIGHT COLUMN (#552
+                      COWORK #166, owner request): "AAPL earnings" visitors want
+                      the latest revenue and EPS at once, and there it stays in
+                      view on a desktop. Growth & Margins leads this column. */}
                   {/* HIDDEN, NOT REMOVED — the owner's standing rule. These two
                       were the FMP estimate cards: "EPS surprise" and "Revenue
                       surprise", both against FMP's epsEstimated /
@@ -988,7 +1200,7 @@ export default async function StockEarningsPage({ params }: Props) {
                       (tableBasis "year"): quarterly results are not in SEC
                       structured data for 20-F/40-F filers; the five-year
                       card below is the main table. */}
-                  {secView.tableBasis === "year" ? null : <SecGrowthMarginsCard view={secView} />}
+                  {secView.tableBasis === "year" ? null : <div className="orderGrowth"><SecGrowthMarginsCard view={secView} /></div>}
                   {/* ON EVERY STOCK, not only annual filers: five fiscal years
                       is the longer view a quarterly table cannot give. Same
                       component, same rows, `sole` only changes the wording. */}
@@ -1002,6 +1214,7 @@ export default async function StockEarningsPage({ params }: Props) {
                     inputs={data.valuation}
                     price={data.latestClose}
                     priceAsOf={data.latestCloseOn}
+                    priceLabel={data.latestPriceLabel}
                     today={data.renderedOn}
                   />
                   <SecCashQualityCard view={secView} />
@@ -1026,15 +1239,28 @@ export default async function StockEarningsPage({ params }: Props) {
                 latest={latestReaction ? { label: latestReaction.label, reactionPct: latestReaction.reactionPct, volumeMultiple: latestReaction.volumeMultiple, volumeSessions: latestReaction.volumeSessions ?? null } : null}
                 reaction={reactionData}
                 drift={driftQuarters}
+                days={data.reactionDays}
                 datesFromSec={data.datesFromSec}
                 uncoveredLabels={uncoveredLabels}
                 noPriceHistoryNote={NO_PRICE_HISTORY_NOTE}
               />}
 
+              {/* THE LINKED CREDIT, once for the page, whenever the reaction
+                  chart or the valuation price is Tiingo's (B3; the contract's
+                  credit, #563 COWORK #31 §5). B's site-wide "powered by Tiingo"
+                  link since #552 COWORK #205. */}
+              {data.pricesFromTiingo ? (
+                <p className="earningsDataNote">
+                  Prices <TiingoLink />
+                </p>
+              ) : null}
+
               {secView ? <SecRecentPeriodsCard view={secView} /> : null}
             </div>
 
             <aside className="sideColumn">
+              {/* FIRST IN THE RIGHT COLUMN, ABOVE "What it means" (#552 COWORK #166). */}
+              {snapshotView ? <div className="orderSnapshot"><SecSnapshotCard view={snapshotView} pending={data.pendingResults} /></div> : null}
               <section className="card">
                 <div className="eyebrow">What it means</div>
                 <h3>Investor read</h3>

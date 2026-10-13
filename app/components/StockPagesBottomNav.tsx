@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { rememberSymbol } from "@/lib/symbol";
+import { chartHref } from "@/lib/chartHref";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 /**
  * Bottom nav across the four symbol-scoped pages: the chart (/dashboard),
@@ -103,6 +105,7 @@ function EarningsIcon() {
 }
 
 export default function StockPagesBottomNav() {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const pathname = usePathname() ?? "";
 
   // On a /stock/... route the ticker is in the URL, so it is known during the
@@ -113,6 +116,8 @@ export default function StockPagesBottomNav() {
     decodeURIComponent((pathname.match(/^\/stock\/([^/]+)/) || [])[1] ?? "")
   );
   const [symbol, setSymbol] = useState(pathSymbol);
+  // "/" serves the dashboard too (#563 COWORK #149 §1), so "Chart" is lit on both.
+  const isDashboard = pathname === "/" || pathname.startsWith("/dashboard");
 
   useEffect(() => {
     const readStored = () => {
@@ -149,15 +154,15 @@ export default function StockPagesBottomNav() {
     //
     // One localStorage read a second, only on this route, and setState only
     // when the value actually changed, so an idle dashboard re-renders never.
-    if (pathname !== "/dashboard") return;
+    if (!isDashboard) return;
     const timer = window.setInterval(() => {
       const next = readStored();
       if (next) setSymbol((current) => (current === next ? current : next));
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [pathname, pathSymbol]);
+  }, [isDashboard, pathSymbol]);
 
-  const active: NavKey = pathname.startsWith("/dashboard")
+  const active: NavKey = isDashboard
     ? "chart"
     : /\/news\/?$/.test(pathname)
       ? "news"
@@ -168,10 +173,14 @@ export default function StockPagesBottomNav() {
   const encoded = encodeURIComponent(symbol || FALLBACK_SYMBOL);
 
   const items: { key: NavKey; label: string; href: string; icon: React.ReactNode }[] = [
-    { key: "chart", label: "Chart", href: `/dashboard?symbol=${encoded}`, icon: <ChartIcon /> },
+    // Straight to the analyser, scrolled to it (#563 COWORK #151).
+    { key: "chart", label: "Chart", href: chartHref(symbol || FALLBACK_SYMBOL), icon: <ChartIcon /> },
     { key: "analysis", label: "Analysis", href: `/stock/${encoded}`, icon: <AnalysisIcon /> },
     { key: "news", label: "News", href: `/stock/${encoded}/news`, icon: <NewsIcon /> },
-    { key: "earnings", label: "Earnings", href: `/stock/${encoded}/earnings`, icon: <EarningsIcon /> },
+    // #552 COWORK #197: the Earnings tab only when this symbol has a filed SEC set.
+    ...(hasFiledEarnings(symbol || FALLBACK_SYMBOL)
+      ? [{ key: "earnings" as const, label: "Earnings", href: `/stock/${encoded}/earnings`, icon: <EarningsIcon /> }]
+      : []),
   ];
 
   return (

@@ -31,6 +31,7 @@ supplyChain:
   - name: Wabash National Corporation
     ticker: WNC
     pct: 30
+    grade: hard
     blurb: >
       Supplies a large share of Old Dominion's trailer fleet, including
       more than 21,000 28-foot trailers; Old Dominion also specs Wabash
@@ -38,6 +39,7 @@ supplyChain:
   - name: Daimler Truck Holding AG (Freightliner)
     ticker: null
     pct: 28
+    grade: some
     blurb: >
       Old Dominion's primary tractor supplier - the majority of its
       roughly 7,700 power units are Freightliners. Daimler Truck's primary
@@ -46,6 +48,7 @@ supplyChain:
   - name: AB Volvo (Volvo Trucks North America)
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Supplies a meaningful share of Old Dominion's tractor fleet alongside
       Freightliner. AB Volvo's primary listing is Nasdaq Stockholm; its US
@@ -54,6 +57,7 @@ supplyChain:
   - name: Diesel fuel market
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       Not a single company - Old Dominion's own 10-K calls diesel "a
       critical component of our operations and a significant operating
@@ -62,6 +66,7 @@ supplyChain:
   - name: Autocar, LLC
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Supplies Old Dominion's yard and terminal spotter tractors, including
       its first all-electric terminal tractor. Privately held by GVW
@@ -70,6 +75,7 @@ customers:
   - name: Largest single customer
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Old Dominion's own 10-K discloses its single largest customer
       accounted for approximately 5.3% of 2024 revenue - the most
@@ -78,6 +84,7 @@ customers:
   - name: Customers ranked #2-5
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       The next four largest accounts, which together with the single
       largest customer brought Old Dominion's top-5 customer concentration
@@ -85,12 +92,14 @@ customers:
   - name: Customers ranked #6-10
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Additional large accounts that brought Old Dominion's top-10
       customer concentration to 21.5% of 2024 revenue per its 10-K.
   - name: Customers ranked #11-20
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       Further large accounts that brought Old Dominion's top-20 customer
       concentration to 31.1% of 2024 revenue per its 10-K - still well
@@ -98,6 +107,7 @@ customers:
   - name: All other customers
     ticker: null
     pct: 69
+    grade: spread
     blurb: >
       Not a single company - Old Dominion serves tens of thousands of
       manufacturing, retail, and industrial shippers beyond its top 20

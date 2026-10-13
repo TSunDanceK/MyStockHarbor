@@ -15,10 +15,12 @@
 //   small   -- a lock, flag, stamp, counter or short list.
 // Sizes are from the CODE-B #75 census (2026-10-01) where measured.
 export const WRITE_SITES = [
+  // Retired 2026-10-12 (#553 COWORK #212) with the FMP warm jobs: the
+  // fundamentals and stock-data row writes, the quote offset, and warm-earnings'
+  // lock, enqueue guard and store write.
   { file: "lib/ai-stock-analysis.ts", key: "getRedisKey(symbol", cls: "row" },
   { file: "lib/indexnowAuto.ts", key: "key", cls: "small" },
   { file: "lib/insightSnapshots.ts", key: "key", cls: "row" },
-  { file: "lib/server/benchmarksBuilder.ts", key: "`${REDIS_PREFIX}:${scope}`", cls: "listed", candidate: '"msh:benchmarks:stock"' },
   { file: "lib/server/bullFlagsBuilder.ts", key: "PLAYS_REDIS_KEY", cls: "listed", candidate: "BULL_FLAGS_REDIS_KEY" },
   { file: "lib/server/bullFlagsBuilder.ts", key: "PLAYS_LOCK_KEY", cls: "small" },
   { file: "lib/server/capexContracts.ts", key: "CONTRACTS_KEY", cls: "listed", candidate: "CONTRACTS_KEY" },
@@ -27,17 +29,15 @@ export const WRITE_SITES = [
   { file: "lib/server/dailyPageLimit.ts", key: "key", cls: "small", count: 2 },
   { file: "lib/server/descendingTrianglesBuilder.ts", key: "DESCENDING_REDIS_KEY", cls: "listed", candidate: "DESCENDING_REDIS_KEY" },
   { file: "lib/server/descendingTrianglesBuilder.ts", key: "DESCENDING_LOCK_KEY", cls: "small" },
-  { file: "lib/server/earningsCalendar.ts", key: "`${QUOTED_SYMBOL_PREFIX}:${symbol}`", cls: "row" },
-  { file: "lib/server/earningsCalendar.ts", key: "key", cls: "small" },
   { file: "lib/server/earningsCalendar.ts", key: "`${DAY_COMPLETE_PREFIX}:${date}`", cls: "small" },
   { file: "lib/server/earningsCalendar.ts", key: "`${DAY_ITEMS_PREFIX}:${date}`", cls: "row" },
   { file: "lib/server/earningsCalendar.ts", key: "CALENDAR_SCAN_GATE_KEY", cls: "small" },
-  { file: "lib/server/earningsSchedule.ts", key: "SCHEDULE_KEY", cls: "listed", candidate: "SCHEDULE_KEY" },
   { file: "lib/server/earningsStore.ts", key: "`${EARNINGS_REDIS_KEY_PREFIX}${clean}`", cls: "row" },
+  // The week page's row figures and closes, one value per strip day, 10-day TTL (#552 COWORK #170).
+  { file: "lib/server/earningsWeekStore.ts", key: "weekFiguresKey(date", cls: "row" },
+  { file: "lib/server/earningsWeekStore.ts", key: "weekCloseKey(date", cls: "row" },
   { file: "lib/server/feedCache.ts", key: "`${REDIS_PREFIX}:${key}`", cls: "row" },
   { file: "lib/server/fundamentalsCache.ts", key: "`${SCREENER_FUND_KEY_PREFIX}${symbol}`", cls: "chunked", bound: "500 rows x <=207 B = 0.09 MB" },
-  { file: "lib/server/fundamentalsCache.ts", key: "QUOTE_OFFSET_KEY", cls: "small" },
-  { file: "lib/server/fundamentalsCache.ts", key: "`${FUND_KEY_PREFIX}${sym}`", cls: "chunked", bound: "universe rows x <=193 B = 0.12 MB" },
   { file: "lib/server/historyCache.ts", key: "NEWEST_BAR_STAMP_HASH", cls: "small" },
   { file: "lib/server/historyCache.ts", key: "key", cls: "small" },
   { file: "lib/server/historyCache.ts", key: "getHistoryRedisKey(normalized", cls: "row" },
@@ -46,8 +46,28 @@ export const WRITE_SITES = [
   { file: "lib/server/jobGuard.ts", key: "key", cls: "small" },
   { file: "lib/server/jobRuns.ts", key: "`${JOB_RUN_PREFIX}:${job}`", cls: "small" },
   { file: "lib/server/marketData/jobs.ts", key: "TIINGO_QUOTES_KEY", cls: "listed", candidate: "TIINGO_QUOTES_KEY" },
-  { file: "lib/server/marketData/jobs.ts", key: "tiingoEodKey(sym", cls: "chunked", bound: "EOD_WRITE_CHUNK rows per pipeline; pinned below" },
+  // Two sites (#553 COWORK #124): the night's re-pull and the already-complete backfill, both EOD_WRITE_CHUNK rows per pipeline.
+  { file: "lib/server/marketData/jobs.ts", key: "tiingoEodKey(sym", cls: "chunked", bound: "EOD_WRITE_CHUNK rows per pipeline; pinned below", count: 2 },
   { file: "lib/server/marketData/jobs.ts", key: "TIINGO_EOD_META_KEY", cls: "small" },
+  // Step 5 (#553 COWORK #98): the newest bar per symbol, one HSET a complete night (~150 B a row).
+  // Two sites: the night's whole rewrite, and the backfill's HSET of at most EOD_WRITE_CHUNK new fields per pipeline (#553 COWORK #124).
+  { file: "lib/server/marketData/jobs.ts", key: "TIINGO_EOD_LAST_KEY", cls: "listed", candidate: "TIINGO_EOD_LAST_KEY", count: 2 },
+  // Step 5: the Tiingo jobs' symbols-only universe (~6 B a symbol), one SET per in-session warm-price-pool run,
+  // and off hours only when the key is absent or older than 6 h (#553 COWORK #120).
+  // Market Mood (#563 COWORK #96): one ~33 KB series of 0–100 scores, 1 SET a complete night.
+  { file: "lib/server/marketMoodWrite.ts", key: "TIINGO_MOOD_KEY", cls: "row" },
+  // The /sector cards' 3-month lines: 11 x 64 percentages (~6 KB), once a complete night (#553 COWORK #167).
+  { file: "lib/server/sectorSparks.ts", key: "SECTOR_SPARK_KEY", cls: "row" },
+  // #553 COWORK #181: ~25 candidates of tickers and words, a few KB.
+  { file: "lib/server/insightCandidates.ts", key: "INSIGHT_CANDIDATES_KEY", cls: "row" },
+  // #553 COWORK #173/#190: ~400 symbols and 50 short rows, a few tens of KB.
+  { file: "lib/server/marketDynamic.ts", key: "MARKET_DYNAMIC_KEY", cls: "row" },
+  // The /upcoming-ipos SEC profiles, one SET of the whole map only when something changed (#553 COWORK #159).
+  { file: "lib/server/ipoProfiles.ts", key: "IPO_PROFILES_KEY", cls: "listed", candidate: "IPO_PROFILES_KEY" },
+  { file: "lib/server/tiingoUniverse.ts", key: "TIINGO_UNIVERSE_KEY", cls: "small" },
+  // The stock-page cold fill (#553 COWORK #121): one symbol's history per SET (the nightly job's row shape), and its per-symbol lock.
+  { file: "lib/server/marketData/coldFill.ts", key: "tiingoEodKey(sym", cls: "row" },
+  { file: "lib/server/tiingoColdState.ts", key: "coldLockKey(coldSymbol(symbol", cls: "small" },
   { file: "lib/server/news/secFilingsStore.ts", key: "secFilingsNewsKey(symbol", cls: "row" },
   { file: "lib/server/newsStore.ts", key: "key", cls: "row" },
   { file: "lib/server/pickerChartsCache.ts", key: "PICKER_CHARTS_KEY", cls: "listed", candidate: "PICKER_CHARTS_KEY" },
@@ -88,9 +108,10 @@ export const WRITE_SITES = [
   { file: "lib/server/secTickerMap.ts", key: "TICKER_REDIS_KEY", cls: "listed", candidate: "TICKER_REDIS_KEY", count: 2 },
   { file: "lib/server/sectorPanels.ts", key: "PERFORMANCE_KEY", cls: "listed", candidate: "SECTOR_PERFORMANCE_KEY" },
   { file: "lib/server/sectorPanels.ts", key: "key", cls: "small" },
+  // One sector's {label, score, at} per HSET, from its news build (#553 COWORK #157).
+  { file: "lib/server/sectorTone.ts", key: "sectorToneKey(", cls: "row" },
   { file: "lib/server/sectorUniverse.ts", key: "SECTOR_INDEX_KEY", cls: "listed", candidate: "SECTOR_INDEX_KEY" },
   { file: "lib/server/stalenessQueue.ts", key: "seededKey(dataset", cls: "small" },
-  { file: "lib/server/stockDataCache.ts", key: "`${KEY_PREFIX}${symbol}`", cls: "chunked", bound: "REFRESH_SLICE_SIZE (40) rows x <=713 B = 0.03 MB" },
   { file: "lib/server/symbolEviction.ts", key: "`${PRESET_ALARM_KEY_PREFIX}${symbol}`", cls: "small" },
   { file: "lib/server/symbolEviction.ts", key: "key", cls: "small" },
   { file: "lib/server/symbolEviction.ts", key: "STALE_BAR_DAYS_HASH", cls: "small" },
@@ -101,9 +122,6 @@ export const WRITE_SITES = [
   { file: "lib/youtube.ts", key: "UPLOADS_PLAYLIST_KEY", cls: "small" },
   { file: "lib/youtube.ts", key: "`${LAST_GOOD_LIST_PREFIX}:${limit}`", cls: "row" },
   { file: "lib/youtube.ts", key: "`${LAST_GOOD_VIDEO_PREFIX}:${videoId}`", cls: "row" },
-  { file: "app/api/jobs/warm-earnings/route.ts", key: "EARNINGS_LOCK_KEY", cls: "small" },
-  { file: "app/api/jobs/warm-earnings/route.ts", key: "EARNINGS_ENQUEUE_GUARD_KEY", cls: "small" },
-  { file: "app/api/jobs/warm-earnings/route.ts", key: "`${EARNINGS_REDIS_KEY_PREFIX}${symbol}`", cls: "row" },
   { file: "app/api/jobs/warm-price-pool/route.ts", key: "PRICE_POOL_LOCK_KEY", cls: "small" },
   { file: "app/api/market/route.ts", key: "REDIS_KEY", cls: "listed", candidate: '"msh:market:state"' },
 ];

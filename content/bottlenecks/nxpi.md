@@ -34,6 +34,7 @@ supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
     pct: 25
+    grade: some
     blurb: >
       NXP's "hybrid manufacturing model" runs partly through two TSMC
       joint ventures - ESMC in Dresden, Germany (TSMC owns 70%, Bosch,
@@ -43,6 +44,7 @@ supplyChain:
   - name: Arm Holdings
     ticker: ARM
     pct: 20
+    grade: some
     blurb: >
       NXP's own filings describe having "the broadest Arm processor
       portfolio in the industry," spanning its LPC and Kinetis
@@ -52,6 +54,7 @@ supplyChain:
   - name: Synopsys
     ticker: SNPS
     pct: 12
+    grade: some
     blurb: >
       A listed NXP design partner supplying the electronic design
       automation (EDA) software used to design and verify its chips - one
@@ -60,6 +63,7 @@ supplyChain:
   - name: Cadence Design Systems
     ticker: CDNS
     pct: 10
+    grade: some
     blurb: >
       The other half of the EDA duopoly and another listed NXP design
       partner, providing verification and design tooling NXP's engineers
@@ -67,6 +71,7 @@ supplyChain:
   - name: Vanguard International Semiconductor
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       NXP's foundry joint-venture partner in VSMC, a $7.8 billion 300mm
       fab under construction in Singapore to supply future analog, power,
@@ -75,6 +80,7 @@ supplyChain:
   - name: Applied Materials
     ticker: AMAT
     pct: 8
+    grade: spread
     blurb: >
       A dominant supplier of the deposition, etch, and polishing
       equipment used across NXP's owned wafer fabs in Austin, Chandler,
@@ -83,6 +89,7 @@ supplyChain:
   - name: ASML Holding
     ticker: ASML
     pct: 7
+    grade: spread
     blurb: >
       The near-monopoly supplier of lithography systems used across the
       semiconductor industry, including at fabs NXP depends on for its
@@ -90,6 +97,7 @@ supplyChain:
   - name: Shin-Etsu Chemical
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       One of the world's two largest suppliers of polished silicon
       wafers, a structural raw-material input for NXP's fabs alongside
@@ -98,6 +106,7 @@ supplyChain:
   - name: Amkor Technology
     ticker: AMKR
     pct: 5
+    grade: spread
     blurb: >
       NXP keeps most assembly and test in-house, but Amkor, the largest
       US-based outsourced semiconductor assembly and test (OSAT)
@@ -107,6 +116,7 @@ customers:
   - name: Avnet, Inc.
     ticker: AVT
     pct: 23
+    grade: some
     blurb: >
       NXP's largest distributor, accounting for 23% of 2025 revenue per
       its 10-K - by far the single largest concentrated revenue
@@ -114,6 +124,7 @@ customers:
   - name: Diversified automotive, industrial, mobile & communications customers
     ticker: null
     pct: 77
+    grade: spread
     blurb: >
       Not a single company. NXP discloses no direct customer above 10% of
       revenue; its base spans thousands of accounts led by automotive

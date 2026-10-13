@@ -9,6 +9,9 @@ import {
 } from "./fundamentalsCache";
 import { SECTORS, sectorSlugFromLabel } from "@/lib/sectors";
 import { resolveProfileBulk } from "@/lib/server/staticProfile";
+import { priceProviderFor } from "./marketData/provider";
+import { readSecTiingoCaps } from "./tiingoPool";
+import { capsOnBasis, chooseCapBasis, countCaps, rankByCap, type CapBasis } from "./sectorCapRank";
 
 // ---------------------------------------------------------------------------
 // Sector -> constituents, built entirely from caches we already fill.
@@ -18,6 +21,8 @@ import { resolveProfileBulk } from "@/lib/server/staticProfile";
 //   * PRESET_UNIVERSE                  -- the 100 mega-caps, guaranteed slots
 //   * readCachedFundamentalsBulk()     -- {marketCap, sector} per symbol (26h)
 //   * readCachedScreenerFundamentals() -- same two fields, wider coverage (30h)
+//   * readSecTiingoCaps()              -- on the POOL gate only: SEC shares x the
+//                                         Tiingo price, three Data Cache blobs
 //
 // The data was always there; what was missing was a reverse index. Redis holds
 // per-symbol keys with no sector -> symbols mapping and nothing SCANs, so the
@@ -50,6 +55,13 @@ const MAX_CONSTITUENTS_PER_SECTOR = 120;
 export type SectorIndex = {
   /** slug -> constituent symbols, largest market cap first. */
   bySlug: Record<string, string[]>;
+  /**
+   * What "largest" was measured on (sectorCapRank.ts), one basis for the whole
+   * build. Absent on an index built before B7: read as "fmp".
+   */
+  capBasis?: CapBasis;
+  /** The POOL gate the index was built under; a cached index from the other gate is rebuilt. */
+  gate?: "tiingo" | "fmp";
   /** Symbols considered. */
   total: number;
   /** Symbols with a recognised sector. */
@@ -102,7 +114,9 @@ async function buildSectorIndex(): Promise<SectorIndex> {
   // fundamentals rows are fresher. Prefer whichever actually has a sector, and
   // fall through to the SEC classification leg when neither does — see below.
   const [fundamentals, screener] = await Promise.all([
-    readCachedFundamentalsBulk(symbols).catch(() => new Map()),
+    // RAW: the stored FMP caps only, so the "fmp" basis never holds a SEC x
+    // Tiingo cap from the read-time overlay (#690 Q2; sectorCapRank: never mixed).
+    readCachedFundamentalsBulk(symbols, { raw: true }).catch(() => new Map()),
     readCachedScreenerFundamentals(symbols).catch(() => new Map()),
   ]);
 
@@ -141,33 +155,54 @@ async function buildSectorIndex(): Promise<SectorIndex> {
     "sector index"
   );
 
-  const buckets = new Map<string, Array<{ symbol: string; marketCap: number }>>();
+  // ── ONE CAP BASIS FOR THE WHOLE RANKING (#553 CODE-B #94 B7) ──────────
+  // FMP's caps above expire 26-30 h after FMP stops, and then every cap is 0.
+  // On the POOL gate (the sector pages' prices are the pool's) the ranking is
+  // SEC cover shares x the Tiingo price -- the overlay's own cap, so the order
+  // and the pool readers agree. The FMP caches are used only while the key is
+  // set and they still hold a cap. Chosen once (sectorCapRank.chooseCapBasis);
+  // a symbol with no cap on that basis ranks as 0, never on the other one's.
+  const fmpCaps = new Map<string, number | null>();
+  for (const symbol of symbols) {
+    const fund = fundamentals.get(symbol)?.marketCap;
+    const scr = screener.get(symbol)?.marketCap;
+    fmpCaps.set(
+      symbol,
+      typeof fund === "number" && Number.isFinite(fund)
+        ? fund
+        : typeof scr === "number" && Number.isFinite(scr)
+          ? scr
+          : null
+    );
+  }
+  const onTiingo = priceProviderFor("POOL") === "tiingo";
+  const secCaps = onTiingo
+    ? await readSecTiingoCaps(symbols, Date.now()).catch(() => new Map<string, number | null>())
+    : new Map<string, number | null>();
+  const basis = chooseCapBasis({
+    poolOnTiingo: onTiingo,
+    secTiingoCaps: countCaps(secCaps),
+    fmpKeySet: Boolean(process.env.FMP_API_KEY),
+    fmpCaps: countCaps(fmpCaps),
+  });
+  const caps = capsOnBasis(basis, symbols, secCaps, fmpCaps);
+  index.capBasis = basis;
+  index.gate = onTiingo ? "tiingo" : "fmp";
+
+  const buckets = new Map<string, string[]>();
   for (const sector of SECTORS) buckets.set(sector.slug, []);
 
   for (const symbol of symbols) {
-    const fund = fundamentals.get(symbol) ?? null;
-    const scr = screener.get(symbol) ?? null;
-
     const slug = sectorSlugFromLabel(resolved.get(symbol)?.sector ?? null);
 
     if (!slug) continue;
 
-    const marketCap =
-      typeof fund?.marketCap === "number" && Number.isFinite(fund.marketCap)
-        ? fund.marketCap
-        : typeof scr?.marketCap === "number" && Number.isFinite(scr.marketCap)
-          ? scr.marketCap
-          : 0;
-
-    buckets.get(slug)?.push({ symbol, marketCap });
+    buckets.get(slug)?.push(symbol);
     index.classified += 1;
   }
 
-  for (const [slug, rows] of buckets) {
-    index.bySlug[slug] = rows
-      .sort((a, b) => b.marketCap - a.marketCap)
-      .slice(0, MAX_CONSTITUENTS_PER_SECTOR)
-      .map((row) => row.symbol);
+  for (const [slug, members] of buckets) {
+    index.bySlug[slug] = rankByCap(members, caps, MAX_CONSTITUENTS_PER_SECTOR);
   }
 
   index.builtAt = Date.now();
@@ -189,7 +224,10 @@ export async function getSectorIndex(): Promise<SectorIndex> {
   if (redis) {
     try {
       const cached = await redis.get<SectorIndex>(SECTOR_INDEX_KEY);
-      if (isUsableIndex(cached)) return cached;
+      // Built under the other POOL gate (the six hours after an env flip):
+      // rebuilt, so the flip changes the ranking's basis at once.
+      const gate = priceProviderFor("POOL") === "tiingo" ? "tiingo" : "fmp";
+      if (isUsableIndex(cached) && (cached.gate ?? "fmp") === gate) return cached;
     } catch {
       // fall through to a rebuild
     }

@@ -22,6 +22,7 @@ supplyChain:
   - name: Advantest
     ticker: null
     pct: 18
+    grade: some
     blurb: >
       A leading supplier of the automated test equipment ASE uses to
       validate chips before shipment. Trades primarily on the Tokyo Stock
@@ -29,12 +30,14 @@ supplyChain:
   - name: Teradyne
     ticker: TER
     pct: 15
+    grade: some
     blurb: >
       A second major supplier of semiconductor test systems used across
       ASE's facilities.
   - name: Unimicron Technology
     ticker: null
     pct: 14
+    grade: some
     blurb: >
       A leading supplier of the advanced substrates ASE uses to package
       chips. Trades primarily on the Taiwan Stock Exchange with no proper
@@ -42,6 +45,7 @@ supplyChain:
   - name: Kinsus Interconnect Technology
     ticker: null
     pct: 10
+    grade: some
     blurb: >
       A major substrate supplier supporting ASE's advanced packaging lines.
       Trades primarily on the Taiwan Stock Exchange with no proper US-listed
@@ -49,6 +53,7 @@ supplyChain:
   - name: Nan Ya PCB
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Supplies high-density substrates used in ASE's advanced packaging.
       Trades primarily on the Taiwan Stock Exchange with no proper US-listed
@@ -56,12 +61,14 @@ supplyChain:
   - name: Shinko Electric Industries
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A major Japanese substrate supplier to the OSAT industry. Trades
       primarily on the Tokyo Stock Exchange with no proper US-listed ticker.
   - name: ASMPT
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Supplies the die-attach and wire-bonding assembly equipment used on
       ASE's packaging lines. Trades primarily on the Hong Kong Stock
@@ -69,6 +76,7 @@ supplyChain:
   - name: BE Semiconductor Industries (Besi)
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Supplies advanced die-bonding equipment for next-generation chip
       packaging. Trades primarily on Euronext Amsterdam with no proper
@@ -76,6 +84,7 @@ supplyChain:
   - name: Sumitomo Bakelite
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       Supplies the mold compounds used to encapsulate finished chip
       packages. Trades primarily on the Tokyo Stock Exchange with no proper
@@ -83,6 +92,7 @@ supplyChain:
   - name: Air Products and Chemicals
     ticker: APD
     pct: 5
+    grade: spread
     blurb: >
       Supplies the industrial gases ASE's packaging and test facilities
       require.
@@ -90,17 +100,20 @@ customers:
   - name: Broadcom
     ticker: AVGO
     pct: 18
+    grade: some
     blurb: >
       A major fabless customer relying on ASE to package and test its
       networking and custom AI chips.
   - name: Qualcomm
     ticker: QCOM
     pct: 15
+    grade: some
     blurb: >
       Relies on ASE for packaging and test of its mobile and PC processors.
   - name: MediaTek
     ticker: null
     pct: 13
+    grade: some
     blurb: >
       A major mobile chipmaker and long-standing ASE customer. Trades
       primarily on the Taiwan Stock Exchange with no proper US-listed
@@ -108,40 +121,47 @@ customers:
   - name: AMD
     ticker: AMD
     pct: 12
+    grade: some
     blurb: >
       Uses ASE for advanced packaging of its CPU and AI GPU products.
   - name: NVIDIA
     ticker: NVDA
     pct: 12
+    grade: some
     blurb: >
       Relies on ASE as part of its outsourced packaging and test capacity
       for AI GPU products.
   - name: Apple
     ticker: AAPL
     pct: 10
+    grade: some
     blurb: >
       Uses ASE for packaging and testing of components across its device
       lineup.
   - name: Texas Instruments
     ticker: TXN
     pct: 8
+    grade: spread
     blurb: >
       Uses ASE for outsourced packaging and test on a portion of its analog
       and power-chip production.
   - name: STMicroelectronics
     ticker: STM
     pct: 6
+    grade: spread
     blurb: >
       A major analog and microcontroller chipmaker relying on ASE for
       packaging and test.
   - name: Marvell Technology
     ticker: MRVL
     pct: 4
+    grade: spread
     blurb: >
       Relies on ASE to package its networking and custom AI silicon.
   - name: NXP Semiconductors
     ticker: NXPI
     pct: 2
+    grade: spread
     blurb: >
       Uses ASE for packaging and test of its automotive and industrial
       chips.

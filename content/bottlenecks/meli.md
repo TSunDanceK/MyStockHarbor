@@ -34,6 +34,7 @@ supplyChain:
   - name: Amazon Web Services (Amazon.com, Inc.)
     ticker: AMZN
     pct: 30
+    grade: hard
     blurb: >
       MercadoLibre named AWS its primary cloud provider in 2020 and has
       continued expanding on it since, running core marketplace, fintech,
@@ -43,6 +44,7 @@ supplyChain:
   - name: Visa Inc.
     ticker: V
     pct: 15
+    grade: some
     blurb: >
       Mercado Pago's card products and its merchant card-acquiring business
       run on Visa's payment network in multiple countries, including
@@ -51,6 +53,7 @@ supplyChain:
   - name: Mastercard Incorporated
     ticker: MA
     pct: 15
+    grade: some
     blurb: >
       Mercado Pago has a parallel, long-running partnership with Mastercard
       for card issuance and network processing in markets such as
@@ -59,6 +62,7 @@ supplyChain:
   - name: Correios (Empresa Brasileira de Correios e Telégrafos)
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       A wholly state-owned Brazilian postal enterprise with no public
       ticker. MercadoLibre has an expanding strategic delivery partnership
@@ -67,6 +71,7 @@ supplyChain:
   - name: Regional last-mile carriers & cross-border logistics partners
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Not a single company. Outside its own Mercado Envios fleet,
       MercadoLibre relies on a patchwork of local couriers, postal
@@ -77,6 +82,7 @@ customers:
   - name: Brazil
     ticker: null
     pct: 55
+    grade: hard
     blurb: >
       Not a single company. Brazil is MercadoLibre's largest market by a
       wide margin, generating roughly half or more of consolidated net
@@ -86,6 +92,7 @@ customers:
   - name: Mexico
     ticker: null
     pct: 22
+    grade: some
     blurb: >
       Not a single company. Mexico has become MercadoLibre's second-largest
       market, with e-commerce and Mercado Pago fintech adoption both
@@ -94,6 +101,7 @@ customers:
   - name: Argentina
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       Not a single company. Argentina is a smaller share of revenue but
       historically MercadoLibre's most profitable market, given its
@@ -102,6 +110,7 @@ customers:
   - name: Other Latin American markets
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Not a single company. Chile, Colombia, Peru, Uruguay, and the roughly
       a dozen other countries MercadoLibre operates in together contribute

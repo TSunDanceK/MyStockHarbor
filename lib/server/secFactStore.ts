@@ -11,9 +11,10 @@
 // the I/O and nothing else.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
-import { SEC_FACTS_INDEX_KEY, SEC_FACTS_PREFIX } from "./secManifest";
+import { SEC_FACTS_EMPTY_KEY, SEC_FACTS_INDEX_KEY, SEC_FACTS_PREFIX, dotDashSpellings } from "./secManifest";
 import { secFieldsHash } from "./secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
+import { flushRedisReadMeterThrottled, recordRedisRead } from "./redisBandwidth";
 import type { StoredFactSet } from "./secFactCodec";
 
 export * from "./secFactCodec";
@@ -33,11 +34,34 @@ export const factKey = (symbol: string) => `${SEC_FACTS_PREFIX}:${symbol.toUpper
  * All three mean "this page has no SEC data to render", and the page's job is to
  * say so rather than to render zeroes.
  */
-export async function readFactSet(symbol: string): Promise<StoredFactSet | null> {
+export async function readFactSet(
+  symbol: string,
+  /**
+   * Who read it, for the bandwidth meter (#553 CODE-B #182): `[a-z0-9-]`.
+   * THE STOCK PAGE IS THE DEFAULT: its render path (secColdFetch) is the
+   * caller that reads on every request; every job passes its own name.
+   */
+  caller = "stock-page",
+): Promise<StoredFactSet | null> {
   if (!redis) return null;
   try {
-    const raw = await redis.get<StoredFactSet>(factKey(symbol));
+    // DOT OR DASH, WHICHEVER IT WAS WRITTEN UNDER (#552 COWORK #147 1a). A set
+    // is keyed by the spelling that wrote it (the manifest's BRK.B, a cold
+    // fill's BRK-B), and a reader asking by the other found nothing: some of
+    // warm-pickers-sec's `noFactSet` were spelling misses, not missing data.
+    // The asked spelling first, so a hit costs the one GET it always did; a
+    // miss on a dotted or dashed ticker costs one more.
+    let raw: StoredFactSet | null = null;
+    for (const spelling of dotDashSpellings(symbol)) {
+      raw = await redis.get<StoredFactSet>(factKey(spelling));
+      if (raw) break;
+    }
     if (!raw || typeof raw !== "object") return null;
+    // METERED ON A HIT (#552 COWORK #213 item 5, B's request in #553 CODE-B
+    // #182): ~17 KB a symbol on every stock-page render, which B's meter could
+    // not see from here. Throttled flush, as the news and Tiingo reads do.
+    await recordRedisRead("sec-facts", 1, caller);
+    await flushRedisReadMeterThrottled();
     // THE GATE. Not a warning, not a best-effort decode: a mismatch means the
     // positional arrays mean something else, and reading them anyway is the
     // silent-wrong-number failure this whole design is built against.
@@ -72,7 +96,8 @@ export async function readFactSet(symbol: string): Promise<StoredFactSet | null>
 export async function factSetExists(symbol: string): Promise<boolean | null> {
   if (!redis) return null;
   try {
-    return (await redis.exists(factKey(symbol))) > 0;
+    // Either spelling (see readFactSet): one EXISTS over both keys.
+    return (await redis.exists(...dotDashSpellings(symbol).map(factKey))) > 0;
   } catch {
     return null;
   }
@@ -92,7 +117,7 @@ export async function factSetPresence(
   if (!syms.length) return { exists: new Map(), changedAt: new Map() };
   try {
     const p = redis.pipeline();
-    for (const s of syms) p.exists(factKey(s));
+    for (const s of syms) p.exists(...dotDashSpellings(s).map(factKey));
     p.hmget(SEC_FIGURES_CHANGED_KEY, ...syms);
     const out = (await p.exec()) as unknown[];
     const stamps = (out[syms.length] ?? {}) as Record<string, unknown> | null;
@@ -117,6 +142,11 @@ export async function factSetPresence(
  */
 export const SEC_FIGURES_CHANGED_KEY = "msh:sec:figures-changed:v1";
 
+/** At least one filed quarter or year: what "has filed earnings" means (#552 COWORK #197). */
+export function factSetHasFiledPeriod(set: Pick<StoredFactSet, "quarters" | "years">): boolean {
+  return (Array.isArray(set.quarters) && set.quarters.length > 0) || (Array.isArray(set.years) && set.years.length > 0);
+}
+
 export async function writeFactSet(set: StoredFactSet): Promise<boolean> {
   if (!redis) return false;
   // A PREVIEW RENDERS FROM THE SET IT HOLDS AND KEEPS NOTHING. See secWriteGate.
@@ -130,6 +160,15 @@ export async function writeFactSet(set: StoredFactSet): Promise<boolean> {
       await redis.sadd(SEC_FACTS_INDEX_KEY, set.symbol.toUpperCase());
     } catch (err) {
       console.error("[sec-facts] index add failed", set.symbol, err);
+    }
+    // AND WHETHER IT HOLDS A FILED PERIOD (#552 COWORK #197): the earnings-link
+    // rule is index less SEC_FACTS_EMPTY_KEY. Reported, not fatal, like the SADD.
+    try {
+      const sym = set.symbol.toUpperCase();
+      if (factSetHasFiledPeriod(set)) await redis.srem(SEC_FACTS_EMPTY_KEY, sym);
+      else await redis.sadd(SEC_FACTS_EMPTY_KEY, sym);
+    } catch (err) {
+      console.error("[sec-facts] empty-set update failed", set.symbol, err);
     }
     try {
       await redis.hset(SEC_FIGURES_CHANGED_KEY, { [set.symbol.toUpperCase()]: Date.now() });

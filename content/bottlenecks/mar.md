@@ -40,6 +40,7 @@ supplyChain:
   - name: Booking Holdings
     ticker: BKNG
     pct: 16
+    grade: some
     blurb: >
       Operator of Booking.com, one of the two dominant global online travel
       agencies Marriott relies on for a meaningful share of paid room-nights
@@ -47,6 +48,7 @@ supplyChain:
   - name: Host Hotels & Resorts
     ticker: HST
     pct: 12
+    grade: some
     blurb: >
       The largest owner of Marriott- and Hyatt-branded hotels, holding
       dozens of luxury and upper-upscale properties; as landlord, its
@@ -55,6 +57,7 @@ supplyChain:
   - name: Expedia Group
     ticker: EXPE
     pct: 14
+    grade: some
     blurb: >
       The other dominant global online travel agency in the same
       commission-based distribution channel as Booking.com, a recurring
@@ -62,6 +65,7 @@ supplyChain:
   - name: JPMorgan Chase & Co.
     ticker: JPM
     pct: 14
+    grade: some
     blurb: >
       Primary US co-brand credit card issuer for Marriott Bonvoy; Marriott
       has monetized this relationship for hundreds of millions of dollars in
@@ -69,18 +73,21 @@ supplyChain:
   - name: American Express
     ticker: AXP
     pct: 10
+    grade: some
     blurb: >
       Secondary co-brand card issuer for premium and small-business Bonvoy
       cards, funding loyalty-program economics alongside Chase.
   - name: Sabre Corporation
     ticker: SABR
     pct: 9
+    grade: spread
     blurb: >
       A global distribution system (GDS) partner Marriott depends on to
       reach travel agencies and corporate booking channels.
   - name: Oracle Corporation
     ticker: ORCL
     pct: 9
+    grade: spread
     blurb: >
       Marriott selected Oracle Hospitality's OPERA Cloud as its
       property-management system across much of its portfolio, a
@@ -88,6 +95,7 @@ supplyChain:
   - name: Amadeus IT Group
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       The other major global distribution system Marriott relies on for
       travel-agency and corporate bookings. Trades primarily on the Madrid
@@ -95,6 +103,7 @@ supplyChain:
   - name: Aimbridge Hospitality
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       The world's largest third-party hotel management company, operating
       numerous Marriott- and Courtyard-branded properties on the ground. A
@@ -103,6 +112,7 @@ customers:
   - name: JPMorgan Chase & Co.
     ticker: JPM
     pct: 26
+    grade: some
     blurb: >
       Buys and advances against Bonvoy loyalty points in bulk as the
       primary co-brand card issuer, a direct and sizeable cash relationship
@@ -110,6 +120,7 @@ customers:
   - name: Booking Holdings
     ticker: BKNG
     pct: 21
+    grade: some
     blurb: >
       Functions as a large wholesale channel for room inventory and
       commission revenue, one of the two dominant online travel agencies
@@ -117,18 +128,21 @@ customers:
   - name: American Express
     ticker: AXP
     pct: 17
+    grade: some
     blurb: >
       Secondary co-brand card issuer funding loyalty-program economics
       alongside Chase for premium and small-business Bonvoy cards.
   - name: Expedia Group
     ticker: EXPE
     pct: 15
+    grade: some
     blurb: >
       The other dominant online travel agency channeling a large share of
       paid booking volume through its distribution platform.
   - name: Marriott Vacations Worldwide
     ticker: MVW
     pct: 12
+    grade: some
     blurb: >
       Spun off from Marriott in 2011, it pays long-term license fees to use
       the Marriott, Sheraton, Westin, and Ritz-Carlton names for its
@@ -136,6 +150,7 @@ customers:
   - name: Large corporate & group travel accounts
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       Negotiated corporate rates and group/convention business are a real,
       disclosed revenue driver, though Marriott doesn't name specific top

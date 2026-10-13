@@ -1,11 +1,15 @@
 "use client";
 
 import { getBuySignalCount } from "@/lib/signalCounts";
+import { chartHrefFrom } from "@/lib/chartHref";
+import { qualifiesBuySignal, qualifiesSellSignal } from "@/lib/pickerScreenRules";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FILTER_DEFS, toneDotColor, type FilterKey } from "@/lib/pickerFilters";
 import PickerTickerSearch from "@/app/components/PickerTickerSearch";
 import TickerLogo from "@/app/components/TickerLogo";
+import { utcDay, utcStamp } from "@/lib/utcDate";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -62,18 +66,13 @@ export type PickersPayload = {
 // so every existing call site below is unchanged.
 const toneDot = toneDotColor;
 
+// Lands on the analyser with the row's symbol and its stored params (#563 COWORK #151).
 function toChartHref(href: string, symbol?: string) {
-  const cleanedSymbol = String(symbol || "").trim().toUpperCase();
-  const fallback = cleanedSymbol ? `/dashboard?symbol=${encodeURIComponent(cleanedSymbol)}` : "/dashboard";
-  const raw = href && href.trim() ? href.trim() : "";
-  const normalised = raw.startsWith("/?symbol=") ? raw.replace("/?symbol=", "/dashboard?symbol=") : raw.startsWith("/?")
-    ? raw.replace("/?", "/dashboard?") : raw;
-  const base = normalised.startsWith("/dashboard") ? normalised : fallback;
-  return base.includes("#chart") ? base : `${base}#chart`;
+  return chartHrefFrom(href, symbol);
 }
 
 // Inserts extra query params into a toChartHref()-built URL (which already
-// ends in "#chart") ahead of the hash, so deep-link params never end up
+// ends in "#analyser") ahead of the hash, so deep-link params never end up
 // tacked on after the fragment.
 function buildDashboardHref(rawHref: string, symbol: string, extraParams?: Record<string, string | number>) {
   const base = toChartHref(rawHref, symbol);
@@ -95,12 +94,13 @@ function buildDashboardHref(rawHref: string, symbol: string, extraParams?: Recor
 // picks, the macro zone pre-drawn for support/resistance picks, the
 // triggering indicator auto-selected for oversold/overbought picks, and
 // both trend MAs for trend-score picks.
-function buildPickHref(sectionTitle: string, item: PickerItem): string {
+function buildPickHref(sectionTitle: string, item: PickerItem, hasFiledEarnings: (symbol: string) => boolean): string {
   const symbol = String(item.symbol ?? "").trim().toUpperCase();
   const title = sectionTitle.toLowerCase();
   const rawHref = item.dashboardHref ?? "";
 
-  if (title.includes("earnings")) {
+  // #552 COWORK #197: the earnings page only with a filed SEC set; otherwise the chart, below.
+  if (title.includes("earnings") && hasFiledEarnings(symbol)) {
     return `/stock/${encodeURIComponent(symbol)}/earnings`;
   }
 
@@ -446,6 +446,7 @@ function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?
 type InsightSummary = { slug: string; title: string; date: string; symbol: string | null };
 
 export default function PickersClient({ latestInsights = [], initialPickersPayload }: { latestInsights?: InsightSummary[]; initialPickersPayload?: PickersPayload }) {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const SHOW_FORCE_FETCH_BUTTON = false;
 
   // Server-rendered seed data (fetched in app/pickers/page.tsx) lets the real
@@ -628,7 +629,7 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
         symbol: String(record.symbol ?? "").trim().toUpperCase(),
         buyCount: getBuySignalCount(record),
       }))
-      .filter((item) => item.symbol && item.buyCount > 0)
+      .filter((item) => item.symbol && qualifiesBuySignal(item.buyCount))
       .sort((a, b) => b.buyCount !== a.buyCount ? b.buyCount - a.buyCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
       .map((item) => item.symbol);
@@ -637,8 +638,9 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
       .map((record) => ({
         symbol: String(record.symbol ?? "").trim().toUpperCase(),
         sellCount: getSellSignalCount(record),
+        qualifies: qualifiesSellSignal(record, getSellSignalCount(record)),
       }))
-      .filter((item) => item.symbol && item.sellCount > 0)
+      .filter((item) => item.symbol && item.qualifies)
       .sort((a, b) => b.sellCount !== a.sellCount ? b.sellCount - a.sellCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
       .map((item) => item.symbol);
@@ -743,7 +745,7 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
   const topBuySection = useMemo<PickerSection | null>(() => {
     const items = safeSignalRecords
       .map((r) => ({ symbol: r.symbol, buyCount: getBuySignalCount(r), dashboardHref: toChartHref(r.dashboardHref ?? "", r.symbol) }))
-      .filter((i) => i.buyCount > 0)
+      .filter((i) => qualifiesBuySignal(i.buyCount))
       .sort((a, b) => b.buyCount !== a.buyCount ? b.buyCount - a.buyCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
       .map((i) => ({ symbol: i.symbol, note: `${i.buyCount} buy signal${i.buyCount === 1 ? "" : "s"}`, tone: "green" as PickerTone, dashboardHref: i.dashboardHref }));
@@ -753,8 +755,8 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
 
   const topSellSection = useMemo<PickerSection | null>(() => {
     const items = safeSignalRecords
-      .map((r) => ({ symbol: r.symbol, sellCount: getSellSignalCount(r), dashboardHref: toChartHref(r.dashboardHref ?? "", r.symbol) }))
-      .filter((i) => i.sellCount > 0)
+      .map((r) => ({ symbol: r.symbol, sellCount: getSellSignalCount(r), qualifies: qualifiesSellSignal(r, getSellSignalCount(r)), dashboardHref: toChartHref(r.dashboardHref ?? "", r.symbol) }))
+      .filter((i) => i.qualifies)
       .sort((a, b) => b.sellCount !== a.sellCount ? b.sellCount - a.sellCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
       .map((i) => ({ symbol: i.symbol, note: `${i.sellCount} sell signal${i.sellCount === 1 ? "" : "s"}`, tone: "red" as PickerTone, dashboardHref: i.dashboardHref }));
@@ -861,8 +863,10 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
   .picker-row-link:hover { color:#93c5fd !important; }
   .pickers-see-all { display:inline-flex !important;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease;white-space:nowrap; }
   .pickers-see-all:hover { background:rgba(255,255,255,0.07);color:#86efac !important;filter:none !important;transform:none !important; }
-  .pickers-section-footer { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:nowrap; }
-  .pickers-section-footer-left { display:flex;align-items:center;gap:8px;flex:1;min-width:0; }
+  /* 2026-10-03 (#553 COWORK #103): the empty .pickers-section-footer-left
+     spacer (left behind when #692 removed the earnings button) is gone, so the
+     footer right-aligns "See all" itself rather than via space-between. */
+  .pickers-section-footer { display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px;flex-wrap:nowrap; }
   .pattern-plays-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
   .pattern-play-card { min-width:0;overflow:hidden; }
   .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
@@ -1121,7 +1125,7 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
                         <div>
                           {visibleItems.map((it) => {
                             const rowKey = `${sec.title}::${it.symbol}`;
-                            const href = buildPickHref(sec.title, it);
+                            const href = buildPickHref(sec.title, it, hasFiledEarnings);
                             const linkLabel = isEarnings ? "Earnings →" : "Chart ↗";
                             return (
                               <div
@@ -1146,8 +1150,9 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
                             {/* The "Fetch Earnings" button that sat here was removed
                                 (#553 CODE-B #94 B11): it ran the FMP warm-earnings
                                 cron from the browser, which errors once FMP is off.
-                                The earnings rows refresh on the job's own schedule. */}
-                            <div className="pickers-section-footer-left" />
+                                The earnings rows refresh on the job's own schedule.
+                                Its empty left spacer went too (2026-10-03, #553
+                                COWORK #103); the footer's CSS right-aligns the link. */}
                             {seeAllHref ? <a href={seeAllHref} className="pickers-see-all">See all →</a> : null}
                           </div>
                         ) : null}
@@ -1179,7 +1184,9 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
                   <Link key={post.slug} href={`/insights/${post.slug}`} className="insight-row">
                     {post.symbol ? <span className="insight-tag">{post.symbol}</span> : null}
                     <div className="insight-title">{post.title}</div>
-                    <div className="insight-meta">{new Date(post.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</div>
+                    {/* UTC fields, by hand (#553 COWORK #143): with no timeZone a viewer west
+                        of UTC saw the day before, and the hydration text differed. */}
+                    <div className="insight-meta">{utcDay(post.date)?.replace(/ \d{4}$/, "") ?? post.date}</div>
                   </Link>
                 )) : <div className="pickers-side-empty">No recent posts yet.</div>}
                 <Link href="/insights" className="pickers-side-footer-link">More reads →</Link>
@@ -1198,7 +1205,11 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
 
         {!loading && !err && (updatedAt || universeSize) ? (
           <div style={{ marginTop: 4, fontSize: 10, lineHeight: 1.5, opacity: 0.28, textAlign: "right", userSelect: "none" }}>
-            {updatedAt ? <div>{new Date(updatedAt).toLocaleString()}</div> : null}
+            {/* React #418 on every /pickers load (#553 COWORK #143): toLocaleString()
+                with no locale or zone rendered "10/4/2026, 2:05:00 PM" on the server
+                and "04/10/2026, 15:05:00" in a UK browser. utcStamp is the same text
+                on both: "4 Oct 2026, 14:05 UTC". */}
+            {updatedAt ? <div>{utcStamp(updatedAt) ?? updatedAt}</div> : null}
             {universeSize != null ? (
               <div>
                 Universe: {universeSize}

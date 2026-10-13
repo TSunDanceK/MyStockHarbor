@@ -21,6 +21,8 @@
 // (scripts/sec-fixture-capture.mjs). Every number in them comes from SEC.
 import fs from "node:fs";
 import { grabConst } from "./source-code.mjs";
+import { splitAdjustSource } from "./split-adjust-source.mjs";
+import { reasonedValueUnit } from "./render-cards.mjs";
 import ts from "typescript";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -66,6 +68,13 @@ const sectorSlugFromLabel = (label) => (label ? String(label).toLowerCase().repl
 const sectorNewsPath = (slug) => "/sector-news/" + slug;
 `;
 
+/** lib/growthVisuals' PROFIT_UNCHECKED, which spans two lines (grabConst reads one or a block). */
+function profitUncheckedConst() {
+  const m = fs.readFileSync("lib/growthVisuals.ts", "utf8").match(/^export const PROFIT_UNCHECKED =[\s\S]*?;$/m);
+  if (!m) throw new Error("PROFIT_UNCHECKED not found in lib/growthVisuals.ts — renamed, or no longer exported");
+  return m[0].replace(/^export /, "");
+}
+
 /**
  * The snapshot builder, the scorer and the sidebar card, in one transpiled unit.
  *
@@ -87,6 +96,8 @@ export async function loadSnapshot(mutate = (src) => src) {
     stripImports("lib/server/fxRates.ts"),
     stripImports("lib/server/secCurrency.ts"),
     stripImports("lib/server/secFactCodec.ts"),
+    // THE SPLIT ADJUSTMENT the view, secValuation and secDividend call at entry.
+    splitAdjustSource(),
     stripImports("lib/server/secEarningsView.ts"),
     // The coverage helpers (scoreCoverage / pinCoverage / partialScoreLabel /
     // partialScoreNote). The scorer's coverageOf and the snapshot both call
@@ -102,6 +113,14 @@ export async function loadSnapshot(mutate = (src) => src) {
     // one thing the snapshot actually reads.
     grabConst("lib/server/secReportDates.ts", "TIMING_WORDING"),
     stripImports("lib/server/secEarningsScore.ts"),
+    // The annual chart (#552 COWORK #134): the one constant the snapshot takes
+    // from lib/growthVisuals, the shared palette, and A's ReasonedValue that
+    // opens each year's figures.
+    profitUncheckedConst(),
+    stripImports("lib/growthPalette.ts"),
+    // The tiles against the year-ago quarter (#563 COWORK #123): pure, import-free.
+    stripImports("lib/snapshotVsYearAgo.ts"),
+    reasonedValueUnit(),
     // getSecEarningsSnapshot's Redis and cold-path calls are stripped with the
     // imports and are never invoked: every assertion drives
     // buildSecEarningsSnapshot, the pure half, which is why it is a separate
@@ -134,6 +153,7 @@ export async function loadDividend(mutate = (src) => src) {
     stripImports("lib/server/fxRates.ts"),
     stripImports("lib/server/secCurrency.ts"),
     stripImports("lib/server/secFactCodec.ts"),
+    splitAdjustSource(),
     // getProfileDividend's cold-path call is stripped with the imports and is
     // never invoked: every assertion drives buildProfileDividend, the pure
     // half, which is why it is a separate function.

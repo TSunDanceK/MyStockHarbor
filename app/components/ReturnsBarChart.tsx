@@ -12,9 +12,13 @@ export type ReturnBar = {
   // ISO date of the closing price this bar represents (the later of the two
   // closes being compared).
   date: string;
-  // Short display label for tooltips/axis ends, e.g. "Jul 21".
+  // Short display label for tooltips/axis ends, naming the END of the
+  // period: "2 Oct", "week to 2 Oct", "Sep 2026" (lib/closeReturns.ts).
   label: string;
   changePercent: number;
+  // A period still in progress ("Oct so far", #553 COWORK #115): drawn with a
+  // lighter fill and left out of the tiles, never presented as a full period.
+  partial?: boolean;
 };
 
 const GREEN = "#22c55e";
@@ -30,6 +34,7 @@ export default function ReturnsBarChart({
   compareLabel,
   bars,
   bare = false,
+  note,
 }: {
   symbol: string;
   // "Daily" | "Weekly"
@@ -40,9 +45,13 @@ export default function ReturnsBarChart({
   // Inside ReturnsToggleCard (#553 COWORK #89): that card is the one border, so
   // each view drops its own. Content is identical either way.
   bare?: boolean;
+  // A line under the explainer, e.g. "October so far isn't included."
+  note?: string;
 }) {
+  // THE TILES COUNT COMPLETE PERIODS ONLY; a partial bar is drawn, marked.
+  const whole = bars.filter((b) => !b.partial);
   // Need a real run of bars for the chart to read as a trend, not noise.
-  if (bars.length < 3) return null;
+  if (whole.length < 3) return null;
 
   // -- Chart geometry (server-rendered SVG, no client JS) --------------------
   const width = 900;
@@ -59,11 +68,13 @@ export default function ReturnsBarChart({
   const slot = plotW / bars.length;
   const barWidth = Math.max(3, slot * 0.55);
 
-  const up = bars.filter((b) => b.changePercent >= 0).length;
-  const down = bars.length - up;
-  const avg = bars.reduce((sum, b) => sum + b.changePercent, 0) / bars.length;
-  const latest = bars[bars.length - 1];
+  const up = whole.filter((b) => b.changePercent >= 0).length;
+  const down = whole.length - up;
+  const avg = whole.reduce((sum, b) => sum + b.changePercent, 0) / whole.length;
+  // The tiles' latest is the latest COMPLETE period; the axis ends at the last bar drawn.
+  const latest = whole[whole.length - 1];
   const first = bars[0];
+  const lastDrawn = bars[bars.length - 1];
 
   return (
     <div style={bare ? bareStyle : cardStyle}>
@@ -75,6 +86,7 @@ export default function ReturnsBarChart({
         Each bar is the percentage change in {symbol}&apos;s closing price versus its{" "}
         {compareLabel} — green for a higher close, red for a lower one.
       </p>
+      {note ? <p style={{ ...subStyle, marginTop: 4 }}>{note}</p> : null}
 
       <div style={{ marginTop: 16 }}>
         <svg
@@ -82,7 +94,7 @@ export default function ReturnsBarChart({
           width={width}
           height={height}
           role="img"
-          aria-label={`${symbol} ${periodLabel.toLowerCase()} close-over-close percentage change from ${first.label} to ${latest.label}`}
+          aria-label={`${symbol} ${periodLabel.toLowerCase()} close-over-close percentage change from ${first.label} to ${lastDrawn.label}`}
           style={{ width: "100%", height: "auto", maxWidth: "100%", display: "block" }}
         >
           <line
@@ -109,29 +121,32 @@ export default function ReturnsBarChart({
                 height={barH}
                 rx={Math.min(3, barWidth / 2)}
                 fill={color}
+                fillOpacity={b.partial ? 0.35 : 1}
+                stroke={b.partial ? color : undefined}
+                strokeDasharray={b.partial ? "3 2" : undefined}
               >
-                <title>{`${b.label}: ${fmtPct(b.changePercent)}`}</title>
+                <title>{`${b.label}: ${fmtPct(b.changePercent)}${b.partial ? " (month in progress)" : ""}`}</title>
               </rect>
             );
           })}
-          <text x={padX} y={height - 6} fontSize={11} fill="rgba(203,213,225,0.55)">
+          <text x={padX} y={height - 6} fontSize="0.75rem" fill="rgba(203,213,225,0.55)">
             {first.label}
           </text>
           <text
             x={width - padX}
             y={height - 6}
-            fontSize={11}
+            fontSize="0.75rem"
             fill="rgba(203,213,225,0.55)"
             textAnchor="end"
           >
-            {latest.label}
+            {lastDrawn.label}
           </text>
         </svg>
       </div>
 
       <div className="returns-stats-row">
         <div style={cellStyle}>
-          <div style={cellLabelStyle}>Latest {periodLabel.toLowerCase()} change</div>
+          <div style={cellLabelStyle}>Latest {periodLabel.toLowerCase()} change{latest !== lastDrawn ? ` (${latest.label})` : ""}</div>
           <div style={{ ...cellValueStyle, color: latest.changePercent >= 0 ? GREEN : RED }}>
             {fmtPct(latest.changePercent)}
           </div>
@@ -172,7 +187,7 @@ export const cardStyle: CSSProperties = {
 };
 const bareStyle: CSSProperties = { minWidth: 0 };
 const eyebrowStyle: CSSProperties = {
-  fontSize: 11,
+  fontSize: "var(--fs-label)",
   fontWeight: 900,
   letterSpacing: "0.1em",
   textTransform: "uppercase",
@@ -181,7 +196,7 @@ const eyebrowStyle: CSSProperties = {
 };
 const headingStyle: CSSProperties = {
   margin: 0,
-  fontSize: 16,
+  fontSize: "1rem",
   lineHeight: 1.25,
   letterSpacing: "-0.02em",
   fontWeight: 800,
@@ -189,9 +204,9 @@ const headingStyle: CSSProperties = {
 const subStyle: CSSProperties = {
   marginTop: 8,
   marginBottom: 0,
-  fontSize: 12.5,
-  lineHeight: 1.55,
-  color: "rgba(241,245,249,0.65)",
+  fontSize: "var(--fs-read)",
+  lineHeight: "var(--lh-read)",
+  color: "rgba(241,245,249,0.7)",
 };
 const cellStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.08)",
@@ -201,7 +216,7 @@ const cellStyle: CSSProperties = {
   minWidth: 0,
 };
 const cellLabelStyle: CSSProperties = {
-  fontSize: 9.5,
+  fontSize: "var(--fs-label)",
   fontWeight: 900,
   letterSpacing: "0.06em",
   textTransform: "uppercase",
@@ -209,7 +224,7 @@ const cellLabelStyle: CSSProperties = {
 };
 const cellValueStyle: CSSProperties = {
   marginTop: 4,
-  fontSize: 13,
+  fontSize: "0.8125rem",
   fontWeight: 800,
   letterSpacing: "-0.01em",
   color: "#f1f5f9",

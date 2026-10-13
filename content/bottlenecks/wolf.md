@@ -40,6 +40,7 @@ supplyChain:
   - name: Aixtron SE
     ticker: null
     pct: 35
+    grade: hard
     blurb: >
       Aixtron's G10-SiC epitaxial deposition systems are, in the company's
       own words, the "tool of record" for both Wolfspeed's 150mm and 200mm
@@ -51,6 +52,7 @@ supplyChain:
   - name: Semiconductor capital equipment vendors
     ticker: null
     pct: 35
+    grade: hard
     blurb: >
       Building out 150mm and 200mm SiC lines at Mohawk Valley and Durham
       requires photolithography, ion implantation, deposition and etch tools
@@ -61,6 +63,7 @@ supplyChain:
   - name: High-purity raw materials & process gas suppliers
     ticker: null
     pct: 30
+    grade: hard
     blurb: >
       Growing and processing SiC boules requires high-purity silicon carbide
       powder feedstock, quartz and graphite crucibles, and specialty process
@@ -71,6 +74,7 @@ customers:
   - name: Infineon Technologies
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       Infineon has held a 150mm SiC wafer supply and capacity-reservation
       agreement with Wolfspeed since 2018, expanded and extended multiple
@@ -82,6 +86,7 @@ customers:
   - name: Renesas Electronics
     ticker: null
     pct: 17
+    grade: some
     blurb: >
       Renesas signed a 10-year, roughly $2 billion SiC wafer supply and
       capacity agreement with Wolfspeed in 2023, backed by a large upfront
@@ -94,6 +99,7 @@ customers:
   - name: STMicroelectronics
     ticker: STM
     pct: 10
+    grade: some
     blurb: >
       ST has a long-running 150mm SiC wafer supply agreement with Wolfspeed,
       expanded over the years to more than $800 million in value, supplying
@@ -102,6 +108,7 @@ customers:
   - name: onsemi
     ticker: ON
     pct: 8
+    grade: spread
     blurb: >
       onsemi (formerly ON Semiconductor) has bought SiC wafers from
       Wolfspeed under a multi-year agreement dating back to Cree-era deals,
@@ -111,6 +118,7 @@ customers:
   - name: Other diversified customers
     ticker: null
     pct: 45
+    grade: hard
     blurb: >
       The remainder of revenue is spread across automotive, industrial,
       energy and distribution customers worldwide, none individually

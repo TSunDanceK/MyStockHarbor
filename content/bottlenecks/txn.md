@@ -35,6 +35,7 @@ supplyChain:
   - name: Applied Materials
     ticker: AMAT
     pct: 22
+    grade: some
     blurb: >
       Supplies wafer fabrication equipment to TI's US factories; a joint
       August 2025 press release from Applied Materials, Apple, and TI
@@ -43,6 +44,7 @@ supplyChain:
   - name: Amkor Technology
     ticker: AMKR
     pct: 16
+    grade: some
     blurb: >
       A longstanding outsourced packaging and test partner for TI,
       including joint flip-chip packaging work and expanded advanced-
@@ -51,6 +53,7 @@ supplyChain:
   - name: ASE Technology Holding
     ticker: ASX
     pct: 12
+    grade: some
     blurb: >
       The world's largest outsourced semiconductor assembly and test
       (OSAT) provider, used by TI alongside Amkor for packaging and testing
@@ -58,6 +61,7 @@ supplyChain:
   - name: Cadence Design Systems
     ticker: CDNS
     pct: 12
+    grade: some
     blurb: >
       TI's chip design flow depends on Cadence's electronic design
       automation (EDA) tools; TI even sells a Cadence-derived circuit
@@ -65,6 +69,7 @@ supplyChain:
   - name: Synopsys
     ticker: SNPS
     pct: 12
+    grade: some
     blurb: >
       The other half of the EDA duopoly TI's engineers depend on; TI has
       publicly selected Synopsys design-for-manufacturing tools for its
@@ -72,6 +77,7 @@ supplyChain:
   - name: Lam Research
     ticker: LRCX
     pct: 10
+    grade: some
     blurb: >
       Supplies etch and deposition equipment used broadly across advanced
       300mm wafer fabs, an equipment category TI's own factories depend on
@@ -79,6 +85,7 @@ supplyChain:
   - name: KLA Corporation
     ticker: KLAC
     pct: 8
+    grade: spread
     blurb: >
       Supplies process-control and defect-inspection equipment used to
       manage yields on TI's advanced manufacturing lines, an area with few
@@ -86,6 +93,7 @@ supplyChain:
   - name: GlobalWafers
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       Built a roughly $5 billion 300mm silicon wafer plant co-located next
       to TI's new fab campus in Sherman, Texas, positioning it as a key
@@ -95,6 +103,7 @@ customers:
   - name: Direct diversified end-customer base
     ticker: null
     pct: 82
+    grade: spread
     blurb: >
       Not a single company - TI's FY2025 results show more than 80% of
       revenue sold directly to over 100,000 industrial, automotive, and
@@ -106,6 +115,7 @@ customers:
   - name: Arrow Electronics
     ticker: ARW
     pct: 6
+    grade: spread
     blurb: >
       Listed on TI's own authorized-distributor page as covering all
       regions except Japan, making it TI's closest equivalent to a single
@@ -113,12 +123,14 @@ customers:
   - name: Digi-Key Electronics
     ticker: null
     pct: 5
+    grade: spread
     blurb: >
       A named TI authorized distributor serving smaller-volume and
       prototype buyers globally. A private company with no public ticker.
   - name: Mouser Electronics
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       A named TI authorized distributor and subsidiary of TTI, Inc., itself
       owned by Berkshire Hathaway. Privately held with no separate public
@@ -126,6 +138,7 @@ customers:
   - name: Macnica / Tokyo Electron Device
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       TI's named authorized distributors for Japan; Macnica's parent trades
       on the Tokyo Stock Exchange and Tokyo Electron Device's parent has

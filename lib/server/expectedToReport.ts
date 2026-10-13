@@ -30,7 +30,7 @@
 // stored record, by the same walk-forward the probe used. The suppression is a
 // live computation over live data, and a filer that becomes irregular drops out
 // on its own.
-import type { ReportEvent } from "./secReportDates";
+import { onTradingDay, type ReportEvent } from "./secReportDates";
 import type { StoredReportDates } from "./secReportDatesStore";
 
 export const EXPECTED_WINDOW_DAYS = 30;
@@ -116,6 +116,7 @@ const parse = (d: string): number => Date.parse(`${d}T00:00:00.000Z`);
 const valid = (d: unknown): d is string =>
   typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(parse(d));
 const daysBetween = (from: string, to: string) => Math.round((parse(to) - parse(from)) / DAY);
+const shiftDay = (d: string, n: number) => new Date(parse(d) + n * DAY).toISOString().slice(0, 10);
 
 export const median = (xs: readonly number[]): number | null => {
   if (!xs.length) return null;
@@ -323,10 +324,13 @@ export function expectedFrom(
 
   const lag = habit.medianLagDays;
   if (lag == null) return { skip: "thin-history" };
-  const daysAway = daysBetween(today, rec.nextPeriodEnd) + lag;
+  const rawAway = daysBetween(today, rec.nextPeriodEnd) + lag;
   // Past-due is the due strip's business, not this section's, and a band is
   // forward-looking by construction.
-  if (daysAway < 0) return { skip: "estimate-in-past" };
+  if (rawAway < 0) return { skip: "estimate-in-past" };
+  // ON A TRADING DAY (#552 COWORK #199): a weekend or holiday day moves toward
+  // the filer's habitual weekday, never before today. The band follows the day.
+  const daysAway = daysBetween(today, onTradingDay(shiftDay(today, rawAway), Array.isArray(rec.events) ? rec.events : [], { notBefore: today }));
   const band = bandFor(daysAway);
   if (!band) return { skip: "beyond-window" };
 

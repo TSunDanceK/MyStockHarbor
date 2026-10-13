@@ -1,11 +1,15 @@
 "use client";
-
+// RETIRED 7 OCT 2026 (#563 COWORK #149 §1): the mobile-only tile landing
+// ("Stock Analysis Tools, Stock Pickers & Market Insights", Quick Stock Search,
+// the Chart Dashboard / Bottlenecks tiles). Phones now get the same dashboard
+// landing as desktops at "/". Hidden (nothing imports it), not deleted.
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TickerLogo from "@/app/components/TickerLogo";
 import { activeRowStyle } from "@/lib/listboxNav";
 import { useListboxNav } from "@/app/components/useListboxNav";
+import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
 const DEFAULT_SYMBOL = "AAPL";
 
@@ -101,6 +105,7 @@ const TILES: NavTile[] = [
 ];
 
 export default function MobileHomePage() {
+  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
   const router = useRouter();
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
@@ -311,6 +316,8 @@ export default function MobileHomePage() {
         }}
       >
         {TILES.map((tile) => {
+          // #552 COWORK #197: the Earnings tile only when the last symbol has a filed SEC set.
+          if (tile.label === "Earnings" && !hasFiledEarnings(lastSymbol)) return null;
           const resolvedHref = typeof tile.href === "function" ? tile.href(lastSymbol) : tile.href;
           const resolvedSublabel = typeof tile.sublabel === "function" ? tile.sublabel(lastSymbol) : tile.sublabel;
 

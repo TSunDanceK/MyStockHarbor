@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { chartHref } from "@/lib/chartHref";
 import type { Metadata } from "next";
 
 const PAGE_TITLE = "Stock Indicators Explained | RSI, MACD, Moving Averages | MyStockHarbor";
@@ -299,7 +300,7 @@ export default function StockIndicatorsPage() {
             }}
           >
             <Link
-              href="/"
+              href={chartHref()}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

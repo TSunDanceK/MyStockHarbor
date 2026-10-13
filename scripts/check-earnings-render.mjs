@@ -210,7 +210,7 @@ console.log("\n3y. A SYMBOL WITH NO CIK GETS A PAGE, NOT A 404");
       /<SecNoRegistrantCard symbol=\{clean\} \/>/.test(PAGE),
     "the branch must mount a card, not fall through to pending");
   check("...and that state is noindex, like the sibling page's no-data state",
-    /index: cikForSymbol\(clean\) !== null/.test(PAGE),
+    /index: earningsPageIndexable\(\{ hasCik: cikForSymbol\(clean\) !== null \|\| isSiteFund\(clean\),/.test(PAGE),
     "a 200 that can be indexed as thin content is the cost of not 404-ing");
 
   // THE COPY MUST NOT GUESS. Measured through the shipped gate: MSTY and JEPI
@@ -297,7 +297,8 @@ console.log("\n4. A6 + A7 — nothing internal reaches the reader");
       hit ? `…${text.slice(Math.max(0, hit.index - 50), hit.index + 60)}…` : "");
   }
   check("the filing DATE is still shown — only the key went",
-    /filed\s+\d{4}-\d{2}-\d{2}/.test(text), text.slice(0, 0) || "");
+    // Read as "13 Aug 2026" since #552 COWORK #97, never ISO.
+    /filed\s+\d{1,2} [A-Z][a-z]{2} \d{4}/.test(text) && !/filed\s+\d{4}-\d{2}-\d{2}/.test(text), text.slice(0, 0) || "");
 }
 
 console.log("\n5. A3 — a blank Q4 EPS says why");
@@ -340,7 +341,7 @@ console.log("\n6. KGC renders a real page, and never a pending one");
   // year-end once and the exact date sits on each FY label.
   check("every annual row names its period end, not only its label",
     vKgc.annual.every((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.end)) &&
-      /title="Ended 2025-12-31"/.test(html(React.createElement(M.SecAnnualCard, { view: vKgc, sole: true }))),
+      /title="Ended 31 Dec 2025"/.test(html(React.createElement(M.SecAnnualCard, { view: vKgc, sole: true }))),
     "two filers' FY2025 can be nine months apart");
   check("the cash card is labelled as annual, not as a quarter",
     vKgc.cashQuality.basis === "year" && vKgc.cashQuality.period === "FY2025",
@@ -439,8 +440,13 @@ console.log("\n9. a percentage change across zero is not printed as a number");
   // THE ABBREVIATION IS GONE. The owner did not know what "n/m" meant, which is
   // the whole verdict on it — an abbreviation tells a reader something is being
   // withheld without saying what.
-  check("...and 'n/m' appears nowhere a reader can see it",
-    !/\bn\/m\b/.test(kgcText) && !/not meaningful/i.test(kgcText),
+  // THE EPS GROWTH CELLS, not the whole page: since #552 COWORK #169 the
+  // Quality of earnings tiles print "n/m: {the reason}" by the owner's own
+  // spec, the reason on the tile itself — a different rule, its own check
+  // (check-earnings-quality-balance).
+  const kgcGrowthText = visibleText(renderPage(M, vKgc).replace(/<section class="card qualityCard">[\s\S]*?<\/section>/, ""));
+  check("...and 'n/m' appears nowhere a reader can see it (outside the cash tiles' own n/m rule)",
+    !/\bn\/m\b/.test(kgcGrowthText) && !/not meaningful/i.test(kgcGrowthText) && kgcGrowthText !== kgcText,
     "replaced by what actually happened in the period");
 
   // A NUMBER THAT WAS MEANINGFUL MUST STILL PRINT. A guard that suppressed
@@ -793,8 +799,8 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // "EPS surprise: 0.00", which read as "came in exactly in line".
   const coalesceCell = (src) =>
     src.replace(
-      "  if (cell.val == null) {\n    if (short) {",
-      "  if (false) {\n    if (short) {"
+      "  if (cell.val == null) {\n    // NO SENTENCE EVER PRINTS",
+      "  if (false) {\n    // NO SENTENCE EVER PRINTS"
     ).replace(
       "? money(cell.val, compact && !cell.perShare, cell.perShare)",
       "? money(cell.val ?? 0, compact && !cell.perShare, cell.perShare)"
@@ -944,7 +950,7 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // from the view that computes the YoY cells, and the rendered row labels are
   // checked to be the same rows in the same order.
   const hMarkup = html(React.createElement(M.SecAnnualCard, { view: hView, sole: false }));
-  const rowLabels = [...hMarkup.matchAll(/class="rowHead"><abbr[^>]*>([^<]+)<\/abbr>/g)].map((m) => m[1]);
+  const rowLabels = [...hMarkup.matchAll(/class="rowHead"><span[^>]*><span role="button"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]);
   const comparedCells = hView.annual.map((r) => r.comparedWith);
   // DROPPING A ROW MUST NOT RE-BASE THE NEXT ONE. The risk in removing rows is
   // that the survivors quietly shift onto whatever is now below them; every
@@ -1060,7 +1066,7 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // agreed with. Both fields exist on the view, so a harness on the wrong one
   // renders a plausible page and asserts about the wrong reader.
   const pageSrc = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
-  const pageGate = (pageSrc.match(/\{secView\.(\w+) === "year" \? null : <SecGrowthMarginsCard/) ?? [])[1];
+  const pageGate = (pageSrc.match(/\{secView\.(\w+) === "year" \? null : (?:<div className="orderGrowth">)?<SecGrowthMarginsCard/) ?? [])[1];
   const soleGate = (pageSrc.match(/<SecAnnualCard view=\{secView\} sole=\{secView\.(\w+) === "year"\}/) ?? [])[1];
   check("the harness gates the growth card on the same field page.tsx does",
     pageGate === "tableBasis" && soleGate === "tableBasis",
@@ -1095,7 +1101,8 @@ console.log("\n15. EPS is labelled with the standard the filer reports under");
   check("the EPS-basis note is not repeated on the cards",
     onCards === 0, `${onCards} copies across the rendered cards`);
   check("...and the page states it once, in the hero, from the filer's own standard",
-    (pageRaw.match(/epsBasisNote\(/g) ?? []).length === 1 && /heroNote">\{epsBasisNote\(secView\.accounting\)\}/.test(pageRaw),
+    // ONE SHORT LINE, THE NOTE ON TAP since #552 COWORK #124.
+    (pageRaw.match(/epsBasisNote\(/g) ?? []).length === 1 && /heroNote"><ReasonedValue text=\{epsBasisShort\(secView\.accounting\)\} reason=\{epsBasisNote\(secView\.accounting\)\} \/>/.test(pageRaw),
     "one call, in the hero");
   const hard = await loadCards(once(
     'return accounting === "IFRS" ? "IFRS" : accounting === "US GAAP" ? "GAAP" : "as filed";',
@@ -1152,14 +1159,18 @@ console.log("\n16. AVAV — the earnings-page cleanup brief, on the filer it was
     annualText.slice(0, 200));
 
   // B: the valuation card is two tiles, with no paragraph under them.
-  const val = visibleText(html(React.createElement(M.SecValuationCard, {
+  const valMarkup = html(React.createElement(M.SecValuationCard, {
     view: vAvav, inputs: M.valuationInputs(AVAV, "2026-09-22"), price: 164.31, priceAsOf: "2026-09-21", today: "2026-09-22",
-  })));
+  }));
+  const val = visibleText(valMarkup);
   // $8.35B, not $8.4B: the market cap now uses the page's one amount rule
   // (scaledAmount, 2dp in B) rather than a second 1dp formatter (PR #531).
-  check("B: valuation reads Market cap $8.35B and P/E Not meaningful, each with a one-line caption",
-    /Market cap \$8\.35B 50\.8M shares × \$164\.31 close, 2026-09-21/.test(val) &&
-      /P\/E \(GAAP, trailing\) Not meaningful Loss over/.test(val) && !/never an adjusted figure/.test(val),
+  // THE CAPTIONS MOVED (#552 COWORK #124): a figure's inputs into the card's
+  // "About these figures", a refusal's reason into its tap note.
+  check("B: valuation reads Market cap $8.35B and P/E Not meaningful; the inputs in the details, the reason in the note",
+    /Market cap \$8\.35B P\/E \(GAAP, trailing\) Not meaningful/.test(val) &&
+      /About these figures Market cap: 50\.8M shares × \$164\.31 close, 21 Sep 2026\./.test(val) &&
+      /data-estimate-note="Loss over[^"]*"[^>]*>Not meaningful</.test(valMarkup) && !/never an adjusted figure/.test(val),
     val);
   // TREND: the median beside the newest period (owner review, #522). AVAV's
   // typical quarter is dominated by its acquisition year; the latest is not.
@@ -1201,7 +1212,7 @@ console.log("\n17. round 2 — fiscal-year ends said once, a horizon not reached
   const annualText = visibleText(html(React.createElement(M.SecAnnualCard, { view: vAvav2 })));
   const annualMarkup = html(React.createElement(M.SecAnnualCard, { view: vAvav2 }));
   check("the five-year table drops the 'ended' line and keeps the date as the label's tooltip",
-    !/ended \d{4}-\d{2}-\d{2}/.test(annualText) && /title="Ended 2026-04-30"/.test(annualMarkup) &&
+    !/ended \d{4}-\d{2}-\d{2}/.test(annualText) && /title="Ended 30 Apr 2026"/.test(annualMarkup) &&
       /Each fiscal year as filed, compared with the year before\. Fiscal years end 30 April\./.test(annualText),
     annualText.slice(0, 160));
 
@@ -1213,7 +1224,7 @@ console.log("\n17. round 2 — fiscal-year ends said once, a horizon not reached
     `${(annualMarkup.match(/<th>/g) ?? []).length} columns`);
   check("...and each row's FY label is the card header, with the date tooltip",
     (annualMarkup.match(/class="rowHead"/g) ?? []).length === vAvav2.annual.length &&
-      /<td data-label="Fiscal year" class="rowHead"><abbr class="cellShort" title="Ended /.test(annualMarkup), "");
+      /<td data-label="Fiscal year" class="rowHead"><span[^>]*><span role="button" tabindex="0" title="Ended /.test(annualMarkup), "");
   const growthMarkup = html(React.createElement(M.SecGrowthMarginsCard, { view: vAapl }));
   check("...while the quarterly table keeps its 'Compared with' column",
     /<th>Compared with<\/th>/.test(growthMarkup) && /data-label="Compared with"/.test(growthMarkup), "");

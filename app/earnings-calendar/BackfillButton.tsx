@@ -110,7 +110,7 @@ export default function BackfillButton({
             border: "1px solid rgba(255,255,255,0.14)",
             background: "rgba(255,255,255,0.03)",
             color: "#e2e8f0",
-            fontSize: 12.5,
+            fontSize: "var(--fs-label)",
           }}
         />
         <button
@@ -138,7 +138,7 @@ export default function BackfillButton({
       {message ? (
         <div
           style={{
-            fontSize: 12,
+            fontSize: "var(--fs-label)",
             color: status === "error" ? "#fca5a5" : "#86efac",
           }}
         >
@@ -157,6 +157,6 @@ const btnStyle: React.CSSProperties = {
   color: "#e2e8f0",
   textDecoration: "none",
   fontWeight: 700,
-  fontSize: 12.5,
+  fontSize: "var(--fs-label)",
   cursor: "pointer",
 };

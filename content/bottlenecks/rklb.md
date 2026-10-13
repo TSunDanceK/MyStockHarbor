@@ -49,6 +49,7 @@ supplyChain:
   - name: Electroimpact
     ticker: null
     pct: 20
+    grade: some
     blurb: >
       A private U.S. manufacturing-technology company supplying the 99-ton
       automated fiber-placement machine Rocket Lab is installing to build
@@ -59,6 +60,7 @@ supplyChain:
   - name: Nikon SLM Solutions
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       A metal additive-manufacturing equipment maker majority-owned by Nikon
       Corporation that signed an MoU with Rocket Lab to reserve two of its
@@ -69,6 +71,7 @@ supplyChain:
   - name: CesiumAstro
     ticker: null
     pct: 15
+    grade: some
     blurb: >
       A private aerospace electronics company supplying the Vireo active
       electronically scanned array Ka-band communications payload for Rocket
@@ -78,6 +81,7 @@ supplyChain:
   - name: Collins Aerospace
     ticker: RTX
     pct: 15
+    grade: some
     blurb: >
       A unit of RTX Corporation providing the software-defined-radio waveform
       and firmware for the tactical satellite communications system on
@@ -87,6 +91,7 @@ supplyChain:
   - name: SEAKR Engineering
     ticker: RTX
     pct: 15
+    grade: some
     blurb: >
       Also an RTX subsidiary (via Raytheon), SEAKR supplies the tactical
       radio and network encryption hardware for the same SDA constellation,
@@ -95,6 +100,7 @@ supplyChain:
   - name: Redwire Space
     ticker: RDW
     pct: 10
+    grade: some
     blurb: >
       A publicly traded space infrastructure company supplying antenna
       systems and RF hardware for Rocket Lab's SDA satellite constellation —
@@ -103,6 +109,7 @@ supplyChain:
   - name: Parsons Corporation
     ticker: PSN
     pct: 10
+    grade: some
     blurb: >
       Supplies the ground-operations software, branded NOVA, used to command
       and control the satellites Rocket Lab builds for the Space Development
@@ -112,6 +119,7 @@ customers:
   - name: U.S. Government
     ticker: null
     pct: 29
+    grade: some
     blurb: >
       Not a single company — Rocket Lab's SEC filings disclose that one
       "government customer" represented 29% of revenue for the first nine
@@ -122,6 +130,7 @@ customers:
   - name: BlackSky Technology
     ticker: BKSY
     pct: 14
+    grade: some
     blurb: >
       A publicly traded satellite-imagery company and repeat Electron launch
       customer, reflecting Rocket Lab's long-running relationship with
@@ -129,6 +138,7 @@ customers:
   - name: Planet Labs
     ticker: PL
     pct: 10
+    grade: some
     blurb: >
       One of Rocket Lab's earliest and most consistent commercial customers,
       using Electron's dedicated-orbit flights to replenish its Earth-imaging
@@ -136,6 +146,7 @@ customers:
   - name: HawkEye 360
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       A private radio-frequency geolocation satellite operator that signed a
       multi-launch contract with Rocket Lab, including Electron's first
@@ -143,6 +154,7 @@ customers:
   - name: Capella Space
     ticker: null
     pct: 9
+    grade: spread
     blurb: >
       A private synthetic-aperture-radar satellite company and multi-launch
       Electron customer, deploying its all-weather imaging constellation on
@@ -151,6 +163,7 @@ customers:
   - name: Synspective
     ticker: null
     pct: 8
+    grade: spread
     blurb: >
       A Japanese SAR-satellite operator that has used Rocket Lab to deploy
       its StriX constellation. Trades on the Tokyo Stock Exchange, with no
@@ -158,6 +171,7 @@ customers:
   - name: iQPS
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       Another Japanese SAR-satellite operator that closed out Rocket Lab's
       2025 launch manifest with its own dedicated Electron mission. Trades
@@ -165,6 +179,7 @@ customers:
   - name: Kinéis
     ticker: null
     pct: 7
+    grade: spread
     blurb: >
       A private French IoT-satellite operator whose entire planned
       constellation Rocket Lab deployed in under a year across multiple
@@ -173,6 +188,7 @@ customers:
   - name: OHB Group
     ticker: null
     pct: 4
+    grade: spread
     blurb: >
       A German aerospace and satellite manufacturer that has used Rocket Lab
       for dedicated small-satellite launches. Trades on the Frankfurt Stock
@@ -180,6 +196,7 @@ customers:
   - name: Canon Electronics
     ticker: null
     pct: 3
+    grade: spread
     blurb: >
       The satellite-manufacturing arm of Canon Inc. and a recurring customer
       for Rocket Lab's dedicated small-satellite launches. Trades separately
