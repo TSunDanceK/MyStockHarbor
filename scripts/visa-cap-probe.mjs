@@ -1,9 +1,12 @@
 // WHY A SYMBOL'S SCREENER MARKET CAP IS "–" (#552 COWORK #216 §4: Visa).
 // READS ONLY, despite the write- task prefix (the store read needs the credential).
-// Redis: 1 GET (the stored fact set) + 1 HGET (the Pickers SEC row) per symbol.
+// Redis: 1 GET (the stored fact set) + 2 HGET (the Pickers SEC row, the cover-review row) per symbol.
 // Prints the stored cover, the shipped valuationInputs refusals, the Pickers
-// row's stored refusals and shares, then runs the SHIPPED withClassCover
-// (lib/server/secCoverClasses.ts) on the filer's newest 10-Q/10-K, SEC only.
+// row's stored refusals and shares, and the cover-review row (1 HGET). Then the
+// cited-class path withClassCover takes for a mapped filer, step by step, with
+// the SHIPPED pure functions only (parseCoverClasses, withFilingRates,
+// coverFromClasses) on the newest 10-Q/10-K: NOT withClassCover itself, which
+// records/clears the cover-review row and so would write.
 //   relay task: write-cap-refusal-probe   SYMBOLS="V"
 import "./lib/register-ts-here.mjs";
 import fs from "node:fs";
@@ -32,8 +35,7 @@ const M = await lift([
   grabFunction(SRC, "parseClassRates"),
   grabFunction(SRC, "withFilingRates"),
   grabFunction(SRC, "coverFromClasses"),
-  grabFunction(SRC, "withClassCover"),
-  "export { withClassCover, parseClassRates };",
+  "export { parseCoverClasses, parseClassRates, withFilingRates, coverFromClasses, pickInstanceName, FILING_INSTANCE_MAX_BYTES };",
 ].join("\n"));
 const get = async (u) => { await new Promise((x) => setTimeout(x, 130)); return fetch(u, { headers: { "User-Agent": UA } }); };
 let commands = 0;
@@ -50,10 +52,30 @@ for (const s of (process.env.SYMBOLS || "V").split(/[,\s]+/).filter(Boolean)) {
   const row = await redis.hget(PICKERS, s); commands++;
   const o = typeof row === "string" ? JSON.parse(row) : row;
   console.log(`  Pickers SEC row: ${o ? `at ${o.at ?? o.updatedAt ?? "?"}; inputs.shares ${JSON.stringify(o.inputs?.shares ?? null)}; inputs.refusals ${JSON.stringify(o.inputs?.refusals ?? null)}` : "none"}`);
-  const warns = [];
-  const w = console.warn; console.warn = (...a) => warns.push(a.map(String).join(" "));
-  const cover = await M.withClassCover(s, String(REG[s]?.cik ?? ""), null, get);
-  console.warn = w;
-  console.log(`  withClassCover on the newest 10-Q/10-K: ${cover ? JSON.stringify(cover) : `refused — ${warns.join(" | ").slice(0, 300) || "no cover"}`}`);
+  const review = await redis.hget(keyOf("lib/server/secCoverReview.ts", "SEC_COVER_REVIEW_HASH"), s); commands++;
+  console.log(`  cover-review row: ${JSON.stringify(review ?? null)}`);
+  const cik = String(REG[s]?.cik ?? "");
+  const subs = await (await get(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`)).json();
+  const r = subs.filings?.recent ?? {};
+  const i = (r.form ?? []).findIndex((f) => f === "10-Q" || f === "10-K");
+  console.log(`  newest 10-Q/10-K: ${r.form?.[i]} ${r.accessionNumber?.[i]} filed ${r.filingDate?.[i]}`);
+  const base = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${String(r.accessionNumber?.[i]).replace(/-/g, "")}`;
+  const items = (await (await get(`${base}/index.json`)).json()).directory?.item ?? [];
+  const name = M.pickInstanceName(items.map((it) => String(it.name ?? "")));
+  const size = Number(items.find((it) => it.name === name)?.size ?? 0);
+  console.log(`  instance: ${name ?? "none"} (${size} bytes; limit ${M.FILING_INSTANCE_MAX_BYTES})`);
+  if (!name || size > M.FILING_INSTANCE_MAX_BYTES) continue;
+  const xml = await (await get(`${base}/${name}`)).text();
+  const facts = M.parseCoverClasses(xml);
+  console.log(`  per-class cover facts: ${facts.map((f) => `${f.member}=${f.val}@${f.asOf}`).join("; ") || "none"}`);
+  const entry = MAP[s];
+  if (!entry) { console.log("  no share-classes entry"); continue; }
+  if (entry.rates) console.log(`  stated rates: ${JSON.stringify(M.parseClassRates(xml, entry.rates.concept))}`);
+  const rated = M.withFilingRates(entry, xml);
+  console.log(`  withFilingRates: ${rated.ok ? `ok ${JSON.stringify(rated.entry.weights)}` : `REFUSED — ${rated.why}`}`);
+  if (rated.ok) {
+    const out = M.coverFromClasses(facts, rated.entry, { accession: r.accessionNumber?.[i] ?? null, filed: r.filingDate?.[i] ?? null });
+    console.log(`  coverFromClasses: ${out.ok ? `ok ${JSON.stringify(out.cover)}` : `REFUSED — ${out.why}`}`);
+  }
 }
 console.log(`\nRedis commands used by this read: ${commands}`);
