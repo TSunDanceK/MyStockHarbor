@@ -47,6 +47,48 @@ export type InsightFormat = "v2" | "v1";
  * page's dateModified (only `updated` does).
  */
 export type InsightDrivers = { asOf: string; text: string; sources: { title: string; publisher: string; url: string }[] };
+/** At most this many peers on the sector card. */
+export const SECTOR_PEERS = 8;
+
+/**
+ * "Other {Sector} on MyStockHarbor" (#563 COWORK #181). Pure: same-sector stocks
+ * with a bottleneck map or an insight post here, never the post's own ticker.
+ * Those with both first, then a map, then a post; A–Z within each. The sector
+ * comes from `sectorOfName` (the committed SIC profile: no read).
+ */
+export function sectorPeers(
+  own: string,
+  sectorName: string,
+  mapped: ReadonlyArray<{ symbol: string; companyName: string }>,
+  posted: ReadonlyArray<string>,
+  sectorOfName: (symbol: string) => string | null,
+  nameOf: (symbol: string) => string,
+  max = SECTOR_PEERS,
+): { symbol: string; name: string }[] {
+  const me = own.toUpperCase();
+  const names = new Map<string, string>();
+  for (const m of mapped) names.set(m.symbol.toUpperCase(), m.companyName);
+  const postedSet = new Set(posted.map((s) => s.toUpperCase()));
+  const all = [...new Set([...names.keys(), ...postedSet])].filter((s) => s !== me && sectorOfName(s) === sectorName);
+  const rank = (s: string) => (names.has(s) && postedSet.has(s) ? 0 : names.has(s) ? 1 : 2);
+  return all
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+    .slice(0, max)
+    .map((symbol) => ({ symbol, name: names.get(symbol) || nameOf(symbol) || symbol }));
+}
+
+/**
+ * A supplier's label on the insight page's mini map (#563 COWORK #181): the
+ * ticker for a listed company, else the name's first whole word ("Molicel",
+ * "Battery", "Single-source"). NEVER CUT MID-WORD: the old label was the first
+ * five characters ("Molic", "Singl"). Pure.
+ */
+export function miniLabel(name: string, ticker: string | null): string {
+  if (ticker) return ticker;
+  const first = name.trim().split(/[\s,(/]+/)[0].replace(/[^\p{L}\p{N}]+$/u, "");
+  return first || name.trim();
+}
+
 /**
  * The drivers' source line, one label per publisher (#563 COWORK #177): two
  * sources from the same publisher read "Archer Aviation (1, 2)", each number

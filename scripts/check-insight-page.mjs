@@ -33,6 +33,10 @@
 //     Monday before the close) reads "Published {its date}" and "the 120
 //     sessions to {the last closed session}"; the drivers' source line names
 //     each publisher once, its sources numbered links ("Archer Aviation (1, 2)").
+//   - #181: the "More on" sector card carries the sector's figures (the side
+//     box's row, no second read) and up to 8 same-sector peers with a map or a
+//     post here, never the post's own ticker; no peers, no heading; the mini
+//     map's labels are a ticker or a whole word, on every bottleneck page.
 // A mutant each.
 //
 //   node scripts/check-insight-page.mjs
@@ -254,6 +258,29 @@ const RULES = {
       /the \{thumb\.length\} sessions to \{dayWords\(thumbTo \?\? n\.date\)\}/.test(page) &&
       /const thumbTo = frozen && frozen\.length > 1 \? snapshot\?\.chartPoints\?\.at\(-1\)\?\.date \?\? null : data\.thumbTo;/.test(route) && /thumbTo=\{thumbTo\}/.test(route);
   },
+  "#181 sector card: the sector's figures and same-sector peers (never the post's own ticker); no peers, no heading": ({ V, page, loader }) => {
+    const sec = { ACHR: "Industrials", JOBY: "Industrials", BA: "Industrials", HON: "Industrials", AAPL: "Technology", GEV: "Industrials" };
+    const of = (s) => sec[s] ?? null;
+    const mapped = [{ symbol: "JOBY", companyName: "Joby Aviation, Inc." }, { symbol: "AAPL", companyName: "Apple Inc." }, { symbol: "HON", companyName: "Honeywell" }, { symbol: "ACHR", companyName: "Archer" }];
+    const p = V.sectorPeers("achr", "Industrials", mapped, ["JOBY", "BA", "ACHR", "AAPL", "GEV"], of, (s) => `${s} Co`);
+    const many = V.sectorPeers("X", "Industrials", Array.from({ length: 12 }, (_, i) => ({ symbol: `I${i}`, companyName: `I${i}` })), [], () => "Industrials", (s) => s);
+    return p.map((x) => x.symbol).join() === "JOBY,HON,BA,GEV" && p[0].name === "Joby Aviation, Inc." && p[2].name === "BA Co" &&
+      V.sectorPeers("achr", "Utilities", mapped, ["JOBY"], of, (s) => s).length === 0 && many.length === V.SECTOR_PEERS && V.SECTOR_PEERS === 8 &&
+      /data-sector-figures="">/.test(page) && /\{fig\("Year to date", mv\.ytd, 2\)\}/.test(page) && /\{fig\("Latest session", mv\.day\)\}/.test(page) &&
+      /\{fig\("This week", mv\.week\)\}/.test(page) && /\{fig\("This month", mv\.month\)\}/.test(page) && /Rank, latest session<\/span><strong>\{mv\.rank\} of 11/.test(page) &&
+      /\{peers\.length \? \(\s*<>\s*<h3 className="inH3" data-sector-peers-head="">Other \{m\.name\} on MyStockHarbor<\/h3>\s*<ScreenMembersList members=\{peers\} \/>/.test(page) &&
+      /<ScreenMembersList members=\{peers\} \/>\s*<\/>\s*\) : null\}\s*<Link href=\{m\.href\} className="inMoreGo">Open the sector page →<\/Link>/.test(page) &&
+      /move: sectorRow \? \{ day: sectorRow\.day, week: sectorRow\.week, month: sectorRow\.month, ytd: sectorRow\.ytd, rank: sectorRow\.rank \} : null,/.test(loader) && /peers: sectorPeers\(sym, sector\.name,/.test(loader);
+  },
+  "#181 mini map: each label a ticker or a whole word of the name, on every bottleneck page; the centre a full ticker": ({ V, page }) => {
+    const bn = fs.readdirSync("content/bottlenecks").filter((f) => f.endsWith(".md")).map((f) => matter(read(`content/bottlenecks/${f}`)).data);
+    const whole = (c) => { const l = V.miniLabel(c.name, c.ticker ?? null); return c.ticker ? l === String(c.ticker) : c.name.split(/[\s,(/]+/).map((w) => w.replace(/[^\p{L}\p{N}]+$/u, "")).includes(l) && l.length > 0; };
+    const tops = bn.flatMap((d) => [...(d.supplyChain ?? [])].sort((x, y) => y.pct - x.pct).slice(0, 4));
+    return bn.length > 100 && tops.length > 300 && tops.every(whole) &&
+      V.miniLabel("Molicel (E-One Moli Energy)", null) === "Molicel" && V.miniLabel("Single-source and custom manufacturers", null) === "Single-source" && V.miniLabel("Stellantis N.V.", "STLA") === "STLA" &&
+      /left=\{m\.suppliers\.map\(\(s\) => miniLabel\(s\.name, s\.ticker\)\)\}/.test(page) && /\{left\.map\(\(s, i\) => <li key=\{i\}>\{s\}<\/li>\)\}/.test(page) &&
+      /fontWeight: 800 \}\}>\{center\}<\/text>/.test(page) && !/\.slice\(0, [45]\)/.test(page) && /\.inMiniLabels li \{[^}]*white-space: nowrap;/.test(page);
+  },
   "#177 sources: one label per publisher, its sources numbered links": ({ V, page }) => {
     const src = (publisher, url) => ({ title: `${publisher} story`, publisher, url });
     const g = V.sourceGroups([src("Archer Aviation", "https://a.example/1"), src("StockTitan", "https://s.example/1"), src("Archer Aviation", "https://a.example/2")]);
@@ -283,6 +310,9 @@ const MUTANTS = [
   ["update: the loader", "v", (s) => s.replace("const update = parseUpdate(data.update).update;", "const update = null;")],
   ["the screens link", "s", (s) => s.replace('href: "/oversold-stocks-today"', 'href: "/oversold-today"')],
   ["#177 no-session day", "v", (s) => s.replace("return { index, session: bars[index][0] };", "return { index, session: date };")],
+  ["#181 sector card", "v", (s) => s.replace(".filter((s) => s !== me && sectorOfName(s) === sectorName)", ".filter((s) => sectorOfName(s) === sectorName)")],
+  ["#181 sector card", "v", (s) => s.replace(".filter((s) => s !== me && sectorOfName(s) === sectorName)", ".filter((s) => s !== me)")],
+  ["#181 mini map", "v", (s) => s.replace("  if (ticker) return ticker;\n  const first", "  if (ticker) return ticker;\n  return name.slice(0, 5);\n  const first")],
   ["#177 sources", "v", (s) => s.replace("if (g) g.items.push(s);", "if (g && false) g.items.push(s);")],
   ["no advice words", "v", (s) => s.replace('case "held": return { word: "Held", detail: "No daily close below it since", tone: "up" };', 'case "held": return { word: "Held", detail: "A level to buy while it holds", tone: "up" };')],
 ];
@@ -309,6 +339,11 @@ const SRC_MUTANTS = [
   ["#177 no-session day", PAGE, (s) => s.replace("sessions to {dayWords(thumbTo ?? n.date)}", "sessions to {dayWords(n.date)}")],
   ["#177 no-session day", LOADER, (s) => s.replace("thumbTo = at.session;", "thumbTo = n.date;")],
   ["#177 sources", PAGE, (s) => s.replace('data-source-n="">{j + 1}</a>', 'data-source-n="">{src.publisher}</a>')],
+  ["#181 sector card", PAGE, (s) => s.replace("{peers.length ? (\n          <>\n            <h3", "{true ? (\n          <>\n            <h3")],
+  ["#181 sector card", PAGE, (s) => s.replace('            {fig("Year to date", mv.ytd, 2)}\n', "")],
+  ["#181 sector card", LOADER, (s) => s.replace("move: sectorRow ? { day: sectorRow.day, week: sectorRow.week, month: sectorRow.month, ytd: sectorRow.ytd, rank: sectorRow.rank } : null,", "move: null,")],
+  ["#181 mini map", PAGE, (s) => s.replace("{left.map((s, i) => <li key={i}>{s}</li>)}", "{left.map((s, i) => <li key={i}>{s.slice(0, 5)}</li>)}")],
+  ["#181 mini map", PAGE, (s) => s.replace("left={m.suppliers.map((s) => miniLabel(s.name, s.ticker))}", "left={m.suppliers.map((s) => s.ticker ?? s.name)}")],
   ["drivers: the card", PAGE, (s) => s.replace(") : d.news?.score ? (", ") : null}{d.news?.score ? (")],
   ["drivers: the card", LOADER, (s) => s.replace("export const NEWS_SHOWN = 3;", "export const NEWS_SHOWN = 5;")],
   ["drivers: the card", LOADER, (s) => s.replace("&& junkReason(i.title) === null)", ")")],

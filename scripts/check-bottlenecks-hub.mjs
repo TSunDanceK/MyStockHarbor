@@ -9,7 +9,8 @@
 // ticker keying; the alias map (and Samsung SDI kept apart); generic buckets
 // never merge across pages; the supplier / customer split; ten rows plus "See
 // full leaderboard", rows that open to chips, "Why it matters" behind a tap;
-// the six themes with distinct-page counts; the capex link; the hero (title,
+// the six themes with distinct-page counts, and (#563 COWORK #180) the eVTOL
+// theme keyed by its pages' own tickers (THEME_PAGES); the capex link; the hero (title,
 // tiles, search, web) and the phone rule (web hidden at 560px and under, top
 // ten instead); the archive and list still there in the mobile order; sizes
 // from rem or the tokens, fine print tagged, no transforms; describes, never
@@ -156,15 +157,31 @@ const RULES = {
   },
   "'Why it matters' sits behind a tap (<details>), at --fs-read when open": ({ board, boardSrc }) =>
     /<details class="bnLbWhy"><summary>Why it matters<\/summary><p>A company that keeps showing up here/.test(board) && /\.bnLbWhy p \{[^}]*font-size: var\(--fs-read\)/.test(boardSrc),
-  "six themes, from the editorial map, each counting distinct mapped pages; three logos each": ({ M, companies, themesHtml }) => {
+  "seven themes, from the editorial maps, each counting distinct mapped pages; three logos each": ({ M, companies, themesHtml }) => {
     const t = M.hub.buildThemes(companies);
     const ids = t.map((x) => x.title).join("|");
     const cloud = t.find((x) => x.id === "cloud");
     const cloudPages = new Set(companies.filter((c) => M.hub.THEME_MAP[c.key] === "cloud").flatMap((c) => c.pages.map((p) => p.slug)));
     const fx = M.hub.buildThemes(M.hub.buildHubCompanies(FIX), { AMZN: "cloud", GOOGL: "cloud" }).find((x) => x.id === "cloud");
-    return ids === "Chip foundry|Memory|AI accelerators|Cloud hosting|Payment networks|Big customers" && t.every((x) => x.line && x.top.length === 3 && x.pageCount > 0) &&
+    return ids === "Chip foundry|Memory|AI accelerators|Cloud hosting|Payment networks|Big customers|Electric air taxis (eVTOL)" && t.every((x) => x.line && x.top.length === 3 && x.pageCount > 0) &&
       cloud.pageCount === cloudPages.size && cloud.pageCount < cloud.top.reduce((a, c) => a + c.count, 0) && fx.pageCount === 4 &&
-      t.every((x) => themesHtml.includes(`>${x.pageCount} mapped stocks</span>`) && themesHtml.includes(`title="${x.pageCount} mapped stocks name a company in this theme"`)) && (themesHtml.match(/class="bnThemeCard"/g) ?? []).length === 6;
+      t.every((x) => themesHtml.includes(`>${x.pageCount} mapped stocks</span>`) && themesHtml.includes(`title="${x.countNote}"`)) && (themesHtml.match(/class="bnThemeCard"/g) ?? []).length === 7;
+  },
+  // #563 COWORK #180: a theme can list mapped pages by their own ticker (THEME_PAGES).
+  "the eVTOL theme: JOBY and ACHR join by ticker, their listed partners are the logos; ticker-keyed, partner-keyed and mixed membership all count; the six partner themes unchanged": ({ M, companies, themesHtml }) => {
+    const t = M.hub.buildThemes(companies), ev = t.find((x) => x.id === "evtol");
+    const evPages = new Set(companies.flatMap((c) => c.pages).filter((p) => ["JOBY", "ACHR"].includes(p.symbol)).map((p) => p.slug));
+    const partners = new Set(["TM", "STLA", "HON", "GRMN", "UAL"]);
+    const fixC = M.hub.buildHubCompanies(FIX);
+    const byTicker = M.hub.buildThemes(fixC, {}, { CCC: "evtol" }).find((x) => x.id === "evtol");
+    const mixed = M.hub.buildThemes(fixC, { AMZN: "cloud" }, { DDD: "cloud" }).find((x) => x.id === "cloud");
+    const sig = (xs) => JSON.stringify(xs.filter((x) => x.id !== "evtol").map((x) => [x.id, x.pageCount, x.top.map((c) => c.key), x.countNote]));
+    return M.hub.THEME_PAGES.JOBY === "evtol" && M.hub.THEME_PAGES.ACHR === "evtol" && evPages.size === 2 &&
+      ev.pageCount === 2 && ev.countNote === "2 mapped stocks are in this theme" && ev.top.length === 3 && ev.top.every((c) => partners.has(c.ticker)) &&
+      /data-theme="evtol"[\s\S]*?Electric air taxis \(eVTOL\)[\s\S]*?>2 mapped stocks<\/span>/.test(themesHtml) &&
+      byTicker.pageCount === 1 && byTicker.countNote === "1 mapped stocks are in this theme" && byTicker.top.map((c) => c.key).sort().join() === "AAPL,AMZN" &&
+      mixed.pageCount === 4 && mixed.countNote === "4 mapped stocks are in or name a company in this theme" && mixed.top[0].key === "AMZN" &&
+      sig(t) === sig(M.hub.buildThemes(companies, M.hub.THEME_MAP, {}));
   },
   "the hub link card 'Follow the money: AI and data-centre capex' → /bottlenecks/capex, on the page": ({ themesHtml, page }) =>
     /<a (?=[^>]*class="bnCapexCard")(?=[^>]*href="\/bottlenecks\/capex")[^>]*>[\s\S]*?Follow the money: AI and data-centre capex[\s\S]*?<\/a>/.test(themesHtml) && /<BottleneckThemes themes=\{hub\.themes\} \/>/.test(page),
@@ -174,12 +191,12 @@ const RULES = {
     const card = css.match(/\.bnThemeCard \{([^}]*)\}/)?.[1] ?? "";
     const cards = themesHtml.split('class="bnThemeCard"').slice(1);
     return /padding: 9px 0;/.test(card) && /\.bnThemeLine \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis; \}/.test(css) && !/(^|;)\s*border:|border-radius|background/.test(card) && /\.bnThemeFoot \{ display: flex; align-items: center;/.test(css) &&
-      cards.length === 6 && cards.every((c) => {
+      cards.length === 7 && cards.every((c) => {
         const f = c.slice(c.indexOf('<div class="bnThemeFoot">'));
         const at = (k) => f.indexOf(k);
         return at('<div class="bnThemeFoot">') === 0 && (f.match(/width:20px;height:20px/g) ?? []).length === 3 &&
           at('class="bnThemeLogos"') > 0 && at('class="bnThemeLogos"') < at('class="bnThemeNames"') && at('class="bnThemeNames"') < at('class="bnThemeCount"') && !/<\/?div/.test(f.slice(at('class="bnThemeNames"'), at('class="bnThemeCount"'))) &&
-          /<span class="bnThemeCount" data-fine-print="" title="\d+ mapped stocks name a company in this theme">\d+ mapped stocks<\/span><\/div><\/div>/.test(f);
+          /<span class="bnThemeCount" data-fine-print="" title="\d+ mapped stocks (?:name a company in|are in|are in or name a company in) this theme">\d+ mapped stocks<\/span><\/div><\/div>/.test(f);
       });
   },
   "the hero: eyebrow, the one-line title in the h1, three stat tiles, the reworded search, the source note": ({ heroHtml, hub }) =>
@@ -280,8 +297,13 @@ const MUTANTS = [
   ["the leaderboard:", "board", (s) => s.replace(/(\s+)See full leaderboard(\s+<\/button>)/, "$1See more$2")],
   ["the leaderboard:", "board", (s) => s.replace("href={`/bottlenecks/${p.slug}`} prefetch={false} className=\"bnLbChip\"", "href={`/stock/${p.symbol}`} prefetch={false} className=\"bnLbChip\"")],
   ["'Why it matters'", "board", (s) => s.replace('<details className="bnLbWhy">\n        <summary>Why it matters</summary>', '<div className="bnLbWhy">\n        <div>Why it matters</div>').replace("        </p>\n      </details>", "        </p>\n      </div>")],
-  ["six themes", "hub", (s) => s.replace("return { ...t, pageCount: pages.size, top: members.slice(0, 3) };", "return { ...t, pageCount: members.reduce((a, c) => a + c.count, 0), top: members.slice(0, 3) };")],
-  ["six themes", "hub", (s) => s.replace('  { id: "payments", title: "Payment networks", line: "The rails card and online payments run on." },\n', "")],
+  ["seven themes", "hub", (s) => s.replace("return { ...t, pageCount: pages.size, countNote, top: [...members, ...partners].slice(0, 3) };", "return { ...t, pageCount: members.reduce((a, c) => a + c.count, 0) + own.size, countNote, top: [...members, ...partners].slice(0, 3) };")],
+  ["seven themes", "hub", (s) => s.replace('  { id: "payments", title: "Payment networks", line: "The rails card and online payments run on." },\n', "")],
+  // #180: ACHR dropped; ticker-keyed membership ignored; a ticker page leaking into every theme; partners not shown.
+  ["the eVTOL theme", "hub", (s) => s.replace("  JOBY: \"evtol\", ACHR: \"evtol\",", "  JOBY: \"evtol\",")],
+  ["the eVTOL theme", "hub", (s) => s.replace("    for (const slug of own) pages.add(slug);\n", "")],
+  ["the eVTOL theme", "hub", (s) => s.replace("pageMap[p.symbol.toUpperCase()] === t.id", "pageMap[p.symbol.toUpperCase()] !== undefined")],
+  ["the eVTOL theme", "hub", (s) => s.replace("top: [...members, ...partners].slice(0, 3)", "top: members.slice(0, 3)")],
   ["the hub link card", "themes", (s) => s.replace('href="/bottlenecks/capex"', 'href="/capex"')],
   ["the hub link card", "page", (s) => s.replace("<BottleneckThemes themes={hub.themes} />", "")],
   ["the hero:", "hero", (s) => s.replace('"Which companies the market can\'t easily do without"', '"Stock bottlenecks"')],

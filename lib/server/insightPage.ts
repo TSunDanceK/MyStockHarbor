@@ -55,7 +55,7 @@ import { toSpendingInput } from "@/lib/server/capexSpendingJob";
 import { confluence } from "@/lib/ta/confluence";
 import type { KeyBar } from "@/lib/ta/keyLevels";
 import {
-  dayWords, differenceNote, indexOnOrBefore, levelSeries, normaliseInsight, publishBar, setupLabel, sinceView, LEVEL_NAME,
+  dayWords, differenceNote, indexOnOrBefore, levelSeries, normaliseInsight, publishBar, sectorPeers, setupLabel, sinceView, LEVEL_NAME,
   type EodBar, type NormalisedInsight, type SetupLabel, type SinceView,
 } from "@/lib/insightView";
 import { SCREEN_ROUTES, screenFor, type ScreenFlag } from "@/lib/insightScreens";
@@ -116,6 +116,10 @@ const readScreenFlags = unstable_cache(
 export const SCREEN_MEMBERS = 10;
 const PRESET_RANK = new Map(PRESET_UNIVERSE.map((s, i) => [s, i]));
 export type ScreenMember = { symbol: string; name: string };
+
+/** The sector row's figures (lib/server/sectorPanels, one read the page already makes). */
+export type SectorMoveFigures = { day: number | null; week: number | null; month: number | null; ytd: number | null; rank: number | null };
+
 /** Pure, for the check: every screen's members, largest first (preset rank, then A–Z), SCREEN_MEMBERS + 1 of them. */
 export function screenMembersFrom(recs: ReadonlyArray<Record<string, unknown>>, nameOf: (s: string) => string): Record<string, ScreenMember[]> {
   const out: Record<string, ScreenMember[]> = {};
@@ -211,7 +215,9 @@ export type MoreCard =
       /** A spender's own capex, latest and prior fiscal year, from its filings. */
       own: { year: string; value: number; prior: number | null; changePct: number | null } | null }
   | { kind: "pickers"; href: string; label: string; flag: ScreenFlag | null }
-  | { kind: "sector"; href: string; name: string }
+  // THE SECTOR CARD, FILLED (#563 COWORK #181): the figures the side box already
+  // has (no new read), and up to SECTOR_PEERS same-sector stocks with a page here.
+  | { kind: "sector"; href: string; name: string; move: SectorMoveFigures | null; peers: ScreenMember[] }
   | { kind: "calendar"; href: string }
   | { kind: "spx"; href: string };
 
@@ -388,7 +394,15 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
   }
   const pick = screenFor(label, flags);
   if (pick) more.push({ kind: "pickers", href: pick.href, label: pick.label, flag: (Object.keys(SCREEN_ROUTES) as ScreenFlag[]).find((f) => SCREEN_ROUTES[f].href === pick.href) ?? null });
-  if (more.length < 3 && sector?.slug) more.push({ kind: "sector", href: `/sector/${sector.slug}`, name: sector.name });
+  if (more.length < 3 && sector?.slug) {
+    more.push({
+      kind: "sector", href: `/sector/${sector.slug}`, name: sector.name,
+      move: sectorRow ? { day: sectorRow.day, week: sectorRow.week, month: sectorRow.month, ytd: sectorRow.ytd, rank: sectorRow.rank } : null,
+      peers: sectorPeers(sym, sector.name, bnPosts.map((p) => ({ symbol: p.symbol, companyName: p.companyName })),
+        getAllPosts().map((p) => String(p.symbol ?? "")).filter(Boolean), (s) => sectorOf(s)?.name ?? null,
+        (s) => normaliseCompanyName(snapshotCompanyName(s))),
+    });
+  }
   if (more.length < 3) more.push({ kind: "calendar", href: "/earnings-calendar" });
   if (more.length < 3) more.push({ kind: "spx", href: "/markets/spx" });
 
@@ -435,6 +449,6 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
 /** The page's data, cached per post for 6 hours (the reads above, at most four times a day a post). */
 export const getInsightPageDataCached = unstable_cache(
   (slug: string) => getInsightPageData(slug),
-  ["insight-page-data-v5"],
+  ["insight-page-data-v6"],
   { revalidate: 21600, tags: ["insight-page-data"] },
 );
