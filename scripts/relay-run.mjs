@@ -1427,6 +1427,8 @@ const TASKS = {
   // READS ONLY (#553 COWORK #222 step 1): the audited symbols' stored last two
   // EOD bars and IEX quote rows; dates, ET times, %, yes/no. GET/MGET/HMGET, ~2 commands.
   "write-premarket-quote-census": { script: "scripts/premarket-quote-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY despite the prefix (#552 COWORK #221): the sec-facts write decision replayed on each stored set. 1 GET + 1 per symbol.
+  "write-stale-cover-replay": { script: "scripts/stale-cover-replay.mjs", args: () => [], needsTypescript: true, writes: true },
 };
 
 const argv = process.argv.slice(2);
