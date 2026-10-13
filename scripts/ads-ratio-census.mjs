@@ -1,11 +1,20 @@
-// THE ADS RATIO EACH 20-F FILER STATES (#552 COWORK #22 §1). For every 20-F
-// registrant in the shard: the latest 20-F's own ratio statement, read by the
-// SHIPPED parser (lib/server/secAdsRatio.ts); where the 20-F states none, the
-// newest F-6 on the filer's list. SEC text only, read-only, no credential.
-// ≤8 requests/s. Prints one line per symbol:
+// THE ADS RATIO EACH DEPOSITARY-SHARE FILER STATES (#552 COWORK #22 §1).
+// For every registrant in the shard: the LATEST ANNUAL REPORT's own ratio
+// statement (20-F, or since #552 COWORK #218/#222 a 10-K or 10-KT: ONC, ZLAB
+// and GPCR list ADSs on a 10-K), read by the SHIPPED parser
+// (lib/server/secAdsRatio.ts); an F-6 only when filed after that report.
+// Same newest-source rule, never a default. SEC text only, read-only, no
+// credential. ≤8 requests/s. Prints one line per symbol:
 //   RATIO <n> <form> <accession> <filed> "<sentence>"
 //   DISAGREE <values> <form> <accession>
 //   NONE ads-mentions=<k> <form> <accession>
+//   UNRATED <form> <accession>   (a 10-K whose 12(b) row under the ticker is
+//                                 depositary shares, with no ratio cited)
+// The universe: every 20-F filer, plus (ANNUAL=1) every other filer located or
+// incorporated outside the US or with an F-6 on its list. A 10-K filer is
+// mapped ONLY for a depositary-share row; its ordinary listing needs no row.
+// CONFIRM_F6=1 also reads the newest F-6 whatever its date and prints its
+// ratio, to confirm a ratio stated only in a 10-K's notes (ONC, GPCR).
 //   SHARD=1/3 node scripts/ads-ratio-census.mjs
 import "./lib/register-ts-here.mjs";
 import fs from "node:fs";
@@ -18,8 +27,11 @@ const R = await import("../lib/server/secAdsRatio.ts");
 const D = await import("../lib/server/secDescription.ts");
 const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
 const only = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
+const ANNUAL_ALL = Boolean(process.env.ANNUAL);
 const mine = only.length ? only : Object.keys(REG).sort()
-  .filter((s) => /^20-F/.test(REG[s]?.annualForm ?? "") && REG[s]?.cik).filter((_, i) => i % N === K - 1);
+  .filter((s) => (ANNUAL_ALL || /^20-F/.test(REG[s]?.annualForm ?? "")) && REG[s]?.cik).filter((_, i) => i % N === K - 1);
+const US = new Set("AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR VI GU".split(" "));
+const ANNUAL_FORMS = ["20-F", "10-K", "10-KT"];
 let lastAt = 0;
 async function get(url, as = "json") {
   const wait = Math.max(0, lastAt + 130 - Date.now());
@@ -29,16 +41,25 @@ async function get(url, as = "json") {
   if (!res.ok) throw new Error(String(res.status));
   return as === "json" ? res.json() : res.text();
 }
-const tally = { RATIO: 0, DIRECT: 0, DISAGREE: 0, CHANGED: 0, NONE: 0, ERROR: 0 };
+const tally = { RATIO: 0, DIRECT: 0, DISAGREE: 0, CHANGED: 0, NONE: 0, UNRATED: 0, SKIPPED: 0, ERROR: 0 };
 let reached = 0;
 for (const s of mine) {
   if (Date.now() - started > BUDGET_MS) break;
   reached++;
   try {
     const cik = String(REG[s].cik);
-    const r = (await get(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`)).filings?.recent ?? {};
+    const sub = await get(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`);
+    const r = sub.filings?.recent ?? {};
     const pick = (forms) => (r.form ?? []).findIndex((f) => forms.includes(f));
-    const i20 = pick(["20-F"]);
+    // THE LATEST ANNUAL REPORT, whatever its form (#552 COWORK #218/#222).
+    const i20 = pick(ANNUAL_FORMS);
+    const is20F = i20 >= 0 && r.form[i20] === "20-F";
+    if (!only.length && !is20F) {
+      // A domestic 10-K filer with no F-6 has no depositary listing to read.
+      const biz = sub.addresses?.business?.stateOrCountry ?? null, inc = sub.stateOfIncorporation || null;
+      const foreign = (biz && !US.has(biz)) || (inc && !US.has(inc));
+      if (!foreign && !(r.form ?? []).some((f) => /^F-6/.test(f))) { tally.SKIPPED++; continue; }
+    }
     const i6 = pick(["F-6", "F-6EF", "F-6 POS"]);
     // NEWEST SOURCE WINS (#552 COWORK #45): an F-6 counts only if it was filed
     // after the latest 20-F (or there is no 20-F on the list at all).
@@ -49,7 +70,11 @@ for (const s of mine) {
     const text20 = i20 >= 0 ? await docText(i20) : null;
     if (text20) mentions += (text20.match(/American depositary/gi) ?? []).length;
     const f6Text = f6IsNewer ? await docText(i6) : null;
-    lastRef = i20 >= 0 ? `20-F ${r.accessionNumber[i20]} ${r.filingDate[i20]}` : "no 20-F";
+    lastRef = i20 >= 0 ? `${r.form[i20]} ${r.accessionNumber[i20]} ${r.filingDate[i20]}` : "no annual report";
+    if (process.env.CONFIRM_F6 && i6 >= 0) {
+      const f6 = R.adsRatioOf(await docText(i6));
+      console.log(`  F-6 ${r.accessionNumber[i6]} ${r.filingDate[i6]}: ${f6.ok ? `RATIO ${f6.ordinaryPerAds} "${f6.sentence.slice(0, 200)}"` : f6.why}`);
+    }
     // THE SHIPPED SOURCE RULE: lib/server/secAdsRatio.decideAdsRow.
     if (process.env.SHOW12B && text20) {
       const flat = text20.replace(/\s+/g, " "), at = flat.search(/registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i);
@@ -57,6 +82,18 @@ for (const s of mine) {
       console.log(`  rows: ${JSON.stringify(R.coverRowsFor(text20, s))}`);
     }
     const decided = R.decideAdsRow(text20, s, f6Text, f6IsNewer);
+    // A 10-K FILER IS MAPPED ONLY FOR A DEPOSITARY-SHARE ROW. Its ordinary
+    // listing is the ordinary case (no row needed); a depositary row with no
+    // cited ratio is UNRATED, for the class refusal (#552 COWORK #218).
+    if (text20 && !is20F && !("row" in decided && decided.row.kind === "ads")) {
+      const cover = R.coverRowFor(text20, s);
+      if (cover?.kind === "ads") {
+        tally.UNRATED++;
+        console.log(`${s.padEnd(6)} UNRATED ${"refuse" in decided ? decided.refuse : "no ratio"} | ${lastRef}`);
+        console.log(`UNRATED-MAP ${JSON.stringify({ symbol: s, evidence: cover.title.slice(0, 300), form: r.form[i20], source: r.accessionNumber[i20], filed: r.filingDate[i20] })}`);
+      } else { tally.SKIPPED++; if (only.length) console.log(`${s.padEnd(6)} not a depositary listing | ${lastRef}`); }
+      continue;
+    }
     if ("row" in decided) {
       const i = decided.row.from === "20-F" ? i20 : i6;
       row = { kind: decided.row.kind, ordinaryPerAds: decided.row.ordinaryPerAds, evidence: decided.row.evidence, basis: decided.row.basis, ...refOf(i) };
@@ -73,4 +110,4 @@ for (const s of mine) {
     if (row) { const { basis, ...stored } = row; void basis; console.log(`MAP ${JSON.stringify({ symbol: s, ...stored })}`); }
   } catch (e) { tally.ERROR++; console.log(`${s.padEnd(6)} ERROR ${String(e?.message ?? e).slice(0, 60)}`); }
 }
-console.log(`\nshard ${K}/${N}: ${mine.length} 20-F symbols, reached ${reached} | ${JSON.stringify(tally)} | ${Math.round((Date.now() - started) / 1000)}s`);
+console.log(`\nshard ${K}/${N}: ${mine.length} symbols${ANNUAL_ALL ? " (every annual-report filer)" : " (20-F filers)"}, reached ${reached} | ${JSON.stringify(tally)} | ${Math.round((Date.now() - started) / 1000)}s`);
