@@ -31,6 +31,8 @@ import {
   revenueLineIncompleteValues,
   REVENUE_FALLBACK_CHAIN,
   REVENUE_TOTAL_OVER_CONTRACT,
+  REVENUE_GAP_CONCEPTS,
+  REVENUE_GAP_TOLERANCE_ABS,
   SHARE_UNIT_SLIP_CORROBORATION,
   SHARE_UNIT_SLIP_FACTORS,
   SHARE_UNIT_SLIP_TOLERANCE,
@@ -1166,6 +1168,8 @@ export function q4RevenueScope(
 
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
+/** The in-memory tag of a derived contract + not-from-contract total (option G, LUNR). Never stored. */
+const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
 
 /**
  * DOES THE FILER TAG EXCISE AT ALL (#552 COWORK #192 ruling A)? Any us-gaap
@@ -1174,6 +1178,41 @@ const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTa
  */
 export function filerTagsExcise(facts: CompanyFacts): boolean {
   return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k));
+}
+
+/** Names of other income and gains: a gap one of these also equals is not called revenue. */
+const OTHER_INCOME_NAME = /OtherIncome|Nonoperating|EquityMethod|Gain|Loss|InvestmentIncome|OtherOperatingIncome|Derivative/;
+
+/**
+ * WHICH REVENUE CONCEPT FILLS THE GAP (#552 COWORK #219, option G), or null.
+ *
+ * The newest quarter (a filed 10-Q/10-K frame of about 91 days) that carries
+ * both `Revenues` and the contract line; the gap between them; and the one
+ * REVENUE_GAP_CONCEPTS concept whose value for that same quarter equals it,
+ * within the larger of REVENUE_GAP_TOLERANCE_ABS and 1%. NULL when no listed
+ * concept equals it, when the gap is not positive, or when an other-income or
+ * gain concept equals it as well (MDU, PACS, ENSG, SPHR, RYN in the census:
+ * too close to call). The same measurement CODE-A #235's census made.
+ */
+export function revenueGapConcept(facts: CompanyFacts, currency = "USD"): string | null {
+  const g = facts.facts?.["us-gaap"] ?? {};
+  type Row = { start?: string; end: string; val: number; form?: string; filed?: string };
+  const quarterRows = (k: string): Row[] => ((g[k]?.units?.[currency] ?? []) as Row[]).filter((r) =>
+    r.start && /^10-[KQ]/.test(r.form ?? "") && Math.abs((Date.parse(r.end) - Date.parse(r.start!)) / 86_400_000 - 91) <= 10);
+  const rv = quarterRows("Revenues"), ct = quarterRows(CONTRACT_REVENUE_TAG);
+  const end = rv.map((r) => r.end).filter((e) => ct.some((c) => c.end === e)).sort().at(-1);
+  if (!end) return null;
+  const at = (rows: Row[]) => rows.filter((r) => r.end === end).sort((x, y) => String(x.filed).localeCompare(String(y.filed))).at(-1)?.val ?? null;
+  const total = at(rv), contract = at(ct);
+  if (total == null || contract == null) return null;
+  const gap = total - contract;
+  if (!(gap > 0)) return null;
+  const tol = Math.max(REVENUE_GAP_TOLERANCE_ABS, gap * 0.01);
+  const equals = (k: string) => { const x = at(quarterRows(k)); return x != null && Math.abs(x - gap) <= tol; };
+  const hit = REVENUE_GAP_CONCEPTS.find(equals) ?? null;
+  if (!hit) return null;
+  const otherToo = Object.keys(g).some((k) => k !== "Revenues" && k !== CONTRACT_REVENUE_TAG && OTHER_INCOME_NAME.test(k) && equals(k));
+  return otherToo ? null : hit;
 }
 
 /**
@@ -1462,7 +1501,53 @@ function extractCompanyFactsWith(
     // EXCISE-TAGGED FILERS ARE EXCLUDED: their `Revenues` carries other income
     // or derivative gains (COP, CEG, MELI in the #198 census). This knowingly
     // supersedes #535 COWORK #12 ruling A for this case only.
-    if (!filerTagsExcise(facts)) {
+    // ── OPTION G: A GAP THAT IS ITSELF REVENUE (#552 COWORK #219) ──────────
+    // Beside the shipped test above (no excise, and more than 5%), `Revenues`
+    // also wins where the newest quarter's gap over the contract line equals
+    // a concept tagged as revenue (revenueGapConcept): MELI's not-from-contract
+    // revenue, CEG's, PAYX's operating interest. Excise-tagged and sub-5% filers
+    // are reached ONLY through this, so CVX's and COP's "revenues and other
+    // income" and DVN's hedging gains stay where they are.
+    const excise = filerTagsExcise(facts);
+    const gapConcept = revenueGapConcept(facts, currency);
+    // ── THE DERIVED TOTAL (#552 COWORK #219, LUNR) ──────────────────────────
+    // For a G filer whose gap is REVENUE NOT FROM CONTRACTS (the ruling's
+    // words), a period with the contract line and that line filed for the
+    // same frame but no `Revenues` takes their SUM as its total, marked
+    // computed. Without it the floor kept LUNR on the contract line (older
+    // quarters lack `Revenues`), understating its revenue by the gap. Not for a
+    // lease-income or interest gap: AHR's floor still holds it. Built in
+    // copies, so nothing outside this rule sees a derived total.
+    const totalQuarter = new Map(fbQuarter), totalYear = new Map(fbYear);
+    if (gapConcept && /^RevenueNotFromContractWithCustomer/.test(gapConcept)) {
+      const kField: FieldDef = { ...revenueField, chain: [gapConcept], ifrsChain: undefined };
+      const kRows = rowsForField(facts, kField, new Set<string>(), currency);
+      const kBucket: Bucket = new Map();
+      for (const c of kRows) {
+        const k = periodKey(c.row);
+        const list = kBucket.get(k);
+        if (list) list.push(c);
+        else kBucket.set(k, [c]);
+      }
+      const kQuarter = new Map<string, Map<string, FieldValue>>();
+      const kYear = new Map<string, Map<string, FieldValue>>();
+      runCumulative([kField], new Map([["revenue", kBucket]]), new Map([["revenue", gapConcept]]), kQuarter, kYear, new Map(), new Map(), []);
+      for (const [cells, totals, kCells] of [[quarterCells, totalQuarter, kQuarter], [yearCells, totalYear, kYear]] as const) {
+        for (const [end, m] of cells) {
+          const t = totals.get(end)?.get("revenue");
+          if (t?.tag === "Revenues" && t.val != null) continue;
+          const c = m.get("revenue"), k = kCells.get(end)?.get("revenue");
+          if (!c || c.tag !== CONTRACT_REVENUE_TAG || c.val == null || !k || k.val == null) continue;
+          // THE SAME FRAME, never a quarter's contract line beside a year's gap.
+          if (!c.covers || !k.covers || c.covers[0] !== k.covers[0] || c.covers[1] !== k.covers[1]) continue;
+          const row = new Map(totals.get(end) ?? []);
+          row.set("revenue", { val: c.val + k.val, tag: DERIVED_TOTAL_TAG, ns: c.ns, unit: c.unit, derived: "computed", covers: c.covers });
+          totals.set(end, row);
+        }
+      }
+    }
+    const isTotal = (t: FieldValue | undefined) => Boolean(t && (t.tag === "Revenues" || t.tag === DERIVED_TOTAL_TAG) && t.val != null);
+    {
       const newest = [...quarterCells.keys(), ...yearCells.keys()].sort().at(-1);
       // LIKE FOR LIKE: a quarter against a quarter, else a year against a
       // year -- never one duration against the other (ADP's $21.9B fiscal
@@ -1472,35 +1557,38 @@ function extractCompanyFactsWith(
         const f = newest ? fbCells.get(newest)?.get("revenue") : undefined;
         return r && f ? { rev: r, fb: f } : null;
       };
-      const pair = pairAt(quarterCells, fbQuarter) ?? pairAt(yearCells, fbYear);
+      const pair = pairAt(quarterCells, totalQuarter) ?? pairAt(yearCells, totalYear);
       const rev = pair?.rev;
       const fb = pair?.fb;
-      // THE FLOOR (#552 COWORK #194): `Revenues` must cover at least as many of
+      // THE FLOOR (#552 COWORK #194): the total must cover at least as many of
       // the newest 8 quarters, AND of the newest 4 years, as the contract line
       // it would replace. Otherwise the one-concept rule would leave more
       // periods unreported than it fixes (BANC, GLP, HRI in the round-2
-      // census), and the filer keeps its old concept.
+      // census), and the filer keeps its old concept. A derived total counts.
       const covers = (cells: typeof quarterCells, fbCells: typeof fbQuarter, n: number) => {
         const ends = [...cells.keys()].sort().reverse().slice(0, n);
-        const total = ends.filter((e) => { const t = fbCells.get(e)?.get("revenue"); return t?.tag === "Revenues" && t.val != null; }).length;
+        const total = ends.filter((e) => isTotal(fbCells.get(e)?.get("revenue"))).length;
         const contract = ends.filter((e) => { const c = cells.get(e)?.get("revenue"); return c?.tag === CONTRACT_REVENUE_TAG && c.val != null; }).length;
         return total >= contract;
       };
-      const floorHolds = covers(quarterCells, fbQuarter, 8) && covers(yearCells, fbYear, 4);
-      if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
-          fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT && !floorHolds) {
+      const floorHolds = covers(quarterCells, totalQuarter, 8) && covers(yearCells, totalYear, 4);
+      const shippedTest = !excise && fb?.tag === "Revenues" && fb.val != null && rev?.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT;
+      const gapTest = gapConcept != null && fb?.val != null && rev?.val != null && fb.val > rev.val;
+      const qualifies = Boolean(rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 && isTotal(fb) && (shippedTest || gapTest));
+      if (qualifies && !floorHolds) {
         notes.push(`revenue: Revenues exceeds the contract line on ${newest} but covers fewer of the newest 8 quarters / 4 years; the contract line is kept (floor)`);
-      } else if (rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 &&
-          fb && fb.tag === "Revenues" && fb.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT) {
-        let moved = 0, refused = 0;
-        for (const [cells, fbCells] of [[quarterCells, fbQuarter], [yearCells, fbYear]] as const) {
+      } else if (qualifies) {
+        let moved = 0, derived = 0, refused = 0;
+        for (const [cells, fbCells] of [[quarterCells, totalQuarter], [yearCells, totalYear]] as const) {
           for (const [end, m] of cells) {
             const total = fbCells.get(end)?.get("revenue");
-            if (total && total.tag === "Revenues" && total.val != null) { m.set("revenue", total); moved++; }
+            if (total && isTotal(total)) { m.set("revenue", total); moved++; if (total.tag === DERIVED_TOTAL_TAG) derived++; }
             else if (m.has("revenue")) { m.delete("revenue"); refused++; }
           }
         }
-        notes.push(`revenue: Revenues ${fb.val} exceeds the contract line ${rev.val} by more than ${Math.round((REVENUE_TOTAL_OVER_CONTRACT - 1) * 100)}% on ${newest}; Revenues used for ${moved} period(s), ${refused} without it left unreported`);
+        notes.push(shippedTest
+          ? `revenue: Revenues ${fb!.val} exceeds the contract line ${rev!.val} by more than ${Math.round((REVENUE_TOTAL_OVER_CONTRACT - 1) * 100)}% on ${newest}; Revenues used for ${moved} period(s), ${refused} without it left unreported`
+          : `revenue: the gap of Revenues ${fb!.val} over the contract line ${rev!.val} on ${newest} is ${gapConcept} (revenue); Revenues used for ${moved} period(s) (${derived} as contract + ${gapConcept}), ${refused} without it left unreported`);
       }
     }
 
