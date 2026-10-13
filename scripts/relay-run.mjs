@@ -1427,6 +1427,8 @@ const TASKS = {
   // READS ONLY (#553 COWORK #222 step 1): the audited symbols' stored last two
   // EOD bars and IEX quote rows; dates, ET times, %, yes/no. GET/MGET/HMGET, ~2 commands.
   "write-premarket-quote-census": { script: "scripts/premarket-quote-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY (#553 COWORK #225): the #856 meter day hashes, per source and caller. HGETALL, 1 command a day.
+  "write-redis-meter-day": { script: "scripts/redis-meter-day.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
