@@ -1,0 +1,69 @@
+{
+  "asOf": "2026-10-09",
+  "indexClose": 30883.15,
+  "ath": {
+    "level": 31224.47,
+    "date": "2026-10-06"
+  },
+  "oneLiner": "Closed at 30,883.15 Friday, up about 0.5% on the day and roughly flat on the week, about 1.1% below Tuesday's record close of 31,224.47.",
+  "intro": "The Nasdaq-100 closed at 30,883.15 on Friday, October 9, up about 0.5% on the day and roughly 1.1% below Tuesday's record close of 31,224.47. Thursday brought a drop of about 1.4% as chip and AI-infrastructure names fell after a report questioned one major AI company's revenue, and Friday recovered part of it. Over the week the index was roughly flat, up about 0.2%.",
+  "sections": {
+    "performance": {
+      "heading": "How the index has done",
+      "body": "The strip above tracks QQQ, the ETF that follows the Nasdaq-100, through the same week. The index added record closes on Friday, October 2, and again on Monday and Tuesday, fell about 1.4% on Thursday, and recovered part of that on Friday. The longer-period cards show how this week sits inside the run since September."
+    },
+    "chart": {
+      "heading": "The trend against its moving averages",
+      "body": "The daily chart above plots QQQ against its 50- and 200-day moving averages. With the index only about 1.1% below Tuesday's record, the chart shows how far Thursday's drop moved price relative to those averages and whether the longer trend lines are still rising."
+    },
+    "levels": {
+      "heading": "Where the nearby levels sit",
+      "body": "Tuesday's record close of 31,224.47 is the nearest marker above for the index, with Friday's close about 1.1% below it. Thursday's low marks the bottom of this week's range. The Price zones and Key levels cards above show where the nearby levels sit on QQQ today."
+    },
+    "signals": {
+      "heading": "Momentum in plain words",
+      "body": "A run of record closes followed by a one-day drop of about 1.4% may reflect momentum cooling from a high level rather than reversing outright. The panel above shows today's RSI (14) and MACD readings on QQQ, which can differ from what the week's headlines suggest."
+    },
+    "change": {
+      "heading": "The weekly and monthly pattern",
+      "body": "Close to close, the index ended the week roughly flat, up about 0.2%, after a volatile run: record closes early in the week, a drop of about 1.4% on Thursday, and a partial rebound on Friday. The tabs above show the daily, weekly and monthly changes on QQQ."
+    }
+  },
+  "marketRead": [
+    "The Nasdaq-100 reached a record close of 31,224.47 on Tuesday, October 6, extending a run of record closes that began the previous Friday, when it closed at 30,807.93. Fading bets on a Federal Reserve rate increase in October may have supported large technology stocks; those bets eased after the September jobs report on 2 October showed payrolls up about 29,000 and unemployment ticking up to 4.2%, though futures pricing still pointed to a meaningful chance of a December increase. The 10-year Treasury yield was roughly flat on the week, while Brent crude held above $100 a barrel (US crude near $90).",
+    "The advance stalled on Thursday when a Financial Times report put one major AI company's annualized revenue at roughly $50 billion, about $20 billion below figures that had circulated among investors. The index fell about 1.4% that day, and the named chip and infrastructure moves were sharp: Nvidia fell about 2.9%, AMD about 3.9% and Oracle about 5.5%. On Friday a later Bloomberg report that the company expects annualized revenue to reach or exceed $70 billion by year-end coincided with a partial rebound in the index and in Oracle, while Nvidia and AMD slipped again.",
+    "Participation inside the index may be narrower than its level suggests. StreetStats described the share of Nasdaq-100 members above their 200-day average as below average on a longer-term basis in late September, and a market report on 12 October said that share had recovered from its recent trough; we could not confirm a current dated figure for this update. The optimistic reading is that a record index with recovering breadth leaves room for more members to join; the cautious one is that leadership may remain concentrated in a smaller group of large AI-linked names.",
+    "The weeks ahead may turn on third-quarter earnings, which begin with the large banks from 13 October and reach the biggest technology companies from late October into early November. Investors are also watching whether the questions about AI revenue and spending that unsettled the group on Thursday return as more companies report, and whether oil prices ease or keep pressing on valuations."
+  ],
+  "points": [
+    {
+      "label": "Catalyst",
+      "text": "A report on one major AI company's revenue coincided with Thursday's drop in chip stocks; the index rebounded only partly on Friday."
+    },
+    {
+      "label": "Breadth",
+      "text": "No current reading we could confirm; a 12 October market report said the share above the 200-day average had recovered from its trough."
+    },
+    {
+      "label": "Record",
+      "text": "The index set a record close of 31,224.47 on Tuesday, October 6; Friday's close sits about 1.1% below it."
+    }
+  ],
+  "breadth": {
+    "pct200": null,
+    "source": "StreetStats",
+    "date": "2026-10-12"
+  },
+  "watchDown": [
+    "Questions about AI revenue and spending return and weigh again on chip and infrastructure stocks.",
+    "Oil prices climb further or bond yields turn higher, pressing on the valuations of growth companies.",
+    "The recovery in the share of members above their 200-day average stalls or reverses.",
+    "The index closes below Thursday's low, giving back more of the advance since September."
+  ],
+  "watchUp": [
+    "The index clears Tuesday's record close of 31,224.47 and holds above it for more than a session.",
+    "Large technology companies report results from late October that ease the questions about AI spending.",
+    "Breadth keeps recovering, with a widening share of members back above their 200-day average.",
+    "Oil prices ease, taking some pressure off the valuations of growth companies."
+  ]
+}

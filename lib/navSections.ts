@@ -195,6 +195,7 @@ export const CRAWLABLE_NAV_SECTIONS: NavSection[] = [
       { href: "/headlines", label: "Headlines" },
       { href: "/upcoming-ipos", label: "Upcoming IPOs" },
       { href: "/markets/spx", label: "SPX Analysis" },
+      { href: "/markets/qqq", label: "Nasdaq-100 (QQQ)" },
       { href: "/sector", label: "All Sectors" },
     ],
   },

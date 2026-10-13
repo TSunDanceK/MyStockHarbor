@@ -258,6 +258,7 @@ const h2: React.CSSProperties = { margin: "6px 0 0", fontSize: "1.5rem", lineHei
 const small: React.CSSProperties = { margin: "8px 0 0", fontSize: "var(--fs-fine)", lineHeight: 1.5, color: C.muted };
 /** A sentence under a visual (a caption the reader is meant to read): reading size. */
 const note: React.CSSProperties = { margin: "8px 0 0", fontSize: "var(--fs-read)", lineHeight: "var(--lh-read)", color: C.muted };
+const crossLink: React.CSSProperties = { display: "inline-block", marginTop: 14, fontSize: "var(--fs-read)", fontWeight: 800, color: "#93c5fd", textDecoration: "none" };
 
 /**
  * THE WRITE-UP UNDER A VISUAL (#563 COWORK #91): 2–4 sentences from the weekly
@@ -360,6 +361,8 @@ export default async function SPXPage() {
               <Tile label="Trend score" value={trend ? `${trend.score}/100` : "—"} tone={trendTone}
                 sub={trend ? `${trendWords(trend.score)} · a price-trend score from SPY's moving averages and RSI (14), not sentiment` : "SPY's price history couldn't be loaded just now"} />
               </div>
+            {/* THE NASDAQ-100 TWIN (#553 COWORK #217): cross-linked both ways. */}
+            <a className="spxCrossLink" href="/markets/qqq" style={crossLink}>Compare with the Nasdaq-100 →</a>
             </div>
             {/* MARKET MOOD (#96): the owner's thermometer, our own reading, where the weekly "Sentiment" tile was. */}
             <MarketMoodCard view={mood} credit={<a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>} />
@@ -559,6 +562,7 @@ export default async function SPXPage() {
                 </details>
               ))}
             </div>
+            <a className="spxCrossLink" href="/markets/qqq" style={crossLink}>Compare with the Nasdaq-100 →</a>
           </section>
         </div>
       </div>

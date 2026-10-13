@@ -26,6 +26,8 @@ const F = {
   card: "app/markets/spx/MarketMoodCard.tsx",
   page: "app/markets/spx/page.tsx",
   dash: "lib/server/dashboardCards.ts",
+  // The Nasdaq-100 twin (#553 COWORK #217): the third reader, the same site-wide reading, the same card.
+  qqq: "app/markets/qqq/page.tsx",
   write: "lib/server/marketMoodWrite.ts",
   read: "lib/server/marketMoodRead.ts",
   eod: "app/api/jobs/tiingo-eod/route.ts",
@@ -129,7 +131,8 @@ const RULES = {
   "no route or JSON export serves the series; the page hands the card one day and 90 readings": ({ src, files }) =>
     files.filter((f) => /(^|\/)route\.ts$/.test(f) && /marketMoodRead|readMarketMood|TIINGO_MOOD_KEY/.test(read(f))).length === 0 &&
     // The dashboard's "Market right now" (#563 COWORK #134) is the second reader, through the same moodView.
-    files.filter((f) => /marketMoodRead|readMarketMood/.test(read(f)) && f !== F.read).sort().join() === [F.dash, F.page].sort().join() &&
+    files.filter((f) => /marketMoodRead|readMarketMood/.test(read(f)) && f !== F.read).sort().join() === [F.dash, F.page, F.qqq].sort().join() &&
+    /const mood = moodView\(await readMarketMood\(\)\);/.test(code(read(F.qqq), F.qqq)) && /<MarketMoodCard view=\{mood\} credit=/.test(code(read(F.qqq), F.qqq)) &&
     /mood: moodView\(moodRaw\)/.test(read(F.dash)) && /readMarketMood\(\)\.catch\(\(\) => null\)/.test(read(F.dash)) &&
     files.filter((f) => /marketMoodWrite|writeMarketMood/.test(read(f)) && f !== F.write).join() === F.eod &&
     /const mood = moodView\(await readMarketMood\(\)\);/.test(src.pageCode) && /<MarketMoodCard view=\{mood\} credit=/.test(src.pageCode) &&

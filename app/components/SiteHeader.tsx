@@ -1258,7 +1258,7 @@ export default function SiteHeader({
       {
         kind: "dropdown",
         label: "Analysis",
-        isActive: (path) => /^\/stock\/[^/]+$/.test(path) || path === "/markets/spx",
+        isActive: (path) => /^\/stock\/[^/]+$/.test(path) || path === "/markets/spx" || path === "/markets/qqq",
         entries: [
           {
             kind: "link",
@@ -1272,6 +1272,13 @@ export default function SiteHeader({
             label: "SPX Analysis",
             href: "/markets/spx",
             isActive: (path) => path === "/markets/spx",
+          },
+          // #553 COWORK #217: the Nasdaq-100 twin, directly after SPX (desktop and mobile read this list).
+          {
+            kind: "link",
+            label: "Nasdaq-100 (QQQ)",
+            href: "/markets/qqq",
+            isActive: (path) => path === "/markets/qqq",
           },
         ],
       },
