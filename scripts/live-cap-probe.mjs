@@ -52,7 +52,7 @@ for (const s of (process.env.SYMBOLS || "V").split(/[,\s]+/).filter(Boolean)) {
   const cap = V.marketCap(inputs, price);
   console.log(`  marketCap: ${cap?.ok ? `$${(cap.val / 1e9).toFixed(2)}B` : JSON.stringify(cap)}`);
   const pe = V.peRatio(inputs, price);
-  console.log(`  P/E: ${pe?.ok ? pe.val.toFixed(1) : JSON.stringify(pe)}; shares basis: ${V.sharesBasisWords?.(inputs.shares) ?? "-"}`);
+  console.log(`  P/E: ${pe?.ok ? pe.val.toFixed(1) : JSON.stringify(pe)}; shares basis: ${inputs.shares ? (V.sharesBasisWords?.(inputs.shares) ?? "-") : "-"}`);
   console.log(`  Pickers SEC row: ${pick ? `at ${pick.at ?? pick.updatedAt ?? "?"}; inputs.shares ${JSON.stringify(pick.inputs?.shares ?? null)}; refusals ${JSON.stringify(pick.inputs?.refusals ?? null)}` : "none"}`);
 }
 console.log(`\nRedis commands used by this read: ${commands}`);
