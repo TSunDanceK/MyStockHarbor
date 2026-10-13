@@ -95,9 +95,11 @@ for (const s of mine) {
     // A 10-K FILER IS MAPPED ONLY FOR A DEPOSITARY-SHARE ROW. Its ordinary
     // listing is the ordinary case (no row needed); a depositary row with no
     // cited ratio is UNRATED, for the class refusal (#552 COWORK #218).
-    // ONLY FROM ITS OWN 12(b) ROW: a 10-K's body text can quote another
-    // listing's ADSs (CCL's performance graph is Carnival plc's, CUK).
-    const cover10k = text20 && !is20F ? R.coverRowFor(text20, s) : null;
+    // ONLY FROM ITS OWN 12(b) ROW, NAMED UNDER THE TICKER: a 10-K's body text
+    // can quote another listing's ADSs (CCL's performance graph is Carnival
+    // plc's), and so can its 12(b) section (CCL's lists CUK's ADS line), which
+    // coverRowFor's section-level rule (E's 20-F) would take for CCL's own.
+    const cover10k = text20 && !is20F ? R.coverRowsFor(text20, s).find((x) => x.kind === "ads") ?? null : null;
     if (text20 && !is20F && !("row" in decided && decided.row.kind === "ads" && cover10k?.kind === "ads")) {
       const cover = cover10k;
       if (cover?.kind === "ads") {
