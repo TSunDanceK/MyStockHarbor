@@ -5,6 +5,7 @@ category: Space launch & satellite manufacturer (vertically integrated space com
 domain: rocketlabcorp.com
 title: "Rocket Lab (RKLB) Bottlenecks: Who Rocket Lab Depends On"
 date: 2026-07-19
+updated: 2026-10-13
 summary: >
   Rocket Lab is one of the most vertically integrated companies in the launch
   industry — it builds its own engines, avionics, composite structures, and
@@ -15,8 +16,8 @@ summary: >
   highest-stakes current programs, including Neutron's composite-tank
   production and its Space Development Agency satellite constellation. On the
   customer side, Rocket Lab is genuinely government-anchored: SEC filings show
-  a single U.S. government customer made up 29% of revenue through the first
-  nine months of 2025, spanning national security launch and Space Force
+  a single U.S. government customer made up 28% of revenue in fiscal 2025,
+  spanning national security launch and Space Force
   satellite contracts, layered on top of a diversified base of commercial
   Earth-observation and SAR-satellite operators.
 supplyChainNote: >
@@ -33,10 +34,10 @@ supplyChainNote: >
   programs, not a representative slice of a broad supplier base.
 customersNote: >
   This chart blends Rocket Lab's two segments — Launch Services and Space
-  Systems — since both feed the same customer relationships. The 29% U.S.
+  Systems — since both feed the same customer relationships. The 28% U.S.
   Government figure is the company's own SEC-disclosed customer-concentration
   threshold (a single "government customer" representing 10%+ of revenue for
-  the nine months ended September 30, 2025); the commercial split below it is
+  the year ended December 31, 2025, per its FY2025 10-K); the commercial split below it is
   an editorial estimate based on launch cadence and publicly announced
   contracts, not a disclosed percentage breakdown.
 disclaimer: >
@@ -118,18 +119,17 @@ supplyChain:
 customers:
   - name: U.S. Government
     ticker: null
-    pct: 29
+    pct: 28
     grade: some
     blurb: >
-      Not a single company — Rocket Lab's SEC filings disclose that one
-      "government customer" represented 29% of revenue for the first nine
-      months of 2025, spanning national security launch, the Space
+      Not a single company — Rocket Lab's FY2025 10-K discloses that one
+      "government customer" represented 28% of revenue for 2025, spanning national security launch, the Space
       Development Agency's satellite-constellation contracts (including an
       $816 million Tranche 3 award), NASA science missions, and other defense
       and intelligence work.
   - name: BlackSky Technology
     ticker: BKSY
-    pct: 14
+    pct: 15
     grade: some
     blurb: >
       A publicly traded satellite-imagery company and repeat Electron launch
@@ -220,8 +220,8 @@ Corporation) building the radios, antennas, and ground software for its
 Space Development Agency satellite constellation.
 
 On the customer side, the concentration is real and disclosed: Rocket Lab's
-own SEC filings show a single U.S. government customer accounted for 29% of
-revenue through the first nine months of 2025, anchored by national security
+own SEC filings show a single U.S. government customer accounted for 28% of
+revenue in fiscal 2025, anchored by national security
 launch contracts and Space Force satellite awards like the $816 million
 Tranche 3 deal. The rest of the business is a genuinely diversified base of
 commercial Earth-observation and SAR-satellite operators — BlackSky, Planet

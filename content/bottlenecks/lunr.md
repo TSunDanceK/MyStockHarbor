@@ -10,7 +10,7 @@ summary: >
   Intuitive Machines builds most of its Nova-C lunar lander hardware in-house,
   so its real supply-side dependency is narrower than a typical hardware
   company — a launch provider it can't fly without, plus a small number of
-  named teammates and electronics suppliers on specific programs. Its customer
+  named electronics suppliers on specific missions. Its customer
   side tells a different story: SEC filings disclose a single customer made up
   72% of Q3 2025 revenue, consistent with NASA's position as the company's
   dominant revenue source, with a fast-growing but much smaller national-
@@ -20,10 +20,11 @@ supplyChainNote: >
   including its own liquid-methane/liquid-oxygen main engine, structures, and
   much of its avionics software — rather than sourcing from a broad supplier
   base. The entries below are the material external dependencies it can't
-  easily substitute: SpaceX for launch, its named teammates on its "Moon
-  RACER" Lunar Terrain Vehicle (LTV) team (NASA picked other providers to
-  build the rovers in May 2026), and the specific electronics suppliers
-  named in mission press coverage.
+  easily substitute: SpaceX for launch, and the specific electronics
+  suppliers named in mission press coverage. Its former "Moon RACER" Lunar
+  Terrain Vehicle teammates (Boeing, Michelin, AVL) are no longer listed:
+  NASA picked Astrolab and Lunar Outpost to build the rovers in May 2026,
+  and no current programme ties them to Intuitive Machines.
 disclaimer: >
   The percentages shown are editorial estimates based on public research
   (company disclosures, earnings commentary, and industry reporting) meant
@@ -33,54 +34,25 @@ disclaimer: >
 supplyChain:
   - name: SpaceX
     ticker: SPCX
-    pct: 40
+    pct: 70
     grade: hard
     blurb: >
       Exclusive launch provider for every Nova-C mission flown or manifested
       to date (IM-1, IM-2, and the planned IM-3), launching each lander on a
       Falcon 9. SpaceX itself went public on Nasdaq under ticker SPCX in a
       June 2026 IPO — without a rocket, no lander leaves the ground.
-  - name: Boeing
-    ticker: BA
-    pct: 20
-    grade: some
-    blurb: >
-      Teammate on Intuitive Machines' "Moon RACER" team, one of three
-      selected for NASA's 2024 Lunar Terrain Vehicle (LTV) feasibility
-      phase, providing vehicle engineering and systems-integration work. In
-      May 2026 NASA picked Lunar Outpost and Astrolab, not Moon RACER, to
-      build the rovers.
-  - name: Michelin
-    ticker: null
-    pct: 12
-    grade: some
-    blurb: >
-      Moon RACER teammate supplying purpose-built, non-pneumatic tires
-      engineered for the Moon's vacuum and abrasive regolith (Moon RACER
-      was not picked to build NASA's rovers in May 2026). Trades only as
-      a thin OTC ADR (MGDDY) with its primary listing on Euronext Paris —
-      no proper US-listed ticker.
   - name: L3Harris Technologies
     ticker: LHX
-    pct: 12
+    pct: 21
     grade: some
     blurb: >
       Supplied avionics and communications electronics integrated into the
       IM-2 Nova-C lander ahead of its 2025 launch — a supplier relationship
       distinct from L3Harris's separate role as a customer on the defense
       side of the business (see Customer concentration).
-  - name: AVL List GmbH
-    ticker: null
-    pct: 8
-    grade: spread
-    blurb: >
-      Austrian engineering firm and Moon RACER teammate, contributing
-      electric powertrain design for the team's Lunar Terrain Vehicle
-      concept (not picked by NASA in May 2026). A private
-      company with no public ticker.
   - name: Aitech Systems
     ticker: null
-    pct: 8
+    pct: 9
     grade: spread
     blurb: >
       Supplied the space-rated avionics computer that handled image data
@@ -160,8 +132,7 @@ roughly) on the Moon, but its bottleneck story has two very different
 halves. On the supply side, it's unusually self-reliant for a hardware
 company — it builds its own engine, structures, and avionics software —
 leaving SpaceX's launch pad as the one dependency it genuinely cannot work
-around, plus a handful of named partners from its Lunar Terrain Vehicle
-bid (which NASA did not pick in May 2026) and specific electronics suppliers like Aitech and L3Harris. On the
+around, plus specific electronics suppliers like Aitech and L3Harris. On the
 customer side, the picture is the opposite of diversified: SEC filings show
 a single customer made up 72% of Q3 2025 revenue, and every public
 disclosure points to that customer being NASA, which has been the company's
