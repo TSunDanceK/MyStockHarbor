@@ -1435,6 +1435,8 @@ const TASKS = {
   "write-premarket-quote-census": { script: "scripts/premarket-quote-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY despite the prefix (#552 COWORK #221/#222): the sec-facts write decision replayed on each stored set. 1 GET + 1 per symbol.
   "write-stale-cover-replay": { script: "scripts/stale-cover-replay.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY despite the prefix (#552 COWORK #223/#224): a symbol's live cap as the stock page computes it. The price is never printed.
+  "write-live-cap-probe": { script: "scripts/live-cap-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY despite the prefix (#552 COWORK #222): re-read requests a kept prior has held open > 14 days, for the check-in. 1 GET.
   "write-held-open-requests": { script: "scripts/held-open-requests.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-held-open-requests-all": { script: "scripts/held-open-requests.mjs", args: () => [], needsTypescript: true, writes: true, env: { ALL: "1" } },
