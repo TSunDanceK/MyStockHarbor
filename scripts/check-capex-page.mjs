@@ -66,8 +66,8 @@ async function suite(P, pageCode) {
   const ok = (label, cond, detail = "") => { if (!cond) fails.push(`${label}${detail ? ` — ${detail}` : ""}`); };
 
   ok("FY label: a year ending mid-month is that month", P.fyToLabel("2026-01-25") === "FY to Jan 2026");
-  ok("FY label: a 53-week year ending 3 Jul is June's", P.fyToLabel("2026-07-03") === "FY to Jun 2026" && P.fyToLabel("2025-11-02") === "FY to Oct 2025");
-  ok("FY label: January's first week rolls back a year", P.fyToLabel("2026-01-02") === "FY to Dec 2025");
+  ok("FY label: a year ending in a month's first week shows its exact date, not the month before (#563 COWORK #188)", P.fyToLabel("2026-09-03") === "FY to 3 Sep 2026" && P.fyToLabel("2026-07-03") === "FY to 3 Jul 2026" && P.fyToLabel("2026-01-02") === "FY to 2 Jan 2026", `${P.fyToLabel("2026-09-03")} ${P.fyToLabel("2026-01-02")}`);
+  ok("FY label: day 8 is that month", P.fyToLabel("2025-11-08") === "FY to Nov 2025");
   ok("amounts in the filed currency", P.formatAmount(10.45e9, "EUR") === "EUR 10.4bn" && P.formatAmount(193.74e9, "USD") === "$194bn" && P.formatAmount(0.39e9, "USD") === "$390m", `${P.formatAmount(10.45e9, "EUR")} ${P.formatAmount(193.74e9, "USD")} ${P.formatAmount(0.39e9, "USD")}`);
   ok("no prior year reads 'New line'", P.changeText(null) === "New line" && P.changeText(68.2) === "+68%" && P.changeText(-4.6) === "−5%");
 
@@ -131,6 +131,10 @@ async function suite(P, pageCode) {
   ok("who is spending most: the record's leaders, named, largest first", ins.topSpenders.map((t) => `${t.ticker}:${t.name}:${t.amount}`).join("|") === "MSFT:Microsoft:$90.0bn|GOOGL:Alphabet:$80.0bn", JSON.stringify(ins.topSpenders));
   ok("fastest growing: the largest rise since the first year", ins.fastest?.sector === "Communication Services" && ins.fastest.changeText === "+300%" && ins.fastest.from === "$50.0bn", JSON.stringify(ins.fastest));
   ok("reinvesting the most: the highest capex ÷ revenue in the latest year", ins.reinvest?.sector === "Utilities" && ins.reinvest.ratioText === "32.0%", JSON.stringify(ins.reinvest));
+  ok("reinvesting the most carries both cohorts, so the 51 vs 48 gap can be explained (#563 COWORK #188)", P.buildInsights({ spending: { years: Y, sectors: [{ ...sec("Utilities", 80e9, 100e9, 0.32), cohort: 51, ratioCohort: 48 }] }, receivers: [], contracts: null, companyName: () => "" }).reinvest?.sectorCohort === 51);
+  ok("the cohort footnote is visible next to the share, not only in the source line", /\{x\.reinvest\.sectorCohort !== x\.reinvest\.cohort \? \([\s\S]*?className="cardText"[\s\S]*?\{x\.reinvest\.sectorCohort\} companies, those with capex in every year/.test(pageCode));
+  ok("the top-5 box says fiscal years are placed in calendar years", pageCode.includes("Fiscal year placed in calendar year:") && pageCode.includes("fiscal year placed in calendar {x.year}."));
+  ok("the capex definition: cash PP&E, finance leases excluded", pageCode.includes("Capex is cash paid for property, plant and equipment") && pageCode.includes("finance leases is not included") && pageCode.includes("goes to the year it ends in"));
   ok("receivers snapshot: the fastest-growing filed line, with its sub-label", ins.receiverTop?.name === "Micron Technology" && ins.receiverTop.line === "CMBU (Cloud Memory Business Unit)" && ins.receiverTop.changeText === "+257%", JSON.stringify(ins.receiverTop));
   ok("contracts snapshot: the top recipient and the matched total", ins.contractTop?.name === "Lockheed Martin" && ins.contractTop.amount === "$70.5bn" && ins.contractTop.mapped === "$311bn" && ins.contractTop.total === "$803bn", JSON.stringify(ins.contractTop));
   ok("a record built before the leaders list: that card is simply absent", P.buildInsights({ spending: { years: Y, sectors: [sec("Energy", 1e9, 2e9, 0.1)] }, receivers: [], contracts: null, companyName: () => "" }).topSpenders.length === 0);
@@ -155,7 +159,9 @@ const mut = (label, s, from, to) => {
   return s.replace(from, () => to);
 };
 const MUTANTS = [
-  ["the first-week roll-back removed", () => mut("fy", src, "if (d <= 7) {", "if (false) {")],
+  ["the first-week exact date removed", () => mut("fy", src, "if (d <= 7) return", "if (false) return")],
+  ["the first-week month rolled back again", () => mut("fy2", src, "if (d <= 7) return `FY to ${d} ${MONTHS[m - 1]} ${y}`;", "if (d <= 7) return m === 1 ? `FY to Dec ${y - 1}` : `FY to ${MONTHS[m - 2]} ${y}`;")],
+  ["the reinvest card's sector cohort dropped", () => mut("rcoh", src, "cohort: ratio.ratioCohort, sectorCohort: ratio.cohort }", "cohort: ratio.ratioCohort, sectorCohort: ratio.ratioCohort }")],
   ["a sub-label shown unverified", () => mut("sub", src, "subLabel: e.subLabel && f.subLabelOk ? e.subLabel.text : null,", "subLabel: e.subLabel ? e.subLabel.text : null,")],
   ["the bar cap removed", () => mut("cap", src, "(Math.min(Math.abs(pct), BAR_CAP_PCT) / BAR_CAP_PCT) * 100", "Math.abs(pct)")],
   ["the hyperscaler note on every group", () => mut("note", src, "hyperscalerNote: entries.some((e) => e.group === g.id && e.hyperscaler)", "hyperscalerNote: true")],

@@ -56,16 +56,14 @@ export type ReceiverGroupView = { id: string; heading: string; hyperscalerNote: 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "FY to Jan 2026". A 52/53-week year ending in the first days of a month
- *  belongs to the month before ("2026-07-03" -> "Jun 2026"). */
+ *  is labelled with its exact end date ("2026-09-03" -> "3 Sep 2026"): naming
+ *  the month before would claim a month the year did not end in (#563
+ *  COWORK #188, Micron's 53-week year to 3 Sep 2026), and naming the month
+ *  itself would suggest a whole month of it. */
 export function fyToLabel(fyEnd: string): string {
   const [y, m, d] = fyEnd.split("-").map(Number);
-  let month = m - 1;
-  let year = y;
-  if (d <= 7) {
-    month -= 1;
-    if (month < 0) { month = 11; year -= 1; }
-  }
-  return `FY to ${MONTHS[month]} ${year}`;
+  if (d <= 7) return `FY to ${d} ${MONTHS[m - 1]} ${y}`;
+  return `FY to ${MONTHS[m - 1]} ${y}`;
 }
 
 /** "$193.7bn" / "EUR 10.4bn" / "$480m". The filed currency, never converted. */
@@ -321,7 +319,7 @@ export type Insights = {
   otherSectors: { count: number; shareText: string } | null;
   topSpenders: Array<{ ticker: string; name: string; amount: string; sector: string }>;
   fastest: { sector: string; changeText: string; from: string; to: string; firstYear: number } | null;
-  reinvest: { sector: string; ratioText: string; cohort: number } | null;
+  reinvest: { sector: string; ratioText: string; cohort: number; sectorCohort: number } | null;
   receiverTop: { ticker: string; name: string; line: string; changeText: string; fyTo: string } | null;
   contractTop: { ticker: string; name: string; amount: string; mapped: string; total: string | null } | null;
 };
@@ -358,7 +356,7 @@ export function buildInsights(input: InsightInput): Insights {
   const ratio = sectors
     .filter((s) => typeof s.capexToRevenue[last] === "number")
     .sort((a, b) => (b.capexToRevenue[last] as number) - (a.capexToRevenue[last] as number))[0];
-  const reinvest = ratio ? { sector: ratio.sector, ratioText: `${((ratio.capexToRevenue[last] as number) * 100).toFixed(1)}%`, cohort: ratio.ratioCohort } : null;
+  const reinvest = ratio ? { sector: ratio.sector, ratioText: `${((ratio.capexToRevenue[last] as number) * 100).toFixed(1)}%`, cohort: ratio.ratioCohort, sectorCohort: ratio.cohort } : null;
   const rTop = input.receivers.filter((r) => r.changePct !== null).sort((a, b) => (b.changePct as number) - (a.changePct as number))[0];
   const receiverTop = rTop
     ? { ticker: rTop.ticker, name: input.companyName(rTop.ticker) || rTop.ticker, line: rTop.subLabel ? `${rTop.label} (${rTop.subLabel})` : rTop.label, changeText: rTop.changeText, fyTo: rTop.fyTo }

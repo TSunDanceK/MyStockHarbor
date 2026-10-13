@@ -95,20 +95,100 @@ export function initials(name: string): string {
   return (words.slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?");
 }
 
-/** What an unlisted row is: a private company, or not a single company at all. */
-export function unlistedWords(name: string, blurb: string): string {
-  if (/not a single company/i.test(blurb) || /\b(suppliers|agencies|customers|consumers|providers|government|governments|users)\b/i.test(name)) return "Not a listed company";
-  if (/private/i.test(blurb)) return "Private company";
-  return "Not a listed company";
+/** A row's optional `listing` (#563 COWORK #188): listed only outside the US, or private. */
+export type Listing = "non-us" | "private";
+export const isListing = (v: unknown): v is Listing => v === "non-us" || v === "private";
+
+/**
+ * WHAT A ROW WITH NO TICKER IS (#563 COWORK #188). "Not a listed company" was
+ * the default and so landed on LSEG, Samsung, MediaTek, Adyen and every other
+ * company listed outside the US. Now, in order:
+ *   - the data file's `listing` field, where set;
+ *   - "unnamed": a customer or supplier the filing does not name;
+ *   - "government" first for one sovereign customer ("U.S. Government"), which
+ *     the filings report as one customer;
+ *   - "group": not a single company (a bucket, an end market, a region);
+ *   - "government": a public body (NASA, the U.S. Air Force);
+ *   - "private": the blurb says it is privately held;
+ *   - else "non-us": a named company with no US ticker on this site, which is
+ *     true of a foreign-listed firm and, less precisely, of a private one the
+ *     blurb does not call private (set `listing: private` on those).
+ */
+export type EntityKind = "listed" | "non-us" | "private" | "government" | "group" | "unnamed";
+const UNNAMED = /\b(unnamed|undisclosed|not named)\b|^(?:the )?(?:largest|second[- ]largest|third[- ]largest)\b|\bcustomer [A-Z]\b|"customer [a-z]"/i;
+const GROUP = /not a single company/i;
+const GROUP_NAME = /\b(suppliers|agencies|customers|consumers|providers|governments|users|distributors|wholesalers|retailers|resellers|partners|end[- ]markets?|others?|rest of|segments?|cohort|channel|investors|shareholders|purchasers|buyers|clients|operators|vendors|contractors|carriers|payers|merchants|advertisers|developers|subscribers|members|insiders|makers|mills|group of|in-house|construction|toll roads)\b|\b(?:materials|launch)$|^(north|south|latin|central)\s+america\b|\basia[- ]pacific\b|^europe\b|middle east|\binternational\b|outside the u\.?s|^(energy|healthcare|industrial|consumer|retail|automotive|aerospace|data cent(?:er|re)s?|telecom)\b|\bODM group\b/i;
+const GOVERNMENT = /\b(NASA|(?:U\.?S\.?|US|federal|national) government|U\.?S\.? (Air Force|Army|Navy|Space Force|Marine Corps|Intelligence Community|Department of)|Department of|Ministry of|Research Institute|ISRO|space agency)\b/i;
+const SOVEREIGN = /^(?:the )?(?:U\.?S\.?|US|United States)(?: federal)? government\b/i;
+const PRIVATE = /\bprivately[- ]held\b|\bprivate(?:ly)? (?:company|firm|held|owned)\b|\bis (?:a )?private\b|\bremains private\b|\bnot publicly (?:traded|listed)\b/i;
+
+export function entityKind(c: { name: string; blurb: string; ticker?: string | null; listing?: Listing }): EntityKind {
+  if (c.ticker) return "listed";
+  if (c.listing) return c.listing;
+  if (UNNAMED.test(c.name)) return "unnamed";
+  // ONE SOVEREIGN CUSTOMER: "U.S. Government", "U.S. Federal Government (all
+  // agencies combined)" — the filings report it as one customer, so it is one
+  // here, whatever the blurb says about its agencies. Not "… & …", "… and …"
+  // or "state & local" (several governments, a group).
+  if (SOVEREIGN.test(c.name) && !/\s(?:&|and)\s|state|local|,/i.test(c.name.replace(/\([^)]*\)/g, ""))) return "government";
+  if (GROUP.test(c.blurb) || GROUP_NAME.test(c.name)) return "group";
+  if (GOVERNMENT.test(c.name)) return "government";
+  if (PRIVATE.test(c.blurb)) return "private";
+  return "non-us";
 }
 
+/** The label under an unlisted row. "No US listing" never says a listed company is not listed. */
+export const UNLISTED_WORDS: Record<Exclude<EntityKind, "listed">, string> = {
+  "non-us": "No US listing",
+  private: "Private company",
+  government: "Government body",
+  group: "Not a single company",
+  unnamed: "Name not disclosed",
+};
+
+/** What an unlisted row is (#188): see entityKind. */
+export function unlistedWords(name: string, blurb: string, listing?: Listing): string {
+  const kind = entityKind({ name, blurb, listing });
+  return kind === "listed" ? "" : UNLISTED_WORDS[kind];
+}
+
+/** A single named company (or public body): what "a single big customer" may mean (#188). */
+export const isSingleNamed = (c: { name: string; blurb: string; ticker?: string | null; listing?: Listing }) =>
+  !["group", "unnamed"].includes(entityKind(c));
+
 export type FaqItem = { q: string; a: string };
+
+/**
+ * "Does X depend on a single big customer?" (#563 COWORK #188). The meter's
+ * largest share can be a group or a region (KDP's 52% of "all other
+ * customers", MELI's 55% Brazil): that is not a single customer. Only a
+ * single named company (entityKind not group / unnamed) answers yes or partly,
+ * at the meter's own bands; otherwise the answer says no single named customer
+ * is that large, and names the bigger group. Hedged, never advice.
+ */
+export function singleCustomerAnswer(meter: Meter, customers?: { name: string; pct: number; blurb: string; ticker?: string | null; listing?: Listing }[]): string {
+  const bands = { high: 40, medium: 20 };
+  if (!customers) {
+    return meter.level === "High" ? `It may: the largest customer or group on this map is ~${meter.pct}% of the mapped reliance.`
+      : meter.level === "Medium" ? `Partly: the largest customer or group on this map is ~${meter.pct}%, which may matter but is not the whole picture.`
+      : `Not on this map. ${meter.why}`;
+  }
+  if (meter.pct === null) return `Not on this map. ${meter.why}`;
+  const byPct = [...customers].sort((a, b) => b.pct - a.pct);
+  const single = byPct.find(isSingleNamed), group = byPct[0];
+  if (single && single.pct >= bands.high) return `It may: ${single.name} is ~${single.pct}% of the mapped reliance, the largest single named customer on this map.`;
+  if (single && single.pct >= bands.medium) return `Partly: ${single.name} is ~${single.pct}% of the mapped reliance, which may matter but is not the whole picture.`;
+  const bigger = group && !isSingleNamed(group) && group.pct >= bands.medium ? ` The largest share (~${group.pct}%) is ${group.name}, a group rather than one customer.` : "";
+  return `Not on this map: no single named customer reaches ~${bands.medium}% of the mapped reliance.${bigger}`;
+}
 /** Three questions from the data: the biggest supplier, one big customer or not, the linked listed stocks. */
 export function buildFaq(o: {
   name: string; symbol: string;
   suppliers: { name: string; pct: number; grade: Grade }[];
   customerMeter: Meter;
   listed: string[];
+  /** The customer rows (#188): only a single NAMED company answers "a single big customer". */
+  customers?: { name: string; pct: number; blurb: string; ticker?: string | null; listing?: Listing }[];
 }): FaqItem[] {
   const top = o.suppliers[0];
   return [
@@ -118,9 +198,7 @@ export function buildFaq(o: {
     },
     {
       q: `Does ${o.name} depend on a single big customer?`,
-      a: o.customerMeter.level === "High" ? `It may: the largest customer or group on this map is ~${o.customerMeter.pct}% of the mapped reliance.`
-        : o.customerMeter.level === "Medium" ? `Partly: the largest customer or group on this map is ~${o.customerMeter.pct}%, which may matter but is not the whole picture.`
-        : `Not on this map. ${o.customerMeter.why}`,
+      a: singleCustomerAnswer(o.customerMeter, o.customers),
     },
     {
       q: `Which listed stocks are linked to ${o.symbol} here?`,
