@@ -120,7 +120,13 @@ const GROUP = /not a single company/i;
 const GROUP_NAME = /\b(suppliers|agencies|customers|consumers|providers|governments|users|distributors|wholesalers|retailers|resellers|partners|end[- ]markets?|others?|rest of|segments?|cohort|channel|investors|shareholders|purchasers|buyers|clients|operators|vendors|contractors|carriers|payers|merchants|advertisers|developers|subscribers|members|insiders|makers|mills|group of|in-house|construction|toll roads)\b|\b(?:materials|launch)$|^(north|south|latin|central)\s+america\b|\basia[- ]pacific\b|^europe\b|middle east|\binternational\b|outside the u\.?s|^(energy|healthcare|industrial|consumer|retail|automotive|aerospace|data cent(?:er|re)s?|telecom)\b|\bODM group\b/i;
 const GOVERNMENT = /\b(NASA|(?:U\.?S\.?|US|federal|national) government|U\.?S\.? (Air Force|Army|Navy|Space Force|Marine Corps|Intelligence Community|Department of)|Department of|Ministry of|Research Institute|ISRO|space agency)\b/i;
 const SOVEREIGN = /^(?:the )?(?:U\.?S\.?|US|United States)(?: federal)? government\b/i;
-const PRIVATE = /\bprivately[- ]held\b|\bprivate(?:ly)? (?:company|firm|held|owned)\b|\bis (?:a )?private\b|\bremains private\b|\bnot publicly (?:traded|listed)\b/i;
+// #563 COWORK #190: also "not a publicly traded company", "no publicly traded
+// shares", "no longer a publicly traded company", "taken private" and "a private,
+// family-owned company" -- the blurbs' own wording for ~25 private rows that read
+// "No US listing". "private-label" and "private fleet" are not a company.
+// A state-owned company "not publicly traded" is not private (COFCO).
+const STATE_OWNED = /\bstate[- ](?:owned|controlled)\b|\bcrown corporation\b/i;
+const PRIVATE = /\bprivately[- ]held\b|\bprivate(?:ly)? (?:company|firm|held|owned)\b|\bis (?:a )?private\b|\bremains private\b|\bnot publicly (?:traded|listed)\b|\b(?:not|no longer) (?:a )?publicly[- ]traded\b|\bno publicly[- ]traded shares\b|\btaken (?:fully )?private\b|\bprivate,? (?:[\w-]+,? ){0,3}(?:company|companies|firm|conglomerate)\b|\bprivate, [\w-]+-owned\b/i;
 
 export function entityKind(c: { name: string; blurb: string; ticker?: string | null; listing?: Listing }): EntityKind {
   if (c.ticker) return "listed";
@@ -133,7 +139,7 @@ export function entityKind(c: { name: string; blurb: string; ticker?: string | n
   if (SOVEREIGN.test(c.name) && !/\s(?:&|and)\s|state|local|,/i.test(c.name.replace(/\([^)]*\)/g, ""))) return "government";
   if (GROUP.test(c.blurb) || GROUP_NAME.test(c.name)) return "group";
   if (GOVERNMENT.test(c.name)) return "government";
-  if (PRIVATE.test(c.blurb)) return "private";
+  if (PRIVATE.test(c.blurb) && !STATE_OWNED.test(c.blurb)) return "private";
   return "non-us";
 }
 
