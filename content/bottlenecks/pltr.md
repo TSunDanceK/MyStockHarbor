@@ -5,6 +5,7 @@ category: Data Analytics & AI Software (Government + Commercial)
 domain: palantir.com
 title: "Palantir Technologies (PLTR) Bottlenecks: Who Palantir Depends On"
 date: 2026-07-10
+updated: 2026-10-13
 summary: >
   Palantir builds data-integration and AI decision software (Gotham, Foundry, AIP) rather
   than hardware, so its real operational dependencies are on the cloud and AI-infrastructure
@@ -62,14 +63,17 @@ supplyChain:
       Google Cloud is a formal infrastructure partner integrating Foundry and AIP for joint
       commercial and public-sector customers, giving Palantir a third major hyperscaler option
       for hosting and distribution.
-  - name: OpenAI and Anthropic
+  - name: Third-party AI model providers (OpenAI, Anthropic and others)
     ticker: null
     pct: 10
     grade: some
     blurb: >
-      Palantir's AIP is explicitly "model agnostic," built to plug in third-party large
-      language models from labs such as OpenAI and Anthropic rather than models Palantir
-      develops itself. Both are private companies with no public ticker.
+      Not a single company — Palantir's own documentation describes AIP as model-agnostic,
+      plugging in third-party large language models (its Model Catalog lists providers
+      including OpenAI, Anthropic, Google Gemini and Mistral AI) rather than models Palantir
+      develops itself. Named deals include Azure OpenAI in classified environments (with
+      Microsoft, August 2024) and Anthropic's Claude via AWS (November 2024). OpenAI and
+      Anthropic are both private, with no public ticker.
 customers:
   - name: U.S. Army
     ticker: null
