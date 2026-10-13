@@ -72,6 +72,15 @@ function probe() {
   const pole = q(".klPole"), klFill = q(".klFill");
   return {
     sideways: document.documentElement.scrollWidth > innerWidth,
+    // THE HERO ROWS (#553 COWORK #221): every row of tiles fills the grid's width (no tile beside an empty column),
+    // and the trend meter sits inside its tile.
+    heroHole: (() => {
+      const grid = q(".qqqTiles"); if (!grid) return false;
+      const g = box(grid), rows = new Map();
+      for (const t of grid.children) { const b = box(t); const k = Math.round(b.top); rows.set(k, Math.max(rows.get(k) ?? 0, b.right)); }
+      return [...rows.values()].some((right) => g.right - right > 2);
+    })(),
+    meterOut: (() => { const m = q(".qqqTrendTile .dlMeter"), t = q(".qqqTrendTile"); if (!m || !t) return true; const a = box(m), b = box(t); return a.right > b.right - parseFloat(getComputedStyle(t).paddingRight) + 0.5 || a.left < b.left; })(),
     // A hero tile whose value or words run past its edge (the five-digit index close at 320 px).
     tileOverflow: [...document.querySelectorAll(".qqqTile")].some((t) => [...t.querySelectorAll("div")].some((d) => d.scrollWidth > t.clientWidth - 2 * parseFloat(getComputedStyle(t).paddingLeft) + 1)),
     heroGap: Math.abs(box(heroLeft).bottom - box(mood).bottom), plotH: box(plot)?.height ?? 0,
@@ -95,7 +104,7 @@ for (const week of WEEKS) {
   const html = renderToStaticMarkup(await Page());
   console.log(`\n${week.name}`);
   for (const root of [16, 20]) {
-    for (const width of [1280, 1024, 768, 390, 320]) {
+    for (const width of [1280, 1024, 768, 430, 390, 320]) {
       const page = await browser.newPage({ viewport: { width, height: 1000 } });
       await page.setContent(doc(html, root));
       const r = await page.evaluate(probe);
@@ -103,6 +112,8 @@ for (const week of WEEKS) {
       if (process.env.QQQ_DEBUG) console.log(JSON.stringify(r.debug));
       if (week.zones && r.zonesCount !== week.zones) fail(`expected ${week.zones} zones, drew ${r.zonesCount}`);
       if (r.sideways) fail("the page scrolls sideways");
+      if (width <= 900 && r.heroHole) fail(`at ${width} px a hero row has a tile beside an empty column`);
+      if (r.meterOut) fail("the trend meter runs outside its tile (or is missing)");
       if (r.tileOverflow) fail("a hero tile's value runs past its edge");
       if (width >= 1024) {
         if (r.heroGap > 8) fail(`hero columns end ${r.heroGap.toFixed(1)} px apart`);
@@ -137,6 +148,26 @@ for (const week of WEEKS) {
   const caught = r.heroGap > 8 || r.levelsGap > 8 || r.keysSpare > 8 || r.glanceSpare > 8 || r.zonesSpare > 8;
   console.log(`\nmutant (no stretch): hero gap ${r.heroGap.toFixed(1)} · levels gap ${r.levelsGap.toFixed(1)} · ${caught ? "caught" : "NOT CAUGHT"}`);
   if (!caught) failures++;
+  await page.close();
+}
+// THE SPAN MUTANT (#553 COWORK #221): the trend tile's full-row rule undone must leave a hole at 768 px (two tiles a row there).
+{
+  globalThis.__SPX_BARS = undefined;
+  const html = renderToStaticMarkup(await Page());
+  const page = await browser.newPage({ viewport: { width: 768, height: 1000 } });
+  await page.setContent(doc(html, 16, ".qqqTrendTile{grid-column:auto!important}"));
+  const r = await page.evaluate(probe);
+  console.log(`mutant (no span): hero hole at 768 px ${r.heroHole ? "caught" : "NOT CAUGHT"}`);
+  if (!r.heroHole) failures++;
+  await page.close();
+}
+// 390 px HERO SHOTS for the PR (#221).
+if (SHOTS) {
+  globalThis.__SPX_BARS = undefined;
+  const html = renderToStaticMarkup(await Page());
+  const page = await browser.newPage({ viewport: { width: 390, height: 1000 } });
+  await page.setContent(doc(html, 16));
+  await page.locator(".qqqHero").screenshot({ path: path.join(SHOTS, `qqq-hero-trend-390.png`) });
   await page.close();
 }
 await browser.close();

@@ -22,6 +22,7 @@ import { macdTone } from "@/lib/ta/macdSeries";
 import { indexWords, isStale, parseSpxWeekly, weeklyDate, type SectionKey, type SpxWeekly } from "@/lib/spxWeekly";
 import { FAQ, WEEKLY_CHART_EXPLAINER, faqJsonLd, trendWords } from "@/lib/spxPage";
 import { dailyReturnBars, monthlyReturnBars, weeklyReturnBars } from "@/lib/closeReturns";
+import { TREND_METER_CSS, TrendMeter } from "@/app/components/TrendMeter";
 import ReturnsToggleCard from "@/app/components/ReturnsToggleCard";
 import PerformanceStrip from "@/app/stock/[symbol]/PerformanceStrip";
 import StockPriceChart from "@/app/stock/[symbol]/StockPriceChart";
@@ -277,9 +278,9 @@ function WriteUp({ weekly, k, stale }: { weekly: SpxWeekly | null; k: SectionKey
 }
 
 /** A hero tile: label, value, a line under it; `dated` lifts the date out when the weekly file is stale. */
-function Tile({ label, value, sub, tone, dated }: { label: string; value: React.ReactNode; sub: React.ReactNode; tone?: string; dated?: boolean }) {
+function Tile({ label, value, sub, tone, dated, wide }: { label: string; value: React.ReactNode; sub: React.ReactNode; tone?: string; dated?: boolean; wide?: boolean }) {
   return (
-    <div className="spxTile" style={{ ...card({ padding: 14 }) }}>
+    <div className={wide ? "spxTile spxTrendTile" : "spxTile"} style={{ ...card({ padding: 14 }) }}>
       <div style={{ fontSize: "var(--fs-label)", fontWeight: 850, letterSpacing: "0.08em", textTransform: "uppercase", color: C.muted }}>{label}</div>
       <div style={{ marginTop: 6, fontSize: "1.5rem", fontWeight: 900, letterSpacing: "-0.03em", color: tone ?? C.value, fontVariantNumeric: "tabular-nums" }}>{value}</div>
       <div style={{ marginTop: 4, fontSize: "var(--fs-read)", lineHeight: 1.45, color: dated ? C.amber : C.muted, fontWeight: dated ? 750 : 400 }}>{sub}</div>
@@ -358,8 +359,18 @@ export default async function SPXPage() {
                 <Tile label="From the record high" value={`${fromAth >= 0 ? "+" : "−"}${Math.abs(fromAth).toFixed(1)}%`}
                   sub={`Record close ${indexWords(weekly.ath.level)} on ${weeklyDate(weekly.ath.date)}`} dated={stale} />
               ) : null}
-              <Tile label="Trend score" value={trend ? `${trend.score}/100` : "—"} tone={trendTone}
-                sub={trend ? `${trendWords(trend.score)} · a price-trend score from SPY's moving averages and RSI (14), not sentiment` : "SPY's price history couldn't be loaded just now"} />
+              {/* THE TREND SCORE ON THE DASHBOARD'S METER (#553 COWORK #221): "85/100", the shared
+                  10-cell bar (app/components/TrendMeter.tsx) and the trend words in one row;
+                  the caption one short line. Spans the row where the tiles run two across. */}
+              <Tile label="Trend score" wide tone={trendTone}
+                value={trend ? (
+                  <span className="spxTrendRow" data-trend={trend.score}>
+                    <span>{trend.score}/100</span>
+                    <TrendMeter score={trend.score} />
+                    <span className="spxTrendWords">{trendWords(trend.score)}</span>
+                  </span>
+                ) : "—"}
+                sub={trend ? "From SPY's moving averages and RSI (14): price trend, not sentiment." : "SPY's price history couldn't be loaded just now"} />
               </div>
             {/* THE NASDAQ-100 TWIN (#553 COWORK #217): cross-linked both ways. */}
             <a className="spxCrossLink" href="/markets/qqq" style={crossLink}>Compare with the Nasdaq-100 →</a>
@@ -579,8 +590,14 @@ export default async function SPXPage() {
           /* THE HERO (#129): Market Mood fills the row, its 90-session line taking the spare height. */
           .spxHeroGrid .moodCard { display: flex; flex-direction: column; }
         }
+        /* THE TREND TILE'S ROW (#553 COWORK #221): score, meter and words on one line, wrapping only if the tile is narrow. */
+        .spxTrendRow { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+        .spxTrendWords { font-size: var(--fs-read); font-weight: 800; letter-spacing: 0; }
+        ${TREND_METER_CSS}
         @media (max-width: 900px) {
           .spxTiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          /* Two tiles a row here: the trend tile takes a row of its own, not half of one beside a hole. */
+          .spxTrendTile { grid-column: 1 / -1; }
           .spxHeroGrid { grid-template-columns: minmax(0, 1fr) !important; }
           .spxLevels { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "zones" "keys" "glance"; }
           .spxPoints, .spxWatch, .spxRead { grid-template-columns: minmax(0, 1fr) !important; }

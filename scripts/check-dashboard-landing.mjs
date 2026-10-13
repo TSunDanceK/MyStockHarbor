@@ -282,7 +282,6 @@ const LANDING_MUTANTS = [
   ["A: the index row stays 4 across on a phone", ".dlIdx{grid-template-columns:repeat(2,minmax(0,1fr));}", ""],
   ["A: the trend / best-sector line dropped", '<div className="dlPerf" data-market-line="">', '<div className="dlPerf" hidden>'],
   ["A: the trend meter dropped", "<TrendMeter score={m.trend.score} />", ""],
-  ["A: the meter lights every cell", "data-on={i < lit ? \"\" : undefined}", "data-on=\"\""],
   ["A: the \"As of\" date dropped", '{asOf ? <span className="dlAsOf" data-as-of="" data-fine-print="">As of {day(asOf)}</span> : null}', ""],
   ["A: the performance line boxed", ".dlPerf{display:flex;flex-wrap:wrap;", ".dlPerf{border:1px solid #222c40;display:flex;flex-wrap:wrap;"],
   ["A: the credit back to the long inline line", '<span className="dlPowered" data-fine-print="" data-credit="tiingo"><TiingoLink /></span>', '<span className="dlPowered" data-fine-print="" data-credit="tiingo"><a href="https://www.tiingo.com/">Market data from Tiingo.com</a></span>'],
@@ -329,6 +328,23 @@ for (const [label, from, to] of LANDING_MUTANTS) {
   if (!landingSrc.includes(from)) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
   const fails = rules(await loadLanding(landingSrc.split(from).join(to)));
   check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no rule failed");
+}
+// THE METER LIVES IN app/components/TrendMeter.tsx since #553 COWORK #221 (shared
+// with the SPX / QQQ heroes). Its mutants run on a mutated copy of that file,
+// written beside it, with the landing copy's import pointed at the copy.
+const METER = "app/components/TrendMeter.tsx", meterSrc = read(METER);
+const METER_MUTANTS = [
+  ["A: the meter lights every cell", "data-on={i < lit ? \"\" : undefined}", "data-on=\"\""],
+  ["A: the meter's up tone loses its green", ".dlMeter[data-tone=\"up\"] i[data-on]{background:#22c55e;}", ".dlMeter[data-tone=\"up\"] i[data-on]{background:#888;}"],
+];
+for (const [label, from, to] of METER_MUTANTS) {
+  if (!meterSrc.includes(from)) { check(`mutant "${label}" applies`, false, "the replacement matched nothing"); continue; }
+  const copy = path.join(path.dirname(METER), `.check-meter-${process.pid}-${seq++}.tsx`);
+  fs.writeFileSync(copy, meterSrc.split(from).join(to));
+  try {
+    const fails = rules(await loadLanding(landingSrc.split('from "@/app/components/TrendMeter"').join(`from "@/app/components/${path.basename(copy, ".tsx")}"`)));
+    check(`mutant "${label}" is caught`, fails.length > 0, fails[0] ?? "no rule failed");
+  } finally { fs.rmSync(copy, { force: true }); }
 }
 const WIRING_MUTANTS = [
   ["A: the old lead line", /<p className="dlLead">Every figure traced to an SEC filing[^<]*<\/p>/, '<p className="dlLead">Every figure traced to the SEC filing or the price it came from.</p>', CLIENT],

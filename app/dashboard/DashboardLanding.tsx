@@ -17,6 +17,7 @@ import { INDEX_ROW } from "@/lib/dashboardIndexRow";
 import TickerLogo from "@/app/components/TickerLogo";
 import { TiingoLink } from "@/app/components/TiingoCredit";
 import { formatHeatPct } from "@/lib/sectorHeatmap";
+import { TREND_METER_CSS, TREND_SEGMENTS, TrendMeter, trendTone } from "@/app/components/TrendMeter";
 import type { CapexBar, DashboardCards, DashboardMarket, Mover } from "@/lib/server/dashboardCards";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -55,10 +56,10 @@ function Card({ id, eyebrow, tone, title, children, more, empty }: { id: string;
 // hues. The old S&P / Trend / Best-sector tiles and the analyser's "Market
 // Benchmarks" row are gone; their figures live here.
 
-/** The trend score's tone: the index tiles' green / amber / red, on trendWords' bands. */
-export const trendTone = (score: number) => (score >= 56 ? "up" : score > 44 ? "flat" : "down");
-/** Segments in the trend meter; one per 10 points. */
-export const TREND_SEGMENTS = 10;
+// The trend meter, its tone and its CSS live in app/components/TrendMeter.tsx
+// since #553 COWORK #221 (the SPX / QQQ hero tiles draw the same meter);
+// re-exported here so this module's surface is unchanged.
+export { TREND_SEGMENTS, trendTone };
 
 /** "Trend Score 85/100 Strong uptrend · Best sector YTD Technology +56%" (either half alone when the other is missing): the line as read. */
 export function marketLine(m: Pick<DashboardMarket, "trend" | "bestSector">): string | null {
@@ -66,16 +67,6 @@ export function marketLine(m: Pick<DashboardMarket, "trend" | "bestSector">): st
   if (m.trend) parts.push(`Trend Score ${m.trend.score}/100 ${m.trend.words}`);
   if (m.bestSector) parts.push(`Best sector YTD ${m.bestSector.name} ${m.bestSector.ytd >= 0 ? "+" : "−"}${Math.round(Math.abs(m.bestSector.ytd))}%`);
   return parts.length ? parts.join(" · ") : null;
-}
-
-/** The trend score as a segmented bar: TREND_SEGMENTS cells, the first round(score / 10) lit. Decorative; the number carries it. */
-function TrendMeter({ score }: { score: number }) {
-  const lit = Math.max(0, Math.min(TREND_SEGMENTS, Math.round(score / (100 / TREND_SEGMENTS))));
-  return (
-    <span className="dlMeter" data-meter={lit} data-tone={trendTone(score)} aria-hidden="true">
-      {Array.from({ length: TREND_SEGMENTS }, (_, i) => <i key={i} data-on={i < lit ? "" : undefined} />)}
-    </span>
-  );
 }
 
 export function MarketToday({ m }: { m: DashboardMarket }) {
@@ -473,11 +464,7 @@ export const LANDING_CSS = `
 .dlPerfNum[data-tone="down"],.dlPerfWords[data-tone="down"]{color:#fca5a5;}
 .dlPerfWords{font-weight:800;}
 .dlPerfWords[data-tone="flat"]{color:#fde68a;}
-.dlMeter{display:inline-grid;grid-template-columns:repeat(10,6px);gap:2px;align-items:center;}
-.dlMeter i{display:block;height:10px;border-radius:2px;background:#222c40;}
-.dlMeter[data-tone="up"] i[data-on]{background:#22c55e;}
-.dlMeter[data-tone="flat"] i[data-on]{background:#eab308;}
-.dlMeter[data-tone="down"] i[data-on]{background:#ef4444;}
+${TREND_METER_CSS}
 .dlMarketFoot{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;gap:6px 14px;flex-wrap:wrap;}
 .dlMarketFoot .dlFine{flex:1 1 220px;min-width:0;}
 .dlPowered{flex:0 0 auto;margin-left:auto;font-size:var(--fs-fine);color:#8a97ad;text-decoration:none;white-space:nowrap;}
