@@ -5,6 +5,7 @@ category: Professional information services (Legal, Tax & Accounting, News)
 domain: thomsonreuters.com
 title: "Thomson Reuters (TRI) Bottlenecks: Who Thomson Reuters Depends On"
 date: 2026-09-27
+updated: 2026-10-13
 summary: >
   Thomson Reuters sells research, workflow, and compliance software to
   lawyers, tax and accounting professionals, corporations, and
@@ -15,9 +16,12 @@ summary: >
   diversified for a literal top-customer chart, so this page reframes
   that side around its own reported segment revenue mix plus the one
   real named large relationship it discloses: the 30-year Reuters News
-  content-licensing deal with the London Stock Exchange Group, struck
-  when Thomson Reuters sold Refinitiv to LSEG in 2021 (Thomson Reuters
-  fully exited its remaining LSEG equity stake in May 2024).
+  agreement (a minimum of US$325M a year) signed in October 2018, when
+  Thomson Reuters sold a majority of its Financial & Risk business
+  (Refinitiv) to a Blackstone-led consortium, and passed to the London
+  Stock Exchange Group when LSEG bought Refinitiv in January 2021
+  (Thomson Reuters fully exited its remaining LSEG equity stake in May
+  2024).
 customersNote: >
   Thomson Reuters' real customer base - millions of individual legal,
   tax, and accounting professionals, plus corporations, governments, and
@@ -27,9 +31,9 @@ customersNote: >
   mix (Legal Professionals, Corporates, Tax/Audit/Accounting, Reuters
   News, Global Print), with the Reuters News segment split out to
   highlight its one real named large relationship: the 30-year news
-  content-licensing agreement with the London Stock Exchange Group
-  (running to 2048), which followed Thomson Reuters' 2021 sale of
-  Refinitiv to LSEG.
+  agreement now held by the London Stock Exchange Group (running to
+  2048), signed in October 2018 as part of the Blackstone/Refinitiv deal
+  and carried over to LSEG when it acquired Refinitiv in January 2021.
 disclaimer: >
   The percentages shown are editorial estimates based on public research
   (company disclosures, earnings commentary, and industry reporting) meant
@@ -112,10 +116,11 @@ customers:
     grade: spread
     blurb: >
       Thomson Reuters' one real named large customer relationship: a
-      30-year Reuters News content-licensing agreement with LSEG running
-      to 2048, struck when Thomson Reuters sold Refinitiv to LSEG in
-      2021. Trades on the London Stock Exchange, with no proper
-      US-listed ticker.
+      30-year Reuters News agreement (a minimum of US$325M a year,
+      running to 2048), signed in October 2018 as part of the
+      Blackstone/Refinitiv deal and passed to LSEG when it acquired
+      Refinitiv in January 2021. Trades on the London Stock Exchange,
+      with no proper US-listed ticker.
   - name: Other Reuters News subscribers & Global Print
     ticker: null
     pct: 10

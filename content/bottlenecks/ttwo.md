@@ -84,6 +84,7 @@ supplyChain:
       with no public ticker.
   - name: National Basketball Association (NBA)
     ticker: null
+    listing: private
     pct: 12
     grade: some
     blurb: >

@@ -164,6 +164,7 @@ customers:
       integrating Experience Cloud into client-facing agency work.
   - name: Deloitte Digital
     ticker: null
+    listing: private
     pct: 5
     grade: spread
     blurb: >
@@ -172,6 +173,7 @@ customers:
       professional-services partnership with no public ticker.
   - name: PwC
     ticker: null
+    listing: private
     pct: 3
     grade: spread
     blurb: >

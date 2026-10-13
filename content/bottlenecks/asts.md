@@ -5,6 +5,7 @@ category: Satellite Direct-to-Cell Broadband
 domain: ast-science.com
 title: "AST SpaceMobile (ASTS) Bottlenecks: Who AST SpaceMobile Depends On"
 date: 2026-07-11
+updated: 2026-10-13
 summary: >
   AST SpaceMobile is building a low-earth-orbit satellite constellation
   (BlueWalker/BlueBird) designed to connect standard, unmodified smartphones
@@ -24,7 +25,7 @@ disclaimer: >
   stock/earnings links. This is not financial advice.
 supplyChain:
   - name: SpaceX
-    ticker: null
+    ticker: SPCX
     pct: 40
     grade: hard
     blurb: >
@@ -33,7 +34,7 @@ supplyChain:
       commercial BlueBird satellites to orbit on Falcon 9. AST's satellites
       are unusually large communications arrays, which narrows the pool of
       rockets that can fly them, and SpaceX remains the most flight-proven
-      option. A private company with no public ticker.
+      option. SpaceX listed on Nasdaq (SPCX) in June 2026.
   - name: Blue Origin
     ticker: null
     pct: 18

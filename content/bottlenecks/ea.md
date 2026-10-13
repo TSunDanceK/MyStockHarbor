@@ -70,6 +70,7 @@ supplyChain:
       transacted through the PlayStation Store.
   - name: National Football League
     ticker: null
+    listing: private
     pct: 13
     grade: some
     blurb: >

@@ -55,6 +55,7 @@ supplyChain:
       Management in 2022, with no public ticker of its own.
   - name: Robert Bosch GmbH
     ticker: null
+    listing: private
     pct: 3
     grade: spread
     blurb: >

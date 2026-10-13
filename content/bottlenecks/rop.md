@@ -5,6 +5,7 @@ category: Diversified vertical-market software & technology products
 domain: ropertech.com
 title: "Roper Technologies (ROP) Bottlenecks: Who Roper Depends On"
 date: 2026-09-27
+updated: 2026-10-13
 summary: >
   Roper Technologies is a holding company for dozens of niche,
   mostly asset-light software businesses - Vertafore, Aderant, Deltek,
@@ -42,22 +43,26 @@ disclaimer: >
 supplyChain:
   - name: Amazon.com, Inc. (AWS)
     ticker: AMZN
-    pct: 22
+    pct: 20
     grade: some
     blurb: >
-      Roper's 10-K discloses reliance on third-party cloud infrastructure
-      to host its many SaaS products, with AWS among the named providers
-      its software brands run on.
-  - name: Microsoft Corporation (Azure)
-    ticker: MSFT
-    pct: 18
+      Roper's 10-K says it relies on third-party cloud computing platforms
+      without naming them. Its brands' own disclosures point to AWS:
+      Vertafore, one of Roper's largest software businesses, named AWS its
+      preferred cloud provider in 2019 and has since moved core products
+      such as Sircon onto it.
+  - name: Other third-party cloud & hosting platforms
+    ticker: null
+    pct: 25
     grade: some
     blurb: >
-      A second named cloud infrastructure provider Roper's software
-      brands depend on to deliver their applications to customers.
+      Not a single company. Roper's 10-K lists reliance on third-party
+      cloud computing platforms as a risk for its SaaS businesses but does
+      not name the providers, and its dozens of software brands make their
+      own hosting choices.
   - name: Sole-source medical & industrial component suppliers
     ticker: null
-    pct: 20
+    pct: 30
     grade: hard
     blurb: >
       Not a single company. Roper's 10-K discloses that some products
@@ -65,24 +70,9 @@ supplyChain:
       Verathon's medical visualization devices and Neptune's water
       meters - are provided by sole-source suppliers it doesn't name
       individually.
-  - name: Alphabet Inc. (Google Cloud)
-    ticker: GOOGL
-    pct: 12
-    grade: some
-    blurb: >
-      A third named cloud infrastructure provider supporting Roper's
-      software portfolio alongside AWS and Azure.
-  - name: Oracle
-    ticker: ORCL
-    pct: 10
-    grade: some
-    blurb: >
-      A fourth cloud infrastructure provider named in Roper's 10-K
-      alongside AWS, Azure, and Google Cloud as vendors its SaaS products
-      rely on for hosting.
   - name: Bolt-on acquisition pipeline
     ticker: null
-    pct: 18
+    pct: 25
     grade: some
     blurb: >
       Not a single company. Roper's growth model depends on continually
