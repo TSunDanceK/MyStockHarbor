@@ -88,6 +88,8 @@ for (const s of mine) {
     } else if (only.length) {
       console.log(`SAME ${s} gap=${gap ?? "—"} newest q ${newestQ(b)?.end ?? "—"} ${m(v(newestQ(b), "revenue"))}`);
     }
+    // NAMED SYMBOLS: the shipped revenue notes, which name the gap concept in the filer's own currency.
+    if (only.length) for (const n of (b.notes ?? []).filter((x) => /revenue: /.test(String(x)))) console.log(`  note ${s}: ${String(n).slice(0, 260)}`);
     if (gp.n) {
       tally.pureDiffers++;
       console.log(`PURE ${s}${CAND.has(s) ? " [877]" : ""} a literal replacement (gap test only) differs from G: ${gp.n} periods (newest q ${m(v(newestQ(b), "revenue"))} → ${m(v(newestQ(c), "revenue"))})`);
