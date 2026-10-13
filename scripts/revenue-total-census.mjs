@@ -88,6 +88,22 @@ for (const s of mine) {
         if (v(pa, "revenue") !== v(pb, "revenue")) diffs.push({ bucket, e, pa, pb });
       }
     }
+    if (process.env.DETAIL) {
+      // EVERY revenue-like concept the filer tags, for its newest year and newest quarter-length duration.
+      const g = facts.facts?.["us-gaap"] ?? {};
+      const rows = [];
+      for (const [k, c] of Object.entries(g)) {
+        if (!/Revenue|Sales|Grant/i.test(k) || /Cost|Deferred|Receivable|Expense|Tax|Unearned|Percentage|Remaining/i.test(k)) continue;
+        for (const r of c.units?.USD ?? []) if (r.start && r.form && /^10-[KQ]/.test(r.form)) rows.push({ k, ...r, days: (Date.parse(r.end) - Date.parse(r.start)) / 864e5 });
+      }
+      const pick = (lo, hi) => { const rs = rows.filter((r) => r.days >= lo && r.days <= hi); const e = rs.map((r) => r.end).sort().at(-1); return rs.filter((r) => r.end === e); };
+      for (const [label, rs] of [["year", pick(350, 380)], ["quarter", pick(80, 100)]]) {
+        const seen = new Map();
+        for (const r of rs) if (!seen.has(r.k) || r.filed > seen.get(r.k).filed) seen.set(r.k, r);
+        console.log(`  ${s} ${label} ${rs[0]?.start ?? "?"}..${rs[0]?.end ?? "?"}: ${[...seen.values()].map((r) => `${r.k}=${m(r.val)}`).join("; ") || "none"}`);
+      }
+      for (const [lbl, list] of [["q", a.quarters.slice(-3)], ["y", a.years.slice(-2)]]) for (const p of list) console.log(`  ${s} stored ${lbl}:${p.start}..${p.end} revenue ${m(v(p, "revenue"))} [${t(p, "revenue")}]`);
+    }
     if (!diffs.length) { tally.same++; if (only.length) console.log(`SAME ${s} revenue ${m(v(a.quarters.at(-1) ?? a.years.at(-1), "revenue"))} [${t(a.quarters.at(-1) ?? a.years.at(-1), "revenue")}]`); continue; }
     tally.changed++;
     if (CAND877.has(s)) tally.changedIn877++;

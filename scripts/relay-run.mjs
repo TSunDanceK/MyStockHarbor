@@ -768,6 +768,7 @@ const TASKS = {
   "ads-ratio-12b": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHOW12B: "1" } },
   // Read-only, no credential (#552 COWORK #217 step 1): the filed total over the ASC 606 line, shipped vs candidate.
   "revenue-total-census": { script: "scripts/revenue-total-census.mjs", args: () => [], needsTypescript: true },
+  "revenue-total-census-detail": { script: "scripts/revenue-total-census.mjs", args: () => [], needsTypescript: true, env: { DETAIL: "1" } },
   "revenue-total-census-1": { script: "scripts/revenue-total-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/3" } },
   "revenue-total-census-2": { script: "scripts/revenue-total-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
   "revenue-total-census-3": { script: "scripts/revenue-total-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
