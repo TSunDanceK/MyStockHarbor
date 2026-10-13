@@ -15,7 +15,7 @@ import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { readTiingoUniverseSymbols } from "../../../../lib/server/tiingoUniverse";
 import { warmPickersSec } from "../../../../lib/server/pickersSecFundamentals";
 import { registrantFor } from "../../../../lib/server/stockProfile";
-import { adsRatioFor } from "../../../../lib/server/secAdsMap";
+import { adsListedUnrated, adsRatioFor } from "../../../../lib/server/secAdsMap";
 import { citedCoverFor, nonEquityListingOf } from "../../../../lib/server/secPrimaryListing";
 import { admittedForSec } from "../../../../lib/server/secSeedGate";
 import { cikForSymbol } from "../../../../lib/server/secColdFetch";
@@ -68,6 +68,8 @@ async function handleGET(req: NextRequest) {
       // A's cited 20-F / 40-F cover counts (#552 COWORK #86b, #92 Q2), as the
       // stock and earnings pages pass them; used only when newer than dei.
       citedCover: citedCoverFor(s),
+      // A 10-K's ADS listing with no cited ratio: refused (#552 COWORK #218).
+      adsUnrated: adsListedUnrated(s),
     }), Date.now(), undefined, {
       // Stop short of the job guard's ceiling, so a stop still flushes, sets
       // the EXPIRE and logs stoppedEarly: "command-budget" (#553 COWORK #124).

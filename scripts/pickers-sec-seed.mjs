@@ -24,7 +24,14 @@ const KEY = process.argv.includes("--preview") ? PICKERS_SEC_PREVIEW_KEY : PICKE
 const { lookupSpellingIn } = await import("../lib/symbolSpellings.mjs");
 const REGISTRANTS = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows ?? {};
 // The cited ADS ratios (#553 COWORK #44), looked up as secAdsMap.adsRatioFor does.
-const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries ?? {};
+const ADS_FILE = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8"));
+const ADS = ADS_FILE.entries ?? {};
+// A 10-K's ADS listing with no usable cited ratio (#552 COWORK #218), as secAdsMap.adsListedUnrated decides.
+const adsListedUnrated = (s) => {
+  const e = lookupSpellingIn(ADS, s.toUpperCase())?.value ?? null;
+  if (e && !e.withheld) return false;
+  return Boolean(lookupSpellingIn(ADS_FILE.unrated ?? {}, s.toUpperCase())?.value) || Boolean(e?.withheld && e.form !== "20-F");
+};
 
 // A's non-common listings (#553 COWORK #67), as the daily job passes them.
 // And A's cited 20-F / 40-F cover counts (#552 COWORK #86b), from the same module.
@@ -41,6 +48,7 @@ const result = await warmPickersSec(symbols, (s) => ({
   // The filer's SIC for A's bank gate on the ≈ Ent. Value (#553 COWORK #102), as the job passes it.
   sic: REGISTRANTS[s]?.sic ?? null,
   citedCover: citedCoverFor(s),
+  adsUnrated: adsListedUnrated(s),
 }), Date.now(), KEY);
 console.log(JSON.stringify(result));
 console.log(`key ${KEY}; field count now: ${await redis.hlen(KEY)}; seeded at ${new Date().toISOString()}`);
