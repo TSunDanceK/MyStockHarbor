@@ -64,8 +64,8 @@ const bar = (date, close) => [date, close, close, close, close, 1000];
 const row = (at, price = 101) => ({ price, open: null, high: null, low: null, prevClose: null, at });
 
 let r = S.pickSurfacePrice(row(TUE_1405_EDT), [bar("2026-09-28", 99)], TUE_1405_EDT);
-check("in session, IEX newer than the last close: the IEX trade, with its ET time",
-  r?.kind === "iex" && r.price === 101 && r.label === "last IEX trade, 14:05 ET", JSON.stringify(r));
+check("in session, IEX newer than the last close: the IEX trade, with its ET time (#553 COWORK #222 wording)",
+  r?.kind === "iex" && r.price === 101 && r.label === "today so far (IEX, 14:05 ET)", JSON.stringify(r));
 
 r = S.pickSurfacePrice(row(TUE_1405_EDT), [bar("2026-09-29", 100)], TUE_1405_EDT);
 check("same trading day: the consolidated close wins the tie",
@@ -73,28 +73,32 @@ check("same trading day: the consolidated close wins the tie",
 
 const WED_0300_UTC = Date.UTC(2026, 8, 30, 3, 0); // 23:00 ET Tue, before the EOD job
 r = S.pickSurfacePrice(row(Date.UTC(2026, 8, 29, 19, 59)), [bar("2026-09-28", 99)], Date.UTC(2026, 8, 30, 14, 0));
-check("an IEX trade from an earlier day names its date",
-  r?.kind === "iex" && r.label === "last IEX trade, 15:59 ET, 29 Sep", JSON.stringify(r));
+// RESTATED (#553 COWORK #222): an earlier day's print no longer stands in for the price; the stored close shows, under its own date.
+check("an IEX trade from an earlier day is refused: the stored close, under its own date",
+  r?.kind === "close" && r.label === "close, 28 Sep 2026", JSON.stringify(r));
 r = S.pickSurfacePrice(row(Date.UTC(2026, 8, 29, 19, 59)), [bar("2026-09-28", 99)], WED_0300_UTC);
-check("after the close, before the EOD job: still the IEX trade, never yesterday's close as current",
-  r?.kind === "iex" && r.date === "2026-09-29", JSON.stringify(r));
+check("after the close, before the EOD job: still the day's session print (#563 COWORK #77), never yesterday's close as current",
+  r?.kind === "iex" && r.date === "2026-09-29" && r.label === "today's last IEX trade, 15:59 ET", JSON.stringify(r));
 
 r = S.pickSurfacePrice(row(Date.UTC(2026, 11, 1, 19, 5)), [], Date.UTC(2026, 11, 1, 19, 6));
-check("ET across the DST change (EST in December)", r?.label === "last IEX trade, 14:05 ET", JSON.stringify(r));
+check("ET across the DST change (EST in December)", r?.label === "today so far (IEX, 14:05 ET)", JSON.stringify(r));
 
-// THE SESSION SUFFIX (#563 COWORK #35), from the trade's own ET time.
+// THE SESSION RULE, from the trade's own ET time. #563 COWORK #35 labelled a
+// pre-market / after-hours print; #553 COWORK #222 (the 13 Oct audit) refuses
+// it instead: only a print from today's 09:30–16:00 ET session stands in for the
+// price, else the stored close shows ("close, 28 Sep 2026" on this fixture).
 const labelAt = (utcMs, nowMs = utcMs + 60_000) => S.pickSurfacePrice(row(utcMs), [bar("2026-09-28", 99)], nowMs)?.label;
 const SESSION_CASES = [
-  ["08:40 EDT is pre-market", Date.UTC(2026, 8, 29, 12, 40), "last IEX trade, 08:40 ET (pre-market)"],
-  ["10:00 EDT is in session: no suffix", Date.UTC(2026, 8, 29, 14, 0), "last IEX trade, 10:00 ET"],
-  ["16:30 EDT is after hours", Date.UTC(2026, 8, 29, 20, 30), "last IEX trade, 16:30 ET (after hours)"],
-  ["09:30 and 16:00 themselves are in session", Date.UTC(2026, 8, 29, 13, 30), "last IEX trade, 09:30 ET"],
-  ["16:00 EDT is in session", Date.UTC(2026, 8, 29, 20, 0), "last IEX trade, 16:00 ET"],
+  ["08:40 EDT is pre-market: refused, the stored close", Date.UTC(2026, 8, 29, 12, 40), "close, 28 Sep 2026"],
+  ["10:00 EDT is in session", Date.UTC(2026, 8, 29, 14, 0), "today so far (IEX, 10:00 ET)"],
+  ["16:30 EDT is after hours: refused, the stored close", Date.UTC(2026, 8, 29, 20, 30), "close, 28 Sep 2026"],
+  ["09:30 and 16:00 themselves are in session", Date.UTC(2026, 8, 29, 13, 30), "today so far (IEX, 09:30 ET)"],
+  ["16:00 EDT is in session; read at 16:01 it is the day's last print", Date.UTC(2026, 8, 29, 20, 0), "today's last IEX trade, 16:00 ET"],
   // DST: 13:40 UTC is 09:40 EDT on 30 Oct but 08:40 EST on 3 Nov (US clocks change 1 Nov 2026).
-  ["across DST, 13:40 UTC on 30 Oct is 09:40 EDT, in session", Date.UTC(2026, 9, 30, 13, 40), "last IEX trade, 09:40 ET"],
-  ["across DST, 13:40 UTC on 3 Nov is 08:40 EST, pre-market", Date.UTC(2026, 10, 3, 13, 40), "last IEX trade, 08:40 ET (pre-market)"],
-  ["an earlier day's after-hours trade names its date and session",
-    Date.UTC(2026, 8, 29, 21, 5), "last IEX trade, 17:05 ET, 29 Sep (after hours)", Date.UTC(2026, 8, 30, 12, 0)],
+  ["across DST, 13:40 UTC on 30 Oct is 09:40 EDT, in session", Date.UTC(2026, 9, 30, 13, 40), "today so far (IEX, 09:40 ET)"],
+  ["across DST, 13:40 UTC on 3 Nov is 08:40 EST, pre-market: refused", Date.UTC(2026, 10, 3, 13, 40), "close, 28 Sep 2026"],
+  ["an earlier day's after-hours trade: refused, the stored close",
+    Date.UTC(2026, 8, 29, 21, 5), "close, 28 Sep 2026", Date.UTC(2026, 8, 30, 12, 0)],
 ];
 /** Every session case, against a given pickSurfacePrice. */
 const sessionLabelsHold = (pick) =>
@@ -127,12 +131,13 @@ check("NEWS_TECH keeps the Yahoo path's window", NT.NEWS_TECH_POINTS === 320);
 const readsNone = await S.readSurfacePrice("SPY");
 check("with no Redis configured, the read is null, not a throw", readsNone === null);
 
-// THE SUFFIX MUTANT (COWORK #35): the same module with the suffix dropped must
-// fail the session cases. The copy sits beside the original so its relative
-// imports resolve, and is removed straight after.
+// THE SESSION-GATE MUTANT (#553 COWORK #222; was COWORK #35's suffix mutant):
+// the same module with the session gate dropped (the old "newer wins" swap)
+// must fail the session cases. The copy sits beside the original so its
+// relative imports resolve, and is removed straight after.
 {
   const src = raw(FILES.surface);
-  const mutated = src.replace("${sessionSuffix(iex.time)}`", "`");
+  const mutated = src.replace(" && sessionPrint(row.at, nowMs)", "");
   const copy = path.join(ROOT, "lib/server", `.tiingoSurfacePrice.mutant-${process.pid}.ts`);
   let bites = false;
   if (mutated !== src) {
@@ -141,7 +146,7 @@ check("with no Redis configured, the read is null, not a throw", readsNone === n
     catch { bites = true; }
     finally { fs.rmSync(copy, { force: true }); }
   }
-  check("mutant bites: dropping the session suffix fails the session labels", mutated !== src && bites,
+  check("mutant bites: dropping the session gate (the old swap) fails the session cases", mutated !== src && bites,
     mutated === src ? "the mutation did not apply" : "");
 }
 

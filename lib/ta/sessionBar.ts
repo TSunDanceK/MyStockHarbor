@@ -51,6 +51,38 @@ export function sinceOpen(ms: number): boolean {
   return weekday >= 1 && weekday <= 5 && hhmm >= SESSION_OPEN;
 }
 
+// ── ONE RULE FOR AN IEX PRINT (#553 COWORK #222, the 13 Oct audit) ──────────
+// An IEX quote may stand in for the price only when it is a print from TODAY'S
+// REGULAR SESSION: sold on a weekday between 09:30 and 16:00 New York time
+// (both ends in), on the same New York date as `nowMs`. Everything else -- a
+// pre-market print (the audit's 08:2x ET "close on Mon 12 Oct"), an after-hours
+// print, a weekend, a holiday (no prints), an earlier day's print -- is refused,
+// and the surface shows the last stored session's close under that session's
+// date. After 16:00 a print from the session itself still counts, until the
+// nightly EOD bar lands (owner ruling #563 COWORK #77, "most up-to-date").
+//
+// pickSurfacePrice (the price every surface shows) and todaySoFar (the partial
+// bar behind MA / RSI / MACD and Key levels) both ask this, so the price and the
+// bars it is set against can never disagree about which session it is.
+
+/** The print's own time is inside a weekday's regular session, 09:30–16:00 ET inclusive. */
+export function regularSessionTime(atMs: number): boolean {
+  if (!(atMs > 0)) return false;
+  const { hhmm, weekday } = easternNow(atMs);
+  return weekday >= 1 && weekday <= 5 && hhmm >= SESSION_OPEN && hhmm <= SESSION_CLOSE;
+}
+
+/** An IEX print at `atMs` counts as today's session at `nowMs` (see above). */
+export function sessionPrint(atMs: number, nowMs: number): boolean {
+  return Number.isFinite(nowMs) && regularSessionTime(atMs) && easternNow(atMs).date === easternNow(nowMs).date;
+}
+
+/** The label of a counted print: "today so far (IEX, 14:05 ET)" in session, "today's last IEX trade, 16:00 ET" after the close. */
+export function sessionPrintLabel(atMs: number, nowMs: number): string {
+  const { hhmm } = easternNow(atMs);
+  return inSession(nowMs) ? `today so far (IEX, ${hhmm} ET)` : `today's last IEX trade, ${hhmm} ET`;
+}
+
 export type LivePhase = "session" | "afterClose";
 
 /**
