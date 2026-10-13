@@ -63,7 +63,7 @@ const RULES = {
   },
   "the gauge is 'Trend score', in trend words, not 'Market mood' or Fear / Greed": ({ page, words }) =>
     /<Tile label="Trend score"/.test(page) && !/<Tile label="Market [Mm]ood"/.test(page) &&
-    /not sentiment/.test(page) && /\$\{trendWords\(trend\.score\)\}/.test(page) && !/trend\.label/.test(page) &&
+    /not sentiment/.test(page) && /\{trendWords\(trend\.score\)\}/.test(page) && !/trend\.label/.test(page) &&
     [0, 20, 40, 50, 60, 80, 100].every((s) => !/fear|greed/i.test(words.trendWords(s))) &&
     words.trendWords(80) === "Strong uptrend" && words.trendWords(50) === "Mixed" && words.trendWords(20) === "Strong downtrend",
   "the AI market backdrop is not called; the old page is kept, retired and dated": ({ page }) =>
@@ -116,7 +116,7 @@ const MUTANTS = [
   ["macdTone is the stock page's buildMacd tone on the same closes", "macd", (s) => s.replace("const quiet = Math.max(closes[closes.length - 1] * 0.001, 0.03);", "const quiet = 0;")],
   ["macdTone is the stock page's buildMacd tone on the same closes", "macd", (s) => s.replace('return Math.abs(p.hist) <= quiet ? "yellow" : p.hist > 0 ? "green" : "red";', 'return Math.abs(p.hist) <= quiet ? "yellow" : p.hist > 0 ? "red" : "green";')],
   ["the gauge is 'Trend score', in trend words, not 'Market mood' or Fear / Greed", "page", (s) => s.replace('<Tile label="Trend score"', '<Tile label="Market mood"')],
-  ["the gauge is 'Trend score', in trend words, not 'Market mood' or Fear / Greed", "page", (s) => s.replace("${trendWords(trend.score)}", "${trend.label}")],
+  ["the gauge is 'Trend score', in trend words, not 'Market mood' or Fear / Greed", "page", (s) => s.replace("{trendWords(trend.score)}", "{trend.label}")],
   ["the gauge is 'Trend score', in trend words, not 'Market mood' or Fear / Greed", "words", (s) => s.replace('"Strong uptrend"', '"Extreme Greed"')],
   ["the AI market backdrop is not called; the old page is kept, retired and dated", "page", (s) => s.replace('import { buildMarketMoodScore } from "@/lib/market-mood";', 'import { getSpxMarketAnalysis } from "@/lib/ai-market";\nimport { buildMarketMoodScore } from "@/lib/market-mood";')],
   ["every live card says it is SPY and carries the Tiingo credit", "page", (s) => s.replace("<KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} fill credit={credit} />", "<KeyLevelsCard bars={bars} lastPrice={lastClose} nowMs={nowMs} fill />")],
