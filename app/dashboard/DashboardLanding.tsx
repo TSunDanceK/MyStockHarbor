@@ -11,7 +11,7 @@
 // --fs-read; short labels at --fs-label; credits and "as of" lines are fine
 // print (data-fine-print).
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import MarketMoodCard from "@/app/markets/spx/MarketMoodCard";
 import { INDEX_ROW } from "@/lib/dashboardIndexRow";
 import TickerLogo from "@/app/components/TickerLogo";
@@ -161,8 +161,15 @@ function HubWeb({ top }: { top: { ticker: string; count: number }[] }) {
  * node: there is no line from a company to another company, because there is
  * no estimated company→company flow (#563 rules). Server-drawn, no client code.
  */
-/** The capex rows' fixed height and gap, in px: the star's lines are drawn on them. */
-const CX_ROW = 28, CX_GAP = 8;
+/**
+ * The capex rows' fixed height and gap, in px: the star's lines are drawn on them.
+ * From 1024 px the CSS scales both by CX_SCALE_WIDE (#553 COWORK #228), so the
+ * chart fills the height its column shares with the hub feature. The lines are
+ * drawn in these base units and the SVG stretches vertically (preserveAspectRatio
+ * "none"), so a uniform scale keeps every line on its row's centre. The CSS reads
+ * the same numbers through the inline variables below, never a second copy.
+ */
+const CX_ROW = 28, CX_GAP = 8, CX_SCALE_WIDE = 1.3;
 
 /** The sectors card's one plain line (#154 §3). */
 export const SECTOR_WHAT = "How much each sector\u2019s stocks have risen or fallen since 1 January, weighted by company size.";
@@ -194,18 +201,18 @@ function CapexFlow({ spenders, receivers }: { spenders: CapexBar[]; receivers: C
   const H = n * CX_ROW + (n - 1) * CX_GAP, hubY = H / 2;
   const cy = (i: number) => i * (CX_ROW + CX_GAP) + CX_ROW / 2;
   return (
-    <div className="dlCapexChart" data-capex-chart="">
+    <div className="dlCapexChart" data-capex-chart="" style={{ "--cx-row": CX_ROW, "--cx-gap": CX_GAP, "--cx-h": H, "--cx-hub": hubY, "--cx-k-wide": CX_SCALE_WIDE } as CSSProperties}>
       {side(spenders, "Top spenders · their own capex", "spend")}
       <div className="dlCxNode">
-        <div className="dlCxStar" style={{ height: H }} data-hub-y={hubY}>
+        <div className="dlCxStar" data-hub-y={hubY}>
           {/* Sizes the column to the label, so the label never wraps or overhangs the bars. */}
           <span className="dlCxSize" aria-hidden="true">the build-out</span>
           <svg viewBox={`0 0 80 ${H}`} preserveAspectRatio="none" className="dlCxLines" aria-hidden="true" focusable="false">
             {spenders.map((r, i) => <path key={`in${r.ticker}`} data-into-node="" data-row-y={cy(i)} d={`M0 ${cy(i)} H14 L40 ${hubY}`} fill="none" stroke="rgba(167,139,250,0.55)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
             {receivers.map((r, i) => <path key={`out${r.ticker}`} data-from-node="" data-row-y={cy(i)} d={`M40 ${hubY} L66 ${cy(i)} H80`} fill="none" stroke="rgba(167,139,250,0.55)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
           </svg>
-          <i className="dlCxHub" style={{ top: hubY }} aria-hidden="true" />
-          <span className="dlCxNodeLabel" data-node="" style={{ top: hubY + 12 }}>the build-out</span>
+          <i className="dlCxHub" aria-hidden="true" />
+          <span className="dlCxNodeLabel" data-node="">the build-out</span>
         </div>
       </div>
       {side(receivers, "Top build-out receivers · their own filed sales", "receive")}
@@ -490,7 +497,7 @@ ${TREND_METER_CSS}
 .dlList a:hover{text-decoration:underline;}
 .dlPill{flex:0 0 auto;padding:2px 9px;border-radius:999px;background:#1a2336;color:#cbd5e1;font-size:var(--fs-label);font-weight:800;white-space:nowrap;}
 .dlHub{display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:20px;align-items:start;}
-.dlWeb{width:100%;height:auto;max-width:300px;}
+.dlWeb{width:100%;height:auto;max-width:330px;}
 .dlColHead{margin:0 0 4px;font-size:var(--fs-read);line-height:1.35;color:#8a97ad;font-weight:700;}
 .dlTk{font-weight:800;}
 .dlWeeks{display:block;}
@@ -502,22 +509,22 @@ ${TREND_METER_CSS}
 .dlMoverMove{white-space:nowrap;font-weight:900;}
 .dlMoverMove[data-tone="up"]{color:#86efac;}
 .dlMoverMove[data-tone="down"]{color:#fca5a5;}
-.dlCapexChart{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:end;}
+.dlCapexChart{--cx-k:1;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:end;}
 .dlCx{min-width:0;}
 .dlCx .dlColHead{min-height:2.7em;}
-.dlCxList{list-style:none;margin:0;padding:0;display:grid;gap:8px;}
-.dlCxRow{display:grid;grid-template-columns:22px auto minmax(16px,1fr) auto;gap:6px;align-items:center;height:28px;font-size:var(--fs-label);min-width:0;}
+.dlCxList{list-style:none;margin:0;padding:0;display:grid;gap:calc(var(--cx-gap) * var(--cx-k) * 1px);}
+.dlCxRow{display:grid;grid-template-columns:22px auto minmax(16px,1fr) auto;gap:6px;align-items:center;height:calc(var(--cx-row) * var(--cx-k) * 1px);font-size:var(--fs-label);min-width:0;}
 .dlCxRow .dlTk{color:#f8fafc;text-decoration:none;font-weight:900;}
 .dlCxTrack{display:block;height:12px;border-radius:4px;background:rgba(255,255,255,0.06);overflow:hidden;}
 .dlCxFill{display:block;height:12px;border-radius:4px;background:#a78bfa;}
 .dlCxAmt{font-weight:900;white-space:nowrap;}
 .dlCxNode{min-width:0;}
-.dlCxStar{position:relative;}
+.dlCxStar{position:relative;height:calc(var(--cx-h) * var(--cx-k) * 1px);}
 .dlCapexWrap{container-type:inline-size;}
 .dlCxSize{display:block;visibility:hidden;height:0;overflow:hidden;white-space:nowrap;font-size:var(--fs-label);font-weight:800;padding:0 10px;}
 .dlCxLines{display:block;width:100%;height:100%;}
-.dlCxHub{position:absolute;left:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#a78bfa;box-shadow:0 0 0 4px rgba(167,139,250,0.18);}
-.dlCxNodeLabel{position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:var(--fs-label);font-weight:800;color:#c4b5fd;line-height:1.2;padding:1px 6px;border-radius:6px;background:#05080f;}
+.dlCxHub{position:absolute;top:calc(var(--cx-hub) * var(--cx-k) * 1px);left:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#a78bfa;box-shadow:0 0 0 4px rgba(167,139,250,0.18);}
+.dlCxNodeLabel{position:absolute;top:calc(var(--cx-hub) * var(--cx-k) * 1px + 12px);left:50%;transform:translateX(-50%);white-space:nowrap;font-size:var(--fs-label);font-weight:800;color:#c4b5fd;line-height:1.2;padding:1px 6px;border-radius:6px;background:#05080f;}
 .dlSecList{list-style:none;margin:0;padding:0;display:grid;gap:6px;}
 .dlSecRow{display:grid;grid-template-columns:minmax(0,9em) minmax(0,1fr) 4.4em;gap:8px;align-items:center;font-size:var(--fs-label);}
 .dlSecName{color:#e2e8f0;text-decoration:none;font-weight:700;line-height:1.15;overflow-wrap:anywhere;}
@@ -552,6 +559,8 @@ ${TREND_METER_CSS}
 .dlNewsTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 @media(max-width:1100px){.dlHub{grid-template-columns:minmax(0,1fr);}.dlWeb{max-width:240px;}}
 @media(max-width:1023px){.dlOpenRow{grid-template-columns:minmax(0,1fr);gap:28px;}}
+/* THE OPEN ROW, SAME HEIGHT (#553 COWORK #228): side by side, both links sit on one bottom line, the capex star spreads to fill, and the map is a little larger. */
+@media(min-width:1024px){.dlOpen .dlMore{margin-top:auto;}.dlHub{flex:1;align-items:stretch;}.dlHub>div{display:flex;flex-direction:column;}.dlHub .dlWeb{align-self:start;}.dlCapexChart{--cx-k:var(--cx-k-wide);}.dlCxLines{position:absolute;inset:0;}}
 @media(max-width:860px){.dlRow3{grid-template-columns:minmax(0,1fr);}}
 @media(max-width:640px){.dlRow2{grid-template-columns:minmax(0,1fr);}}
 @media(max-width:640px){.dlHub .dlWeb{display:block;margin-inline:auto;}}

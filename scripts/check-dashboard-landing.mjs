@@ -166,6 +166,12 @@ function rules(mod, scr = DASHBOARD_SCREENS) {
   const ins = [...cx.matchAll(/<path data-into-node="" data-row-y="([\d.]+)" d="([^"]+)"/g)], outs = [...cx.matchAll(/<path data-from-node="" data-row-y="([\d.]+)" d="([^"]+)"/g)];
   want("the capex star: each line level with its own row and ending on the hub, never company to company", ins.length === 3 && outs.length === 3 && hubY === rowY(1) &&
     ins.every((m, i) => m[2] === `M0 ${rowY(i)} H14 L40 ${hubY}`) && outs.every((m, i) => m[2] === `M40 ${hubY} L66 ${rowY(i)} H80`));
+  // #553 COWORK #228: the CSS draws the rows from the star's own numbers (inline variables), never a second copy,
+  // and only scales them from 1024 px, where the open features sit side by side.
+  want("the capex rows' CSS reads the star's numbers (no hand-copied 28/8), scaled only from 1024 px", /style="--cx-row:28;--cx-gap:8;--cx-h:100;--cx-hub:50;--cx-k-wide:[\d.]+"/.test(cx) &&
+    /\.dlCxRow\{[^}]*height:calc\(var\(--cx-row\) \* var\(--cx-k\) \* 1px\)/.test(base) && /\.dlCxList\{[^}]*gap:calc\(var\(--cx-gap\) \* var\(--cx-k\) \* 1px\)/.test(base) &&
+    /\.dlCxStar\{[^}]*height:calc\(var\(--cx-h\) \* var\(--cx-k\) \* 1px\)/.test(base) && /\.dlCapexChart\{--cx-k:1;/.test(base) && /@media\(min-width:1024px\)\{[^}]*\}[^@]*\.dlCapexChart\{--cx-k:var\(--cx-k-wide\);\}/.test(css));
+  want("the open features' links share one bottom line from 1024 px (a fixed 8 px below 1024 px)", /\.dlOpen \.dlMore\{margin-top:8px;\}/.test(base) && /@media\(min-width:1024px\)\{\.dlOpen \.dlMore\{margin-top:auto;\}\.dlHub\{flex:1;align-items:stretch;\}\.dlHub>div\{display:flex;flex-direction:column;\}/.test(css));
 
   // ── C. This week ──
   const week = full.slice(full.indexOf('data-section="week"'));
@@ -305,6 +311,9 @@ const LANDING_MUTANTS = [
   ["a Pickers screen links off the picker routes", "<Link href={s.href} prefetch={false}>{s.label}</Link>", "<Link href={s.href + \"-x\"} prefetch={false}>{s.label}</Link>"],
   ["the capex feature advises", "From each company&apos;s filings.", "You should buy these. From each company&apos;s filings."],
   ["a line runs company to company", "d={`M40 ${hubY} L66 ${cy(i)} H80`}", "d={`M0 ${cy(i)} H80`}"],
+  ["the capex rows' height hand-copied again", "height:calc(var(--cx-row) * var(--cx-k) * 1px);", "height:28px;"],
+  ["the capex chart scaled below 1024 px too", ".dlCapexChart{--cx-k:1;display:grid;", ".dlCapexChart{--cx-k:var(--cx-k-wide);display:grid;"],
+  ["the open features' links back at a fixed 8 px on desktop", "@media(min-width:1024px){.dlOpen .dlMore{margin-top:auto;}", "@media(min-width:1024px){.dlOpen .dlMore{margin-top:8px;}"],
   // C
   ["C: the cards no longer stretch to one height", ".dlRow{display:grid;gap:16px;align-items:stretch;}", ".dlRow{display:grid;gap:16px;align-items:start;}"],
   ["C: a card's footer no longer pinned to the bottom", ".dlMore{margin-top:auto;", ".dlMore{margin-top:6px;"],
