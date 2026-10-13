@@ -44,7 +44,9 @@
    "hasSecFacts": true,
    "thinFilings": false,
    "hasBottleneck": false,
-   "latestInsightDate": null
+   "latestInsightDate": null,
+   "skipContent": true,
+   "skipReason": "Second share class of GOOGL"
   },
   {
    "symbol": "MSFT",

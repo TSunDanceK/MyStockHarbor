@@ -18,7 +18,7 @@
 //   2. Locally: `node scripts/content-candidates.mjs --from-log <task.log>`
 //      rebuilds data/content-candidates.json from those lines, recomputing
 //      hasBottleneck and latestInsightDate from content/ (the schedules do the
-//      same), then prints the two top-40 tables and the thin pages.
+//      same) and applying SKIP_CONTENT (below) as `skipContent` + `skipReason`.
 //
 // THE COLUMNS. inPool: a live close (Tiingo's newest stored bar, the last 7 days). hasSecFacts: a stored
 // fact set that A's buildSecEarningsView builds without error (imported, not
@@ -36,6 +36,16 @@ import path from "node:path";
 import { toDashed, toDotted } from "../lib/symbolSpellings.mjs";
 
 const OUT = "data/content-candidates.json";
+
+/**
+ * EDITORIAL SKIPS (#563 COWORK #185): rows the content schedules must pass
+ * over, applied on every refresh so a regenerated file keeps them. Each row
+ * gets `skipContent: true` and the reason; the schedules honour skipContent.
+ * Add a name here, never by hand in the JSON (the next refresh would drop it).
+ */
+export const SKIP_CONTENT = {
+  GOOG: "Second share class of GOOGL",
+};
 const fromLog = process.argv.indexOf("--from-log");
 
 /** The content flags, from the committed content/ tree. */
@@ -182,6 +192,7 @@ if (fromLog < 0) {
     thinFilings: r.figures > 0 && r.nmCount * 2 > r.figures,
     hasBottleneck: bn.has(r.symbol),
     latestInsightDate: latest.get(r.symbol) ?? null,
+    ...(SKIP_CONTENT[r.symbol] ? { skipContent: true, skipReason: SKIP_CONTENT[r.symbol] } : {}),
   })).sort((a, b) => (b.marketCap ?? -1) - (a.marketCap ?? -1) || a.symbol.localeCompare(b.symbol));
   fs.writeFileSync(OUT, `${JSON.stringify({ generatedAt: meta.generatedAt, source: "relay content-candidates", symbols }, null, 1)}\n`);
   console.log(`wrote ${OUT}: ${symbols.length} symbols (pool ${meta.pool}, universe ${meta.universe}, with SEC facts ${meta.withFacts}; ${meta.commands} Redis commands, read-only)`);
