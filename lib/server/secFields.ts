@@ -713,6 +713,33 @@ export const REVENUE_FALLBACK_CHAIN: readonly string[] = ["Revenues", "RevenuesN
 export const REVENUE_TOTAL_OVER_CONTRACT = 1.05;
 
 /**
+ * THE GAP THAT IS REVENUE (#552 COWORK #219, option G). Where the filer's
+ * newest quarter files both `Revenues` and the contract line, and the gap
+ * between them equals ONE of these concepts (and no other-income or gain
+ * concept equals it too), `Revenues` is the total of two revenue lines, not
+ * revenue plus other income, so it becomes the filer's revenue concept even
+ * if the filer tags excise or the gap is under REVENUE_TOTAL_OVER_CONTRACT.
+ * MELI, CEG and PAYX are the cases; the list is every concept that filled a
+ * mover's gap in the census (CODE-A #235), named for what the rule allows:
+ * revenue not from contracts, lease income, operating interest income,
+ * collaboration revenue. Oil "revenues and other income" (CVX, COP) and
+ * hedging gains (DVN, RRC, MTDR) match none of them and stay as they are.
+ */
+export const REVENUE_GAP_CONCEPTS: readonly string[] = [
+  "RevenueNotFromContractWithCustomer",
+  "RevenueNotFromContractWithCustomerOther",
+  "OperatingLeaseLeaseIncome",
+  "LeaseIncome",
+  "SubleaseIncome",
+  "DirectFinancingLeaseRevenue",
+  "SalesTypeLeaseRevenue",
+  "InterestIncomeOperating",
+  "RevenueFromCollaborativeArrangementExcludingRevenueFromContractWithCustomer",
+];
+/** How close the gap and the concept must be: the larger of this and 1% of the gap. */
+export const REVENUE_GAP_TOLERANCE_ABS = 0.5e6;
+
+/**
  * SHARE COUNTS ON A UNIT SLIP (#552 COWORK #192): the factors a period's
  * weighted shares may be rescaled by, and how close net income ÷ (EPS ×
  * shares) must land to one of them (secExtract.unitSlipFactor). Thousands and
@@ -817,6 +844,9 @@ export function secChainsHash(): string {
   // AND THE TOTAL-OVER-CONTRACT RULE (#552 COWORK #192): it moves stored
   // revenue for every filer it reaches, so it re-reads like a chain edit.
   feed(`revenue-total-over-contract|${REVENUE_TOTAL_OVER_CONTRACT}|no-excise|floor:8q4y`);
+  // AND OPTION G (#552 COWORK #219): the gap-is-revenue test and the derived
+  // contract + not-from-contract total move stored revenue too.
+  feed(`revenue-gap|${REVENUE_GAP_CONCEPTS.join(",")}|${REVENUE_GAP_TOLERANCE_ABS}|derived-total`);
   // AND THE SHARE UNIT-SLIP RESCALE (#552 COWORK #192): it moves stored
   // weighted shares on every period it proves.
   feed(`share-unit-slip|${SHARE_UNIT_SLIP_FACTORS.join(",")}|${SHARE_UNIT_SLIP_TOLERANCE}|corroborated:${SHARE_UNIT_SLIP_CORROBORATION}`);

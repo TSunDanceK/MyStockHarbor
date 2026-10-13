@@ -16,6 +16,13 @@
 //             for this case) a filer whose newest `Revenues` is > 5% above its
 //             contract line takes `Revenues` for every period -- AFRM -- unless
 //             it tags excise (COP, CEG: kept on the contract line)
+//   G         (#552 COWORK #219, option G) beside that test, a gap of the total
+//             over the contract line that equals a concept tagged as revenue
+//             moves the filer too -- MELI (excise), PAYX (excise, 3%) -- but not
+//             hedging gains (DVN), and not a gap an other-income concept also
+//             equals (MDU); LUNR's older quarters read contract + not-from-
+//             contract, marked computed, so its floor holds; AHR's lease gap
+//             gets no derived total and its floor still holds
 // plus a mutation: the substitution removed, and the rescued cases fail.
 import fs from "node:fs";
 import { lift } from "./lib/earnings-plan.mjs";
@@ -148,7 +155,7 @@ console.log("\n3b. AFRM: the total becomes the filer's one concept (#552 COWORK 
   const b26 = X.extractCompanyFacts("BANC", banc).years.find((p) => p.end === "2026-06-30")?.values?.[REV];
   check("the floor fails (Revenues on 1 of 4 years): the contract line is kept everywhere",
     b23?.val === 600 * M && b26?.val === 1440 * M && b26?.tag === CONTRACT, JSON.stringify({ b23, b26 }));
-  const nofloor = extractRaw.replace("const floorHolds = covers(quarterCells, fbQuarter, 8) && covers(yearCells, fbYear, 4);", "const floorHolds = true;");
+  const nofloor = extractRaw.replace("const floorHolds = covers(quarterCells, totalQuarter, 8) && covers(yearCells, totalYear, 4);", "const floorHolds = true;");
   check("the floor mutation applied", nofloor !== extractRaw);
   const XF = await load(nofloor);
   const f23 = XF.extractCompanyFacts("BANC", banc).years.find((p) => p.end === "2023-06-30")?.values?.[REV];
@@ -163,23 +170,79 @@ console.log("\n3b. AFRM: the total becomes the filer's one concept (#552 COWORK 
   const aq = X.extractCompanyFacts("ADP", adp).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
   check("a quarter is never compared with a year (ADP: the year is 4.5% above, so nothing moves)",
     aq?.val === 5474 * M && aq?.tag === CONTRACT, JSON.stringify(aq));
-  const mixed = extractRaw.replace("const pair = pairAt(quarterCells, fbQuarter) ?? pairAt(yearCells, fbYear);",
-    "const pair = (() => { const r = newest ? (quarterCells.get(newest) ?? yearCells.get(newest))?.get(\"revenue\") : undefined; const f = newest ? (fbQuarter.get(newest) ?? fbYear.get(newest))?.get(\"revenue\") : undefined; return r && f ? { rev: r, fb: f } : null; })();");
+  const mixed = extractRaw.replace("const pair = pairAt(quarterCells, totalQuarter) ?? pairAt(yearCells, totalYear);",
+    "const pair = (() => { const r = newest ? (quarterCells.get(newest) ?? yearCells.get(newest))?.get(\"revenue\") : undefined; const f = newest ? (totalQuarter.get(newest) ?? totalYear.get(newest))?.get(\"revenue\") : undefined; return r && f ? { rev: r, fb: f } : null; })();");
   check("the duration mutation applied", mixed !== extractRaw);
   // The floor disabled too: ADP has no quarterly Revenues, so the floor alone
   // would also refuse, and the duration guard must be tested on its own.
-  const XD = await load(mixed.replace("const floorHolds = covers(quarterCells, fbQuarter, 8) && covers(yearCells, fbYear, 4);", "const floorHolds = true;"));
+  const XD = await load(mixed.replace("const floorHolds = covers(quarterCells, totalQuarter, 8) && covers(yearCells, totalYear, 4);", "const floorHolds = true;"));
   const dq = XD.extractCompanyFacts("ADP", adp).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
   check("MUTATION: quarter-against-year comparison flips ADP's quarter away (caught)", !(dq?.val === 5474 * M && dq?.tag === CONTRACT), JSON.stringify(dq));
-  const mutated = extractRaw.replace("if (!filerTagsExcise(facts)) {", "if (false) {");
+  const mutated = extractRaw.replace("const qualifies = Boolean(", "const qualifies = false && Boolean(");
   check("the mutation applied", mutated !== extractRaw);
   const XM = await load(mutated);
   const m25 = XM.extractCompanyFacts("AFRM", facts).years.find((p) => p.end === "2025-06-30")?.values?.[REV];
   check("MUTATION: without the rule AFRM reads the contract line (caught)", m25?.val === 1110 * M, JSON.stringify(m25));
-  const excise = extractRaw.replace("if (!filerTagsExcise(facts)) {", "if (true) {");
+  const excise = extractRaw.replace("const shippedTest = !excise && ", "const shippedTest = ");
   const XE = await load(excise);
   const cop = XE.extractCompanyFacts("FIX", payload(CASES.COP[0])).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
   check("MUTATION: without the excise exclusion COP flips to Revenues (caught)", cop?.val === 34922 * M, JSON.stringify(cop));
+}
+
+console.log("\n3c. option G: a gap that is itself revenue (#552 COWORK #219)");
+{
+  const RNFC = "RevenueNotFromContractWithCustomer";
+  const EX = { ExciseAndSalesTaxes: [[...Q, 50 * M]] };
+  const meli = payload({ [CONTRACT]: [[...Q, 7055 * M]], Revenues: [[...Q, 10169 * M]], [RNFC]: [[...Q, 3114 * M]], [OP]: [[...Q, 700 * M]], ...EX });
+  check("MELI (tags excise; gap = not-from-contract revenue): Revenues $10,169M, not the $7,055M line",
+    quarterRevenue(meli).val === 10169 * M && quarterRevenue(meli).tag === "Revenues", JSON.stringify(quarterRevenue(meli)));
+  check("...revenueGapConcept names the concept", X.revenueGapConcept(meli) === RNFC);
+  const payx = payload({ [CONTRACT]: [[...Q, 1580.7 * M]], Revenues: [[...Q, 1630.5 * M]], InterestIncomeOperating: [[...Q, 49.8 * M]], [OP]: [[...Q, 600 * M]], ...EX });
+  check("PAYX (excise, 3% gap = operating interest income): Revenues $1,630.5M", quarterRevenue(payx).val === 1630.5 * M, JSON.stringify(quarterRevenue(payx)));
+  const dvn = payload({ [CONTRACT]: [[...Q, 7003 * M]], Revenues: [[...Q, 7417 * M]], GainLossOnOilAndGasHedgingActivity: [[...Q, 414 * M]], [OP]: [[...Q, 900 * M]], ...EX });
+  check("DVN (gap = hedging gains): the contract line stays", quarterRevenue(dvn).val === 7003 * M && X.revenueGapConcept(dvn) === null, JSON.stringify(quarterRevenue(dvn)));
+  const mdu = payload({ [CONTRACT]: [[...Q, 372.9 * M]], Revenues: [[...Q, 375.3 * M]], [RNFC]: [[...Q, 2.4 * M]], IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToReportingEntity: [[...Q, 2.4 * M]], [OP]: [[...Q, 40 * M]], ...EX });
+  check("MDU (gap equals a revenue concept AND a discontinued-operations loss): too close to call, stays", quarterRevenue(mdu).val === 372.9 * M && X.revenueGapConcept(mdu) === null, JSON.stringify(quarterRevenue(mdu)));
+  check("COP (excise, gap matching nothing): stays, as before", quarterRevenue(payload(CASES.COP[0])).val === 31588 * M);
+  // LUNR: Revenues on the newest quarter only; the contract line and the
+  // not-from-contract line on the older quarters. Derived totals let the floor hold.
+  const lq = [["2025-07-01", "2025-09-30"], ["2025-10-01", "2025-12-31"], ["2026-01-01", "2026-03-31"], Q];
+  const lunr = payload({
+    [CONTRACT]: lq.map(([a, b], i) => [a, b, [180, 188, 196, 203.4][i] * M]),
+    [RNFC]: lq.map(([a, b]) => [a, b, 2.8 * M]),
+    Revenues: [[...Q, 206.2 * M]],
+    [OP]: lq.map(([a, b]) => [a, b, -20 * M]),
+  });
+  const lr = X.extractCompanyFacts("LUNR", lunr).quarters;
+  const lnew = lr.find((p) => p.end === "2026-06-30")?.values?.[REV], lold = lr.find((p) => p.end === "2025-12-31")?.values?.[REV];
+  check("LUNR: the newest quarter takes Revenues ($206.2M)", lnew?.val === 206.2 * M && lnew?.tag === "Revenues", JSON.stringify(lnew));
+  check("...an older quarter reads contract + not-from-contract ($188.0M + $2.8M), marked computed",
+    Math.abs((lold?.val ?? 0) - 190.8 * M) < 1 && lold?.derived === "computed", JSON.stringify(lold));
+  // AHR: the same shape with a LEASE-INCOME gap. No derived total (the ruling
+  // names the not-from-contract line), so the floor keeps the contract line.
+  const ahr = payload({
+    [CONTRACT]: lq.map(([a, b], i) => [a, b, [600, 610, 620, 634.5][i] * M]),
+    OperatingLeaseLeaseIncome: lq.map(([a, b]) => [a, b, 39.8 * M]),
+    Revenues: [[...Q, 674.3 * M]],
+    [OP]: lq.map(([a, b]) => [a, b, 50 * M]),
+  });
+  const an = X.extractCompanyFacts("AHR", ahr).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
+  check("AHR (lease-income gap, Revenues on the newest quarter only): no derived total, the floor keeps the contract line",
+    an?.val === 634.5 * M && an?.tag === CONTRACT && X.revenueGapConcept(ahr) === "OperatingLeaseLeaseIncome", JSON.stringify(an));
+  const XR = await load(extractRaw.replace("if (gapConcept && /^RevenueNotFromContractWithCustomer/.test(gapConcept)) {", "if (gapConcept) {"));
+  check("MUTATION: a derived total for any gap concept → AHR moves (caught)",
+    XR.extractCompanyFacts("AHR", ahr).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV]?.val === 674.3 * M);
+  const XG = await load(extractRaw.replace("const hit = REVENUE_GAP_CONCEPTS.find(equals) ?? null;", "const hit = null;"));
+  check("MUTATION: the gap test removed → MELI back on the $7,055M contract line (caught)",
+    XG.extractCompanyFacts("FIX", meli).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV]?.val === 7055 * M);
+  const XA = await load(extractRaw.replace("return otherToo ? null : hit;", "return hit;"));
+  check("MUTATION: the other-income guard removed → MDU moves (caught)",
+    XA.extractCompanyFacts("FIX", mdu).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV]?.val === 375.3 * M);
+  const XL = await load(extractRaw.replace("          totals.set(end, row);\n", ""));
+  const ml = XL.extractCompanyFacts("LUNR", lunr).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
+  check("MUTATION: no derived total → the floor keeps LUNR on its contract line (caught)", ml?.tag === CONTRACT, JSON.stringify(ml));
+  const XF = await load(extractRaw.replace("if (!c.covers || !k.covers || c.covers[0] !== k.covers[0] || c.covers[1] !== k.covers[1]) continue;", ""));
+  check("(the same-frame guard is present)", XF !== X && extractRaw.includes("c.covers[0] !== k.covers[0]"));
 }
 
 console.log("\n4. the one predicate");
@@ -191,7 +254,7 @@ check("the fallback chain is the ruled one", JSON.stringify(X.REVENUE_FALLBACK_C
 console.log("\n5. mutation");
 {
   // The total-over-contract rule disabled too, so the substitution is tested alone.
-  const mutated = extractRaw.replace('        m.set("revenue", fb);\n', "").replace("if (!filerTagsExcise(facts)) {", "if (false) {");
+  const mutated = extractRaw.replace('        m.set("revenue", fb);\n', "").replace("const qualifies = Boolean(", "const qualifies = false && Boolean(");
   check("the mutation applied", mutated !== extractRaw);
   const XM = await load(mutated);
   const got = XM.extractCompanyFacts("FIX", payload(CASES.UDR[0])).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV]?.val;
