@@ -1,6 +1,6 @@
 // WHY A SYMBOL'S SCREENER MARKET CAP IS "–" (#552 COWORK #216 §4: Visa).
 // READS ONLY, despite the write- task prefix (the store read needs the credential).
-// Redis: 1 GET (the stored fact set) + 2 HGET (the Pickers SEC row, the cover-review row) per symbol.
+// Redis: 1 GET (the stored fact set) + 3 HGET (the Pickers SEC row, the manifest entry, the cover-review row) per symbol.
 // Prints the stored cover, the shipped valuationInputs refusals, the Pickers
 // row's stored refusals and shares, and the cover-review row (1 HGET). Then the
 // cited-class path withClassCover takes for a mapped filer, step by step, with
@@ -52,6 +52,10 @@ for (const s of (process.env.SYMBOLS || "V").split(/[,\s]+/).filter(Boolean)) {
   const row = await redis.hget(PICKERS, s); commands++;
   const o = typeof row === "string" ? JSON.parse(row) : row;
   console.log(`  Pickers SEC row: ${o ? `at ${o.at ?? o.updatedAt ?? "?"}; inputs.shares ${JSON.stringify(o.inputs?.shares ?? null)}; inputs.refusals ${JSON.stringify(o.inputs?.refusals ?? null)}` : "none"}`);
+  const man = await redis.hget(keyOf("lib/server/secManifest.ts", "SEC_MANIFEST_KEY"), s); commands++;
+  const me = typeof man === "string" ? JSON.parse(man) : man;
+  const iso = (t) => (typeof t === "number" ? new Date(t).toISOString().slice(0, 19) + "Z" : String(t ?? null));
+  console.log(`  manifest: verifiedAt ${iso(me?.verifiedAt)}; checkedAt ${iso(me?.checkedAt)}; contentHash ${me?.contentHash === set?.contentHash ? "same as stored set" : "differs"}`);
   const review = await redis.hget(keyOf("lib/server/secCoverReview.ts", "SEC_COVER_REVIEW_HASH"), s); commands++;
   console.log(`  cover-review row: ${JSON.stringify(review ?? null)}`);
   const cik = String(REG[s]?.cik ?? "");
