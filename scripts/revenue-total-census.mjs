@@ -45,8 +45,11 @@ const CAND = swap(
   "fb.val > rev.val * 1 && !floorHolds",
 ).replace("fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT)", "fb.val > rev.val * 1)");
 if (CAND.includes("rev.val * REVENUE_TOTAL_OVER_CONTRACT")) throw new Error("factor anchor left in place");
+// CANDIDATE B: A, and the #194 floor removed too (what the floor costs, and what it protects).
+const CANDB = swap(CAND, "fb.val > rev.val * 1 && !floorHolds", "fb.val > rev.val * 1 && false");
 const S = await lift(parts(EXTRACT));
 const C = await lift(parts(CAND));
+const CB = await lift(parts(CANDB));
 const I = S.SEC_FIELD_INDEX;
 
 const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
@@ -79,7 +82,13 @@ for (const s of mine) {
   try {
     const facts = await get(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik.padStart(10, "0")}.json`);
     tally.filers++;
-    const a = S.extractCompanyFacts(s, facts), b = C.extractCompanyFacts(s, facts);
+    const a = S.extractCompanyFacts(s, facts), b = C.extractCompanyFacts(s, facts), bb = CB.extractCompanyFacts(s, facts);
+    const diffB = [];
+    for (const [A, B] of [[a.quarters, bb.quarters], [a.years, bb.years]]) for (const p of new Set([...A.map((x) => x.end), ...B.map((x) => x.end)])) {
+      const pa = A.find((x) => x.end === p), pb = B.find((x) => x.end === p);
+      if (v(pa, "revenue") !== v(pb, "revenue")) diffB.push({ pa, pb });
+    }
+    const bNote = diffB.length ? ` | B(no floor): ${diffB.length} periods move, ${diffB.filter((d) => v(d.pb, "revenue") == null).length} left unreported` : "";
     const diffs = [];
     for (const [bucket, A, B] of [["q", a.quarters, b.quarters], ["y", a.years, b.years]]) {
       const ends = new Set([...A.map((p) => p.end), ...B.map((p) => p.end)]);
@@ -107,6 +116,7 @@ for (const s of mine) {
       for (const n of (b.notes ?? []).filter((x) => /revenue/i.test(String(x)))) console.log(`  ${s} note (candidate): ${String(n).slice(0, 220)}`);
       for (const [lbl, list] of [["q", byEnd(a.quarters).slice(-3)], ["y", byEnd(a.years).slice(-2)]]) for (const p of list) console.log(`  ${s} stored ${lbl}:${p.start}..${p.end} revenue ${m(v(p, "revenue"))} [${t(p, "revenue")}]`);
     }
+    if (!diffs.length && diffB.length) { tally.floorOnly = (tally.floorOnly ?? 0) + 1; console.log(`FLOOR ${s}${CAND877.has(s) ? " [877]" : ""} excise=${S.filerTagsExcise(facts)} A keeps the contract line (floor)${bNote}`); continue; }
     if (!diffs.length) { tally.same++; if (only.length) { const nq = [...a.quarters].sort((x, y) => x.end.localeCompare(y.end)).at(-1); console.log(`SAME ${s} newest q:${nq?.end} revenue ${m(v(nq, "revenue"))} [${t(nq, "revenue")}]`); } continue; }
     tally.changed++;
     if (CAND877.has(s)) tally.changedIn877++;
@@ -119,7 +129,7 @@ for (const s of mine) {
     const gp = v(newest.pb, "grossProfit"), cogs = v(newest.pb, "costOfRevenue");
     const basis = gp != null && cogs != null ? (near(gp + cogs, rb) ? "GP+COGS=new" : near(gp + cogs, ra) ? "GP+COGS=old" : "GP+COGS=neither") : "no GP+COGS pair";
     const lost = diffs.filter((d) => v(d.pb, "revenue") == null).length, gained = diffs.filter((d) => v(d.pa, "revenue") == null).length;
-    console.log(`CHANGED ${s}${CAND877.has(s) ? " [877]" : ""} why=${why} excise=${excise} periods=${diffs.length} (gained ${gained}, now unreported ${lost}) | newest ${newest.bucket}:${newest.e} ${m(ra)} [${t(newest.pa, "revenue")}] -> ${m(rb)} [${t(newest.pb, "revenue")}] x${ratio?.toFixed(3) ?? "—"} | gross margin ${pct(gross(newest.pa), ra)} -> ${pct(gross(newest.pb), rb)} | ${basis}`);
+    console.log(`CHANGED ${s}${CAND877.has(s) ? " [877]" : ""} why=${why} excise=${excise} periods=${diffs.length} (gained ${gained}, now unreported ${lost}) | newest ${newest.bucket}:${newest.e} ${m(ra)} [${t(newest.pa, "revenue")}] -> ${m(rb)} [${t(newest.pb, "revenue")}] x${ratio?.toFixed(3) ?? "—"} | gross margin ${pct(gross(newest.pa), ra)} -> ${pct(gross(newest.pb), rb)} | ${basis}${bNote}`);
   } catch (e) { tally.ERROR++; console.log(`ERROR ${s} ${String(e?.message ?? e).slice(0, 80)}`); }
 }
 console.log(`\nshard ${K}/${N}: ${mine.length} symbols | ${JSON.stringify(tally)} | changed by reason ${JSON.stringify(byWhy)} | ${Math.round((Date.now() - started) / 1000)}s`);
