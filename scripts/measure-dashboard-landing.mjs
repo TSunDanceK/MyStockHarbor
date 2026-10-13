@@ -30,9 +30,11 @@
 //     crowds a bar; an earnings name is cut off without an ellipsis;
 //   - (#166 d) the chart watermark overlaps the plot (it has its own strip);
 //   - (#166 c) at 640 px and under the supply-chain map is off centre.
+//   - (#553 COWORK #228) from 1024 px the two open features differ in height, or
+//     their links' tops differ, by more than 2 px (printed per run; 1440 px added).
 // "/" (#149 §1), rendered from app/page.tsx and opened at 390 px with a phone's
-// user agent, must be this same landing. With --shots DIR it saves 1280 and 390 px
-// screenshots. A mutant (a 700 px wide block) must be caught as sideways scroll.
+// user agent, must be this same landing. With --shots DIR it saves 1280, 1440 and 390 px
+// screenshots (and, at 1280 and 1440, the "Only on" section on its own). A mutant (a 700 px wide block) must be caught as sideways scroll.
 //
 //   node scripts/measure-dashboard-landing.mjs [--shots DIR]
 //
@@ -136,6 +138,17 @@ function probe() {
       const fb = cs.map((c) => c.more?.bottom ?? NaN);
       if (Math.max(...fb) - Math.min(...fb) > 4) bad.push(`row ${r.dataset.row}: footers not aligned (${fb.map(Math.round).join("/")})`);
     }
+  }
+  // #553 COWORK #228: the two open features the same height, from 1024 px, their
+  // links on one bottom line (tops within 2 px). The figures are kept on the page
+  // so the run can print them.
+  if (innerWidth >= 1024) {
+    const opens = ["hub", "capex"].map((o) => q(`[data-open="${o}"]`)).filter(Boolean);
+    const links = opens.map((o) => [...o.querySelectorAll(".dlMore")].find(vis)?.getBoundingClientRect());
+    const hs = opens.map((o) => o.getBoundingClientRect().height), tops = links.map((l) => l?.top ?? NaN);
+    window.__openRow = { linkTops: tops.map((t) => Math.round(t * 10) / 10), heights: hs.map((h) => Math.round(h * 10) / 10) };
+    if (opens.length === 2 && !(Math.abs(tops[0] - tops[1]) <= 2)) bad.push(`open row: the links are not on one line (${tops.map(Math.round).join("/")})`);
+    if (opens.length === 2 && Math.abs(hs[0] - hs[1]) > 2) bad.push(`open row: feature heights ${hs.map(Math.round).join("/")}`);
   }
   // #164 C: each news row's thumbnail (or logo) a 40–48 px square, left of its one-line headline.
   for (const r of document.querySelectorAll(".dlNewsRow")) {
@@ -266,16 +279,18 @@ let failures = 0;
 for (const [name, body] of runs) {
   mode = name;
   for (const root of [16, 20]) {
-    for (const width of [320, 390, 640, 768, 1024, 1280]) {
+    for (const width of [320, 390, 640, 768, 1024, 1280, 1440]) {
       const page = await open(body, root, width);
       const bad = await page.evaluate(probe);
       if (bad.length) failures++;
-      console.log(`${name} ${width}px @ ${root}px: ${bad.length ? `FAIL ${bad.join("; ")}` : "OK"}`);
-      if (SHOTS && root === 16 && (width === 1280 || width === 390)) {
+      const openRow = width >= 1024 ? await page.evaluate(() => window.__openRow) : null;
+      console.log(`${name} ${width}px @ ${root}px: ${bad.length ? `FAIL ${bad.join("; ")}` : "OK"}${openRow ? ` (open row: link tops ${openRow.linkTops.join(" / ")} px, heights ${openRow.heights.join(" / ")} px)` : ""}`);
+      if (SHOTS && root === 16 && (width === 1280 || width === 1440 || width === 390)) {
         // Lazy logos load only once scrolled near: walk the page first, as a reader would.
         await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 400) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 40)); } scrollTo(0, 0); });
         await page.waitForLoadState("networkidle").catch(() => {});
         fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, `dashboard-${name}-${width}.png`), fullPage: true });
+        if (width >= 1024) await page.locator('[data-section="only"]').screenshot({ path: path.join(SHOTS, `only-${name}-${width}.png`) });
       }
       await page.close();
     }
@@ -325,6 +340,19 @@ for (const [label, from, to, width, pat] of [
   console.log(`mutant (${label}, ${width}px): ${caught ? "caught" : "NOT CAUGHT"}`);
   if (!caught) failures++;
   await page.close();
+}
+// #228's MUTANT: the hub link back at a fixed 8 px under its list, off the capex link's line.
+{
+  const from = "@media(min-width:1024px){.dlOpen .dlMore{margin-top:auto;}";
+  if (!runs[0][1].includes(from)) { console.log("mutant (the links off one line): DOES NOT APPLY"); failures++; }
+  else {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.setContent(doc(runs[0][1].split(from).join("@media(min-width:1024px){.dlOpen .dlMore{margin-top:8px;}"), 16));
+    const caught = (await page.evaluate(probe)).some((b) => /open row/.test(b));
+    console.log(`mutant (the links off one line, 1280px): ${caught ? "caught" : "NOT CAUGHT"}`);
+    if (!caught) failures++;
+    await page.close();
+  }
 }
 // THE PHONE TOOLBAR'S MUTANTS (after #829): the old wrapping, and controls too wide to fit.
 for (const [label, from, to, width] of [
