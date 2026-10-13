@@ -4,9 +4,11 @@ import type { HubTheme } from "@/lib/bottleneckHub";
 
 // "Choke points by theme" on /bottlenecks (#125 COWORK), plus the hub's link
 // card to the capex page. Server-rendered from buildThemes(): the themes are
-// an editorial map in lib/bottleneckHub.ts (THEME_MAP, company key → theme),
-// and each card counts the distinct mapped stock pages that name at least one
-// company in it. The three logos are the theme's most-named companies.
+// an editorial map in lib/bottleneckHub.ts (THEME_MAP, company key → theme;
+// THEME_PAGES, a mapped page's own ticker → theme, #563 COWORK #180), and each
+// card counts the distinct mapped stock pages that name at least one company in
+// it or are in it. The three logos are the theme's most-named companies (on a
+// ticker-keyed theme, the listed partners its pages name).
 
 export const CAPEX_TITLE = "Follow the money: AI and data-centre capex";
 
@@ -26,7 +28,7 @@ export default function BottleneckThemes({ themes }: { themes: HubTheme[] }) {
                 {t.top.map((c) => <TickerLogo key={c.key} symbol={c.ticker} name={c.name} size={20} radius={5} alt="" />)}
               </div>
               <span className="bnThemeNames" title={t.top.map((c) => c.name).join(", ")}>{t.top.map((c) => c.ticker ?? c.name).join(" · ")}</span>
-              <span className="bnThemeCount" data-fine-print="" title={`${t.pageCount} mapped stocks name a company in this theme`}>{t.pageCount} mapped stocks</span>
+              <span className="bnThemeCount" data-fine-print="" title={t.countNote}>{t.pageCount} mapped stocks</span>
             </div>
           </div>
         ))}
