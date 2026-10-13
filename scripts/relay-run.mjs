@@ -1427,6 +1427,9 @@ const TASKS = {
   // READS ONLY (#553 COWORK #222 step 1): the audited symbols' stored last two
   // EOD bars and IEX quote rows; dates, ET times, %, yes/no. GET/MGET/HMGET, ~2 commands.
   "write-premarket-quote-census": { script: "scripts/premarket-quote-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // NO CREDENTIALS (owner request 13 Oct, #553 COWORK #229): fetches the four published AI answer-bot IP lists
+  // and prints the firewall rule JSON. Public data only; the sandbox cannot reach these hosts.
+  "firewall-ai-answer-bots-rule": { script: "scripts/firewall/build-ai-answer-bots-rule.mjs", args: () => [] },
 };
 
 const argv = process.argv.slice(2);
