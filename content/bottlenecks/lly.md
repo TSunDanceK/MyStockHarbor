@@ -99,6 +99,7 @@ supplyChain:
       that reliance.
   - name: Boehringer Ingelheim
     ticker: null
+    listing: private
     pct: 10
     grade: some
     blurb: >

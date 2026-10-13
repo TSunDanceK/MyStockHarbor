@@ -1,6 +1,7 @@
 // "Who is spending" (Relay C, #563 COWORK #1 D1): the aggregation rules, each
 // one a way the sector chart could mislead without anyone noticing:
-//   * fiscal years placed in the calendar year holding most of them;
+//   * fiscal years placed in the calendar year holding most of their months,
+//     a July–June 6/6 tie going to the year it ends in;
 //   * a FIXED cohort per sector (capex in every year), so a bar cannot grow
 //     because more companies started reporting;
 //   * other-currency filers counted, not silently dropped; unclassified
@@ -41,8 +42,8 @@ const cyYears = (base, opts = {}) =>
   }));
 const I = (symbol, sector, years, extra = {}) => ({ symbol, cik: extra.cik ?? `000${symbol.length}${symbol.charCodeAt(0)}`, sector, currency: extra.currency ?? null, years });
 
-// A July–June filer: FY ending 2025-06-30 has its midpoint in 2024.
-const julJun = YEARS.map((y) => ({ s: `${y}-07-01`, e: `${y + 1}-06-30`, capex: 7, revenue: 70, rnd: null }));
+// A July–June filer: a 6/6 tie, so FY ending 2025-06-30 is placed in 2025.
+const julJun = YEARS.map((y) => ({ s: `${y - 1}-07-01`, e: `${y}-06-30`, capex: 7, revenue: 70, rnd: null }));
 
 const INPUTS = [
   I("AAA", "Technology", cyYears(100, { rnd: true }), { cik: "0000000001" }),
@@ -61,7 +62,9 @@ const INPUTS = [
 async function suite(M) {
   const fails = [];
   const ok = (label, cond, detail = "") => { if (!cond) fails.push(`${label}${detail ? ` — ${detail}` : ""}`); };
-  ok("a July–June year sits in the calendar year of its midpoint", M.calendarYearOf("2024-07-01", "2025-06-30") === 2024 && M.calendarYearOf("2025-01-27", "2026-01-25") === 2025 && M.calendarYearOf(null, "2025-12-31") === 2025);
+  ok("most months wins: a February–January year is the earlier calendar year", M.calendarYearOf("2025-01-27", "2026-01-25") === 2025 && M.calendarYearOf(null, "2025-12-31") === 2025 && M.calendarYearOf("2024-04-01", "2025-03-31") === 2024 && M.calendarYearOf("2024-10-01", "2025-09-30") === 2025);
+  ok("a July–June 6/6 tie goes to the year it ends in: MSFT FY2026 is 2026, FY2025 is 2025 (#563 COWORK #188)", M.calendarYearOf("2025-07-01", "2026-06-30") === 2026 && M.calendarYearOf("2024-07-01", "2025-06-30") === 2025 && M.calendarYearOf(null, "2026-06-30") === 2026);
+  ok("52/53-week ends snap to the nearest month: 28 Jun–3 Jul is July–June; MU to 3 Sep 2026 is Sep–Aug", M.calendarYearOf("2025-06-28", "2026-07-03") === 2026 && M.calendarYearOf("2024-06-30", "2025-06-28") === 2025 && M.calendarYearOf("2025-08-29", "2026-09-03") === 2026);
   ok("the years are the last five complete ones", M.spendingYears(NOW).join() === YEARS.join());
 
   const r = M.aggregateSpending(INPUTS, YEARS, NOW);
@@ -73,7 +76,7 @@ async function suite(M) {
   ok("a company with some years is counted as partial", r.partial === 1, String(r.partial));
   ok("capex ÷ revenue uses only companies with revenue every year", tech?.ratioCohort === 1 && Math.abs(tech.capexToRevenue[0] - 0.1) < 1e-12, JSON.stringify(tech?.capexToRevenue));
   ok("R&D has its own cohort", tech?.rndCohort === 1 && tech.rnd[0] === 100);
-  ok("a July–June filer fills 2021..2025 from FY2022..FY2026's midpoints", ind?.cohort === 1 && ind.capex.every((v) => v === 7), JSON.stringify(ind));
+  ok("a July–June filer fills 2021..2025 from FY2021..FY2025", ind?.cohort === 1 && ind.capex.every((v) => v === 7), JSON.stringify(ind));
   ok("another currency is counted, not dropped silently", r.otherCurrency === 1);
   ok("no sector: counted as unclassified, not placed", r.unclassified === 2 && !r.sectors.some((s) => s.top.includes("NOSEC")));
   ok("the unplaced are named, largest first (#563 COWORK #6)", r.unclassifiedLargest.map((u) => `${u.symbol}:${u.capex}`).join() === "BIGNOSEC:700,NOSEC:70", JSON.stringify(r.unclassifiedLargest));
@@ -98,7 +101,9 @@ const mut = (label, from, to) => {
   return src.replace(from, () => to);
 };
 const MUTANTS = [
-  ["fiscal year placed by its end, not its midpoint", () => mut("mid", "return new Date((start + end) / 2).getUTCFullYear();", "return new Date(end).getUTCFullYear();")],
+  ["fiscal year placed by its end, not by most months", () => mut("end", "  return best;\n}", "  return Math.floor((stop - 1) / 12);\n}")],
+  ["the 6/6 tie goes to the earlier year (the old midpoint result)", () => mut("tie", "(n === most && year > best)", "(n === most && year < best)")],
+  ["ends not snapped to the nearest month", () => mut("snap", "+ (t.getUTCDate() - 1 > days / 2 ? 1 : 0)", "")],
   ["cohort of anyone with any capex", () => mut("cohort", "const cohort = rows.filter((r) => complete(r.capex));", "const cohort = rows.filter((r) => r.capex.some((v) => v !== null)).map((r) => ({ ...r, capex: r.capex.map((v) => v ?? 0) }));")],
   ["other currencies dropped silently", () => mut("cur", "if (input.currency && input.currency !== \"USD\") otherCurrency++;", "")],
   ["unclassified placed in a catch-all", () => mut("unc", "    if (!input.sector) {\n      if (row.capex.some((v) => v !== null)) {", "    if (!input.sector) input.sector = \"Other\";\n    if (false) {\n      if (row.capex.some((v) => v !== null)) {")],

@@ -19,7 +19,10 @@
 //      <details> after the head and the listed line, or is not in the HTML;
 //   9. (#166 g) the phone map's SUPPLIERS / CUSTOMERS labels are missing or
 //      sit on the boxes;
-//  10. (#166 e) the capex hero loses its coins picture or the insight heroes' shade.
+//  10. (#166 e) the capex hero loses its coins picture or the insight heroes' shade;
+//  11. (#188) a foreign-listed firm reads "not listed", or a group / public body /
+//      unnamed customer is labelled as a company, or `listing` is ignored;
+//  12. (#188) the "single big customer" FAQ counts a group or region as one customer.
 // A mutant each.
 //
 //   node scripts/check-bottleneck-page.mjs
@@ -76,6 +79,26 @@ function rules(R, V, capexSrc = read(CAPEX)) {
   const side = R.mapSide(POST.supplyChain, "s");
   want("the map: at most 6 boxes a side, the rest as one \"+N more\"", side.length === 7 && side.slice(0, 6).every((n) => !("more" in n)) && side[6].more === 2 && side[6].pct === 10 && R.MAP_SIDE_MAX === 6 &&
     R.mapSide(POST.customers, "c").length === 3);
+  // 11 (#563 COWORK #188). What an unlisted row is: a foreign-listed firm is not
+  // "not listed"; groups, public bodies and unnamed customers say what they are.
+  const U = (name, blurb = "", listing) => R.unlistedWords(name, blurb, listing);
+  want("labels: foreign-listed 'No US listing'; private, government, group, unnamed each say so; `listing` wins",
+    U("Samsung Electronics", "Korean memory maker.") === "No US listing" && U("Syensqo", "Belgian specialty materials.") === "No US listing" &&
+    U("CordenPharma", "A privately held CDMO.") === "Private company" && U("Boehringer Ingelheim", "German drugmaker.", "private") === "Private company" &&
+    U("Adyen", "A private company, per an old note.", "non-us") === "No US listing" &&
+    U("U.S. Government", "All federal agencies.") === "Government body" && U("U.S. Federal Government (all agencies combined)", "") === "Government body" && U("NASA", "") === "Government body" &&
+    U("State & local governments", "") === "Not a single company" && U("All other customers", "") === "Not a single company" &&
+    U("Brazil", "Not a single company: the country segment.") === "Not a single company" &&
+    U("Largest customer (unnamed)", "") === "Name not disclosed" && U("Samsung Electronics", "").indexOf("Not a listed") === -1);
+  // 12 (#188). "A single big customer" means one named company or body, never a group.
+  const C = (rows) => R.singleCustomerAnswer(R.customerMeter(rows.map((x) => x.pct), ""), rows.map((x) => ({ blurb: "", ticker: null, ...x })));
+  const kdp = C([{ name: "All other customers", pct: 52, blurb: "Not a single company." }, { name: "Walmart", pct: 15, ticker: "WMT" }]);
+  want("FAQ: a 52% group is not a single customer; it is named as a group, hedged", kdp.startsWith("Not on this map: no single named customer reaches ~20%") && kdp.includes("~52%) is All other customers, a group rather than one customer"));
+  want("FAQ: a named company at 40%+ 'It may', at 20-39% 'Partly', even behind a bigger group",
+    C([{ name: "NASA", pct: 70 }]).startsWith("It may: NASA is ~70%") &&
+    C([{ name: "Other shippers", pct: 50 }, { name: "Plains All American Pipeline", pct: 25, ticker: "PAA" }]).startsWith("Partly: Plains All American Pipeline is ~25%") &&
+    C([{ name: "Brazil", pct: 55, blurb: "Not a single company." }, { name: "Acme", pct: 19 }]).startsWith("Not on this map"));
+  want("FAQ: no advice words", !/\b(buy|sell|should|recommend)\b/i.test(kdp + C([{ name: "NASA", pct: 70 }])));
   // The page.
   let html = "";
   try {
@@ -166,6 +189,13 @@ const MUTANTS = [
   ["the roll-up dropped", RULES_SRC, "return rest.length ? [...shown, { key: `${prefix}more`, more: rest.length, pct: Math.round(rest.reduce((a, r) => a + r.pct, 0)) }] : shown;", "return shown;"],
   ["single-source not hard", RULES_SRC, "if (side === \"supplier\" && SINGLE.test(blurb)) return \"hard\";", ""],
   ["diversified customers not spread", RULES_SRC, "if (side === \"customer\" && DIVERSIFIED.test(blurb)) return \"spread\";", ""],
+  // #188.
+  ["foreign-listed read as 'not listed'", RULES_SRC, "  \"non-us\": \"No US listing\",", "  \"non-us\": \"Not a listed company\","],
+  ["the `listing` field ignored", RULES_SRC, "  if (c.listing) return c.listing;", ""],
+  ["groups not recognised", RULES_SRC, "if (GROUP.test(c.blurb) || GROUP_NAME.test(c.name)) return \"group\";", ""],
+  ["one sovereign customer read as a group", RULES_SRC, "if (SOVEREIGN.test(c.name) &&", "if (false &&"],
+  ["the FAQ's top row taken whatever it is", RULES_SRC, "const single = byPct.find(isSingleNamed), group = byPct[0];", "const single = byPct[0], group = byPct[0];"],
+  ["the FAQ's Partly band dropped", RULES_SRC, "if (single && single.pct >= bands.medium) return", "if (false) return"],
   ["the map after the cards", VIEW, "<section className=\"bnCard bnMapCard\" data-bn=\"map\"", "<section className=\"bnCard bnMapCard\" data-bn=\"map-x\""],
   ["the grade chip dropped", VIEW, "<span className=\"bnGrade\" data-grade={c.grade}>{GRADE_WORDS[c.grade]}</span>", "<span className=\"bnGrade\">Critical</span>"],
   ["Earnings ungated", VIEW, "{hasFiledEarnings ? <Link href={`/stock/${encodeURIComponent(t)}/earnings`}", "{true ? <Link href={`/stock/${encodeURIComponent(t)}/earnings`}"],
