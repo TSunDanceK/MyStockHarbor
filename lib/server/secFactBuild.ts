@@ -17,8 +17,10 @@ import {
   type FxSeries,
   type FxSource,
 } from "./fxRates";
-import { encodeFactSet, type StoredFactSet } from "./secFactCodec";
+import { contentHashOf, encodeFactSet, type StoredFactSet } from "./secFactCodec";
 import { needsReread } from "./secStaleness";
+import { coverIsUsable } from "./secCoverAuto";
+import { COVER_SHARES_MAX_AGE_DAYS } from "./secValuation";
 
 /**
  * The date span a filer's periods need rates for.
@@ -182,6 +184,50 @@ export function mustWriteOver(
   set: Pick<StoredFactSet, "contentHash" | "fx" | "quarters" | "years" | "instants">,
 ): boolean {
   return prior.contentHash !== set.contentHash || conversionGained(prior, set) || needsReread(prior);
+}
+
+/**
+ * THE KEPT SET, WITH A NEWER COVER OR TTM EPS MERGED IN (#552 COWORK #222).
+ *
+ * While companyfacts lags a filing the filing job filled (`keepFilled`), the
+ * job keeps the stored set whole. That is right for its figures and wrong for
+ * what the fresh read computes from the filing itself: V's prior carried a
+ * 2010 companyfacts cover (469,280,842) while withClassCover read
+ * 1,867,047,260 Class A-equivalents from the 10-Q, and the kept set held the
+ * old one for as long as the feed lagged.
+ *
+ * NEWEST WINS, NOT "DIFFERS". The fresh cover is taken only when it is usable
+ * (a value, not the ambiguous form, inside the age limit) and STRICTLY newer
+ * by asOf. C, WES and MDLZ keep their filled-10-Q covers, which are newer than
+ * the companyfacts counts a lagging re-read offers. `te` likewise, only when
+ * it runs to a later period end.
+ *
+ * ONLY THOSE TWO FIELDS. The prior's figures, `ff` and its stamps stay as
+ * they are: a set must not claim chains or a share version it was not read
+ * with, so it stays on the stale queue and is rebuilt once the feed catches up.
+ *
+ * NOT FOR A CONVERTED SET: its contentHash is taken on the REPORTED figures
+ * (encodeFactSet), which the stored set no longer carries, so a hash recomputed
+ * here would be on a different basis. Such a set is kept as it is.
+ *
+ * Returns the PRIOR ITSELF when nothing is newer, so `kept !== prior` is the
+ * write test. PURE.
+ */
+export function keptWithNewer(
+  prior: StoredFactSet,
+  fresh: Pick<StoredFactSet, "cover" | "te">,
+  today: string,
+): StoredFactSet {
+  if (prior.fx) return prior;
+  // coverIsUsable refuses the ambiguous form too: it has no value, only candidates.
+  const coverNewer = coverIsUsable(fresh.cover, today, COVER_SHARES_MAX_AGE_DAYS)
+    && fresh.cover!.asOf > (prior.cover?.asOf ?? "");
+  const teNewer = Boolean(fresh.te && (!prior.te || fresh.te.periodEnd > prior.te.periodEnd));
+  if (!coverNewer && !teNewer) return prior;
+  const { contentHash: _old, ...rest } = prior;
+  void _old;
+  const merged = { ...rest, ...(coverNewer ? { cover: fresh.cover } : {}), ...(teNewer ? { te: fresh.te } : {}) };
+  return { ...merged, contentHash: contentHashOf(merged) };
 }
 
 /**

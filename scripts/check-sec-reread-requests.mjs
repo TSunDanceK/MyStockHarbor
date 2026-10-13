@@ -8,7 +8,12 @@
 //      would re-read the symbol every run forever); the cap removed.
 //   2. The cron applies the requests BEFORE it builds its queues.
 //      MUTATION: applied after.
-//   3. The committed file parses and names XOM with a real timestamp.
+//   3. heldOpenRequests (#552 COWORK #222): a request held open by a kept
+//      prior for MORE than 14 days is listed, with companyfacts' newest end
+//      against ff; not one held 14 days or fewer, not one verified since the
+//      request, not one never held; once per symbol. MUTATIONS: the threshold
+//      removed; the open-request test removed.
+//   4. The committed file parses and names XOM with a real timestamp.
 //
 //   node scripts/check-sec-reread-requests.mjs
 import fs from "node:fs";
@@ -81,7 +86,36 @@ check("applyRereadRequests runs before populationQueues", before(ROUTE));
 check("MUTATION: applied after the queues are built → caught",
   !before(once(ROUTE, "const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY, secSeedRefusal);", "const q = populationQueues(manifest, undefined, undefined, REWINDOW_PRIORITY, secSeedRefusal);\nconst late = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());").replace("const requested = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());", "const requested = [];")));
 
-console.log("\n3. the committed file");
+console.log("\n3. heldOpenRequests: the check-in's 14-day list (#552 COWORK #222)");
+{
+  const loadHeld = (src) => lift([
+    src.match(/^export const SEC_HELD_OPEN_LIST_DAYS = \d+;$/m)?.[0].replace(/^export /, "") ?? "",
+    grabFunction(src, "heldOpenRequests"),
+    "export { heldOpenRequests };",
+  ].join("\n"));
+  const H = await loadHeld(SRC);
+  const DAY = 86_400_000;
+  const held = (sinceDays, over = {}) => entry({ keptOpen: { since: NOW - sinceDays * DAY, feedEnd: "2025-12-31", ff: "2026-06-30" }, ...over });
+  const m = { symbols: { C: held(15), V: held(3), WES: held(20, { verifiedAt: NOW }), XOM: entry() } };
+  const out = H.heldOpenRequests(m, [REQ("C"), REQ("V"), REQ("WES"), REQ("XOM")], NOW);
+  check("held 15 days with its request open → listed, with the feed's newest end against ff",
+    out.length === 1 && out[0].symbol === "C" && out[0].days === 15 && out[0].feedEnd === "2025-12-31" && out[0].ff === "2026-06-30");
+  check("held 3 days → not yet listed", !out.some((r) => r.symbol === "V"));
+  check("verified after the request (a pass read through) → not listed", !out.some((r) => r.symbol === "WES"));
+  check("never held → not listed", !out.some((r) => r.symbol === "XOM"));
+  check("exactly 14 days → not listed (more than 14)",
+    H.heldOpenRequests({ symbols: { C: held(14) } }, [REQ("C")], NOW).length === 0);
+  check("a symbol requested twice is listed once",
+    H.heldOpenRequests({ symbols: { C: held(15) } }, [REQ("C"), REQ("C", "2026-09-20T00:00:00Z")], NOW).length === 1);
+  const Md = await loadHeld(once(SRC, "    if (held <= days) continue;\n", ""));
+  check("MUTATION: the 14-day threshold removed → a 3-day hold is listed (caught)",
+    Md.heldOpenRequests(m, [REQ("V")], NOW).length === 1);
+  const Mv = await loadHeld(once(SRC, "if (!kept || !Number.isFinite(at) || (entry.verifiedAt ?? 0) >= at) continue;", "if (!kept || !Number.isFinite(at)) continue;"));
+  check("MUTATION: the open-request test removed → a verified symbol is listed (caught)",
+    Mv.heldOpenRequests(m, [REQ("WES")], NOW).length === 1);
+}
+
+console.log("\n4. the committed file");
 const FILE = JSON.parse(fs.readFileSync("data/sec/reread-requests.json", "utf8"));
 check("every request has a symbol, a parseable requestedAt and a reason",
   FILE.requests.every((r) => r.symbol && Number.isFinite(Date.parse(r.requestedAt)) && r.reason));
