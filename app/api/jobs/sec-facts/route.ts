@@ -11,7 +11,7 @@ import { withClassCover } from "@/lib/server/secCoverClasses";
 import { withInstanceEps } from "@/lib/server/secInstanceEps";
 import { applyRereadRequests, SEC_REREAD_REQUESTS } from "@/lib/server/secRereadRequests";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
-import { mustWriteOver, priorStandsForFx, toStoredSet } from "@/lib/server/secFactBuild";
+import { keptWithNewer, mustWriteOver, priorStandsForFx, toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
@@ -673,13 +673,20 @@ export async function GET(req: NextRequest) {
       const keepForFx = priorStandsForFx(prior, extracted, fresh);
       if (keepForFx) console.warn("[sec-facts] fx unavailable — stored set kept", JSON.stringify({ symbol, cur: extracted.reportingCurrency }));
       const keepPrior = keepFilled || keepForFx;
-      const set: StoredFactSet = keepPrior ? prior! : keepNotice ? { ...fresh, lg: prior!.lg } : fresh;
+      // ── THE KEPT SET STILL TAKES A NEWER COVER OR TTM EPS (#552 COWORK #222).
+      // The fresh read computes both from the filing itself, so a lagging feed
+      // is no reason to hold an older one (V: a 2010 cover kept over the 10-Q's
+      // per-class count). Newest wins; the prior's figures and stamps stay.
+      // See keptWithNewer.
+      const kept = keepPrior ? keptWithNewer(prior!, fresh, new Date().toISOString().slice(0, 10)) : null;
+      const set: StoredFactSet = keepPrior ? kept! : keepNotice ? { ...fresh, lg: prior!.lg } : fresh;
       // A figure moved, OR A REFUSED PERIOD NOW CONVERTS (a rate source was
       // added; the hash is on the reported figures and cannot see it), OR THE
       // STORED SET IS BEHIND WHAT THE CODE WRITES (#552 COWORK #132 (a)): the
       // manifest stamps from `set`, so a stale prior left unwritten was stamped
-      // current with the old shape still stored. See mustWriteOver.
-      const changed = keepPrior ? false : prior ? mustWriteOver(prior, set) : true;
+      // current with the old shape still stored. See mustWriteOver. A kept set
+      // is written only when keptWithNewer merged something into it.
+      const changed = keepPrior ? kept !== prior : prior ? mustWriteOver(prior, set) : true;
       // LAYER 2 OF THE CORRECTIONS FAILSAFE (spec §3). A figure that moved with
       // no filing event behind it is a SILENT RESTATEMENT -- the case the
       // amended-form signal cannot see. The site is allowed to update; it is
@@ -760,7 +767,21 @@ export async function GET(req: NextRequest) {
         entry.contentHash = set.contentHash;
         entry.needsReverify = false;
         entry.reverifyReason = null;
-        entry.verifiedAt = Date.now();
+        // ── A PASS THAT KEEPS THE PRIOR IS NOT A VERIFICATION (#552 COWORK #222).
+        // verifiedAt is what retires a re-read request (secRereadRequests), and
+        // stamping it here closed V's with its stale set still stored, every
+        // run. So the request stays open until a pass reads the feed through;
+        // `keptOpen` records since when, for the check-in's 14-day list.
+        if (keepPrior) {
+          entry.keptOpen = {
+            since: entry.keptOpen?.since ?? Date.now(),
+            feedEnd: freshNewest || null,
+            ff: prior!.ff?.reportDate ?? null,
+          };
+        } else {
+          entry.verifiedAt = Date.now();
+          entry.keptOpen = null;
+        }
         // ── WHAT WAS WRITTEN, RECORDED ON THE MANIFEST ────────────────────
         //
         // Written on EVERY pass, not only when `changed` — an unchanged set

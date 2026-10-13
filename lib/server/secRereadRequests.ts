@@ -54,3 +54,47 @@ export function applyRereadRequests(
   }
   return applied;
 }
+
+/** A request held open longer than this is listed for the check-in (#552 COWORK #222). */
+export const SEC_HELD_OPEN_LIST_DAYS = 14;
+
+export type HeldOpenRequest = {
+  symbol: string;
+  requestedAt: string;
+  /** When the job began keeping the prior over a lagging feed (ms). */
+  keptSince: number;
+  days: number;
+  /** companyfacts' newest period end on the last pass, against the filed one. */
+  feedEnd: string | null;
+  ff: string | null;
+};
+
+/**
+ * THE REQUESTS A LAGGING FEED IS HOLDING OPEN (#552 COWORK #222).
+ *
+ * A pass that keeps the stored set (keepFilled / keepForFx) no longer stamps
+ * verifiedAt, so its request stays open until companyfacts carries the filled
+ * period. That is meant to be brief. This lists any request still open whose
+ * symbol has been held for more than `days` (C's feed already ended at FY2025
+ * when this shipped), so a feed that never catches up is seen rather than
+ * re-read quietly forever. PURE: the manifest, the list and the clock.
+ */
+export function heldOpenRequests(
+  manifest: SecManifest,
+  requests: RereadRequest[],
+  nowMs: number,
+  days = SEC_HELD_OPEN_LIST_DAYS,
+): HeldOpenRequest[] {
+  const out = new Map<string, HeldOpenRequest>();
+  for (const r of requests) {
+    const symbol = String(r.symbol).toUpperCase();
+    const entry = manifest.symbols[symbol];
+    const kept = entry?.keptOpen;
+    const at = Date.parse(r.requestedAt);
+    if (!kept || !Number.isFinite(at) || (entry.verifiedAt ?? 0) >= at) continue;
+    const held = (nowMs - kept.since) / 86_400_000;
+    if (held <= days) continue;
+    out.set(symbol, { symbol, requestedAt: r.requestedAt, keptSince: kept.since, days: Math.floor(held), feedEnd: kept.feedEnd, ff: kept.ff });
+  }
+  return [...out.values()];
+}

@@ -219,6 +219,15 @@ export type SecManifestEntry = {
    * same run. Cleared once companyfacts publishes the period.
    */
   filingLag?: { accn: string; reportDate: string; kind?: "filled" | "notice" } | null;
+  /**
+   * THE STORED SET IS BEING KEPT OVER A LAGGING FEED (#552 COWORK #222): set on
+   * the first sec-facts pass that keeps the prior (keepFilled / keepForFx),
+   * cleared on the first pass that does not. Such a pass does not stamp
+   * `verifiedAt`, so a re-read request stays open; this records since when,
+   * and the feed's newest period end against the filled one, for the check-in
+   * (secRereadRequests.heldOpenRequests). Absent = not held.
+   */
+  keptOpen?: { since: number; feedEnd: string | null; ff: string | null } | null;
   needsReverify: boolean;
   scoreVersion: number;
   /**
