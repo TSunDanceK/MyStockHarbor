@@ -1440,6 +1440,9 @@ const TASKS = {
   "write-held-open-requests-all": { script: "scripts/held-open-requests.mjs", args: () => [], needsTypescript: true, writes: true, env: { ALL: "1" } },
   // READS ONLY (#553 COWORK #225): the #856 meter day hashes, per source and caller. HGETALL, 1 command a day.
   "write-redis-meter-day": { script: "scripts/redis-meter-day.mjs", args: () => [], writes: true },
+  // NO CREDENTIALS (owner request 13 Oct, #553 COWORK #229): fetches the four published AI answer-bot IP lists
+  // and prints the firewall rule JSON. Public data only; the sandbox cannot reach these hosts.
+  "firewall-ai-answer-bots-rule": { script: "scripts/firewall/build-ai-answer-bots-rule.mjs", args: () => [] },
 };
 
 const argv = process.argv.slice(2);
