@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
 import { buildBottleneckHub, buildHubCompanies, type BottleneckHub } from "./bottleneckHub";
-import { defaultGrade, isGrade, type Grade, type Side } from "./bottleneckPage";
+import { defaultGrade, isGrade, isListing, type Grade, type Listing, type Side } from "./bottleneckPage";
 
 const bottlenecksDirectory = path.join(process.cwd(), "content/bottlenecks");
 
@@ -13,6 +13,12 @@ export type BottleneckCompany = {
   blurb: string;
   /** How replaceable it is (#563 COWORK #158): the data file's `grade`, else the default rule. */
   grade: Grade;
+  /**
+   * Optional, for a row with no ticker (#563 COWORK #188): "non-us" (listed
+   * only outside the US) or "private". Absent, the label is read from the name
+   * and blurb (bottleneckPage.entityKind).
+   */
+  listing?: Listing;
 };
 
 export type BottleneckPost = {
@@ -82,7 +88,8 @@ function normalizeCompanies(value: unknown, side: Side): BottleneckCompany[] {
 
       if (!name || !Number.isFinite(pct)) return null;
 
-      return { name, ticker, pct, blurb, grade: isGrade(record.grade) ? record.grade : defaultGrade(side, pct, blurb) };
+      return { name, ticker, pct, blurb, grade: isGrade(record.grade) ? record.grade : defaultGrade(side, pct, blurb),
+        ...(isListing(record.listing) ? { listing: record.listing } : {}) };
     })
     .filter((item): item is BottleneckCompany => item !== null);
 }

@@ -67,7 +67,7 @@ function DepRow({ c, side, i, d, hasFiledEarnings }: { c: BottleneckCompany; sid
             {hasFiledEarnings ? <Link href={`/stock/${encodeURIComponent(t)}/earnings`} prefetch={false} className="bnLink" data-earnings-link="">Earnings →</Link> : null}
             {d.ownMaps.has(t) ? <Link href={`/bottlenecks/${t.toLowerCase()}`} prefetch={false} className="bnLink">{t}&apos;s own map →</Link> : null}
           </>
-        ) : <span className="bnUnlisted">{unlistedWords(c.name, c.blurb)}</span>}
+        ) : <span className="bnUnlisted">{unlistedWords(c.name, c.blurb, c.listing)}</span>}
       </div>
       {/* THE LONG DESCRIPTION, ONE TAP DEEPER (#563 COWORK #166 f): a native
           disclosure, closed on arrival. Server-rendered, so the text stays in

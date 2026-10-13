@@ -166,7 +166,7 @@ export default async function BottleneckPage({ params }: Props) {
   const sMeter = supplierMeter(post.supplyChain.map((c) => c.pct));
   const cMeter = customerMeter(post.customers.map((c) => c.pct), [post.customersNote, ...post.customers.map((c) => c.blurb)].join(" "));
   const listed = [...new Set([post.symbol, ...[...post.supplyChain, ...post.customers].map((c) => c.ticker).filter((t): t is string => !!t)])];
-  const faq = buildFaq({ name, symbol: post.symbol, suppliers: post.supplyChain, customerMeter: cMeter, listed: listed.filter((t) => t !== post.symbol) });
+  const faq = buildFaq({ name, symbol: post.symbol, suppliers: post.supplyChain, customerMeter: cMeter, listed: listed.filter((t) => t !== post.symbol), customers: post.customers });
 
   const bottleneckJsonLd = {
     "@context": "https://schema.org",

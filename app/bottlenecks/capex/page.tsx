@@ -119,7 +119,9 @@ export default async function CapexPage() {
           )}
           <p style={sourceStyle}>
             Source: each company&apos;s annual cash-flow and income statements filed with the SEC (10-K, 20-F or
-            40-F). Fiscal years are placed in the calendar year that holds most of them. Sectors are the ones used
+            40-F). Capex is cash paid for property, plant and equipment as the cash-flow statement reports it;
+            equipment taken on through finance leases is not included. Fiscal years are placed in the calendar year
+            holding most of their months; a July–June year, six months in each, goes to the year it ends in. Sectors are the ones used
             across this site. Totals are sums of filed figures, not estimates; capex ÷ revenue uses the companies
             in each sector that reported both in every year.
           </p>
@@ -371,11 +373,12 @@ function InsightColumn({ insights: x, topReceivers, contractsWindow }: { insight
         <section className="capexCard">
           <div className="cardEyebrow">Who is spending most</div>
           <h3>Largest reported capex, {x.year}</h3>
+          <p className="cardText">Fiscal year placed in calendar year: each company&apos;s year is counted in {x.year} when most of its months fall there.</p>
           <ul className="cardList">
             {/* Each company with its logo (#563 COWORK #130), as on the /bottlenecks leaderboard. */}
             {x.topSpenders.map((t) => <CapexLogoRow key={t.ticker} ticker={t.ticker} name={t.name} amount={t.amount} />)}
           </ul>
-          <p className="cardSource">Source: each company&apos;s cash-flow statement filed with the SEC, calendar {x.year}.</p>
+          <p className="cardSource">Source: each company&apos;s cash-flow statement filed with the SEC, fiscal year placed in calendar {x.year}.</p>
         </section>
       ) : null}
 
@@ -398,6 +401,13 @@ function InsightColumn({ insights: x, topReceivers, contractsWindow }: { insight
           <h3>{x.reinvest.sector}</h3>
           <div className="cardBig">{x.reinvest.ratioText}</div>
           <p className="cardText">of revenue went back into capital spending in {x.year}, the highest share of any sector shown ({x.reinvest.cohort} companies).</p>
+          {/* #563 COWORK #188: the sector row counts a different cohort; say why next to the number. */}
+          {x.reinvest.sectorCohort !== x.reinvest.cohort ? (
+            <p className="cardText">
+              Its sector row counts {x.reinvest.sectorCohort} companies, those with capex in every year; this share uses
+              the {x.reinvest.cohort} of them that also reported revenue in every year.
+            </p>
+          ) : null}
           <p className="cardSource">Source: SEC annual filings, calendar {x.year}.</p>
         </section>
       ) : null}

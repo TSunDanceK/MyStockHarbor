@@ -8,9 +8,9 @@
 //
 // ── THE RULES, EACH ONE A WAY THE CHART COULD MISLEAD ─────────────────────
 // 1. CALENDAR YEARS, NOT FISCAL YEARS. A fiscal year is placed in the calendar
-//    year holding most of it (its midpoint), so Microsoft's July–June year and
-//    NVIDIA's February–January year both land where most of their spending
-//    happened. Summing "FY2025" across companies would add up years that end
+//    year holding most of its months, so NVIDIA's February–January year lands
+//    where eleven of its months fell. A July–June year is a 6/6 tie and goes
+//    to the year it ends in (Microsoft's FY2026, Jul 2025–Jun 2026, is 2026). Summing "FY2025" across companies would add up years that end
 //    as much as eleven months apart.
 // 2. A FIXED COHORT PER SECTOR. A sector's bars sum only the companies that
 //    report capex in EVERY one of the five years. Otherwise a bar can grow
@@ -90,13 +90,29 @@ export type SpendingRecord = {
 };
 
 /**
- * The calendar year holding most of a fiscal year: the year of its midpoint.
- * With no start date, a year of 365 days before the end is assumed.
+ * The calendar year holding most of a fiscal year's MONTHS. Each end is
+ * snapped to the nearest month boundary (a 52/53-week year ending 3 Jul ends
+ * with June; one starting 28 Jun starts with July), the months are counted in
+ * each calendar year, and the year with most wins. A 6/6 tie (a July–June
+ * year) goes to the calendar year the fiscal year ENDS in: Microsoft's year to
+ * June 2026 is placed in 2026, not 2025 (#563 COWORK #188). With no start
+ * date, twelve months before the end are assumed.
  */
 export function calendarYearOf(s: string | null, e: string): number {
-  const end = Date.parse(`${e}T00:00:00Z`);
-  const start = s ? Date.parse(`${s}T00:00:00Z`) : end - 364 * 864e5;
-  return new Date((start + end) / 2).getUTCFullYear();
+  // Months since year 0 of the month boundary nearest the date.
+  const boundary = (iso: string, plusDays = 0): number => {
+    const t = new Date(Date.parse(`${iso}T00:00:00Z`) + plusDays * 864e5);
+    const y = t.getUTCFullYear(), m = t.getUTCMonth();
+    const days = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return y * 12 + m + (t.getUTCDate() - 1 > days / 2 ? 1 : 0);
+  };
+  const stop = boundary(e, 1); // exclusive: the first month after the year
+  const start = s ? boundary(s) : stop - 12;
+  const count = new Map<number, number>();
+  for (let k = start; k < Math.max(stop, start + 1); k++) count.set(Math.floor(k / 12), (count.get(Math.floor(k / 12)) ?? 0) + 1);
+  let best = Math.floor((stop - 1) / 12), most = -1;
+  for (const [year, n] of count) if (n > most || (n === most && year > best)) { best = year; most = n; }
+  return best;
 }
 
 /** The last SPENDING_YEARS complete calendar years before `nowMs`. */
