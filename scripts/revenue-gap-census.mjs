@@ -90,6 +90,16 @@ for (const s of mine) {
     }
     // NAMED SYMBOLS: the shipped revenue notes, which name the gap concept in the filer's own currency.
     if (only.length) for (const n of (b.notes ?? []).filter((x) => /revenue: /.test(String(x)))) console.log(`  note ${s}: ${String(n).slice(0, 260)}`);
+    // NAMED SYMBOLS: the floor's window, period by period: the stored revenue tag, and which raw concepts the filer files for that frame.
+    if (only.length && process.env.COVERAGE) {
+      const g = facts.facts?.["us-gaap"] ?? {};
+      const has = (k, p) => (g[k]?.units?.USD ?? []).some((r) => r.end === p.end && r.start === p.start);
+      for (const [lbl, list, n] of [["q", a.quarters, 8], ["y", a.years, 4]]) {
+        for (const p of [...list].sort((x, y) => y.end.localeCompare(x.end)).slice(0, n)) {
+          console.log(`  ${s} ${lbl} ${p.start}..${p.end} stored ${p.values?.[I.revenue]?.tag ?? "—"} ${m(v(p, "revenue"))} (${d(p, "revenue") ?? "—"}) | raw: Revenues ${has("Revenues", p) ? "y" : "n"}, contract ${has("RevenueFromContractWithCustomerExcludingAssessedTax", p) ? "y" : "n"}, gap concept ${gap && has(gap, p) ? "y" : "n"}`);
+        }
+      }
+    }
     if (gp.n) {
       tally.pureDiffers++;
       console.log(`PURE ${s}${CAND.has(s) ? " [877]" : ""} a literal replacement (gap test only) differs from G: ${gp.n} periods (newest q ${m(v(newestQ(b), "revenue"))} → ${m(v(newestQ(c), "revenue"))})`);

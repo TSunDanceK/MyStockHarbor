@@ -767,6 +767,7 @@ const TASKS = {
   "ads-ratio-census": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true },
   // OPTION G ON EVERY REGISTRANT (#552 COWORK #219): movers S→G, and what a pure replacement would differ on. Read-only, no credential.
   "revenue-gap-census": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true },
+  "revenue-gap-census-coverage": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true, env: { COVERAGE: "1" } },
   "revenue-gap-census-1": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/3" } },
   "revenue-gap-census-2": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
   "revenue-gap-census-3": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
