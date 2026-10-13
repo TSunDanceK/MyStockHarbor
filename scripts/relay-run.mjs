@@ -770,7 +770,7 @@ const TASKS = {
   "ads-10k-census-2": { script: "scripts/ads-10k-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
   "ads-10k-census-3": { script: "scripts/ads-10k-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
   "ads-10k-census": { script: "scripts/ads-10k-census.mjs", args: () => [], needsTypescript: true },
-  // READS ONLY despite the prefix (#552 COWORK #216 §4): why a screener cap is "–". 4 commands per symbol.
+  // READS ONLY despite the prefix (#552 COWORK #216 §4): why a screener cap is "–". 3 commands per symbol + 1.
   "write-cap-refusal-probe": { script: "scripts/visa-cap-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },

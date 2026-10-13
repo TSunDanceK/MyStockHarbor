@@ -1,6 +1,6 @@
 // WHY A SYMBOL'S SCREENER MARKET CAP IS "–" (#552 COWORK #216 §4: Visa).
 // READS ONLY, despite the write- task prefix (the store read needs the credential).
-// Redis: 1 GET (the stored fact set) + 3 HGET (the Pickers SEC row, the manifest entry, the cover-review row) per symbol.
+// Redis: 1 GET (the stored fact set) + 2 HGET (the Pickers SEC row, the cover-review row) per symbol, and 1 GET of the manifest.
 // Prints the stored cover, the shipped valuationInputs refusals, the Pickers
 // row's stored refusals and shares, and the cover-review row (1 HGET). Then the
 // cited-class path withClassCover takes for a mapped filer, step by step, with
@@ -38,27 +38,29 @@ const M = await lift([
   "export { parseCoverClasses, parseClassRates, withFilingRates, coverFromClasses, pickInstanceName, FILING_INSTANCE_MAX_BYTES };",
 ].join("\n"));
 const get = async (u) => { await new Promise((x) => setTimeout(x, 130)); return fetch(u, { headers: { "User-Agent": UA } }); };
-let commands = 0;
+let commands = 1;
+// THE MANIFEST IS ONE STRING KEY: one GET for all symbols.
+const MANIFEST = await redis.get(keyOf("lib/server/secManifest.ts", "SEC_MANIFEST_KEY"));
 for (const s of (process.env.SYMBOLS || "V").split(/[,\s]+/).filter(Boolean)) {
   console.log(`\n== ${s}`);
-  const set = await redis.get(`${FACTS}:${s}`); commands++;
+  let set = await redis.get(`${FACTS}:${s}`); commands++;
+  if (!set && /[.-]/.test(s)) { set = await redis.get(`${FACTS}:${s.replace(/[.-]/, s.includes('.') ? '-' : '.')}`); commands++; }
   if (!set) console.log("  no stored set");
   else {
     console.log(`  stored set: hash ${set.h === secFieldsHash() ? "current" : "STALE"}; extracted ${new Date(set.at).toISOString().slice(0, 19)}Z`);
     console.log(`  stored cover: ${JSON.stringify(set.cover ?? null)}`);
-    const r = V.valuationInputs(set, TODAY, { annualForm: REG[s]?.annualForm ?? null });
+    const r = V.valuationInputs(set, TODAY, { annualForm: (REG[s] ?? REG[s.replace('.', '-')])?.annualForm ?? null });
     console.log(`  valuationInputs: shares ${r.shares ? `${r.shares.val} as of ${r.shares.asOf}` : "null"}; refusals ${JSON.stringify(r.refusals)}`);
   }
   const row = await redis.hget(PICKERS, s); commands++;
   const o = typeof row === "string" ? JSON.parse(row) : row;
   console.log(`  Pickers SEC row: ${o ? `at ${o.at ?? o.updatedAt ?? "?"}; inputs.shares ${JSON.stringify(o.inputs?.shares ?? null)}; inputs.refusals ${JSON.stringify(o.inputs?.refusals ?? null)}` : "none"}`);
-  const man = await redis.hget(keyOf("lib/server/secManifest.ts", "SEC_MANIFEST_KEY"), s); commands++;
-  const me = typeof man === "string" ? JSON.parse(man) : man;
+  const me = MANIFEST?.symbols?.[s] ?? MANIFEST?.symbols?.[s.replace('.', '-')] ?? MANIFEST?.symbols?.[s.replace('-', '.')] ?? null;
   const iso = (t) => (typeof t === "number" ? new Date(t).toISOString().slice(0, 19) + "Z" : String(t ?? null));
-  console.log(`  manifest: verifiedAt ${iso(me?.verifiedAt)}; checkedAt ${iso(me?.checkedAt)}; contentHash ${me?.contentHash === set?.contentHash ? "same as stored set" : "differs"}`);
+  console.log(`  manifest: verifiedAt ${iso(me?.verifiedAt)}; contentHash ${me?.contentHash == null ? "none" : me.contentHash === set?.contentHash ? "same as stored set" : "differs"}`);
   const review = await redis.hget(keyOf("lib/server/secCoverReview.ts", "SEC_COVER_REVIEW_HASH"), s); commands++;
   console.log(`  cover-review row: ${JSON.stringify(review ?? null)}`);
-  const cik = String(REG[s]?.cik ?? "");
+  const cik = String(REG[s]?.cik ?? REG[s.replace('.', '-')]?.cik ?? "");
   const subs = await (await get(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`)).json();
   const r = subs.filings?.recent ?? {};
   const i = (r.form ?? []).findIndex((f) => f === "10-Q" || f === "10-K");
@@ -72,7 +74,7 @@ for (const s of (process.env.SYMBOLS || "V").split(/[,\s]+/).filter(Boolean)) {
   const xml = await (await get(`${base}/${name}`)).text();
   const facts = M.parseCoverClasses(xml);
   console.log(`  per-class cover facts: ${facts.map((f) => `${f.member}=${f.val}@${f.asOf}`).join("; ") || "none"}`);
-  const entry = MAP[s];
+  const entry = MAP[s] ?? MAP[s.replace('-', '.')] ?? MAP[s.replace('.', '-')];
   if (!entry) { console.log("  no share-classes entry"); continue; }
   if (entry.rates) console.log(`  stated rates: ${JSON.stringify(M.parseClassRates(xml, entry.rates.concept))}`);
   const rated = M.withFilingRates(entry, xml);
