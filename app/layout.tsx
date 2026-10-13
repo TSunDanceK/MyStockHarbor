@@ -58,11 +58,6 @@ export const metadata: Metadata = {
       "Free stock screeners for breakouts, oversold stocks & bullish divergence. Daily insight posts, live dashboards, chart pattern plays, and swing trade setups. No login needed.",
     images: ["https://www.mystockharbor.com/og-image-v2.png"],
   },
-  // BOTH Impact tags stay (#563 COWORK #170/#171): this older entry renders
-  // as content=, and the raw value= tag in <head> below carries the newer ID.
-  other: {
-    "impact-site-verification": "cfd647ce-ddd8-4f2a-921f-3763ef298b2a",
-  },
 };
 
 export default async function RootLayout({
