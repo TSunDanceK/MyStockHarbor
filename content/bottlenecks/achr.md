@@ -5,6 +5,7 @@ category: Electric air taxis (eVTOL) and defense aircraft
 domain: archer.com
 title: "Archer Aviation (ACHR) Bottlenecks: Who Archer Depends On"
 date: 2026-10-12
+updated: 2026-10-13
 summary: >
   Archer is developing Midnight, an electric air taxi, and a hybrid defense
   aircraft with Anduril. Its own 10-K says it depends on a limited number of
@@ -12,12 +13,15 @@ summary: >
   replacing them would be costly and time-consuming. Stellantis is lined up
   to help build Midnight at Archer's Georgia plant, though the 10-K says the
   final manufacturing terms remain uncertain. Archer has almost no revenue
-  yet: what it has comes mostly from the Hawthorne Airport business it took
-  a stake in this year.
+  yet: what it has comes mostly from Hawthorne Airport, which it took
+  control of in December 2025, adding a 75% stake in the airport's
+  fixed-base operator (FBO) business in April 2026.
 customersNote: >
   Archer has not sold any aircraft yet. Its $6.6M of revenue in the first
   half of 2026 came mostly from fuel, ground handling and leases at
-  Hawthorne Airport, where it took a 75% stake on 1 April 2026. United
+  Hawthorne Airport. Archer took control of the airport's lease on 8
+  December 2025 and bought 75% of its fixed-base operator (FBO) business on
+  1 April 2026. United
   Airlines, the US Air Force and Abu Dhabi Aviation have orders, contracts
   or launch plans that may become revenue later; most can be cancelled or
   depend on certification, so their shares here are editorial estimates of

@@ -33,6 +33,7 @@ disclaimer: >
 supplyChain:
   - name: National Football League
     ticker: null
+    listing: private
     pct: 16
     grade: some
     blurb: >
@@ -49,6 +50,7 @@ supplyChain:
       fleet.
   - name: National Basketball Association
     ticker: null
+    listing: private
     pct: 12
     grade: some
     blurb: >

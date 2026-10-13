@@ -5,6 +5,7 @@ category: Semiconductors / DRAM, HBM & NAND memory
 domain: skhynix.com
 title: "SK hynix (SKHY) Bottlenecks: Who SK hynix Depends On"
 date: 2026-08-15
+updated: 2026-10-13
 summary: >
   SK hynix is the world's leading supplier of high-bandwidth memory, the
   stacked DRAM that sits alongside every serious AI accelerator, and it
@@ -51,13 +52,14 @@ supplyChain:
   - name: ASML
     ticker: ASML
     pct: 24
-    grade: some
+    grade: hard
     blurb: >
       ASML is the only company on earth that makes EUV lithography systems,
       so there is no second source at any price. SK hynix disclosed an order
-      worth roughly KRW 11.9 trillion for around 30 EUV scanners in March
-      2026, for delivery through the end of 2027 into its M15X Cheongju HBM
-      fab and the new Yongin cluster, and in September 2025 it became the
+      worth roughly KRW 11.95 trillion for ASML EUV tools in March 2026, to
+      be bought by the end of 2027 for its M15X Cheongju HBM fab and the new
+      Yongin cluster; Bernstein analyst David Dao estimated that equals
+      about 30 new EUV scanners. In September 2025 it became the
       first memory maker to install a High-NA EUV system, ASML's
       TWINSCAN EXE:5200B, for production use at M16 in Icheon.
   - name: Applied Materials
