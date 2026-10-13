@@ -277,6 +277,30 @@ function safeCaller(caller: string | undefined): string {
   return caller;
 }
 
+// WHICH DEPLOYMENT READ (#553 COWORK #229). Preview deployments share the
+// production Redis (both env targets carry the Upstash URL and token), so a
+// preview build or a reviewer's page reads land in the same day hash as the
+// site's own traffic and could not be told apart. The caller now carries the
+// deployment as a prefix:
+//
+//   production       the bare caller, unchanged, so the day hashes stay
+//                    comparable with every reading taken before this landed
+//   preview          pv-<caller>
+//   development      dev-<caller>
+//   GitHub Actions   gh-<caller>    (relay and workflow scripts; no VERCEL_ENV)
+//   anything else    local-<caller>
+//
+// It renames fields inside the same flush, so it costs 0 extra commands. The
+// per-source totals (<source>:units, :reads) and the hourly buckets stay
+// whole-database figures; the split is read from the per-caller fields.
+export function meterCaller(caller: string | undefined, env: Record<string, string | undefined> = process.env): string {
+  const who = safeCaller(caller);
+  const deployment = env.VERCEL_ENV;
+  if (deployment === "production") return who;
+  const tag = deployment === "preview" ? "pv" : deployment === "development" ? "dev" : deployment ? "local" : env.GITHUB_ACTIONS === "true" ? "gh" : "local";
+  return `${tag}-${who}`;
+}
+
 function hourField(source: RedisReadSource, nowMs: number) {
   const hh = String(new Date(nowMs).getUTCHours()).padStart(2, "0");
   return `${source}:h${hh}:units`;
@@ -440,7 +464,7 @@ export async function recordRedisRead(
   try {
     const nowMs = Date.now();
     const key = dayKey(nowMs);
-    const who = safeCaller(caller);
+    const who = meterCaller(caller);
     const rounded = Math.round(units);
 
     // The same five fields the per-read pipeline wrote, unchanged in meaning.
