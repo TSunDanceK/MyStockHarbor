@@ -12,7 +12,7 @@
 //   3. a span inside the window reuses the cache (no fetch);
 //   4. a remembered failure (null) is not retried within the run.
 import fs from "node:fs";
-import { lift } from "./lib/earnings-plan.mjs";
+import { lift, grabFunction } from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -20,10 +20,24 @@ const check = (name, ok, detail = "") => {
   if (!ok) failures++;
 };
 const strip = (f) => fs.readFileSync(f, "utf8").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
+// THE COVER-AGE RULE keptWithNewer closes over (#552 COWORK #222), each line
+// read from its own module rather than pinned: secValuation and secReportDates
+// are too large to concatenate whole.
+const line = (f, re) => {
+  const m = fs.readFileSync(f, "utf8").match(re);
+  if (!m) throw new Error(`not found in ${f}: ${re}`);
+  return m[0].replace(/^export /, "");
+};
+const coverAge = () => [
+  line("lib/server/secReportDates.ts", /^export const DEADLINE_FALLBACK = [^;]+;$/m),
+  line("lib/server/secValuation.ts", /^export const COVER_SHARES_MAX_AGE_DAYS = [^;]+;$/m),
+  // coverIsUsable's DAY is secExtract's (already in the lift, the same 86,400,000).
+  grabFunction(fs.readFileSync("lib/server/secCoverAuto.ts", "utf8"), "coverIsUsable"),
+].join("\n");
 const load = (mutate = (s) => s) => lift(mutate([fs.readFileSync("lib/server/secFields.ts", "utf8"),
   strip("lib/server/secExtract.ts"), strip("lib/server/fxRates.ts"), strip("lib/server/secCurrency.ts"),
   // secStaleness since #552 COWORK #132: secFactBuild's mustWriteOver closes over needsReread.
-  strip("lib/server/secFactCodec.ts"), strip("lib/server/secStaleness.ts"), strip("lib/server/secFactBuild.ts")].join("\n")));
+  strip("lib/server/secFactCodec.ts"), strip("lib/server/secStaleness.ts"), coverAge(), strip("lib/server/secFactBuild.ts")].join("\n")));
 
 const day = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 let calls = [];

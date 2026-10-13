@@ -1427,6 +1427,11 @@ const TASKS = {
   // READS ONLY (#553 COWORK #222 step 1): the audited symbols' stored last two
   // EOD bars and IEX quote rows; dates, ET times, %, yes/no. GET/MGET/HMGET, ~2 commands.
   "write-premarket-quote-census": { script: "scripts/premarket-quote-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY despite the prefix (#552 COWORK #221/#222): the sec-facts write decision replayed on each stored set. 1 GET + 1 per symbol.
+  "write-stale-cover-replay": { script: "scripts/stale-cover-replay.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY despite the prefix (#552 COWORK #222): re-read requests a kept prior has held open > 14 days, for the check-in. 1 GET.
+  "write-held-open-requests": { script: "scripts/held-open-requests.mjs", args: () => [], needsTypescript: true, writes: true },
+  "write-held-open-requests-all": { script: "scripts/held-open-requests.mjs", args: () => [], needsTypescript: true, writes: true, env: { ALL: "1" } },
 };
 
 const argv = process.argv.slice(2);
