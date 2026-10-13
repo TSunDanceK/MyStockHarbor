@@ -71,9 +71,17 @@ for (const s of mine) {
     if (text20) mentions += (text20.match(/American depositary/gi) ?? []).length;
     const f6Text = f6IsNewer ? await docText(i6) : null;
     lastRef = i20 >= 0 ? `${r.form[i20]} ${r.accessionNumber[i20]} ${r.filingDate[i20]}` : "no annual report";
-    if (process.env.CONFIRM_F6 && i6 >= 0) {
-      const f6 = R.adsRatioOf(await docText(i6));
-      console.log(`  F-6 ${r.accessionNumber[i6]} ${r.filingDate[i6]}: ${f6.ok ? `RATIO ${f6.ordinaryPerAds} "${f6.sentence.slice(0, 200)}"` : f6.why}`);
+    // CONFIRMATION ONLY, NEVER THE SOURCE OF A ROW: each F-6 on the list,
+    // newest first, until one states a ratio (a later post-effective amendment
+    // may state none: ONC's 2025 one).
+    if (process.env.CONFIRM_F6) {
+      const f6s = (r.form ?? []).map((f, i) => (/^F-6/.test(f) ? i : -1)).filter((i) => i >= 0).slice(0, 6);
+      if (!f6s.length) console.log("  F-6: none on the recent list");
+      for (const i of f6s) {
+        const f6 = R.adsRatioOf(await docText(i));
+        console.log(`  ${r.form[i]} ${r.accessionNumber[i]} ${r.filingDate[i]}: ${f6.ok ? `RATIO ${f6.ordinaryPerAds} "${f6.sentence.slice(0, 200)}"` : f6.why}`);
+        if (f6.ok) break;
+      }
     }
     // THE SHIPPED SOURCE RULE: lib/server/secAdsRatio.decideAdsRow.
     if (process.env.SHOW12B && text20) {
