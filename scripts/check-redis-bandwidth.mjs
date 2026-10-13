@@ -466,6 +466,40 @@ check(
     "into an outage"
 );
 
+// WHICH DEPLOYMENT READ (#553 COWORK #229): preview, development, Actions and
+// local reads carry a prefix; production keeps the bare caller. Lifted and RUN,
+// and the same cases are run against a mutant (production prefixed too).
+const liftFns = (src, names) => {
+  const sf = ts.createSourceFile("m.ts", src, ts.ScriptTarget.Latest, true);
+  const out = [];
+  const visit = (n) => {
+    if ((ts.isFunctionDeclaration(n) && names.includes(n.name?.text)) || (ts.isVariableStatement(n) && n.declarationList.declarations.some((d) => names.includes(d.name.getText(sf))))) out.push(n.getText(sf).replace(/^export\s+/, ""));
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out.join("\n");
+};
+const callerCases = (fn) => [
+  fn("pg-stock-screener", { VERCEL_ENV: "production" }) === "pg-stock-screener",
+  fn("pg-stock-screener", { VERCEL_ENV: "preview" }) === "pv-pg-stock-screener",
+  fn("api-pickers", { VERCEL_ENV: "development" }) === "dev-api-pickers",
+  fn("warm-targets", { GITHUB_ACTIONS: "true" }) === "gh-warm-targets",
+  fn("warm-targets", {}) === "local-warm-targets",
+  fn(undefined, { VERCEL_ENV: "preview" }) === "pv-unattributed",
+  fn("Bad Caller!", { VERCEL_ENV: "production" }) === "unattributed",
+];
+const meterCallerOf = async (src) => {
+  const js = ts.transpileModule(`${liftFns(src, ["CALLER_PATTERN", "UNATTRIBUTED_CALLER", "safeCaller", "meterCaller"])}\nexport { meterCaller };`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText;
+  return (await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`)).meterCaller;
+};
+const realCaller = await meterCallerOf(meter);
+check("the meter tags preview, development, Actions and local reads; production keeps the bare caller", callerCases(realCaller).every(Boolean), callerCases(realCaller).join(","));
+check("the meter's recordRedisRead uses that tag", /const who = meterCaller\(caller\);/.test(meter));
+const mutantSrc = meter.replace('if (deployment === "production") return who;', "");
+const mutantCaller = mutantSrc !== meter ? await meterCallerOf(mutantSrc) : null;
+check("mutant \"production prefixed too\" is caught", !!mutantCaller && !callerCases(mutantCaller).every(Boolean));
+
 console.log(
   failures === 0
     ? "\nAll Redis bandwidth assertions hold.\n"
