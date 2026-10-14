@@ -53,7 +53,7 @@ const allTokens = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
 // BLOCKED and asserts each still renders its header.
 const pageToken = allTokens.find((t) => t.startsWith("page="));
 const page = pageToken ? pageToken.slice("page=".length) : "stock";
-if (!["stock", "dashboard", "storage"].includes(page)) throw new Error("page= takes stock, dashboard or storage");
+if (!["stock", "dashboard", "storage", "header"].includes(page)) throw new Error("page= takes stock, dashboard, storage or header");
 const tokens = allTokens.filter((t) => t !== pageToken);
 const sectionToken = tokens.find((t) => t.startsWith("section="));
 const section = sectionToken ? sectionToken.slice("section=".length) : "about";
@@ -238,6 +238,49 @@ if (page === "storage") {
   }
   out.results = results;
   console.log(`rendered test: ${results.filter((r) => r.ok).length}/${results.length} passed`);
+}
+
+// ── THE SITE HEADER (#552 COWORK #231) ───────────────────────────────────
+// The header split into a server component and a client island must look
+// the same. Shot on two pages (an active top-level link, and an active
+// dropdown with an active flyout item), at a 1440 desktop and a 390 phone,
+// menus closed and open: the Pickers drop-down with its Chart Plays flyout on
+// desktop, the full-screen overlay on mobile. Run once on production and once
+// on the preview; the PNGs are compared pixel for pixel off the runner. The
+// header's text and link list are recorded too, for a non-visual diff.
+if (page === "header") {
+  const PAGES = { learn: "/learn", plays: "/plays/bull-flags" };
+  const headerInfo = () => evaluate(`(() => { const h = document.querySelector("header"); if (!h) return null; const r = h.getBoundingClientRect();
+    return { height: Math.round(r.height), text: h.innerText.replace(/\\s+/g, " ").trim(), links: [...h.querySelectorAll("a")].map((a) => a.getAttribute("href") + " " + a.className.trim()) }; })()`);
+  const shoot = async (key, width, height) => {
+    const { data } = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width, height, scale: 1 } });
+    out.shots[key] = { png: data, height };
+  };
+  for (const [name, path] of Object.entries(PAGES)) {
+    await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await load(`${origin}${path}`);
+    await evaluate("window.scrollTo(0, 0)");
+    const info = await headerInfo();
+    await shoot(`header-${name}-desktop-closed`, 1440, Math.min(160, (info?.height ?? 80) + 20));
+    out.shots[`header-${name}-desktop-closed`].text = JSON.stringify(info);
+    // Open Pickers, then its Chart Plays flyout (hover, as a reader would).
+    await evaluate(`(() => { const b = [...document.querySelectorAll("header button")].find((e) => e.textContent.trim().startsWith("Pickers")); b && b.click(); })()`);
+    await sleep(600);
+    const row = await evaluate(`(() => { const r = [...document.querySelectorAll(".mshGlobalHeaderDropdownItem--submenu")].find((e) => e.textContent.trim().startsWith("Chart Plays")); if (!r) return null; const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
+    if (row) { await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: row.x, y: row.y }); await sleep(600); }
+    await shoot(`header-${name}-desktop-pickers-open`, 1440, 760);
+    await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await load(`${origin}${path}`);
+    await evaluate("window.scrollTo(0, 0)");
+    const minfo = await headerInfo();
+    await shoot(`header-${name}-mobile-closed`, 390, Math.min(140, (minfo?.height ?? 70) + 20));
+    out.shots[`header-${name}-mobile-closed`].text = JSON.stringify(minfo);
+    await evaluate(`(() => { const b = document.querySelector(".mshMobileMenuButton"); b && b.click(); })()`);
+    await sleep(700);
+    await shoot(`header-${name}-mobile-open`, 390, 844);
+    out.shots[`header-${name}-mobile-open`].text = await evaluate(`(() => { const o = document.querySelector(".mshMobileOverlay"); return o ? o.innerText.replace(/\\s+/g, " ").trim() : "no overlay"; })()`);
+    console.log(`header ${name}: desktop ${info?.height}px, mobile ${minfo?.height}px, ${info?.links?.length} links`);
+  }
 }
 
 for (const sym of page !== "stock" ? [] : symbols) {

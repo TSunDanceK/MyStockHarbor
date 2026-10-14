@@ -190,15 +190,17 @@ if (!(await suite(await load(src), pageCode.replace(".capexSide { display: grid;
 }
 
 // ── The nav (#563 COWORK #3, N1): Bottlenecks is a drop-down, stock pages first ──
+// #552 COWORK #231: the header's tree is data in lib/navSections.ts (HEADER_NAV);
+// the menu panels are drawn by app/components/SiteHeaderNav.tsx.
 function navSuite(header, sections) {
   const fails = [];
-  const i = header.indexOf('label: "Bottlenecks"');
-  const block = i < 0 ? "" : header.slice(header.lastIndexOf("{", i), header.indexOf("],", i));
+  const i = sections.indexOf('label: "Bottlenecks",\n', sections.indexOf("export const HEADER_NAV"));
+  const block = i < 0 ? "" : sections.slice(sections.lastIndexOf("{", i), sections.indexOf("\n  },", i));
   const first = block.indexOf('href: "/bottlenecks"');
   const capex = block.indexOf('href: "/bottlenecks/capex"');
   if (!/kind: "dropdown"/.test(block)) fails.push("Bottlenecks is a drop-down");
   if (!(first >= 0 && capex > first)) fails.push("its entries are /bottlenecks first, then /bottlenecks/capex");
-  if (/label: "Follow the Money"/.test(header)) fails.push("no separate top-level capex link");
+  if (/label: "Follow the Money"/.test(sections)) fails.push("no separate top-level capex link");
   if (!sections.includes('{ href: "/bottlenecks/capex", label: "Capex — Follow the money" }')) fails.push("the crawlable nav lists the capex page");
   // #563 COWORK #9: a fixed-width panel clipped "Capex — Follow the money"
   // behind a horizontal scrollbar. Every header menu and flyout sizes to its
@@ -216,14 +218,14 @@ function navSuite(header, sections) {
   if (!/menuRef\.current\?\.offsetWidth/.test(header) || !/flyoutRef\.current\?\.offsetWidth/.test(header)) fails.push("menus are positioned by their measured width");
   return fails;
 }
-const header = read("app/components/SiteHeader.tsx");
+const header = read("app/components/SiteHeaderNav.tsx");
 const sections = read("lib/navSections.ts");
 const navFails = navSuite(header, sections);
 if (navFails.length) {
   console.error("FAIL check-capex-page (nav):\n  " + navFails.join("\n  "));
   process.exit(1);
 }
-if (!navSuite(header.replace('kind: "dropdown",\n        label: "Bottlenecks",', 'kind: "link",\n        label: "Bottlenecks",'), sections).length) {
+if (!navSuite(header, sections.replace('kind: "dropdown",\n    label: "Bottlenecks",', 'kind: "link",\n    label: "Bottlenecks",')).length) {
   console.error("MUTANT SURVIVED: Bottlenecks back to a plain link");
   process.exit(1);
 }

@@ -103,7 +103,7 @@ async function suite(S, files) {
 
   const bad = unguardedAccesses(files);
   ok("every localStorage / sessionStorage access on the site is inside a try", bad.length === 0, bad.map((b) => `${b.file}:${b.line} ${b.text}`).join("; "));
-  ok("the scan sees the site (the header and the helper)", files.has("app/components/SiteHeader.tsx") && files.has(MODULE));
+  ok("the scan sees the site (the header and the helper)", files.has("app/components/SiteHeaderNav.tsx") && files.has(MODULE));
   return fails;
 }
 
@@ -122,8 +122,8 @@ const mut = (label, s, from, to) => {
 };
 const withFile = (f, from, to) => { const m = new Map(files); m.set(f, mut(f, files.get(f), from, to)); return m; };
 const MUTANTS = [
-  ["the header's bare read is back (the original crash)", () => [src, withFile("app/components/SiteHeader.tsx", "setLastSymbol(cleanSymbol(readStored(SYMBOL_STORAGE_KEY)));", `setLastSymbol(cleanSymbol(window.localStorage.getItem("msh_last_symbol")));`)]],
-  ["the header's click-time read unguarded", () => [src, withFile("app/components/SiteHeader.tsx", "return cleanSymbol(readStored(SYMBOL_STORAGE_KEY));", `return cleanSymbol(window.localStorage.getItem("msh_last_symbol"));`)]],
+  ["the header's bare read is back (the original crash)", () => [src, withFile("app/components/SiteHeaderNav.tsx", "setLastSymbol(cleanSymbol(readStored(SYMBOL_STORAGE_KEY)));", `setLastSymbol(cleanSymbol(window.localStorage.getItem("msh_last_symbol")));`)]],
+  ["the header's click-time read unguarded", () => [src, withFile("app/components/SiteHeaderNav.tsx", "return cleanSymbol(readStored(SYMBOL_STORAGE_KEY));", `return cleanSymbol(window.localStorage.getItem("msh_last_symbol"));`)]],
   ["the platforms write unguarded", () => [src, withFile("app/platforms/PlatformsClient.tsx", `writeStored("msh-platform-region", nextRegion);`, `window.localStorage.setItem("msh-platform-region", nextRegion);`)]],
   ["a bare sessionStorage read", () => [src, withFile("app/platforms/PlatformsClient.tsx", `const saved = readStored("msh-platform-region");`, `const saved = sessionStorage.getItem("msh-platform-region");`)]],
   ["a try around a function's DEFINITION, not its body", () => [src, withFile("app/platforms/PlatformsClient.tsx", `writeStored("msh-platform-region", nextRegion);`, `try { const f = () => window.localStorage.setItem("r", nextRegion); f(); } catch {}`)]],

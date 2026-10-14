@@ -43,7 +43,7 @@ const EXEMPT = [
   { file: "app/stock/[symbol]/earnings/page.tsx", re: /mystockharbor\.com\/stock\/\$\{clean\}\/earnings/, why: "the page's own canonical / og:url / structured-data URL (noindex handles a no-set page)" },
   { file: "app/stock/[symbol]/coldFillAction.ts", re: /revalidatePath\(/, why: "cache revalidation, not a link" },
   { file: "app/stock/[symbol]/earnings/EarningsSymbolPicker.tsx", re: /router\.push\(/, why: "navigation to a symbol the reader typed on the earnings page; the page shows its not-available state" },
-  { file: "app/components/SiteHeader.tsx", re: /if \(kind === "earnings"\) return/, why: "the stockHref helper; its only earnings caller is the Company Earnings entry, built only when hasFiledEarnings(lastSymbol), and the click path re-checks" },
+  { file: "app/components/SiteHeaderNav.tsx", re: /if \(kind === "earnings"\) return/, why: "the stockHref helper; its only earnings caller is the Company Earnings entry (HEADER_NAV requiresFiledEarnings), kept only when hasFiledEarnings(lastSymbol), and the click path re-checks" },
   { file: "app/sitemap.ts", re: /toAbsoluteUrl\(`\/stock\/\$\{symbol\}\/earnings`\)/, why: "filtered by earningsRenderable, whose `filed` input is hasFiledEarningsIn (asserted below and in check-sitemap-robots)" },
   { file: "lib/latest-earnings-data.ts", re: /financialmodelingprep\.com/, why: "a data-provider API URL, not a site link" },
   { file: "app/components/MobileHomePage.tsx", re: /href: \(symbol: string\) => `\/stock\/\$\{encodeURIComponent\(symbol\)\}\/earnings`/, why: "the Earnings tile's definition; the tile is skipped at render unless hasFiledEarnings(lastSymbol) (asserted below)" },

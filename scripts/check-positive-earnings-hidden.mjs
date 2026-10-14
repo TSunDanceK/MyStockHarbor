@@ -59,7 +59,8 @@ const SITES = [
   },
   ...[
     ["app/components/ScreenerNav.tsx", "the screener sidebar's Earnings group", "] satisfies NavItem[]).filter((item) => !positiveLastEarningsHidden(item.href)),"],
-    ["app/components/SiteHeader.tsx", "the header's Earnings submenu", "] satisfies NavChild[]).filter((item) => !positiveLastEarningsHidden(item.href)),"],
+    // #552 COWORK #231: the header's tree is data in lib/navSections.ts (HEADER_NAV).
+    ["lib/navSections.ts", "the header's Earnings submenu", "items: links(EARNINGS_SCREENS).filter((item) => !positiveLastEarningsHidden(item.href)),"],
     ["lib/navSections.ts", "the crawlable nav's Signals & Earnings section", "].filter((link) => !positiveLastEarningsHidden(link.href)),"],
     ["app/pickers/page.tsx", "the /pickers setup list", "{SETUP_LINKS.filter((s) => !positiveLastEarningsHidden(s.href)).map((s) => ("],
   ].map(([file, where, gate]) => ({
