@@ -773,7 +773,7 @@ const TASKS = {
   "ads-annual-confirm": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { ANNUAL: "1", CONFIRM_F6: "1", SHOW12B: "1" } },
   // OPTION G ON EVERY REGISTRANT (#552 COWORK #219): movers S→G, and what a pure replacement would differ on. Read-only, no credential.
   // THE 40-F AIF SCOPE PROBE (#552 COWORK #228 (1)). Read-only, no credential.
-  "aif-probe": { script: "scripts/aif-probe.mjs", args: () => [], needsTypescript: true, env: { SAMPLE: "GIB,BN,CNI,TD,WPM" } },
+  "aif-probe": { script: "scripts/aif-probe.mjs", args: () => [], needsTypescript: true, env: { SAMPLE: "GIB,BN,CNI,TD,WPM", DEBUG: "1" } },
   "revenue-gap-census": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true },
   "revenue-gap-census-1": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/3" } },
   "revenue-gap-census-2": { script: "scripts/revenue-gap-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },

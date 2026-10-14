@@ -30,7 +30,9 @@ async function get(url, as = "text") {
 
 const AIF = /annual\s+information\s+form/i;
 // Section starts, in order of preference; ends are the AIF's next major headings.
-const START = /^(?:(?:item|section|part)?\s*[\dA-Z.]*\s*)?(?:description\s+of\s+(?:the\s+|our\s+)?business|business\s+of\s+the\s+(?:company|corporation|bank|trust)|our\s+business|the\s+business|narrative\s+description\s+of\s+the\s+business)\b/i;
+// A WHOLE-LINE heading (numbering and a trailing page number allowed), so a
+// risk factor opening "Our business may be…" is never taken for the section.
+const START = /^(?:(?:item|section|part|article)\s*)?(?:[\dIVX]+(?:\.\d+)*\.?\s*[-–—:]?\s*)?(?:description\s+of\s+(?:the\s+|our\s+)?business(?:es)?|(?:narrative\s+)?description\s+of\s+the\s+business|business\s+of\s+(?:the\s+)?(?:company|corporation|bank|trust|partnership|issuer)(?:\s+and\s+its\s+industry)?|(?:about\s+)?our\s+business(?:es)?(?:\s*(?:&|and)\s+strategy)?|the\s+business|business\s+(?:description|overview)|understanding\s+our\s+business)\s*(?:\d{1,3})?$/i;
 const END = /^(?:(?:item|section|part)?\s*[\dA-Z.]*\s*)?(?:risk\s+factors|dividends|description\s+of\s+(?:the\s+)?capital\s+structure|market\s+for\s+(?:the\s+)?securities|directors\s+and\s+(?:executive\s+)?officers|mineral\s+propert|legal\s+proceedings|transfer\s+agent|interests\s+of\s+experts|material\s+contracts|capital\s+structure|dividends\s+and\s+distributions)\b/i;
 
 function locate(text) {
@@ -40,11 +42,14 @@ function locate(text) {
   const isHead = (l) => l.length <= 90;
   let best = null;
   for (let i = 0; i < lines.length; i++) {
-    if (!isHead(lines[i]) || !START.test(lines[i])) continue;
-    let j = i + 1;
+    // A heading split over two lines ("DESCRIPTION" / "OF THE BUSINESS").
+    const two = i + 1 < lines.length && lines[i].length <= 40 && START.test(`${lines[i]} ${lines[i + 1]}`);
+    if (!isHead(lines[i]) || !(START.test(lines[i]) || two)) continue;
+    const h = two && !START.test(lines[i]) ? i + 1 : i;
+    let j = h + 1;
     while (j < lines.length && !(isHead(lines[j]) && END.test(lines[j]))) j++;
-    const body = text.slice(offs[i] + lines[i].length, j < lines.length ? offs[j] : undefined).trim();
-    if (body.length >= 1500) { best = { heading: lines[i], chars: body.length, body }; break; }
+    const body = text.slice(offs[h] + lines[h].length, j < lines.length ? offs[j] : undefined).trim();
+    if (body.length >= 1500) { best = { heading: h > i ? `${lines[i]} ${lines[h]}` : lines[i], chars: body.length, body }; break; }
   }
   return best;
 }
@@ -64,10 +69,12 @@ for (const s of syms) {
     const rows = [...idx.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => c[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()))
       .filter((c) => c.length >= 4 && /\.(htm|html|txt)$/i.test(c[2]));
     const ex = rows.filter((c) => /^EX-99/i.test(c[3]));
+    // NO EX-99 AIF: every .htm document on the index is tried (type not trusted).
+    if (!ex.some((c) => AIF.test(c[1]) || /aif/i.test(c[2]))) for (const c of rows) if (!ex.includes(c) && !/^(40-F|EX-(?:23|31|32|97|101|10[0-9]))/i.test(c[3])) ex.push(c);
     const named = ex.find((c) => AIF.test(c[1]) || /aif/i.test(c[2]));
     const order = named ? [named, ...ex.filter((c) => c !== named)] : ex;
     let hit = null, how = "";
-    for (const c of order.slice(0, 5)) {
+    for (const c of order.slice(0, 8)) {
       const text = D.filingText(await get(`${folder}/${c[2]}`));
       if (!AIF.test(text.slice(0, 6000))) continue;
       hit = { doc: c[2], type: c[3], text }; how = named === c ? "named" : "text"; break;
@@ -75,6 +82,7 @@ for (const s of syms) {
     const ref = `40-F ${acc} ${r.filingDate[i]}`;
     if (!hit) { console.log(`${s.padEnd(6)} NO_AIF ${ref} | EX-99 docs: ${ex.map((c) => `${c[3]}:${c[1].slice(0, 40)}`).join("; ") || "none"}`); tally.NO_AIF++; continue; }
     const sec = locate(hit.text);
+    if (!sec && process.env.DEBUG) console.log(`  CANDIDATES ${JSON.stringify(hit.text.split(/\n+/).map((l) => l.trim()).filter((l) => l.length <= 90 && /business/i.test(l)).slice(0, 25))}`);
     if (!sec) { console.log(`${s.padEnd(6)} NO_SECTION ${ref} AIF=${hit.type} (${how}) ${hit.text.length} chars`); tally.NO_SECTION++; continue; }
     tally.OK++;
     console.log(`${s.padEnd(6)} OK ${ref} AIF=${hit.type} (${how}) heading="${sec.heading.slice(0, 60)}" ${sec.chars} chars`);
