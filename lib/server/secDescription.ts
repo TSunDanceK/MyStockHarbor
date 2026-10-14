@@ -290,6 +290,8 @@ export function filingIndexDocs(indexHtml: string): IndexDoc[] {
   const cell = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
   return [...indexHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
     .map((m) => [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => cell(c[1])))
+    // An inline-XBRL document's cell reads "cni-20251231.htm iXBRL": the file is its first token.
+    .map((c) => (c.length >= 4 ? [c[0], c[1], c[2].split(" ")[0], c[3]] : c))
     .filter((c) => c.length >= 4 && /\.(htm|html|txt)$/i.test(c[2]))
     .map((c) => ({ description: c[1], document: c[2], type: c[3] }));
 }
@@ -311,6 +313,18 @@ export function aifCandidates(docs: IndexDoc[]): IndexDoc[] {
   const named = exhibits.filter((d) => AIF_TITLE.test(d.description) || /aif/i.test(d.document));
   const ex99 = exhibits.filter((d) => /^EX-99/i.test(d.type) && !named.includes(d));
   return [...named, ...ex99, ...exhibits.filter((d) => !named.includes(d) && !ex99.includes(d)), ...wrapper];
+}
+
+/**
+ * WORD-PER-LINE TEXT (TD's AIF): a PDF-converted exhibit can break the line
+ * after almost every word, which the cleaner reads as headings and fragments
+ * (82 chars left). When most of the opening's lines are a few words long,
+ * single line breaks are spaces; blank lines stay paragraph breaks.
+ */
+function unwrapShortLines(body: string): string {
+  const head = body.slice(0, 2000).split("\n").map((l) => l.trim()).filter(Boolean);
+  if (head.length < 20 || head.filter((l) => l.length <= 20).length < head.length * 0.6) return body;
+  return body.split(/\n{2,}/).map((p) => p.replace(/\s*\n\s*/g, " ")).join("\n\n");
 }
 
 /** The AIF's "Description of the Business" section, bounded like an open-ended 10-K section. */
@@ -336,7 +350,7 @@ export function locateAifSection(text: string): Located {
     const from = offs[h] + RAW[h].length;
     const to = e < L.length ? offs[e] : text.length;
     if (to - from < MIN_SECTION_CHARS) continue;
-    const body = text.slice(from, Math.min(to, from + 8000)).trim();
+    const body = unwrapShortLines(text.slice(from, Math.min(to, from + 8000)).trim());
     if (body.length >= MIN_SECTION_CHARS) return { found: true, body };
   }
   return { found: false, why: starts

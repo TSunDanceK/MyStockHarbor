@@ -181,6 +181,20 @@ console.log("\n2b. 40-F: the Annual Information Form exhibit and its Description
   check("MUTATION: the section-length test dropped → the TOC entry is taken (caught)", !gt.found || !gt.body.startsWith("The mission of CGI"), gt.found ? gt.body.slice(0, 30) : gt.why);
   const typed = await load(once("return [...named, ...ex99, ...exhibits.filter((d) => !named.includes(d) && !ex99.includes(d)), ...wrapper];", "return usable.filter((d) => /^EX-99/i.test(d.type));"));
   check("MUTATION: the exhibit type trusted → CNI's typeless AIF is never tried (caught)", !typed.aifCandidates(typed.filingIndexDocs(index)).some((d) => d.document === "d123aif.htm"));
+  // TD's AIF, as filed: a line break after almost every word.
+  const tdWords = 'The Toronto -Dominion Bank and its subsidiaries are collectively known as TD Bank Group ("TD" or the "Bank"). TD is the sixth largest bank in North America by assets and serves over 28.1 million clients in four key businesses operating in a number of locations in financial centres around the globe: Canadian Personal and Commercial Banking, including TD Canada Trust; U.S. Retail, including TD Bank; Wealth Management and Insurance; and Wholesale Banking, including TD Securities and TD Cowen. TD also ranks among North America\'s leading digital banks, with more than 13 million mobile active users in Canada and the U.S. TD had $2.1 trillion in assets on October 31, 2025. '.repeat(3);
+  const tdDoc = ["ANNUAL INFORMATION FORM", "DESCRIPTION OF THE BUSINESS", tdWords.split(" ").reduce((a, w, i) => a + w + (i % 2 ? "\n" : " "), ""), "RISK FACTORS", "x"].join("\n");
+  const tdLoc = D.locateAifSection(tdDoc);
+  const tdClean = tdLoc.found ? D.cleanDescription(tdLoc.body, { companyName: "TORONTO DOMINION BANK" }) : { ok: false };
+  check("TD: word-per-line AIF text is unwrapped into its paragraph and cleans to a description", tdClean.ok && txt(tdClean).startsWith("The Toronto -Dominion Bank") && txt(tdClean).length >= 400, tdClean.ok ? `${txt(tdClean).length} chars` : tdClean.why);
+  const noUnwrap = await load(once("const body = unwrapShortLines(text.slice(from, Math.min(to, from + 8000)).trim());", "const body = text.slice(from, Math.min(to, from + 8000)).trim();"));
+  const tdBad = noUnwrap.locateAifSection(tdDoc);
+  const tdBadClean = tdBad.found ? noUnwrap.cleanDescription(tdBad.body, { companyName: "TORONTO DOMINION BANK" }) : { ok: false };
+  check("MUTATION: no unwrapping → TD's description is lost to fragments (caught)", !tdBadClean.ok || txt(tdBadClean).length < 400, tdBadClean.ok ? `${txt(tdBadClean).length} chars` : tdBadClean.why);
+  const ix = `<table><tr><td>1</td><td>FORM 40-F</td><td><a href="/x">cni-20251231.htm</a> iXBRL</td><td>40-F</td><td>9</td></tr></table>`;
+  check("an inline-XBRL 40-F document ('x.htm iXBRL') is read from the index (CNI, CNQ, TRI)", D.filingIndexDocs(ix)[0]?.document === "cni-20251231.htm");
+  const noIx = await load(once('.map((c) => (c.length >= 4 ? [c[0], c[1], c[2].split(" ")[0], c[3]] : c))', ".map((c) => c)"));
+  check("MUTATION: the iXBRL suffix kept → CNI's 40-F document is dropped from the index (caught)", noIx.filingIndexDocs(ix).length === 0);
   const untitled = await load(once("return AIF_TITLE.test(text.slice(0, 6000));", "return true;"));
   check("MUTATION: the AIF title test dropped → a code of ethics passes as the AIF (caught)", untitled.isAnnualInformationForm("CODE OF BUSINESS ETHICS POLICY"));
 }
