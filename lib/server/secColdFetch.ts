@@ -98,7 +98,7 @@ import { recordColdCik } from "./secColdCik";
 import { inSecJobWindow } from "../secJobWindow.mjs";
 import { secSeedRefusal } from "./secSeedGate";
 import { nonEquityListingOf } from "./secPrimaryListing";
-import { uniqueEtfs } from "../curatedSymbols";
+import { isSiteFund } from "../curatedSymbols";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
 // ABSENCE. @upstash/redis sends `cache: "no-store"` by default, and one such
@@ -729,9 +729,8 @@ export const NOT_YET_READ = "not yet read";
  *
  * Never throws: every failure path returns a status the page can render.
  */
-const SITE_FUNDS = new Set<string>(uniqueEtfs);
 /** One of the funds the site lists (lib/curatedSymbols.ts), with or without a CIK of its own. */
-export const isSiteFund = (symbol: string) => SITE_FUNDS.has(symbol.trim().toUpperCase());
+export { isSiteFund };
 
 export async function resolveFactSetForRender(symbol: string): Promise<ColdResult> {
   const clean = symbol.trim().toUpperCase();

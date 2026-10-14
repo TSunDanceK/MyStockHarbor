@@ -51,6 +51,7 @@ import { Redis } from "@upstash/redis";
 import { lookupBySpelling, symbolSpellings } from "../symbolSpellings.mjs";
 import type { ResolvedTickerMap, TickerEntry } from "./secTickerMap";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { isSiteFund } from "../curatedSymbols";
 
 export const SEC_UNLISTED_MAX = 10;
 export const SEC_UNLISTED_MAX_SHARE = 0.02;
@@ -60,21 +61,39 @@ export type SecListingVerdict = {
   skipped: "map-not-live" | "map-stale" | "map-empty" | "universe-empty" | "map-suspect" | null;
   /** Universe symbols SEC no longer lists (empty when skipped). */
   unlisted: string[];
+  /** The site's own funds absent from SEC's file: never evidence, never evicted here. */
+  fundExempt: string[];
 };
 
 type MapView = Pick<ResolvedTickerMap, "map" | "source" | "stale">;
 
-/** Pure. Which universe symbols the live SEC map no longer lists, or why it will not say. */
-export function secUnlistedSymbols(universe: string[], live: MapView): SecListingVerdict {
-  if (live.source !== "redis") return { skipped: "map-not-live", unlisted: [] };
-  if (live.stale) return { skipped: "map-stale", unlisted: [] };
-  if (!live.map.size) return { skipped: "map-empty", unlisted: [] };
+/**
+ * Pure. Which universe symbols the live SEC map no longer lists, or why it will not say.
+ *
+ * THE SITE'S OWN FUNDS ARE NOT EVIDENCE (#552 COWORK #233 S0). XLK, XLF and the
+ * other Select Sector funds are series of one trust, so SEC's ticker file has
+ * no row for them at all; their absence says nothing about a delisting, and
+ * with no CIK there is nothing to follow. They were evicted, tombstoned for 21
+ * trading days, re-admitted and evicted again. Exempt from THIS route only: a
+ * fund that really stops trading still goes by the stale-bar route.
+ * Filtered before the mass-absence cap, so they never count towards it either.
+ */
+export function secUnlistedSymbols(
+  universe: string[],
+  live: MapView,
+  exempt: (symbol: string) => boolean = isSiteFund
+): SecListingVerdict {
+  if (live.source !== "redis") return { skipped: "map-not-live", unlisted: [], fundExempt: [] };
+  if (live.stale) return { skipped: "map-stale", unlisted: [], fundExempt: [] };
+  if (!live.map.size) return { skipped: "map-empty", unlisted: [], fundExempt: [] };
   const symbols = [...new Set(universe.map((s) => String(s ?? "").trim().toUpperCase()).filter(Boolean))];
-  if (!symbols.length) return { skipped: "universe-empty", unlisted: [] };
-  const unlisted = symbols.filter((s) => !lookupBySpelling(live.map, s));
+  if (!symbols.length) return { skipped: "universe-empty", unlisted: [], fundExempt: [] };
+  const absent = symbols.filter((s) => !lookupBySpelling(live.map, s));
+  const fundExempt = absent.filter((s) => exempt(s));
+  const unlisted = absent.filter((s) => !exempt(s));
   const cap = Math.max(SEC_UNLISTED_MAX, Math.ceil(symbols.length * SEC_UNLISTED_MAX_SHARE));
-  if (unlisted.length > cap) return { skipped: "map-suspect", unlisted: [] };
-  return { skipped: null, unlisted };
+  if (unlisted.length > cap) return { skipped: "map-suspect", unlisted: [], fundExempt };
+  return { skipped: null, unlisted, fundExempt };
 }
 
 // ─────────────────────────────────────────────────── renames by CIK (#22)

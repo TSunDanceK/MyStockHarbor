@@ -59,6 +59,14 @@ export const priorityStocks = Array.from(
 
 export const uniqueEtfs = Array.from(new Set(etfs));
 
+const SITE_FUNDS = new Set<string>(uniqueEtfs);
+/**
+ * One of the funds the site lists, with or without a CIK of its own. Pure, so
+ * the SEC-listing sweep (lib/server/secListing.ts) and the earnings page's
+ * fund card (secColdFetch.ts) share one definition.
+ */
+export const isSiteFund = (symbol: string) => SITE_FUNDS.has(String(symbol ?? "").trim().toUpperCase());
+
 // ── Related-stocks selection ("Explore More Stocks" module) ────────────────
 
 type CategoryEntry = { list: string[] };

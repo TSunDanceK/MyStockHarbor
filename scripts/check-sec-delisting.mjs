@@ -47,6 +47,10 @@ if (!file.present) throw new Error(`committed ticker file not loadable: ${file.e
 const live = { map: file.map, source: "redis", stale: false };
 
 const FOUR = ["BK", "EQR", "EA", "WBS"];
+// The ten Select Sector funds the SEC-listing sweep evicted (#552 CODE-B-OPUS #13).
+const TRUST_SERIES = ["XLK", "XLF", "XLE", "XLB", "XLC", "XLP", "XLI", "XLY", "XLV", "XLU"];
+const presentInFile = TRUST_SERIES.filter((s) => file.map.has(s));
+if (presentInFile.length) throw new Error(`fixture: SEC's committed file now lists ${presentInFile.join(", ")}; pick funds it does not`);
 const ALIVE = ["AAPL", "BRK.B", "BRK-B", "BNY", "VMRK", "MSFT", "GOOGL"];
 
 async function suite(L, E, route) {
@@ -72,6 +76,20 @@ async function suite(L, E, route) {
   const few = new Map([...file.map].filter(([t]) => !universe.slice(0, 8).includes(t)));
   ok("a handful absent from a 700 universe still acts", L.secUnlistedSymbols(universe, { ...live, map: few }).unlisted.length === 8);
 
+  // THE SITE'S OWN FUNDS (#552 COWORK #233 S0): trust series SEC's file has no
+  // row for. An absence must never evict one, nor count towards the mass cap;
+  // the stale-bar route still applies to them.
+  const fundsV = L.secUnlistedSymbols([...ALIVE, ...FOUR, ...TRUST_SERIES], live);
+  ok("a trust-series fund absent from SEC's file is not named for eviction",
+    TRUST_SERIES.every((s) => !fundsV.unlisted.includes(s)), JSON.stringify(fundsV.unlisted));
+  ok("the four are still named beside the funds", JSON.stringify([...fundsV.unlisted].sort()) === JSON.stringify([...FOUR].sort()), JSON.stringify(fundsV.unlisted));
+  ok("the exempt funds are reported by name", TRUST_SERIES.every((s) => fundsV.fundExempt.includes(s)), JSON.stringify(fundsV.fundExempt));
+  const withFunds = L.secUnlistedSymbols([...universe, ...TRUST_SERIES], { ...live, map: few });
+  ok("exempt funds do not count towards the mass-absence cap", withFunds.skipped === null && withFunds.unlisted.length === 8, JSON.stringify({ skipped: withFunds.skipped, n: withFunds.unlisted.length }));
+  const now = Date.now();
+  ok("a fund still goes by the stale-bar route",
+    E.staleBarEvictionAction("XLK", E.EVICTION_CORROBORATION_DAYS, E.EVICTION_STALE_BAR_WEEKDAYS, now, now) === "evict");
+
   ok("an unlisted non-preset is evicted", E.secListingEvictionAction("BK", true) === "evict");
   ok("an unlisted preset is a hand edit, never an eviction", E.secListingEvictionAction("AAPL", true) === "hand-edit");
   ok("a listed symbol is kept", E.secListingEvictionAction("BK", false) === "keep");
@@ -84,6 +102,7 @@ async function suite(L, E, route) {
   ok("it asks the one preset gate", /secListingEvictionAction\(symbol, true\)/.test(route));
   ok("it evicts and deregisters what it names",
     /const evicted = await evictSymbol\(symbol\);[\s\S]{0,120}sweep\.evictedBySecListing\+\+/.test(route) && /await deregisterSymbols\(secEvicted\)/.test(route));
+  ok("the run record names the exempt funds", /sweep\.secFundExempt\.push\(\.\.\.verdict\.fundExempt\)/.test(route) && /secFundExempt: sweep\.secFundExempt\.join/.test(route));
   ok("the run record carries the names and the skip reason", /secUnlisted: sweep\.secUnlisted\.join/.test(route) && /secSweepSkipped: sweep\.secSkipped/.test(route));
   return fails;
 }
@@ -104,9 +123,12 @@ const mut = (label, src, from, to) => {
 };
 const MUTANTS = [
   ["the committed seed accepted", () => [mut("source", listingSrc, `if (live.source !== "redis")`, `if (live.source === "none")`), evictionSrc, routeCode]],
-  ["a stale map accepted", () => [mut("stale", listingSrc, `if (live.stale) return { skipped: "map-stale", unlisted: [] };`, ""), evictionSrc, routeCode]],
+  ["a stale map accepted", () => [mut("stale", listingSrc, `if (live.stale) return { skipped: "map-stale", unlisted: [], fundExempt: [] };`, ""), evictionSrc, routeCode]],
   ["the mass-absence refusal removed", () => [mut("cap", listingSrc, `if (unlisted.length > cap)`, `if (false)`), evictionSrc, routeCode]],
   ["exact-spelling lookup (BRK.B misses BRK-B)", () => [mut("spell", listingSrc, `!lookupBySpelling(live.map, s)`, `!live.map.has(s)`), evictionSrc, routeCode]],
+  ["the fund exemption removed", () => [mut("fund", listingSrc, `const unlisted = absent.filter((s) => !exempt(s));`, `const unlisted = absent;`), evictionSrc, routeCode]],
+  ["the funds counted towards the cap", () => [mut("fundcap", listingSrc, `if (unlisted.length > cap)`, `if (absent.length > cap)`), evictionSrc, routeCode]],
+  ["the exemption applied to the stale-bar route too", () => [listingSrc, mut("stalefund", evictionSrc, `staleBarsShouldEvict(staleDays, weekdaysBehind, observedAtMs, nowMs),`, `staleBarsShouldEvict(staleDays, weekdaysBehind, observedAtMs, nowMs) && !/^XL/.test(symbol),`), routeCode]],
   ["the preset gate bypassed", () => [listingSrc, mut("gate", evictionSrc, `return actionFor(unlisted, symbol, presets);`, `return unlisted ? "evict" : "keep";`), routeCode]],
   ["the pass nested under the FMP branch", () => {
     const CALL = "const verdict = secUnlistedSymbols(universe, live)";
@@ -126,4 +148,4 @@ for (const [label, make] of MUTANTS) {
   }
 }
 if (survived) process.exit(1);
-console.log(`check-sec-delisting: the four named, ${ALIVE.length} live names kept; ${MUTANTS.length} mutants caught`);
+console.log(`check-sec-delisting: the four named, ${ALIVE.length} live names kept, ${TRUST_SERIES.length} trust-series funds exempt; ${MUTANTS.length} mutants caught`);
