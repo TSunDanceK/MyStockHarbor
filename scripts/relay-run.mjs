@@ -1448,6 +1448,14 @@ const TASKS = {
   // NO CREDENTIALS (owner request 13 Oct, #553 COWORK #229): fetches the four published AI answer-bot IP lists
   // and prints the firewall rule JSON. Public data only; the sandbox cannot reach these hosts.
   "firewall-ai-answer-bots-rule": { script: "scripts/firewall/build-ai-answer-bots-rule.mjs", args: () => [] },
+  // THE TEN SELECT SECTOR FUNDS (#552 COWORK #233 S0): their tombstones cleared and any missing
+  // Tiingo EOD key cold-queued. Dry reports state only; apply is the owner's GO. ~20-45 commands.
+  "write-site-fund-restore-dry": { script: "scripts/site-fund-restore.mjs", args: () => [], writes: true },
+  "write-site-fund-restore": { script: "scripts/site-fund-restore.mjs", args: () => ["--apply"], writes: true },
+  // READS ONLY (#552 COWORK #233 S0(b)): /api/pickers's response body rebuilt from the stored payload, against 4.5 MB.
+  "write-pickers-response-size": { script: "scripts/pickers-response-size.mjs", args: () => [], needsTypescript: true, writes: true },
+  // NO CREDENTIALS: one public GET of /api/pickers, sizes and headers only.
+  "pickers-response-live": { script: "scripts/pickers-response-size.mjs", args: () => [], needsTypescript: true, env: { LIVE: "1" } },
 };
 
 const argv = process.argv.slice(2);

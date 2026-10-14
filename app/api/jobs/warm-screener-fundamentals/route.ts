@@ -136,6 +136,10 @@ async function handleGET(req: NextRequest) {
     // THE FOURTH SIGNAL (secListing.ts): absent from SEC's live ticker file.
     // Its own skip reason, because it runs when the three above cannot.
     secUnlisted: [] as string[],
+    // THE SITE'S OWN FUNDS SEC HAS NO ROW FOR (#552 COWORK #233 S0): series of
+    // one trust (XLK, XLF, ...), never evicted on this route. Named so the day
+    // they stop showing up is visible too.
+    secFundExempt: [] as string[],
     // RENAMES FOLLOWED BY CIK (#553 COWORK #22), and the cases a person should
     // look at (no CIK, no single successor, successor already in the universe,
     // a rename over the per-run cap).
@@ -317,6 +321,7 @@ async function handleGET(req: NextRequest) {
     const live = await resolveTickerMap();
     const verdict = secUnlistedSymbols(universe, live);
     sweep.secSkipped = verdict.skipped;
+    sweep.secFundExempt.push(...verdict.fundExempt);
     const already = new Set([...sweep.evicted, ...sweep.presetHandEdit]);
     const todo: string[] = [];
     for (const symbol of verdict.unlisted) {
@@ -431,6 +436,7 @@ async function handleGET(req: NextRequest) {
     // THE FOURTH SIGNAL, named rather than counted: every symbol here is a
     // delisting OR a rename, and only a person can tell which.
     secUnlisted: sweep.secUnlisted.join(", ") || null,
+    secFundExempt: sweep.secFundExempt.join(", ") || null,
     secRenamed: sweep.secRenamed.join(", ") || null,
     secFlagged: sweep.secFlagged.join(" | ") || null,
     evictedBySecListing: sweep.evictedBySecListing,
