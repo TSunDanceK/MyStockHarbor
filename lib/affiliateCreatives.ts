@@ -33,3 +33,8 @@ export const TRADINGVIEW_LEADERBOARD: RailCreative = {
   height: 90,
   alt: "TradingView",
 };
+
+// The notice beside the dashboard leaderboard. Wording follows the programme's terms as the
+// owner supplied them: a $15 discount on a NEXT plan, once a first has been bought. Not "£15",
+// not "on sign-up". Descriptive, never an instruction.
+export const TRADINGVIEW_OFFER = { headline: "$15 off", detail: "a next TradingView plan, once a first is bought, through this link" };

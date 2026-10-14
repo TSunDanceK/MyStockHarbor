@@ -10,7 +10,7 @@ import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } 
 import TradingViewChartEmbed from "./TradingViewChartEmbed";
 import InteractiveChart from "./InteractiveChart";
 import AffiliateBanner from "./AffiliateBanner";
-import { TRADINGVIEW_LEADERBOARD } from "@/lib/affiliateCreatives";
+import { TRADINGVIEW_LEADERBOARD, TRADINGVIEW_OFFER } from "@/lib/affiliateCreatives";
 import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
@@ -1208,19 +1208,21 @@ export default function DashboardClient({
     </SectionCard>);
   }
 
-  function MobileBreakdownAccordion() {
+  function MobileBreakdownAccordion({ alwaysOpen = false }: { alwaysOpen?: boolean } = {}) {
+    // ALWAYS OPEN ON DESKTOP (owner request, #553, 14 Oct): the desktop grid passes alwaysOpen, so the card is open with no toggle; the phone layout keeps the collapsible card.
+    const open = alwaysOpen || breakdownOpen;
     const items = customMode ? selectedBreakdownRows : overviewItems;
     const bc = items.filter((i: any) => i.tone === "green").length, rc = items.filter((i: any) => i.tone === "red").length, nc = items.length - bc - rc;
     const sl = customMode ? "Custom indicators" : `Mixed · ${bc} bullish · ${rc} bearish · ${nc} neutral`;
     // ON THE LANDING, COLLAPSED BY DEFAULT AT EVERY WIDTH (#563 COWORK #164 D): "Breakdown ▸".
-    return (<section data-breakdown={breakdownOpen ? "open" : "collapsed"} style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, overflow: "hidden" }}>
-      <button type="button" aria-expanded={breakdownOpen} onClick={() => setBreakdownOpen(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "none", background: "none", color: COLORS.cardFg, cursor: "pointer", textAlign: "left" }}>
+    return (<section data-breakdown={open ? "open" : "collapsed"} style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, overflow: "hidden" }}>
+      <button type="button" aria-expanded={open} onClick={alwaysOpen ? undefined : () => setBreakdownOpen(v => !v)} tabIndex={alwaysOpen ? -1 : undefined} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "none", background: "none", color: COLORS.cardFg, cursor: alwaysOpen ? "default" : "pointer", textAlign: "left" }}>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: COLORS.blueSoft, border: `1px solid ${COLORS.blueBorder}`, display: "grid", placeItems: "center", flex: "0 0 auto" }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9cc0ff" strokeWidth="2.2" strokeLinecap="round"><path d="M4 19V5M4 19h16M9 16V9M14 16V6M19 16v-4" /></svg></div>
-        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 14 }}>{landing ? <>Breakdown <span aria-hidden="true">{breakdownOpen ? "▾" : "▸"}</span></> : "Indicator Breakdown"}</div><div style={{ fontSize: 12, color: COLORS.mutedFg, marginTop: 1 }}>{sl}</div></div>
+        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 14 }}>{landing ? <>Breakdown <span aria-hidden="true">{open ? "▾" : "▸"}</span></> : "Indicator Breakdown"}</div><div style={{ fontSize: 12, color: COLORS.mutedFg, marginTop: 1 }}>{sl}</div></div>
         <div style={{ display: "flex", gap: 3, flex: "0 0 auto" }}>{Array.from({ length: Math.min(bc, 4) }).map((_, i) => <span key={`b${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.green }} />)}{Array.from({ length: Math.min(rc, 4) }).map((_, i) => <span key={`r${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.red }} />)}{Array.from({ length: Math.min(nc, 4) }).map((_, i) => <span key={`n${i}`} style={{ width: 6, height: 6, borderRadius: 99, background: COLORS.mutedFg2 }} />)}</div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={COLORS.mutedFg} strokeWidth="2.4" strokeLinecap="round" style={{ flex: "0 0 auto", transform: breakdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.25s ease" }}><path d="M6 9l6 6 6-6" /></svg>
+        {alwaysOpen ? null : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={COLORS.mutedFg} strokeWidth="2.4" strokeLinecap="round" style={{ flex: "0 0 auto", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.25s ease" }}><path d="M6 9l6 6 6-6" /></svg>}
       </button>
-      {breakdownOpen ? <div style={{ borderTop: `1px solid ${COLORS.borderSoft}` }}>
+      {open ? <div style={{ borderTop: `1px solid ${COLORS.borderSoft}` }}>
         <div style={{ display: "flex", gap: 5, padding: "10px 16px 0" }}>{items.map((item: any) => <span key={customMode ? item.label : item.key} style={{ flex: 1, height: 5, borderRadius: 99, background: chipToneColor(item.tone) }} />)}</div>
         <div style={{ padding: "8px 16px 4px" }}>{items.map((item: any) => <div key={customMode ? item.label : item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${COLORS.borderSoft}` }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14 }}>{item.label}</span><span title={breakdownChipValue(customMode ? item.value : item.valueText).full} style={{ fontSize: 13, fontWeight: 700, color: chipToneColor(item.tone), minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{breakdownChipValue(customMode ? item.value : item.valueText).text}</span></div>)}</div>
         <div style={{ padding: "8px 16px 14px" }}><Link href="/learn" style={{ fontSize: 13, fontWeight: 700, color: "#9cc0ff", textDecoration: "none" }}>Learn what these mean →</Link></div>
@@ -1697,19 +1699,19 @@ export default function DashboardClient({
         {(() => {
           const errBox = err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null;
           // On the landing the Breakdown is collapsed at every width (#164 D); elsewhere the desktop card stays.
-          const breakdown = landing ? <MobileBreakdownAccordion /> : <BreakdownPanel />;
+          const breakdown = landing ? <MobileBreakdownAccordion alwaysOpen /> : <BreakdownPanel />;
           const grids = (
             <>
               <div ref={deskGridRef} className={`msh-grid msh-desktop-only${wideChart ? " msh-grid-wide" : ""}`} data-wide-chart={wideChart ? "1" : "0"}>
                 {wideChart ? (
                   <>
-                    <div className="msh-col msh-wide-chart"><ChartPanel /><AffiliateBanner creative={TRADINGVIEW_LEADERBOARD} /></div>
+                    <div className="msh-col msh-wide-chart"><ChartPanel /><AffiliateBanner creative={TRADINGVIEW_LEADERBOARD} offer={TRADINGVIEW_OFFER} /></div>
                     <div className="msh-wide-cards"><OverviewPanel />{breakdown}</div>
                   </>
                 ) : (
                   <>
                     <div className="msh-col"><OverviewPanel />{breakdown}</div>
-                    <div className="msh-col"><ChartPanel /><AffiliateBanner creative={TRADINGVIEW_LEADERBOARD} /></div>
+                    <div className="msh-col"><ChartPanel /><AffiliateBanner creative={TRADINGVIEW_LEADERBOARD} offer={TRADINGVIEW_OFFER} /></div>
                   </>
                 )}
               </div>
