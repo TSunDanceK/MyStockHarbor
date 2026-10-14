@@ -358,6 +358,31 @@ export function locateAifSection(text: string): Located {
     : "40-F: AIF has no Description of the Business heading" };
 }
 
+/**
+ * THE OPENING OF A 40-F DESCRIPTION, CHECKED AFTER CLEANING (#552 COWORK #229).
+ * AIFs are typeset documents; the full 77-filer build showed openings the
+ * 10-K cleaner was never asked to see. A row is refused (no description) when
+ * the cleaned text opens:
+ *   - mid-sentence or with a list mark, footnote number or bracket (BGSI
+ *     "(“BGSI”), through…", CVE "• Oil Sands…", KGC "2 “Production cost…");
+ *   - with a bare generic noun left from a stripped name (BMO "Group is…");
+ *   - with a pointer or a reading note (CNL "As described above…", SII "For a
+ *     detailed account…", IAG "Unless stated otherwise…");
+ *   - with a running header or a contents line (VET "… ■ Page 7 ■ 2025 Annual
+ *     Information Form", FSM "FORTUNA MINING CORP.", RCI "… Obligations 67
+ *     PROPERTIES…", TU "Who we are TELUS…").
+ * Returns the reason, or null for a clean opening.
+ */
+export function aifOpeningProblem(text: string): string | null {
+  const head = text.slice(0, 160);
+  if (!/^[A-Z“"]/.test(head)) return "opens mid-sentence or with a list mark";
+  if (/^(group|company|corporation|bank|trust|partnership)\s+(is|are)\b/i.test(head)) return "opens with a fragment of the company's name";
+  if (/^(as\s+(described|discussed|noted)|for\s+(a\s+)?(detailed|further|more)|unless\s+(stated|otherwise)|refer\s+to|see\s|who\s+we\s+are\b)/i.test(head)) return "opens with a pointer or a reading note";
+  if (/\bpage\s+\d|annual\s+information\s+form|■/i.test(head) || /^[A-Z][A-Z&.,'’\-]*(\s+[A-Z][A-Z&.,'’\-]*){1,}\s*[^\sA-Za-z]/.test(head)
+    || /^[A-Z][A-Z&.'’\-]+(\s+[A-Z][A-Z&.'’\-]+){1,}\.?\s/.test(head) || /\b\d{1,3}\s+[A-Z]{5,}\b/.test(head)) return "opens with a running header or a contents line";
+  return null;
+}
+
 // ── CLEANING ──────────────────────────────────────────────────────────────
 
 /** Rule 4: text that is a cross-reference or the financial discussion. */

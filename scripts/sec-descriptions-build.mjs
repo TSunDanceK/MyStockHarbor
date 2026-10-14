@@ -144,6 +144,10 @@ for (const symbol of mine) {
     if (only.length) console.log(`BODY ${JSON.stringify({ symbol, body: loc.body.slice(0, 2500) })}`);
     continue;
   }
+  // 40-F OPENINGS (#552 COWORK #229): a typeset AIF can leave a header, a
+  // pointer or a clipped name at the front; such a row is refused, not shown.
+  const opening = annual.form === "40-F" ? desc.aifOpeningProblem(cleaned.text) : null;
+  if (opening) { misses[symbol] = `40-F: ${opening}`; continue; }
   if (cleaned.joined) { joinedWords += cleaned.joined; joinedRows++; }
   rows[symbol] = [annual.form, annual.filedOn, annual.accession, cleaned.text];
   // NAMED SYMBOLS (SYMBOLS=…): the row is printed too, so a one-row refresh can

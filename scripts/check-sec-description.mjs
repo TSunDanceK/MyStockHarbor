@@ -195,6 +195,30 @@ console.log("\n2b. 40-F: the Annual Information Form exhibit and its Description
   check("an inline-XBRL 40-F document ('x.htm iXBRL') is read from the index (CNI, CNQ, TRI)", D.filingIndexDocs(ix)[0]?.document === "cni-20251231.htm");
   const noIx = await load(once('.map((c) => (c.length >= 4 ? [c[0], c[1], c[2].split(" ")[0], c[3]] : c))', ".map((c) => c)"));
   check("MUTATION: the iXBRL suffix kept → CNI's 40-F document is dropped from the index (caught)", noIx.filingIndexDocs(ix).length === 0);
+  // The openings the full 77-filer build produced, as filed.
+  const refused = {
+    BGSI: "(“BGSI”), through its operating company, The Boyd Group Inc. and its subsidiaries, is one of the largest operators",
+    BMO: "Group is a highly diversified financial services provider based in North America",
+    CNL: "As described above under “ General Development of the Business ”, the Company is a natural resource exploration company",
+    CVE: "• Oil Sands, includes the development and production of bitumen and heavy oil in northern Alberta",
+    FSM: "FORTUNA MINING CORP. ​ 2024 Developments ​ The expansion of the leach pad at the Lindero Mine",
+    IAG: "Unless stated otherwise (indicated by date), the information in this summary is based upon the technical report",
+    KGC: "2 “Production cost of sales per ounce” is defined as production cost of sales divided by total ounces sold.",
+    RCI: "Commitments and Contractual Obligations 67 PROPERTIES, TRADEMARKS, ENVIRONMENTAL, AND OTHER MATTERS In most instances",
+    SII: "For a detailed account of the underlying principal subsidiaries within our reportable operating segments, refer to Note 2",
+    TU: "Who we are TELUS (TSX: T, NYSE: TU) is a world-leading communications technology company",
+    VET: "Vermilion Energy Inc. ■ Page 7 ■ 2025 Annual Information Form Vermilion recognizes stakeholder expectations",
+  };
+  const wrongly = Object.entries(refused).filter(([, t]) => !D.aifOpeningProblem(t)).map(([k]) => k);
+  check("40-F openings refused: header, contents line, pointer, list mark, clipped name (11 from the full build)", wrongly.length === 0, wrongly.join(","));
+  const kept = ["CN is engaged in the rail and related transportation business.", "We are a leading global investment firm.", "The mission of CGI is to help its clients succeed.",
+    "The Toronto -Dominion Bank and its subsidiaries are collectively known as TD Bank Group.", "Wheaton is a streaming company.", "OR Royalties is engaged in the business of acquiring royalties.", "“BRP” is a global leader in powersports."];
+  const lost = kept.filter((t) => D.aifOpeningProblem(t));
+  check("...and clean openings kept (CNI, BN, GIB, TD, WPM, OR, a quoted name)", lost.length === 0, lost.join(" | "));
+  const noGate = await load(once('if (!/^[A-Z“"]/.test(head)) return "opens mid-sentence or with a list mark";', ""));
+  check("MUTATION: the first-character rule dropped → BGSI's clipped opening ships (caught)", noGate.aifOpeningProblem(refused.BGSI) === null);
+  const build = readCodeOnly("scripts/sec-descriptions-build.mjs");
+  check("the build refuses a 40-F row whose opening fails, and only a 40-F row", /annual\.form === "40-F" \? desc\.aifOpeningProblem\(cleaned\.text\) : null/.test(build));
   const untitled = await load(once("return AIF_TITLE.test(text.slice(0, 6000));", "return true;"));
   check("MUTATION: the AIF title test dropped → a code of ethics passes as the AIF (caught)", untitled.isAnnualInformationForm("CODE OF BUSINESS ETHICS POLICY"));
 }
