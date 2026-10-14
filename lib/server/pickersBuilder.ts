@@ -47,7 +47,8 @@ import {
 } from "./dynamicUniverseCache";
 import { readSearchDemand } from "./searchDemand";
 import { PRESET_UNIVERSE } from "./presetUniverse";
-import { readTopByCap, TOP_BY_CAP } from "./topByCap";
+import { readByCapAndLiquidity, readTopByCap, TOP_BY_CAP } from "./topByCap";
+import { liquiditySlots, PRE_S1_UNIVERSE_CAP } from "./liquiditySlice";
 import { toDashed } from "../symbolSpellings.mjs";
 import { isPriceExcluded } from "../priceExcluded.mjs";
 import { POSITIVE_LAST_EARNINGS_ENABLED } from "../positiveLastEarnings";
@@ -3450,10 +3451,10 @@ async function buildPickersPayload(
   // ONE SYMBOL, ONE SLOT, WHATEVER ITS SPELLING (#553 COWORK #186): the preset
   // writes BRK.B, the SEC and Tiingo stores (the size slice) write BRK-B.
   const slotSpellings = new Set<string>();
-  const fillSlots = (symbols: string[], maxFromThisSource: number) => {
+  const fillSlots = (symbols: string[], maxFromThisSource: number, ceiling = UNIVERSE_CAP) => {
     let added = 0;
     for (const raw of symbols) {
-      if (universeSlots.size >= UNIVERSE_CAP) break;
+      if (universeSlots.size >= Math.min(ceiling, UNIVERSE_CAP)) break;
       if (added >= maxFromThisSource) break;
       const s = String(raw).trim().toUpperCase();
       // The dated PRICE_EXCLUDED list (#553 COWORK #61): hidden from the
@@ -3473,7 +3474,16 @@ async function buildPickersPayload(
   const topByCap = await readTopByCap(TOP_BY_CAP);
   fillSlots(topByCap, TOP_BY_CAP);
   fillSlots(popularSearchSymbols, POPULAR_SEARCH_QUOTA);
-  fillSlots(dynamicUniverse, UNIVERSE_CAP); // backfills the remainder
+  // The dynamic universe backfills up to the PRE-S1 size only (#552 COWORK
+  // #235): slots above it are the liquidity slice's, so a cap of 700 is exactly
+  // the pre-S1 build and setting it back is the whole rollback.
+  fillSlots(dynamicUniverse, UNIVERSE_CAP, PRE_S1_UNIVERSE_CAP);
+  // THE LIQUIDITY SLICE (liquiditySlice.ts): slots 701..UNIVERSE_CAP, ranked by
+  // SEC cap x 20-session dollar volume with floors. No dynamic backfill after
+  // it: a slot it cannot fill stays empty rather than going to a name nobody
+  // ranked.
+  const liquidSlots = liquiditySlots(UNIVERSE_CAP);
+  if (liquidSlots > 0) fillSlots(await readByCapAndLiquidity(), liquidSlots);
   const universe = Array.from(universeSlots);
 
   // STRONG EARNINGS GROWTH FROM THE FILINGS (#553 CODE-B #94 B5, 2026-10-03).

@@ -21,6 +21,7 @@ import { readTiingoEodLast } from "./marketData/read";
 import { secCapAndPe, type SecCapRow } from "./pickersSecFundamentals";
 import type { EodLast } from "./marketData/eodLast";
 import { toDashed, toDotted } from "../symbolSpellings.mjs";
+import { rankByCapAndLiquidity } from "./liquiditySlice";
 
 export const TOP_BY_CAP = 300;
 
@@ -60,4 +61,15 @@ export async function readTopByCap(n = TOP_BY_CAP): Promise<string[]> {
   const [rows, eod] = await Promise.all([readSecCapRows().catch(() => null), readTiingoEodLast().catch(() => null)]);
   if (!rows || !eod) return [];
   return rankByCap(rows, eod, n);
+}
+
+/**
+ * The liquidity slice's read (liquiditySlice.ts, #552 COWORK #235): the same two
+ * Data Cache blobs as readTopByCap, so no new command. Never throws; empty until
+ * the nightly EOD job has written `dv` on the newest-bar rows.
+ */
+export async function readByCapAndLiquidity(): Promise<string[]> {
+  const [rows, eod] = await Promise.all([readSecCapRows().catch(() => null), readTiingoEodLast().catch(() => null)]);
+  if (!rows || !eod) return [];
+  return rankByCapAndLiquidity(rows, eod, CAP_RANK_HOLD_OUT);
 }
