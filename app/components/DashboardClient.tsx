@@ -9,6 +9,8 @@ import Link from "next/link";
 import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
 import TradingViewChartEmbed from "./TradingViewChartEmbed";
 import InteractiveChart from "./InteractiveChart";
+import AffiliateBanner from "./AffiliateBanner";
+import { TRADINGVIEW_LEADERBOARD } from "@/lib/affiliateCreatives";
 import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
@@ -1701,13 +1703,13 @@ export default function DashboardClient({
               <div ref={deskGridRef} className={`msh-grid msh-desktop-only${wideChart ? " msh-grid-wide" : ""}`} data-wide-chart={wideChart ? "1" : "0"}>
                 {wideChart ? (
                   <>
-                    <div className="msh-col msh-wide-chart"><ChartPanel /></div>
+                    <div className="msh-col msh-wide-chart"><ChartPanel /><AffiliateBanner creative={TRADINGVIEW_LEADERBOARD} /></div>
                     <div className="msh-wide-cards"><OverviewPanel />{breakdown}</div>
                   </>
                 ) : (
                   <>
                     <div className="msh-col"><OverviewPanel />{breakdown}</div>
-                    <div className="msh-col"><ChartPanel /></div>
+                    <div className="msh-col"><ChartPanel /><AffiliateBanner creative={TRADINGVIEW_LEADERBOARD} /></div>
                   </>
                 )}
               </div>

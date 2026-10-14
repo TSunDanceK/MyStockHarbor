@@ -23,3 +23,13 @@ export const TRADINGVIEW_RAIL: RailCreative = {
 
 /** The rail's stack, top to bottom. */
 export const RAIL_CREATIVES: RailCreative[] = [ETORO_RAIL, TRADINGVIEW_RAIL];
+
+// TradingView's 728x90 leaderboard, under the dashboard chart.
+export const TRADINGVIEW_LEADERBOARD: RailCreative = {
+  href: TRADINGVIEW_RAIL.href,
+  imgSrc: "https://s3.tradingview.com/pub/referrals/creatives/DT/EN/728x90Leaderboard.jpg",
+  imgSrc2x: "https://s3.tradingview.com/pub/referrals/creatives/DT/EN/1456x180Leaderboard.jpg",
+  width: 728,
+  height: 90,
+  alt: "TradingView",
+};
