@@ -11,7 +11,7 @@ import { usePartnerAds } from "./usePartnerAds";
 // Reusable: a different slot or creative is another <AffiliateRail creatives={[...]} />.
 export type RailCreative = { href: string; imgSrc: string; imgSrc2x?: string; width: number; height: number; alt: string };
 
-const MIN_WIDTH = 1380; // 780px text column + a 30px gap + 160px banner + the 352px sidebar and page padding
+const MIN_WIDTH = 1380; // 780px text column + no gap (the banner is centred in the whole strip) + 160px banner + the 352px sidebar and page padding
 
 export function PartnerImage({ c, fluid }: { c: RailCreative; fluid?: boolean }) {
   return (
@@ -29,8 +29,9 @@ export default function AffiliateRail({ creatives }: { creatives: RailCreative[]
   const show = usePartnerAds(MIN_WIDTH);
   if (!show) return null;
   const width = Math.max(...creatives.map((c) => c.width));
+  // Takes all the room between the text and the table's right edge and centres the banners in it (owner request, #553).
   return (
-    <aside aria-label="Sponsored" style={{ flex: "none", marginTop: 40, width, display: "grid", gap: 12, alignContent: "start" }}>
+    <aside aria-label="Sponsored" style={{ flex: `1 1 ${width}px`, minWidth: width, marginTop: 40, display: "grid", justifyItems: "center", gap: 12, alignContent: "start" }}>
       <div style={AD_LABEL_STYLE}>Ad</div>
       {creatives.map((c) => <PartnerImage key={c.href} c={c} />)}
     </aside>

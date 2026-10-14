@@ -1763,8 +1763,8 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .scanDebug { margin-top: 30px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; line-height: 1.5; color: rgba(148,163,184,0.5); letter-spacing: 0.02em; }
 
         /* Flex so the partner banners can sit beside the text and the row grows to hold them; with no banners the section is exactly the 780px column it was. */
-        .screenerProseWrap { display: flex; gap: 30px; align-items: flex-start; }
-        .screenerProse { flex: 1 1 0; min-width: 0; margin-top: 40px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.08); max-width: 780px; }
+        .screenerProseWrap { display: flex; gap: 0; align-items: flex-start; }
+        .screenerProse { flex: 0 1 780px; min-width: 0; margin-top: 40px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.08); max-width: 780px; }
         .screenerProseBlock + .screenerProseBlock { margin-top: 28px; }
         .screenerProse h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.3; font-weight: 800; color: #e2e8f0; letter-spacing: -0.01em; }
         /* Read text: the reading floor (--fs-read / --lh-read, #553 COWORK #152). */
