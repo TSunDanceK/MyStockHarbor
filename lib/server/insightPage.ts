@@ -210,7 +210,9 @@ export type MoreCard =
   // suppliers, by the page's editorial %) and who depends on it (×N, three names).
   | { kind: "bottlenecks"; href: string; company: string; ownPage: boolean;
       suppliers: { name: string; ticker: string | null; pct: number }[];
-      dependants: { count: number; names: string[] } }
+      dependants: { count: number; names: string[] };
+      /** A stock with no map of its own: the pages that list it, by the chart they list it on. */
+      listedBy: { supplier: { count: number; names: string[] }; customer: { count: number; names: string[] } } }
   | { kind: "capex"; href: string; mention: CapexMention; flow: { from: CapexFlowItem[]; to: CapexFlowItem[] };
       /** A spender's own capex, latest and prior fiscal year, from its filings. */
       own: { year: string; value: number; prior: number | null; changePct: number | null } | null }
@@ -378,6 +380,10 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
       kind: "bottlenecks", href: own ? `/bottlenecks/${sym.toLowerCase()}` : "/bottlenecks", company, ownPage: !!own,
       suppliers: own ? [...own.supplyChain].sort((x, y) => y.pct - x.pct).slice(0, 4).map((c) => ({ name: c.name, ticker: c.ticker, pct: c.pct })) : [],
       dependants: { count: named?.count ?? 0, names: (named?.pages ?? []).slice(0, 3).map((p) => p.companyName || p.symbol) },
+      listedBy: {
+        supplier: { count: named?.listedAsSupplierBy.length ?? 0, names: (named?.listedAsSupplierBy ?? []).slice(0, 3).map((p) => p.companyName || p.symbol) },
+        customer: { count: named?.listedAsCustomerBy.length ?? 0, names: (named?.listedAsCustomerBy ?? []).slice(0, 3).map((p) => p.companyName || p.symbol) },
+      },
     });
   }
   if (capexMention && capex) {

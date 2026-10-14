@@ -340,13 +340,20 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
             <ul className="inList inTight">{m.suppliers.map((s) => <li key={s.name}><span>{s.name}</span><strong>~{s.pct}%</strong></li>)}</ul>
           </>
         ) : null}
-        {m.dependants.count > 0 ? (
-          <>
-            <h3 className="inH3">Who depends on {m.company} <span className="inMoreBig inInline">×{m.dependants.count}</span></h3>
-            <p className="inRead">{m.dependants.names.join(", ")}{m.dependants.count > m.dependants.names.length ? ` and ${m.dependants.count - m.dependants.names.length} more` : ""}.</p>
-          </>
-        ) : null}
-        <Link href={m.href} className="inMoreGo">{m.ownPage ? "See the full map →" : `See who depends on ${m.company} →`}</Link>
+        {m.ownPage ? (
+          m.dependants.count > 0 ? (
+            <>
+              <h3 className="inH3">Who depends on {m.company} <span className="inMoreBig inInline">×{m.dependants.count}</span></h3>
+              <p className="inRead">{m.dependants.names.join(", ")}{m.dependants.count > m.dependants.names.length ? ` and ${m.dependants.count - m.dependants.names.length} more` : ""}.</p>
+            </>
+          ) : null
+        ) : (
+          // No map of its own: say which way each page names it (a page's supplier chart / customer chart).
+          (["supplier", "customer"] as const).map((dir) => m.listedBy[dir].count > 0 ? (
+            <p key={dir} className="inRead"><strong>Lists it as a {dir}:</strong> {m.listedBy[dir].names.join(", ")}{m.listedBy[dir].count > m.listedBy[dir].names.length ? ` and ${m.listedBy[dir].count - m.listedBy[dir].names.length} more` : ""}.</p>
+          ) : null)
+        )}
+        <Link href={m.href} className="inMoreGo">{m.ownPage ? "See the full map →" : `See the maps that name ${m.company} →`}</Link>
       </div>
     );
   }
