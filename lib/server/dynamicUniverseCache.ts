@@ -123,7 +123,14 @@ const SEEN_KEY = "msh:dynamic-universe:v2:seen";
 // raising the cap means re-taking it first) and check-screener-pool (the cap
 // moves at step 7c, not alongside the pool). The size slice (topByCap.ts) fits
 // inside 700 by displacing the lowest-scoring dynamic names (CODE-B #158).
-export const ANALYSIS_UNIVERSE_CAP = 700;
+//
+// RAISED TO 1,000 FOR S1 (#552 COWORK #235, owner GO 2026-10-14), after the
+// bandwidth measurement was re-taken (redisBandwidth.ts REDIS_UNIVERSE_DECISION).
+// Slots 701-1,000 go only to the liquidity slice (liquiditySlice.ts); the
+// dynamic universe still backfills to 700 and MAX_DYNAMIC_UNIVERSE_SIZE below is
+// unchanged, so SETTING THIS BACK TO 700 IS THE WHOLE ROLLBACK: no stored score
+// or key depends on it.
+export const ANALYSIS_UNIVERSE_CAP = 1000;
 
 // EXPORTED so app/api/jobs/warm-earnings can derive the largest universe the
 // caps allow -- the analysed cap UNIONED with this pool -- rather than reading

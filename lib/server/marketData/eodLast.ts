@@ -42,7 +42,28 @@ export type EodLast = {
   a50: boolean | null;
   /** Last close above its 200-session mean; null under 200 bars. */
   a200: boolean | null;
+  /**
+   * Mean daily DOLLAR volume (close x volume) over the last 20 sessions, whole
+   * dollars; null under 20 bars. The Pickers universe's liquidity slice ranks on
+   * it (liquiditySlice.ts, #552 COWORK #235). Absent on rows written before it.
+   */
+  dv?: number | null;
 };
+
+/** Sessions in the dollar-volume mean. */
+export const DOLLAR_VOLUME_SESSIONS = 20;
+
+/** Pure: mean close x volume over the last DOLLAR_VOLUME_SESSIONS bars, or null with fewer usable bars. */
+export function dollarVolume20(bars: EodBar[]): number | null {
+  const tail = bars.slice(-DOLLAR_VOLUME_SESSIONS);
+  if (tail.length < DOLLAR_VOLUME_SESSIONS) return null;
+  let sum = 0;
+  for (const b of tail) {
+    if (!pos(b[4]) || !Number.isFinite(b[5]) || b[5] < 0) return null;
+    sum += b[4] * b[5];
+  }
+  return Math.round(sum / DOLLAR_VOLUME_SESSIONS);
+}
 
 const pos = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 const pct = (to: number, from: number | null | undefined) => (pos(from) ? ((to - from) / from) * 100 : null);
@@ -84,6 +105,7 @@ export function eodLastRow(bars: EodBar[]): EodLast | null {
     y: pct(c, closeOnOrBefore(bars, `${Number(d.slice(0, 4)) - 1}-12-31`)),
     a50: enough ? c > mean(closes.slice(-50)) : null,
     a200: enough ? c > mean(closes.slice(-200)) : null,
+    dv: dollarVolume20(bars),
   };
 }
 

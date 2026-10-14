@@ -1455,6 +1455,8 @@ const TASKS = {
   // READS ONLY (#552 COWORK #233 S0(b)): /api/pickers's response body rebuilt from the stored payload, against 4.5 MB.
   "write-pickers-response-size": { script: "scripts/pickers-response-size.mjs", args: () => [], needsTypescript: true, writes: true },
   // NO CREDENTIALS: one public GET of /api/pickers, sizes and headers only.
+  // READS ONLY (#552 COWORK #235 S1): the names the liquidity slice would add at cap 1,000, before it is switched on.
+  "write-liquidity-slice-preview": { script: "scripts/liquidity-slice-preview.mjs", args: () => [], needsTypescript: true, writes: true },
   "pickers-response-live": { script: "scripts/pickers-response-size.mjs", args: () => [], needsTypescript: true, env: { LIVE: "1" } },
 };
 

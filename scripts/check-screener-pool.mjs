@@ -59,12 +59,18 @@ check(
   `${limit} candidates against an ANALYSIS_UNIVERSE_CAP of ${analysisCap} — a pool ` +
     `no larger than the universe is not a pool, it is the universe with extra steps`
 );
+// THE CAP MOVED SEPARATELY, as this assertion was written to force: the pool
+// widened first (7b, SCREENER_LIMIT), and the cap moved later on its own GO
+// (S1, #552 COWORK #235), recorded in redisBandwidth.ts. So the rule is now that
+// the cap equals the decision on record, not a literal 700.
+const meterSrc = readCodeOnly("lib/server/redisBandwidth.ts");
+const approvedCap = Number((meterSrc.match(/REDIS_APPROVED_UNIVERSE_CAP = (\d+)/) ?? [])[1]);
 check(
-  "and the universe cap was NOT raised in the same change",
-  analysisCap === 700,
-  `${analysisCap} — raising both at once multiplies the load on every downstream ` +
-    `job at the same moment the candidate set widens, and nothing afterwards can ` +
-    `say which change moved what. 7c is where this number moves.`
+  "and the universe cap moves only with a recorded decision",
+  analysisCap === 700 || (analysisCap === approvedCap && /REDIS_UNIVERSE_DECISION =/.test(meterSrc)),
+  `${analysisCap} (approved ${approvedCap}) — raising it in the same change as the ` +
+    `pool multiplies the load on every downstream job at once, and nothing afterwards ` +
+    `can say which change moved what; a move needs its own decision on record.`
 );
 
 // ── 2. Which constant actually binds ────────────────────────────────────────

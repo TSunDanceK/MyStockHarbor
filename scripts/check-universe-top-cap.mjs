@@ -75,7 +75,7 @@ function sourceRules({ builder, cap, preset }) {
   const fails = [];
   const want = (label, ok) => { if (!ok) fails.push(label); };
   const b = stripComments(builder, { file: BUILDER });
-  const order = ["fillSlots(PRESET_UNIVERSE, PRESET_UNIVERSE.length);", "fillSlots(topByCap, TOP_BY_CAP);", "fillSlots(popularSearchSymbols, POPULAR_SEARCH_QUOTA);", "fillSlots(dynamicUniverse, UNIVERSE_CAP);"].map((x) => b.indexOf(x));
+  const order = ["fillSlots(PRESET_UNIVERSE, PRESET_UNIVERSE.length);", "fillSlots(topByCap, TOP_BY_CAP);", "fillSlots(popularSearchSymbols, POPULAR_SEARCH_QUOTA);", "fillSlots(dynamicUniverse, UNIVERSE_CAP, PRE_S1_UNIVERSE_CAP);"].map((x) => b.indexOf(x));
   want("preset, then the size slice, then searches, then dynamic", order.every((i) => i > 0) && order.every((i, k) => k === 0 || i > order[k - 1]));
   want("the slice is read from topByCap", /const topByCap = await readTopByCap\(TOP_BY_CAP\);/.test(b));
   want("one slot per symbol whatever its spelling", /if \(slotSpellings\.has\(toDashed\(s\)\)\) continue;/.test(b) && /slotSpellings\.add\(toDashed\(s\)\)/.test(b));
@@ -114,7 +114,7 @@ try {
   for (const [label, which, from, to] of SM) {
     if (!srcs[which].includes(from)) { check(`mutant "${label}" applies`, false, "the anchor matched nothing"); continue; }
     let m = srcs[which].replace(from, to);
-    if (label === "the size slice after the dynamic universe") m = m.replace("  fillSlots(dynamicUniverse, UNIVERSE_CAP);", "  fillSlots(dynamicUniverse, UNIVERSE_CAP);\n  fillSlots(topByCap, TOP_BY_CAP);");
+    if (label === "the size slice after the dynamic universe") m = m.replace("  fillSlots(dynamicUniverse, UNIVERSE_CAP, PRE_S1_UNIVERSE_CAP);", "  fillSlots(dynamicUniverse, UNIVERSE_CAP, PRE_S1_UNIVERSE_CAP);\n  fillSlots(topByCap, TOP_BY_CAP);");
     const f = sourceRules({ ...srcs, [which]: m });
     check(`mutant "${label}" is caught`, f.length > 0, f[0] ?? "no rule failed");
   }
