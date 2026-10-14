@@ -324,7 +324,8 @@ export function aifCandidates(docs: IndexDoc[]): IndexDoc[] {
 function unwrapShortLines(body: string): string {
   const head = body.slice(0, 2000).split("\n").map((l) => l.trim()).filter(Boolean);
   if (head.length < 20 || head.filter((l) => l.length <= 20).length < head.length * 0.6) return body;
-  return body.split(/\n{2,}/).map((p) => p.replace(/\s*\n\s*/g, " ")).join("\n\n");
+  // A break before a hyphen is inside a word ("Toronto" / "-Dominion"): no space.
+  return body.split(/\n{2,}/).map((p) => p.replace(/[ \t]*\n[ \t]*(?=-\w)/g, "").replace(/\s*\n\s*/g, " ")).join("\n\n");
 }
 
 /** The AIF's "Description of the Business" section, bounded like an open-ended 10-K section. */

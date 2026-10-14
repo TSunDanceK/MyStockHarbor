@@ -163,5 +163,14 @@ console.log("\n6. the committed file is current");
 check("classification-overrides.json matches the rules",
   (() => { try { execFileSync("node", ["scripts/build-sic-classification.mjs", "--check"], { stdio: "pipe" }); return true; } catch { return false; } })());
 
+console.log("\n7. 40-F About text does not classify (#552 COWORK #230)");
+{
+  const build = fs.readFileSync("scripts/build-sic-classification.mjs", "utf8");
+  const committed = JSON.parse(fs.readFileSync("data/sec/classification-overrides.json", "utf8"));
+  const entries = Object.values(committed.overrides ?? committed).filter((e) => e && typeof e === "object" && "form" in e);
+  check("the build drops 40-F description rows before the rules pass", /\.filter\(\(\[, r\]\) => r\[0\] !== "40-F"\)/.test(build));
+  check("no committed override is cited from a 40-F", entries.every((e) => e.form !== "40-F"), `${entries.length} cited entries`);
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
