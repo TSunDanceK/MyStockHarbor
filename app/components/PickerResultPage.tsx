@@ -8,6 +8,8 @@ import Link from "next/link";
 import type { MiniCandlePoint, SupportResistanceZone } from "@/app/components/MiniPickerCandleChart";
 import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
+import AffiliateRail from "@/app/components/AffiliateRail";
+import { ETORO_RAIL } from "@/lib/affiliateCreatives";
 import HowToCollapse from "@/app/components/HowToCollapse";
 import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
 import { pageRanking } from "@/lib/pickerRanking";
@@ -1727,6 +1729,10 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .resultWrap { max-width: 1600px; margin: 0 auto; padding: 26px 18px 58px; }
         .resultShell { display: grid; grid-template-columns: 352px minmax(0, 1fr); gap: 22px; align-items: start; }
         .resultMain { min-width: 0; }
+        /* THE PARTNER RAIL: a third column, only while AffiliateRail has
+           decided to show (UK/EU/EEA, accepted, 1280px+) and has set
+           data-ad-rail on <html>. Everyone else keeps the two-column grid. */
+        @media (min-width: 1280px) { html[data-ad-rail] .resultShell { grid-template-columns: 352px minmax(0, 1fr) 160px; } }
         .hero { border: 1px solid ${toneBorder(config.tone)}; border-radius: 28px; padding: 22px; background: ${toneBackground(config.tone)}; box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 18px 42px rgba(0,0,0,0.26); }
         .eyebrow { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid ${toneBorder(config.tone)}; background: rgba(59,130,246,0.10); color: #dbeafe; font-size: 12px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
         .hero h1 { margin: 12px 0 0; font-size: 44px; line-height: 1.03; letter-spacing: -0.055em; }
@@ -2053,6 +2059,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
 
                 <HideWatermarksBar />
               </div>
+              <AffiliateRail creative={ETORO_RAIL} />
             </div>
           </PickerFilterProvider>
         </div>
