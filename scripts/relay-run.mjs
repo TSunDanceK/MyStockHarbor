@@ -1442,6 +1442,8 @@ const TASKS = {
   "write-stale-cover-replay": { script: "scripts/stale-cover-replay.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY despite the prefix (#552 COWORK #222): re-read requests a kept prior has held open > 14 days, for the check-in. 1 GET.
   "write-held-open-requests": { script: "scripts/held-open-requests.mjs", args: () => [], needsTypescript: true, writes: true },
+  // READS ONLY despite the prefix (#552 COWORK #204): the Relay A weekly check-in. GET/SCAN/MGET/HGETALL, no SEC requests.
+  "write-weekly-checkin-a": { script: "scripts/weekly-checkin-a.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-held-open-requests-all": { script: "scripts/held-open-requests.mjs", args: () => [], needsTypescript: true, writes: true, env: { ALL: "1" } },
   // READS ONLY (#553 COWORK #225): the #856 meter day hashes, per source and caller. HGETALL, 1 command a day.
   "write-redis-meter-day": { script: "scripts/redis-meter-day.mjs", args: () => [], writes: true },
