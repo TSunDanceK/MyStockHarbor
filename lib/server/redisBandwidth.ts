@@ -703,8 +703,12 @@ export const REDIS_OVERAGE_MEASURED_AT_CAP = 700;
  * file, because the last one went stale silently and took four sentences of
  * reasoning with it.
  */
-export const REDIS_PROJECTION_MEASURED_BYTES = Math.round(48.6 * 1024 * 1024 * 1024);
-export const REDIS_PROJECTION_MEASURED_AT = "2026-09-11";
+// RE-TAKEN 2026-10-14 BEFORE S1 (#552 COWORK #235), as this gate requires: the
+// meter's last full UTC day (13 Oct, `write-redis-meter-day`) was 8,251.71 MB
+// (10^6 B), x 30. Up from 48.60 GB on 2026-09-11 because the Tiingo and SEC
+// readers (tiingo-eod, sec-cap-rows, eod-last) arrived since and are metered.
+export const REDIS_PROJECTION_MEASURED_BYTES = Math.round(8251.71 * 1e6 * 30);
+export const REDIS_PROJECTION_MEASURED_AT = "2026-10-14";
 /**
  * The universe cap the projection above was measured at.
  *
@@ -719,9 +723,28 @@ export const REDIS_PROJECTION_MEASURED_AT = "2026-09-11";
  */
 export const REDIS_PROJECTION_MEASURED_AT_CAP = 700;
 export const REDIS_PROJECTION_MEASURED_SOURCE =
-  "/cache-health Redis bandwidth panel, 7-day window projected to 30 days, at " +
-  "ANALYSIS_UNIVERSE_CAP 700, after #419 closed the single-symbol metering hole. " +
-  "The previous figure was ~207 GB on 2026-09-04, taken before that fix.";
+  "write-redis-meter-day, the full UTC day 2026-10-13 (8,251.71 MB) x 30, at " +
+  "ANALYSIS_UNIVERSE_CAP 700. Previous: 48.60 GB/month on 2026-09-11 (/cache-health " +
+  "panel, 7-day window), and ~207 GB on 2026-09-04 before #419 closed the metering hole.";
+
+/**
+ * THE OWNER'S DECISION, WRITTEN DOWN, AND WHAT IT ACCEPTED (#552 COWORK #233/#235).
+ *
+ * The re-taken measurement is ALREADY over the 200 GB plan at 700 (~230 GiB),
+ * so the plan cap can no longer be the budget line: the honest budget check
+ * would be red on main at today's cap. The owner's GO for S1 (14 Oct) was given
+ * against CODE-B-OPUS #13's projection, ~11 GB/day at 1,000 with the excess
+ * billed as overage. So the budget rule now tests against an ACCEPTED monthly
+ * ceiling, and the decision rule against an APPROVED cap, each dated and
+ * sourced. Raising either alone fails a check: the approved cap must project
+ * under the accepted ceiling, and an accepted ceiling above the plan must say
+ * who accepted it.
+ */
+export const REDIS_APPROVED_UNIVERSE_CAP = 1000;
+export const REDIS_ACCEPTED_MONTHLY_BYTES = 350 * 1024 * 1024 * 1024;
+export const REDIS_UNIVERSE_DECISION =
+  "2026-10-14 owner GO for S1 (#552 COWORK #235): cap 700 -> 1,000, against " +
+  "CODE-B-OPUS #13's ~11 GB/day projection; bandwidth over the 200 GB plan is billed as overage.";
 
 /**
  * The largest universe the measured bill would still fit the plan cap at.

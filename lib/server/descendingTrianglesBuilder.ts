@@ -25,6 +25,7 @@ import { playsTiingoHistory } from "./marketData/playsHistory";
 import { flushRedisReadMeter } from "./redisBandwidth";
 
 import { addToDynamicUniverse, readDynamicUniverse, ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
+import { PRE_S1_UNIVERSE_CAP } from "./liquiditySlice";
 import { getCompanyNameMap } from "./companyNames";
 import { PRESET_UNIVERSE } from "./presetUniverse";
 import { readMarketState } from "./marketState";
@@ -136,7 +137,10 @@ type AggregatedPoint = {
 
 // One shared constant, not a fourth copy. See dynamicUniverseCache.ts,
 // which also records why its own 700 is a different quantity.
-const UNIVERSE_CAP = ANALYSIS_UNIVERSE_CAP;
+// HELD AT THE PRE-S1 SIZE (#552 COWORK #235): S1 grows the Pickers universe
+// only (its slots 701+ are the liquidity slice, which this builder does not
+// read); a larger cap here would just scan more dynamic names.
+const UNIVERSE_CAP = Math.min(ANALYSIS_UNIVERSE_CAP, PRE_S1_UNIVERSE_CAP);
 const MAX_FRESH_HISTORY_FETCHES = 275;
 const HISTORY_DAYS = 1300;
 

@@ -279,6 +279,8 @@ const decls = [
   declOf(meter, "REDIS_OVERAGE_MEASURED_AT_CAP"),
   declOf(meter, "REDIS_BANDWIDTH_CAP_BYTES"),
   declOf(meter, "REDIS_PROJECTION_MEASURED_AT_CAP"),
+  declOf(meter, "REDIS_APPROVED_UNIVERSE_CAP"),
+  declOf(meter, "REDIS_ACCEPTED_MONTHLY_BYTES"),
 ];
 if (decls.some((d) => !d)) {
   console.error(
@@ -296,7 +298,12 @@ const budgetMod = await lift(
 );
 const measured = budgetMod.REDIS_PROJECTION_MEASURED_BYTES;
 const planCap = budgetMod.REDIS_BANDWIDTH_CAP_BYTES;
-const affordable = budgetMod.redisAffordableUniverseCap();
+// THE OWNER'S DECISION (#552 COWORK #235): the approved cap and the monthly
+// bandwidth accepted for it. The budget rule tests against the accepted figure,
+// which may exceed the plan only with a dated decision on record (below).
+const approved = budgetMod.REDIS_APPROVED_UNIVERSE_CAP;
+const accepted = budgetMod.REDIS_ACCEPTED_MONTHLY_BYTES;
+const affordable = budgetMod.redisAffordableUniverseCap(measured, ceiling, accepted);
 const projectedAtCap = budgetMod.redisProjectedBytesAt(cap);
 const GB = 1024 ** 3;
 
@@ -313,9 +320,10 @@ check(
 // muted." At 24.3% of the plan cap it is green, so it can finally be the rule,
 // and it catches a regression in the bill that the direction rule cannot see.
 check(
-  "the projected bill at the configured cap fits under the plan cap",
-  projectedAtCap > 0 && projectedAtCap < planCap,
-  `${(projectedAtCap / GB).toFixed(2)} GB against ${(planCap / GB).toFixed(0)} GB — ` +
+  "the projected bill at the configured cap fits under the accepted monthly ceiling",
+  projectedAtCap > 0 && projectedAtCap < accepted,
+  `${(projectedAtCap / GB).toFixed(2)} GB against ${(accepted / GB).toFixed(0)} GB accepted ` +
+    `(${(planCap / GB).toFixed(0)} GB plan) — ` +
     `${((projectedAtCap / planCap) * 100).toFixed(1)}% of plan. Was ~207 GB (over) ` +
     `on 2026-09-04, before #419 closed the metering hole and #419/#420/#421 cut ` +
     `the traffic`
@@ -328,9 +336,9 @@ check(
 // deliberate -- the next person should see both numbers rather than inherit the
 // old prose's wrong one.
 check(
-  "ANALYSIS_UNIVERSE_CAP has not been raised past the cap the measurement was taken at",
-  cap <= ceiling,
-  cap <= ceiling
+  "ANALYSIS_UNIVERSE_CAP has not been raised past the owner-approved cap",
+  cap <= approved,
+  cap <= approved
     ? `${cap} <= ${ceiling}. The BILL would permit ~${affordable} at the measured ` +
       `${(measured / GB).toFixed(2)} GB/month, and that is not permission: the ` +
       `ceiling is where the measurement was taken, so raising it means re-taking ` +
@@ -341,8 +349,20 @@ check(
       `${((budgetMod.redisProjectedBytesAt(3000) / planCap) * 100).toFixed(0)}%), so the ` +
       `old 700 -> 1,500 -> 3,000 sequence is still blocked at its last step by the ` +
       `bill alone.`
-    : `${cap} > ${ceiling} — the universe cap was raised past the cap the bandwidth ` +
-      `measurement was taken at. Re-take it first.`
+    : `${cap} > ${approved} — the universe cap was raised past the approved cap. ` +
+      `Re-take the measurement and record the decision first.`
+);
+check(
+  "the approved cap projects under the accepted ceiling, from a measurement at most 90 days old",
+  budgetMod.redisProjectedBytesAt(approved) < accepted &&
+    Date.now() - Date.parse(String((meter.match(/REDIS_PROJECTION_MEASURED_AT = "([^"]+)"/) ?? [])[1])) < 90 * 86_400_000,
+  `${approved} projects to ${(budgetMod.redisProjectedBytesAt(approved) / GB).toFixed(0)} GB against ` +
+    `${(accepted / GB).toFixed(0)} GB accepted. Raising the approved cap alone fails here`
+);
+check(
+  "a ceiling above the plan carries a dated owner decision",
+  accepted <= planCap || /REDIS_UNIVERSE_DECISION =\s*\n?\s*"\d{4}-\d{2}-\d{2} owner GO/.test(meter),
+  "bandwidth past the plan is billed; accepting it is the owner's call, and the file must say whose and when"
 );
 // DERIVED, PROVED BY RUNNING IT ON OTHER INPUTS. Comparing the function's
 // answer to the same division computed here only proves two copies agree -- and
@@ -351,19 +371,19 @@ check(
 // arguments cannot survive being called with different ones.
 check(
   "the affordable ceiling is DERIVED from the measurement, not written down",
-  affordable === Math.floor((ceiling * planCap) / measured) &&
-    affordable > ceiling &&
+  affordable === Math.floor((ceiling * accepted) / measured) &&
+    affordable >= approved &&
     // WITHIN ROUNDING, because the function floors and floor() does not
     // distribute over multiplication -- floor(x)*3 and floor(3x) differ by up
     // to 2. Asserting exact equality here failed on correct code, which is a
     // check calibrating itself rather than its subject.
     Math.abs(
-      budgetMod.redisAffordableUniverseCap(measured * 2, ceiling, planCap) - affordable / 2
+      budgetMod.redisAffordableUniverseCap(measured * 2, ceiling, accepted) - affordable / 2
     ) <= 1 &&
     Math.abs(
-      budgetMod.redisAffordableUniverseCap(measured, ceiling * 3, planCap) - affordable * 3
+      budgetMod.redisAffordableUniverseCap(measured, ceiling * 3, accepted) - affordable * 3
     ) <= 3,
-  `${affordable} = ${ceiling} x ${(planCap / GB).toFixed(0)} GB / ` +
+  `${affordable} = ${ceiling} x ${(accepted / GB).toFixed(0)} GB / ` +
     `${(measured / GB).toFixed(2)} GB, and it halves at twice the bill and triples ` +
     `at three times the basis — it moves when the measurement does, which is what ` +
     `the last calibration could not do`
