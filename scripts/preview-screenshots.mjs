@@ -62,7 +62,10 @@ const symbols = tokens.filter((t) => t !== sectionToken);
 if (!symbols.length) throw new Error("SYMBOLS is required");
 if (symbols.some((s) => !/^[A-Z0-9.\-]{1,10}$/i.test(s))) throw new Error("SYMBOLS takes ticker symbols only");
 const BYPASS = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "";
-if (!BYPASS) throw new Error("VERCEL_AUTOMATION_BYPASS_SECRET is not set (a masked repo secret)");
+// A protected preview needs the bypass; production does not (#552 COWORK #231:
+// the header is shot on both). Without the secret a *.vercel.app run still
+// tries, and says so.
+if (!BYPASS) console.log(`no VERCEL_AUTOMATION_BYPASS_SECRET: loading ${/\.vercel\.app$/.test(url.hostname) ? "a protected preview may fail" : "production"} without the bypass header`);
 
 const chrome = [process.env.CHROME, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium-browser", "/usr/bin/chromium"]
   .find((c) => c && fs.existsSync(c));
@@ -112,7 +115,7 @@ const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Geck
 await send("Network.setUserAgentOverride", { userAgent: UA });
 // The bypass secret as a header on every request; set-bypass-cookie makes the
 // client-side navigations that follow carry it too.
-await send("Network.setExtraHTTPHeaders", { headers: {
+if (BYPASS) await send("Network.setExtraHTTPHeaders", { headers: {
   "x-vercel-protection-bypass": BYPASS,
   "x-vercel-set-bypass-cookie": "true",
 } });
