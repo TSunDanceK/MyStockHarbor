@@ -1729,10 +1729,6 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .resultWrap { max-width: 1600px; margin: 0 auto; padding: 26px 18px 58px; }
         .resultShell { display: grid; grid-template-columns: 352px minmax(0, 1fr); gap: 22px; align-items: start; }
         .resultMain { min-width: 0; }
-        /* THE PARTNER RAIL: a third column, only while AffiliateRail has
-           decided to show (UK/EU/EEA, accepted, 1280px+) and has set
-           data-ad-rail on <html>. Everyone else keeps the two-column grid. */
-        @media (min-width: 1280px) { html[data-ad-rail] .resultShell { grid-template-columns: 352px minmax(0, 1fr) 160px; } }
         .hero { border: 1px solid ${toneBorder(config.tone)}; border-radius: 28px; padding: 22px; background: ${toneBackground(config.tone)}; box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 18px 42px rgba(0,0,0,0.26); }
         .eyebrow { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid ${toneBorder(config.tone)}; background: rgba(59,130,246,0.10); color: #dbeafe; font-size: 12px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
         .hero h1 { margin: 12px 0 0; font-size: 44px; line-height: 1.03; letter-spacing: -0.055em; }
@@ -1766,6 +1762,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .emptyBox { margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; padding: 18px; background: rgba(255,255,255,0.035); color: rgba(226,232,240,0.72); line-height: 1.7; }
         .scanDebug { margin-top: 30px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; line-height: 1.5; color: rgba(148,163,184,0.5); letter-spacing: 0.02em; }
 
+        .screenerProseWrap { position: relative; }
         .screenerProse { margin-top: 40px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.08); max-width: 780px; }
         .screenerProseBlock + .screenerProseBlock { margin-top: 28px; }
         .screenerProse h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.3; font-weight: 800; color: #e2e8f0; letter-spacing: -0.01em; }
@@ -2012,6 +2009,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                 />
 
                 {config.bodySections?.length ? (
+                  <div className="screenerProseWrap">
                   <section className="screenerProse">
                     {config.bodySections.map((section) => (
                       <div key={section.heading} className="screenerProseBlock">
@@ -2034,6 +2032,12 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                       </div>
                     ) : null}
                   </section>
+                  {/* THE PARTNER BANNER sits in the empty strip to the right of this
+                      text, fixed in place (it scrolls with the page, no sticky). The
+                      table's width is untouched. Shown only where the strip fits
+                      (1380px+) and only to accepted UK/EU/EEA visitors. */}
+                  <AffiliateRail creative={ETORO_RAIL} />
+                  </div>
                 ) : null}
 
                 {config.relatedGuide ? (
@@ -2059,7 +2063,6 @@ export default async function PickerResultPage({ config }: { config: PickerResul
 
                 <HideWatermarksBar />
               </div>
-              <AffiliateRail creative={ETORO_RAIL} />
             </div>
           </PickerFilterProvider>
         </div>
