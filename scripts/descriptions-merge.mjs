@@ -33,7 +33,7 @@ const seen = Object.keys(rows).length + Object.keys(misses).length;
 if (seen !== total) fail(`${seen} symbols accounted for, registrants has ${total}`);
 const out = {
   asOf: shards.map((s) => s.asOf).sort().at(-1),
-  source: "SEC EDGAR: each registrant’s latest 10-K Item 1 / 20-F Item 4.B, located and cleaned by lib/server/secDescription.ts (scripts/sec-descriptions-build.mjs)",
+  source: "SEC EDGAR: each registrant’s latest 10-K Item 1 / 20-F Item 4.B / 40-F Annual Information Form (Description of the Business), located and cleaned by lib/server/secDescription.ts (scripts/sec-descriptions-build.mjs)",
   fields: ["form", "filedOn", "accession", "text"],
   rows: sorted(rows),
   misses: sorted(misses),

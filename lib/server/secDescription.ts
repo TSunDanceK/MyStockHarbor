@@ -195,7 +195,7 @@ function pairSection(
 export function locateSection(text: string, form: string): Located {
   if (!["10-K", "10-K405", "10-KT", "20-F"].includes(form)) {
     return { found: false, why: form === "40-F"
-      ? "40-F: the business description is in the AIF exhibit, not the primary document"
+      ? "40-F: the business description is in the AIF exhibit, not the primary document (locateAifSection)"
       : `no section heading defined for ${form}` };
   }
   const L = lines(text);
@@ -245,6 +245,143 @@ export function locateSection(text: string, form: string): Located {
   return found(r.span) ?? { found: false, why: r.starts
     ? `heading found ${r.starts}x, every candidate section was a table of contents`
     : "heading not found" };
+}
+
+// ── 40-F: THE ANNUAL INFORMATION FORM'S "DESCRIPTION OF THE BUSINESS" ─────
+//
+// #552 COWORK #228/#229. A 40-F's primary document is a wrapper; the business
+// description is in the Annual Information Form, filed as an exhibit of the
+// same accession. Scope probe (relay aif-probe, 77 filers): the AIF was found
+// for 77/77 and its section for 70/77, with these rules:
+//   - THE EXHIBIT TYPE IS NOT TRUSTED. 66 AIFs are EX-99.x; others are EX-1,
+//     EX-1.1, EX-13.1, EX-99.B3(A), or carry no type at all (CNI, CNQ). Every
+//     document on the index is a candidate (EX-99s first, a described AIF
+//     first of all), and one is the AIF only if "Annual Information Form" is
+//     in its opening. The complete-submission text file is never a candidate
+//     (TRI's 58M-character hit).
+//   - THE HEADING IS A WHOLE LINE: "Description of the Business" in its
+//     variants (Narrative…, of Our/the Bank's/CGI's Business[es] and
+//     Operations), "Business of the Company/Corporation" or "Business of
+//     {Name}", "Our Business", "The Business". Numbering ("3.", "ITEM 4 –",
+//     "ITEM III:") and a trailing page number are allowed; anything longer is
+//     prose, so a risk factor opening "Our business may be adversely affected…"
+//     (NTR, LSPD) is never taken. A heading split over two lines
+//     ("DESCRIPTION" / "OF THE BUSINESS": CNL, SGML) is joined.
+//   - THE FIRST HEADING FOLLOWED BY A SECTION wins: a table-of-contents entry
+//     is closer to the next major heading than MIN_SECTION_CHARS.
+// The 7 the rules miss (AGI, CGAU, FNV, TECK: only "General Development of
+// the Business"; MFC "Business Operations"; CIGI; TRI) keep "no description".
+const AIF_TITLE = /annual\s+information\s+form/i;
+const AIF_START = /^(?:(?:item|section|part|article)\s*)?(?:[\dIVX]+(?:\.\d+)*\.?\s*[-–—:]?\s*)?(?:(?:narrative\s+)?description\s+of\s+(?:the\s+|our\s+)?business(?:es)?|business\s+of\s+(?:the\s+)?(?:company|corporation|bank|trust|partnership|issuer)(?:\s+and\s+its\s+industry)?|(?:about\s+)?our\s+business(?:es)?(?:\s*(?:&|and)\s+strategy)?|the\s+business|business\s+(?:description|overview)|understanding\s+our\s+business|description\s+of\s+(?:the\s+)?[\w&.-]+(?:\s+[\w&.-]+){0,2}[’']s?\s+business(?:es)?(?:\s+and\s+operations)?|business\s+of\s+[a-z][\w&.-]*(?:\s+[a-z][\w&.-]*){0,2}|general\s+development\s+and\s+business\s+of\s+the\s+company)\s*(?:\d{1,3})?$/i;
+const AIF_END = /^(?:(?:item|section|part)?\s*[\dA-Z.]*\s*)?(?:risk\s+factors|dividends|description\s+of\s+(?:the\s+)?capital\s+structure|market\s+for\s+(?:the\s+)?securities|directors\s+and\s+(?:executive\s+)?officers|mineral\s+propert|legal\s+proceedings|transfer\s+agent|interests\s+of\s+experts|material\s+contracts|capital\s+structure|dividends\s+and\s+distributions)\b/i;
+/** A heading line in an AIF: anything longer is prose. */
+const AIF_HEADING_MAX = 90;
+
+/** True when a document's opening names it the Annual Information Form. */
+export function isAnnualInformationForm(text: string): boolean {
+  return AIF_TITLE.test(text.slice(0, 6000));
+}
+
+/** One row of a filing's -index.htm document table. */
+export type IndexDoc = { description: string; document: string; type: string };
+
+/** The document table of a filing index page (Seq | Description | Document | Type | Size). */
+export function filingIndexDocs(indexHtml: string): IndexDoc[] {
+  const cell = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
+  return [...indexHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+    .map((m) => [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => cell(c[1])))
+    // An inline-XBRL document's cell reads "cni-20251231.htm iXBRL": the file is its first token.
+    .map((c) => (c.length >= 4 ? [c[0], c[1], c[2].split(" ")[0], c[3]] : c))
+    .filter((c) => c.length >= 4 && /\.(htm|html|txt)$/i.test(c[2]))
+    .map((c) => ({ description: c[1], document: c[2], type: c[3] }));
+}
+
+/**
+ * The documents to try for the AIF, in order: one DESCRIBED as the AIF, then
+ * the other EX-99s, then every other document whatever its type, and LAST the
+ * 40-F document itself: CNI, CNQ and TRI file no AIF exhibit; their AIF is in
+ * the 40-F document. (Its cover carries an "Annual information form" checkbox,
+ * so the title test alone passes every wrapper: the caller keeps trying until
+ * a candidate also has the section.) Never the complete-submission text file,
+ * consents, certifications, XBRL or material contracts.
+ */
+export function aifCandidates(docs: IndexDoc[]): IndexDoc[] {
+  const usable = docs.filter((d) => !/\.txt$/i.test(d.document) && !/complete\s+submission/i.test(d.description)
+    && !/^EX-(?:23|31|32|97|101|10\d?)\b/i.test(d.type));
+  const wrapper = usable.filter((d) => /^40-F/i.test(d.type));
+  const exhibits = usable.filter((d) => !wrapper.includes(d));
+  const named = exhibits.filter((d) => AIF_TITLE.test(d.description) || /aif/i.test(d.document));
+  const ex99 = exhibits.filter((d) => /^EX-99/i.test(d.type) && !named.includes(d));
+  return [...named, ...ex99, ...exhibits.filter((d) => !named.includes(d) && !ex99.includes(d)), ...wrapper];
+}
+
+/**
+ * WORD-PER-LINE TEXT (TD's AIF): a PDF-converted exhibit can break the line
+ * after almost every word, which the cleaner reads as headings and fragments
+ * (82 chars left). When most of the opening's lines are a few words long,
+ * single line breaks are spaces; blank lines stay paragraph breaks.
+ */
+function unwrapShortLines(body: string): string {
+  const head = body.slice(0, 2000).split("\n").map((l) => l.trim()).filter(Boolean);
+  if (head.length < 20 || head.filter((l) => l.length <= 20).length < head.length * 0.6) return body;
+  // A break before a hyphen is inside a word ("Toronto" / "-Dominion"): no space.
+  return body.split(/\n{2,}/).map((p) => p.replace(/[ \t]*\n[ \t]*(?=-\w)/g, "").replace(/\s*\n\s*/g, " ")).join("\n\n");
+}
+
+/** The AIF's "Description of the Business" section, bounded like an open-ended 10-K section. */
+export function locateAifSection(text: string): Located {
+  const RAW = text.split("\n");
+  const L = RAW.map((t) => t.trim());
+  const offs: number[] = [];
+  let at = 0;
+  for (const t of RAW) { offs.push(at); at += t.length + 1; }
+  const isHead = (l: string) => l.length > 0 && l.length <= AIF_HEADING_MAX;
+  const next = (i: number) => { let j = i + 1; while (j < L.length && !L[j]) j++; return j; };
+  let starts = 0;
+  for (let i = 0; i < L.length; i++) {
+    if (!isHead(L[i])) continue;
+    const j1 = next(i);
+    // A heading split over two lines ("DESCRIPTION" / "OF THE BUSINESS").
+    const two = !AIF_START.test(L[i]) && L[i].length <= 40 && j1 < L.length && isHead(L[j1]) && AIF_START.test(`${L[i]} ${L[j1]}`);
+    if (!AIF_START.test(L[i]) && !two) continue;
+    starts++;
+    const h = two ? j1 : i;
+    let e = h + 1;
+    while (e < L.length && !(isHead(L[e]) && AIF_END.test(L[e]))) e++;
+    const from = offs[h] + RAW[h].length;
+    const to = e < L.length ? offs[e] : text.length;
+    if (to - from < MIN_SECTION_CHARS) continue;
+    const body = unwrapShortLines(text.slice(from, Math.min(to, from + 8000)).trim());
+    if (body.length >= MIN_SECTION_CHARS) return { found: true, body };
+  }
+  return { found: false, why: starts
+    ? `40-F: AIF heading found ${starts}x, every candidate section was a table of contents`
+    : "40-F: AIF has no Description of the Business heading" };
+}
+
+/**
+ * THE OPENING OF A 40-F DESCRIPTION, CHECKED AFTER CLEANING (#552 COWORK #229).
+ * AIFs are typeset documents; the full 77-filer build showed openings the
+ * 10-K cleaner was never asked to see. A row is refused (no description) when
+ * the cleaned text opens:
+ *   - mid-sentence or with a list mark, footnote number or bracket (BGSI
+ *     "(“BGSI”), through…", CVE "• Oil Sands…", KGC "2 “Production cost…");
+ *   - with a bare generic noun left from a stripped name (BMO "Group is…");
+ *   - with a pointer or a reading note (CNL "As described above…", SII "For a
+ *     detailed account…", IAG "Unless stated otherwise…");
+ *   - with a running header or a contents line (VET "… ■ Page 7 ■ 2025 Annual
+ *     Information Form", FSM "FORTUNA MINING CORP.", RCI "… Obligations 67
+ *     PROPERTIES…", TU "Who we are TELUS…").
+ * Returns the reason, or null for a clean opening.
+ */
+export function aifOpeningProblem(text: string): string | null {
+  const head = text.slice(0, 160);
+  if (!/^[A-Z“"]/.test(head)) return "opens mid-sentence or with a list mark";
+  if (/^(group|company|corporation|bank|trust|partnership)\s+(is|are)\b/i.test(head)) return "opens with a fragment of the company's name";
+  if (/^(as\s+(described|discussed|noted)|for\s+(a\s+)?(detailed|further|more)|unless\s+(stated|otherwise)|refer\s+to|see\s|who\s+we\s+are\b)/i.test(head)) return "opens with a pointer or a reading note";
+  if (/\bpage\s+\d|annual\s+information\s+form|■/i.test(head) || /^[A-Z][A-Z&.,'’\-]*(\s+[A-Z][A-Z&.,'’\-]*){1,}\s*[^\sA-Za-z]/.test(head)
+    || /^[A-Z][A-Z&.'’\-]+(\s+[A-Z][A-Z&.'’\-]+){1,}\.?\s/.test(head) || /\b\d{1,3}\s+[A-Z]{5,}\b/.test(head)) return "opens with a running header or a contents line";
+  return null;
 }
 
 // ── CLEANING ──────────────────────────────────────────────────────────────

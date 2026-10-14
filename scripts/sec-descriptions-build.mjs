@@ -12,8 +12,11 @@
 // data/sec/descriptions-part-k.json; .github/workflows/descriptions-commit.yml
 // merges the shards on a runner (the artifact host is refused to the sandbox).
 //
-// SKIPPED WITHOUT A FETCH: a registrant whose latest annual form is 40-F
-// (owner, #518: no description for now) or null (no annual report filed).
+// SKIPPED WITHOUT A FETCH: a registrant with no annual report filed.
+// A 40-F FILER (#552 COWORK #228/#229) is read from its Annual Information
+// Form: the latest 40-F's filing index, each candidate exhibit in order
+// (secDescription.aifCandidates, at most 8) until one opens as the AIF, then
+// locateAifSection and the same cleaner. The row cites the 40-F's accession.
 //
 // Read-only, no credentials. ≤8 requests/s, under SEC's 10/s.
 //
@@ -102,22 +105,49 @@ for (const symbol of mine) {
   const slow = (phase) => { const ms = Date.now() - t0; if (ms > 10_000) console.log(`  slow: ${symbol} ${Math.round(ms / 1000)}s at ${phase}`); };
   const reg = REG.rows[symbol];
   if (!reg?.cik) { misses[symbol] = "no CIK"; continue; }
-  if (reg.annualForm === "40-F") { misses[symbol] = "40-F: skipped (owner, #518)"; continue; }
   if (!reg.annualForm) { misses[symbol] = "no annual report filed"; continue; }
   const sub = await get(`https://data.sec.gov/submissions/CIK${reg.cik}.json`);
   if (sub.status !== 200) { misses[symbol] = `submissions ${sub.status}`; continue; }
   const annual = await latestAnnual(sub.body);
   if (!annual) { misses[symbol] = "no annual report filed"; continue; }
-  if (annual.form === "40-F") { misses[symbol] = "40-F: skipped (owner, #518)"; continue; }
-  const url = `https://www.sec.gov/Archives/edgar/data/${Number(reg.cik)}/${annual.accession.replace(/-/g, "")}/${annual.doc}`;
-  const page = await get(url, "text");
-  if (page.status !== 200) { misses[symbol] = `document ${page.status}`; continue; }
-  slow(`fetch (${Math.round(page.body.length / 1e6)} MB)`);
-  const loc = desc.locateSection(desc.filingText(page.body), annual.form);
+  const folder = `https://www.sec.gov/Archives/edgar/data/${Number(reg.cik)}/${annual.accession.replace(/-/g, "")}`;
+  let loc;
+  if (annual.form === "40-F") {
+    const index = await get(`${folder}/${annual.accession}-index.htm`, "text");
+    if (index.status !== 200) { misses[symbol] = `40-F index ${index.status}`; continue; }
+    // The first candidate that opens as the AIF AND has the section; a title
+    // match without one (an MD&A citing the AIF, a 40-F cover) is passed over.
+    loc = { found: false, why: "40-F: no Annual Information Form exhibit found" };
+    const cands = desc.aifCandidates(desc.filingIndexDocs(index.body));
+    for (const d of [...cands.slice(0, 8), ...cands.slice(8).filter((c) => /^40-F/i.test(c.type))]) {
+      const doc = await get(`${folder}/${d.document}`, "text");
+      if (doc.status !== 200) continue;
+      const text = desc.filingText(doc.body);
+      if (!desc.isAnnualInformationForm(text)) continue;
+      const hit = desc.locateAifSection(text);
+      if (hit.found || loc.why.startsWith("40-F: no Annual")) loc = hit;
+      if (hit.found) break;
+    }
+    slow("AIF");
+  } else {
+    const page = await get(`${folder}/${annual.doc}`, "text");
+    if (page.status !== 200) { misses[symbol] = `document ${page.status}`; continue; }
+    slow(`fetch (${Math.round(page.body.length / 1e6)} MB)`);
+    loc = desc.locateSection(desc.filingText(page.body), annual.form);
+  }
   if (!loc.found) { misses[symbol] = loc.why; continue; }
   const cleaned = desc.cleanDescription(loc.body, { companyName: sub.body.name ?? null, isWord });
   slow("clean");
-  if (!cleaned.ok) { misses[symbol] = cleaned.why; continue; }
+  if (!cleaned.ok) {
+    misses[symbol] = cleaned.why;
+    // NAMED SYMBOLS: the located text the cleaner refused, for review (SEC text).
+    if (only.length) console.log(`BODY ${JSON.stringify({ symbol, body: loc.body.slice(0, 2500) })}`);
+    continue;
+  }
+  // 40-F OPENINGS (#552 COWORK #229): a typeset AIF can leave a header, a
+  // pointer or a clipped name at the front; such a row is refused, not shown.
+  const opening = annual.form === "40-F" ? desc.aifOpeningProblem(cleaned.text) : null;
+  if (opening) { misses[symbol] = `40-F: ${opening}`; continue; }
   if (cleaned.joined) { joinedWords += cleaned.joined; joinedRows++; }
   rows[symbol] = [annual.form, annual.filedOn, annual.accession, cleaned.text];
   // NAMED SYMBOLS (SYMBOLS=…): the row is printed too, so a one-row refresh can
@@ -126,6 +156,8 @@ for (const symbol of mine) {
   if (only.length) console.log(`ROW ${JSON.stringify({ symbol, row: rows[symbol] })}`);
 }
 const notReached = mine.slice(reached);
+// NAMED SYMBOLS: each miss too, so a targeted refresh can update its reason.
+if (only.length) for (const [symbol, why] of Object.entries(misses)) console.log(`MISS ${JSON.stringify({ symbol, why })}`);
 
 fs.mkdirSync("data/sec", { recursive: true });
 const out = `data/sec/descriptions-part-${only.length ? "adhoc" : K}.json`;

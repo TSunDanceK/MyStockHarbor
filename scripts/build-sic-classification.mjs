@@ -231,7 +231,12 @@ if (isMain) {
   const desc = read("data/sec/descriptions.json");
   const manual = read("data/sec/classification-manual.json").entries;
   const excerpts = read("data/sec/item1-excerpts.json").rows;
-  const { overrides, needsClassification } = buildOverrides({ registrants, table, rules, descriptions: desc.rows, manual, excerpts });
+  // 40-F ROWS STAY OUT FOR NOW (#552 COWORK #230): their Annual Information
+  // Form text is shown as About text only; a 40-F filer's sector stays
+  // SIC-cited until the A-3 classification pass reviews them (ERO came out
+  // "Gold" while it is mainly copper).
+  const rows = Object.fromEntries(Object.entries(desc.rows).filter(([, r]) => r[0] !== "40-F"));
+  const { overrides, needsClassification } = buildOverrides({ registrants, table, rules, descriptions: rows, manual, excerpts });
   const doc = {
     _comment:
       "Per-symbol sector/industry overrides from each filer's own 10-K Item 1 / 20-F text, by the rules in " +
