@@ -109,6 +109,9 @@ export type HubCompany = {
   supplierPages: number;
   customerPages: number;
   pages: CompanyPage[];
+  /** The pages whose supplier chart / key-customer chart lists the company (the page's own direction). */
+  listedAsSupplierBy: CompanyPage[];
+  listedAsCustomerBy: CompanyPage[];
 };
 
 export type CensusRow = {
@@ -220,7 +223,13 @@ function toCompany(acc: Acc): HubCompany {
     supplierPages: acc.supplier.size,
     customerPages: acc.customer.size,
     pages: [...acc.pages.values()].sort((a, b) => a.symbol.localeCompare(b.symbol)),
+    listedAsSupplierBy: pagesIn(acc, acc.supplier),
+    listedAsCustomerBy: pagesIn(acc, acc.customer),
   };
+}
+
+function pagesIn(acc: Acc, slugs: Set<string>): CompanyPage[] {
+  return [...slugs].map((slug) => acc.pages.get(slug)!).sort((a, b) => a.symbol.localeCompare(b.symbol));
 }
 
 function byCount(a: { count: number; name: string }, b: { count: number; name: string }) {
