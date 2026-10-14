@@ -11,7 +11,10 @@
 // refresh it, re-run relay tasks sec-descriptions-1 … -6 and point the commit
 // workflow at the new runs.
 //
-// NO ROW MEANS NO PARAGRAPH (owner, #518): 40-F filers, filers with no annual
+// 40-F FILERS (#552 COWORK #228/#229) are read from the Annual Information
+// Form exhibit of their latest 40-F; the row cites that 40-F's accession.
+//
+// NO ROW MEANS NO PARAGRAPH (owner, #518): filers with no annual
 // report yet (XOM's holding company), sections a filter rejected (AZN's
 // cross-reference) and 20-F filers whose Item 4 has no Business Overview
 // (RYAAY, TSM) all render the existing no-description layout. There is no
@@ -34,7 +37,7 @@ const FILE = descriptionsFile as unknown as DescriptionsFile;
 
 export type FilingDescription = {
   text: string;
-  /** "10-K", "10-KT" or "20-F". */
+  /** "10-K", "10-KT", "20-F" or "40-F" (its Annual Information Form). */
   form: string;
   /** YYYY-MM-DD. */
   filedOn: string;
@@ -62,10 +65,12 @@ export function monthYear(isoDate: string): string | null {
 
 /**
  * The owner's attribution line: "From {company}'s {form}, filed {Mon YYYY}".
- * With no company name, "the company's".
+ * With no company name, "the company's". A 40-F row's words are its Annual
+ * Information Form's, so the form reads "Annual Information Form (40-F)".
  */
 export function descriptionAttribution(companyName: string | null, d: FilingDescription): string {
   const who = companyName?.trim() ? `${companyName.trim()}'s` : "the company's";
   const when = monthYear(d.filedOn);
-  return `From ${who} ${d.form}${when ? `, filed ${when}` : ""}`;
+  const form = d.form === "40-F" ? "Annual Information Form (40-F)" : d.form;
+  return `From ${who} ${form}${when ? `, filed ${when}` : ""}`;
 }

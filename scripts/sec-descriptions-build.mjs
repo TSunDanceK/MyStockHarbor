@@ -12,8 +12,11 @@
 // data/sec/descriptions-part-k.json; .github/workflows/descriptions-commit.yml
 // merges the shards on a runner (the artifact host is refused to the sandbox).
 //
-// SKIPPED WITHOUT A FETCH: a registrant whose latest annual form is 40-F
-// (owner, #518: no description for now) or null (no annual report filed).
+// SKIPPED WITHOUT A FETCH: a registrant with no annual report filed.
+// A 40-F FILER (#552 COWORK #228/#229) is read from its Annual Information
+// Form: the latest 40-F's filing index, each candidate exhibit in order
+// (secDescription.aifCandidates, at most 8) until one opens as the AIF, then
+// locateAifSection and the same cleaner. The row cites the 40-F's accession.
 //
 // Read-only, no credentials. ≤8 requests/s, under SEC's 10/s.
 //
@@ -102,18 +105,32 @@ for (const symbol of mine) {
   const slow = (phase) => { const ms = Date.now() - t0; if (ms > 10_000) console.log(`  slow: ${symbol} ${Math.round(ms / 1000)}s at ${phase}`); };
   const reg = REG.rows[symbol];
   if (!reg?.cik) { misses[symbol] = "no CIK"; continue; }
-  if (reg.annualForm === "40-F") { misses[symbol] = "40-F: skipped (owner, #518)"; continue; }
   if (!reg.annualForm) { misses[symbol] = "no annual report filed"; continue; }
   const sub = await get(`https://data.sec.gov/submissions/CIK${reg.cik}.json`);
   if (sub.status !== 200) { misses[symbol] = `submissions ${sub.status}`; continue; }
   const annual = await latestAnnual(sub.body);
   if (!annual) { misses[symbol] = "no annual report filed"; continue; }
-  if (annual.form === "40-F") { misses[symbol] = "40-F: skipped (owner, #518)"; continue; }
-  const url = `https://www.sec.gov/Archives/edgar/data/${Number(reg.cik)}/${annual.accession.replace(/-/g, "")}/${annual.doc}`;
-  const page = await get(url, "text");
-  if (page.status !== 200) { misses[symbol] = `document ${page.status}`; continue; }
-  slow(`fetch (${Math.round(page.body.length / 1e6)} MB)`);
-  const loc = desc.locateSection(desc.filingText(page.body), annual.form);
+  const folder = `https://www.sec.gov/Archives/edgar/data/${Number(reg.cik)}/${annual.accession.replace(/-/g, "")}`;
+  let loc;
+  if (annual.form === "40-F") {
+    const index = await get(`${folder}/${annual.accession}-index.htm`, "text");
+    if (index.status !== 200) { misses[symbol] = `40-F index ${index.status}`; continue; }
+    loc = { found: false, why: "40-F: no Annual Information Form exhibit found" };
+    for (const d of desc.aifCandidates(desc.filingIndexDocs(index.body)).slice(0, 8)) {
+      const doc = await get(`${folder}/${d.document}`, "text");
+      if (doc.status !== 200) continue;
+      const text = desc.filingText(doc.body);
+      if (!desc.isAnnualInformationForm(text)) continue;
+      loc = desc.locateAifSection(text);
+      break;
+    }
+    slow("AIF");
+  } else {
+    const page = await get(`${folder}/${annual.doc}`, "text");
+    if (page.status !== 200) { misses[symbol] = `document ${page.status}`; continue; }
+    slow(`fetch (${Math.round(page.body.length / 1e6)} MB)`);
+    loc = desc.locateSection(desc.filingText(page.body), annual.form);
+  }
   if (!loc.found) { misses[symbol] = loc.why; continue; }
   const cleaned = desc.cleanDescription(loc.body, { companyName: sub.body.name ?? null, isWord });
   slow("clean");

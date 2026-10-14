@@ -19,6 +19,9 @@
 //   6e. Owner review of the full file: pointer sentences (See Note, Item 7,
 //      on page 9…), running page headers, "referred to herein as" name lists,
 //      par-value / ticker-symbol sentences, and words split by a stray space.
+//   2b. 40-F (#552 COWORK #228/#229): the AIF exhibit, whatever its type, and
+//      its whole-line "Description of the Business" heading after the TOC;
+//      a risk factor opening "Our business may…" is never the section.
 //   7. Cross-references and MD&A are rejected, not rendered.
 //   8. The committed file: every row within the length rules, no FMP text.
 //   9. The monthly refresh workflow: scheduled, opens a PR, takes no inputs
@@ -130,7 +133,55 @@ console.log("\n2. 20-F: Item 4, then its Business Overview");
     tkBad.found ? tkBad.body.slice(0, 40) : tkBad.why);
   const noFour = await load(once("const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;", "const ITEM4B_ANY = /^(item4)?b?businessoverview$/;"));
   check("...and CATCHES the '4' prefix removed (BIP back to 'no Business Overview heading')", !noFour.locateSection(bip, "20-F").found);
-  check("40-F has no description", !D.locateSection("x", "40-F").found);
+  check("a 40-F's primary document has no description (its AIF does: 2b)", !D.locateSection("x", "40-F").found);
+}
+
+console.log("\n2b. 40-F: the Annual Information Form exhibit and its Description of the Business");
+{
+  const body = (name) => `${name} ${filler(name)}`;
+  // GIB-shaped: a TOC entry with a page number, a risk factor whose first line
+  // folds to "our business…", then the real (company-named) heading.
+  const gib = [
+    "ANNUAL INFORMATION FORM", "Fiscal year ended September 30, 2025", "TABLE OF CONTENTS",
+    "Corporate Structure 3", "Description of CGI’s Business 5", "Risk Factors 20",
+    "Our business may be adversely affected by changing regulations", "risky ".repeat(400),
+    "Description of CGI’s Business", "The mission of CGI is to help its clients succeed through outstanding quality. " + body("CGI"),
+    "Risk Factors", "Risks follow.",
+  ].join("\n");
+  const g = D.locateAifSection(gib);
+  check("GIB: the company-named heading after the TOC, not the TOC entry or the risk factor", g.found && g.body.startsWith("The mission of CGI"), g.found ? g.body.slice(0, 40) : g.why);
+  const heads = [
+    ["BN", "BUSINESS OF THE CORPORATION", "We are a leading global investment firm."],
+    ["CNI", "ITEM 4 DESCRIPTION OF THE BUSINESS", "CN is engaged in the rail and related transportation business."],
+    ["TD", "DESCRIPTION OF THE BUSINESS", "The Toronto-Dominion Bank and its subsidiaries are collectively known as TD Bank Group."],
+    ["NTR", "5 – Description of the business", "Nutrien is a provider of crop inputs."],
+    ["BTE", "11 DESCRIPTION OF OUR BUSINESS", "Baytex is an energy company."],
+  ];
+  for (const [sym, h, lede] of heads) {
+    const r = D.locateAifSection(["ANNUAL INFORMATION FORM", h, lede + " " + body(sym), "DIVIDENDS", "x"].join("\n"));
+    check(`${sym}: "${h}"`, r.found && r.body.startsWith(lede), r.found ? r.body.slice(0, 40) : r.why);
+  }
+  const split = D.locateAifSection(["ANNUAL INFORMATION FORM", "DESCRIPTION", "OF THE BUSINESS", "Sigma Lithium is a producer. " + body("Sigma"), "RISK FACTORS"].join("\n"));
+  check("CNL/SGML: a heading split over two lines is joined", split.found && split.body.startsWith("Sigma Lithium"));
+  const general = D.locateAifSection(["ANNUAL INFORMATION FORM", "GENERAL DEVELOPMENT OF THE BUSINESS", body("Teck"), "RISK FACTORS"].join("\n"));
+  check("TECK-shaped: only 'General Development of the Business' → no description (one of the 7)", !general.found);
+  check("the AIF is recognised by its opening; a code of ethics is not",
+    D.isAnnualInformationForm("ANNUAL INFORMATION FORM\nMarch 2026") && !D.isAnnualInformationForm("CODE OF BUSINESS ETHICS POLICY, AS AMENDED"));
+  const row = (desc, doc, type) => `<tr><td>1</td><td>${desc}</td><td><a href="/x/${doc}">${doc}</a></td><td>${type}</td><td>1000</td></tr>`;
+  const index = `<table>${row("FORM 40-F", "d40f.htm", "40-F")}${row("CODE OF BUSINESS ETHICS POLICY", "ex99-1.htm", "EX-99.1")}${row("", "d123aif.htm", "&nbsp;")}${row("CONSENT", "ex23.htm", "EX-23.1")}${row("Complete submission text file", "0001-26-1.txt", "&nbsp;")}</table>`;
+  const docs = D.filingIndexDocs(index), cands = D.aifCandidates(docs);
+  check("CNI-shaped index: a typeless AIF is a candidate (named first); the 40-F wrapper, consents and the submission .txt are not",
+    cands[0]?.document === "d123aif.htm" && cands.some((d) => d.document === "ex99-1.htm") && !cands.some((d) => /d40f|ex23|\.txt$/.test(d.document)), cands.map((d) => d.document).join(","));
+  const anchored = await load(once("(?:\\d{1,3})?$/i;", "(?:\\d{1,3})?/i;"));
+  const ga = anchored.locateAifSection(gib);
+  check("MUTATION: the whole-line anchor dropped → the risk factor 'Our business may…' is taken (caught)", !ga.found || !ga.body.startsWith("The mission of CGI"), ga.found ? ga.body.slice(0, 30) : ga.why);
+  const toc = await load((src) => once("    if (body.length >= MIN_SECTION_CHARS) return { found: true, body };", "    return { found: true, body };")(once("    if (to - from < MIN_SECTION_CHARS) continue;\n", "")(src)));
+  const gt = toc.locateAifSection(gib);
+  check("MUTATION: the section-length test dropped → the TOC entry is taken (caught)", !gt.found || !gt.body.startsWith("The mission of CGI"), gt.found ? gt.body.slice(0, 30) : gt.why);
+  const typed = await load(once("return [...named, ...ex99, ...usable.filter((d) => !named.includes(d) && !ex99.includes(d))];", "return usable.filter((d) => /^EX-99/i.test(d.type));"));
+  check("MUTATION: the exhibit type trusted → CNI's typeless AIF is never tried (caught)", !typed.aifCandidates(typed.filingIndexDocs(index)).some((d) => d.document === "d123aif.htm"));
+  const untitled = await load(once("return AIF_TITLE.test(text.slice(0, 6000));", "return true;"));
+  check("MUTATION: the AIF title test dropped → a code of ethics passes as the AIF (caught)", untitled.isAnnualInformationForm("CODE OF BUSINESS ETHICS POLICY"));
 }
 
 console.log("\n3–6. the cleaner");
@@ -345,8 +396,11 @@ console.log("\n8. the committed descriptions");
   } else {
     const bad = rows.filter(([, r]) => r[3].length < 200 || r[3].length > 1000 || /Financial Modeling Prep/.test(r[3]));
     check("every row is within the length rules and carries no FMP text", bad.length === 0, `${rows.length} rows, ${bad.length} outside`);
-    check("rows name their form and filing date", rows.every(([, r]) => /^(10-K|10-K405|10-KT|20-F)$/.test(r[0]) && /^\d{4}-\d{2}-\d{2}$/.test(r[1])));
-    check("no 40-F filer has a row", Object.entries(f.misses ?? {}).filter(([, w]) => /40-F/.test(w)).every(([s]) => !f.rows[s]));
+    check("rows name their form and filing date", rows.every(([, r]) => /^(10-K|10-K405|10-KT|20-F|40-F)$/.test(r[0]) && /^\d{4}-\d{2}-\d{2}$/.test(r[1])));
+    // #552 COWORK #229: 40-F filers are read from their AIF; none is skipped
+    // unread any more, and a 40-F miss says which AIF step failed.
+    check("no 40-F filer is skipped unread (#518's skip is gone)", !Object.values(f.misses ?? {}).some((w) => /skipped \(owner, #518\)/.test(w)));
+    check("a 40-F row cites an accession", rows.filter(([, r]) => r[0] === "40-F").every(([, r]) => /^\d{10}-\d{2}-\d{6}$/.test(r[2])));
   }
 }
 
