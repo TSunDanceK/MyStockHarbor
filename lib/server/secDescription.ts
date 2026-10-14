@@ -296,16 +296,21 @@ export function filingIndexDocs(indexHtml: string): IndexDoc[] {
 
 /**
  * The documents to try for the AIF, in order: one DESCRIBED as the AIF, then
- * the other EX-99s, then every other document whatever its type. Never the
- * 40-F wrapper, the complete-submission text file, consents, certifications,
- * XBRL or material contracts.
+ * the other EX-99s, then every other document whatever its type, and LAST the
+ * 40-F document itself: CNI, CNQ and TRI file no AIF exhibit; their AIF is in
+ * the 40-F document. (Its cover carries an "Annual information form" checkbox,
+ * so the title test alone passes every wrapper: the caller keeps trying until
+ * a candidate also has the section.) Never the complete-submission text file,
+ * consents, certifications, XBRL or material contracts.
  */
 export function aifCandidates(docs: IndexDoc[]): IndexDoc[] {
   const usable = docs.filter((d) => !/\.txt$/i.test(d.document) && !/complete\s+submission/i.test(d.description)
-    && !/^(40-F|EX-(?:23|31|32|97|101|10\d?)\b)/i.test(d.type));
-  const named = usable.filter((d) => AIF_TITLE.test(d.description) || /aif/i.test(d.document));
-  const ex99 = usable.filter((d) => /^EX-99/i.test(d.type) && !named.includes(d));
-  return [...named, ...ex99, ...usable.filter((d) => !named.includes(d) && !ex99.includes(d))];
+    && !/^EX-(?:23|31|32|97|101|10\d?)\b/i.test(d.type));
+  const wrapper = usable.filter((d) => /^40-F/i.test(d.type));
+  const exhibits = usable.filter((d) => !wrapper.includes(d));
+  const named = exhibits.filter((d) => AIF_TITLE.test(d.description) || /aif/i.test(d.document));
+  const ex99 = exhibits.filter((d) => /^EX-99/i.test(d.type) && !named.includes(d));
+  return [...named, ...ex99, ...exhibits.filter((d) => !named.includes(d) && !ex99.includes(d)), ...wrapper];
 }
 
 /** The AIF's "Description of the Business" section, bounded like an open-ended 10-K section. */

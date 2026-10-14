@@ -115,14 +115,18 @@ for (const symbol of mine) {
   if (annual.form === "40-F") {
     const index = await get(`${folder}/${annual.accession}-index.htm`, "text");
     if (index.status !== 200) { misses[symbol] = `40-F index ${index.status}`; continue; }
+    // The first candidate that opens as the AIF AND has the section; a title
+    // match without one (an MD&A citing the AIF, a 40-F cover) is passed over.
     loc = { found: false, why: "40-F: no Annual Information Form exhibit found" };
-    for (const d of desc.aifCandidates(desc.filingIndexDocs(index.body)).slice(0, 8)) {
+    const cands = desc.aifCandidates(desc.filingIndexDocs(index.body));
+    for (const d of [...cands.slice(0, 8), ...cands.slice(8).filter((c) => /^40-F/i.test(c.type))]) {
       const doc = await get(`${folder}/${d.document}`, "text");
       if (doc.status !== 200) continue;
       const text = desc.filingText(doc.body);
       if (!desc.isAnnualInformationForm(text)) continue;
-      loc = desc.locateAifSection(text);
-      break;
+      const hit = desc.locateAifSection(text);
+      if (hit.found || loc.why.startsWith("40-F: no Annual")) loc = hit;
+      if (hit.found) break;
     }
     slow("AIF");
   } else {
@@ -134,7 +138,12 @@ for (const symbol of mine) {
   if (!loc.found) { misses[symbol] = loc.why; continue; }
   const cleaned = desc.cleanDescription(loc.body, { companyName: sub.body.name ?? null, isWord });
   slow("clean");
-  if (!cleaned.ok) { misses[symbol] = cleaned.why; continue; }
+  if (!cleaned.ok) {
+    misses[symbol] = cleaned.why;
+    // NAMED SYMBOLS: the located text the cleaner refused, for review (SEC text).
+    if (only.length) console.log(`BODY ${JSON.stringify({ symbol, body: loc.body.slice(0, 2500) })}`);
+    continue;
+  }
   if (cleaned.joined) { joinedWords += cleaned.joined; joinedRows++; }
   rows[symbol] = [annual.form, annual.filedOn, annual.accession, cleaned.text];
   // NAMED SYMBOLS (SYMBOLS=…): the row is printed too, so a one-row refresh can

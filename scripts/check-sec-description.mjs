@@ -170,8 +170,9 @@ console.log("\n2b. 40-F: the Annual Information Form exhibit and its Description
   const row = (desc, doc, type) => `<tr><td>1</td><td>${desc}</td><td><a href="/x/${doc}">${doc}</a></td><td>${type}</td><td>1000</td></tr>`;
   const index = `<table>${row("FORM 40-F", "d40f.htm", "40-F")}${row("CODE OF BUSINESS ETHICS POLICY", "ex99-1.htm", "EX-99.1")}${row("", "d123aif.htm", "&nbsp;")}${row("CONSENT", "ex23.htm", "EX-23.1")}${row("Complete submission text file", "0001-26-1.txt", "&nbsp;")}</table>`;
   const docs = D.filingIndexDocs(index), cands = D.aifCandidates(docs);
-  check("CNI-shaped index: a typeless AIF is a candidate (named first); the 40-F wrapper, consents and the submission .txt are not",
-    cands[0]?.document === "d123aif.htm" && cands.some((d) => d.document === "ex99-1.htm") && !cands.some((d) => /d40f|ex23|\.txt$/.test(d.document)), cands.map((d) => d.document).join(","));
+  check("a typeless AIF is a candidate (named first); the 40-F document is tried LAST (CNI: its AIF is inside it); consents and the submission .txt never",
+    cands[0]?.document === "d123aif.htm" && cands.some((d) => d.document === "ex99-1.htm") && cands[cands.length - 1]?.document === "d40f.htm"
+    && !cands.some((d) => /ex23|\.txt$/.test(d.document)), cands.map((d) => d.document).join(","));
   const anchored = await load(once("(?:\\d{1,3})?$/i;", "(?:\\d{1,3})?/i;"));
   const ga = anchored.locateAifSection(gib);
   check("MUTATION: the whole-line anchor dropped → the risk factor 'Our business may…' is taken (caught)", !ga.found || !ga.body.startsWith("The mission of CGI"), ga.found ? ga.body.slice(0, 30) : ga.why);
