@@ -1,5 +1,5 @@
 {
- "_comment": "Cited ADS ratios (#552 COWORK #22 §1): ordinary shares per American Depositary Share, as each filer's own LATEST ANNUAL REPORT states it (a 20-F: its 12(b) section, then its text; a 10-K or 10-KT, since #552 COWORK #218/#222: only its own 12(b) row under the ticker), or an F-6 filed after that report (#552 COWORK #45: an older F-6 never wins), verbatim. Found by scripts/ads-ratio-census.mjs (lib/server/secAdsRatio.ts). A symbol not listed keeps the depositary-share refusal; a ratio is never inferred or defaulted to 1. Read by lib/server/secAdsMap.ts. kind 'ordinary' = the 20-F cover's Section 12(b) row lists ordinary/common shares under the ticker and the filing has no ADS (ratio 1, cited). BBD and CIG are left out: their ADSs are of preferred shares and the quoted line is the common-share ADS. Also left out, by rule: depositary shares of preferred shares or CPOs, and a class ticker (PBR-A, CIG-C) that no 12(b) row names. A row with `withheld` keeps its citation but is not used: adsRatioFor returns nothing for it, so the depositary-share refusal applies (MFG, #552 COWORK #64: a cited ratio with good reason to think it stale). `unrated` (#552 COWORK #218): non-20-F filers whose latest 10-K's 12(b) row under the ticker is depositary shares with no ratio stated; secAdsMap.adsListedUnrated refuses them as a 20-F filer with no ratio is refused. Empty when no such filer exists (the census of 2026-10-13 found none).",
+ "_comment": "Cited ADS ratios (#552 COWORK #22 §1): ordinary shares per American Depositary Share, as each filer's own LATEST ANNUAL REPORT states it (a 20-F: its 12(b) section, then its text; a 10-K or 10-KT, since #552 COWORK #218/#222: only its own 12(b) row under the ticker), or an F-6 filed after that report (#552 COWORK #45: an older F-6 never wins), verbatim. Found by scripts/ads-ratio-census.mjs (lib/server/secAdsRatio.ts). A symbol not listed keeps the depositary-share refusal; a ratio is never inferred or defaulted to 1. Read by lib/server/secAdsMap.ts. kind 'ordinary' = the 20-F cover's Section 12(b) row lists ordinary/common shares under the ticker and the filing has no ADS (ratio 1, cited). BBD and CIG are left out: their ADSs are of preferred shares and the quoted line is the common-share ADS. Also left out, by rule: depositary shares of preferred shares or CPOs, and a class ticker (PBR-A, CIG-C) that no 12(b) row names. A row with `withheld` keeps its citation but is not used: adsRatioFor returns nothing for it, so the depositary-share refusal applies (MFG, #552 COWORK #64: a cited ratio with good reason to think it stale). `unrated` (#552 COWORK #218): non-20-F filers whose latest 10-K's 12(b) row under the ticker is depositary shares with no ratio stated; secAdsMap.adsListedUnrated refuses them as a 20-F filer with no ratio is refused. Empty when no such filer exists (the census of 2026-10-13 found none). Cited batch of 2026-10-13 (#552 COWORK #224): AU, BRSL, KYIV, CAAP, KLAR, RACE, STLA, BIPC and ZGN as direct listings and AMX (20 B shares per ADS), each from its own latest 20-F 12(b) row, each cap checked against a published cap first. Left out: GFL (its latest annual report is a 40-F; the only 20-F cover is from 2021) and SKHY (F-6 only; waits for its first annual report).",
  "entries": {
   "AAPG": {
    "kind": "ads",
@@ -105,6 +105,14 @@
    "source": "0001104659-26-024068",
    "filed": "2026-03-05"
   },
+  "AMX": {
+   "kind": "ads",
+   "ordinaryPerAds": 20,
+   "evidence": "Trading symbol Name of each exchange on which registered American Depositary Shares, each representing 20 B Shares, without par value AMX New York Stock Exchange 3.625% Senior",
+   "form": "20-F",
+   "source": "0001140361-26-017486",
+   "filed": "2026-04-28"
+  },
   "ARCO": {
    "kind": "ordinary",
    "ordinaryPerAds": 1,
@@ -176,6 +184,14 @@
    "form": "20-F",
    "source": "0001104659-26-044551",
    "filed": "2026-04-17"
+  },
+  "AU": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares",
+   "form": "20-F",
+   "source": "0001973832-26-000066",
+   "filed": "2026-03-26"
   },
   "AUGO": {
    "kind": "ordinary",
@@ -306,6 +322,14 @@
    "filed": "2026-03-17",
    "note": "Added by hand (#552 COWORK #56): the 12(b) row 'Limited Partnership Units BIP; BIP UN New York Stock Exchange ; Toronto Stock Exchange' lists the units themselves under BIP and no ADS, as cited in data/sec/primary-listings.json. The census matcher reads ordinary/common-share rows only, so it did not produce this row."
   },
+  "BIPC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Exchangeable Subordinate Voting Shares",
+   "form": "20-F",
+   "source": "0001788348-26-000001",
+   "filed": "2026-03-17"
+  },
   "BIRK": {
    "kind": "ordinary",
    "ordinaryPerAds": 1,
@@ -369,6 +393,14 @@
    "form": "20-F",
    "source": "0000313807-26-000006",
    "filed": "2026-03-06"
+  },
+  "BRSL": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, nominal value $0.10",
+   "form": "20-F",
+   "source": "0001628280-26-011083",
+   "filed": "2026-02-24"
   },
   "BSAC": {
    "kind": "ads",
@@ -441,6 +473,14 @@
    "form": "20-F",
    "source": "0001104659-26-050959",
    "filed": "2026-04-29"
+  },
+  "CAAP": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, U.S.$1.00 nominal value per share",
+   "form": "20-F",
+   "source": "0001104659-26-029442",
+   "filed": "2026-03-17"
   },
   "CAMT": {
    "kind": "ordinary",
@@ -1154,6 +1194,14 @@
    "source": "0001193125-26-190113",
    "filed": "2026-04-29"
   },
+  "KLAR": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, nominal value $0.0001 per share",
+   "form": "20-F",
+   "source": "0002003292-26-000007",
+   "filed": "2026-02-26"
+  },
   "KSPI": {
    "kind": "ads",
    "ordinaryPerAds": 1,
@@ -1169,6 +1217,14 @@
    "form": "20-F",
    "source": "0001628280-26-028096",
    "filed": "2026-04-29"
+  },
+  "KYIV": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value US$0.01 per share",
+   "form": "20-F",
+   "source": "0002062440-26-000006",
+   "filed": "2026-03-16"
   },
   "LAR": {
    "kind": "ordinary",
@@ -1694,6 +1750,14 @@
    "source": "0001015820-26-000018",
    "filed": "2026-03-20"
   },
+  "RACE": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares (par value of €0.01 each)",
+   "form": "20-F",
+   "source": "0001648416-26-000024",
+   "filed": "2026-02-19"
+  },
   "RDWR": {
    "kind": "ordinary",
    "ordinaryPerAds": 1,
@@ -1933,6 +1997,14 @@
    "form": "20-F",
    "source": "0001104659-26-035485",
    "filed": "2026-03-27"
+  },
+  "STLA": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value €0.01",
+   "form": "20-F",
+   "source": "0001605484-26-000021",
+   "filed": "2026-02-26"
   },
   "STM": {
    "kind": "ordinary",
@@ -2365,6 +2437,14 @@
    "form": "20-F",
    "source": "0001193125-26-126363",
    "filed": "2026-03-26"
+  },
+  "ZGN": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares , nominal value €0.02 per share",
+   "form": "20-F",
+   "source": "0001877787-26-000015",
+   "filed": "2026-03-20"
   },
   "ZIM": {
    "kind": "ordinary",
