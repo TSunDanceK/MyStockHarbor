@@ -143,6 +143,8 @@ for (const symbol of mine) {
   if (only.length) console.log(`ROW ${JSON.stringify({ symbol, row: rows[symbol] })}`);
 }
 const notReached = mine.slice(reached);
+// NAMED SYMBOLS: each miss too, so a targeted refresh can update its reason.
+if (only.length) for (const [symbol, why] of Object.entries(misses)) console.log(`MISS ${JSON.stringify({ symbol, why })}`);
 
 fs.mkdirSync("data/sec", { recursive: true });
 const out = `data/sec/descriptions-part-${only.length ? "adhoc" : K}.json`;
