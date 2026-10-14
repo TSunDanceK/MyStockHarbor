@@ -4,6 +4,9 @@ import Link from "next/link";
 import SiteHeader from "./components/SiteHeader";
 import CrawlableNav from "./components/CrawlableNav";
 import PageViewTracker from "./components/PageViewTracker";
+import CookieConsent from "./components/CookieConsent";
+import CookieSettingsLink from "./components/CookieSettingsLink";
+import { CONSENT_REGIONS } from "@/lib/consentRegions";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
 import { LATEST_VIDEOS_LIMIT } from "@/lib/videoResolve";
 import "./globals.css";
@@ -205,6 +208,11 @@ export default async function RootLayout({
             __html: `
               window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
+              (function () {
+                var m = document.cookie.match(/(?:^|; )msh_consent=(accept|reject)/);
+                var v = m && m[1] === 'accept' ? 'granted' : 'denied';
+                gtag('consent', 'default', { ad_storage: v, analytics_storage: v, ad_user_data: v, ad_personalization: v, region: ${JSON.stringify(CONSENT_REGIONS)} });
+              })();
               gtag('js', new Date());
               gtag('config', 'G-V2BD40X7H2');
               gtag('config', 'AW-18022878142');
@@ -347,6 +355,7 @@ export default async function RootLayout({
               fires from a genuinely client-rendered navigation -- never from
               a Link prefetch, and never from a client that doesn't run JS. */}
           <PageViewTracker category="site" />
+          <CookieConsent />
           <SiteHeader latestVideoId={latestVideoId} />
           <div style={{ flex: 1 }}>{children}</div>
 
@@ -465,6 +474,7 @@ export default async function RootLayout({
                 }}
               >
                 © {new Date().getFullYear()} MyStockHarbor. All rights reserved.
+                <CookieSettingsLink />
               </div>
             </div>
           </footer>
