@@ -24,8 +24,8 @@ const CSS = `
 .pbArrow { font-size: 22px; font-weight: 900; color: #4ade80; line-height: 1; }
 .pbArrow::before { content: "\\2193"; }
 @container (min-width: 960px) {
-  .pbLabel { justify-self: end; }
-  .pbRow { width: 100%; flex-direction: row; justify-content: flex-end; align-items: center; gap: 16px; }
+  .pbLabel { justify-self: center; }
+  .pbRow { width: 100%; flex-direction: row; justify-content: center; align-items: center; gap: 16px; }
   .pbArrow::before { content: "\\2192"; }
 }
 `;
