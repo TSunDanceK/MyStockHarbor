@@ -9,7 +9,7 @@ import type { MiniCandlePoint, SupportResistanceZone } from "@/app/components/Mi
 import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
 import AffiliateRail from "@/app/components/AffiliateRail";
-import { ETORO_RAIL } from "@/lib/affiliateCreatives";
+import { RAIL_CREATIVES } from "@/lib/affiliateCreatives";
 import HowToCollapse from "@/app/components/HowToCollapse";
 import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
 import { pageRanking } from "@/lib/pickerRanking";
@@ -1762,8 +1762,9 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .emptyBox { margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; padding: 18px; background: rgba(255,255,255,0.035); color: rgba(226,232,240,0.72); line-height: 1.7; }
         .scanDebug { margin-top: 30px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; line-height: 1.5; color: rgba(148,163,184,0.5); letter-spacing: 0.02em; }
 
-        .screenerProseWrap { position: relative; }
-        .screenerProse { margin-top: 40px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.08); max-width: 780px; }
+        /* Flex so the partner banners can sit beside the text and the row grows to hold them; with no banners the section is exactly the 780px column it was. */
+        .screenerProseWrap { display: flex; gap: 30px; align-items: flex-start; }
+        .screenerProse { flex: 1 1 0; min-width: 0; margin-top: 40px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.08); max-width: 780px; }
         .screenerProseBlock + .screenerProseBlock { margin-top: 28px; }
         .screenerProse h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.3; font-weight: 800; color: #e2e8f0; letter-spacing: -0.01em; }
         /* Read text: the reading floor (--fs-read / --lh-read, #553 COWORK #152). */
@@ -2033,10 +2034,10 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                     ) : null}
                   </section>
                   {/* THE PARTNER BANNER sits in the empty strip to the right of this
-                      text, fixed in place (it scrolls with the page, no sticky). The
+                      text, fixed in place (it scrolls with the page, no sticky), the second banner directly under the first. The
                       table's width is untouched. Shown only where the strip fits
                       (1380px+) and only to accepted UK/EU/EEA visitors. */}
-                  <AffiliateRail creative={ETORO_RAIL} />
+                  <AffiliateRail creatives={RAIL_CREATIVES} />
                   </div>
                 ) : null}
 
