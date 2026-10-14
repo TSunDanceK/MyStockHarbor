@@ -179,7 +179,7 @@ console.log("\n2b. 40-F: the Annual Information Form exhibit and its Description
   const toc = await load((src) => once("    if (body.length >= MIN_SECTION_CHARS) return { found: true, body };", "    return { found: true, body };")(once("    if (to - from < MIN_SECTION_CHARS) continue;\n", "")(src)));
   const gt = toc.locateAifSection(gib);
   check("MUTATION: the section-length test dropped → the TOC entry is taken (caught)", !gt.found || !gt.body.startsWith("The mission of CGI"), gt.found ? gt.body.slice(0, 30) : gt.why);
-  const typed = await load(once("return [...named, ...ex99, ...usable.filter((d) => !named.includes(d) && !ex99.includes(d))];", "return usable.filter((d) => /^EX-99/i.test(d.type));"));
+  const typed = await load(once("return [...named, ...ex99, ...exhibits.filter((d) => !named.includes(d) && !ex99.includes(d)), ...wrapper];", "return usable.filter((d) => /^EX-99/i.test(d.type));"));
   check("MUTATION: the exhibit type trusted → CNI's typeless AIF is never tried (caught)", !typed.aifCandidates(typed.filingIndexDocs(index)).some((d) => d.document === "d123aif.htm"));
   const untitled = await load(once("return AIF_TITLE.test(text.slice(0, 6000));", "return true;"));
   check("MUTATION: the AIF title test dropped → a code of ethics passes as the AIF (caught)", untitled.isAnnualInformationForm("CODE OF BUSINESS ETHICS POLICY"));
