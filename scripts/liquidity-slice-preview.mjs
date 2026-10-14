@@ -70,13 +70,17 @@ for (let i = 0; i < cand.length; i += 25) {
 const scored = L.scoreByCapAndLiquidity(rows, eod, new Set(["SPCX"])).filter((c) => !universe.has(c.sym));
 const picked = scored.filter((c) => c.passes).slice(0, SLOTS);
 const cutScore = picked.length ? picked[picked.length - 1].score : Infinity;
-const near = scored.filter((c) => !c.passes && c.score >= cutScore && (c.cap >= 0.75 * L.LIQUIDITY_MIN_CAP) && (c.dv >= 0.75 * L.LIQUIDITY_MIN_DOLLAR_VOLUME));
+// NEAR MISSES: the 20 highest-scoring names within 25% under either floor,
+// marked whether their score would have placed them inside the picked set.
+const near = scored
+  .filter((c) => !c.passes && c.cap >= 0.75 * L.LIQUIDITY_MIN_CAP && c.dv >= 0.75 * L.LIQUIDITY_MIN_DOLLAR_VOLUME)
+  .slice(0, 20);
 
 console.log(`SEC rows ${Object.keys(rows).length}; eod-last rows ${Object.keys(eod).length}; universe ${universe.size}; candidates read ${cand.length} (${(bytes / 1048576).toFixed(1)} MB)`);
 console.log(`passing floors, not in universe: ${scored.filter((c) => c.passes).length}; slots ${SLOTS}; picked ${picked.length}`);
 for (let i = 0; i < picked.length; i += 30) console.log(`PICK ${picked.slice(i, i + 30).map((c) => c.sym).join(",")}`);
 for (const c of near) {
   const why = [c.cap < L.LIQUIDITY_MIN_CAP ? "cap" : null, c.dv < L.LIQUIDITY_MIN_DOLLAR_VOLUME ? "dv" : null].filter(Boolean).join("+");
-  console.log(`NEAR ${c.sym} under:${why}`);
+  console.log(`NEAR ${c.sym} under:${why} ${c.score >= cutScore ? "would-rank-in" : "below-cut"}`);
 }
 console.log(`Redis commands: ${commands}`);
