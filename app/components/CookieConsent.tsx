@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CONSENT_CHANGED, CONSENT_OPEN, askRegion, readConsent, writeConsent } from "./consentClient";
 
@@ -21,6 +23,9 @@ const BUTTON: React.CSSProperties = {
 export default function CookieConsent() {
   const [inScope, setInScope] = useState(false);
   const [open, setOpen] = useState(false);
+  // The privacy policy page is exempt from the pop-up (its own link would otherwise open a page the dialog covers); the footer's "Cookie settings" still opens it there.
+  const [asked, setAsked] = useState(false);
+  const onPolicyPage = usePathname() === "/privacy-policy";
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -30,21 +35,21 @@ export default function CookieConsent() {
       setInScope(yes);
       if (yes && readConsent() === null) setOpen(true);
     });
-    const reopen = () => setOpen(true);
+    const reopen = () => { setOpen(true); setAsked(true); };
     // A stored choice (from here, or any other component) closes the dialog.
-    const closed = () => setOpen(false);
+    const closed = () => { setOpen(false); setAsked(false); };
     window.addEventListener(CONSENT_OPEN, reopen);
     window.addEventListener(CONSENT_CHANGED, closed);
     return () => { live = false; window.removeEventListener(CONSENT_OPEN, reopen); window.removeEventListener(CONSENT_CHANGED, closed); };
   }, []);
 
-  const showing = inScope && open;
+  const showing = inScope && open && (!onPolicyPage || asked);
   useEffect(() => {
     if (!showing) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
     const before = document.activeElement as HTMLElement | null;
-    const buttons = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button"));
+    const buttons = Array.from(dialog.querySelectorAll<HTMLElement>("a[href], button")); // DOM order, so the wrap-around matches Tab
 
     // Lock page scroll; keep the scrollbar's width so nothing behind shifts.
     const body = document.body;
@@ -54,7 +59,8 @@ export default function CookieConsent() {
     body.style.overflow = "hidden";
     if (gap > 0) body.style.paddingRight = `${gap}px`;
 
-    buttons[0]?.focus();
+    const start = dialog.querySelector<HTMLElement>("button"); // Accept: the link comes first in the page but the choice is what the dialog asks for
+    start?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); return; } // Esc does nothing, on purpose
       if (e.key !== "Tab" || buttons.length === 0) return;
@@ -65,7 +71,7 @@ export default function CookieConsent() {
       else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
     };
     // If focus escapes (a click on the backdrop, a script), pull it back.
-    const onFocusIn = (e: FocusEvent) => { if (!dialog.contains(e.target as Node)) buttons[0]?.focus(); };
+    const onFocusIn = (e: FocusEvent) => { if (!dialog.contains(e.target as Node)) start?.focus(); };
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("focusin", onFocusIn);
     return () => {
@@ -85,7 +91,8 @@ export default function CookieConsent() {
         style={{ width: "100%", maxWidth: 420, maxHeight: "100%", overflowY: "auto", boxSizing: "border-box", padding: 24, borderRadius: 14, background: "#0f172a", border: "1px solid rgba(255,255,255,0.16)", boxShadow: "0 20px 48px rgba(0,0,0,0.55)", color: "#e2e8f0", fontSize: 15, lineHeight: 1.55 }}>
         <h2 id="msh-cookie-title" style={{ margin: "0 0 10px", fontSize: 20, fontWeight: 800, color: "#f8fafc" }}>Cookies</h2>
         <p style={{ margin: "0 0 20px" }}>
-          MyStockHarbor is free and paid for by partner adverts. Can we use cookies for ads and analytics? You can change this any time under Cookie settings in the footer.
+          MyStockHarbor is free and paid for by partner adverts. Can we use cookies for ads and analytics? You can change this any time under Cookie settings in the footer.{" "}
+          <Link href="/privacy-policy" style={{ color: "#93c5fd" }}>Privacy policy</Link>
         </p>
         <div style={{ display: "flex", gap: 12 }}>
           <button type="button" style={BUTTON} onClick={() => writeConsent("accept")}>Accept</button>
