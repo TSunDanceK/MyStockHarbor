@@ -223,6 +223,12 @@ export type StoredFactSet = {
    * reason `as` is not: it fills in as each set is refreshed.
    */
   asr?: [string, number][];
+  /**
+   * The filer's own stock-split facts, `[date, ratio as filed]`
+   * (ExtractResult.splitFacts; #552 COWORK #245). Optional; not in
+   * contentHashOf, for the reason `asr` is not.
+   */
+  ssf?: [string, number][];
   /** Period ends re-filed unchanged (ExtractResult.shareRefiled). Optional; not in contentHashOf. */
   asf?: string[];
   /**
@@ -344,6 +350,7 @@ export function encodeFactSet(
     cc: result.conceptChoice,
     ...(result.annualShares?.length ? { as: result.annualShares } : {}),
     ...(result.shareRestated?.length ? { asr: result.shareRestated } : {}),
+    ...(result.splitFacts?.length ? { ssf: result.splitFacts } : {}),
     ...(result.shareRefiled?.length ? { asf: result.shareRefiled } : {}),
     ...(result.untagged ? { nt: result.untagged } : {}),
     ...(result.readNamespaces ? { rns: result.readNamespaces } : {}),
