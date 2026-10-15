@@ -141,6 +141,7 @@ const TASKS = {
   // without the symbol set.
   // #552 COWORK #243: per-class quarterly EPS identified from the filing (dei:TradingSymbol). SEC only, reads only.
   "per-class-eps-probe": { script: "scripts/per-class-eps-probe.mjs", args: () => [] },
+  "per-class-eps-verify": { script: "scripts/per-class-eps-verify.mjs", args: () => [] },
   "wire-feeds": {
     script: "scripts/wire-feeds-probe.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
