@@ -44,7 +44,13 @@ export type SplitAdjustment = {
   adjusted: string[];
 };
 
-type ProvenSplit = { k: number; refs: string[] };
+/**
+ * `date` is set for a split proven from the filer's own split fact: only a
+ * period whose newest filing predates it is on the old basis (a period filed
+ * after it -- a restated comparative, a later 10-K -- already carries the
+ * split). A split proven from `asr` has no date; the share counts decide.
+ */
+type ProvenSplit = { k: number; refs: string[]; date?: string };
 
 const splitPlusYears = (iso: string, n: number) => `${Number(iso.slice(0, 4)) + n}${iso.slice(4)}`;
 const splitNum = (p: StoredPeriod, key: string): number | null => {
@@ -97,8 +103,8 @@ function splitsFromFacts(set: Pick<StoredFactSet, "quarters" | "years" | "ssf">)
     if (!after) continue;
     const base = splitSharesOf(after)!;
     for (const K of [whole, 1 / whole]) {
-      const proves = all.some((p) => p.e < date && splitSharesOf(p) !== null && Math.abs((splitSharesOf(p)! * K) / base - 1) <= SPLIT_FACT_CORROBORATION);
-      if (proves && !out.some((s) => s.k === K)) { out.push({ k: K, refs: [after.e] }); break; }
+      const proves = all.some((p) => p.e < date && Boolean(p.f) && p.f! < date && splitSharesOf(p) !== null && Math.abs((splitSharesOf(p)! * K) / base - 1) <= SPLIT_FACT_CORROBORATION);
+      if (proves && !out.some((s) => s.k === K)) { out.push({ k: K, refs: [after.e], date }); break; }
     }
   }
   return out;
@@ -115,7 +121,8 @@ export function provenSplits(set: Pick<StoredFactSet, "asr"> & Partial<Pick<Stor
     else out.push({ k, refs: [e] });
   }
   if (set.quarters && set.years) {
-    for (const f of splitsFromFacts(set as Pick<StoredFactSet, "quarters" | "years" | "ssf">)) if (!out.some((s) => s.k === f.k)) out.push(f);
+    // A ratio the restatement proof already holds, either way up, is that split.
+    for (const f of splitsFromFacts(set as Pick<StoredFactSet, "quarters" | "years" | "ssf">)) if (!out.some((s) => s.k === f.k || s.k === 1 / f.k)) out.push(f);
   }
   return out;
 }
@@ -131,6 +138,8 @@ export function splitFactors(set: Pick<StoredFactSet, "quarters" | "years" | "as
     if (s === null) continue;
     let f = 1;
     for (const split of splits) {
+      // A FILED SPLIT MOVES ONLY WHAT WAS FILED BEFORE IT (see ProvenSplit.date).
+      if (split.date && !(p.f && p.f < split.date)) continue;
       // THE NEAREST RESTATED PERIOD is on the new basis (its stored value is the
       // restatement). Compare on the same footing: its shares scaled by what
       // has been applied for the other splits.
