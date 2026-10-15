@@ -64,6 +64,11 @@ export function cleanSymbol(value: SymbolInput): string {
 
 export const SYMBOL_COOKIE = "msh_sym";
 export const SYMBOL_STORAGE_KEY = "msh_last_symbol";
+// Fired on `window` in the SAME tab each time a symbol is remembered, with the
+// symbol as `detail` (#553 COWORK #238). The `storage` event only reaches OTHER
+// tabs, so without this a reader in the tab that made the choice (the header's
+// Company Earnings entry, the mobile home tile) kept showing the old symbol.
+export const SYMBOL_CHANGED = "msh-symbol-changed";
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
@@ -119,6 +124,38 @@ export function rememberSymbol(value: SymbolInput): void {
   }
 
   writeSymbolCookie(symbol);
+
+  // Tell this tab's readers. Carries the symbol, so a reader still learns it
+  // when both stores are blocked and nothing could be written.
+  try {
+    window.dispatchEvent(new CustomEvent(SYMBOL_CHANGED, { detail: symbol }));
+  } catch {
+    /* No CustomEvent (very old browsers): readers pick it up on their next read. */
+  }
+}
+
+/**
+ * Listen for the remembered symbol changing: this tab (SYMBOL_CHANGED) and
+ * other tabs (the `storage` event for the same key). Calls back with the new,
+ * normalised symbol. Returns the unsubscribe function.
+ */
+export function onRememberedSymbolChange(callback: (symbol: string) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const onSame = (event: Event) => {
+    const symbol = cleanSymbol((event as CustomEvent<string>).detail);
+    if (symbol) callback(symbol);
+  };
+  const onOther = (event: StorageEvent) => {
+    if (event.key !== SYMBOL_STORAGE_KEY) return;
+    const symbol = cleanSymbol(event.newValue);
+    if (symbol) callback(symbol);
+  };
+  window.addEventListener(SYMBOL_CHANGED, onSame);
+  window.addEventListener("storage", onOther);
+  return () => {
+    window.removeEventListener(SYMBOL_CHANGED, onSame);
+    window.removeEventListener("storage", onOther);
+  };
 }
 
 // Reads the memory the way the SERVER will read it: cookie first, so a client

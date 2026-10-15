@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { rememberSymbol } from "@/lib/symbol";
+import { onRememberedSymbolChange, rememberSymbol } from "@/lib/symbol";
 import { chartHref } from "@/lib/chartHref";
 import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 
@@ -146,20 +146,11 @@ export default function StockPagesBottomNav() {
 
     // The dashboard is the one page here that changes symbol WITHOUT
     // navigating: its search box calls setSymbol in place and DashboardClient
-    // writes the new ticker to localStorage. Nothing about that is observable
-    // from out here -- the storage event only fires in other tabs -- so the
-    // choice is to poll it or to let these three links keep pointing at
-    // whatever ticker the page opened on, which on the page whose whole
-    // purpose is switching tickers is not a small bug.
-    //
-    // One localStorage read a second, only on this route, and setState only
-    // when the value actually changed, so an idle dashboard re-renders never.
+    // remembers the new ticker. rememberSymbol fires an event in this tab (and
+    // `storage` covers other tabs), so these links follow it at once (#553
+    // COWORK #238; this was a one-second localStorage poll).
     if (!isDashboard) return;
-    const timer = window.setInterval(() => {
-      const next = readStored();
-      if (next) setSymbol((current) => (current === next ? current : next));
-    }, 1000);
-    return () => window.clearInterval(timer);
+    return onRememberedSymbolChange((next) => setSymbol((current) => (current === next ? current : next)));
   }, [isDashboard, pathSymbol]);
 
   const active: NavKey = isDashboard
