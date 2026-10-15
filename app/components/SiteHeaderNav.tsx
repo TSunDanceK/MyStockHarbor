@@ -767,6 +767,73 @@ function MobileNavOverlay({
   );
 }
 
+// The mobile menu as plain HTML (#553 COWORK #234): every top-level item and
+// its links, server-rendered inside the header and hidden by CSS until the
+// hamburger's checkbox is :checked. Groups are native <details>, so the whole
+// menu opens and expands with JavaScript off, or before it has loaded (iPhone
+// Safari left the button dead when the island did not hydrate). It is the
+// fallback only: a hydrated island intercepts the hamburger and opens
+// MobileNavOverlay (the drill-down) instead, so this never shows alongside it.
+function StaticMobileMenu({
+  navItems,
+  activePathname,
+  onNavigate,
+}: {
+  navItems: NavItem[];
+  activePathname: string;
+  onNavigate: () => void;
+}) {
+  const link = (child: NavChild, extra: string) => (
+    <Link
+      key={child.label}
+      href={child.href}
+      className={`mshMobileOverlayLink${extra}${child.emphasize ? " mshMobileOverlayLink--emphasis" : ""}${child.isActive(activePathname) ? " is-active" : ""}`}
+      onClick={onNavigate}
+    >
+      {child.label}
+    </Link>
+  );
+  const trigger = (label: string, active: boolean, nested: boolean) => (
+    <summary className="mshStaticSummary">
+      <span className={`mshMobileOverlayGroupTrigger${nested ? " mshMobileOverlayGroupTrigger--nested" : ""}${active ? " is-active" : ""}`}>
+        <span>{label}</span>
+        <span aria-hidden="true" className="mshMobileOverlayChevron">▶</span>
+      </span>
+    </summary>
+  );
+  return (
+    <nav className="mshStaticMenu" aria-label="Site menu">
+      <div className="mshMobileOverlayHeader">
+        <span className="mshMobileOverlayTitle">Menu</span>
+        <label htmlFor="mshMenuToggle" className="mshMobileOverlayClose" role="button" aria-label="Close menu">
+          ✕
+        </label>
+      </div>
+      <div className="mshMobileOverlayNav">
+        {navItems.map((item) =>
+          item.kind === "link" ? (
+            link(item, "")
+          ) : (
+            <details key={item.label} className="mshMobileOverlayGroup" open={item.isActive(activePathname) || undefined}>
+              {trigger(item.label, item.isActive(activePathname), false)}
+              {item.entries.map((entry) =>
+                entry.kind === "link" ? (
+                  link(entry, " mshMobileOverlayLink--nested")
+                ) : (
+                  <details key={entry.label} className="mshMobileOverlaySubgroup" open={entry.isActive(activePathname) || undefined}>
+                    {trigger(entry.label, entry.isActive(activePathname), true)}
+                    {entry.items.map((child) => link(child, " mshMobileOverlayLink--nested2"))}
+                  </details>
+                )
+              )}
+            </details>
+          )
+        )}
+      </div>
+    </nav>
+  );
+}
+
 /**
  * THE HEADER'S CLIENT ISLAND (#552 COWORK #231). SiteHeader (a server
  * component) renders the bar, its styles and the logo, and passes the nav tree
@@ -799,6 +866,11 @@ export default function SiteHeaderNav({
   const { hasFiledEarnings } = useFiledEarnings();
   const earningsLinked = hasFiledEarnings(lastSymbol);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // The checkbox behind the no-JS menu (see StaticMobileMenu).
+  const toggleRef = useRef<HTMLInputElement>(null);
+  const closeStaticMenu = () => {
+    if (toggleRef.current) toggleRef.current.checked = false;
+  };
 
   // The mobile overlay is a one-way navigation surface -- once a route
   // change happens (a link was tapped, or the browser back/forward
@@ -806,7 +878,17 @@ export default function SiteHeaderNav({
   // underneath the new page.
   useEffect(() => {
     setMobileMenuOpen(false);
+    closeStaticMenu();
   }, [pathname]);
+
+  // Esc closes the no-JS menu if it was opened before this island hydrated.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeStaticMenu();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   const navItems = useMemo<NavItem[]>(
     () => buildNavItems(items, { lastSymbol, latestVideoId, earningsLinked }),
@@ -815,18 +897,28 @@ export default function SiteHeaderNav({
 
   return (
     <>
-      <button
-        type="button"
-        className="mshMobileMenuButton"
+      {/* The hamburger is a checkbox + label so it works with no JavaScript
+          (and before this island hydrates): see StaticMobileMenu. Once
+          hydrated, a tap is taken over here and opens the drill-down overlay;
+          the checkbox is put straight back, so the static menu only ever shows
+          when this handler has not run. */}
+      <input
+        ref={toggleRef}
+        id="mshMenuToggle"
+        type="checkbox"
+        className="mshMenuToggle"
         aria-label="Open menu"
-        aria-haspopup="dialog"
-        aria-expanded={mobileMenuOpen}
-        onClick={() => setMobileMenuOpen(true)}
-      >
+        onChange={(event) => {
+          if (!event.target.checked) return;
+          event.target.checked = false;
+          setMobileMenuOpen(true);
+        }}
+      />
+      <label htmlFor="mshMenuToggle" className="mshMobileMenuButton" aria-hidden="true">
         <span className="mshMobileMenuBar" />
         <span className="mshMobileMenuBar" />
         <span className="mshMobileMenuBar" />
-      </button>
+      </label>
 
       {logo}
 
@@ -885,6 +977,8 @@ export default function SiteHeaderNav({
           );
         })}
       </nav>
+
+      <StaticMobileMenu navItems={navItems} activePathname={activePathname} onNavigate={closeStaticMenu} />
 
       {mobileMenuOpen ? (
         <MobileNavOverlay

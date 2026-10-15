@@ -30,11 +30,23 @@ export default function SiteHeader({
         top: 0,
         zIndex: 100,
         background: "rgba(10,15,26,0.94)",
-        backdropFilter: "blur(14px)",
         borderBottom: "1px solid #1a2336",
       }}
     >
       <style>{`
+        /* The blur sits on a pseudo-element, not on the header itself: a
+           backdrop-filter makes its element the containing block for
+           position:fixed descendants, and the no-JS mobile menu below is a
+           fixed, full-screen child of this header. */
+        .mshGlobalHeader::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: -1;
+          pointer-events: none;
+          backdrop-filter: blur(14px);
+        }
+
         .mshGlobalHeaderNav::-webkit-scrollbar { display: none; }
 
         /* Base Link Styles */
@@ -198,8 +210,42 @@ export default function SiteHeader({
           background: #6FE0D0;
         }
 
+        /* The no-JS mobile menu (#553 COWORK #234). A real checkbox and its
+           label: tapping the hamburger toggles :checked and CSS shows the
+           menu, so it opens with JavaScript off or not yet hydrated (iPhone
+           Safari). Once the island has hydrated it takes the tap over and
+           opens the drill-down overlay below instead. */
+        .mshMenuToggle {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: 0;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .mshMenuToggle:focus-visible + .mshMobileMenuButton {
+          outline: 2px solid #6FE0D0;
+          outline-offset: 2px;
+        }
+
+        .mshStaticSummary {
+          display: block;
+          list-style: none;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .mshStaticSummary::-webkit-details-marker { display: none; }
+        .mshStaticSummary::marker { content: ""; }
+
+        .mshStaticSummary > .mshMobileOverlayGroupTrigger { width: 100%; box-sizing: border-box; }
+
+        details[open] > .mshStaticSummary .mshMobileOverlayChevron { transform: rotate(90deg); }
+
         /* Full-screen mobile nav overlay */
-        .mshMobileOverlay {
+        .mshMobileOverlay,
+        .mshStaticMenu {
           position: fixed;
           inset: 0;
           z-index: 500;
@@ -451,7 +497,12 @@ export default function SiteHeader({
         .mshDrillBack:active { opacity: 0.7; }
         .mshDrillBackChevron { font-size: 24px; line-height: 1; margin-top: -2px; }
 
+        .mshStaticMenu { display: none; }
+
         @media (max-width: 720px) {
+          .mshMenuToggle:checked ~ .mshStaticMenu { display: flex; }
+          body:has(.mshMenuToggle:checked) { overflow: hidden; }
+
           .mshGlobalHeaderInner {
             flex-direction: row !important;
             align-items: center !important;
