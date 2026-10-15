@@ -226,6 +226,13 @@ export function derivationNote(
       }
       return "Derived: this period minus the previous year-to-date figure, because the filer reports cash flow cumulatively.";
     case "computed":
+      // REVENUE HAS ITS OWN SENTENCE (#552 COWORK #241): a computed revenue is
+      // a sum of the lines the filing tags separately (a bank's net interest
+      // income plus noninterest income; LUNR's contract plus non-contract
+      // revenue), not the EPS ratio this used to describe for every key.
+      if (context.key === "revenue") {
+        return "Computed: the sum of the revenue lines the filing tags separately (for a bank, net interest income plus noninterest income). The filing tags no total.";
+      }
       return "Derived: net income divided by this quarter's weighted average share count.";
     case "ambiguous":
       return "The filer reports this separately for each share class and the filing does not say which is which, so no single figure is shown.";
@@ -721,6 +728,27 @@ export function withDerivedLiabilities(cellIn: ViewCell, at: StoredPeriod | null
     derived: "computed",
     derivedNote: "Derived: total assets less total equity (including noncontrolling interests) at the same date — an accounting identity. The filing does not tag total liabilities.",
   };
+}
+
+/** The derived Q4 EPS note (#552 COWORK #241 (d)), owner's wording. */
+export const Q4_EPS_DERIVED_NOTE = "Derived: fiscal year less Q1–Q3";
+
+/**
+ * Q4 DILUTED EPS, DERIVED where the filing states none (#552 COWORK #241 (d)).
+ * A 10-K reports the year, not its fourth quarter, so every Q4 EPS cell was
+ * blank. `derive` is secValuation.derivedQ4Eps (fiscal year less Q1-Q3, refused
+ * across a share-basis change or a converted set); where it refuses, the cell
+ * stays blank. A filed figure is never replaced, and only a Q4 is touched.
+ */
+export function withDerivedQ4Eps(
+  cellIn: ViewCell,
+  p: StoredPeriod | null | undefined,
+  derive: ((q4: StoredPeriod) => number | null) | null,
+): ViewCell {
+  if (cellIn.val !== null || !p || p.fp !== "Q4" || !derive) return cellIn;
+  const d = derive(p);
+  if (d === null || !Number.isFinite(d)) return cellIn;
+  return { ...cellIn, val: d, derived: "computed", derivedNote: Q4_EPS_DERIVED_NOTE };
 }
 
 /**
@@ -1363,12 +1391,24 @@ export function buildSecEarningsView(
      * none (a set filled from the filing before companyfacts published).
      */
     cik?: string | null;
+    /**
+     * DERIVED Q4 DILUTED EPS (#552 COWORK #241 (d)): the fiscal year's EPS less
+     * Q1-Q3's, with its guards (secValuation.derivedQ4Eps). Injected by the
+     * page rather than imported, because secValuation already imports this
+     * module. Absent: Q4 EPS stays blank, as before. It fills only a Q4 cell
+     * the filing left blank, on the split-adjusted set the page renders, and
+     * is never used for a YoY or the score.
+     */
+    deriveQ4Eps?: (set: StoredFactSet, q4: StoredPeriod) => number | null;
   } = {},
 ): SecEarningsView | null {
   // PER-SHARE FIGURES ON TODAY'S SHARE BASIS (#552 COWORK #187 §1): a split the
   // filer proved moves the old-basis periods' EPS and DPS. See secSplitAdjust.
   set = splitAdjusted(set);
   const annualFiler = opts.annualForm ?? null;
+  const adjusted = set;
+  const q4EpsCell = (p: StoredPeriod | null | undefined, label: string): ViewCell =>
+    withDerivedQ4Eps(view(p, "epsDiluted", label), p, opts.deriveQ4Eps ? (q) => opts.deriveQ4Eps!(adjusted, q) : null);
   // ── A SET THAT IS NOT IN DOLLARS DOES NOT RENDER ─────────────────────────
   //
   // `cur` non-USD with `fx` absent means the filer reports in a currency the
@@ -1778,7 +1818,7 @@ export function buildSecEarningsView(
     ["epsDiluted", `Diluted EPS (${epsStd})`],
     ["sharesDiluted", "Diluted shares"],
   ];
-  const incomeRows = withNonOperatingMarker(withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(latest, k, label)))));
+  const incomeRows = withNonOperatingMarker(withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => (k === "epsDiluted" ? q4EpsCell(latest, label) : view(latest, k, label))))));
   // EACH PERIOD'S OWN INCOME ROWS, for the per-period one-off check: the table
   // basis's periods and every stored fiscal year (#552 COWORK #117). Labels are
   // distinct across the two ("Q1 FY2026" / "FY2025"); a label in both is one row.
@@ -1860,7 +1900,7 @@ export function buildSecEarningsView(
         );
         return { revenueYoYNotMeaningful: reason !== null, revenueYoYNotMeaningfulReason: reason };
       })(),
-      epsDiluted: view(latest, "epsDiluted", `Diluted EPS (${epsStd})`),
+      epsDiluted: q4EpsCell(latest, `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(home(latest), "epsDiluted"), valueOf(home(yearAgo), "epsDiluted")),
       netIncome: view(latest, "netIncome", "Net income"),
       operatingIncome: view(latest, "operatingIncome", "Operating income"),
@@ -2010,7 +2050,7 @@ export function buildSecEarningsView(
         label: periodLabel(p),
         end: p.e,
         revenue: view(p, "revenue", "Revenue"),
-        epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
+        epsDiluted: q4EpsCell(p, `Diluted EPS (${epsStd})`),
         netIncome: view(p, "netIncome", "Net income"),
       })),
     oneOffs: Object.fromEntries(
