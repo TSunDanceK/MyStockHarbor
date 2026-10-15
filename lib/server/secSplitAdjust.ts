@@ -87,10 +87,10 @@ export const SPLIT_FACT_CORROBORATION = 0.15;
  * no restated ÷ first-filed ratio, and Q1 FY2026 ($1.69, filed before the
  * split) sat beside Q2 FY2026 ($0.42, after it). The filer's split fact names
  * the ratio but not, reliably, the direction (CVNA files 0.2 for a forward
- * split). So: the newest period ending after the split date is the reference
- * (its count is on today's basis), and some period ending before the date
- * must sit within SPLIT_FACT_CORROBORATION of it once moved by the ratio --
- * that period proves the split and its direction. A ratio that is not a whole
+ * split). So: the first period ending after the split date is the reference
+ * (its count is on the new basis), and the last period ending and filed before
+ * the date must sit within SPLIT_FACT_CORROBORATION of it once moved by the
+ * ratio -- that pair proves the split and its direction. A ratio that is not a whole
  * split (CVNA's 0.0556 exchange-ratio facts of 2022-23) is never considered.
  */
 function splitsFromFacts(set: Pick<StoredFactSet, "quarters" | "years" | "ssf">): ProvenSplit[] {
@@ -99,11 +99,17 @@ function splitsFromFacts(set: Pick<StoredFactSet, "quarters" | "years" | "ssf">)
   for (const [date, r] of Array.isArray(set.ssf) ? set.ssf : []) {
     const whole = splitRatioOf(r);
     if (whole === null) continue;
-    const after = all.filter((p) => p.e > date && splitSharesOf(p) !== null).sort((a, b) => b.e.localeCompare(a.e))[0];
-    if (!after) continue;
+    // THE TWO PERIODS EITHER SIDE OF THE SPLIT (#552 COWORK #248): the first
+    // ending after it and the last ending (and filed) before it. Not the
+    // newest period against any older one: BORR's share count roughly doubled
+    // from issuance after its 2-to-1 REVERSE split of Dec 2021, so 2020's count
+    // x2 sat within the band of 2026's and read the split upside down.
+    const after = all.filter((p) => p.e > date && splitSharesOf(p) !== null).sort((a, b) => a.e.localeCompare(b.e))[0];
+    const before = all.filter((p) => p.e < date && Boolean(p.f) && p.f! < date && splitSharesOf(p) !== null).sort((a, b) => b.e.localeCompare(a.e))[0];
+    if (!after || !before) continue;
     const base = splitSharesOf(after)!;
     for (const K of [whole, 1 / whole]) {
-      const proves = all.some((p) => p.e < date && Boolean(p.f) && p.f! < date && splitSharesOf(p) !== null && Math.abs((splitSharesOf(p)! * K) / base - 1) <= SPLIT_FACT_CORROBORATION);
+      const proves = Math.abs((splitSharesOf(before)! * K) / base - 1) <= SPLIT_FACT_CORROBORATION;
       if (proves && !out.some((s) => s.k === K)) { out.push({ k: K, refs: [after.e], date }); break; }
     }
   }
@@ -160,8 +166,15 @@ function factorsFor(set: Pick<StoredFactSet, "quarters" | "years">, splits: Prov
     if (s === null) continue;
     let f = 1;
     for (const split of splits) {
-      // A FILED SPLIT MOVES ONLY WHAT WAS FILED BEFORE IT (see ProvenSplit.date).
-      if (split.date && !(p.f && p.f < split.date)) continue;
+      // A FILED SPLIT MOVES EXACTLY WHAT ENDED AND WAS FILED BEFORE IT (see
+      // ProvenSplit.date): those periods are on the old basis by definition,
+      // and the pair either side of the date already proved the ratio and its
+      // direction. No share-distance test: BORR's issuance after its reverse
+      // split left 2020's count nearer the new basis unmoved than moved.
+      if (split.date) {
+        if (p.e < split.date && p.f && p.f < split.date) f *= split.k;
+        continue;
+      }
       // THE NEAREST RESTATED PERIOD is on the new basis (its stored value is the
       // restatement). Compare on the same footing: its shares scaled by what
       // has been applied for the other splits.
