@@ -80,6 +80,9 @@ const fmt = (v) => v == null ? "—" : Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed
 const code = (c) => (c ? ({ "as-filed": "F", differenced: "D", computed: "C", ambiguous: "A", withheld: "W" }[c.derived] ?? "?") : "-");
 const byCat = { a: new Set(), b: new Set(), c: new Set(), other: new Set() };
 const changeLines = [];
+const totals = { fill: new Set(), removal: new Set(), change: new Set() };
+const detail = [];
+const yearsTouched = new Set();
 let failed = 0;
 
 for (const sym of targets) {
@@ -100,7 +103,7 @@ for (const sym of targets) {
       K.forEach((f, i) => {
         const vb = pb.values[i]?.val ?? null, va = pa.values[i]?.val ?? null;
         const same = vb === va || (vb != null && va != null && Math.abs(vb - va) <= 1e-9 * Math.max(1, Math.abs(vb)));
-        if (!same) diffs.push({ kind, end, field: f, b: `${fmt(vb)}${code(pb.values[i])}`, a: `${fmt(va)}${code(pa.values[i])}` });
+        if (!same) diffs.push({ kind, end, field: f, b: `${fmt(vb)}${code(pb.values[i])}`, a: `${fmt(va)}${code(pa.values[i])}`, type: vb == null ? "fill" : va == null ? "removal" : "change" });
       });
     }
   }
@@ -124,11 +127,19 @@ for (const sym of targets) {
     else cats.add(cal ? "c" : "other");
   }
   for (const c of cats) byCat[c].add(sym);
+  const t = (x) => diffs.filter((d) => d.type === x);
+  for (const x of ["fill", "removal", "change"]) if (t(x).length) totals[x].add(sym);
+  for (const d of [...t("change"), ...t("removal")]) detail.push(`${d.type.toUpperCase()} ${sym}${cal ? " 16wk" : ""} ${d.kind[0]}${d.end} ${d.field} ${d.b}->${d.a}`);
+  if (diffs.some((d) => d.kind === "years")) yearsTouched.add(sym);
   changeLines.push(`CHANGED ${sym} [${[...cats].join(",")}]${cal ? " 16wk" : ""} ${diffs.length} cells: ${diffs.slice(0, 6).map((d) => `${d.kind[0]}${d.end} ${d.field} ${d.b}->${d.a}`).join("; ")}${diffs.length > 6 ? " …" : ""}`);
 }
 
 console.log(`\n== summary · read ${targets.length - failed} · failed ${failed}`);
 for (const [c, set] of Object.entries(byCat)) console.log(`CAT ${c} ${set.size}: ${[...set].sort().join(" ")}`);
+for (const [x, set] of Object.entries(totals)) console.log(`TYPE ${x} ${set.size}: ${[...set].sort().join(" ")}`);
+console.log(`YEARS touched ${yearsTouched.size}: ${[...yearsTouched].sort().join(" ")}`);
+console.log("");
+detail.forEach((l) => console.log(l));
 console.log("");
 changeLines.forEach((l) => console.log(l));
 console.log(`\nRedis commands: ${cmds}`);
