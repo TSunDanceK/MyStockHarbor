@@ -64,8 +64,48 @@ function splitSharesOf(p: StoredPeriod): number | null {
   return null;
 }
 
+/**
+ * How far a pre-split period's share count times the split ratio may sit from
+ * the reference post-split period's and still corroborate a filed split fact
+ * (#552 COWORK #245). Wider than SHARE_SPLIT_TOLERANCE because the two periods
+ * are months apart and carry that span's buybacks or issuance; the split
+ * itself is the filer's own fact, the share counts only confirm and orient it.
+ */
+export const SPLIT_FACT_CORROBORATION = 0.15;
+
+/**
+ * A SPLIT THE FILER STATED, CONFIRMED BY ITS OWN SHARE COUNTS (#552 COWORK #245).
+ *
+ * CVNA's 5-for-1 (8 May 2026) never reached `asr`: companyfacts holds no
+ * first-filed undimensioned share count for the restated quarter, so there is
+ * no restated ÷ first-filed ratio, and Q1 FY2026 ($1.69, filed before the
+ * split) sat beside Q2 FY2026 ($0.42, after it). The filer's split fact names
+ * the ratio but not, reliably, the direction (CVNA files 0.2 for a forward
+ * split). So: the newest period ending after the split date is the reference
+ * (its count is on today's basis), and some period ending before the date
+ * must sit within SPLIT_FACT_CORROBORATION of it once moved by the ratio --
+ * that period proves the split and its direction. A ratio that is not a whole
+ * split (CVNA's 0.0556 exchange-ratio facts of 2022-23) is never considered.
+ */
+function splitsFromFacts(set: Pick<StoredFactSet, "quarters" | "years" | "ssf">): ProvenSplit[] {
+  const out: ProvenSplit[] = [];
+  const all = [...(set.quarters ?? []), ...(set.years ?? [])].filter((p) => p?.e);
+  for (const [date, r] of Array.isArray(set.ssf) ? set.ssf : []) {
+    const k = splitRatioOf(r);
+    if (k === null) continue;
+    const after = all.filter((p) => p.e > date && splitSharesOf(p) !== null).sort((a, b) => b.e.localeCompare(a.e))[0];
+    if (!after) continue;
+    const base = splitSharesOf(after)!;
+    for (const K of [k, 1 / k]) {
+      const proves = all.some((p) => p.e < date && splitSharesOf(p) !== null && Math.abs((splitSharesOf(p)! * K) / base - 1) <= SPLIT_FACT_CORROBORATION);
+      if (proves && !out.some((s) => s.k === K)) { out.push({ k: K, refs: [after.e] }); break; }
+    }
+  }
+  return out;
+}
+
 /** The filer's proven splits (forward or reverse), one per ratio and SHARE_PROVEN_SPLIT_YEARS window. */
-export function provenSplits(set: Pick<StoredFactSet, "asr">): ProvenSplit[] {
+export function provenSplits(set: Pick<StoredFactSet, "asr"> & Partial<Pick<StoredFactSet, "quarters" | "years" | "ssf">>): ProvenSplit[] {
   const out: ProvenSplit[] = [];
   for (const [e, r] of Array.isArray(set.asr) ? set.asr : []) {
     const k = splitRatioOf(r);
@@ -74,11 +114,14 @@ export function provenSplits(set: Pick<StoredFactSet, "asr">): ProvenSplit[] {
     if (near) near.refs.push(e);
     else out.push({ k, refs: [e] });
   }
+  if (set.quarters && set.years) {
+    for (const f of splitsFromFacts(set as Pick<StoredFactSet, "quarters" | "years" | "ssf">)) if (!out.some((s) => s.k === f.k)) out.push(f);
+  }
   return out;
 }
 
 /** Period end -> the factor that puts it on today's basis (1 = already there). */
-export function splitFactors(set: Pick<StoredFactSet, "quarters" | "years" | "asr">): Map<string, number> {
+export function splitFactors(set: Pick<StoredFactSet, "quarters" | "years" | "asr"> & Partial<Pick<StoredFactSet, "ssf">>): Map<string, number> {
   const splits = provenSplits(set);
   const all = [...set.quarters, ...set.years].filter((p) => p?.e);
   const factors = new Map<string, number>();
