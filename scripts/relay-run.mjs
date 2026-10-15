@@ -139,6 +139,8 @@ const TASKS = {
   // Read-only, but needs the frozen universe to compute the match ratio: the
   // question "how many wire items are about a stock we cover" cannot be answered
   // without the symbol set.
+  // #552 COWORK #243: per-class quarterly EPS identified from the filing (dei:TradingSymbol). SEC only, reads only.
+  "per-class-eps-probe": { script: "scripts/per-class-eps-probe.mjs", args: () => [] },
   "wire-feeds": {
     script: "scripts/wire-feeds-probe.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
