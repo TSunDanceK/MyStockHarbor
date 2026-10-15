@@ -1090,6 +1090,8 @@ const TASKS = {
   "write-factset-dump": { script: "scripts/factset-dump-probe.mjs", args: () => [], writes: true },
   // #552 COWORK #245 before/after (per-class EPS, filed-split proof, split-aware gate). Reads only.
   "write-earnings-pr3-before-after": { script: "scripts/earnings-pr3-before-after.mjs", args: () => [], needsTypescript: true, writes: true },
+  // #552 COWORK #246 census: filed whole-ratio splits main does not recognise. Reads only.
+  "write-split-census-246": { script: "scripts/split-census-246.mjs", args: () => [], needsTypescript: true, writes: true },
   // CAN A MULTI-CLASS FILER'S SHARES BE SPLIT BY CLASS AT ALL? BUILD-BRIEF §5
   // prescribes summing each class's shares x that class's close; secFields.ts
   // records from measurement that companyfacts carries no class label. Both
