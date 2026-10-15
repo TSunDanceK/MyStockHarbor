@@ -1088,6 +1088,8 @@ const TASKS = {
   "nonop-tag-coverage": { script: "scripts/nonop-tag-coverage.mjs", args: () => [] },
   // STORED SETS AS JSON for a local render fixture (#552 COWORK #47). 1 MGET.
   "write-factset-dump": { script: "scripts/factset-dump-probe.mjs", args: () => [], writes: true },
+  // #552 COWORK #239: earnings-page data audit (EPS basis, Q4 EPS, quarter gaps, bank revenue). Reads only.
+  "write-earnings-audit-239": { script: "scripts/earnings-audit-239.mjs", args: () => [], needsTypescript: true, writes: true },
   // CAN A MULTI-CLASS FILER'S SHARES BE SPLIT BY CLASS AT ALL? BUILD-BRIEF §5
   // prescribes summing each class's shares x that class's close; secFields.ts
   // records from measurement that companyfacts carries no class label. Both
