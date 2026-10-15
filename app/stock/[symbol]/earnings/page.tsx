@@ -37,7 +37,7 @@ import {
 import {
   SCORE_COMPONENTS, coverageOf, scoreFromSec,
 } from "@/lib/server/secEarningsScore";
-import { valuationInputs } from "@/lib/server/secValuation";
+import { derivedQ4Eps, valuationInputs } from "@/lib/server/secValuation";
 import { registrantFor } from "@/lib/server/stockProfile";
 import { ANNUAL_REACTION_MIN, annualNextReportOutlook, annualOnlyForm, annualOnlyNote, annualReactionEvents } from "@/lib/server/annualOnly";
 import {
@@ -374,7 +374,7 @@ async function getEarningsData(symbol: string) {
     ? annualOnlyForm(registrantFor(symbol)?.annualForm, cold.set, new Date().toISOString().slice(0, 10))
     : null;
   const secView = cold.status === "ready"
-    ? buildSecEarningsView(cold.set, { annualForm, cik: cikForSymbol(symbol) })
+    ? buildSecEarningsView(cold.set, { annualForm, cik: cikForSymbol(symbol), deriveQ4Eps: derivedQ4Eps })
     : null;
 
   // DATES AND TIMING ONLY. epsActual/revenueActual are deliberately not read
