@@ -118,6 +118,29 @@ export default function SiteHeader({
           background: #141b2b;
         }
 
+        /* An entry that stays but is not a link (#553 COWORK #236): greyed
+           text with an optional small second line, in the dropdown, the
+           drill-down and the static menu alike. */
+        .mshNavDisabled {
+          color: #5f6b80 !important;
+          cursor: default;
+          user-select: none;
+        }
+
+        .mshNavDisabled:hover,
+        .mshNavDisabled:active {
+          color: #5f6b80 !important;
+          background: transparent !important;
+        }
+
+        .mshNavDisabledNote {
+          display: block;
+          margin-top: 2px;
+          font-size: 11px;
+          font-weight: 600;
+          color: #5f6b80;
+        }
+
         /* A dropdown row that opens a flyout submenu instead of navigating
            directly -- same base look as a link item, plus a right-facing
            arrow (added inline) to hint that it expands sideways. */

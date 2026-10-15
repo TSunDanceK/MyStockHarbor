@@ -2,7 +2,12 @@
 //
 // The rule: /stock/SYM/earnings is linked only when SYM has a stored SEC fact
 // set with at least one filed period (lib/filedEarningsLinks.ts, one cached index
-// read in lib/server/filedEarnings.ts). Otherwise the link is left out.
+// read in lib/server/filedEarnings.ts). Otherwise the link is left out -- except
+// the header's "Company Earnings" entry and the mobile home Earnings tile, which
+// are never hidden (#553 COWORK #236): with no filed set they stay as greyed
+// text with no href at all (aria-disabled, a note "Not on SEC for SYM, try
+// another stock"; no note while the list loads), so there is still never a link
+// to a no-set page. Section 5 pins that.
 //
 //   1. THE SCAN. Every earnings href in app/ and lib/ (code only, comments
 //      stripped) must have a hasFiledEarnings call or value on its line or in
@@ -43,10 +48,10 @@ const EXEMPT = [
   { file: "app/stock/[symbol]/earnings/page.tsx", re: /mystockharbor\.com\/stock\/\$\{clean\}\/earnings/, why: "the page's own canonical / og:url / structured-data URL (noindex handles a no-set page)" },
   { file: "app/stock/[symbol]/coldFillAction.ts", re: /revalidatePath\(/, why: "cache revalidation, not a link" },
   { file: "app/stock/[symbol]/earnings/EarningsSymbolPicker.tsx", re: /router\.push\(/, why: "navigation to a symbol the reader typed on the earnings page; the page shows its not-available state" },
-  { file: "app/components/SiteHeaderNav.tsx", re: /if \(kind === "earnings"\) return/, why: "the stockHref helper; its only earnings caller is the Company Earnings entry (HEADER_NAV requiresFiledEarnings), kept only when hasFiledEarnings(lastSymbol), and the click path re-checks" },
+  { file: "app/components/SiteHeaderNav.tsx", re: /if \(kind === "earnings"\) return/, why: "the stockHref helper; its only earnings caller is the Company Earnings entry (HEADER_NAV requiresFiledEarnings), which is a link only when hasFiledEarnings(lastSymbol) and otherwise greyed text with no href (asserted in section 5), and the click path re-checks" },
   { file: "app/sitemap.ts", re: /toAbsoluteUrl\(`\/stock\/\$\{symbol\}\/earnings`\)/, why: "filtered by earningsRenderable, whose `filed` input is hasFiledEarningsIn (asserted below and in check-sitemap-robots)" },
   { file: "lib/latest-earnings-data.ts", re: /financialmodelingprep\.com/, why: "a data-provider API URL, not a site link" },
-  { file: "app/components/MobileHomePage.tsx", re: /href: \(symbol: string\) => `\/stock\/\$\{encodeURIComponent\(symbol\)\}\/earnings`/, why: "the Earnings tile's definition; the tile is skipped at render unless hasFiledEarnings(lastSymbol) (asserted below)" },
+  { file: "app/components/MobileHomePage.tsx", re: /href: \(symbol: string\) => `\/stock\/\$\{encodeURIComponent\(symbol\)\}\/earnings`/, why: "the Earnings tile's definition; the tile is a link only when hasFiledEarnings(lastSymbol), otherwise a greyed div with no href (asserted below)" },
 ];
 
 // app/api/ is skipped: route handlers render no links (their /earnings strings
@@ -87,8 +92,8 @@ for (const [file, hs] of [...byFile].sort()) {
 }
 check(`${all.length} earnings hrefs found, none ungated`, all.length > 20 && ungated.length === 0,
   ungated.map((h) => `${h.file}:${h.line} ${h.text.slice(0, 90)}`).join(" | "));
-check("the MobileHomePage Earnings tile is skipped without a filed set (its exemption's condition)",
-  /if \(tile\.label === "Earnings" && !hasFiledEarnings\(lastSymbol\)\) return null;/.test(readCodeOnly("app/components/MobileHomePage.tsx")));
+check("the MobileHomePage Earnings tile is not a link without a filed set (its exemption's condition)",
+  /if \(tile\.label === "Earnings" && !hasFiledEarnings\(lastSymbol\)\) \{\s*return \(\s*<div/.test(readCodeOnly("app/components/MobileHomePage.tsx")));
 for (const x of EXEMPT) {
   check(`exemption still matches something (${x.file})`, all.some((h) => h.exempt === x), "a stale exemption is a hole");
 }
@@ -181,6 +186,43 @@ console.log("\n4. cost: one cached read per render, never a GET per link\n");
   const route = readCodeOnly("app/api/sec/filed-earnings/route.ts");
   check("the client endpoint is CDN-cached, and a failed read is a no-store 503, never an empty list",
     /s-maxage=3600/.test(route) && /status: 503, headers: \{ "Cache-Control": "no-store" \}/.test(route));
+}
+
+// ── 5. NEVER HIDDEN, NEVER LINKED (#553 COWORK #236) ─────────────────────────
+console.log("\n5. the header's Company Earnings and the mobile Earnings tile: greyed text, no href, without a filed set\n");
+{
+  const nav = readCodeOnly("app/components/SiteHeaderNav.tsx");
+  const home = readCodeOnly("app/components/MobileHomePage.tsx");
+  const once1 = (src, find, repl) => {
+    if (src.split(find).length - 1 !== 1) throw new Error(`mutation anchor not unique: ${find.slice(0, 60)}`);
+    return src.replace(find, repl);
+  };
+  const props = [
+    ["the entry is never filtered out of the menu data", nav, (n) => !/const shown =/.test(n) && !/\.filter\(shown\)/.test(n) && /entries: item\.entries\.map\(\(e\) =>/.test(n),
+      (n) => once1(n, "entries: item.entries.map((e) =>", "entries: item.entries.filter((e) => e.kind === \"submenu\" || !e.requiresFiledEarnings).map((e) =>")],
+    ["without a filed set the entry has an empty href and a disabled marker, and no stockNav", nav,
+      (n) => /if \(c\.requiresFiledEarnings && !ctx\.earningsLinked\) \{\s*return \{\s*label: c\.label,\s*href: "",[\s\S]{0,160}?disabled: \{ note:/.test(n),
+      (n) => once1(n, 'href: "",\n        isActive: (path) => navMatches(rule, path),\n        disabled', 'href: stockHref(ctx.lastSymbol, "earnings"),\n        isActive: (path) => navMatches(rule, path),\n        disabled')],
+    ["the note names the symbol once the list has loaded, and is absent while it loads", nav,
+      (n) => /note: ctx\.earningsReady \? `Not on SEC for \$\{ctx\.lastSymbol\}, try another stock` : null/.test(n),
+      (n) => once1(n, "ctx.earningsReady ? `Not on SEC", "true ? `Not on SEC")],
+    ["the disabled row is a div with aria-disabled and no link", nav,
+      (n) => { const m = n.match(/function DisabledEntry\([\s\S]*?\n\}\n/); return !!m && /<div role=\{role\} aria-disabled="true"/.test(m[0]) && !/<Link|<a |href=/.test(m[0]); },
+      (n) => once1(n, '<div role={role} aria-disabled="true"', "<Link href={child.href} aria-disabled=\"true\"")],
+    ["the desktop dropdown renders it disabled", nav, (n) => /if \(entry\.disabled\) return <DisabledEntry/.test(n), (n) => once1(n, "if (entry.disabled) return <DisabledEntry", "if (false) return <DisabledEntry")],
+    ["the desktop flyout renders it disabled", nav, (n) => /if \(child\.disabled\) return <DisabledEntry key=\{child\.label\} child=\{child\} role="menuitem"/.test(n), (n) => once1(n, 'if (child.disabled) return <DisabledEntry key={child.label} child={child} role="menuitem"', 'if (false) return <DisabledEntry key={child.label} child={child} role="menuitem"')],
+    ["the mobile drill-down renders it disabled", nav, (n) => /if \(child\.disabled\) return <DisabledEntry key=\{child\.label\} child=\{child\} className="mshDrillLink"/.test(n), (n) => once1(n, 'if (child.disabled) return <DisabledEntry key={child.label} child={child} className="mshDrillLink"', 'if (false) return <DisabledEntry key={child.label} child={child} className="mshDrillLink"')],
+    ["the no-JS static menu renders it disabled", nav, (n) => /child\.disabled \? \(\s*<DisabledEntry/.test(n), (n) => once1(n, "child.disabled ? (\n    <DisabledEntry", "false ? (\n    <DisabledEntry")],
+    ["the mobile Earnings tile is a greyed div with aria-disabled and no href", home,
+      (h) => { const m = h.match(/if \(tile\.label === "Earnings" && !hasFiledEarnings\(lastSymbol\)\) \{[\s\S]*?\n          \}\n/); return !!m && /aria-disabled="true"/.test(m[0]) && !/href=|<Link/.test(m[0]) && /filedReady \?/.test(m[0]); },
+      (h) => once1(h, '<div\n                key={tile.label}\n                aria-disabled="true"', '<Link\n                key={tile.label}\n                href={`/stock/${lastSymbol}/earnings`}\n                aria-disabled="true"')],
+  ];
+  for (const [label, src, ok, mutate] of props) {
+    check(label, ok(src));
+    let broke;
+    try { broke = ok(mutate(src)); } catch (e) { check(`MUTATION anchor for: ${label}`, false, e.message); continue; }
+    check(`MUTATION: ${label} — broken source is caught`, !broke);
+  }
 }
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);

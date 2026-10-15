@@ -248,7 +248,7 @@ export type HeaderNavChild = {
   match?: NavMatch;
   emphasize?: boolean;
   stockNav?: StockNavKind;
-  /** Shown only when the last symbol has a filed SEC set (#552 COWORK #197). */
+  /** A link only when the last symbol has a filed SEC set (#552 COWORK #197); otherwise the entry stays, greyed and unlinked, with a note (#553 COWORK #236). */
   requiresFiledEarnings?: boolean;
   /** The newest video's page when one is known (lib/youtube.ts), else `href`. */
   latestVideo?: boolean;
