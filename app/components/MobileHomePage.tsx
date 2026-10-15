@@ -10,6 +10,7 @@ import TickerLogo from "@/app/components/TickerLogo";
 import { activeRowStyle } from "@/lib/listboxNav";
 import { useListboxNav } from "@/app/components/useListboxNav";
 import { useFiledEarnings } from "@/app/components/useFiledEarnings";
+import { useLastStockSymbol } from "@/app/components/useLastStockSymbol";
 
 const DEFAULT_SYMBOL = "AAPL";
 
@@ -112,17 +113,8 @@ export default function MobileHomePage() {
   const [results, setResults] = useState<{ symbol: string; name: string; exchange: string }[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // Last viewed symbol from localStorage, falls back to AAPL for fresh visitors
-  const [lastSymbol, setLastSymbol] = useState(DEFAULT_SYMBOL);
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem("msh_last_symbol");
-      if (saved && saved.trim()) setLastSymbol(saved.trim().toUpperCase());
-    } catch {
-      // localStorage unavailable (private browsing edge cases) — keep default
-    }
-  }, []);
+  // Last viewed symbol, live: it follows a choice made anywhere (#553 COWORK #238); AAPL for fresh visitors.
+  const lastSymbol = useLastStockSymbol(null);
 
   // Close the search dropdown when clicking anywhere outside of it.
   useEffect(() => {

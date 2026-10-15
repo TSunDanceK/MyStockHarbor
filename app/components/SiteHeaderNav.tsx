@@ -6,7 +6,8 @@ import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { rememberSymbol, SYMBOL_STORAGE_KEY } from "@/lib/symbol";
+import { SYMBOL_STORAGE_KEY } from "@/lib/symbol";
+import { cleanSymbol, useLastStockSymbol } from "@/app/components/useLastStockSymbol";
 import { readStored } from "@/lib/browserStorage";
 import { useFiledEarnings } from "@/app/components/useFiledEarnings";
 import { navMatches } from "@/lib/navMatch";
@@ -57,52 +58,12 @@ type NavLinkItem = NavChild & {
 
 type NavItem = NavLinkItem | NavDropdownItem;
 
-function cleanSymbol(value: string | null | undefined) {
-  const cleaned = String(value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9.-]/g, "");
-
-  return cleaned || "AAPL";
-}
-
-function symbolFromPathname(pathname: string | null) {
-  if (!pathname) return null;
-
-  const match = pathname.match(/^\/stock\/([^/]+)/i);
-  if (!match?.[1]) return null;
-
-  try {
-    return cleanSymbol(decodeURIComponent(match[1]));
-  } catch {
-    return cleanSymbol(match[1]);
-  }
-}
-
 function stockHref(symbol: string, kind: StockNavKind) {
   const encoded = encodeURIComponent(cleanSymbol(symbol));
 
   if (kind === "earnings") return `/stock/${encoded}/earnings`;
   if (kind === "news") return `/stock/${encoded}/news`;
   return `/stock/${encoded}`;
-}
-
-function useLastStockSymbol(pathname: string | null) {
-  const [lastSymbol, setLastSymbol] = useState("AAPL");
-
-  useEffect(() => {
-    const pathSymbol = symbolFromPathname(pathname);
-
-    if (pathSymbol) {
-      setLastSymbol(pathSymbol);
-      rememberSymbol(pathSymbol);
-      return;
-    }
-
-    setLastSymbol(cleanSymbol(readStored(SYMBOL_STORAGE_KEY)));
-  }, [pathname]);
-
-  return lastSymbol;
 }
 
 function currentCachedSymbol() {
