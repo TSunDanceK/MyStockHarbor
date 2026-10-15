@@ -30,7 +30,7 @@ for (const acc of ACCS) {
   }
   const rows = [];
   for (const m of xml.matchAll(/<us-gaap:(\w+)\b([^>]*)>\s*([^<]+?)\s*<\/us-gaap:\1>/g)) {
-    if (!RX.test(m[1])) continue;
+    if (!RX.test(m[1]) || /TextBlock$/.test(m[1])) continue;
     const c = ctx.get(m[2].match(/contextRef="([^"]+)"/)?.[1]);
     if (!c || !c.startsWith("2026") && !c.startsWith("2025")) continue;
     rows.push(`${m[1]} ${c} = ${m[3]}`);
