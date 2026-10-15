@@ -3,7 +3,9 @@
 // The client side of the earnings-link rule (#552 COWORK #197). One fetch of
 // the filed list per page load, shared by every component that asks; until it
 // arrives -- or if it fails -- hasFiledEarnings is false and no earnings link
-// renders ("only when", never a disabled link).
+// renders. `ready` says the list has arrived, so a menu entry that must not
+// vanish (#553 COWORK #236: the header's "Company Earnings") can tell "still
+// loading" (greyed, no second line) from "not on SEC" (greyed, with the note).
 import { useCallback, useEffect, useState } from "react";
 import { hasFiledEarningsIn } from "@/lib/filedEarningsLinks";
 
@@ -27,7 +29,7 @@ function loadFiled(): Promise<ReadonlySet<string> | null> {
   return shared;
 }
 
-export function useFiledEarnings(): { hasFiledEarnings: (symbol: string | null | undefined) => boolean } {
+export function useFiledEarnings(): { hasFiledEarnings: (symbol: string | null | undefined) => boolean; ready: boolean } {
   const [filed, setFiled] = useState<ReadonlySet<string> | null>(known);
   useEffect(() => {
     if (known) return;
@@ -37,5 +39,5 @@ export function useFiledEarnings(): { hasFiledEarnings: (symbol: string | null |
   }, []);
   // Stable until the list arrives, so it can sit in a useMemo's dependencies.
   const hasFiledEarnings = useCallback((symbol: string | null | undefined) => hasFiledEarningsIn(filed, symbol), [filed]);
-  return { hasFiledEarnings };
+  return { hasFiledEarnings, ready: filed !== null };
 }

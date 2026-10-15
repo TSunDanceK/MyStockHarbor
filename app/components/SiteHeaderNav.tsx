@@ -20,6 +20,11 @@ type NavChild = {
   // Visually distinguishes a single "home" link for a dropdown section
   // (e.g. "Advanced Pickers Page") from the grouped items below it.
   emphasize?: boolean;
+  // Present when the entry must stay in the menu but cannot be a link (#553
+  // COWORK #236: "Company Earnings" for a symbol with no filed SEC set). It is
+  // rendered as greyed plain text with aria-disabled, no href; `note` is the
+  // small second line, null while the filed list is still loading.
+  disabled?: { note: string | null };
 };
 
 // A top-level row inside a dropdown menu: either a plain link, or a
@@ -116,10 +121,19 @@ const ownHref = (child: HeaderNavChild): NavMatch => child.match ?? { exact: [ch
  */
 function buildNavItems(
   items: HeaderNavItem[],
-  ctx: { lastSymbol: string; latestVideoId: string | null; earningsLinked: boolean }
+  ctx: { lastSymbol: string; latestVideoId: string | null; earningsLinked: boolean; earningsReady: boolean }
 ): NavItem[] {
   const child = (c: HeaderNavChild): NavChild => {
     const rule = ownHref(c);
+    // #553 COWORK #236 (replacing the #197 "hide"): never hidden. No filed set: greyed text, no href at all, so no crawlable link to an empty page.
+    if (c.requiresFiledEarnings && !ctx.earningsLinked) {
+      return {
+        label: c.label,
+        href: "",
+        isActive: (path) => navMatches(rule, path),
+        disabled: { note: ctx.earningsReady ? `Not on SEC for ${ctx.lastSymbol}, try another stock` : null },
+      };
+    }
     return {
       label: c.label,
       href: c.stockNav ? stockHref(ctx.lastSymbol, c.stockNav) : c.latestVideo && ctx.latestVideoId ? `/insights/videos/${ctx.latestVideoId}` : c.href,
@@ -128,7 +142,6 @@ function buildNavItems(
       ...(c.emphasize ? { emphasize: true } : {}),
     };
   };
-  const shown = (c: HeaderNavChild) => !c.requiresFiledEarnings || ctx.earningsLinked;
   return items.map((item): NavItem => {
     if (item.kind === "link") return { kind: "link", ...child(item) };
     return {
@@ -137,9 +150,9 @@ function buildNavItems(
       isActive: (path) => navMatches(item.match, path),
       ...(item.menuMinWidth ? { menuMinWidth: item.menuMinWidth } : {}),
       ...(item.submenuMinWidth ? { submenuMinWidth: item.submenuMinWidth } : {}),
-      entries: item.entries.filter((e) => e.kind === "submenu" || shown(e)).map((e) =>
+      entries: item.entries.map((e) =>
         e.kind === "submenu"
-          ? { kind: "submenu", label: e.label, isActive: (path: string) => navMatches(e.match, path), items: e.items.filter(shown).map(child) }
+          ? { kind: "submenu", label: e.label, isActive: (path: string) => navMatches(e.match, path), items: e.items.map(child) }
           : { kind: "link", ...child(e) }
       ),
     };
@@ -150,6 +163,18 @@ function normalisePathname(pathname: string | null) {
   if (!pathname) return "/";
   const withoutTrailingSlash = pathname.replace(/\/$/, "");
   return withoutTrailingSlash || "/";
+}
+
+// A menu entry that stays but is not a link (#553 COWORK #236): greyed text,
+// no href, aria-disabled, optionally a small second line. One component so the
+// desktop dropdown, its flyout and the mobile drill-down read the same.
+function DisabledEntry({ child, className, role }: { child: NavChild; className: string; role?: "menuitem" }) {
+  return (
+    <div role={role} aria-disabled="true" className={`${className} mshNavDisabled`}>
+      <span>{child.label}</span>
+      {child.disabled?.note ? <small className="mshNavDisabledNote">{child.disabled.note}</small> : null}
+    </div>
+  );
 }
 
 // A submenu trigger row rendered inside an open NavDropdown's portal menu.
@@ -281,6 +306,7 @@ function NavSubmenu({
         onMouseLeave={scheduleClose}
       >
         {items.map((child) => {
+          if (child.disabled) return <DisabledEntry key={child.label} child={child} role="menuitem" className="mshGlobalHeaderDropdownItem" />;
           const childHref = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
 
           return (
@@ -525,6 +551,7 @@ function NavDropdown({
             );
           }
 
+          if (entry.disabled) return <DisabledEntry key={entry.label} child={entry} role="menuitem" className="mshGlobalHeaderDropdownItem" />;
           const childHref = entry.stockNav ? stockHref(lastSymbol, entry.stockNav) : entry.href;
 
           return (
@@ -692,6 +719,7 @@ function MobileNavOverlay({
   }
 
   function renderLeaf(child: NavChild) {
+    if (child.disabled) return <DisabledEntry key={child.label} child={child} className="mshDrillLink" />;
     const href = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
     const active = child.isActive(activePathname);
     return (
@@ -783,7 +811,9 @@ function StaticMobileMenu({
   activePathname: string;
   onNavigate: () => void;
 }) {
-  const link = (child: NavChild, extra: string) => (
+  const link = (child: NavChild, extra: string) => child.disabled ? (
+    <DisabledEntry key={child.label} child={child} className={`mshMobileOverlayLink${extra}`} />
+  ) : (
     <Link
       key={child.label}
       href={child.href}
@@ -862,8 +892,8 @@ export default function SiteHeaderNav({
   const router = useRouter();
   const activePathname = normalisePathname(pathname);
   const lastSymbol = useLastStockSymbol(pathname);
-  // #552 COWORK #197: "Company Earnings" only when the last symbol has a filed SEC set.
-  const { hasFiledEarnings } = useFiledEarnings();
+  // "Company Earnings" is a link only when the last symbol has a filed SEC set (#552 COWORK #197); otherwise it stays, greyed and unlinked (#553 COWORK #236).
+  const { hasFiledEarnings, ready: earningsReady } = useFiledEarnings();
   const earningsLinked = hasFiledEarnings(lastSymbol);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // The checkbox behind the no-JS menu (see StaticMobileMenu).
@@ -891,8 +921,8 @@ export default function SiteHeaderNav({
   }, []);
 
   const navItems = useMemo<NavItem[]>(
-    () => buildNavItems(items, { lastSymbol, latestVideoId, earningsLinked }),
-    [items, lastSymbol, latestVideoId, earningsLinked]
+    () => buildNavItems(items, { lastSymbol, latestVideoId, earningsLinked, earningsReady }),
+    [items, lastSymbol, latestVideoId, earningsLinked, earningsReady]
   );
 
   return (

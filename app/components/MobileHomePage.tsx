@@ -105,7 +105,7 @@ const TILES: NavTile[] = [
 ];
 
 export default function MobileHomePage() {
-  const { hasFiledEarnings } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set
+  const { hasFiledEarnings, ready: filedReady } = useFiledEarnings(); // #552 COWORK #197: earnings link only with a filed set; the tile stays, greyed (#553 COWORK #236)
   const router = useRouter();
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
@@ -316,8 +316,36 @@ export default function MobileHomePage() {
         }}
       >
         {TILES.map((tile) => {
-          // #552 COWORK #197: the Earnings tile only when the last symbol has a filed SEC set.
-          if (tile.label === "Earnings" && !hasFiledEarnings(lastSymbol)) return null;
+          // The Earnings tile is a link only when the last symbol has a filed SEC set (#552 COWORK #197).
+          // Otherwise it stays, greyed and unlinked, with a note once the list has loaded (#553 COWORK #236).
+          if (tile.label === "Earnings" && !hasFiledEarnings(lastSymbol)) {
+            return (
+              <div
+                key={tile.label}
+                aria-disabled="true"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  padding: "14px 14px 15px",
+                  borderRadius: 16,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderLeft: "3px solid #475569",
+                  background: "rgba(255,255,255,0.03)",
+                  color: "#64748b",
+                  userSelect: "none",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <span style={{ fontSize: 18, lineHeight: 1, filter: "grayscale(1)", opacity: 0.6 }}>{tile.icon}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase" }}>{tile.label}</span>
+                </div>
+                {filedReady ? (
+                  <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.4 }}>{`Not on SEC for ${lastSymbol}, try another stock`}</div>
+                ) : null}
+              </div>
+            );
+          }
           const resolvedHref = typeof tile.href === "function" ? tile.href(lastSymbol) : tile.href;
           const resolvedSublabel = typeof tile.sublabel === "function" ? tile.sublabel(lastSymbol) : tile.sublabel;
 
