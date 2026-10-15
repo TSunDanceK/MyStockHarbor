@@ -63,7 +63,7 @@ const gated = async (url) => {
   for (let a = 0; a < 3; a++) {
     const wait = Math.max(0, lastAt + 130 - Date.now()); if (wait) await new Promise((r) => setTimeout(r, wait));
     lastAt = Date.now();
-    try { const res = await fetch(url, { headers: { "User-Agent": UA, "Accept-Encoding": "gzip, deflate" } }); if (res.ok || res.status === 404) return res; } catch {}
+    try { const res = await fetch(url, { headers: { "User-Agent": UA, "Accept-Encoding": "gzip, deflate" }, signal: AbortSignal.timeout(30000) }); if (res.ok || res.status === 404) return res; } catch {}
     await new Promise((r) => setTimeout(r, 1000 * (a + 1)));
   }
   return new Response("{}", { status: 599 });
@@ -95,7 +95,7 @@ for (const sym of cand) {
   for (const kind of ["quarters", "years"]) {
     const bm = new Map(b[kind].map((p) => [p.end, p]));
     for (const p of a[kind]) { const q = bm.get(p.end); if (!q) { totals.nonEps.add(sym); continue; }
-      K.forEach((k, i) => { if (EPS.has(k)) return; const x = q.values[i]?.val ?? null, y = p.values[i]?.val ?? null; if (x !== y && !(x != null && y != null && Math.abs(x - y) <= 1e-9 * Math.abs(x))) { totals.nonEps.add(sym); lines.push(`NONEPS ${sym} ${kind[0]}${p.end} ${k} ${fmt(x)}->${fmt(y)}`); } }); }
+      K.forEach((k, i) => { if (EPS.has(k)) return; const x = q.values[i]?.val ?? null, y = p.values[i]?.val ?? null; if (x !== y && !(x != null && y != null && Math.abs(x - y) <= 1e-9 * Math.abs(x))) { totals.nonEps.add(sym); console.log(`NONEPS ${sym} ${kind[0]}${p.end} ${k} ${fmt(x)}->${fmt(y)}`); } }); }
   }
   const n = await CE.withClassEps(sym, String(cik), a, gated);
   if (n) totals.classFilled.add(sym);
@@ -109,7 +109,7 @@ for (const sym of cand) {
   }
   for (const t of ["fill", "removal", "change"]) if (diffs.some((d) => d.type === t)) totals[t].add(sym);
   if (NAMED.includes(sym) || diffs.some((d) => d.type !== "fill")) {
-    lines.push(`${NAMED.includes(sym) ? "NAMED" : "MOVED"} ${sym} class+${n} factors ${JSON.stringify([...pa.factors])} · ${diffs.length} EPS cells: ${diffs.slice(0, 10).map((d) => `${d.key} ${fmt(d.x)}->${fmt(d.y)}`).join("; ")}${diffs.length > 10 ? " …" : ""}`);
+    console.log(`${NAMED.includes(sym) ? "NAMED" : "MOVED"} ${sym} class+${n} factors ${JSON.stringify([...pa.factors])} · ${diffs.length} EPS cells: ${diffs.slice(0, 10).map((d) => `${d.key} ${fmt(d.x)}->${fmt(d.y)}`).join("; ")}${diffs.length > 10 ? " …" : ""}`);
   }
 }
 console.log(`== summary · read ${cand.size - failed} · failed ${failed}`);
