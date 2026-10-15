@@ -107,15 +107,16 @@ console.log("APPLY");
 
 console.log("SPLIT");
 const K = F.SEC_FIELD_KEYS;
-const period = (e, s, fp, fy, cells) => {
+const period = (e, s, fp, fy, cells, f = null) => {
   const v = K.map((k) => (k in cells ? cells[k] : null));
-  return { e, s, fp, fy, a: null, f: null, v, d: K.map((k) => (k in cells ? "F" : "-")).join("") };
+  return { e, s, fp, fy, a: null, f, v, d: K.map((k) => (k in cells ? "F" : "-")).join("") };
 };
 const cvnaSet = (ssf) => ({
   quarters: [
-    period("2026-06-30", "2026-04-01", "Q2", 2026, { netIncome: 310e6, sharesDiluted: 739.96e6, epsDiluted: 0.42 }),
-    period("2026-03-31", "2026-01-01", "Q1", 2026, { netIncome: 250e6, epsDiluted: 1.69 }),
-    period("2025-06-30", "2025-04-01", "Q2", 2025, { netIncome: 183e6, sharesDiluted: 716.153e6, epsDiluted: 0.26 }),
+    period("2026-06-30", "2026-04-01", "Q2", 2026, { netIncome: 310e6, sharesDiluted: 739.96e6, epsDiluted: 0.42 }, "2026-07-29"),
+    period("2026-03-31", "2026-01-01", "Q1", 2026, { netIncome: 250e6, epsDiluted: 1.69 }, "2026-04-29"),
+    // restated in the Q2 FY2026 10-Q, filed after the split
+    period("2025-06-30", "2025-04-01", "Q2", 2025, { netIncome: 183e6, sharesDiluted: 716.153e6, epsDiluted: 0.26 }, "2026-07-29"),
   ],
   years: [], instants: [], ...(ssf ? { ssf } : {}),
 });
@@ -130,7 +131,15 @@ const cvnaSet = (ssf) => ({
   check("no split fact -> nothing moves (as before)", SA.splitFactors(cvnaSet(null)).size === 0);
   const lone = cvnaSet([["2026-05-08", 0.2]]); lone.quarters = lone.quarters.filter((p) => p.e !== "2026-03-31");
   check("no pre-split period that corroborates -> nothing moves", SA.splitFactors(lone).size === 0);
-  const M = await mutated("lib/server/secSplitAdjust.ts", "    for (const f of splitsFromFacts(set as Pick<StoredFactSet, \"quarters\" | \"years\" | \"ssf\">)) if (!out.some((s) => s.k === f.k)) out.push(f);", "");
+  // FLG-shaped: the old periods were restated by filings after the split date -> nothing moves.
+  const restated = cvnaSet([["2026-05-08", 0.2]]);
+  restated.quarters = restated.quarters.map((p) => (p.e === "2026-03-31" ? { ...p, f: "2026-08-01", v: p.v.map((x, i) => (K[i] === "epsDiluted" ? 0.338 : x)) } : p));
+  check("a period filed after the split date is never moved (already restated)", SA.splitFactors(restated).size === 0, JSON.stringify([...SA.splitFactors(restated)]));
+  check("a ratio the restatement proof already holds is not added again, either way up", SA.provenSplits({ ...cvnaSet([["2026-05-08", 0.2]]), asr: [["2025-06-30", 0.2]] }).length === 1);
+  const MD = await mutated("lib/server/secSplitAdjust.ts", "      if (split.date && !(p.f && p.f < split.date)) continue;\n", "");
+  const both = cvnaSet([["2026-05-08", 0.2]]); both.quarters.push(period("2024-06-30", "2024-04-01", "Q2", 2024, { netIncome: 18e6, sharesDiluted: 128e6, epsDiluted: 0.14 }, "2026-08-01"));
+  check("mutant (filing-date rule dropped) is caught", MD.splitFactors(both).get("2024-06-30") === 5 && !SA.splitFactors(both).has("2024-06-30"));
+  const M = await mutated("lib/server/secSplitAdjust.ts", "    for (const f of splitsFromFacts(set as Pick<StoredFactSet, \"quarters\" | \"years\" | \"ssf\">)) if (!out.some((s) => s.k === f.k || s.k === 1 / f.k)) out.push(f);", "");
   check("mutant (filed split ignored) is caught", M.splitFactors(cvnaSet([["2026-05-08", 0.2]])).size === 0);
 }
 
