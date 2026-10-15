@@ -18,6 +18,7 @@ const pickInstanceFromIndex = (idx) => {
 const UA = process.env.SEC_USER_AGENT ?? "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; per-class eps probe)";
 const SYMBOLS = (process.env.SYMBOLS || "CVNA,AIG,AMBP,BB,BCE,BULL,GSHD,IMTX,MAIN,MKL,PENG,QNME,TRLV").split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
 const MAX_FILINGS = Number(process.env.MAX_FILINGS || 9);
+process.env.COVER ??= "1";
 
 let lastAt = 0, requests = 0;
 const get = async (url, kind = "json") => {
@@ -63,7 +64,13 @@ function readInstance(xml) {
     if (d < 80 || d > 120) continue;
     eps.push({ concept: m[1], start: c.start, end: c.end, member: mem, val: Number(m[3]) });
   }
-  return { symbolToMember, eps };
+  const titles = [];
+  for (const m of xml.matchAll(/<dei:(Security12bTitle|TradingSymbol)\b([^>]*)>\s*([^<]+?)\s*<\/dei:\1>/g)) {
+    const c = ctx.get(m[2].match(/\bcontextRef="([^"]+)"/)?.[1]);
+    titles.push(`${m[1]}[${c?.dims.map((d) => d.join("=")).join(",") || "-"}]="${m[3].trim()}"`);
+  }
+  const members = [...new Set([...xml.matchAll(/StatementClassOfStockAxis">\s*([^<\s]+)/g)].map((x) => x[1].replace(/^.*:/, "")))];
+  return { symbolToMember, eps, titles, members };
 }
 
 for (const sym of SYMBOLS) {
@@ -84,7 +91,8 @@ for (const sym of SYMBOLS) {
     if (!name) { console.log(`  ${f} ${acc}: no instance`); continue; }
     const xml = await get(`${base}/${name}`, "text");
     if (!xml) continue;
-    const { symbolToMember, eps } = readInstance(xml);
+    const { symbolToMember, eps, titles, members } = readInstance(xml);
+    if (process.env.COVER) console.log(`  cover ${acc}: ${titles.join(" | ")} · class members ${members.join(",")}`);
     for (const [s, m] of symbolToMember) mapSeen.set(s, m);
     const mine = symbolToMember.has(sym) ? symbolToMember.get(sym) : undefined;
     for (const e of eps) {
