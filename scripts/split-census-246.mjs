@@ -49,8 +49,8 @@ const gated = async (url) => {
   return new Response("{}", { status: 599 });
 };
 const whole = (r) => { const k = r >= 1 ? r : 1 / r; return k >= 1.9 && Math.abs(k - Math.round(k)) <= 0.02 * k ? Math.round(k) : null; };
-const out = { fixed: [], mainKnows: [], unproven: [], none: 0, failed: 0, noSet: 0 };
-let cells = 0;
+const out = { fixed: [], mainKnows: [], unproven: [], mixed: [], none: 0, failed: 0, noSet: 0 };
+let cells = 0, mixedCells = 0;
 for (let i = 0; i < symbols.length; i += 50) {
   const batch = symbols.slice(i, i + 50);
   const sets = await redis.mget(...batch.map((s) => `${PREFIX}:${s}`)); cmds++;
@@ -72,12 +72,24 @@ for (let i = 0; i < symbols.length; i += 50) {
     const tag = `${sym} ${stated.map(([d, x]) => `${d}:${whole(x)}${x < 1 ? "fwd" : "rev"}`).join(",")}`;
     if (n) { out.fixed.push(sym); cells += n; console.log(`FIXED ${tag} · ${n} EPS cells · ${moved.slice(0, 6).join(" ")}${moved.length > 6 ? " …" : ""}`); }
     else if (fb.size) { out.mainKnows.push(sym); console.log(`MAIN-KNOWS ${tag} · main factors ${fb.size}`); }
-    else { out.unproven.push(sym); console.log(`UNPROVEN ${tag} · no share-count step (or nothing pre-split stored)`); }
+    else {
+      // Still mixed? A stored EPS cell in a period that ends before the split and
+      // was only ever filed before it, beside a stored period after the split.
+      const all = [...set.quarters.map((p) => ["q", p]), ...set.years.map((p) => ["y", p])];
+      let mixed = 0; const where = [];
+      for (const [d] of stated) {
+        if (!all.some(([, p]) => p.e >= d)) continue;
+        for (const [kind, p] of all) if (p.e < d && p.f && p.f < d) { const c = EPS.filter((x) => p.v[x] != null).length; mixed += c; if (c) where.push(`${kind}${p.e}`); }
+      }
+      if (mixed) { out.mixed.push(sym); mixedCells += mixed; console.log(`STILL-MIXED ${tag} · ${mixed} EPS cells pre-split as filed · ${where.slice(0, 6).join(" ")}${where.length > 6 ? " …" : ""}`); }
+      else out.unproven.push(sym);
+    }
   }
 }
 console.log(`\n== summary · ${symbols.length} sets · no set ${out.noSet} · failed ${out.failed} · no whole split fact ${out.none}`);
 console.log(`FIXED ${out.fixed.length} (${cells} EPS cells): ${out.fixed.join(" ")}`);
 console.log(`MAIN-KNOWS ${out.mainKnows.length}: ${out.mainKnows.join(" ")}`);
-console.log(`UNPROVEN ${out.unproven.length}: ${out.unproven.join(" ")}`);
+console.log(`STILL-MIXED ${out.mixed.length} (${mixedCells} EPS cells): ${out.mixed.join(" ")}`);
+console.log(`CLEAN (nothing pre-split stored as filed) ${out.unproven.length}`);
 fs.rmSync(".before", { recursive: true, force: true });
 console.log(`Redis commands: ${cmds}`);
