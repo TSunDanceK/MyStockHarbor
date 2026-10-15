@@ -14,7 +14,7 @@ const get = async (url, kind = "json") => {
 };
 const t = await get("https://www.sec.gov/files/company_tickers.json");
 const cik = Object.values(t).find((x) => x.ticker === sym)?.cik_str;
-const RX = /^(EarningsPerShare\w*|NetIncomeLoss\w*|ProfitLoss|WeightedAverageNumber\w*|NetIncomeLossAttributableToNoncontrollingInterest)$/;
+const RX = /^(StockholdersEquityNoteStockSplit\w*|StockholdersEquityReverseStockSplit|StockSplit\w*|EarningsPerShare\w*|NetIncomeLoss\w*|ProfitLoss|WeightedAverageNumber\w*|NetIncomeLossAttributableToNoncontrollingInterest)$/;
 for (const acc of ACCS) {
   const base = `https://www.sec.gov/Archives/edgar/data/${cik}/${acc.replace(/-/g, "")}`;
   const idx = await get(`${base}/index.json`);
@@ -33,9 +33,13 @@ for (const acc of ACCS) {
     if (!RX.test(m[1]) || /TextBlock$/.test(m[1])) continue;
     const c = ctx.get(m[2].match(/contextRef="([^"]+)"/)?.[1]);
     if (!c || !c.startsWith("2026") && !c.startsWith("2025")) continue;
+    if (/Split/.test(m[1])) { rows.push(`SPLIT ${m[1]} ${c} = ${m[3].slice(0, 200)}`); continue; }
     rows.push(`${m[1]} ${c} = ${m[3]}`);
   }
   [...new Set(rows)].sort().forEach((r) => console.log("  " + r));
+  for (const m of xml.matchAll(/<dei:(\w+)\b[^>]*>\s*([^<]{1,120}?)\s*<\/dei:\1>/g)) if (/DocumentPeriodEndDate|AmendmentFlag|EntityCommonStockSharesOutstanding/.test(m[1])) console.log(`  DEI ${m[1]} = ${m[2]}`);
+  const words = [...new Set([...xml.matchAll(/[^.;>]{0,120}(?:stock split|five-for-one|5-for-1|forward split)[^.;<]{0,160}/gi)].map((x) => x[0].replace(/&#160;/g, " ").replace(/&[a-z#0-9]+;/g, " ").replace(/\s+/g, " ").trim()))].slice(0, 4);
+  words.forEach((w) => console.log(`  TEXT ${w}`));
   // The rendered statements: find the R page that carries "per share" rows.
   for (const n of names.filter((n) => /^R\d+\.htm$/i.test(n)).slice(0, 8)) {
     const html = await get(`${base}/${n}`, "text");
