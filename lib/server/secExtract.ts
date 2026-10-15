@@ -549,12 +549,55 @@ export function spanDays(start: string, end: string): number {
  * band silently drops those filers rather than failing, which is the same
  * fail-open shape as reading a cumulative figure straight.
  */
-export function quartersCovered(days: number): 1 | 2 | 3 | 4 | null {
+export function quartersCovered(days: number, calendar: QuarterCalendar = "standard"): 1 | 2 | 3 | 4 | null {
+  // A 12/12/12/16-WEEK FILER ONLY (#552 COWORK #240 (c)): its 16-week quarter
+  // (~112 days), 24-week half (~168) and 36-week nine months (~252) sit just
+  // outside the standard bands, so COST's Q4 (FY less 36 weeks) and AZO's Q1
+  // were never admitted. Widened for a filer sixteenWeekCalendar() detects,
+  // and for no one else.
+  if (calendar === "sixteen-week") {
+    if (days >= 80 && days <= 119) return 1;
+    if (days >= 160 && days <= 200) return 2;
+    if (days >= 245 && days <= 290) return 3;
+  }
   if (days >= 80 && days <= 105) return 1;
   if (days >= 170 && days <= 200) return 2;
   if (days >= 260 && days <= 290) return 3;
   if (days >= 350 && days <= 380) return 4;
   return null;
+}
+
+export type QuarterCalendar = "standard" | "sixteen-week";
+
+/**
+ * IS THIS A 12/12/12/16-WEEK FILER? (#552 COWORK #240 (c); #239 item 3.)
+ *
+ * Read from the filer's own frames, never from a symbol list: some fiscal year
+ * (frames sharing one start, ending inside a 52/53-week year) carries a
+ * 12-week first frame and a 36-week year-to-date (the 16-week quarter is Q4:
+ * COST, PEP, DPZ), or a 16-week first frame and a 28-week year-to-date (the
+ * 16-week quarter is Q1: AZO, KR, ACI). A 13-week (4-4-5) filer's frames are
+ * 91/182/273 days and match neither, so it keeps the standard bands.
+ */
+export function sixteenWeekCalendar(facts: CompanyFacts): boolean {
+  const near = (d: number, target: number) => Math.abs(d - target) <= 2;
+  const byStart = new Map<string, number[]>();
+  for (const tag of ["NetIncomeLoss", "ProfitLoss", "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"]) {
+    for (const r of facts.facts?.["us-gaap"]?.[tag]?.units?.USD ?? []) {
+      if (!r.start || !r.end) continue;
+      const list = byStart.get(r.start) ?? [];
+      list.push(spanDays(r.start, r.end));
+      byStart.set(r.start, list);
+    }
+  }
+  for (const spans of byStart.values()) {
+    const has = (t: number) => spans.some((d) => near(d, t));
+    const year = spans.some((d) => (d >= 362 && d <= 365) || (d >= 369 && d <= 372));
+    if (!year) continue;
+    if (has(83) && has(251)) return true; // 12, 24, 36, 52 weeks: Q4 is 16 weeks
+    if (has(111) && has(195)) return true; // 16, 28, 40, 52 weeks: Q1 is 16 weeks
+  }
+  return false;
 }
 
 /**
@@ -1168,6 +1211,15 @@ export function q4RevenueScope(
 
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
+/** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
+export const LAST_RESORT_REVENUE_TAG = "RevenuesNetOfInterestExpense";
+/** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
+export const RATIO_CLOSE_TOLERANCE = 0.1;
+/** ...over its newest this-many quarters and years. */
+const RATIO_CLOSE_QUARTERS = 8;
+const RATIO_CLOSE_YEARS = 4;
+/** How many of the newest years must carry no revenue before the last resort fills the years. */
+const LAST_RESORT_YEARS = 4;
 /** The in-memory tag of a derived contract + not-from-contract total (option G, LUNR). Never stored. */
 const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
 
@@ -1283,6 +1335,9 @@ function extractCompanyFactsWith(
   // recorded, and unreadableReason says so, as it does now.
   const currency = reportingCurrency(facts) ?? "USD";
 
+  // The filer's quarter calendar, decided once like the currency. See sixteenWeekCalendar.
+  const calendar: QuarterCalendar = sixteenWeekCalendar(facts) ? "sixteen-week" : "standard";
+
   // SPLIT SG&A, SUMMED BEFORE ANY FIELD IS READ, so the YTD differencing and
   // the chain ranking treat it like any other row. See withSummedSga.
   facts = withSummedSga(facts);
@@ -1357,7 +1412,7 @@ function extractCompanyFactsWith(
     for (const [, cands] of bucket) {
       const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
       if (!best?.row.start || !best.row.end) continue;
-      const n = quartersCovered(spanDays(best.row.start, best.row.end));
+      const n = quartersCovered(spanDays(best.row.start, best.row.end), calendar);
       if (n === null) continue;
       const list = byStart.get(best.row.start);
       const entry = { end: best.row.end, n, best };
@@ -1592,6 +1647,52 @@ function extractCompanyFactsWith(
       }
     }
 
+    // ── A BANK'S QUARTERS: NO REVENUE LINE AT ALL (#552 COWORK #240 (b)) ────
+    // JPM, WFC, BNY and most banks tag no contract-revenue line and no
+    // quarterly `Revenues`; the quarter's total is filed only as
+    // `RevenuesNetOfInterestExpense`. The fallback above needs a tagged line
+    // to judge, so it never fired and every quarter read "Not captured" while
+    // the 10-K's `Revenues` filled the years. LAST RESORT, PER SERIES: only
+    // where none of the newest SEC_QUARTER_WINDOW quarters (or newest
+    // LAST_RESORT_YEARS years) carries any revenue, and only into periods with
+    // none -- a filer with a line keeps it, so no tagged figure moves. A value
+    // below the period's own operating (or pre-tax) income is refused, as the
+    // fallback refuses one.
+    {
+      const lrField: FieldDef = { ...revenueField, chain: [LAST_RESORT_REVENUE_TAG], ifrsChain: undefined };
+      const lrRows = rowsForField(facts, lrField, new Set<string>(), currency);
+      if (lrRows.length) {
+        const lrBucket: Bucket = new Map();
+        for (const c of lrRows) {
+          const k = periodKey(c.row);
+          const list = lrBucket.get(k);
+          if (list) list.push(c);
+          else lrBucket.set(k, [c]);
+        }
+        const lrQuarter = new Map<string, Map<string, FieldValue>>();
+        const lrYear = new Map<string, Map<string, FieldValue>>();
+        runCumulative(
+          [lrField], new Map([["revenue", lrBucket]]), new Map([["revenue", LAST_RESORT_REVENUE_TAG]]),
+          lrQuarter, lrYear, new Map(), new Map(), [],
+        );
+        let filled = 0;
+        for (const [cells, lrCells, window] of [[quarterCells, lrQuarter, SEC_QUARTER_WINDOW], [yearCells, lrYear, LAST_RESORT_YEARS]] as const) {
+          const newest = [...cells.keys()].sort().reverse().slice(0, window);
+          if (newest.some((e) => cells.get(e)?.get("revenue")?.val != null)) continue;
+          for (const [end, m] of cells) {
+            if (m.get("revenue")?.val != null) continue;
+            const lr = lrCells.get(end)?.get("revenue");
+            if (!lr || lr.val == null || lr.val <= 0) continue;
+            const bar = m.get("operatingIncome")?.val ?? m.get("preTaxIncome")?.val ?? null;
+            if (bar != null && lr.val < bar) continue;
+            m.set("revenue", lr);
+            filled++;
+          }
+        }
+        if (filled) notes.push(`revenue: no revenue line tagged; ${LAST_RESORT_REVENUE_TAG} used for ${filled} period(s) (last resort)`);
+      }
+    }
+
     // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD (#552 COWORK #196/#200) ──
     // AFTER every revenue choice above, so it judges the figure that would be
     // stored. Only a DIFFERENCED revenue cell can be judged: an as-filed
@@ -1647,7 +1748,7 @@ function extractCompanyFactsWith(
     for (const [, cands] of bucket) {
       const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
       if (!best?.row.start || !best.row.end) continue;
-      const n = quartersCovered(spanDays(best.row.start, best.row.end));
+      const n = quartersCovered(spanDays(best.row.start, best.row.end), calendar);
       if (n !== 1 && n !== 4) continue; // a 6M or 9M average belongs to no quarter
 
       const target = n === 1 ? quarterCells : yearCells;
@@ -1719,9 +1820,32 @@ function extractCompanyFactsWith(
   // the cell null rather than reaching for the nearest available one. Q4 has no
   // filed three-month average, so Q4 EPS comes out null -- that is the cost of
   // refusing to derive the average, stated rather than hidden.
+  // ── ONLY WHERE THE FILER'S OWN EPS CLOSES ON THAT RATIO (#552 COWORK #240 (a)) ──
+  // CVNA (Up-C) files its per-Class-A EPS on the class axis, which companyfacts
+  // drops, and an undimensioned weighted count of ~716M that is not that EPS's
+  // basis: $183M / 716M rendered $0.26 against a filed $1.28. The filer's own
+  // periods say so -- wherever it files EPS, net income / (EPS x shares) is far
+  // from 1 (FY2025: 0.74). So the ratio is computed only for a filer whose every
+  // filed EPS in the newest RATIO_CLOSE_QUARTERS quarters and RATIO_CLOSE_YEARS
+  // years closes within RATIO_CLOSE_TOLERANCE; otherwise the cell stays null
+  // ("Not reported"). A filer that files no EPS at all keeps the ratio, as before.
+  const ratioCloses = (epsKey: string, numerator: string, denominator: string): boolean => {
+    const recent = (cells: typeof quarterCells, n: number) =>
+      [...cells.keys()].sort().reverse().slice(0, n).map((e) => cells.get(e)!);
+    for (const m of [...recent(quarterCells, RATIO_CLOSE_QUARTERS), ...recent(yearCells, RATIO_CLOSE_YEARS)]) {
+      const eps = m.get(epsKey), ni = m.get(numerator)?.val ?? null, sh = m.get(denominator)?.val ?? null;
+      if (!eps || eps.derived !== "as-filed" || eps.val == null || eps.val === 0 || ni == null || ni === 0 || sh == null || sh <= 0) continue;
+      if (Math.abs(ni / (eps.val * sh) - 1) > RATIO_CLOSE_TOLERANCE) return false;
+    }
+    return true;
+  };
   for (const field of asFiledOnlyFields()) {
     if (!field.ratioSource) continue;
     const { numerator, denominator } = field.ratioSource;
+    if (!ratioCloses(field.key, numerator, denominator)) {
+      notes.push(`${field.key}: the filer's filed ${field.key} does not close on ${numerator} / ${denominator} within ${RATIO_CLOSE_TOLERANCE * 100}%; not computed`);
+      continue;
+    }
     for (const cells of [quarterCells, yearCells]) {
       for (const [end, m] of cells) {
         if (m.get(field.key)) continue; // filed; nothing to compute
