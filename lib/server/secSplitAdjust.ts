@@ -91,12 +91,12 @@ function splitsFromFacts(set: Pick<StoredFactSet, "quarters" | "years" | "ssf">)
   const out: ProvenSplit[] = [];
   const all = [...(set.quarters ?? []), ...(set.years ?? [])].filter((p) => p?.e);
   for (const [date, r] of Array.isArray(set.ssf) ? set.ssf : []) {
-    const k = splitRatioOf(r);
-    if (k === null) continue;
+    const whole = splitRatioOf(r);
+    if (whole === null) continue;
     const after = all.filter((p) => p.e > date && splitSharesOf(p) !== null).sort((a, b) => b.e.localeCompare(a.e))[0];
     if (!after) continue;
     const base = splitSharesOf(after)!;
-    for (const K of [k, 1 / k]) {
+    for (const K of [whole, 1 / whole]) {
       const proves = all.some((p) => p.e < date && splitSharesOf(p) !== null && Math.abs((splitSharesOf(p)! * K) / base - 1) <= SPLIT_FACT_CORROBORATION);
       if (proves && !out.some((s) => s.k === K)) { out.push({ k: K, refs: [after.e] }); break; }
     }

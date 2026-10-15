@@ -25,6 +25,7 @@
 import type { ExtractResult, FieldValue } from "./secExtract";
 import { SEC_FIELD_INDEX } from "./secFields";
 import { FILING_INSTANCE_MAX_BYTES, pickInstanceName } from "./secFilingFill";
+import { symbolSpellings } from "../symbolSpellings.mjs";
 
 /** The most 10-Q instances read per filer (newest first): two years of quarters and their comparatives. */
 export const CLASS_EPS_MAX_FILINGS = 6;
@@ -93,7 +94,7 @@ export function parseClassInstance(xml: string): ClassInstance {
 export function listedClassMember(cover: ClassCover, symbol: string): { member: string } | { refused: string } {
   const syms = [...new Set(cover.symbols.map((s) => s.toUpperCase()))];
   if (syms.length !== 1) return { refused: `${syms.length} securities on the cover` };
-  const spellings = new Set([symbol, symbol.replace(/[.-]/g, ""), symbol.replace(/\./g, "-"), symbol.replace(/-/g, ".")].map((s) => s.toUpperCase()));
+  const spellings = new Set(symbolSpellings(symbol).map((s: string) => s.toUpperCase()));
   if (!spellings.has(syms[0])) return { refused: `cover symbol ${syms[0]} is not the listed ticker` };
   const titles = [...new Set(cover.titles)];
   if (titles.length !== 1) return { refused: `${titles.length} security titles on the cover` };
