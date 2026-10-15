@@ -98,6 +98,9 @@ console.log("APPLY");
   ex.quarters[0].values[F.SEC_FIELD_INDEX.epsBasic] = { val: 0.43, derived: "as-filed" };
   const b = C.blankEpsCells(ex);
   check("blank cells: diluted only (basic is filed)", b.length === 1 && b[0].key === "epsDiluted", JSON.stringify(b));
+  const q4 = { quarters: [{ ...q("2025-10-01", "2025-12-31"), fp: "Q4" }] };
+  q4.quarters[0].values[F.SEC_FIELD_INDEX.netIncome] = { val: 1, derived: "differenced" };
+  check("a blank Q4 is never a reason to read a 10-Q", C.blankEpsCells(q4).length === 0);
   const n = C.applyClassEps(ex, [{ end: "2026-06-30", key: "epsDiluted", val: 0.42, accession: "a" }, { end: "2026-06-30", key: "epsBasic", val: 9, accession: "a" }], A);
   check("writes the blank as filed, never over a filed cell", n === 1 && ex.quarters[0].values[F.SEC_FIELD_INDEX.epsDiluted].val === 0.42 && ex.quarters[0].values[F.SEC_FIELD_INDEX.epsBasic].val === 0.43);
 }

@@ -133,13 +133,15 @@ export function classEpsFills(
   return { member: id.member, fills };
 }
 
-/** The extracted quarters' blank EPS cells worth a read: the newest CLASS_EPS_QUARTERS, net income present. */
+/** The extracted quarters' blank EPS cells worth a read: the newest CLASS_EPS_QUARTERS, Q1-Q3, net income present. */
 export function blankEpsCells(extracted: Pick<ExtractResult, "quarters">): { start: string; end: string; key: "epsDiluted" | "epsBasic" }[] {
   const ni = SEC_FIELD_INDEX["netIncome"];
   const out: { start: string; end: string; key: "epsDiluted" | "epsBasic" }[] = [];
   const qs = [...extracted.quarters].sort((a, b) => b.end.localeCompare(a.end)).slice(0, CLASS_EPS_QUARTERS);
   for (const p of qs) {
-    if (!p.start || p.values[ni]?.val == null) continue;
+    // A Q4 IS NEVER IN A 10-Q (the 10-K states the year), so a blank Q4 is
+    // not a reason to read one; #897's derived Q4 covers it on the page.
+    if (!p.start || p.fp === "Q4" || p.values[ni]?.val == null) continue;
     for (const key of ["epsDiluted", "epsBasic"] as const) if (p.values[SEC_FIELD_INDEX[key]]?.val == null) out.push({ start: p.start, end: p.end, key });
   }
   return out;
