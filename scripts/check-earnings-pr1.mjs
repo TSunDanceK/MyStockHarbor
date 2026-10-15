@@ -46,23 +46,24 @@ const cell = (res, kind, end, key) => res[kind].find((p) => p.end === end)?.valu
 // ── (a) ──
 console.log("(a) EPS ratio gate");
 const cvna = (fyEps) => payload({
-  NetIncomeLoss: ["USD", [row("2025-04-01", "2025-06-30", 183 * M, "Q2"), row("2025-01-01", "2025-12-31", 1407 * M, "FY")]],
-  WeightedAverageNumberOfDilutedSharesOutstanding: ["shares", [row("2025-04-01", "2025-06-30", 716.153 * M, "Q2"), row("2025-01-01", "2025-12-31", 224.277 * M, "FY")]],
+  NetIncomeLoss: ["USD", [row("2025-04-01", "2025-06-30", 183 * M, "Q2"), row("2025-01-01", "2025-12-31", 1407 * M, "FY"), row("2024-01-01", "2024-12-31", 210 * M, "FY")]],
+  WeightedAverageNumberOfDilutedSharesOutstanding: ["shares", [row("2025-04-01", "2025-06-30", 716.153 * M, "Q2"), row("2025-01-01", "2025-12-31", 224.277 * M, "FY"), row("2024-01-01", "2024-12-31", 132.206 * M, "FY")]],
   ...(fyEps == null ? {} : { EarningsPerShareDiluted: ["USD/shares", [row("2025-01-01", "2025-12-31", fyEps, "FY")]] }),
 });
 const runA = (X) => {
   const off = X.extractCompanyFacts("CVNA", cvna(8.45)); // 1407 / (8.45 x 224.3) = 0.74
   const on = X.extractCompanyFacts("FIX", cvna(1407 / 224.277)); // closes exactly
   const none = X.extractCompanyFacts("FIX", cvna(null));
-  return { off: cell(off, "quarters", "2025-06-30", "epsDiluted"), on: cell(on, "quarters", "2025-06-30", "epsDiluted"), none: cell(none, "quarters", "2025-06-30", "epsDiluted"), offNotes: off.notes };
+  return { offYear: cell(off, "years", "2024-12-31", "epsDiluted"), off: cell(off, "quarters", "2025-06-30", "epsDiluted"), on: cell(on, "quarters", "2025-06-30", "epsDiluted"), none: cell(none, "quarters", "2025-06-30", "epsDiluted"), offNotes: off.notes };
 };
 {
   const r = runA(X);
   check("CVNA-shaped: Q2 computed EPS refused (FY closes at 0.74)", r.off?.val == null, JSON.stringify(r.off));
   check("...and a note says why", r.offNotes.some((n) => /epsDiluted: .*does not close/.test(n)));
+  check("...but a year's computed EPS is kept (the gate is quarters only)", r.offYear?.derived === "computed", JSON.stringify(r.offYear));
   check("a filer whose filed EPS closes keeps the computed quarter", r.on?.derived === "computed" && Math.abs(r.on.val - 183 / 716.153) < 1e-9, JSON.stringify(r.on));
   check("a filer that files no EPS keeps the computed quarter", r.none?.derived === "computed", JSON.stringify(r.none));
-  const XM = await load(once("    if (!ratioCloses(field.key, numerator, denominator)) {", "    if (false) {")(extractRaw));
+  const XM = await load(once("    const closes = ratioCloses(field.key, numerator, denominator);", "    const closes = true;")(extractRaw));
   check("mutant (gate removed) is caught", runA(XM).off?.val != null);
 }
 
