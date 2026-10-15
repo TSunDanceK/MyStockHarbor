@@ -4,6 +4,7 @@ import {
   isBypassedIp,
   getDailyPageViewCount,
 } from "@/lib/server/dailyPageLimit";
+import { ETORO_RAIL } from "@/lib/affiliateCreatives";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,13 @@ export const dynamic = "force-dynamic";
 // they came from a real person browsing the site. See hasRealPageView().
 const affiliateIds: Record<string, string> = {
   tradingview: "164495",
+};
+
+// Partners whose tracking is a whole tracking URL rather than an ID parameter.
+// Same page-view rule as the IDs above. eToro uses the click link from its
+// approved banner (#553) until a dedicated text-link URL is supplied.
+const trackedLinks: Record<string, string> = {
+  etoro: ETORO_RAIL.href,
 };
 
 // Plain, un-tagged destination for each partner. A request that hasn't
@@ -82,7 +90,8 @@ export async function GET(
   const base = plainLinks[key] ?? "https://www.mystockharbor.com/platforms";
   const affiliateId = affiliateIds[key];
 
-  const earned = affiliateId ? await hasRealPageView(request) : false;
+  const trackedLink = trackedLinks[key];
+  const earned = affiliateId || trackedLink ? await hasRealPageView(request) : false;
 
   let target = base;
 
@@ -104,6 +113,8 @@ export async function GET(
       : query
         ? `https://www.tradingview.com/?${query}`
         : base;
+  } else if (earned && trackedLink) {
+    target = trackedLink;
   } else if (earned && affiliateId) {
     const url = new URL(base);
     url.searchParams.set("aff_id", affiliateId);
