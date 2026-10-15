@@ -1220,6 +1220,8 @@ const RATIO_CLOSE_QUARTERS = 8;
 const RATIO_CLOSE_YEARS = 4;
 /** How many of the newest years must carry no revenue before the last resort fills the years. */
 const LAST_RESORT_YEARS = 4;
+/** A bank's two revenue halves (#552 COWORK #241): summed, marked computed, only where no total is tagged. */
+export const BANK_REVENUE_HALVES = ["InterestIncomeExpenseNet", "NoninterestIncome"] as const;
 /** The in-memory tag of a derived contract + not-from-contract total (option G, LUNR). Never stored. */
 const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
 
@@ -1691,6 +1693,50 @@ function extractCompanyFactsWith(
         }
         if (filled) notes.push(`revenue: no revenue line tagged; ${LAST_RESORT_REVENUE_TAG} used for ${filled} period(s) (last resort)`);
       }
+    }
+
+    // ── A BANK WITH NO REVENUE TOTAL AT ALL (#552 COWORK #241) ──────────────
+    // BNY, COLB, WSFS, UBSI, AX, FLG, TBBK tag no revenue total of any kind,
+    // not even RevenuesNetOfInterestExpense: the income statement's two halves,
+    // net interest income and noninterest income, are its revenue. Their SUM,
+    // marked computed, from the SAME frame, under the same per-series rule as
+    // the last resort above (none of the newest periods carries any revenue,
+    // after that fill) and only into periods with none. Both halves or no cell.
+    {
+      const halves = BANK_REVENUE_HALVES.map((tag) => {
+        const f: FieldDef = { ...revenueField, chain: [tag], ifrsChain: undefined };
+        const rows = rowsForField(facts, f, new Set<string>(), currency);
+        const bucket: Bucket = new Map();
+        for (const c of rows) {
+          const k = periodKey(c.row);
+          const list = bucket.get(k);
+          if (list) list.push(c);
+          else bucket.set(k, [c]);
+        }
+        const qc = new Map<string, Map<string, FieldValue>>(), yc = new Map<string, Map<string, FieldValue>>();
+        if (rows.length) runCumulative([f], new Map([["revenue", bucket]]), new Map([["revenue", tag]]), qc, yc, new Map(), new Map(), []);
+        return { qc, yc };
+      });
+      let summed = 0;
+      for (const [cells, kind, window] of [[quarterCells, "qc", SEC_QUARTER_WINDOW], [yearCells, "yc", LAST_RESORT_YEARS]] as const) {
+        const newest = [...cells.keys()].sort().reverse().slice(0, window);
+        if (newest.some((e) => cells.get(e)?.get("revenue")?.val != null)) continue;
+        for (const [end, m] of cells) {
+          if (m.get("revenue")?.val != null) continue;
+          const [a, b] = halves.map((h) => h[kind].get(end)?.get("revenue"));
+          if (!a || !b || a.val == null || b.val == null || !sameFrame(a.covers, b.covers)) continue;
+          const sum = a.val + b.val;
+          if (sum <= 0) continue;
+          const bar = m.get("operatingIncome")?.val ?? m.get("preTaxIncome")?.val ?? null;
+          if (bar != null && sum < bar) continue;
+          m.set("revenue", {
+            val: sum, tag: null, ns: a.ns, unit: a.unit, derived: "computed",
+            covers: a.covers, computedFrom: [BANK_REVENUE_HALVES[0], BANK_REVENUE_HALVES[1]],
+          });
+          summed++;
+        }
+      }
+      if (summed) notes.push(`revenue: no revenue total tagged; ${BANK_REVENUE_HALVES.join(" + ")} used for ${summed} period(s) (computed)`);
     }
 
     // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD (#552 COWORK #196/#200) ──
