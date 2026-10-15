@@ -21,7 +21,9 @@ const redis = Redis.fromEnv();
 const ROOT = process.cwd();
 const UA = process.env.SEC_USER_AGENT ?? "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; earnings pr3 before-after)";
 const keyOf = (f, n) => (fs.readFileSync(f, "utf8").match(new RegExp(`${n} = "([^"]+)"`)) ?? [])[1];
-const NAMED = (process.env.SYMBOLS || "CVNA,GSHD,AIG,AMBP,BB,BCE,BULL,IMTX,MAIN,MKL,PENG,QNME,TRLV,AAPL,MSFT,AMZN").split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+// SHARD:i/n reads the named set (shard 0 only) and every n-th candidate from i.
+const SHARD = (process.env.SYMBOLS || "").match(/^SHARD:(\d+)\/(\d+)$/);
+const NAMED = (SHARD ? (SHARD[1] === "0" ? "CVNA,GSHD,AIG,AMBP,BB,BCE,BULL,IMTX,MAIN,MKL,PENG,QNME,TRLV,AAPL,MSFT,AMZN" : "") : (process.env.SYMBOLS || "CVNA,GSHD,AIG,AMBP,BB,BCE,BULL,IMTX,MAIN,MKL,PENG,QNME,TRLV,AAPL,MSFT,AMZN")).split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
 
 execSync("git fetch --depth=1 origin main", { stdio: "ignore" });
 fs.rmSync(".before", { recursive: true, force: true }); fs.mkdirSync(".before");
@@ -56,7 +58,8 @@ for (let i = 0; i < symbols.length; i += 50) {
     if (qs.some((p) => p.v[IX("netIncome")] != null && (p.v[IX("epsDiluted")] == null || p.v[IX("epsBasic")] == null)) || [...set.quarters, ...set.years].some((p) => p.d[IX("epsDiluted")] === "C")) cand.add(batch[j]);
   });
 }
-console.log(`${symbols.length} manifest symbols · reading ${cand.size}\n`);
+if (SHARD) { const [i, n] = [Number(SHARD[1]), Number(SHARD[2])]; const all = [...cand].filter((s) => !NAMED.includes(s)).sort(); cand.clear(); NAMED.forEach((s) => cand.add(s)); all.forEach((s, j) => { if (j % n === i) cand.add(s); }); }
+console.log(`${symbols.length} manifest symbols · reading ${cand.size}${SHARD ? ` (shard ${SHARD[1]}/${SHARD[2]})` : ""}\n`);
 
 let lastAt = 0;
 const gated = async (url) => {
