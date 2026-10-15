@@ -1827,8 +1827,8 @@ function extractCompanyFactsWith(
   // periods say so -- wherever it files EPS, net income / (EPS x shares) is far
   // from 1 (FY2025: 0.74). So the ratio is computed only for a filer whose every
   // filed EPS in the newest RATIO_CLOSE_QUARTERS quarters and RATIO_CLOSE_YEARS
-  // years closes within RATIO_CLOSE_TOLERANCE; otherwise the cell stays null
-  // ("Not reported"). A filer that files no EPS at all keeps the ratio, as before.
+  // years closes within RATIO_CLOSE_TOLERANCE; otherwise the QUARTER cells stay
+  // null ("Not reported"). A filer that files no EPS at all keeps the ratio, as before.
   const ratioCloses = (epsKey: string, numerator: string, denominator: string): boolean => {
     const recent = (cells: typeof quarterCells, n: number) =>
       [...cells.keys()].sort().reverse().slice(0, n).map((e) => cells.get(e)!);
@@ -1839,14 +1839,15 @@ function extractCompanyFactsWith(
     }
     return true;
   };
+  // QUARTERS ONLY (#552 COWORK #240 (a) is scoped to the quarterly figure): a
+  // year's computed EPS is left as it was -- FCX's computed years match its
+  // reported EPS, and refusing them would remove right numbers.
   for (const field of asFiledOnlyFields()) {
     if (!field.ratioSource) continue;
     const { numerator, denominator } = field.ratioSource;
-    if (!ratioCloses(field.key, numerator, denominator)) {
-      notes.push(`${field.key}: the filer's filed ${field.key} does not close on ${numerator} / ${denominator} within ${RATIO_CLOSE_TOLERANCE * 100}%; not computed`);
-      continue;
-    }
-    for (const cells of [quarterCells, yearCells]) {
+    const closes = ratioCloses(field.key, numerator, denominator);
+    if (!closes) notes.push(`${field.key}: the filer's filed ${field.key} does not close on ${numerator} / ${denominator} within ${RATIO_CLOSE_TOLERANCE * 100}%; quarters not computed`);
+    for (const cells of closes ? [quarterCells, yearCells] : [yearCells]) {
       for (const [end, m] of cells) {
         if (m.get(field.key)) continue; // filed; nothing to compute
         const numCell = m.get(numerator);
