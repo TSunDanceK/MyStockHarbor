@@ -106,6 +106,14 @@ for (let i = 0; i < symbols.length; i++) {
       if (s.m == null) { if (Math.abs(x / s.w - 1) <= 0.25) { s.m = s.w; s.how = "cover"; } else if (Math.abs(x * s.w - 1) <= 0.25) { s.m = 1 / s.w; s.how = "cover"; } }
     }
   }
+  // WHAT THE MERGED CODE MAKES OF IT once re-read: the stored set plus the
+  // filer's split facts (same read as secExtract's readSplitFacts).
+  const ssfMap = new Map();
+  for (const r of Object.values(g.StockholdersEquityNoteStockSplitConversionRatio1?.units ?? {}).flat()) { const d = r.end ?? r.start; if (d && r.val > 0) ssfMap.set(`${d}|${r.val}`, [d, r.val]); }
+  const ssf = [...ssfMap.values()].sort((a, b) => a[0].localeCompare(b[0]));
+  const proven = SA.provenSplits({ ...set, ssf });
+  const facts1 = SA.splitFactors({ ...set, ssf });
+  console.log(`${sym} DIAG asr ${JSON.stringify(set.asr ?? [])} · proven(with ssf) ${JSON.stringify(proven.map((x) => [x.k, x.date ?? null, x.refs.slice(0, 3)]))} · factors ${facts1.size}`);
   const page = SA.splitAdjusted(set);
   const all = [...page.quarters.map((p) => ["q", p]), ...page.years.map((p) => ["y", p])];
   const allStored = [...set.quarters, ...set.years];
