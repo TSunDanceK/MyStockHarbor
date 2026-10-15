@@ -146,6 +146,14 @@ for (let i = 0; i < symbols.length; i++) {
         const off = Math.abs(today) > 1e-9 ? Math.abs(v / today - 1) : Math.abs(v);
         if (off <= 0.03 || Math.abs(v - today) < 0.006) { totals.ok++; continue; }
         totals.truly++; truly.set(sym, (truly.get(sym) ?? 0) + 1);
+        // WHY splitFactors leaves it: its shares against each proven split's nearest restated ref.
+        const sp = (q) => q.v[K.indexOf("sharesDiluted")] ?? q.v[K.indexOf("sharesBasic")] ?? (q.v[K.indexOf("netIncome")] != null && q.v[IX.epsDiluted] ? q.v[K.indexOf("netIncome")] / q.v[IX.epsDiluted] : null);
+        const raw = allStored.find((q) => q.e === p.e && q.fp === p.fp);
+        const diag = proven.map((x) => {
+          const refs = x.refs.map((e) => allStored.find((q) => q.e === e)).filter((q) => q && sp(q) != null).sort((a, b) => Math.abs(Date.parse(a.e) - Date.parse(p.e)) - Math.abs(Date.parse(b.e) - Date.parse(p.e)));
+          return refs[0] ? `k${Number(x.k.toFixed(3))} ref ${refs[0].fp}${refs[0].e} sh ${fmt(sp(refs[0]))} (f ${refs[0].f})` : `k${Number(x.k.toFixed(3))} no ref with shares`;
+        });
+        lines.push(`    shares ${fmt(raw ? sp(raw) : null)} (f ${p.f}) · ${diag.join(" | ") || "no proven split"}`);
         lines.push(`  PRE ${kind}${p.e} ${key} page ${fmt(v)} vs today ${fmt(today)} (newest ${fmt(newest.val)} ${newest.form} ${newest.filed})`);
       }
     }
