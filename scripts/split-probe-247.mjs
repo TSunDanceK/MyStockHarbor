@@ -72,16 +72,39 @@ for (let i = 0; i < symbols.length; i++) {
   for (const r of g.StockholdersEquityNoteStockSplitConversionRatio1?.units ? Object.values(g.StockholdersEquityNoteStockSplitConversionRatio1.units).flat() : []) {
     const d = r.end ?? r.start, w = whole(r.val);
     if (!d || !w) continue;
-    if (!stated.some((s) => s.w === w && Math.abs(days(s.d, d)) < 200)) stated.push({ d, w, filed: r.filed });
-    else { const s = stated.find((s) => s.w === w && Math.abs(days(s.d, d)) < 200); if (d < s.d) s.d = d; }
+    // ONE SPLIT PER RATIO WITHIN TWO YEARS: later filings restate the same
+    // split at their own period ends; the earliest date is the split.
+    const near = stated.find((s) => s.w === w && Math.abs(days(s.d, d)) < 730);
+    if (!near) stated.push({ d, w, filed: r.filed });
+    else if (d < near.d) near.d = d;
   }
   // orientation from the cover share count either side of each date
   const cover = (facts.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares ?? []).filter((r) => r.end && r.val > 0).sort((a, b) => a.end.localeCompare(b.end));
   for (const s of stated) {
     const before = [...cover].reverse().find((r) => r.end < s.d && days(r.end, s.d) < 200);
     const after = cover.find((r) => r.end >= s.d && days(s.d, r.end) < 200);
-    s.m = null;
-    if (before && after) { const x = after.val / before.val; if (Math.abs(x / s.w - 1) <= 0.25) s.m = s.w; else if (Math.abs(x * s.w - 1) <= 0.25) s.m = 1 / s.w; s.coverStep = x; }
+    s.m = null; s.how = "unknown";
+    // (a) THE FILER'S OWN RESTATEMENT: one period's EPS filed before the date and again after it.
+    let votes = { up: 0, down: 0 };
+    for (const t of ["EarningsPerShareDiluted", "EarningsPerShareBasic"]) {
+      const rows = Object.values(g[t]?.units ?? {}).flat().filter((r) => r.start && r.end && r.end < s.d && Math.abs(r.val) >= 0.02);
+      const byPeriod = new Map();
+      for (const r of rows) { const k = `${r.start}|${r.end}`; (byPeriod.get(k) ?? byPeriod.set(k, []).get(k)).push(r); }
+      for (const list of byPeriod.values()) {
+        const pre = list.filter((r) => r.filed < s.d).sort((a, b) => b.filed.localeCompare(a.filed))[0];
+        const post = list.filter((r) => r.filed > s.d).sort((a, b) => b.filed.localeCompare(a.filed))[0];
+        if (!pre || !post) continue;
+        const x = post.val / pre.val;
+        if (Math.abs(x * s.w - 1) <= 0.06) votes.up++; else if (Math.abs(x / s.w - 1) <= 0.06) votes.down++;
+      }
+    }
+    if (votes.up > votes.down) { s.m = s.w; s.how = `restated ${votes.up}`; }
+    else if (votes.down > votes.up) { s.m = 1 / s.w; s.how = `restated ${votes.down}`; }
+    // (b) the cover share count either side of the date
+    if (before && after) {
+      const x = after.val / before.val; s.coverStep = x;
+      if (s.m == null) { if (Math.abs(x / s.w - 1) <= 0.25) { s.m = s.w; s.how = "cover"; } else if (Math.abs(x * s.w - 1) <= 0.25) { s.m = 1 / s.w; s.how = "cover"; } }
+    }
   }
   const page = SA.splitAdjusted(set);
   const all = [...page.quarters.map((p) => ["q", p]), ...page.years.map((p) => ["y", p])];
@@ -119,8 +142,8 @@ for (let i = 0; i < symbols.length; i++) {
       }
     }
   }
-  console.log(`${sym} splits ${stated.map((s) => `${s.d}×${s.w}${s.m ? (s.m > 1 ? "↑" : "↓") : "?"}`).join(",")}\n  why: ${why.join(" | ")}`);
-  lines.slice(0, 12).forEach((l) => console.log(l)); if (lines.length > 12) console.log(`  … ${lines.length - 12} more`);
+  console.log(`${sym} splits ${stated.map((s) => `${s.d}×${s.w}${s.m ? (s.m > 1 ? "↑" : "↓") : "?"}(${s.how})`).join(",")}\n  why: ${why.join(" | ")}`);
+  lines.slice(0, 30).forEach((l) => console.log(l)); if (lines.length > 30) console.log(`  … ${lines.length - 30} more`);
 }
 console.log(`\n== cells checked ${totals.cells} · truly pre-split on the page ${totals.truly} · on today's basis ${totals.ok} · unverifiable ${totals.unverifiable}`);
 console.log(`TRULY ${[...truly].map(([s, n]) => `${s} ${n}`).join(", ")}`);
