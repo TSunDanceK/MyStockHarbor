@@ -373,6 +373,14 @@ export type ExtractResult = {
    */
   shareRestated?: [string, number][];
   /**
+   * THE FILER'S OWN STOCK-SPLIT FACTS (#552 COWORK #245): `[date, ratio]` from
+   * StockholdersEquityNoteStockSplitConversionRatio1, undimensioned, as filed
+   * (CVNA's 5-for-1 of 8 May 2026 is filed as 0.2). Raw: which ones are whole
+   * splits, and in which direction, is decided by the reader against the
+   * share counts (secSplitAdjust). Optional; absent = none filed.
+   */
+  splitFacts?: [string, number][];
+  /**
    * PERIODS RE-FILED UNCHANGED (#552 COWORK #89 §1): year and recent-quarter
    * ends whose basic share count a later filing reported again within 1%.
    * The other half of the split evidence: a doubling between two periods
@@ -1215,6 +1223,25 @@ const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTa
 export const LAST_RESORT_REVENUE_TAG = "RevenuesNetOfInterestExpense";
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
+/** How close a closure ratio must sit to one of the filer's split ratios to read as a split, not a wrong count. */
+export const SPLIT_SHAPED_TOLERANCE = 0.05;
+/** The split-ratio concept the filer states its splits under. */
+export const SPLIT_FACT_TAGS = ["StockholdersEquityNoteStockSplitConversionRatio1"] as const;
+
+/** The filer's split facts, `[date, ratio]`, undimensioned rows only, de-duplicated. See ExtractResult.splitFacts. */
+export function readSplitFacts(facts: CompanyFacts): [string, number][] {
+  const out = new Map<string, number>();
+  for (const tag of SPLIT_FACT_TAGS) {
+    for (const rows of Object.values(facts.facts?.["us-gaap"]?.[tag]?.units ?? {})) {
+      for (const r of rows) {
+        const d = r.end ?? r.start;
+        if (!d || typeof r.val !== "number" || !Number.isFinite(r.val) || r.val <= 0) continue;
+        out.set(`${d}|${r.val}`, r.val);
+      }
+    }
+  }
+  return [...out].map(([k, v]) => [k.split("|")[0], v] as [string, number]).sort((a, b) => a[0].localeCompare(b[0]));
+}
 /** ...over its newest this-many quarters and years. */
 const RATIO_CLOSE_QUARTERS = 8;
 const RATIO_CLOSE_YEARS = 4;
@@ -1337,6 +1364,7 @@ function extractCompanyFactsWith(
   // recorded, and unreadableReason says so, as it does now.
   const currency = reportingCurrency(facts) ?? "USD";
 
+  const splitFacts = readSplitFacts(facts);
   // The filer's quarter calendar, decided once like the currency. See sixteenWeekCalendar.
   const calendar: QuarterCalendar = sixteenWeekCalendar(facts) ? "sixteen-week" : "standard";
 
@@ -1875,13 +1903,23 @@ function extractCompanyFactsWith(
   // filed EPS in the newest RATIO_CLOSE_QUARTERS quarters and RATIO_CLOSE_YEARS
   // years closes within RATIO_CLOSE_TOLERANCE; otherwise the QUARTER cells stay
   // null ("Not reported"). A filer that files no EPS at all keeps the ratio, as before.
+  // ── A SPLIT CANNOT TRIP IT (#552 COWORK #245) ──────────────────────────
+  // Where a period's EPS and share count were filed on two sides of a split,
+  // net income / (EPS x shares) lands on the split ratio, not near 1. A ratio
+  // within SPLIT_SHAPED_TOLERANCE of one of the FILER'S OWN split ratios (its
+  // split facts, or its restated ÷ first-filed share counts), either way up,
+  // is a basis difference, not a wrong share count, and does not trip the gate.
+  const filerSplitRatios = [...splitFacts.map(([, r]) => r), ...shareRestatements(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null).map(([, r]) => r)]
+    .filter((r) => Number.isFinite(r) && r > 0 && Math.abs(Math.log(r)) > Math.log(1.2));
+  const splitShaped = (r: number) => r > 0 && filerSplitRatios.some((k) => [k, 1 / k].some((x) => Math.abs(r / x - 1) <= SPLIT_SHAPED_TOLERANCE));
   const ratioCloses = (epsKey: string, numerator: string, denominator: string): boolean => {
     const recent = (cells: typeof quarterCells, n: number) =>
       [...cells.keys()].sort().reverse().slice(0, n).map((e) => cells.get(e)!);
     for (const m of [...recent(quarterCells, RATIO_CLOSE_QUARTERS), ...recent(yearCells, RATIO_CLOSE_YEARS)]) {
       const eps = m.get(epsKey), ni = m.get(numerator)?.val ?? null, sh = m.get(denominator)?.val ?? null;
       if (!eps || eps.derived !== "as-filed" || eps.val == null || eps.val === 0 || ni == null || ni === 0 || sh == null || sh <= 0) continue;
-      if (Math.abs(ni / (eps.val * sh) - 1) > RATIO_CLOSE_TOLERANCE) return false;
+      const r = ni / (eps.val * sh);
+      if (Math.abs(r - 1) > RATIO_CLOSE_TOLERANCE && !splitShaped(r)) return false;
     }
     return true;
   };
@@ -2062,6 +2100,7 @@ function extractCompanyFactsWith(
     ),
     annualShares: annualShareSeries(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null, naming.yearEnd),
     ...(() => { const r = shareRestatements(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null); return r.length ? { shareRestated: r } : {}; })(),
+    ...(splitFacts.length ? { splitFacts } : {}),
     ...(() => { const r = shareRefiledUnchanged(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null); return r.length ? { shareRefiled: r } : {}; })(),
     ...(ytd ? { ytd } : {}),
     ...(nci.length ? { nci } : {}),

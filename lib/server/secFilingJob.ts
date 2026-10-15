@@ -27,6 +27,7 @@ import { extractForSymbol } from "./secExtractFor";
 import { withPredecessorFacts } from "./secSuccession";
 import { withClassCover } from "./secCoverClasses";
 import { withInstanceEps } from "./secInstanceEps";
+import { withClassEps } from "./secClassEps";
 import { priorStandsForFx, toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { sicChangeOf, type SicChange } from "./secSicChange";
@@ -264,6 +265,7 @@ async function checkAndFillFrom(
   });
   if (baseNewest !== null && baseNewest >= f.reportDate) {
     // TWELVE MONTHS OF EPS FROM THE 10-K AND 10-Q where the periods cannot give it. See secInstanceEps.
+    await withClassEps(symbol, cik, base, fetch.get);
     base.ttmEps = await withInstanceEps(symbol, cik, base, fetch.get);
     return { kind: "caught-up", set: keptFromFx(stored, base, await toStoredSet(base, defaultSources(), fxSeries)), lag: null };
   }
@@ -273,6 +275,8 @@ async function checkAndFillFrom(
     ? mergeFillOnly(cf, instanceToFacts(xml, f).facts, base.reportingCurrency)
     : { merged: cf, added: 0 };
   const filled = added ? { ...extractForSymbol(symbol, merged), coverShares: base.coverShares } : base;
+  // QUARTERLY EPS PER LISTED CLASS (#552 COWORK #244). See secClassEps.
+  await withClassEps(symbol, cik, filled, fetch.get);
   filled.ttmEps = await withInstanceEps(symbol, cik, filled, fetch.get);
   const next = keptFromFx(stored, filled, await toStoredSet(filled, defaultSources(), fxSeries));
   const noticeOnly = isLagging(next, f);

@@ -89,6 +89,7 @@ import { extractForSymbol } from "./secExtractFor";
 import { withPredecessorFacts } from "./secSuccession";
 import { withClassCover } from "./secCoverClasses";
 import { withInstanceEps } from "./secInstanceEps";
+import { withClassEps } from "./secClassEps";
 import { type StoredFactSet } from "./secFactCodec";
 import { toStoredSet } from "./secFactBuild";
 import { needsReread } from "./secStaleness";
@@ -605,6 +606,8 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   const secGet = (url: string) => secFetch(url, { headers: { "User-Agent": SEC_UA } });
   extracted.coverShares = await withClassCover(symbol, cik, extracted.coverShares, secGet);
   // TWELVE MONTHS OF EPS FROM THE 10-K AND 10-Q where the periods cannot give it. See secInstanceEps.
+  // QUARTERLY EPS PER LISTED CLASS, from the 10-Q (#552 COWORK #244). See secClassEps.
+  await withClassEps(symbol, cik, extracted, secGet);
   extracted.ttmEps = await withInstanceEps(symbol, cik, extracted, secGet);
   const set = await toStoredSet(extracted);
   // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
