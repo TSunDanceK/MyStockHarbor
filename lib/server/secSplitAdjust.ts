@@ -121,15 +121,37 @@ export function provenSplits(set: Pick<StoredFactSet, "asr"> & Partial<Pick<Stor
     else out.push({ k, refs: [e] });
   }
   if (set.quarters && set.years) {
-    // A ratio the restatement proof already holds, either way up, is that split.
-    for (const f of splitsFromFacts(set as Pick<StoredFactSet, "quarters" | "years" | "ssf">)) if (!out.some((s) => s.k === f.k || s.k === 1 / f.k)) out.push(f);
+    // A FILED SPLIT THE RESTATEMENT PROOF ALREADY APPLIES is that split, either
+    // way up (FLG's 1-for-3 would otherwise be added a second time, inverted).
+    // Applies, not merely holds the ratio (#552 COWORK #248): ORLY's `asr` 15
+    // measures every period from a reference still stored on the old basis, so
+    // it moves nothing and its 15-for-1 of June 2025 sat unadjusted; APH's 2:1s
+    // of 2014/2020 swallowed its 2024 2:1 the same way. The test is whether the
+    // matching proof moves any period the filed split covers (ended and filed
+    // before its date); a near date cannot tell them apart, since a
+    // restatement's references always sit just before its own split.
+    const restated = out.slice();
+    for (const f of splitsFromFacts(set as Pick<StoredFactSet, "quarters" | "years" | "ssf">)) {
+      const same = restated.filter((s) => s.k === f.k || s.k === 1 / f.k);
+      if (same.length && appliesBefore(set as Pick<StoredFactSet, "quarters" | "years">, same, f.date!)) continue;
+      if (!out.some((s) => s.k === f.k && s.date === f.date)) out.push(f);
+    }
   }
   return out;
 }
 
+/** Does any of `splits` move a period that ended and was filed before `date`? */
+function appliesBefore(set: Pick<StoredFactSet, "quarters" | "years">, splits: ProvenSplit[], date: string): boolean {
+  const moved = factorsFor(set, splits);
+  return [...set.quarters, ...set.years].some((p) => p?.e && p.e < date && Boolean(p.f) && p.f! < date && moved.has(p.e));
+}
+
 /** Period end -> the factor that puts it on today's basis (1 = already there). */
 export function splitFactors(set: Pick<StoredFactSet, "quarters" | "years" | "asr"> & Partial<Pick<StoredFactSet, "ssf">>): Map<string, number> {
-  const splits = provenSplits(set);
+  return factorsFor(set, provenSplits(set));
+}
+
+function factorsFor(set: Pick<StoredFactSet, "quarters" | "years">, splits: ProvenSplit[]): Map<string, number> {
   const all = [...set.quarters, ...set.years].filter((p) => p?.e);
   const factors = new Map<string, number>();
   if (!splits.length) return factors;
