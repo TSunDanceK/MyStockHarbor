@@ -28,11 +28,10 @@ export const metadata: Metadata = {
   title: "MyStockHarbor — Stock Screeners, Swing Trade Setups & Daily Market Insights",
   description:
     "Free stock screeners for breakouts, oversold stocks & bullish divergence. Daily insight posts, live dashboards, chart pattern plays, and swing trade setups. No login needed.",
-  icons: {
-    icon: "/icon.png",
-    shortcut: "/icon.png",
-    apple: "/icon.png",
-  },
+  // Icons come from the file conventions, not from here: app/icon.png (192x192),
+  // app/apple-icon.png (180x180) and app/favicon.ico (16/32/48), all the anchor on
+  // a solid navy square with no transparency (Google Search shows the favicon on
+  // its own background). Next writes the <link> tags for them.
 
   openGraph: {
     title:

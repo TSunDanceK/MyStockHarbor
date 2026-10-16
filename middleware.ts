@@ -262,6 +262,6 @@ export const config = {
     // turns it into the logos problem. The doc's rule is "any new folder under
     // public/ needs a matcher exclusion in the same PR" — the folder is not new,
     // the traffic is (claude/serving-assets-from-public-2026-09-15.md §1).
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|robots.txt|sitemap.xml|logos/|news-art/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|robots.txt|sitemap.xml|logos/|news-art/).*)",
   ],
 };
