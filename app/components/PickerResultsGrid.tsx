@@ -6,6 +6,7 @@ import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pickerFilters";
+import { divergenceOverlay } from "@/lib/divergenceOverlay";
 import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
 import { valueSatisfies } from "@/lib/screenerFields";
 import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
@@ -64,26 +65,32 @@ const TONE_BY_KEY = new Map<AnyFilterKey, PickerTone>([
 // Signals, any custom filter combination -- there is no such condition, so the
 // cards show plain candles.
 //
-// The divergence pages are the one exception, and the reason the per-entry
-// branch still exists: a divergence card carries its own indicator (RSI on one,
-// MACD on the next), and the combined page mixes both, so there the card's own
-// text has to choose. Everywhere else reading the card's text was actively
-// wrong -- on the Advanced Screener a card picked up an RSI or MACD panel
-// purely because one of the ~25 conditions it happened to qualify for mentioned
-// that indicator, so two cards side by side drew different panels on a page
-// that was about neither.
+// The divergence views are the one exception, and they are decided in
+// lib/divergenceOverlay.ts (#553): a page about ONE kind of divergence (RSI or
+// MACD), or a Screener-sidebar condition naming one, decides from that alone;
+// only a view that mixes both kinds (the combined divergence page, or both
+// kinds ticked) decides per card, and then from the card's OWN divergence
+// signal (its badge and divergence flags). It must never read a card's
+// `reasons`: that lists every other condition the stock qualifies for, so an
+// RSI-divergence card whose reasons mentioned MACD drew a MACD panel. (The
+// same mistake had already been removed from the Advanced Screener, where a
+// card picked up a panel from whichever of its ~25 conditions mentioned an
+// indicator.)
 //
 // ORDER IS LOAD-BEARING. These are substring tests against the href, and the
 // specific breakout pages have to be checked before the generic one:
 // /all-time-high-breakout-stocks and /3-month-high-breakout-stocks both contain
 // "breakout" but want their own reference line, not the catch-all.
-function chartOverlayForEntry(configHref: string, configTitle: string, entry: ResultEntry) {
+function chartOverlayForEntry(configHref: string, configTitle: string, entry: ResultEntry, selectedFilters: readonly AnyFilterKey[]) {
   const href = configHref.toLowerCase();
-  const perCardIndicator = href.includes("divergence");
-  const entryText = perCardIndicator
-    ? `${entry.badge ?? ""} ${entry.note} ${entry.reasons?.join(" ") ?? ""}`
-    : "";
-  const text = `${configTitle} ${entryText}`.toLowerCase();
+  // DIVERGENCE VIEWS (#553): decided by lib/divergenceOverlay.ts from the page
+  // or the ticked condition, and only on a mixed view from the card's OWN
+  // divergence signal. Never from `reasons`: that lists every other condition
+  // the stock qualifies for, which is how RSI-divergence cards drew MACD.
+  const divergence = divergenceOverlay(configHref, selectedFilters, entry);
+  if (divergence) return divergence;
+  // The title still names the indicator on the other curated pages (oversold, overbought, ...).
+  const text = configTitle.toLowerCase();
   if (text.includes("macd")) return "macd" as const;
   if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) return "rsi" as const;
   // The two DAILY trend-flip pages draw the Trend Helper (Slow) HMA itself,
@@ -1616,7 +1623,7 @@ export default function PickerResultsGrid({
                             points={barsFor(entry).points}
                             loading={barsFor(entry).loading}
                             tone={displayTone ?? tone}
-                            overlay={chartOverlayForEntry(configHref, configTitle, entry)}
+                            overlay={chartOverlayForEntry(configHref, configTitle, entry, selectedFilters)}
                             supportResistanceZone={entry.supportResistanceZone}
                           />
                         </div>
@@ -1742,7 +1749,7 @@ export default function PickerResultsGrid({
                     points={barsFor(entry).points}
                     loading={barsFor(entry).loading}
                     tone={displayTone ?? tone}
-                    overlay={chartOverlayForEntry(configHref, configTitle, entry)}
+                    overlay={chartOverlayForEntry(configHref, configTitle, entry, selectedFilters)}
                     supportResistanceZone={entry.supportResistanceZone}
                   />
                   <div className="note">{entry.note}</div>
