@@ -20,6 +20,8 @@ export type BlogPost = {
   slug: string;
   title: string;
   date: string;
+  /** When the post's TEXT last changed (frontmatter `updated`); "" when it never has. */
+  updated: string;
   excerpt: string;
   symbol?: string | null;
   timeframe: "d" | "w";
@@ -146,6 +148,7 @@ function readSortedPosts(): BlogPost[] {
       slug,
       title: String(data.title || ""),
       date: formatFrontmatterDate(data.date),
+      updated: formatFrontmatterDate(data.updated),
       excerpt: String(data.excerpt || data.summary || ""), // a new-format post (#563 COWORK #132) has a summary, no excerpt
       symbol: data.symbol ? String(data.symbol) : null,
       timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
@@ -159,7 +162,8 @@ function readSortedPosts(): BlogPost[] {
   });
 
   return posts.sort((a, b) => {
-    if (a.date === b.date) return 0;
+    // Same date: by slug, so "newer" and "previous" never depend on the order the filesystem lists files in.
+    if (a.date === b.date) return a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0;
     if (!a.date) return 1;
     if (!b.date) return -1;
     return a.date < b.date ? 1 : -1;
@@ -174,6 +178,42 @@ function readSortedPosts(): BlogPost[] {
 // the unbounded-DOM/hydration-payload problem that got fixed here.
 export function getAllPosts(): BlogPost[] {
   return readSortedPosts();
+}
+
+// ── Posts on the same ticker (#553): "Previous insight on SYM", "Newer insight
+// on SYM", and the stock page's Insights list. Computed from content/insights
+// when the page is built (no manual edits): add a post and every older post on
+// that ticker points at it, and it points back.
+
+/** The date the post's TEXT last changed: its `updated`, else its `date`. The JSON-LD's dateModified and the sitemap's lastmod. */
+export function insightModifiedDate(post: Pick<BlogPost, "date" | "updated">): string {
+  return post.updated || post.date;
+}
+
+export type InsightLink = { slug: string; title: string; date: string };
+
+const toInsightLink = (post: BlogPost): InsightLink => ({ slug: post.slug, title: post.title, date: post.date });
+
+/** Every post on a ticker, newest first (case-insensitive). */
+export function getInsightsForSymbol(symbol: string | null | undefined): BlogPost[] {
+  const want = String(symbol ?? "").trim().toUpperCase();
+  if (!want) return [];
+  return readSortedPosts().filter((post) => post.symbol?.toUpperCase() === want);
+}
+
+/**
+ * For the post `slug` on `symbol`: the previous post on the same ticker (the
+ * next one back in time), and the NEWEST post on it when that is newer than
+ * this one (null on the newest post itself, so only older posts get a banner).
+ */
+export function getSameSymbolLinks(slug: string, symbol: string | null | undefined): { previous: InsightLink | null; newest: InsightLink | null } {
+  const list = getInsightsForSymbol(symbol);
+  const at = list.findIndex((post) => post.slug === slug);
+  if (at < 0) return { previous: null, newest: null };
+  return {
+    previous: at + 1 < list.length ? toInsightLink(list[at + 1]) : null,
+    newest: at > 0 ? toInsightLink(list[0]) : null,
+  };
 }
 
 export type PaginatedPosts = {

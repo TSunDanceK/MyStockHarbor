@@ -48,6 +48,7 @@ import { stockPageIndexable } from "@/lib/stockPageRobots";
 import Link from "next/link";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
+import StockInsights from "@/app/components/StockInsights";
 import StockSymbolPageClient, { type InitialQuote } from "./StockSymbolPageClient";
 import TiingoColdFill, { TiingoRequestedTouch } from "./TiingoColdFill";
 import { inCommittedUniverse, isColdTiingoCandidate, preparingWords } from "@/lib/server/tiingoColdState";
@@ -971,6 +972,9 @@ export default async function StockPage({ params }: Props) {
              component to keep this change tightly scoped -- it's still
              part of the same server-rendered response, so it's in the
              crawlable initial HTML. -- */}
+      {/* This ticker's insight posts, newest first (#553); nothing when it has none. */}
+      <StockInsights symbol={upper} />
+
       <RelatedStocks currentSymbol={upper} symbols={relatedSymbols} />
     </>
   );
