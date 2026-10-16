@@ -28,6 +28,7 @@ import InsightVote from "./InsightVote";
 import { TiingoLink } from "@/app/components/TiingoCredit";
 import { screenMembersFor, type InsightPageData, type MoreCard, type ScreenMember } from "@/lib/server/insightPage";
 import type { ScreenFlag } from "@/lib/insightScreens";
+import type { InsightLink } from "@/lib/blog";
 import { dayWords, miniLabel, outcomeWords, pctWords, ptsWords, sourceGroups } from "@/lib/insightView";
 
 export type InsightHtml = { whatHappened: string | null; why: string | null; originalRest: string | null };
@@ -41,7 +42,7 @@ export const INSIGHT_FINE_PRINT =
   "Descriptive analysis of public information, not investment advice. The post's text is as published on its date; prices, levels and figures on this page update daily. Filed figures: SEC EDGAR.";
 
 // hasFiledEarnings: the route's hasFiledEarnings(symbol) (#552 COWORK #197); the earnings links render only when true.
-export default function InsightPage({ d, html, thumb, thumbTo = null, hasFiledEarnings = false }: { d: InsightPageData; html: InsightHtml; thumb: number[] | null; thumbTo?: string | null; hasFiledEarnings: boolean }) {
+export default function InsightPage({ d, html, thumb, thumbTo = null, hasFiledEarnings = false, sameSymbol = { previous: null, newest: null } }: { d: InsightPageData; html: InsightHtml; thumb: number[] | null; thumbTo?: string | null; hasFiledEarnings: boolean; sameSymbol?: { previous: InsightLink | null; newest: InsightLink | null } }) {
   const { n } = d;
   const sym = n.symbol;
   const timeframe = n.timeframe === "w" ? "Weekly" : "Daily";
@@ -137,6 +138,13 @@ export default function InsightPage({ d, html, thumb, thumbTo = null, hasFiledEa
       <div className="inWrap">
         <nav className="inCrumbs" aria-label="Breadcrumb"><Link href="/insights">Insights</Link> › <Link href={`/stock/${sym}`}>{sym}</Link></nav>
 
+        {/* A newer post on the same ticker, computed from content/insights at build (#553). Only older posts get it. */}
+        {sameSymbol.newest ? (
+          <aside className="inNewer" data-insight-newer="" aria-label={`Newer insight on ${sym}`}>
+            Newer insight on {sym}: <Link href={`/insights/${sameSymbol.newest.slug}`}>{sameSymbol.newest.title}</Link>
+          </aside>
+        ) : null}
+
         {/* 1. HERO */}
         <header className="inHero" data-insight-hero="">
           {d.art.kind === "library" ? (
@@ -158,8 +166,10 @@ export default function InsightPage({ d, html, thumb, thumbTo = null, hasFiledEa
               </div>
             </div>
             <h1 className="inTitle">{n.title}</h1>
-            <p className="inMeta">
+            <p className="inMeta" data-insight-dates="">
               Published {dayWords(n.date)}
+              {thumbTo ? <>, prices as of {dayWords(thumbTo)}</> : null}
+              {n.updated && n.updated !== n.date ? <> · Updated {dayWords(n.updated)}</> : null}
               {d.nextReport ? <> · Next report: {d.nextReport}</> : null}
               {d.sector || d.capWords ? <> · {[d.sector?.name, d.capWords ? `${d.capWords} market cap` : null].filter(Boolean).join(" · ")}</> : null}
             </p>
@@ -289,6 +299,11 @@ export default function InsightPage({ d, html, thumb, thumbTo = null, hasFiledEa
             <a href="/platforms" className="inTrade">Trade {sym} →</a>
           </div>
         </nav>
+        {sameSymbol.previous ? (
+          <p className="inPrev" data-insight-previous="">
+            <Link href={`/insights/${sameSymbol.previous.slug}`}>Previous insight on {sym}: {sameSymbol.previous.title} ({dayWords(sameSymbol.previous.date)})</Link>
+          </p>
+        ) : null}
         <p className="inFine" data-fine-print="">{INSIGHT_FINE_PRINT}</p>
       </div>
       <style>{CSS}</style>
@@ -591,6 +606,10 @@ const CSS = `
 .inChip[data-tone="down"] { border-color: rgba(239,68,68,0.5); color: #fca5a5; }
 .inTitle { margin: 14px 0 0; font-size: 2rem; line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .inMeta { margin: 10px 0 0; font-size: var(--fs-read); line-height: var(--lh-read); color: rgba(226,232,240,0.85); }
+.inNewer { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(147,197,253,0.35); background: rgba(30,58,138,0.18); font-size: var(--fs-fine); line-height: 1.45; color: rgba(226,232,240,0.9); }
+.inNewer a { color: #93c5fd; font-weight: 700; }
+.inPrev { margin: 14px 0 0; font-size: var(--fs-read); line-height: var(--lh-read); }
+.inPrev a { color: #93c5fd; font-weight: 700; }
 .inSinceTitle { margin: 0; font-size: 1.125rem; }
 .inSince { margin-top: 16px; border: 1px solid rgba(148,163,184,0.22); border-radius: 18px; padding: 16px; background: rgba(15,23,42,0.55); }
 .inEyebrow { margin: 0; font-size: var(--fs-label); font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(147,197,253,0.85); display: block; }

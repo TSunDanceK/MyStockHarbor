@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getPostBySlug } from "@/lib/blog";
+import { getPostBySlug, getSameSymbolLinks } from "@/lib/blog";
 import { getOrCreateInsightSnapshot } from "@/lib/insightSnapshots";
 import { remark } from "remark";
 import html from "remark-html";
@@ -336,7 +336,7 @@ export default async function InsightPostPage({ params }: Props) {
         }}
       />
 
-      <InsightPage d={data} html={{ whatHappened, why, originalRest }} thumb={thumb} thumbTo={thumbTo} hasFiledEarnings={await hasFiledEarnings(data.n.symbol)} />
+      <InsightPage d={data} html={{ whatHappened, why, originalRest }} thumb={thumb} thumbTo={thumbTo} hasFiledEarnings={await hasFiledEarnings(data.n.symbol)} sameSymbol={isInsightFixture(post.slug) ? { previous: null, newest: null } : getSameSymbolLinks(post.slug, data.n.symbol)} />
     </>
   );
 }

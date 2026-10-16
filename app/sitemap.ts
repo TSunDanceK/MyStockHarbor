@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getAllPosts } from "@/lib/blog";
+import { getAllPosts, insightModifiedDate } from "@/lib/blog";
 import { getAllVideoMeta } from "@/lib/videoContent";
 import { getAllBottleneckPosts } from "@/lib/bottlenecks";
 import { LESSONS } from "@/app/learn/lessons";
@@ -238,7 +238,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
 
   // Insight posts are frozen snapshots tied to their `date` field - they
-  // never change after publish (see claude/CLAUDE.md "Lessons learned").
+  // only change when their text is edited, which sets `updated` (see
+  // claude/CLAUDE.md "Lessons learned"); lastmod follows that.
   // "yearly" is a more honest signal than "monthly" for Google's crawl
   // budget, and matters more now that 5 new frozen posts land every day
   // instead of 1.
@@ -259,7 +260,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // https://www.mystockharbor.com/sitemap.xml with this, only add to it.
   const insightEntries: MetadataRoute.Sitemap = insightPosts.map((post) => ({
     url: toAbsoluteUrl(`/insights/${post.slug}`),
-    ...(post.date ? { lastModified: new Date(post.date) } : {}),
+    // lastmod = the page's dateModified (#553): the post's `updated` when its text was edited, else its date.
+    ...(insightModifiedDate(post) ? { lastModified: new Date(insightModifiedDate(post)) } : {}),
     changeFrequency: "yearly",
     priority: 0.72,
   }));
