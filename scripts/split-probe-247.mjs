@@ -38,6 +38,9 @@ if (CONFIRM) {
     const qs = [...page.quarters].sort((a, b) => b.e.localeCompare(a.e)).slice(0, 8);
     console.log(`${sym} ssf ${JSON.stringify(sets[i]?.ssf ?? null)} · adjusted ${JSON.stringify(page.spa?.adjusted ?? [])}`);
     console.log(`  ${qs.map((p) => `${p.fp} FY${p.fy} (${p.e}) dil ${fmt(p.v[IX.epsDiluted])} bas ${fmt(p.v[IX.epsBasic])}`).join("\n  ")}`);
+    const adj = new Set(page.spa?.adjusted ?? []);
+    const moved = [...page.quarters.map((p) => ["q", p]), ...page.years.map((p) => ["y", p])].filter(([, p]) => adj.has(p.e));
+    if (moved.length) console.log(`  ADJUSTED: ${moved.map(([k, p]) => `${k}${p.e} dil ${fmt(p.v[IX.epsDiluted])} bas ${fmt(p.v[IX.epsBasic])}`).join(" · ")}`);
   });
   console.log(`Redis commands: 2`);
   process.exit(0);
