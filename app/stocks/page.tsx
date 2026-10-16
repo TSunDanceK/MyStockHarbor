@@ -5,6 +5,7 @@ import Link from "next/link";
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { filedEarningsGate } from "@/lib/server/filedEarnings";
+import { coverageLine, siteCoverage } from "@/lib/server/siteCoverage";
 
 // Why this page exists
 // --------------------
@@ -38,9 +39,12 @@ export const revalidate = 86400;
 
 const SITE = "https://www.mystockharbor.com";
 const PAGE_URL = `${SITE}/stocks`;
-const PAGE_TITLE = "Stock Directory — Every Stock & ETF We Cover | MyStockHarbor";
+const PAGE_TITLE = "Stock Directory — Featured Stocks & ETFs A-Z | MyStockHarbor";
+// THE FEATURED LIST, NOT THE WHOLE SITE (16 Oct 2026): the counts below are the
+// curated directory's; the site's coverage line (lib/server/siteCoverage.ts)
+// says how much wider the stock pages reach.
 const PAGE_DESCRIPTION =
-  "Full A-Z directory of every stock and ETF covered on MyStockHarbor. Jump straight to technical analysis, latest news or earnings history for any ticker.";
+  "A-Z directory of the stocks and ETFs featured on MyStockHarbor. Jump straight to technical analysis, latest news or earnings history for each featured ticker.";
 
 export const metadata: Metadata = {
   title: PAGE_TITLE,
@@ -250,6 +254,7 @@ export default async function StockDirectoryPage() {
   const etfs = toEntries(uniqueEtfs);
 
   const totalPages = companies.length * 3 + etfs.length * 2;
+  const coverage = coverageLine(await siteCoverage());
 
   return (
     <main
@@ -302,10 +307,11 @@ export default async function StockDirectoryPage() {
             maxWidth: 760,
           }}
         >
-          Every stock and ETF with a dedicated page on MyStockHarbor, listed
-          A&ndash;Z. Each entry links straight through to that ticker&rsquo;s
-          technical analysis, its latest news, and&nbsp;&mdash;&nbsp;for
-          individual companies&nbsp;&mdash;&nbsp;its earnings history.
+          The directory of featured stock pages: the stocks and ETFs we
+          feature, listed A&ndash;Z. Each entry links straight through to that
+          ticker&rsquo;s technical analysis, its latest news,
+          and&nbsp;&mdash;&nbsp;for individual companies&nbsp;&mdash;&nbsp;its
+          earnings history.
         </p>
 
         <p
@@ -315,8 +321,19 @@ export default async function StockDirectoryPage() {
             color: "rgba(148,163,184,0.9)",
           }}
         >
-          {companies.length} companies and {etfs.length} ETFs, covering{" "}
-          {totalPages} pages.
+          This directory features {companies.length} companies and{" "}
+          {etfs.length} ETFs, {totalPages} pages in all.
+        </p>
+
+        <p
+          style={{
+            margin: "0 0 4px",
+            fontSize: 14,
+            color: "rgba(148,163,184,0.9)",
+            maxWidth: 760,
+          }}
+        >
+          {coverage}
         </p>
 
         <nav
@@ -359,7 +376,7 @@ export default async function StockDirectoryPage() {
           <Link href="/stock-screener" style={{ color: "#93c5fd" }}>
             full screener
           </Link>{" "}
-          searches the entire market universe, and{" "}
+          searches the whole screening universe, and{" "}
           <Link href="/pickers" style={{ color: "#93c5fd" }}>
             the pickers
           </Link>{" "}

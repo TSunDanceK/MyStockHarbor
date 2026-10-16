@@ -1,10 +1,19 @@
 import type { Metadata } from "next";
 import DashboardPage from "./dashboard/page";
+import { coverageDescription, siteCoverage } from "@/lib/server/siteCoverage";
 
-export const metadata: Metadata = {
+const HOME_DESCRIPTION =
+  "Use MyStockHarbor to explore stock analysis tools, stock pickers, market insights, technical chart views and educational investing resources.";
+
+// THE COVERAGE LINE, SHORT FORM (lib/server/siteCoverage.ts): live counts,
+// rounded down. Unreadable counts keep the standing description.
+export async function generateMetadata(): Promise<Metadata> {
+  return { ...metadata, description: coverageDescription(await siteCoverage()) ?? HOME_DESCRIPTION };
+}
+
+const metadata: Metadata = {
   title: "Stock Analysis Tools, Stock Pickers & Market Insights | MyStockHarbor",
-  description:
-    "Use MyStockHarbor to explore stock analysis tools, stock pickers, market insights, technical chart views and educational investing resources.",
+  description: HOME_DESCRIPTION,
   alternates: {
     canonical: "https://www.mystockharbor.com/",
   },

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { chartHref } from "@/lib/chartHref";
 import type { Metadata } from "next";
+import { coverageLine, hedgedCount, siteCoverage } from "@/lib/server/siteCoverage";
 
 export const metadata: Metadata = {
   title: "About MyStockHarbor | Free Stock Screeners & Market Education",
@@ -168,7 +169,9 @@ const ABOUT_JSON_LD = {
   ],
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  // The site's coverage, from live counts (lib/server/siteCoverage.ts).
+  const coverage = await siteCoverage();
   return (
     <main
       style={{
@@ -288,8 +291,9 @@ export default function AboutPage() {
           </p>
 
           <p style={paraStyle}>
-            The screening universe is a few hundred large, liquid, actively
-            traded companies rather than every listed security, and the
+            The screening universe is{" "}
+            {coverage.pickers ? `${hedgedCount(coverage.pickers)}` : "a set of"} large,
+            liquid, actively traded companies rather than every listed security, and the
             fundamental screens depend on figures that arrive on their own
             slower schedules. Where a figure is missing it is shown as missing
             rather than filled in with an estimate, and a company with no value
@@ -306,6 +310,8 @@ export default function AboutPage() {
           </p>
 
           <h2 style={h2Style}>What&rsquo;s on the site</h2>
+
+          <p style={paraStyle}>{coverageLine(coverage)}</p>
 
           <div style={{ display: "grid", gap: 16, marginTop: 4 }}>
             {SECTIONS.map((section) => (
