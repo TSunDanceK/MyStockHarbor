@@ -11,6 +11,10 @@
 //   2. A sidebar condition naming one kind decides, on any page.
 //   3. A mixed view decides per card, from its own badge / divergence flags only.
 //   4. The grid hands the decision to the module and never reads `reasons`.
+//   5. The chart LINK follows the same decision: choosing a chart on an RSI
+//      divergence page opened the dashboard with MACD applied (the stored link
+//      prefers MACD for a stock with both divergences). Links are rewritten by
+//      the module, on the server page and in the grid.
 import fs from "node:fs";
 import { lift } from "./lib/earnings-plan.mjs";
 import { readCodeOnly } from "./lib/source-code.mjs";
@@ -81,6 +85,28 @@ const OLD = `export function divergenceOverlay(href, filters, card) {
 const oldMod = await lift(OLD);
 check("MUTANT caught: the shipped bug (search reasons, MACD first) fails the headline scenario", oldMod.divergenceOverlay("/bullish-rsi-divergence-stocks", [], rsiCardWithMacdReasons) === "macd");
 
+console.log("\n2b. the chart link, on the real module\n");
+const STORED = "/dashboard?symbol=OLLI&tf=D&indicator=MACD%2812%2C26%2C9%29#analyser";
+const LINKS = [
+  ["an RSI page's link gets indicator=RSI(14), keeping symbol, timeframe and hash", (m) => m.withDivergenceIndicator(STORED, "rsi"), "/dashboard?symbol=OLLI&tf=D&indicator=RSI%2814%29#analyser"],
+  ["a MACD page's link gets indicator=MACD(12,26,9)", (m) => m.withDivergenceIndicator("/dashboard?symbol=WM&tf=W&indicator=RSI%2814%29#analyser", "macd"), "/dashboard?symbol=WM&tf=W&indicator=MACD%2812%2C26%2C9%29#analyser"],
+  ["a link with no indicator gets one", (m) => m.withDivergenceIndicator("/dashboard?symbol=UNH#analyser", "rsi"), "/dashboard?symbol=UNH&indicator=RSI%2814%29#analyser"],
+  ["no decision leaves the link alone", (m) => m.withDivergenceIndicator(STORED, null), STORED],
+  ["an earnings link is never touched", (m) => m.withDivergenceIndicator("/stock/OLLI/earnings", "rsi"), "/stock/OLLI/earnings"],
+];
+for (const [label, run, want] of LINKS) { const got = run(real); check(label, got === want, got); }
+const LINK_MUTANTS = [
+  ["the indicator is not replaced when one is already there (MACD stays)", (s) => once(s, "params.set(\"indicator\", INDICATOR_PARAM[indicator]);", "if (!params.has(\"indicator\")) params.set(\"indicator\", INDICATOR_PARAM[indicator]);")],
+  ["the hash is dropped", (s) => once(s, "return `${path}?${params.toString()}${hash}`;", "return `${path}?${params.toString()}`;")],
+  ["the two indicators are swapped", (s) => once(s, "{ rsi: \"RSI(14)\", macd: \"MACD(12,26,9)\" }", "{ rsi: \"MACD(12,26,9)\", macd: \"RSI(14)\" }")],
+  ["an earnings link is rewritten too", (s) => once(s, "if (!href.startsWith(\"/dashboard\") && !href.startsWith(\"/?\")) return href;", "")],
+];
+for (const [label, mutate] of LINK_MUTANTS) {
+  let broken;
+  try { broken = await lift(mutate(src)); } catch (e) { check(`MUTANT anchor: ${label}`, false, e.message); continue; }
+  check(`MUTANT caught: ${label}`, LINKS.some(([, run, want]) => run(broken) !== want));
+}
+
 console.log("\n3. the grid uses it, and does not read reasons for the panel\n");
 const grid = readCodeOnly("app/components/PickerResultsGrid.tsx");
 const body = grid.slice(grid.indexOf("function chartOverlayForEntry("), grid.indexOf("function scoreLabelForEntry("));
@@ -88,6 +114,12 @@ check("chartOverlayForEntry asks divergenceOverlay with the sidebar's ticked con
 check("chartOverlayForEntry never reads reasons, note or badge itself", !/\.reasons|entry\.note|entry\.badge/.test(body));
 check("both call sites pass the sidebar's selected filters", (grid.match(/chartOverlayForEntry\(configHref, configTitle, entry, selectedFilters\)/g) ?? []).length === 2);
 check("MUTANT caught: reading reasons in the grid again is detected", /\.reasons/.test(once(body, "const divergence = divergenceOverlay(", "const r = entry.reasons?.join(' '); const divergence = divergenceOverlay(")));
+
+const pageSrc = readCodeOnly("app/components/PickerResultPage.tsx");
+const pageFn = pageSrc.slice(pageSrc.indexOf("function chartHrefForEntry("), pageSrc.indexOf("function getSellSignalCount("));
+check("the server page sets the indicator on a one-kind divergence page's chart links", /divergencePageKind\(configHref\)/.test(pageFn) && /if \(divergenceKind === "rsi" \|\| divergenceKind === "macd"\) return withDivergenceIndicator\(base, divergenceKind\);/.test(pageFn));
+check("MUTANT caught: the server page's link rewrite removed is detected", !/withDivergenceIndicator\(base, divergenceKind\)/.test(once(pageFn, "return withDivergenceIndicator(base, divergenceKind);", "return base;")));
+check("the grid's three chart links (card, list symbol, row action) go through chartLinkFor", !/entry\.chartHref|e\.chartHref/.test(grid.replace(/withDivergenceIndicator\(entry\.chartHref/, "")) && (grid.match(/chartLinkFor\(/g) ?? []).length >= 3);
 
 console.log(failures ? `\n${failures} FAILED` : "\nThe divergence overlay holds.");
 process.exit(failures ? 1 : 0);

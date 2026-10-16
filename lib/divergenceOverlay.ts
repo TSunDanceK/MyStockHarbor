@@ -78,3 +78,30 @@ export function divergenceOverlay(
   if (page === "both" || (picked.rsi && picked.macd)) return ownDivergenceIndicator(card);
   return null;
 }
+
+// ── The chart LINK follows the same decision (#553) ────────────────────────
+// Choosing a chart on an RSI divergence page opened the dashboard with MACD
+// applied: the stored link carries the indicator the builder preferred for the
+// card, and for a stock with BOTH divergences that is MACD. The link now takes
+// the indicator this module decides, so the chart opens on what the page is about.
+
+const INDICATOR_PARAM: Record<DivergenceIndicator, string> = { rsi: "RSI(14)", macd: "MACD(12,26,9)" };
+
+/**
+ * The dashboard chart link with its `indicator` set to the divergence view's
+ * indicator. Every other parameter (symbol, timeframe, ...) and the hash are
+ * kept. A null decision, or a link that is not the dashboard's (an earnings
+ * page, say), comes back untouched.
+ */
+export function withDivergenceIndicator(href: string, indicator: DivergenceIndicator | null): string {
+  if (!indicator) return href;
+  if (!href.startsWith("/dashboard") && !href.startsWith("/?")) return href;
+  const hashAt = href.indexOf("#");
+  const hash = hashAt >= 0 ? href.slice(hashAt) : "";
+  const beforeHash = hashAt >= 0 ? href.slice(0, hashAt) : href;
+  const queryAt = beforeHash.indexOf("?");
+  const path = queryAt >= 0 ? beforeHash.slice(0, queryAt) : beforeHash;
+  const params = new URLSearchParams(queryAt >= 0 ? beforeHash.slice(queryAt + 1) : "");
+  params.set("indicator", INDICATOR_PARAM[indicator]);
+  return `${path}?${params.toString()}${hash}`;
+}

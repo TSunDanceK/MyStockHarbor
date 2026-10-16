@@ -49,6 +49,7 @@ import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
 import { CATEGORY_FIELDS, valueSatisfies, type Predicate } from "@/lib/screenerFields";
 import { PickerEmptyGuardError, emptyGuardLine, implausibleEmpty } from "@/lib/pickerEmptyGuard";
+import { divergencePageKind, withDivergenceIndicator } from "@/lib/divergenceOverlay";
 
 // The six valuation cells of a listing that is not a common share (#553 COWORK #168).
 const NOT_COMMON_WHY: Partial<Record<CellWhyColumn, CellWhyCode>> = {
@@ -481,6 +482,13 @@ function chartHrefForEntry(
 ) {
   const base = chartHrefFor(symbol, rawHref);
   const href = configHref.toLowerCase();
+
+  // A page about ONE kind of divergence opens its charts on that indicator
+  // (#553): the stored link prefers MACD for a stock with both divergences,
+  // which put MACD on every such card of an RSI divergence page. The combined
+  // page keeps each card's own indicator.
+  const divergenceKind = divergencePageKind(configHref);
+  if (divergenceKind === "rsi" || divergenceKind === "macd") return withDivergenceIndicator(base, divergenceKind);
 
   if (href.includes("macro-support-resistance") && item.supportResistanceZone) {
     const z = item.supportResistanceZone;

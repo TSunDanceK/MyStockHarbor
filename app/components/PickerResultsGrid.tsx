@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pickerFilters";
-import { divergenceOverlay } from "@/lib/divergenceOverlay";
+import { divergenceOverlay, withDivergenceIndicator } from "@/lib/divergenceOverlay";
 import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
 import { valueSatisfies } from "@/lib/screenerFields";
 import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
@@ -912,8 +912,13 @@ export default function PickerResultsGrid({
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
 
   // #552 COWORK #197: on an earnings page a row opens the earnings view only with a filed SEC set; otherwise its chart.
+  // The chart link opens on the indicator the divergence view is about, the same decision as the card's panel (#553).
+  const chartLinkFor = useCallback(
+    (entry: ResultEntry) => withDivergenceIndicator(entry.chartHref, divergenceOverlay(configHref, selectedFilters, entry)),
+    [configHref, selectedFilters]
+  );
   const cardHrefFor = (entry: ResultEntry) =>
-    isEarnings && hasFiledEarnings(entry.symbol) ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
+    isEarnings && hasFiledEarnings(entry.symbol) ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : chartLinkFor(entry);
 
   // Every entry is stamped with the PAGE's tone server-side (see buildEntries in
   // PickerResultPage.tsx), which is correct right up until the visitor filters
@@ -949,7 +954,7 @@ export default function PickerResultsGrid({
       sortType: "str",
       get: (e) => e.symbol ?? "",
       cell: (e) => {
-        const href = isEarnings && hasFiledEarnings(e.symbol) ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : e.chartHref;
+        const href = isEarnings && hasFiledEarnings(e.symbol) ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : chartLinkFor(e);
         return (
           <a href={href} className="listSym" onClick={(ev) => ev.stopPropagation()}>
             <span className="dot" style={{ background: toneColour(displayTone ?? e.tone) }} aria-hidden="true" />
@@ -1154,7 +1159,7 @@ export default function PickerResultsGrid({
     return sets;
     // displayTone is a real dependency: the symbol cell renders the dot, so
     // without it the table keeps the tone it was first built with.
-  }, [isEarnings, displayTone, configHref, hasFiledEarnings]);
+  }, [isEarnings, displayTone, configHref, hasFiledEarnings, chartLinkFor]);
 
   const activeColumns = columnSets[activeTab];
 
@@ -1648,7 +1653,7 @@ export default function PickerResultsGrid({
                         {isEarnings && hasFiledEarnings(entry.symbol) ? (
                           <Link href={`${entry.stockHref}/earnings`} className="mRowAction">Earnings</Link>
                         ) : null}
-                        <Link href={entry.chartHref} className="mRowAction">Chart</Link>
+                        <Link href={chartLinkFor(entry)} className="mRowAction">Chart</Link>
                         <Link href={entry.stockHref} className="mRowAction">Analysis</Link>
                         <Link href={`${entry.stockHref}/news`} className="mRowAction">News</Link>
                       </div>
