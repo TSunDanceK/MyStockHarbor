@@ -29,6 +29,8 @@ import { TiingoLink } from "@/app/components/TiingoCredit";
 import { screenMembersFor, type InsightPageData, type MoreCard, type ScreenMember } from "@/lib/server/insightPage";
 import type { ScreenFlag } from "@/lib/insightScreens";
 import type { InsightLink } from "@/lib/blog";
+import InsightRailAd from "@/app/components/InsightRailAd";
+import { ETORO_INSIGHT_RAIL } from "@/lib/affiliateCreatives";
 import { dayWords, miniLabel, outcomeWords, pctWords, ptsWords, sourceGroups } from "@/lib/insightView";
 
 export type InsightHtml = { whatHappened: string | null; why: string | null; originalRest: string | null };
@@ -262,6 +264,8 @@ export default function InsightPage({ d, html, thumb, thumbTo = null, hasFiledEa
                 <p className="inFine" data-fine-print=""><Link href={`/sector/${d.sectorMove.slug}`}>The {d.sectorMove.name} sector →</Link></p>
               </Card>
             ) : null}
+            {/* The eToro banner under the sector card, consent- and region-gated (#553). */}
+            <InsightRailAd creative={ETORO_INSIGHT_RAIL} />
           </aside>
         </div>
 
