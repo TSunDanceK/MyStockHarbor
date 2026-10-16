@@ -36,7 +36,8 @@ if (CONFIRM) {
   symbols.forEach((sym, i) => {
     const page = SA.splitAdjusted(sets[i]);
     const qs = [...page.quarters].sort((a, b) => b.e.localeCompare(a.e)).slice(0, 8);
-    console.log(`${sym} ssf ${JSON.stringify(sets[i]?.ssf ?? null)} · adjusted ${JSON.stringify(page.spa?.adjusted ?? [])}`);
+    const newest = [...(sets[i]?.quarters ?? [])].sort((a, b) => b.e.localeCompare(a.e))[0]?.e ?? null;
+    console.log(`${sym} ssf ${JSON.stringify(sets[i]?.ssf ?? null)} · ff ${JSON.stringify(sets[i]?.ff ?? null)} · lg ${JSON.stringify(sets[i]?.lg ?? null)} · newest quarter ${newest} · adjusted ${JSON.stringify(page.spa?.adjusted ?? [])}`);
     console.log(`  ${qs.map((p) => `${p.fp} FY${p.fy} (${p.e}) dil ${fmt(p.v[IX.epsDiluted])} bas ${fmt(p.v[IX.epsBasic])}`).join("\n  ")}`);
     const adj = new Set(page.spa?.adjusted ?? []);
     const moved = [...page.quarters.map((p) => ["q", p]), ...page.years.map((p) => ["y", p])].filter(([, p]) => adj.has(p.e));
