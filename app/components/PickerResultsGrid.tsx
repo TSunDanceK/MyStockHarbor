@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pickerFilters";
+import { divergenceOverlay, withDivergenceIndicator } from "@/lib/divergenceOverlay";
 import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
 import { valueSatisfies } from "@/lib/screenerFields";
 import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
@@ -64,26 +65,32 @@ const TONE_BY_KEY = new Map<AnyFilterKey, PickerTone>([
 // Signals, any custom filter combination -- there is no such condition, so the
 // cards show plain candles.
 //
-// The divergence pages are the one exception, and the reason the per-entry
-// branch still exists: a divergence card carries its own indicator (RSI on one,
-// MACD on the next), and the combined page mixes both, so there the card's own
-// text has to choose. Everywhere else reading the card's text was actively
-// wrong -- on the Advanced Screener a card picked up an RSI or MACD panel
-// purely because one of the ~25 conditions it happened to qualify for mentioned
-// that indicator, so two cards side by side drew different panels on a page
-// that was about neither.
+// The divergence views are the one exception, and they are decided in
+// lib/divergenceOverlay.ts (#553): a page about ONE kind of divergence (RSI or
+// MACD), or a Screener-sidebar condition naming one, decides from that alone;
+// only a view that mixes both kinds (the combined divergence page, or both
+// kinds ticked) decides per card, and then from the card's OWN divergence
+// signal (its badge and divergence flags). It must never read a card's
+// `reasons`: that lists every other condition the stock qualifies for, so an
+// RSI-divergence card whose reasons mentioned MACD drew a MACD panel. (The
+// same mistake had already been removed from the Advanced Screener, where a
+// card picked up a panel from whichever of its ~25 conditions mentioned an
+// indicator.)
 //
 // ORDER IS LOAD-BEARING. These are substring tests against the href, and the
 // specific breakout pages have to be checked before the generic one:
 // /all-time-high-breakout-stocks and /3-month-high-breakout-stocks both contain
 // "breakout" but want their own reference line, not the catch-all.
-function chartOverlayForEntry(configHref: string, configTitle: string, entry: ResultEntry) {
+function chartOverlayForEntry(configHref: string, configTitle: string, entry: ResultEntry, selectedFilters: readonly AnyFilterKey[]) {
   const href = configHref.toLowerCase();
-  const perCardIndicator = href.includes("divergence");
-  const entryText = perCardIndicator
-    ? `${entry.badge ?? ""} ${entry.note} ${entry.reasons?.join(" ") ?? ""}`
-    : "";
-  const text = `${configTitle} ${entryText}`.toLowerCase();
+  // DIVERGENCE VIEWS (#553): decided by lib/divergenceOverlay.ts from the page
+  // or the ticked condition, and only on a mixed view from the card's OWN
+  // divergence signal. Never from `reasons`: that lists every other condition
+  // the stock qualifies for, which is how RSI-divergence cards drew MACD.
+  const divergence = divergenceOverlay(configHref, selectedFilters, entry);
+  if (divergence) return divergence;
+  // The title still names the indicator on the other curated pages (oversold, overbought, ...).
+  const text = configTitle.toLowerCase();
   if (text.includes("macd")) return "macd" as const;
   if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) return "rsi" as const;
   // The two DAILY trend-flip pages draw the Trend Helper (Slow) HMA itself,
@@ -905,8 +912,13 @@ export default function PickerResultsGrid({
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
 
   // #552 COWORK #197: on an earnings page a row opens the earnings view only with a filed SEC set; otherwise its chart.
+  // The chart link opens on the indicator the divergence view is about, the same decision as the card's panel (#553).
+  const chartLinkFor = useCallback(
+    (entry: ResultEntry) => withDivergenceIndicator(entry.chartHref, divergenceOverlay(configHref, selectedFilters, entry)),
+    [configHref, selectedFilters]
+  );
   const cardHrefFor = (entry: ResultEntry) =>
-    isEarnings && hasFiledEarnings(entry.symbol) ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
+    isEarnings && hasFiledEarnings(entry.symbol) ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : chartLinkFor(entry);
 
   // Every entry is stamped with the PAGE's tone server-side (see buildEntries in
   // PickerResultPage.tsx), which is correct right up until the visitor filters
@@ -942,7 +954,7 @@ export default function PickerResultsGrid({
       sortType: "str",
       get: (e) => e.symbol ?? "",
       cell: (e) => {
-        const href = isEarnings && hasFiledEarnings(e.symbol) ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : e.chartHref;
+        const href = isEarnings && hasFiledEarnings(e.symbol) ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : chartLinkFor(e);
         return (
           <a href={href} className="listSym" onClick={(ev) => ev.stopPropagation()}>
             <span className="dot" style={{ background: toneColour(displayTone ?? e.tone) }} aria-hidden="true" />
@@ -1147,7 +1159,7 @@ export default function PickerResultsGrid({
     return sets;
     // displayTone is a real dependency: the symbol cell renders the dot, so
     // without it the table keeps the tone it was first built with.
-  }, [isEarnings, displayTone, configHref, hasFiledEarnings]);
+  }, [isEarnings, displayTone, configHref, hasFiledEarnings, chartLinkFor]);
 
   const activeColumns = columnSets[activeTab];
 
@@ -1616,7 +1628,7 @@ export default function PickerResultsGrid({
                             points={barsFor(entry).points}
                             loading={barsFor(entry).loading}
                             tone={displayTone ?? tone}
-                            overlay={chartOverlayForEntry(configHref, configTitle, entry)}
+                            overlay={chartOverlayForEntry(configHref, configTitle, entry, selectedFilters)}
                             supportResistanceZone={entry.supportResistanceZone}
                           />
                         </div>
@@ -1641,7 +1653,7 @@ export default function PickerResultsGrid({
                         {isEarnings && hasFiledEarnings(entry.symbol) ? (
                           <Link href={`${entry.stockHref}/earnings`} className="mRowAction">Earnings</Link>
                         ) : null}
-                        <Link href={entry.chartHref} className="mRowAction">Chart</Link>
+                        <Link href={chartLinkFor(entry)} className="mRowAction">Chart</Link>
                         <Link href={entry.stockHref} className="mRowAction">Analysis</Link>
                         <Link href={`${entry.stockHref}/news`} className="mRowAction">News</Link>
                       </div>
@@ -1742,7 +1754,7 @@ export default function PickerResultsGrid({
                     points={barsFor(entry).points}
                     loading={barsFor(entry).loading}
                     tone={displayTone ?? tone}
-                    overlay={chartOverlayForEntry(configHref, configTitle, entry)}
+                    overlay={chartOverlayForEntry(configHref, configTitle, entry, selectedFilters)}
                     supportResistanceZone={entry.supportResistanceZone}
                   />
                   <div className="note">{entry.note}</div>
