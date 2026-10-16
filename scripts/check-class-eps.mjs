@@ -135,12 +135,60 @@ const cvnaSet = (ssf) => ({
   const restated = cvnaSet([["2026-05-08", 0.2]]);
   restated.quarters = restated.quarters.map((p) => (p.e === "2026-03-31" ? { ...p, f: "2026-08-01", v: p.v.map((x, i) => (K[i] === "epsDiluted" ? 0.338 : x)) } : p));
   check("a period filed after the split date is never moved (already restated)", SA.splitFactors(restated).size === 0, JSON.stringify([...SA.splitFactors(restated)]));
-  check("a ratio the restatement proof already holds is not added again, either way up", SA.provenSplits({ ...cvnaSet([["2026-05-08", 0.2]]), asr: [["2025-06-30", 0.2]] }).length === 1);
-  const MD = await mutated("lib/server/secSplitAdjust.ts", "      if (split.date && !(p.f && p.f < split.date)) continue;\n", "");
+  // A restatement proof that APPLIES the ratio takes the filed split's place (no double move)...
+  const held = { ...cvnaSet([["2026-05-08", 0.2]]), asr: [["2025-06-30", 5]] };
+  check("a restatement proof that already moves the period is not doubled", SA.provenSplits(held).length === 1 && SA.splitFactors(held).get("2026-03-31") === 5, JSON.stringify([...SA.splitFactors(held)]));
+  // ...and one held the other way up never inverts or doubles it.
+  const inverted = { ...cvnaSet([["2026-05-08", 0.2]]), asr: [["2025-06-30", 0.2]] };
+  check("...held the other way up, the period still moves exactly x5", SA.splitFactors(inverted).get("2026-03-31") === 5, JSON.stringify([...SA.splitFactors(inverted)]));
+  // ORLY-shaped (#552 COWORK #248): asr holds 15 but its only reference is stored
+  // on the old basis, so it moves nothing; the filed 15-for-1 must still apply.
+  const orly = {
+    quarters: [
+      period("2026-06-30", "2026-04-01", "Q2", 2026, { netIncome: 640e6, sharesDiluted: 850e6, epsDiluted: 0.75 }, "2026-07-30"),
+      period("2024-03-31", "2024-01-01", "Q1", 2024, { netIncome: 547e6, sharesDiluted: 59.454e6, epsDiluted: 9.2 }, "2025-05-09"),
+      period("2023-12-31", "2023-10-01", "Q4", 2023, { netIncome: 537e6, epsDiluted: 9.0 }, "2026-02-27"),
+    ],
+    years: [], instants: [], asr: [["2023-12-31", 15]], ssf: [["2025-06-10", 15]],
+  };
+  const of = SA.splitFactors(orly);
+  check("ORLY-shaped: a held ratio that moves nothing does not swallow the filed split (Q1 2024 x15)", of.get("2024-03-31") === 15 && !of.has("2026-06-30"), JSON.stringify([...of]));
+  // BORR-shaped: a 2-to-1 REVERSE split (filed 0.5) followed by heavy issuance.
+  // Judged on the newest period, 2020's 110M x2 = 220M sits within 15% of
+  // 2026's 250M and reads it as forward; either side of the split, 274M x0.5 =
+  // 137M is the pair that proves it, so Q2 2020's EPS doubles.
+  const borr = {
+    quarters: [
+      period("2026-06-30", "2026-04-01", "Q2", 2026, { netIncome: 50e6, sharesDiluted: 250e6, epsDiluted: 0.2 }, "2026-08-01"),
+      period("2021-12-31", "2021-10-01", "Q4", 2021, { netIncome: -60e6, sharesDiluted: 137e6, epsDiluted: -0.44 }, "2022-03-30"),
+      period("2021-09-30", "2021-07-01", "Q3", 2021, { netIncome: -70e6, sharesDiluted: 274e6, epsDiluted: -0.26 }, "2021-11-30"),
+      period("2020-06-30", "2020-04-01", "Q2", 2020, { netIncome: -91e6, sharesDiluted: 110e6, epsDiluted: -0.83 }, "2020-08-30"),
+    ],
+    years: [], instants: [], asr: [], ssf: [["2021-12-14", 0.5]],
+  };
+  const bf = SA.splitFactors(borr);
+  check("BORR-shaped: a reverse split is read the right way up (Q2 2020 factor 1/2, EPS doubles)", bf.get("2020-06-30") === 0.5 && bf.get("2021-09-30") === 0.5 && !bf.has("2026-06-30"), JSON.stringify([...bf]));
+  const MB = await mutated("lib/server/secSplitAdjust.ts", "    const after = all.filter((p) => p.e > date && splitSharesOf(p) !== null).sort((a, b) => a.e.localeCompare(b.e))[0];", "    const after = all.filter((p) => p.e > date && splitSharesOf(p) !== null).sort((a, b) => b.e.localeCompare(a.e))[0];");
+  check("mutant (newest period as the reference) is caught", MB.splitFactors(borr).get("2020-06-30") !== 0.5);
+  const MO = await mutated("lib/server/secSplitAdjust.ts", "      if (same.length && appliesBefore(set as Pick<StoredFactSet, \"quarters\" | \"years\">, same, f.date!)) continue;\n", "      if (same.length) continue;\n");
+  check("mutant (dedupe on the ratio alone) is caught", !MO.splitFactors(orly).has("2024-03-31"));
+  const MD = await mutated("lib/server/secSplitAdjust.ts", "        if (p.e < split.date && p.f && p.f < split.date) f *= split.k;\n", "        f *= split.k;\n");
   const both = cvnaSet([["2026-05-08", 0.2]]); both.quarters.push(period("2024-06-30", "2024-04-01", "Q2", 2024, { netIncome: 18e6, sharesDiluted: 128e6, epsDiluted: 0.14 }, "2026-08-01"));
   check("mutant (filing-date rule dropped) is caught", MD.splitFactors(both).get("2024-06-30") === 5 && !SA.splitFactors(both).has("2024-06-30"));
-  const M = await mutated("lib/server/secSplitAdjust.ts", "    for (const f of splitsFromFacts(set as Pick<StoredFactSet, \"quarters\" | \"years\" | \"ssf\">)) if (!out.some((s) => s.k === f.k || s.k === 1 / f.k)) out.push(f);", "");
+  const M = await mutated("lib/server/secSplitAdjust.ts", "      if (!out.some((s) => s.k === f.k && s.date === f.date)) out.push(f);", "");
   check("mutant (filed split ignored) is caught", M.splitFactors(cvnaSet([["2026-05-08", 0.2]])).size === 0);
+}
+
+console.log("HASH");
+{
+  // ssf IN contentHash ONLY WHEN PRESENT (#552 COWORK #248): a set that only
+  // gains split facts is written; a set without them keeps its hash exactly.
+  const CODEC = await imp("lib/server/secFactCodec.ts");
+  const OLD = await mutated("lib/server/secFactCodec.ts", "  if (set.ssf?.length) for (const [d, r] of set.ssf) feed(`ss${d}=${r}`);\n", "");
+  const plain = cvnaSet(null), split = cvnaSet([["2026-05-08", 0.2]]);
+  check("a set with no split facts keeps its hash", CODEC.contentHashOf(plain) === OLD.contentHashOf(plain));
+  check("gaining split facts moves the hash (so the re-read writes it)", CODEC.contentHashOf(split) !== CODEC.contentHashOf(plain));
+  check("mutant (ssf not hashed) is caught", OLD.contentHashOf(split) === OLD.contentHashOf(plain));
 }
 
 console.log("GATE");

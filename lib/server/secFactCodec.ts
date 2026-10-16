@@ -225,8 +225,9 @@ export type StoredFactSet = {
   asr?: [string, number][];
   /**
    * The filer's own stock-split facts, `[date, ratio as filed]`
-   * (ExtractResult.splitFacts; #552 COWORK #245). Optional; not in
-   * contentHashOf, for the reason `asr` is not.
+   * (ExtractResult.splitFacts; #552 COWORK #245). Optional. IN contentHashOf
+   * when present (#552 COWORK #248), unlike `asr`: a set whose only change was
+   * gaining it (SRE) was counted unchanged and never written.
    */
   ssf?: [string, number][];
   /** Period ends re-filed unchanged (ExtractResult.shareRefiled). Optional; not in contentHashOf. */
@@ -307,6 +308,11 @@ export function contentHashOf(set: Omit<StoredFactSet, "contentHash">): string {
   // ONLY WHEN PRESENT, so no set without it changes hash.
   if (set.te) feed(`te${set.te.val}@${set.te.periodEnd}`);
   if (set.yt) { feed(`yt${set.yt.s}..${set.yt.e}`); for (const v of set.yt.v) feed(v === null ? "~" : String(v)); }
+  // THE FILER'S SPLIT FACTS (#552 COWORK #248), when present. They move EPS on
+  // the page (secSplitAdjust), so a re-read that only gains them must be
+  // written; hashed only when present, so only a filer that files a split fact
+  // changes hash, once, the next time its set is read for any reason.
+  if (set.ssf?.length) for (const [d, r] of set.ssf) feed(`ss${d}=${r}`);
   return h.toString(16).padStart(8, "0");
 }
 
