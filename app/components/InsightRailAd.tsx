@@ -3,7 +3,7 @@
 import { AD_LABEL_STYLE, PartnerImage, type RailCreative } from "./AffiliateRail";
 import { usePartnerAds } from "./usePartnerAds";
 
-// One 160x600 partner banner at the foot of an insight post's right-hand
+// One 300x600 partner banner at the foot of an insight post's right-hand
 // column, under the sector card (owner request, #553, 16 Oct). Same rules as
 // the screener rail: UK / EU / EEA visitors who pressed Accept only, and only
 // while the page is two columns wide (above the 900px the layout collapses at),

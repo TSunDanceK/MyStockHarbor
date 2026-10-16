@@ -11,13 +11,13 @@ export const ETORO_RAIL: RailCreative = {
   alt: "eToro",
 };
 
-// eToro's 160x600 for the right-hand side of an insight post (owner request,
-// #553, 16 Oct): the banner the owner supplied from the partner portal, a
-// different banner id (B21002) from the screener rail's. A plain link and image.
+// eToro's 300x600 for the foot of an insight post's right-hand column (owner
+// request, #553, 16 Oct): the banner the owner supplied from the partner portal,
+// a different banner id (B21003) from the screener rail's. A plain link and image.
 export const ETORO_INSIGHT_RAIL: RailCreative = {
-  href: "https://med.etoro.com/B21002_A128935_TClick.aspx",
-  imgSrc: "https://med.etoro.com/B21002_A128935_TGet.aspx",
-  width: 160,
+  href: "https://med.etoro.com/B21003_A128935_TClick.aspx",
+  imgSrc: "https://med.etoro.com/B21003_A128935_TGet.aspx",
+  width: 300,
   height: 600,
   alt: "eToro",
 };

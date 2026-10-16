@@ -1,4 +1,4 @@
-// THE eTORO BANNER ON AN INSIGHT POST (#553, owner request 16 Oct): one 160x600
+// THE eTORO BANNER ON AN INSIGHT POST (#553, owner request 16 Oct): one 300x600
 // banner at the foot of the right-hand column, under the sector card, with the
 // same consent and region rules as the rest of the partner ads. Each property is
 // asserted against the shipped source and again against a broken copy.
@@ -17,9 +17,9 @@ const props = [
   ["the banner is the last thing in the right-hand rail, after the sector card", page,
     (s) => /<aside className="inRail">[\s\S]*d\.sectorMove \? \([\s\S]*<InsightRailAd creative=\{ETORO_INSIGHT_RAIL\} \/>\s*<\/aside>/.test(s),
     (s) => once(s, "<InsightRailAd creative={ETORO_INSIGHT_RAIL} />", "")],
-  ["it is the banner the owner supplied (B21002), a click link over its image", creatives,
-    (s) => /ETORO_INSIGHT_RAIL[\s\S]{0,200}href: "https:\/\/med\.etoro\.com\/B21002_A128935_TClick\.aspx"[\s\S]{0,100}imgSrc: "https:\/\/med\.etoro\.com\/B21002_A128935_TGet\.aspx"[\s\S]{0,60}width: 160,\s*height: 600/.test(s),
-    (s) => once(s, "B21002_A128935_TClick", "B21111_A128935_TClick")],
+  ["it is the 300x600 banner the owner supplied (B21003), a click link over its image", creatives,
+    (s) => /ETORO_INSIGHT_RAIL[\s\S]{0,200}href: "https:\/\/med\.etoro\.com\/B21003_A128935_TClick\.aspx"[\s\S]{0,100}imgSrc: "https:\/\/med\.etoro\.com\/B21003_A128935_TGet\.aspx"[\s\S]{0,60}width: 300,\s*height: 600/.test(s),
+    (s) => once(s, "B21003_A128935_TClick", "B21111_A128935_TClick")],
   ["it shows only after Accept in the UK / EU / EEA (usePartnerAds), else renders nothing", ad,
     (s) => /const show = usePartnerAds\(TWO_COLUMNS_FROM\);\s*if \(!show\) return null;/.test(s),
     (s) => once(s, "if (!show) return null;", "")],
