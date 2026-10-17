@@ -4,7 +4,7 @@ import {
   isBypassedIp,
   getDailyPageViewCount,
 } from "@/lib/server/dailyPageLimit";
-import { ETORO_RAIL } from "@/lib/affiliateCreatives";
+import { ETORO_TRACKING } from "@/lib/affiliateCreatives";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +16,13 @@ const affiliateIds: Record<string, string> = {
 };
 
 // Partners whose tracking is a whole tracking URL rather than an ID parameter.
-// Same page-view rule as the IDs above. eToro uses the click link from its
-// approved banner (#553) until a dedicated text-link URL is supplied.
+// Same page-view rule as the IDs above. eToro uses the click links of its
+// approved banners (#553) until a dedicated text-link URL is supplied.
 const trackedLinks: Record<string, string> = {
-  etoro: ETORO_RAIL.href,
+  etoro: ETORO_TRACKING.rail,
+  // The self-hosted banners (lib/affiliateCreatives.ts): each is its own eToro banner id.
+  "etoro-rail": ETORO_TRACKING.rail,
+  "etoro-insight": ETORO_TRACKING.insight,
 };
 
 // Plain, un-tagged destination for each partner. A request that hasn't
@@ -29,6 +32,8 @@ const plainLinks: Record<string, string> = {
   tradingview: "https://www.tradingview.com/",
   trading212: "https://www.trading212.com/",
   etoro: "https://www.etoro.com/",
+  "etoro-rail": "https://www.etoro.com/",
+  "etoro-insight": "https://www.etoro.com/",
   interactivebrokers:
     "https://www.interactivebrokers.com/en/trading/trading-platforms.php",
   saxo: "https://www.home.saxo/",
