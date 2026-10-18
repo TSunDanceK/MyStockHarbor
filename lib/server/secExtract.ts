@@ -1257,6 +1257,14 @@ const RATIO_CLOSE_YEARS = 4;
 const LAST_RESORT_YEARS = 4;
 /** A bank's two revenue halves (#552 COWORK #241): summed, marked computed, only where no total is tagged. */
 export const BANK_REVENUE_HALVES = ["InterestIncomeExpenseNet", "NoninterestIncome"] as const;
+/**
+ * HOW CLOSE A BANK'S FILED TOTAL MUST SIT TO ITS NET REVENUE (earnings audit
+ * r2): net interest income plus noninterest income for the same frame. A
+ * `Revenues` outside this is a sub-line (ZION's $662M of $3,385M), a zero
+ * (UVSP, CBSH, OFG) or a gross figure before interest expense (BBT +13%, BFH
+ * +37%), and is not taken. See the bank net-basis block in extractCompanyFactsWith.
+ */
+export const BANK_NET_TOLERANCE = 0.02;
 /** The in-memory tag of a derived contract + not-from-contract total (option G, LUNR). Never stored. */
 const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
 
@@ -1796,6 +1804,90 @@ function extractCompanyFactsWith(
         }
       }
       if (summed) notes.push(`revenue: no revenue total tagged; ${BANK_REVENUE_HALVES.join(" + ")} used for ${summed} period(s) (computed)`);
+    }
+
+    // ── A BANK'S REVENUE IS ITS NET REVENUE (earnings audit r2) ─────────────
+    // HBAN's revenue read $1,562M, its 606 fee line, beside $5,991M of net
+    // interest income; 55 filers sat below their own net interest income. The
+    // block above only fills a bank whose newest periods carry NO revenue, and
+    // these carry a fee line (or a `Revenues` that is itself a sub-line, a zero,
+    // or gross of interest expense), so it never reached them.
+    //
+    // A FILER THAT TAGS BOTH HALVES, on any period whose revenue (as every rule
+    // above left it) is more than BANK_NET_TOLERANCE off net interest income
+    // plus noninterest income for the same frame, moves its WHOLE SERIES to net
+    // revenue, frame by frame:
+    //   1. RevenuesNetOfInterestExpense as filed, when within tolerance of the
+    //      two halves (or the halves are not both filed for that frame);
+    //   2. `Revenues` as filed, only within tolerance of the two halves;
+    //   3. the two halves' sum, marked computed.
+    // A period with none of these reads Not reported rather than keep the fee
+    // line beside net revenue, so a series cannot carry two bases. The halves
+    // and both totals are differenced like any concept, so a derived Q4 is on
+    // the same basis as its year.
+    //
+    // AFTER #913's total-over-contract rule, and it cannot fight it: that rule
+    // only chooses between the contract line and `Revenues`; this one checks
+    // whatever was chosen against the bank's own net revenue and replaces it
+    // only when it is off. A bank already on a net total (KEY's `Revenues`
+    // within 0.5%, SYF's computed halves) is untouched.
+    {
+      const seriesOf = (tag: string) => {
+        const f: FieldDef = { ...revenueField, chain: [tag], ifrsChain: undefined };
+        const rows = rowsForField(facts, f, new Set<string>(), currency);
+        const bucket: Bucket = new Map();
+        for (const c of rows) {
+          const k = periodKey(c.row);
+          const list = bucket.get(k);
+          if (list) list.push(c);
+          else bucket.set(k, [c]);
+        }
+        const qc = new Map<string, Map<string, FieldValue>>(), yc = new Map<string, Map<string, FieldValue>>();
+        if (rows.length) runCumulative([f], new Map([["revenue", bucket]]), new Map([["revenue", tag]]), qc, yc, new Map(), new Map(), []);
+        return { qc, yc, n: rows.length };
+      };
+      const [nii, non] = BANK_REVENUE_HALVES.map(seriesOf);
+      if (nii.n && non.n) {
+        const rnoie = seriesOf(LAST_RESORT_REVENUE_TAG), rv = seriesOf("Revenues");
+        const kinds = [[quarterCells, "qc"], [yearCells, "yc"]] as const;
+        const halvesAt = (kind: "qc" | "yc", end: string) => {
+          const a = nii[kind].get(end)?.get("revenue"), b = non[kind].get(end)?.get("revenue");
+          return a && b && a.val != null && b.val != null && sameFrame(a.covers, b.covers) ? { a, sum: a.val + b.val } : null;
+        };
+        const near = (v: number, sum: number) => Math.abs(v - sum) <= BANK_NET_TOLERANCE * Math.abs(sum);
+        const netAt = (kind: "qc" | "yc", end: string): FieldValue | null => {
+          const h = halvesAt(kind, end);
+          const r = rnoie[kind].get(end)?.get("revenue");
+          if (r?.val != null && r.val > 0 && (!h || near(r.val, h.sum))) return r;
+          if (!h || !(h.sum > 0)) return null;
+          const t = rv[kind].get(end)?.get("revenue");
+          if (t?.val != null && near(t.val, h.sum) && sameFrame(t.covers, h.a.covers)) return t;
+          return {
+            val: h.sum, tag: null, ns: h.a.ns, unit: h.a.unit, derived: "computed",
+            covers: h.a.covers, computedFrom: [BANK_REVENUE_HALVES[0], BANK_REVENUE_HALVES[1]],
+          };
+        };
+        let off = 0;
+        for (const [cells, kind] of kinds) {
+          for (const [end, m] of cells) {
+            const c = m.get("revenue");
+            const h = halvesAt(kind, end);
+            if (c?.val == null || !h || !(h.sum > 0) || !sameFrame(c.covers, h.a.covers)) continue;
+            if (!near(c.val, h.sum)) off++;
+          }
+        }
+        if (off) {
+          let moved = 0, computed = 0, blanked = 0;
+          for (const [cells, kind] of kinds) {
+            for (const [end, m] of cells) {
+              const t = netAt(kind, end);
+              if (t) { m.set("revenue", t); moved++; if (t.derived === "computed") computed++; }
+              else if (m.has("revenue")) { m.delete("revenue"); blanked++; }
+            }
+          }
+          notes.push(`revenue: bank net basis — ${off} period(s) more than ${BANK_NET_TOLERANCE * 100}% off ${BANK_REVENUE_HALVES.join(" + ")}; net revenue used for ${moved} period(s) (${computed} computed), ${blanked} without it left unreported`);
+        }
+      }
     }
 
     // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD (#552 COWORK #196/#200) ──
