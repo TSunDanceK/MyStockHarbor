@@ -103,10 +103,15 @@ console.log("\n2. a derived quarter is rescued through the same differencing");
 console.log("\n3. nothing outside a flagged period moves");
 {
   // Two quarters: Q1 complete (contract 100 > op 30), Q2 flagged (contract 2 < op 50).
+  // EXCISE-TAGGED, so the total-over-contract rule cannot reach it: without
+  // the tag that rule now makes `Revenues` the filer's one concept, judged on
+  // the newest quarter's line as tagged (earnings audit r1, 3d below), and this
+  // section is about the per-period fallback alone.
   const facts = payload({
     [CONTRACT]: [["2026-01-01", "2026-03-31", 100 * M], ["2026-04-01", "2026-06-30", 2 * M]],
     Revenues: [["2026-01-01", "2026-03-31", 140 * M], ["2026-04-01", "2026-06-30", 160 * M]],
     [OP]: [["2026-01-01", "2026-03-31", 30 * M], ["2026-04-01", "2026-06-30", 50 * M]],
+    ExciseAndSalesTaxes: [["2026-04-01", "2026-06-30", 1 * M]],
   });
   const qs = X.extractCompanyFacts("FIX", facts).quarters;
   const q1 = qs.find((p) => p.end === "2026-03-31")?.values?.[REV];
@@ -187,6 +192,57 @@ console.log("\n3b. AFRM: the total becomes the filer's one concept (#552 COWORK 
   const XE = await load(excise);
   const cop = XE.extractCompanyFacts("FIX", payload(CASES.COP[0])).quarters.find((p) => p.end === "2026-06-30")?.values?.[REV];
   check("MUTATION: without the excise exclusion COP flips to Revenues (caught)", cop?.val === 34922 * M, JSON.stringify(cop));
+}
+
+console.log("\n3d. the concept is judged on the line AS TAGGED (earnings audit r1: KEY, CRCL)");
+{
+  // KEY's 10-K figures ($M): the contract line, `Revenues`, pre-tax income.
+  // 2022 and 2025 pre-tax sit above the contract line (the fallback rescued
+  // them); 2023 and 2024 (a loss year) do not, and kept the $1.44B / $1.64B
+  // sub-line beside $7.3B and $7.5B. 2023/2024 pre-tax are shaped below the
+  // line, as KEY's are; the newest quarter is Q2 2026 as filed.
+  const yr = (y, v) => [`${y}-01-01`, `${y}-12-31`, v * M];
+  const key = payload({
+    [CONTRACT]: [yr(2022, 1594), yr(2023, 1435), yr(2024, 1643), yr(2025, 1749), ["2026-04-01", "2026-06-30", 449 * M]],
+    Revenues: [yr(2022, 7272), yr(2023, 6413), yr(2024, 4619), yr(2025, 7513), ["2026-04-01", "2026-06-30", 1964 * M]],
+    [PRE]: [yr(2022, 2333), yr(2023, 1150), yr(2024, -300), yr(2025, 2304), ["2026-04-01", "2026-06-30", 647 * M]],
+  });
+  const kr = X.extractCompanyFacts("KEY", key);
+  const kv = (y) => kr.years.find((p) => p.end === `${y}-12-31`)?.values?.[REV];
+  check("KEY FY2023 reads Revenues $6,413M, not the $1,435M contract line", kv(2023)?.val === 6413 * M && kv(2023)?.tag === "Revenues", JSON.stringify(kv(2023)));
+  check("KEY FY2024 reads Revenues $4,619M, not $1,643M", kv(2024)?.val === 4619 * M && kv(2024)?.tag === "Revenues", JSON.stringify(kv(2024)));
+  check("...and the years either side stay on the same concept",
+    kv(2022)?.val === 7272 * M && kv(2025)?.val === 7513 * M && [2022, 2023, 2024, 2025].every((y) => kv(y)?.tag === "Revenues"));
+  check("one concept down the series", new Set([...kr.years, ...kr.quarters].map((p) => p.values[REV]?.tag).filter(Boolean)).size === 1);
+
+  // CRCL: a sub-line ($15-110M) under a $1.4-2.7B total. Q2 2025 and FY2025
+  // (operating income below the line) kept it; Q4 2024 was derived from it.
+  // Figures as filed except the nine-month 2024 split, which is shaped.
+  const crcl = payload({
+    [CONTRACT]: [yr(2023, 19.9), yr(2024, 15.2), yr(2025, 109.8), ["2024-01-01", "2024-09-30", 12.8 * M],
+      ["2025-04-01", "2025-06-30", 23.8 * M], ["2026-04-01", "2026-06-30", 33.6 * M]],
+    Revenues: [yr(2023, 1450.5), yr(2024, 1676.3), yr(2025, 2746.6), ["2024-01-01", "2024-09-30", 1240.4 * M],
+      ["2025-04-01", "2025-06-30", 658.1 * M], ["2026-04-01", "2026-06-30", 701.3 * M]],
+    [OP]: [yr(2023, 269.5), yr(2024, 167.2), yr(2025, 40), ["2024-01-01", "2024-09-30", 140 * M],
+      ["2025-04-01", "2025-06-30", -400 * M], ["2026-04-01", "2026-06-30", 34.4 * M]],
+  });
+  const cr = X.extractCompanyFacts("CRCL", crcl);
+  const fy25 = cr.years.find((p) => p.end === "2025-12-31")?.values?.[REV];
+  const q2 = cr.quarters.find((p) => p.end === "2025-06-30")?.values?.[REV];
+  const q4 = cr.quarters.find((p) => p.end === "2024-12-31")?.values?.[REV];
+  check("CRCL FY2025 reads $2,746.6M, not $109.8M", fy25?.val === 2746.6 * M && fy25?.tag === "Revenues", JSON.stringify(fy25));
+  check("CRCL Q2 FY2025 reads the total, not $23.8M", q2?.val === 658.1 * M && q2?.tag === "Revenues", JSON.stringify(q2));
+  check("CRCL derived Q4 FY2024 = FY − 9M of Revenues (435.9M), not 2.4M of the sub-line",
+    Math.abs((q4?.val ?? 0) - 435.9 * M) < 1 && q4?.tag === "Revenues" && q4?.derived === "differenced", JSON.stringify(q4));
+  check("CRCL: a fiscal year and its quarters on one concept",
+    new Set([...cr.years, ...cr.quarters].map((p) => p.values[REV]?.tag).filter(Boolean)).size === 1);
+
+  const judgedRescued = extractRaw.replace("const r = newest ? asTaggedRevenue(cells.get(newest)) : undefined;",
+    "const r = newest ? cells.get(newest)?.get(\"revenue\") : undefined;");
+  check("the as-tagged mutation applied", judgedRescued !== extractRaw);
+  const XR = await load(judgedRescued);
+  const m23 = XR.extractCompanyFacts("KEY", key).years.find((p) => p.end === "2023-12-31")?.values?.[REV];
+  check("MUTATION: judging the rescued cell brings KEY's $1,435M back (caught)", m23?.val === 1435 * M, JSON.stringify(m23));
 }
 
 console.log("\n3c. option G: a gap that is itself revenue (#552 COWORK #219)");

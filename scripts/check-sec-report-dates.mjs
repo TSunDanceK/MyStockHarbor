@@ -20,7 +20,7 @@ const load = (mutate = (s) => s, nonce = 0) =>
   lift(
     mutate(SRC).replace(/export (const|function|type)/g, "$1") +
       "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, reactionDate," +
-      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary, reactionBarLabels, reportedLabel, latestResultsAnnouncement, pendingResults, snapPeriodEnd," +
+      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary, reactionBarLabels, reportedLabel, latestResultsAnnouncement, pendingResults, pendingIsCredible, snapPeriodEnd," +
       " resultsPairing, earlyNonResultsPattern, looksLikeEarlyNonResults, periodicReportDates,"+
       " onTradingDay, habitWeekday, usMarketHolidays, isUsTradingDay, nextUsTradingDay };" +
       `\n// nonce ${nonce}`
@@ -798,6 +798,27 @@ console.log("\n4d. announced, but not yet in the SEC data feed");
   check("...nor one whose derived quarter has not ended",
     m.pendingResults(placed, { ...july, announcedOn: "2026-07-16" }, cadence, "2026-05-01") === null,
     "a quarter that has not finished cannot have been reported");
+  // ── SYF (earnings audit r1): "the quarter ended 30 Sep 2026 was announced
+  // on 14 Aug 2026". Written after 30 Sep and before the October release, the
+  // record's newest results 8-K was a mid-quarter 2.02, newer than the July
+  // one, and the cadence named the quarter after the stored one.
+  {
+    const syfPlaced = [
+      ev("2026-06-30", "2026-07-22"), ev("2026-03-31", "2026-04-22"),
+      ev("2025-12-31", "2026-01-27"), ev("2025-09-30", "2025-10-15"),
+    ];
+    const syfCadence = m.nextPeriodEndFrom(["2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30"], []);
+    const aug = { ...ev("2026-09-30", "2026-08-14"), periodEnd: null };
+    check("SYF: an announcement made BEFORE the quarter it would name ended is not pending",
+      m.pendingResults(syfPlaced, aug, syfCadence, "2026-10-01") === null,
+      JSON.stringify(m.pendingResults(syfPlaced, aug, syfCadence, "2026-10-01")));
+    check("...while SYF's real October release still is",
+      m.pendingResults(syfPlaced, { ...aug, announcedOn: "2026-10-14" }, syfCadence, "2026-10-16")?.periodEnd === "2026-09-30");
+    check("pendingIsCredible: the guard every reader of a stored notice applies",
+      m.pendingIsCredible({ periodEnd: "2026-09-30", announcedOn: "2026-08-14" }) === false &&
+        m.pendingIsCredible({ periodEnd: "2026-09-30", announcedOn: "2026-10-14" }) === true &&
+        m.pendingIsCredible(null) === false);
+  }
   check("no cadence, no claim about which quarter",
     m.pendingResults(placed, july, null, "2026-09-16") === null,
     "the notice names a quarter, so a quarter has to be known");
@@ -844,8 +865,14 @@ console.log("\n4d. announced, but not yet in the SEC data feed");
     const mut = await load((src) => src.replace(
       "  if (latest.announcedOn <= newestPlaced.announcedOn) return null;",
       "  if (false) return null;"), 7);
+    // A LATE filer whose placed announcement already postdates the next
+    // quarter's end: the credibility guard (announced after the period ends)
+    // passes it, so only the ordering test stands between it and a notice.
+    const late = [ev("2026-03-31", "2026-07-02"), ...placed.slice(1)];
+    check("the ordering test refuses an up-to-date late filer",
+      m.pendingResults(late, ev("2026-03-31", "2026-07-02"), cadence, "2026-09-16") === null);
     check("MUTATION: dropping the ordering test fires on an up-to-date filer",
-      mut.pendingResults(placed, ev("2026-03-31", "2026-04-16"), cadence, "2026-09-16") !== null,
+      mut.pendingResults(late, ev("2026-03-31", "2026-07-02"), cadence, "2026-09-16") !== null,
       "every filer would carry the notice, which makes it mean nothing");
   }
 }
@@ -990,7 +1017,7 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
       (cards.match(/Results for the quarter ended[\s\S]{0,400}/) ?? [""])[0]
     ));
   check("the page reads it from the stored record, never deriving it on a render",
-    /pendingResults: secDates\?\.pending \?\? null/.test(page) &&
+    /pendingResults: pendingIsCredible\(secDates\?\.pending\) \? secDates!\.pending! : null/.test(page) &&
       !/latestResultsAnnouncement/.test(page),
     "deriving it needs submissions, and a render has no business fetching EDGAR");
   check("the cron computes it from the submissions payload already in hand",

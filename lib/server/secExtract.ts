@@ -1562,6 +1562,10 @@ function extractCompanyFactsWith(
       [fbField], new Map([["revenue", fbBucket]]), new Map([["revenue", preferredTag(fbRows)]]),
       fbQuarter, fbYear, new Map(), new Map(), [],
     );
+    // THE LINE AS TAGGED, for each period this fallback rewrites. The
+    // total-over-contract rule below judges the filer's concept on these, not
+    // on the rescued cells: see `asTaggedRevenue`.
+    const taggedBefore = new Map<Map<string, FieldValue>, FieldValue>();
     for (const [cells, fbCells] of [[quarterCells, fbQuarter], [yearCells, fbYear]] as const) {
       for (const [end, m] of cells) {
         const rev = m.get("revenue")?.val ?? null;
@@ -1571,6 +1575,7 @@ function extractCompanyFactsWith(
         const fb = fbCells.get(end)?.get("revenue");
         const bar = op ?? pre;
         if (!fb || fb.val == null || bar == null || fb.val < bar) continue;
+        taggedBefore.set(m, m.get("revenue")!);
         m.set("revenue", fb);
         notes.push(`revenue ${end}: tagged line ${rev} is below ${op != null ? "operating" : "pre-tax"} income ${bar}; ${fb.tag} ${fb.val} used`);
       }
@@ -1632,13 +1637,25 @@ function extractCompanyFactsWith(
       }
     }
     const isTotal = (t: FieldValue | undefined) => Boolean(t && (t.tag === "Revenues" || t.tag === DERIVED_TOTAL_TAG) && t.val != null);
+    // ── THE CONCEPT IS JUDGED ON THE LINE AS TAGGED (earnings audit r1) ─────
+    // The fallback above has already replaced the contract line with
+    // `Revenues` on every period whose operating (or pre-tax) income exceeds
+    // it. Judged on those cells, a filer whose NEWEST period was rescued never
+    // showed the contract line here, so the rule below never fired and every
+    // period the fallback did not reach kept the sub-line: KEY's FY2023
+    // ($1.44B) and FY2024 ($1.64B, a loss year) beside $7.3B and $7.5B; CRCL's
+    // FY2025 ($109.8M of $2.75B), Q2 FY2025 and derived Q4 FY2024. One series,
+    // two concepts. Reading the cell as tagged lets the rule see the filer's
+    // own concept and move the whole series to the total.
+    const asTaggedRevenue = (row: Map<string, FieldValue> | undefined) =>
+      row ? taggedBefore.get(row) ?? row.get("revenue") : undefined;
     {
       const newest = [...quarterCells.keys(), ...yearCells.keys()].sort().at(-1);
       // LIKE FOR LIKE: a quarter against a quarter, else a year against a
       // year -- never one duration against the other (ADP's $21.9B fiscal
       // year against its $5.47B fourth quarter, caught by the round-2 census).
       const pairAt = (cells: typeof quarterCells, fbCells: typeof fbQuarter) => {
-        const r = newest ? cells.get(newest)?.get("revenue") : undefined;
+        const r = newest ? asTaggedRevenue(cells.get(newest)) : undefined;
         const f = newest ? fbCells.get(newest)?.get("revenue") : undefined;
         return r && f ? { rev: r, fb: f } : null;
       };
@@ -1653,7 +1670,7 @@ function extractCompanyFactsWith(
       const covers = (cells: typeof quarterCells, fbCells: typeof fbQuarter, n: number) => {
         const ends = [...cells.keys()].sort().reverse().slice(0, n);
         const total = ends.filter((e) => isTotal(fbCells.get(e)?.get("revenue"))).length;
-        const contract = ends.filter((e) => { const c = cells.get(e)?.get("revenue"); return c?.tag === CONTRACT_REVENUE_TAG && c.val != null; }).length;
+        const contract = ends.filter((e) => { const c = asTaggedRevenue(cells.get(e)); return c?.tag === CONTRACT_REVENUE_TAG && c.val != null; }).length;
         return total >= contract;
       };
       const floorHolds = covers(quarterCells, totalQuarter, 8) && covers(yearCells, totalYear, 4);

@@ -591,6 +591,16 @@ const TASKS = {
   // over the manifest with the shipped extraction, before/after the chain
   // edits, plus the re-read backlog the edit causes. GETs only.
   // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  // READ-ONLY DESPITE THE PREFIX (fix/earnings-audit-r1): the audit's problem
+  // classes counted over the manifest, main's extraction vs this branch's, plus
+  // stored pending notices dated before their quarter. GETs/MGETs only.
+  // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  "write-earnings-audit-r1-scan": {
+    script: "scripts/earnings-audit-r1-scan.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-round2-gap-census": {
     script: "scripts/sec-round2-gap-census.mjs",
     args: () => [],

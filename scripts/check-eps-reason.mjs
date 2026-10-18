@@ -93,6 +93,22 @@ console.log("\n4. a listed filer that has an EPS figure shows the figure");
   check("no reason sentence where EPS is present", !text.includes(CLASS));
 }
 
+console.log("\n5. a filer whose SEC data tags no EPS at all says so (earnings audit r1: ONON)");
+{
+  const NOT_TAGGED = "EPS is not tagged in SEC data";
+  const set = blankEps(M, "ONON");
+  set.nt = [...new Set([...(set.nt ?? []), "epsBasic", "epsDiluted"])];
+  const view = M.buildSecEarningsView(set);
+  check("ONON: view.epsReason", view.epsReason === NOT_TAGGED, String(view.epsReason));
+  const annual = renderRaw("SecAnnualCard", view);
+  check("ONON: the annual table reads the short form, the reason on hover",
+    annual.includes(">Not tagged in SEC data<") && annual.includes(NOT_TAGGED), annual.match(/Diluted EPS[\s\S]{0,200}/)?.[0] ?? "");
+  const tagged = blankEps(M, "AAPL");
+  tagged.nt = (tagged.nt ?? []).filter((k) => k !== "epsDiluted");
+  check("a filer that tags EPS but left a period blank keeps \"Not reported\"", M.buildSecEarningsView(tagged).epsReason === null);
+  check("a listed class filer keeps its own reason even if untagged", M.epsBlankReason("V", ["epsDiluted"]) === CLASS);
+}
+
 if (failures) {
   console.log(`\n${failures} assertion(s) failed.`);
   process.exit(1);

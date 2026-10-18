@@ -344,7 +344,10 @@ const INCOME: FieldDef[] = ([
   // 10-Ks ($445.7M and $540.5M, relay 35790767741) — the five-year card read
   // "Not reported" beside a filed cost of revenue and gross profit that sum to
   // exactly that revenue.
-  { key: "revenue", chain: ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax"], unit: "USD" },
+  // RegulatedAndUnregulatedOperatingRevenue LAST for the same reason: XEL tags
+  // its total operating revenue under it and nothing above it ($14,669M
+  // FY2025), so every revenue cell read "Not captured" (earnings audit r1).
+  { key: "revenue", chain: ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax", "RegulatedAndUnregulatedOperatingRevenue"], unit: "USD" },
   { key: "costOfRevenue", chain: ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold"], unit: "USD" },
   // THE FILER'S OWN GROSS PROFIT, not revenue - costOfRevenue. Stored precisely
   // so the identity has something to check: a derived figure cannot disagree
@@ -844,6 +847,9 @@ export function secChainsHash(): string {
   // AND THE TOTAL-OVER-CONTRACT RULE (#552 COWORK #192): it moves stored
   // revenue for every filer it reaches, so it re-reads like a chain edit.
   feed(`revenue-total-over-contract|${REVENUE_TOTAL_OVER_CONTRACT}|no-excise|floor:8q4y`);
+  // …JUDGED ON THE LINE AS TAGGED, before the incomplete-line fallback
+  // (earnings audit r1: KEY, CRCL). It moves stored revenue, so it re-reads.
+  feed("revenue-total-judged-as-tagged");
   // AND OPTION G (#552 COWORK #219): the gap-is-revenue test and the derived
   // contract + not-from-contract total move stored revenue too.
   feed(`revenue-gap|${REVENUE_GAP_CONCEPTS.join(",")}|${REVENUE_GAP_TOLERANCE_ABS}|derived-total`);

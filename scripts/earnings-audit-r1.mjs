@@ -21,44 +21,14 @@
 //
 //   relay task: earnings-audit-r1   symbols "KEY,CRCL,CM,GIB,XEL,AFRM,RDDT,SYF"
 import fs from "node:fs";
-import { execSync } from "node:child_process";
-import { stripComments, grabConst, readCodeOnly } from "./lib/source-code.mjs";
-import { lift, grabFunction } from "./lib/earnings-plan.mjs";
+import { loadMainAndBranch } from "./lib/earnings-audit-lift.mjs";
 
 const UA = process.env.SEC_USER_AGENT ??
   "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; earnings audit round 1)";
 const SYMBOLS = (process.env.SYMBOLS || process.argv[2] || "KEY,CRCL,CM,GIB,XEL,AFRM,RDDT,SYF")
   .split(/[\s,]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
-const TODAY = new Date().toISOString().slice(0, 10);
 
-const MODULES = [
-  "lib/server/secFields.ts", "lib/server/secExtract.ts", "lib/server/fxRates.ts",
-  "lib/server/secCurrency.ts", "lib/server/secFactCodec.ts", "lib/server/secFactBuild.ts",
-  "lib/server/secStaleness.ts", "lib/server/secShareHistory.ts", "lib/server/secSplitAdjust.ts",
-  "lib/server/secEarningsView.ts", "lib/server/secPresentation.ts", "lib/server/secEarningsScore.ts",
-];
-const stripImports = (src) => src.replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "")
-  .replace(/^export \* from "\.\/[^"]+";$/gm, "");
-async function load(read, label) {
-  const parts = MODULES.map((f) => {
-    return stripImports(stripComments(read(f), { file: f }));
-  });
-  // secFactBuild's keptWithNewer closes over these two; read from the source.
-  const extra = [grabConst("lib/server/secReportDates.ts", "DEADLINE_FALLBACK"),
-    grabConst("lib/server/secValuation.ts", "COVER_SHARES_MAX_AGE_DAYS"),
-    grabFunction(readCodeOnly("lib/server/secCoverAuto.ts"), "coverIsUsable").replace(/^export /, "")].join("\n");
-  return lift(parts.join("\n"), extra, label);
-}
-
-let mainRead = null;
-try {
-  execSync("git fetch --depth=1 origin main", { stdio: "ignore" });
-  mainRead = (f) => execSync(`git show FETCH_HEAD:${f}`, { encoding: "utf8", maxBuffer: 64 << 20 });
-} catch (e) {
-  console.log(`main could not be fetched (${e.message}); BRANCH ONLY`);
-}
-const NEW = await load((f) => fs.readFileSync(f, "utf8"), "branch");
-const OLD = mainRead ? await load(mainRead, "main") : null;
+const { NEW, OLD } = await loadMainAndBranch();
 
 const cikMap = JSON.parse(fs.readFileSync("data/cik-map.json", "utf8"));
 const tickers = JSON.parse(fs.readFileSync("data/sec/company-tickers.json", "utf8"));
@@ -168,6 +138,7 @@ for (const symbol of SYMBOLS) {
     console.log(`  score main → branch: ${ob ? `${ob.score.score} ${ob.score.label}` : "—"} → ${nb.score.score} ${nb.score.label}`);
     for (const note of nb.ex.notes ?? []) if (/^revenue/.test(note)) console.log(`  note: ${note.slice(0, 240)}`);
     const c = nb.set.cover;
+    console.log(`  untagged (nt): ${(nb.set.nt ?? []).filter((k) => /revenue|eps/i.test(k)).join(", ") || "none of revenue/EPS"} · epsReason ${nb.view?.epsReason ?? "null"}`);
     console.log(`  cover: ${c ? `val ${c.val ?? "—"} asOf ${c.asOf ?? "—"} candidates ${c.candidates?.length ?? 0}` : "none"}`);
   } catch (e) {
     console.log(`  FAILED: ${e?.name}: ${String(e?.message).slice(0, 300)}`);
