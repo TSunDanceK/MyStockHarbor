@@ -13,7 +13,9 @@
 // It FAILS (exit 1) on an unexplained gap, and on a stale exception (one that no
 // longer matches a gap, e.g. because the mirror was added). Provisional
 // exceptions are gaps we could not yet close (no sourced weight, or nothing
-// removable); their count is printed on every run and does not fail.
+// removable); their count is printed on every run. It is a RATCHET: the file
+// stores `provisionalCount`, and the guard fails if the real count differs from
+// it (a rise is refused; a fall must be written down by lowering the number).
 //
 // Matching is by ticker (GOOG folds into GOOGL, as the leaderboard does); an
 // entry with no ticker, or whose ticker has no page, is not checked.
@@ -61,13 +63,15 @@ for (const [fromKey, from] of pages) {
 }
 
 const EXC_FILE = path.join(DIR, "_mirror-exceptions.json");
-const exceptions = fs.existsSync(EXC_FILE) ? JSON.parse(fs.readFileSync(EXC_FILE, "utf8")) : [];
+const excDoc = fs.existsSync(EXC_FILE) ? JSON.parse(fs.readFileSync(EXC_FILE, "utf8")) : { provisionalCount: 0, exceptions: [] };
+const exceptions = excDoc.exceptions;
 const ek = (source, target, role) => `${String(source).toUpperCase()}|${String(target).toUpperCase()}|${role}`;
 const excMap = new Map(exceptions.map((e) => [ek(e.source, e.target, e.role), e]));
 const gapKeys = new Set(missing.map((m) => ek(m.from, m.to, m.role)));
 const unexplained = missing.filter((m) => !excMap.has(ek(m.from, m.to, m.role)));
 const stale = exceptions.filter((e) => !gapKeys.has(ek(e.source, e.target, e.role)));
 const provisional = exceptions.filter((e) => e.provisional).length;
+const ratchet = excDoc.provisionalCount;
 
 const line = (m) => `${m.to} should list ${m.from} as a ${m.mirror === "customers" ? "customer" : "supplier"} (${m.from} lists ${m.to} as a ${m.role}; ${m.to}'s ${m.mirror === "customers" ? "customers" : "suppliers"} list has ${m.count})`;
 const sorted = (xs) => [...xs].sort((a, b) => a.to.localeCompare(b.to) || a.from.localeCompare(b.from));
@@ -77,7 +81,7 @@ const room = sorted(unexplained.filter((m) => !m.full));
 let pairs = 0;
 for (const [fromKey, from] of pages) for (const list of ["supplyChain", "customers"]) for (const t of from[list]) if (t !== fromKey && pages.has(t)) pairs++;
 
-console.log(`bottleneck mirror links: ${pairs} entries name a company that has its own page; ${missing.length} have no mirror on that page; ${missing.length - unexplained.length} are accepted exceptions (${provisional} provisional); ${unexplained.length} unexplained; ${stale.length} stale exceptions.`);
+console.log(`bottleneck mirror links: ${pairs} entries name a company that has its own page; ${missing.length} have no mirror on that page; ${missing.length - unexplained.length} are accepted exceptions (${provisional} provisional, ratchet ${ratchet}); ${unexplained.length} unexplained; ${stale.length} stale exceptions.`);
 const BRIEF = process.argv.includes("--brief");
 const SHOWN = 5;
 const show = (xs) => {
@@ -90,7 +94,11 @@ if (stale.length) {
   console.log(`\nStale exceptions (no matching gap - delete them): ${stale.length}`);
   for (const e of BRIEF ? stale.slice(0, SHOWN) : stale) console.log(`  ${e.source} -> ${e.target} (${e.role})`);
 }
-if (unexplained.length || stale.length) {
+if (provisional !== ratchet) {
+  console.log(`\nProvisional exceptions: ${provisional}, but the stored ratchet (provisionalCount in _mirror-exceptions.json) is ${ratchet}.`);
+  console.log(provisional > ratchet ? "The count may only fall: close the gap instead of adding a provisional exception." : "A gap was closed: lower provisionalCount to the new number.");
+}
+if (unexplained.length || stale.length || provisional !== ratchet) {
   console.log("\nFix: add the mirror on the target page (and make room), or record an exception in content/bottlenecks/_mirror-exceptions.json.");
   process.exit(1);
 }

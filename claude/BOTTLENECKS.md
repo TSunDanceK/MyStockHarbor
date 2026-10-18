@@ -91,7 +91,13 @@ no page. `--brief` prints the short form.
   accepted exceptions. A material gap that could not be closed (no sourced
   weight, or the only removable entries have pages of their own) is recorded with
   `"provisional": true`; the guard prints the provisional count on every run and
-  does not fail on them. Close them when sourced and delete the row.
+  does not fail on them by themselves. Close them when sourced and delete the row.
+- **Ratchet:** the exceptions file is `{ "provisionalCount": N, "exceptions": [...] }`.
+  The guard fails if the real number of provisional rows differs from
+  `provisionalCount`: a rise is refused (close the gap, do not add a provisional
+  row), and a fall must be written down by lowering `provisionalCount` in the same
+  change that removes the exception. `check-all` prints one line with the current
+  count at the end of the run.
 - **When you add a page or an entry, add the mirror in the same change** (or an
   exception with its reason).
 - **How a mirror weight is derived:** from the *target* company's own filings and

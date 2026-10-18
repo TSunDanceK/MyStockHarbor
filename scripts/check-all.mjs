@@ -73,5 +73,9 @@ if (failures.length) {
 }
 
 const checkCount = scripts.length - [...REPORT_ONLY.keys()].filter((f) => scripts.includes(f)).length;
+try {
+  const exc = JSON.parse(fs.readFileSync(path.join(process.cwd(), "content/bottlenecks/_mirror-exceptions.json"), "utf8"));
+  console.log(`\nbottleneck mirror links: ${exc.provisionalCount} provisional gaps still open (ratchet; may only fall)`);
+} catch {}
 console.log(`\n${failed ? `${failed} of ${checkCount} FAILED` : `all ${checkCount} passed`}\n`);
 process.exit(failed ? 1 : 0);

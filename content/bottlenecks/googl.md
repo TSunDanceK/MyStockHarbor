@@ -120,11 +120,10 @@ customers:
     grade: some
     blurb: >
       Palo Alto Networks announced a multibillion-dollar agreement with Google
-      Cloud in December 2025 to move key internal workloads onto Google Cloud
-      and run its security platforms on Google's AI infrastructure. Press
+      Cloud in December 2025 to move internal workloads onto Google Cloud. Press
       reports citing Reuters put the multi-year spending commitment at nearly
-      $10 billion, though neither company confirmed the figure. If accurate, it
-      may make this one of Google Cloud's largest security-sector contracts.
+      $10 billion, though neither company confirmed the figure, so the true size
+      may differ.
   - name: Salesforce
     ticker: CRM
     pct: 9

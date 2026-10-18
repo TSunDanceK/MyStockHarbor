@@ -66,6 +66,13 @@ supplyChain:
       A major memory supplier to AWS's server infrastructure. Its primary
       listing is the Korea Exchange, but it has also traded on Nasdaq as
       an ADR since July 2026.
+  - name: Samsung Electronics
+    ticker: null
+    pct: 6
+    grade: spread
+    blurb: >
+      A major memory supplier to AWS. Trades primarily on the Korea
+      Exchange with no proper US-listed ticker.
   - name: Vertiv Holdings
     ticker: VRT
     pct: 6
@@ -73,18 +80,6 @@ supplyChain:
     blurb: >
       Supplies power and cooling infrastructure across AWS's rapidly
       expanding data centers.
-  - name: Astera Labs
-    ticker: ALAB
-    pct: 6
-    grade: spread
-    blurb: >
-      Astera Labs supplies Amazon and its affiliates with connectivity chips,
-      including smart fabric switches, signal conditioning products and optical
-      engines. In February 2026 Astera granted Amazon a warrant whose vesting is
-      tied to Amazon purchases of these products, up to a total of $6.5 billion.
-      That figure is a ceiling that may or may not be reached over time, but it
-      suggests the relationship could be large for AWS's server and AI
-      infrastructure.
   - name: Marvell Technology
     ticker: MRVL
     pct: 4
@@ -163,9 +158,9 @@ customers:
     pct: 4
     grade: spread
     blurb: >
-      CrowdStrike buys cloud hosting from AWS to run its Falcon security
-      platform. In October 2021 it signed a private pricing addendum with AWS
-      that sets a minimum of $600 million of spend through September 2026, and
-      it had used $498.2 million of that by October 31, 2023. The size is modest
-      next to the AI labs, and the terms after September 2026 may differ.
+      CrowdStrike buys cloud hosting from AWS. In October 2021 it signed a
+      private pricing addendum with AWS that sets a minimum of $600 million of
+      spend through September 2026, and it had used $498.2 million of that by
+      October 31, 2023. The size is modest next to the AI labs, and the terms
+      after September 2026 may differ.
 ---

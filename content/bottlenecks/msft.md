@@ -92,9 +92,8 @@ supplyChain:
       of the restarted Three Mile Island Unit 1 (the Crane Clean Energy Center),
       about 835 megawatts, under a 20-year power purchase agreement announced in
       September 2024. The plant is expected to return to service around 2028, so
-      the supply may not begin until then. The deal matters because it gives
-      Microsoft a long-dated source of carbon-free power for its data centers,
-      though it may be only a small part of Microsoft's total electricity needs.
+      supply may not begin until then. No price or share of Microsoft's total
+      power use was disclosed.
   - name: Corning
     ticker: GLW
     pct: 3

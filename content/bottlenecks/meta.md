@@ -74,13 +74,12 @@ supplyChain:
     pct: 6
     grade: spread
     blurb: >
-      Google is reported to supply Meta with cloud computing and AI chip
-      capacity. The Information reported in February 2026 that Meta agreed a
-      multi-year, multibillion-dollar deal to rent Google's TPUs, and an earlier
-      report described a Google Cloud contract worth more than $10 billion over
-      six years. These figures come from anonymous sources and neither company
-      has confirmed them, so the true size may differ. Meta may also be
-      considering buying TPUs for its own data centers from 2027.
+      Google is reported to supply Meta with cloud computing capacity. The
+      Information reported in February 2026 that Meta agreed a multi-year,
+      multibillion-dollar deal to rent Google Cloud TPUs, and an earlier report
+      described a Google Cloud contract worth more than $10 billion over six
+      years. These figures come from anonymous sources and Google did not
+      comment, so the true size may differ.
   - name: Vertiv Holdings
     ticker: VRT
     pct: 5
@@ -96,9 +95,8 @@ supplyChain:
       Constellation Energy agreed in June 2025 to supply power to Meta under a
       20-year agreement tied to the Clinton Clean Energy Center nuclear plant in
       Illinois, announced at about 1,121 megawatts. Deliveries are scheduled to
-      start in June 2027. For Meta this is a long-term source of electricity for
-      its data centers, though the parties have not said what share of the
-      plant's output Meta takes, and no dollar value was disclosed.
+      start in June 2027. The parties have not said what share of the plant's
+      output Meta takes, and no dollar value was disclosed.
   - name: Arista Networks
     ticker: ANET
     pct: 3

@@ -80,12 +80,11 @@ supplyChain:
     grade: spread
     blurb: >
       Alnylam supplies Regeneron with RNAi (gene-silencing) drug technology
-      under a broad collaboration signed in 2019 covering eye and central
-      nervous system diseases plus a small number of liver programs. Regeneron
-      paid a $400 million upfront fee in 2019 and separately invested $400
-      million in Alnylam stock. The initial research term is five years, and
-      Regeneron may extend it for a fee of $200 million to $400 million, so the
-      relationship might grow or stay fixed depending on early programs.
+      under a broad collaboration signed in 2019. Regeneron paid a $400 million
+      upfront fee and separately bought $400 million of Alnylam stock. The
+      research term is five years, and Regeneron may extend it for a fee of $200
+      million to $400 million, so the relationship might grow or stay fixed
+      depending on early programs.
 customers:
   - name: Sanofi
     ticker: SNY
