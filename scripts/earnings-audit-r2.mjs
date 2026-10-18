@@ -22,7 +22,8 @@
 //           cell by cell beside the raw SEC rows that produced them
 //   mixed   the mixed-concept census (main only; investigation, no fix)
 //
-//   relay tasks: write-earnings-audit-r2-banks / -raw / -fysum / -mixed
+//   cells   every stored revenue cell that differs, main against this branch
+//   relay tasks: write-earnings-audit-r2-banks / -raw / -fysum / -mixed / -cells
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
 delete process.env.KV_REST_API_URL;
@@ -357,7 +358,30 @@ async function mixed() {
   console.log(`\nfilers with a YoY across a concept boundary: ${boundaryAny}; of them beyond ±60% only because of it: ${boundary60}`);
 }
 
-const run = { banks, raw, fysum, mixed }[MODE];
+// ── cells: every stored revenue cell that differs, main against this branch ──
+async function cells() {
+  ensureMainTree();
+  const OLD = await load(MAIN_TREE), NEW = await load(ROOT);
+  const ri = NEW.F.SEC_FIELD_KEYS.indexOf("revenue");
+  for (const sym of SYMBOLS) {
+    const got = await factsFor(sym);
+    if (!got.facts) { console.log(`${sym}: ${got.err}`); continue; }
+    const side = async (T) => T.B.toStoredSet(T.X.extractCompanyFacts(sym, got.facts));
+    const o = await side(OLD), n = await side(NEW);
+    const byE = (set) => new Map([...set.years, ...set.quarters].map((p) => [`${p.s}..${p.e}`, p]));
+    const ob = byE(o), nb = byE(n);
+    const keys = [...new Set([...ob.keys(), ...nb.keys()])].sort((a, b) => a.split("..")[1].localeCompare(b.split("..")[1]));
+    const diff = keys.filter((k) => (ob.get(k)?.v[ri] ?? null) !== (nb.get(k)?.v[ri] ?? null));
+    console.log(`\n===== ${sym}: ${diff.length} of ${keys.length} stored cells differ`);
+    for (const k of diff) {
+      const a = ob.get(k), b = nb.get(k);
+      console.log(`  ${k} ${(b ?? a).fp ?? ""}${(b ?? a).fy ?? ""} ${M(a?.v[ri] ?? null)} (${a?.d?.[ri] ?? "-"}) → ${M(b?.v[ri] ?? null)} (${b?.d?.[ri] ?? "-"})`);
+    }
+    await pause();
+  }
+}
+
+const run = { banks, raw, fysum, mixed, cells }[MODE];
 if (!run) { console.error(`FATAL: unknown MODE ${MODE}`); process.exit(2); }
 await run();
 try { if (fs.existsSync(MAIN_TREE)) execSync(`git worktree remove --force ${MAIN_TREE}`, { stdio: "ignore" }); } catch { /* the runner is discarded */ }

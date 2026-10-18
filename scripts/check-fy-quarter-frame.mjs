@@ -8,7 +8,9 @@
 //   VICR FY2025 407.7 on 2025-07-01..2025-09-30, accn 0001193125-26-085102
 //        (its 10-Q filed 110.4 for the same dates)
 // Each read as a quarter equal to its year. The rows are LHX's and VICR's own,
-// in $M. Pinned: the quarter is refused and Q4 = FY − 9M; VICR's Q3 comes from
+// in $M. LHX's FY2025 10-K goes further: 21,865.0 on Q4's dates and NO 2025
+// year row at all; that quarter reads Not reported. Pinned: the quarter is
+// refused and Q4 = FY − 9M; VICR's Q3 comes from
 // its 10-Q; a filer whose restated year disagrees with its quarters (BKV's
 // 10-K/A) is NOT touched; and the mutation that keeps the mis-dated row.
 import fs from "node:fs";
@@ -91,13 +93,47 @@ console.log("\n3. what is not touched");
   check("no smaller year-to-date figure: a Q4 equal to its year is kept", X.fullYearOnQuarterFrame(lumpy.facts["us-gaap"][TAG].units.USD).size === 0);
 }
 
-console.log("\n4. mutation");
+console.log("\n4. LHX FY2025: the year on Q4's dates with no year row beside it");
+const LHX25 = facts([
+  ["2025-01-04", "2025-03-28", 5132.0, "10-Q", 2025, "Q1", "2025-04-24", "0000202058-25-000201"],
+  ["2025-03-29", "2025-06-27", 5426.0, "10-Q", 2025, "Q2", "2025-07-24", "0000202058-25-000202"],
+  ["2025-01-04", "2025-06-27", 10558.0, "10-Q", 2025, "Q2", "2025-07-24", "0000202058-25-000202"],
+  ["2025-06-28", "2025-10-03", 5659.0, "10-Q", 2025, "Q3", "2025-10-23", "0000202058-25-000203"],
+  ["2025-01-04", "2025-10-03", 16217.0, "10-Q", 2025, "Q3", "2025-10-23", "0000202058-25-000203"],
+  ["2025-10-04", "2026-01-02", 21865.0, "10-K", 2025, "FY", "2026-02-12", "0000202058-26-000099"],
+  ["2023-12-30", "2025-01-03", 21325.0, "10-K", 2025, "FY", "2026-02-12", "0000202058-26-000099"],
+]);
+{
+  const ex = X.extractCompanyFacts("LHX", LHX25);
+  const q4 = q(ex, "2026-01-02");
+  check("Q4 FY2025 does not read the 21,865M year (16,217M nine months + 5,648M): Not reported", q4?.val == null, JSON.stringify(q4));
+  check("...Q3 stays 5,659M", q(ex, "2025-10-03")?.val === 5659 * M);
+  // A real, big fourth quarter is kept: 120 after nine months of 300 (avg 100).
+  const big = facts([
+    ["2025-01-01", "2025-09-30", 300, "10-Q", 2025, "Q3", "2025-10-30", "0000000000-25-000003"],
+    ["2025-07-01", "2025-09-30", 100, "10-Q", 2025, "Q3", "2025-10-30", "0000000000-25-000003"],
+    ["2025-10-01", "2025-12-31", 260, "10-K", 2025, "FY", "2026-02-20", "0000000000-26-000001"],
+    ["2024-01-01", "2024-12-31", 380, "10-K", 2025, "FY", "2026-02-20", "0000000000-26-000001"],
+  ]);
+  check("a genuine Q4 of 2.6x the average (260 after 300) is kept", q(X.extractCompanyFacts("BIG", big), "2025-12-31")?.val === 260 * M,
+    JSON.stringify(q(X.extractCompanyFacts("BIG", big), "2025-12-31")));
+}
+
+console.log("\n5. mutation");
 {
   const mutated = extractRaw.replace("          if (misdated.has(row)) continue;\n", "");
   check("the mutation applied", mutated !== extractRaw);
   const XM = await load(mutated);
   const m = q(XM.extractCompanyFacts("LHX", LHX), "2025-01-03");
   check("MUTATION: keeping the row puts the year back in Q4 (caught)", m?.val === 21325 * M, JSON.stringify(m));
+}
+
+{
+  const from = "      if (q.val > 2 * avg && rest >= 0.5 * avg && rest <= 1.5 * avg) out.add(q);\n";
+  if (extractRaw.split(from).length !== 2) throw new Error("mutation anchor (no-year branch) not unique");
+  const XN = await load(extractRaw.replace(from, ""));
+  const m = q(XN.extractCompanyFacts("LHX", LHX25), "2026-01-02");
+  check("MUTATION: without the no-year branch LHX's Q4 FY2025 reads the 21,865M year (caught)", m?.val === 21865 * M, JSON.stringify(m));
 }
 
 if (failures) {

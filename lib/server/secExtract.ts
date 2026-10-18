@@ -680,7 +680,14 @@ export function newer(a: FactRow, b: FactRow): FactRow {
  * SAME concept and SAME accession that contains it, while another row of that
  * concept inside the year (a six- or nine-month figure) is smaller than the
  * year — so a real quarter exists to be found. Q4 then comes from FY − 9M as
- * for any filer, and a mid-year quarter from the 10-Q that stated it. PURE.
+ * for any filer, and a mid-year quarter from the 10-Q that stated it.
+ *
+ * ALSO refused: an annual filing's quarter-length row with NO year row to match
+ * (LHX's FY2025 10-K tags $21,865M on 2025-10-04..2026-01-02 and no 2025 year
+ * at all) whose value is the nine months just before it plus about one more of
+ * its average quarters: $16,217M + $5,648M against a $5,406M average. A real
+ * fourth quarter is near the average, not three and a half times it, so this
+ * cannot catch one; that quarter then reads Not reported, not the year. PURE.
  */
 export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Set<FactRow> {
   const out = new Set<FactRow>();
@@ -692,7 +699,16 @@ export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Set<FactRow> {
     const d = days(q);
     if (!(d >= 80 && d <= 100)) continue;
     const y = years.find((y) => y.accn === q.accn && y.val === q.val && y.start! <= q.start! && y.end! >= q.end!);
-    if (!y) continue;
+    if (!y) {
+      if (!/^(10-K|20-F|40-F)/.test(q.form ?? "")) continue;
+      const before = (r: FactRow) => (Date.parse(q.start!) - Date.parse(r.end!)) / DAY;
+      const nine = rows.find((r) => typeof r.val === "number" && r.val > 0 && r.start && days(r) >= 255 && days(r) <= 290
+        && before(r) >= 0 && before(r) <= 8);
+      if (!nine) continue;
+      const avg = nine.val! / 3, rest = q.val - nine.val!;
+      if (q.val > 2 * avg && rest >= 0.5 * avg && rest <= 1.5 * avg) out.add(q);
+      continue;
+    }
     const smaller = rows.some((r) => r !== q && r !== y && typeof r.val === "number" && r.start && r.start >= y.start! && r.end! <= y.end!
       && days(r) > d && days(r) < 350 && Math.abs(r.val) < Math.abs(y.val!));
     if (smaller) out.add(q);
