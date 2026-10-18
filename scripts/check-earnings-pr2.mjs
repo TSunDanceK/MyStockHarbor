@@ -77,7 +77,15 @@ const q2 = (Xm, f) => Xm.extractCompanyFacts("FIX", f).quarters.find((p) => p.en
   check("COLB-shaped: Q2 revenue = 446 + 64, computed", c?.val === 510 * M && c?.derived === "computed" && c?.tag === null, JSON.stringify(c));
   const j = q2(X, jpm);
   check("JPM-shaped: the filed RevenuesNetOfInterestExpense wins", j?.val === 44912 * M && j?.tag === "RevenuesNetOfInterestExpense", JSON.stringify(j));
-  check("a filer with a contract line is untouched", q2(X, withLine)?.val == null);
+  // The no-total fill still leaves a filer with a contract line alone; since
+  // earnings audit r2 that 300M fee line is more than 2% off NII + noninterest
+  // income (491M), so the bank net-basis rule moves the series to net revenue
+  // and fills the newest quarter (scripts/check-bank-revenue.mjs pins it).
+  const wl = X.extractCompanyFacts("FIX", withLine);
+  check("a filer with a contract line is not filled by the no-total rule",
+    !(wl.notes ?? []).some((n) => /no revenue total tagged/.test(n)), (wl.notes ?? []).filter((n) => /^revenue/.test(n)).join(" | "));
+  check("...its fee line is replaced on the bank net basis (Q1 425 + 66, Q2 446 + 64)",
+    wl.quarters.find((p) => p.end === "2025-03-31")?.values?.[REV]?.val === 491 * M && q2(X, withLine)?.val === 510 * M);
   check("one half missing: no cell", q2(X, half)?.val == null);
   const XM = await load(once('          m.set("revenue", {\n            val: sum,', '          if (false) m.set("revenue", {\n            val: sum,')(extractRaw));
   check("mutant (sum removed) is caught", q2(XM, colb)?.val == null);
