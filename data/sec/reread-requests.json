@@ -2,6 +2,306 @@
  "_comment": "One-off re-read requests for the sec-facts cron: a symbol whose stored set was last verified BEFORE requestedAt is put on the manifest's reverify queue (reason 'requested'), at most SEC_REREAD_REQUESTS_PER_RUN (12) a run. The cron's own verifiedAt stamp retires the request once the re-read lands, so an entry left here is inert. Read by lib/server/secRereadRequests.ts. No secret, no manual call: a code change, reviewed like any other.",
  "requests": [
   {
+   "symbol": "KEY",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "#913 (earnings audit r1): bank revenue reads the filed Revenues total, not the 606 fee line; the stored set predates it"
+  },
+  {
+   "symbol": "CRCL",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "#913 (earnings audit r1): one revenue concept per series (the total over the contract line); the stored set predates it"
+  },
+  {
+   "symbol": "XEL",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "#913 (earnings audit r1): the utility revenue tag is a last resort, not the first read; the stored set predates it"
+  },
+  {
+   "symbol": "AX",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "BKU",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "CUBI",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "DCOM",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "FITB-PM",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "GBCI",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "HBAN",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "PFS",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "SYBT",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "TBBK",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "TCBK",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "UVSP",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "BFST",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "BPOP",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "ONB",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "SOFI",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "WTFC",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "BOH",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "CFFN",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "COLB",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "MCHB",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "MTB",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "NBHC",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "NBTB",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "WAFD",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "ZION",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "BBT",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "BFH",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "CATY",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "CBSH",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "CHCO",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "EBC",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "FBNC",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "FITB",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "FLG",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "FULT",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "MCB",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "OFG",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "PEBO",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "RF",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "UBSI",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "WAL",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
+  },
+  {
+   "symbol": "AXP",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "NTRS",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "IBKR",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "RJF",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "ATLC",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "ASB",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "BANC",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "CASH",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "CBU",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "GABC",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "HAPN",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "QCRH",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "STT",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "UCB",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
+   "symbol": "WSFS",
+   "requestedAt": "2026-10-19T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (RevenuesNetOfInterestExpense, a Revenues within 2% of net interest income + noninterest income, else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
+  {
    "symbol": "XOM",
    "requestedAt": "2026-09-24T12:30:00Z",
    "reason": "#581: predecessor-CIK merge (holding-company succession); the stored set predates it and is not stale by the window/chain/label rules"
