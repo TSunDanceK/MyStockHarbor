@@ -20,7 +20,7 @@ disclaimer: >
   stock/earnings links. This is not financial advice.
 supplyChain:
   - name: Infineon Technologies
-    ticker: null
+    ticker: IFNNY
     pct: 16
     grade: some
     blurb: >

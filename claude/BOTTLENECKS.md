@@ -54,6 +54,39 @@ So the exact spelling no longer splits a ticker'd company. For a company with
 **no ticker** the spelling still decides the key unless it normalises the same
 or an alias joins it, so consistent spelling still matters there.
 
+### A company with a page of its own carries that page's ticker (2026-10-18, #553)
+
+If a company has a page in `content/bottlenecks/`, every entry for it on other
+pages is written with that page's ticker, **even when it is only an OTC ADR**
+that the ticker-availability policy would otherwise send to `ticker: null`.
+Infineon is the case: `ifnny.md` exists (`symbol: IFNNY`), so the Infineon
+entries in `vrt.md` (supplier) and `wolf.md` (customer) say `ticker: IFNNY`, not
+`null`. Why it matters:
+
+- The leaderboard keys by ticker, so a `null` entry only joins the company by
+  spelling luck (or an alias), while `IFNNY` joins it for certain.
+- The mirror report below finds a company's page **by ticker**; a `null` entry
+  is invisible to it.
+- The entry gets the stock and page links, which is what a ticker is for here.
+
+Keep the name spelling used on the company's own page ("Infineon Technologies",
+as in `ifnny.md`'s title) so the displayed name matches.
+
+### Mirror links between pages: a report, not a check (2026-10-18, #553)
+
+A page lists up to ten suppliers (`supplyChain`) and ten key customers
+(`customers`). When an entry's ticker has a page of its own, that page holds the
+other half of the same relationship: if X lists Y as a **supplier**, Y's page
+should list X as a **customer** (and the reverse).
+`scripts/check-bottleneck-links.mjs` prints the missing mirrors, split into
+"other list is full (10)" (an entry would have to give way) and "other list has
+room". `scripts/check-all.mjs` runs it as a **report** (`REPORT_ONLY`): it
+prints a summary and the first few of each group, and it can never fail check-all
+or count as a failure. Run it by itself for the full list; add `--brief` for the
+short form. It matches by ticker (`GOOG` folds into `GOOGL`) and skips entries
+with no ticker or whose ticker has no page. Nothing is fixed automatically:
+whether a missing mirror belongs on the page is an editorial call.
+
 ### The dependency web's rim (2026-10-06, COWORK #131)
 
 - **Hubs:** the top 8 companies by distinct-page count, keyed as above.
@@ -84,13 +117,16 @@ the more useful half.**
   NYSE/Nasdaq ADR that trades with real volume" and must be written as
   `ticker: SKHY`, never `ticker: null`.
 
-**Spelling matters as much as the ticker.** *(Superseded 2026-10-06: the
-leaderboard now keys by ticker, then by normalised name -- see "How the
-leaderboard keys and counts companies" above. Kept as history.)*
-`getBottleneckCompanyCounts()` keyed by company **name**, so `SK Hynix` and
-`SK hynix` counted as two separate companies and silently undercounted both on
-the Bottleneck Leaderboard. The
-company's own styling is lowercase-h: always write **`SK hynix`**.
+**The ticker is what joins the entries, not the spelling.** *(Rewritten
+2026-10-18 (#553): this paragraph used to say the leaderboard keyed by company
+**name**, so `SK Hynix` and `SK hynix` counted as two companies. That stopped
+being true on 2026-10-06 (COWORK #125): `lib/bottleneckHub.ts` keys by ticker
+when there is one, then by normalised name -- see "How the leaderboard keys and
+counts companies" above.)* With `ticker: SKHY` on every entry, `SK Hynix` and
+`SK hynix` are one company and the count is right whichever way a page spells
+it. Spelling still decides the key only for an entry with **no ticker**. Write
+the company's own styling anyway (**`SK hynix`**, lowercase h) so the displayed
+name is consistent.
 
 The content backfill landed in **PR #246** (merged `136523bf`, 2026-08-20):
 `content/bottlenecks/skhy.md` plus `ticker: SKHY` across the 13 existing pages

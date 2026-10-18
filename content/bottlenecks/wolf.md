@@ -72,7 +72,7 @@ supplyChain:
       specialized inputs can directly constrain output. Not a single company.
 customers:
   - name: Infineon Technologies
-    ticker: null
+    ticker: IFNNY
     pct: 20
     grade: some
     blurb: >
