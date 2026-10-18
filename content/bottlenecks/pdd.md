@@ -5,6 +5,7 @@ category: E-commerce marketplace holding company (Pinduoduo & Temu)
 domain: pddholdings.com
 title: "PDD Holdings (PDD) Bottlenecks: Who PDD Depends On"
 date: 2026-07-19
+updated: 2026-10-18
 summary: >
   PDD Holdings is the asset-light operator behind Pinduoduo (China's
   group-buying marketplace) and Temu (its fast-growing international
@@ -34,7 +35,7 @@ disclaimer: >
 supplyChain:
   - name: Tencent Holdings
     ticker: null
-    pct: 30
+    pct: 28
     grade: hard
     blurb: >
       Pinduoduo's platform runs substantially on Tencent Cloud
@@ -47,7 +48,7 @@ supplyChain:
       US-listed ticker.
   - name: J&T Global Express
     ticker: null
-    pct: 15
+    pct: 14
     grade: some
     blurb: >
       A Tencent-backed courier that grew explosively on Pinduoduo's order
@@ -58,7 +59,7 @@ supplyChain:
       ticker.
   - name: DHL Group
     ticker: null
-    pct: 12
+    pct: 11
     grade: some
     blurb: >
       Signed an expanded 2025-2026 agreement with Temu covering air-freight,
@@ -69,7 +70,7 @@ supplyChain:
       ticker.
   - name: YunExpress
     ticker: null
-    pct: 10
+    pct: 9
     grade: some
     blurb: >
       A major cross-border small-parcel consolidator and customs-clearance
@@ -77,7 +78,7 @@ supplyChain:
       company with no public ticker.
   - name: 4PX
     ticker: null
-    pct: 8
+    pct: 7
     grade: spread
     blurb: >
       A cross-border logistics and customs-brokerage consolidator, owned by
@@ -86,13 +87,25 @@ supplyChain:
       US-listed ticker of its own.
   - name: Apple
     ticker: AAPL
-    pct: 8
+    pct: 7
     grade: spread
     blurb: >
       Controls iOS app-store distribution for both Pinduoduo and Temu;
       Indonesia's government formally asked Apple to block Temu from its
       App Store in 2024, illustrating the real regulatory leverage this
       gatekeeper role carries.
+  - name: Meta Platforms
+    ticker: META
+    pct: 7
+    grade: spread
+    blurb: >
+      Meta supplies advertising space on Facebook and Instagram that Temu has
+      used to attract shoppers. The Wall Street Journal reported Temu spent
+      roughly $2 billion on Meta ads in 2023, which made it Meta's largest
+      advertiser, though Goldman Sachs estimated a lower figure of about $1.2
+      billion. Morgan Stanley estimated about $1.4 billion for 2024, and Temu
+      appeared to cut its US Meta spending sharply in 2025 after tariff changes.
+      Spend may keep moving with trade policy, so the weight could shift.
   - name: Alphabet (Google)
     ticker: GOOGL
     pct: 7

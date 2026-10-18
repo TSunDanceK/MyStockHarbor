@@ -1,5 +1,5 @@
 {
-  "provisionalCount": 166,
+  "provisionalCount": 165,
   "exceptions": [
     {
       "source": "ABNB",
@@ -940,13 +940,6 @@
       "target": "DASH",
       "role": "customer",
       "reason": "Immaterial on META's page (8%, spread); DASH's page does not need to mirror it."
-    },
-    {
-      "source": "META",
-      "target": "PDD",
-      "role": "customer",
-      "provisional": true,
-      "reason": "Material on META's page (14%, some) but no sourced weight for META as PDD's supplier yet; left open."
     },
     {
       "source": "META",
