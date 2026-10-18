@@ -1826,6 +1826,17 @@ function extractCompanyFactsWith(
     // and both totals are differenced like any concept, so a derived Q4 is on
     // the same basis as its year.
     //
+    // IT REPLACES, IT DOES NOT BACKFILL. A period the rules above left with no
+    // revenue is filled only when it is newer than every period that has one
+    // (FITB, OFG, UBSI: the newest years blank), the gap the block above is for.
+    // An older blank stays as those rules left it: USB's 2020-21 and FCNCA's
+    // 2023 quarters were withheld upstream, and a bank already on net revenue
+    // must not move because one stray period somewhere tripped the test.
+    //
+    // USD FILERS ONLY. A 20-F bank's halves and its `Revenues` need not share a
+    // unit or a presentation (HDB, MFG, MUFG), so the 2% test means nothing
+    // there; like minorityInterestAt, the block reads US filers.
+    //
     // AFTER #913's total-over-contract rule, and it cannot fight it: that rule
     // only chooses between the contract line and `Revenues`; this one checks
     // whatever was chosen against the bank's own net revenue and replaces it
@@ -1847,7 +1858,7 @@ function extractCompanyFactsWith(
         return { qc, yc, n: rows.length };
       };
       const [nii, non] = BANK_REVENUE_HALVES.map(seriesOf);
-      if (nii.n && non.n) {
+      if (currency === "USD" && nii.n && non.n) {
         const rnoie = seriesOf(LAST_RESORT_REVENUE_TAG), rv = seriesOf("Revenues");
         const kinds = [[quarterCells, "qc"], [yearCells, "yc"]] as const;
         const halvesAt = (kind: "qc" | "yc", end: string) => {
@@ -1879,7 +1890,10 @@ function extractCompanyFactsWith(
         if (off) {
           let moved = 0, computed = 0, blanked = 0;
           for (const [cells, kind] of kinds) {
+            let newestValued = "";
+            for (const [end, m] of cells) if (m.get("revenue")?.val != null && end > newestValued) newestValued = end;
             for (const [end, m] of cells) {
+              if (m.get("revenue")?.val == null && end <= newestValued) continue;
               const t = netAt(kind, end);
               if (t) { m.set("revenue", t); moved++; if (t.derived === "computed") computed++; }
               else if (m.has("revenue")) { m.delete("revenue"); blanked++; }

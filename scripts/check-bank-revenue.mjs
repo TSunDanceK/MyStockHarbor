@@ -12,8 +12,10 @@
 //   KEY   Revenues 7,513 within 0.5% of 4,636 + 2,842 -> UNCHANGED
 //   SYF   no total; already the computed halves -> UNCHANGED
 // plus: the derived Q4 on the same basis as its year, no fee line left beside
-// net revenue in one series, no bank below its own NII, and the mutation (the
-// block removed) that brings HBAN's fee line back.
+// net revenue in one series, no bank below its own NII, no backfill of an older
+// period the earlier rules left blank (USB 2020-21), the newest blank years
+// filled (FITB), a non-USD filer untouched (MFG), and the mutation (the block
+// removed) that brings HBAN's fee line back.
 import fs from "node:fs";
 import { lift } from "./lib/earnings-plan.mjs";
 
@@ -115,7 +117,40 @@ console.log("\n4. no bank below its own net interest income");
   }
 }
 
-console.log("\n5. mutation");
+console.log("\n5. it replaces, it does not backfill; USD filers only");
+{
+  // FY2024 carries no fee line: whatever the earlier rules leave there, the
+  // block must leave too (USB 2020-21). FY2025's fee line still moves.
+  const gap = payload({
+    [CONTRACT]: [Y(2025, 1562), Y(2023, 1400)],
+    [NII]: [Y(2025, 5991), Y(2024, 5450), Y(2023, 5100)], [NON]: [Y(2025, 2175), Y(2024, 1980), Y(2023, 1900)],
+  });
+  const start = extractRaw.indexOf("    // ── A BANK'S REVENUE IS ITS NET REVENUE (earnings audit r2)");
+  const stop = extractRaw.indexOf("    // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD");
+  const XW = await load(extractRaw.slice(0, start) + extractRaw.slice(stop));
+  const withB = X.extractCompanyFacts("GAP", gap), without = XW.extractCompanyFacts("GAP", gap);
+  check("the fee line still moves (FY2025 8,166M)", rev(withB, "2025-12-31")?.val === 8166 * M, JSON.stringify(rev(withB, "2025-12-31")));
+  check("an older period the earlier rules left as they did is left as they did (FY2024)",
+    JSON.stringify(rev(withB, "2024-12-31") ?? null) === JSON.stringify(rev(without, "2024-12-31") ?? null),
+    `${JSON.stringify(rev(withB, "2024-12-31"))} vs ${JSON.stringify(rev(without, "2024-12-31"))}`);
+  // The newest years blank (FITB): filled, the gap the rule exists for.
+  const head = payload({
+    [CONTRACT]: [Y(2023, 577)],
+    [NII]: [Y(2025, 5982), Y(2024, 5630), Y(2023, 5827)], [NON]: [Y(2025, 3035), Y(2024, 2849), Y(2023, 2881)],
+  });
+  const h = X.extractCompanyFacts("FITB", head);
+  check("FITB-shaped: the newest years read net revenue (9,017M / 8,479M) and 2023 moves off its 577M fee line",
+    rev(h, "2025-12-31")?.val === 9017 * M && rev(h, "2024-12-31")?.val === 8479 * M && rev(h, "2023-12-31")?.val === 8708 * M,
+    [rev(h, "2025-12-31")?.val, rev(h, "2024-12-31")?.val, rev(h, "2023-12-31")?.val].join(","));
+  // A 20-F bank in yen: its own presentation, not this rule's.
+  const yen = JSON.parse(JSON.stringify(hban).replace(/"USD"/g, '"JPY"'));
+  const j = X.extractCompanyFacts("MFG", yen);
+  check("a non-USD filer is not touched (no bank net basis note, fee line kept)",
+    !(j.notes ?? []).some((n) => /bank net basis/.test(n)) && rev(j, "2025-12-31")?.derived !== "computed",
+    `${j.reportingCurrency} ${JSON.stringify(rev(j, "2025-12-31"))}`);
+}
+
+console.log("\n6. mutation");
 {
   const start = extractRaw.indexOf("    // ── A BANK'S REVENUE IS ITS NET REVENUE (earnings audit r2)");
   const stop = extractRaw.indexOf("    // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD");
@@ -123,6 +158,24 @@ console.log("\n5. mutation");
   const XM = await load(extractRaw.slice(0, start) + extractRaw.slice(stop));
   const m = rev(XM.extractCompanyFacts("HBAN", hban), "2025-12-31");
   check("MUTATION: without the block HBAN reads its 1,562M fee line again (caught)", m?.val === 1562 * M, JSON.stringify(m));
+}
+
+{
+  const cut = (from, to = "") => {
+    if (extractRaw.split(from).length !== 2) throw new Error(`mutation anchor not unique: ${from}`);
+    return load(extractRaw.replace(from, to));
+  };
+  const gap = payload({
+    [CONTRACT]: [Y(2025, 1562), Y(2023, 1400)],
+    [NII]: [Y(2025, 5991), Y(2024, 5450), Y(2023, 5100)], [NON]: [Y(2025, 2175), Y(2024, 1980), Y(2023, 1900)],
+  });
+  const XB = await cut('              if (m.get("revenue")?.val == null && end <= newestValued) continue;\n');
+  check("MUTATION: the no-backfill guard removed -> FY2024 filled with 7,430M (caught)",
+    rev(XB.extractCompanyFacts("GAP", gap), "2024-12-31")?.val === 7430 * M);
+  const XU = await cut('currency === "USD" && nii.n && non.n', "nii.n && non.n");
+  const yen = JSON.parse(JSON.stringify(hban).replace(/"USD"/g, '"JPY"'));
+  check("MUTATION: the USD gate removed -> the yen filer moves (caught)",
+    rev(XU.extractCompanyFacts("MFG", yen), "2025-12-31")?.derived === "computed");
 }
 
 if (failures) {
