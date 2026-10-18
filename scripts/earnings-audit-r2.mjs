@@ -95,12 +95,23 @@ function frames(facts, tag) {
   return out;
 }
 
+// The period the r1 scan flagged per filer (main), for the one-row table.
+const FLAGGED = Object.fromEntries(`AX:FY2026 BKU:FY2025 CUBI:FY2020 DCOM:FY2025 EFC:FY2022 FITB-PM:FY2023 GBCI:FY2025
+HBAN:FY2025 LFWD:FY2023 PFS:FY2025 PVLA:Q1 2024 SMR:Q1 2024 SYBT:FY2020 TBBK:FY2025 TCBK:FY2025 TNGX:Q1 2026
+UVSP:FY2021 BFST:FY2025 BPOP:Q1 2026 IMNM:FY2025 ONB:FY2021 SFNC:FY2025 SOFI:FY2025 WTFC:FY2025 ASTS:FY2023
+BOH:FY2025 BRTX:FY2024 CFFN:FY2025 COLB:FY2025 MCHB:FY2025 MTB:FY2025 NBHC:FY2025 NBTB:FY2025 PLSE:FY2020
+QUBT:FY2025 WAFD:FY2025 ZION:FY2025 BBT:FY2025 BFH:FY2020 CATY:FY2025 CBSH:Q1 2026 CHCO:FY2025 EBC:FY2025
+EQBK:FY2023 FBNC:FY2025 FITB:FY2023 FLG:FY2022 FULT:FY2025 MCB:FY2025 OFG:FY2023 PEBO:FY2025 RF:FY2021
+SLS:FY2023 UBSI:FY2022 WAL:FY2025`.split(/\s(?=[A-Z-]+:)/).map((x) => x.trim().split(":")));
+
 // ── banks ───────────────────────────────────────────────────────────────────
 async function banks() {
   ensureMainTree();
   const OLD = await load(MAIN_TREE), NEW = await load(ROOT);
   const ri = NEW.F.SEC_FIELD_KEYS.indexOf("revenue");
   const off2 = [];
+  const belowList = [];
+  const gap5 = [];
   console.log("BANKS ticker | FY end | old rev (code) | new rev (code) | SEC value [concept] | match | NII | NonII | score old→new");
   for (const sym of SYMBOLS) {
     const got = await factsFor(sym);
@@ -108,6 +119,18 @@ async function banks() {
     const f = got.facts;
     const rv = frames(f, "Revenues"), rn = frames(f, "RevenuesNetOfInterestExpense");
     const nii = frames(f, "InterestIncomeExpenseNet"), non = frames(f, "NoninterestIncome");
+    // THE SEC COLUMN: RevenuesNetOfInterestExpense if filed; else `Revenues`
+    // when within 2% of the halves (or no halves to judge it); else the halves'
+    // sum, basis labelled. Never "unverifiable" while either half is filed.
+    const secOf = (k) => {
+      const h = nii.get(k) && non.get(k) ? nii.get(k).val + non.get(k).val : null;
+      if (rn.get(k)) return [rn.get(k).val, "RevenuesNetOfInterestExpense", rn.get(k).accn];
+      if (rv.get(k) && (h == null || Math.abs(rv.get(k).val - h) <= 0.02 * Math.abs(h))) return [rv.get(k).val, "Revenues", rv.get(k).accn];
+      if (h != null) return [h, "InterestIncomeExpenseNet+NoninterestIncome (sum of filed halves)", nii.get(k).accn];
+      if (rv.get(k)) return [rv.get(k).val, "Revenues (no halves to judge)", rv.get(k).accn];
+      if (nii.get(k)) return [nii.get(k).val, "InterestIncomeExpenseNet only (NonII not filed)", nii.get(k).accn];
+      return [null, "none of RNOIE / Revenues / NII filed", ""];
+    };
     const side = async (T) => {
       const ex = T.X.extractCompanyFacts(sym, f);
       const set = await T.B.toStoredSet(ex);
@@ -117,10 +140,11 @@ async function banks() {
       try {
         const row = T.P.buildSecPickerRow(set, TODAY, {}, NOW);
         const fig = T.P.applySecPickerRow(JSON.parse(JSON.stringify(row)), 50);
-        const growth = T.G.secGrowthFacts(set, TODAY);
-        pick = { ps: fig?.ps ?? fig?.priceToSales ?? null, why: fig?.why ?? null, revYoY: growth?.revenueYoY ?? growth?.revenue?.yoy ?? null, mi: T.Val.multipleInputs(set) };
+        const growth = T.G.secGrowthFacts(set, TODAY, {}, []);
+        const g = growth?.ok ? ((growth.revenue - growth.revenuePrior) / Math.abs(growth.revenuePrior)) * 100 : (growth?.why ?? growth?.reason ?? "refused");
+        pick = { ps: fig?.psRatio ?? null, rev: fig?.revenue ?? null, revYoY: g, mi: T.Val.multipleInputs(set) };
       } catch (e) { pick = { err: String(e?.message).slice(0, 120) }; }
-      return { set, score, pick, notes: ex.notes ?? [] };
+      return { ex, set, score, pick, notes: ex.notes ?? [] };
     };
     let o, n;
     try { o = await side(OLD); n = await side(NEW); }
@@ -133,7 +157,10 @@ async function banks() {
     for (const k of keys) {
       const a = ob.get(k)?.v[ri] ?? null, b = nb.get(k)?.v[ri] ?? null;
       const ni = nii.get(k)?.val ?? null;
-      if (ni != null && ni > 0) { if (a != null && a < ni) belowOld++; if (b != null && b < ni) belowNew++; }
+      const nn = non.get(k)?.val ?? null;
+      // BELOW NII ONLY COUNTS where noninterest income is not itself negative
+      // (a securities loss makes net revenue below NII, truthfully).
+      if (ni != null && ni > 0 && !(nn != null && nn < 0)) { if (a != null && a < ni) belowOld++; if (b != null && b < ni) { belowNew++; belowList.push(`${sym} ${k} new ${M(b)} < NII ${M(ni)} (NonII ${M(nn)})`); } }
       if (a !== b) changed++;
       const r = rv.get(k), x = ni != null && non.get(k) ? ni + non.get(k).val : null;
       if (r && x && Math.abs(r.val - x) > 0.02 * Math.abs(x)) off2.push(`${sym} ${k} Revenues ${M(r.val)} vs NII+NonII ${M(x)} (${pct(((r.val - x) / x) * 100)}) accn ${r.accn}`);
@@ -141,19 +168,58 @@ async function banks() {
     for (const y of n.set.years.slice(0, 6)) {
       const k = `${y.s}..${y.e}`;
       const op = ob.get(k), np = nb.get(k);
-      const sec = rn.get(k) ? [rn.get(k).val, "RevenuesNetOfInterestExpense"] : rv.get(k) ? [rv.get(k).val, "Revenues"]
-        : nii.get(k) && non.get(k) ? [nii.get(k).val + non.get(k).val, "InterestIncomeExpenseNet+NoninterestIncome"] : [null, "none filed"];
+      const sec = secOf(k);
       const newV = np?.v[ri] ?? null;
       const match = sec[0] != null && newV != null ? (Math.abs(newV - sec[0]) <= 0.02 * Math.abs(sec[0]) ? "Y" : "N") : "—";
       console.log(`${sym} | ${y.e} | ${M(op?.v[ri])} (${op?.d?.[ri] ?? "-"}) | ${M(newV)} (${np?.d?.[ri] ?? "-"}) | ${M(sec[0])} [${sec[1]}] | ${match} | ${M(nii.get(k)?.val)} | ${M(non.get(k)?.val)} | ${o.score.score}→${n.score.score}`);
     }
-    const pk = (p) => (p?.err ? `ERR ${p.err}` : `ttmRev ${M(p?.mi?.revenue?.val ?? p?.mi?.ttmRevenue ?? null)} incomplete=${p?.mi?.revenueIncomplete ?? "?"} ps=${typeof p?.ps === "number" ? p.ps.toFixed(2) : JSON.stringify(p?.ps ?? null)} revYoY=${typeof p?.revYoY === "number" ? p.revYoY.toFixed(1) : JSON.stringify(p?.revYoY ?? null)}`);
+    // THE r1-FLAGGED PERIOD, one row: "FY2025" or "Q1 2026".
+    const flag = FLAGGED[sym];
+    if (flag) {
+      const [fp, fy] = flag.startsWith("FY") ? ["FY", +flag.slice(2)] : [flag.slice(0, 2), +flag.slice(3)];
+      const list = fp === "FY" ? [...n.set.years, ...o.set.years] : [...n.set.quarters, ...o.set.quarters];
+      const hit = list.find((p) => p.fy === fy && (fp === "FY" || p.fp === fp));
+      if (!hit) console.log(`FLAGGED | ${sym} | ${flag} | period not in either set`);
+      else {
+        const k = `${hit.s}..${hit.e}`;
+        const op = ob.get(k), np = nb.get(k), sec = secOf(k);
+        const newV = np?.v[ri] ?? null;
+        const match = sec[0] != null && newV != null ? (Math.abs(newV - sec[0]) <= 0.02 * Math.abs(sec[0]) ? "Y" : "N") : "—";
+        console.log(`FLAGGED | ${sym} | ${flag} ${k} | ${M(op?.v[ri])} (${op?.d?.[ri] ?? "-"}) | ${M(newV)} (${np?.d?.[ri] ?? "-"}) | ${M(sec[0])} | ${sec[1]} | accn ${sec[2]} | ${match} | filed Revenues ${M(rv.get(k)?.val)} | NII ${M(nii.get(k)?.val)} | NonII ${M(non.get(k)?.val)} | ${o.score.score}→${n.score.score}`);
+      }
+    }
+    // WHICH PERIODS TRIGGERED THE RULE: main's extraction (every period, not
+    // only the stored window), revenue more than 2% off NII + NonII.
+    {
+      const offs = [];
+      for (const p of [...o.ex.years, ...o.ex.quarters]) {
+        const c = p.values?.[ri], k = `${p.start}..${p.end}`;
+        const x = nii.get(k) && non.get(k) ? nii.get(k).val + non.get(k).val : null;
+        if (c?.val != null && x != null && x > 0 && Math.abs(c.val - x) > 0.02 * Math.abs(x)) offs.push(`${k} ${M(c.val)} [${c.tag ?? c.derived}] vs ${M(x)}`);
+      }
+      if (offs.length) console.log(`  ${sym} trigger periods (${offs.length}): ${offs.slice(0, 12).join("; ")}`);
+    }
+    // A FEW CHANGED FRAMES (controls): name them.
+    if (changed > 0 && changed <= 4) for (const k of keys) {
+      const a = ob.get(k)?.v[ri] ?? null, b = nb.get(k)?.v[ri] ?? null;
+      if (a !== b) console.log(`  ${sym} changed ${k}: ${M(a)} (${ob.get(k)?.d?.[ri] ?? "-"}) → ${M(b)} (${nb.get(k)?.d?.[ri] ?? "-"})`);
+    }
+    // ABOVE NII BUT MORE THAN 5% BELOW NII + NONII (report only).
+    for (const k of keys) {
+      const b = nb.get(k)?.v[ri] ?? null, ni = nii.get(k)?.val ?? null, nn = non.get(k)?.val ?? null;
+      if (b != null && ni != null && nn != null && nn >= 0 && b >= ni && b < 0.95 * (ni + nn)) gap5.push(`${sym} ${k} new ${M(b)} vs NII ${M(ni)} + NonII ${M(nn)} = ${M(ni + nn)} (${pct(((b - ni - nn) / (ni + nn)) * 100)}) code ${nb.get(k)?.d?.[ri] ?? "-"} tag ${nb.get(k)?.t?.[ri] ?? ""}`);
+    }
+    const pk = (p) => (p?.err ? `ERR ${p.err}` : `ttmRev ${M(p?.mi?.revenue?.val ?? null)} pickersRev ${M(p?.rev)} incomplete=${p?.mi?.revenueIncomplete ?? "?"} P/S@$50=${typeof p?.ps === "number" ? p.ps.toFixed(2) : JSON.stringify(p?.ps ?? null)} revGrowth=${typeof p?.revYoY === "number" ? p.revYoY.toFixed(1) + "%" : JSON.stringify(p?.revYoY ?? null)}`);
     console.log(`  ${sym} summary: frames ${keys.length}, changed ${changed}, below NII old ${belowOld} → new ${belowNew}; pickers old {${pk(o.pick)}} new {${pk(n.pick)}}`);
     for (const note of n.notes) if (/bank|net interest|NoninterestIncome/i.test(note)) console.log(`  ${sym} note: ${note.slice(0, 220)}`);
     await pause();
   }
+  console.log(`\nSTILL BELOW NII WITH NON-NEGATIVE NONINTEREST INCOME (${belowList.length} frames)`);
+  for (const l of belowList) console.log(`  ${l}`);
   console.log(`\nREVENUES MORE THAN 2% OFF NII + NONINTEREST INCOME (${off2.length} frames)`);
   for (const l of off2) console.log(`  ${l}`);
+  console.log(`\nABOVE NII BUT MORE THAN 5% BELOW NII + NONINTEREST INCOME (${gap5.length} frames)`);
+  for (const l of gap5) console.log(`  ${l}`);
 }
 
 // ── raw (hand spot-checks) ──────────────────────────────────────────────────
