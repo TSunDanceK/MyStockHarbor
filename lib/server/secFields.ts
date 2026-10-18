@@ -344,10 +344,7 @@ const INCOME: FieldDef[] = ([
   // 10-Ks ($445.7M and $540.5M, relay 35790767741) — the five-year card read
   // "Not reported" beside a filed cost of revenue and gross profit that sum to
   // exactly that revenue.
-  // RegulatedAndUnregulatedOperatingRevenue LAST for the same reason: XEL tags
-  // its total operating revenue under it and nothing above it ($14,669M
-  // FY2025), so every revenue cell read "Not captured" (earnings audit r1).
-  { key: "revenue", chain: ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax", "RegulatedAndUnregulatedOperatingRevenue"], unit: "USD" },
+  { key: "revenue", chain: ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax"], unit: "USD" },
   { key: "costOfRevenue", chain: ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold"], unit: "USD" },
   // THE FILER'S OWN GROSS PROFIT, not revenue - costOfRevenue. Stored precisely
   // so the identity has something to check: a derived figure cannot disagree
@@ -850,6 +847,9 @@ export function secChainsHash(): string {
   // …JUDGED ON THE LINE AS TAGGED, before the incomplete-line fallback
   // (earnings audit r1: KEY, CRCL). It moves stored revenue, so it re-reads.
   feed("revenue-total-judged-as-tagged|excise-not-buyback");
+  // AND THE UTILITY LAST RESORT (secExtract.UTILITY_REVENUE_TAG): it fills a
+  // series that was empty, so a set written without it must re-read.
+  feed("revenue-last-resort|RevenuesNetOfInterestExpense,RegulatedAndUnregulatedOperatingRevenue");
   // AND OPTION G (#552 COWORK #219): the gap-is-revenue test and the derived
   // contract + not-from-contract total move stored revenue too.
   feed(`revenue-gap|${REVENUE_GAP_CONCEPTS.join(",")}|${REVENUE_GAP_TOLERANCE_ABS}|derived-total`);

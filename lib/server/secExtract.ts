@@ -1221,6 +1221,14 @@ export function q4RevenueScope(
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
 export const LAST_RESORT_REVENUE_TAG = "RevenuesNetOfInterestExpense";
+/**
+ * A UTILITY'S TOTAL OPERATING REVENUE, on the same per-series last-resort rule
+ * (earnings audit r1). XEL tags it and none of the chain's concepts, so every
+ * revenue cell read "Not captured". NOT a chain entry: DUK and TLN file it
+ * beside a contract line on a few periods, and as a chain fallback it mixed
+ * two measures into their series (relay scan, write-earnings-audit-r1-scan).
+ */
+export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
 /** How close a closure ratio must sit to one of the filer's split ratios to read as a split, not a wrong count. */
@@ -1709,8 +1717,10 @@ function extractCompanyFactsWith(
     // none -- a filer with a line keeps it, so no tagged figure moves. A value
     // below the period's own operating (or pre-tax) income is refused, as the
     // fallback refuses one.
-    {
-      const lrField: FieldDef = { ...revenueField, chain: [LAST_RESORT_REVENUE_TAG], ifrsChain: undefined };
+    // The utility concept after it, under the same rule, so it fills only a
+    // series the bank concept left empty.
+    for (const lastResortTag of [LAST_RESORT_REVENUE_TAG, UTILITY_REVENUE_TAG]) {
+      const lrField: FieldDef = { ...revenueField, chain: [lastResortTag], ifrsChain: undefined };
       const lrRows = rowsForField(facts, lrField, new Set<string>(), currency);
       if (lrRows.length) {
         const lrBucket: Bucket = new Map();
@@ -1723,7 +1733,7 @@ function extractCompanyFactsWith(
         const lrQuarter = new Map<string, Map<string, FieldValue>>();
         const lrYear = new Map<string, Map<string, FieldValue>>();
         runCumulative(
-          [lrField], new Map([["revenue", lrBucket]]), new Map([["revenue", LAST_RESORT_REVENUE_TAG]]),
+          [lrField], new Map([["revenue", lrBucket]]), new Map([["revenue", lastResortTag]]),
           lrQuarter, lrYear, new Map(), new Map(), [],
         );
         let filled = 0;
@@ -1740,7 +1750,7 @@ function extractCompanyFactsWith(
             filled++;
           }
         }
-        if (filled) notes.push(`revenue: no revenue line tagged; ${LAST_RESORT_REVENUE_TAG} used for ${filled} period(s) (last resort)`);
+        if (filled) notes.push(`revenue: no revenue line tagged; ${lastResortTag} used for ${filled} period(s) (last resort)`);
       }
     }
 
