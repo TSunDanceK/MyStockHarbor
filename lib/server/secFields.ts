@@ -849,7 +849,7 @@ export function secChainsHash(): string {
   feed(`revenue-total-over-contract|${REVENUE_TOTAL_OVER_CONTRACT}|no-excise|floor:8q4y`);
   // …JUDGED ON THE LINE AS TAGGED, before the incomplete-line fallback
   // (earnings audit r1: KEY, CRCL). It moves stored revenue, so it re-reads.
-  feed("revenue-total-judged-as-tagged");
+  feed("revenue-total-judged-as-tagged|excise-not-buyback");
   // AND OPTION G (#552 COWORK #219): the gap-is-revenue test and the derived
   // contract + not-from-contract total move stored revenue too.
   feed(`revenue-gap|${REVENUE_GAP_CONCEPTS.join(",")}|${REVENUE_GAP_TOLERANCE_ABS}|derived-total`);

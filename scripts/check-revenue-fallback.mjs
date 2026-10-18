@@ -207,6 +207,9 @@ console.log("\n3d. the concept is judged on the line AS TAGGED (earnings audit r
     Revenues: [yr(2022, 7272), yr(2023, 6413), yr(2024, 4619), yr(2025, 7513), ["2026-04-01", "2026-06-30", 1964 * M]],
     [PRE]: [yr(2022, 2333), yr(2023, 1150), yr(2024, -300), yr(2025, 2304), ["2026-04-01", "2026-06-30", 647 * M]],
   });
+  // KEY's only excise concept is the 1% tax on its buybacks.
+  key.facts["us-gaap"].ShareRepurchaseProgramExciseTax = { units: { USD: [row("2025-01-01", "2025-12-31", 2 * M)] } };
+  check("a buyback excise is not the excise the rule excludes", X.filerTagsExcise(key) === false);
   const kr = X.extractCompanyFacts("KEY", key);
   const kv = (y) => kr.years.find((p) => p.end === `${y}-12-31`)?.values?.[REV];
   check("KEY FY2023 reads Revenues $6,413M, not the $1,435M contract line", kv(2023)?.val === 6413 * M && kv(2023)?.tag === "Revenues", JSON.stringify(kv(2023)));

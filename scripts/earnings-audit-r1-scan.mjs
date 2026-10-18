@@ -15,7 +15,9 @@
 //   bankLow    revenue more than 10% below InterestIncomeExpenseNet alone for
 //              the same frame (banks, insurers, brokers)
 //   bankJump   revenue YoY above +50% on a filer that tags net interest income
-//   changed    any revenue cell that differs main -> branch (the fix's reach)
+//   changed    any revenue cell that differs main -> branch (the fix's reach),
+//              by cause: the as-tagged judgement, the buyback-excise narrowing,
+//              the utility concept, or other
 //   filled     a filer whose revenue was blank on every period and is not now
 //
 // And from the STORED report-date records (no companyfacts needed): every
@@ -191,6 +193,7 @@ for (const [sym, cik] of targets) {
     if (changed) {
       const tagB = [...new Set([...b.years, ...b.quarters].map((p) => p.values[ri]?.tag).filter(Boolean))].join("+");
       const why = /RegulatedAndUnregulated/.test(tagB) ? "utility"
+        : OLD.filerTagsExcise(facts) && !NEW.filerTagsExcise(facts) ? "buyback-excise"
         : (b.notes ?? []).some((n) => /^revenue: (Revenues|the gap)/.test(n)) ? "total-over-contract" : "other";
       hit("changed", why, sym, `${changed} cell(s) -> ${tagB}`);
     }
@@ -212,7 +215,7 @@ for (const c of classes) {
     console.log(`  ${side}: ${ex.join("; ").slice(0, 3000)}`);
   }
 }
-for (const why of ["total-over-contract", "utility", "other"]) {
+for (const why of ["total-over-contract", "buyback-excise", "utility", "other"]) {
   const ex = examples[`changed|${why}`] ?? [];
   console.log(`changed (${why}): ${ex.length} filer(s)`);
   if (ex.length) console.log(`  ${ex.join("; ").slice(0, 4000)}`);

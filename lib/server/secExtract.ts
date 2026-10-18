@@ -1258,7 +1258,11 @@ const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
  * carries other income, which the total-over-contract rule must not reach.
  */
 export function filerTagsExcise(facts: CompanyFacts): boolean {
-  return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k));
+  // NOT THE BUYBACK EXCISE (earnings audit r1). The 1% excise on share
+  // repurchases (ShareRepurchaseProgramExciseTax, tagged by many filers since
+  // 2023) says nothing about revenue, and it kept KEY's $1.44B contract line
+  // beside its $6.41B total.
+  return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k) && !/Repurchase|Buyback|TreasuryStock/.test(k));
 }
 
 /** Names of other income and gains: a gap one of these also equals is not called revenue. */
