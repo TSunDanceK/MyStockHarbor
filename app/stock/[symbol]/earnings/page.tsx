@@ -57,7 +57,7 @@ import { nonEquityListingOf, citedCoverFor } from "@/lib/server/secPrimaryListin
 import NextReportCard from "./NextReportCard";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
 import { filedEarningsGate, filedEarningsKnown } from "@/lib/server/filedEarnings";
-import { NO_PRICE_HISTORY_NOTE, reactionBarLabels } from "@/lib/server/secReportDates";
+import { NO_PRICE_HISTORY_NOTE, pendingIsCredible, reactionBarLabels } from "@/lib/server/secReportDates";
 import { PriceReactionCard, type DriftQuarter, type SingleBarPoint } from "./ReactionCharts";
 
 // No segment config here on purpose -- it cascades from
@@ -551,7 +551,9 @@ async function getEarningsData(symbol: string) {
      * because deriving it needs the submissions feed and the page has no
      * business fetching EDGAR on a render.
      */
-    pendingResults: secDates?.pending ?? null,
+    // A STORED notice that names a quarter announced before it ended is
+    // dropped here too: records written before the guard stay until rebuilt.
+    pendingResults: pendingIsCredible(secDates?.pending) ? secDates!.pending! : null,
   };
 }
 

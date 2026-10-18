@@ -59,7 +59,11 @@ const pure = raw
     // ReferenceError on first call rather than at load.
     .replace(/export async function getCalendarForwardSections[\s\S]*?\n\}\n/m, "");
 
-const js = ts.transpileModule(pure, {
+// dueInputFrom reads a stored notice through the shared guard (secReportDates).
+const credible = (fs.readFileSync(path.join(ROOT, "lib/server/secReportDates.ts"), "utf8")
+  .match(/^export function pendingIsCredible\([\s\S]*?\n\}$/m) ?? [])[0];
+if (!credible) { console.error("FATAL: pendingIsCredible not found in secReportDates.ts"); process.exit(2); }
+const js = ts.transpileModule(`${pure}\n${credible.replace(/^export /, "")}`, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText;
 const m = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
@@ -336,9 +340,16 @@ console.log("\nR. AN ANNOUNCED PERIOD LEAVES THE STRIP");
     return b.skipped["results-filed"]?.includes("MU") && b.inputs.length === 0;
   })());
   // MUTATION: the check removed -- MU would read "results have not yet been filed".
-  const mutJs = ts.transpileModule(pure.replace(
-    'if (rec.pending && typeof rec.pending.periodEnd === "string" && rec.pending.periodEnd >= rec.nextPeriodEnd) {',
-    "if (false) {"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  // SYF's stored shape (earnings audit r1): a notice naming a quarter it was
+  // "announced" six weeks before the quarter ended. It is not a filing, so it
+  // must not take SYF off the strip.
+  check("a notice announced before its own period end does not skip the strip",
+    "input" in m.dueInputFrom("SYF", dated({ nextPeriodEnd: "2026-09-30",
+      pending: { periodEnd: "2026-09-30", announcedOn: "2026-08-14", timing: "before-open" } })));
+  const GATE = 'if (rec.pending && pendingIsCredible(rec.pending) && rec.pending.periodEnd >= rec.nextPeriodEnd) {';
+  check("the mutation's anchor is present", pure.includes(GATE));
+  const mutJs = ts.transpileModule(`${pure.replace(GATE, "if (false) {")}\n${credible.replace(/^export /, "")}`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
   const mut = await import(`data:text/javascript;base64,${Buffer.from(mutJs + "\n//r").toString("base64")}`);
   check("MUTATION: without the check the announced period stays on the strip",
     "input" in mut.dueInputFrom("MU", announced));

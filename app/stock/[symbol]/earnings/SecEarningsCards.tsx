@@ -553,6 +553,8 @@ export function SecSnapshotCard({
   // the card already shows (within the 10 days a 52/53-week end moves).
   const pendingShown =
     pending && !view.filedNotInFeed && !view.latestFromFiling &&
+    // NEVER A QUARTER ANNOUNCED BEFORE IT ENDED (secReportDates.pendingIsCredible).
+    pending.announcedOn >= pending.periodEnd &&
     Date.parse(pending.periodEnd) - Date.parse(view.latestEnd) > 10 * 86400000
       ? pending
       : null;

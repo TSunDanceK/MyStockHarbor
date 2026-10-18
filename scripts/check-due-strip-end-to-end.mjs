@@ -41,6 +41,7 @@ if (!RD.includes(GUARD)) { console.error("FATAL: the pendingResults guard line m
 const loadBuilder = (mutate = (s) => s) => lift(mutate(RD) + "\n" + STORE_LIMIT + "\n" + BUILDER +
   "\nexport { buildReportDatesRecord };", "", "buildReportDatesRecord");
 const DUE = await lift(decl("lib/server/dueInputs.ts", "ANNUAL_WHEN_UNKNOWN") + "\n" +
+  decl("lib/server/secReportDates.ts", "pendingIsCredible") + "\n" +
   decl("lib/server/dueInputs.ts", "dueInputFrom") + "\nexport { dueInputFrom };", "", "dueInputFrom");
 const B = await loadBuilder();
 
