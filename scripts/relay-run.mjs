@@ -265,6 +265,10 @@ const TASKS = {
   // quarter-carrying 6-K from a press release.
   // Read-only: the shipped fetch + extraction on named symbols, printing the
   // error sec-reread.yml's public log only counts (#552 COWORK #56, TSM).
+  // EARNINGS AUDIT ROUND 1 (fix/earnings-audit-r1): the audited symbols' changed
+  // cells, main's shipped extraction/view/score beside this branch's, with the
+  // SEC's own annual figures. Read-only; companyfacts only, no Redis.
+  "earnings-audit-r1": { script: "scripts/earnings-audit-r1.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
   "sec-facts-one": { script: "scripts/sec-facts-one.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
   // READS ONLY: the stored-fact-set index against a SCAN, DBSIZE, manifest
   // dot/dash duplicates (#552 COWORK #59). Weekly or on demand.
@@ -587,6 +591,16 @@ const TASKS = {
   // over the manifest with the shipped extraction, before/after the chain
   // edits, plus the re-read backlog the edit causes. GETs only.
   // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  // READ-ONLY DESPITE THE PREFIX (fix/earnings-audit-r1): the audit's problem
+  // classes counted over the manifest, main's extraction vs this branch's, plus
+  // stored pending notices dated before their quarter. GETs/MGETs only.
+  // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  "write-earnings-audit-r1-scan": {
+    script: "scripts/earnings-audit-r1-scan.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-round2-gap-census": {
     script: "scripts/sec-round2-gap-census.mjs",
     args: () => [],

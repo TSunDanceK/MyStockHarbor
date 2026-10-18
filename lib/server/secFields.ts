@@ -844,6 +844,12 @@ export function secChainsHash(): string {
   // AND THE TOTAL-OVER-CONTRACT RULE (#552 COWORK #192): it moves stored
   // revenue for every filer it reaches, so it re-reads like a chain edit.
   feed(`revenue-total-over-contract|${REVENUE_TOTAL_OVER_CONTRACT}|no-excise|floor:8q4y`);
+  // …JUDGED ON THE LINE AS TAGGED, before the incomplete-line fallback
+  // (earnings audit r1: KEY, CRCL). It moves stored revenue, so it re-reads.
+  feed("revenue-total-judged-as-tagged|excise-not-buyback");
+  // AND THE UTILITY LAST RESORT (secExtract.UTILITY_REVENUE_TAG): it fills a
+  // series that was empty, so a set written without it must re-read.
+  feed("revenue-last-resort|RevenuesNetOfInterestExpense,RegulatedAndUnregulatedOperatingRevenue");
   // AND OPTION G (#552 COWORK #219): the gap-is-revenue test and the derived
   // contract + not-from-contract total move stored revenue too.
   feed(`revenue-gap|${REVENUE_GAP_CONCEPTS.join(",")}|${REVENUE_GAP_TOLERANCE_ABS}|derived-total`);

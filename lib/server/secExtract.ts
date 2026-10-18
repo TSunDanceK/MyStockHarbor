@@ -1221,6 +1221,14 @@ export function q4RevenueScope(
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
 export const LAST_RESORT_REVENUE_TAG = "RevenuesNetOfInterestExpense";
+/**
+ * A UTILITY'S TOTAL OPERATING REVENUE, on the same per-series last-resort rule
+ * (earnings audit r1). XEL tags it and none of the chain's concepts, so every
+ * revenue cell read "Not captured". NOT a chain entry: DUK and TLN file it
+ * beside a contract line on a few periods, and as a chain fallback it mixed
+ * two measures into their series (relay scan, write-earnings-audit-r1-scan).
+ */
+export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
 /** How close a closure ratio must sit to one of the filer's split ratios to read as a split, not a wrong count. */
@@ -1258,7 +1266,11 @@ const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
  * carries other income, which the total-over-contract rule must not reach.
  */
 export function filerTagsExcise(facts: CompanyFacts): boolean {
-  return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k));
+  // NOT THE BUYBACK EXCISE (earnings audit r1). The 1% excise on share
+  // repurchases (ShareRepurchaseProgramExciseTax, tagged by many filers since
+  // 2023) says nothing about revenue, and it kept KEY's $1.44B contract line
+  // beside its $6.41B total.
+  return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k) && !/Repurchase|Buyback|TreasuryStock/.test(k));
 }
 
 /** Names of other income and gains: a gap one of these also equals is not called revenue. */
@@ -1562,6 +1574,10 @@ function extractCompanyFactsWith(
       [fbField], new Map([["revenue", fbBucket]]), new Map([["revenue", preferredTag(fbRows)]]),
       fbQuarter, fbYear, new Map(), new Map(), [],
     );
+    // THE LINE AS TAGGED, for each period this fallback rewrites. The
+    // total-over-contract rule below judges the filer's concept on these, not
+    // on the rescued cells: see `asTaggedRevenue`.
+    const taggedBefore = new Map<Map<string, FieldValue>, FieldValue>();
     for (const [cells, fbCells] of [[quarterCells, fbQuarter], [yearCells, fbYear]] as const) {
       for (const [end, m] of cells) {
         const rev = m.get("revenue")?.val ?? null;
@@ -1571,6 +1587,7 @@ function extractCompanyFactsWith(
         const fb = fbCells.get(end)?.get("revenue");
         const bar = op ?? pre;
         if (!fb || fb.val == null || bar == null || fb.val < bar) continue;
+        taggedBefore.set(m, m.get("revenue")!);
         m.set("revenue", fb);
         notes.push(`revenue ${end}: tagged line ${rev} is below ${op != null ? "operating" : "pre-tax"} income ${bar}; ${fb.tag} ${fb.val} used`);
       }
@@ -1632,13 +1649,25 @@ function extractCompanyFactsWith(
       }
     }
     const isTotal = (t: FieldValue | undefined) => Boolean(t && (t.tag === "Revenues" || t.tag === DERIVED_TOTAL_TAG) && t.val != null);
+    // ── THE CONCEPT IS JUDGED ON THE LINE AS TAGGED (earnings audit r1) ─────
+    // The fallback above has already replaced the contract line with
+    // `Revenues` on every period whose operating (or pre-tax) income exceeds
+    // it. Judged on those cells, a filer whose NEWEST period was rescued never
+    // showed the contract line here, so the rule below never fired and every
+    // period the fallback did not reach kept the sub-line: KEY's FY2023
+    // ($1.44B) and FY2024 ($1.64B, a loss year) beside $7.3B and $7.5B; CRCL's
+    // FY2025 ($109.8M of $2.75B), Q2 FY2025 and derived Q4 FY2024. One series,
+    // two concepts. Reading the cell as tagged lets the rule see the filer's
+    // own concept and move the whole series to the total.
+    const asTaggedRevenue = (row: Map<string, FieldValue> | undefined) =>
+      row ? taggedBefore.get(row) ?? row.get("revenue") : undefined;
     {
       const newest = [...quarterCells.keys(), ...yearCells.keys()].sort().at(-1);
       // LIKE FOR LIKE: a quarter against a quarter, else a year against a
       // year -- never one duration against the other (ADP's $21.9B fiscal
       // year against its $5.47B fourth quarter, caught by the round-2 census).
       const pairAt = (cells: typeof quarterCells, fbCells: typeof fbQuarter) => {
-        const r = newest ? cells.get(newest)?.get("revenue") : undefined;
+        const r = newest ? asTaggedRevenue(cells.get(newest)) : undefined;
         const f = newest ? fbCells.get(newest)?.get("revenue") : undefined;
         return r && f ? { rev: r, fb: f } : null;
       };
@@ -1653,7 +1682,7 @@ function extractCompanyFactsWith(
       const covers = (cells: typeof quarterCells, fbCells: typeof fbQuarter, n: number) => {
         const ends = [...cells.keys()].sort().reverse().slice(0, n);
         const total = ends.filter((e) => isTotal(fbCells.get(e)?.get("revenue"))).length;
-        const contract = ends.filter((e) => { const c = cells.get(e)?.get("revenue"); return c?.tag === CONTRACT_REVENUE_TAG && c.val != null; }).length;
+        const contract = ends.filter((e) => { const c = asTaggedRevenue(cells.get(e)); return c?.tag === CONTRACT_REVENUE_TAG && c.val != null; }).length;
         return total >= contract;
       };
       const floorHolds = covers(quarterCells, totalQuarter, 8) && covers(yearCells, totalYear, 4);
@@ -1688,8 +1717,10 @@ function extractCompanyFactsWith(
     // none -- a filer with a line keeps it, so no tagged figure moves. A value
     // below the period's own operating (or pre-tax) income is refused, as the
     // fallback refuses one.
-    {
-      const lrField: FieldDef = { ...revenueField, chain: [LAST_RESORT_REVENUE_TAG], ifrsChain: undefined };
+    // The utility concept after it, under the same rule, so it fills only a
+    // series the bank concept left empty.
+    for (const lastResortTag of [LAST_RESORT_REVENUE_TAG, UTILITY_REVENUE_TAG]) {
+      const lrField: FieldDef = { ...revenueField, chain: [lastResortTag], ifrsChain: undefined };
       const lrRows = rowsForField(facts, lrField, new Set<string>(), currency);
       if (lrRows.length) {
         const lrBucket: Bucket = new Map();
@@ -1702,7 +1733,7 @@ function extractCompanyFactsWith(
         const lrQuarter = new Map<string, Map<string, FieldValue>>();
         const lrYear = new Map<string, Map<string, FieldValue>>();
         runCumulative(
-          [lrField], new Map([["revenue", lrBucket]]), new Map([["revenue", LAST_RESORT_REVENUE_TAG]]),
+          [lrField], new Map([["revenue", lrBucket]]), new Map([["revenue", lastResortTag]]),
           lrQuarter, lrYear, new Map(), new Map(), [],
         );
         let filled = 0;
@@ -1719,7 +1750,7 @@ function extractCompanyFactsWith(
             filled++;
           }
         }
-        if (filled) notes.push(`revenue: no revenue line tagged; ${LAST_RESORT_REVENUE_TAG} used for ${filled} period(s) (last resort)`);
+        if (filled) notes.push(`revenue: no revenue line tagged; ${lastResortTag} used for ${filled} period(s) (last resort)`);
       }
     }
 
