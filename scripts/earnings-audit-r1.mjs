@@ -126,6 +126,8 @@ for (const symbol of SYMBOLS) {
     facts = await res.json();
   } catch (e) { console.log(`  fetch failed: ${e.message}`); continue; }
   secAnnual(facts);
+  const excise = Object.keys(facts.facts?.["us-gaap"] ?? {}).filter((k) => /Excise/.test(k));
+  console.log(`  excise-named concepts: ${excise.join(", ") || "none"} · gap concept ${NEW.revenueGapConcept(facts) ?? "none"}`);
   try {
     const nb = await build(NEW, symbol, facts, fxNew);
     const ob = OLD ? await build(OLD, symbol, facts, fxOld) : null;
