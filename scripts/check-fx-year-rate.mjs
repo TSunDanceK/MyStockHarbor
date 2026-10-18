@@ -1,16 +1,12 @@
-// EARNINGS AUDIT ROUND 1 — the two fixes the other checks do not pin.
+// A FISCAL YEAR'S GROWTH AT THE YEAR'S OWN RATE (earnings audit r1: CM).
 //
-//   1. CM: a fiscal year's growth is recovered in its reporting currency at the
-//      rate IT was converted at, not its Q4's. By end date alone the year found
-//      the quarter's rate first (quarters are recorded before years) and CM's
-//      FY2023-FY2025 revenue growth printed +7.5%, +9.5%, +12.3% against its
-//      filed CAD +6.9%, +9.8%, +13.8%. Both the new {start, end} entries and the
-//      sets already stored without `start` are covered.
-//   2. XEL: total operating revenue tagged RegulatedAndUnregulatedOperating-
-//      Revenue fills a series that read "Not captured" everywhere, and never
-//      displaces a concept above it in the chain.
-// KEY/CRCL (check-revenue-fallback 3d), SYF (check-sec-report-dates 4d) and
-// ONON (check-eps-reason 5) are pinned beside the rules they test.
+// Growth is taken in the reporting currency, recovered from the stored USD
+// figure and the rate its period was converted at. By end date alone a fiscal
+// year found its own Q4's rate first (quarters are recorded before years, and
+// both end on one date), so CM's FY2023-FY2025 revenue growth printed +7.5%,
+// +9.5%, +12.3% against its filed CAD +6.9%, +9.8%, +13.8%. Both the new
+// {start, end} entries and the sets already stored without `start` are covered,
+// plus a mutation that puts the end-only lookup back.
 import fs from "node:fs";
 import { lift } from "./lib/earnings-plan.mjs";
 
@@ -30,7 +26,7 @@ const load = (currencySrc) => lift(`${fieldsSrc}\n${fxSrc}\n${currencySrc}\n${ex
 const X = await load(currencyRaw);
 const REV = X.SEC_FIELD_KEYS.indexOf("revenue");
 
-console.log("1. CM: a year's growth at the year's own rate");
+console.log("CM: a year's growth at the year's own rate");
 {
   // CM's filed revenue (CAD $M) and plausible USD-per-CAD averages: the year's
   // twelve-month average and its Q4's three-month average differ, as they do.
@@ -78,33 +74,8 @@ console.log("1. CM: a year's growth at the year's own rate");
   check(`MUTATION: matching by end alone prints the page's wrong ${g23?.toFixed(1)}% for FY2023 (caught)`, g23 != null && Math.abs(g23 - filed(2023)) > 0.3);
 }
 
-console.log("\n2. XEL: RegulatedAndUnregulatedOperatingRevenue");
-{
-  const M = 1e6;
-  const row = (tag, start, end, val, form = "10-K") => [tag, { start, end, val, accn: "0000072903-26-000001", fy: 2026, fp: "FY", form, filed: "2026-02-20" }];
-  const payload = (rows) => {
-    const g = {};
-    for (const [tag, r] of rows) ((g[tag] ??= { units: { USD: [] } }).units.USD).push(r);
-    return { cik: 72903, entityName: "Fixture", facts: { "us-gaap": g } };
-  };
-  const RU = "RegulatedAndUnregulatedOperatingRevenue";
-  const xel = payload([
-    row(RU, "2024-01-01", "2024-12-31", 13441 * M), row(RU, "2025-01-01", "2025-12-31", 14669 * M),
-    row("OperatingIncomeLoss", "2025-01-01", "2025-12-31", 2600 * M),
-  ]);
-  const fy25 = X.extractCompanyFacts("XEL", xel).years.find((p) => p.end === "2025-12-31")?.values?.[REV];
-  check("XEL FY2025 reads $14,669M", fy25?.val === 14669 * M && fy25?.tag === RU, JSON.stringify(fy25));
-  const both = payload([
-    row("Revenues", "2025-01-01", "2025-12-31", 9000 * M), row(RU, "2025-01-01", "2025-12-31", 9100 * M),
-  ]);
-  const b25 = X.extractCompanyFacts("DUK", both).years.find((p) => p.end === "2025-12-31")?.values?.[REV];
-  check("a filer tagging Revenues too keeps Revenues (the new concept is last)", b25?.tag === "Revenues", JSON.stringify(b25));
-  const chain = X.SEC_FIELDS.find((f) => f.key === "revenue").chain;
-  check("it is the last entry of the revenue chain", chain.at(-1) === RU);
-}
-
 if (failures) {
   console.log(`\n${failures} assertion(s) failed.`);
   process.exit(1);
 }
-console.log("\nThe audited cells hold.");
+console.log("\nA year's growth is taken at the year's rate.");
