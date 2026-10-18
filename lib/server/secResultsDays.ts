@@ -23,6 +23,7 @@ import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import type { StoredReportDates } from "./secReportDatesStore";
+import { pendingIsCredible } from "./secReportDates";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -40,7 +41,7 @@ export function resultsDaysOf(rec: Pick<StoredReportDates, "events" | "pending">
     if (typeof e.form === "string" && e.form.startsWith("6-K")) continue;
     days.add(e.announcedOn);
   }
-  if (rec.pending?.announcedOn) days.add(rec.pending.announcedOn);
+  if (rec.pending?.announcedOn && pendingIsCredible(rec.pending)) days.add(rec.pending.announcedOn);
   return [...days].sort().reverse();
 }
 

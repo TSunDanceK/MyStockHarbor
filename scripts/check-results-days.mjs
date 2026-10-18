@@ -14,8 +14,10 @@ const check = (name, ok, detail = "") => {
   if (!ok) failures++;
 };
 const SRC = readCodeOnly("lib/server/secResultsDays.ts");
+// resultsDaysOf reads a stored notice through the shared guard (secReportDates).
+const CREDIBLE = grabFunction(readCodeOnly("lib/server/secReportDates.ts"), "pendingIsCredible");
 const load = (mutate = (s) => s) => lift(
-  [grabFunction(mutate(SRC), "resultsDaysOf"), grabFunction(SRC, "symbolsByDay")].join("\n").replace(/export function/g, "function") +
+  [grabFunction(mutate(SRC), "resultsDaysOf"), grabFunction(SRC, "symbolsByDay"), CREDIBLE].join("\n").replace(/export function/g, "function") +
   "\nexport { resultsDaysOf, symbolsByDay };");
 const R = await load();
 
@@ -32,6 +34,8 @@ const days = R.resultsDaysOf(rec);
 check("8-K events and the pending announcement, newest first", JSON.stringify(days) === JSON.stringify(["2026-09-23", "2026-07-30", "2026-04-29"]), JSON.stringify(days));
 check("a 6-K is not listed as reported results", !days.includes("2026-05-01"));
 check("no record, no days", R.resultsDaysOf(null).length === 0);
+check("a notice announced before its own period end is not a results day (SYF, earnings audit r1)",
+  !R.resultsDaysOf({ events: [], pending: { announcedOn: "2026-08-14", periodEnd: "2026-09-30", timing: "before-open" } }).includes("2026-08-14"));
 {
   const M = await load((s) => s.replace('if (typeof e.form === "string" && e.form.startsWith("6-K")) continue;', ""));
   check("MUTATION: without the exclusion the 6-K day comes back", M.resultsDaysOf(rec).includes("2026-05-01"));
