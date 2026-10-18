@@ -101,6 +101,7 @@ async function banks() {
   const OLD = await load(MAIN_TREE), NEW = await load(ROOT);
   const ri = NEW.F.SEC_FIELD_KEYS.indexOf("revenue");
   const off2 = [];
+  const belowList = [];
   console.log("BANKS ticker | FY end | old rev (code) | new rev (code) | SEC value [concept] | match | NII | NonII | score old→new");
   for (const sym of SYMBOLS) {
     const got = await factsFor(sym);
@@ -117,8 +118,9 @@ async function banks() {
       try {
         const row = T.P.buildSecPickerRow(set, TODAY, {}, NOW);
         const fig = T.P.applySecPickerRow(JSON.parse(JSON.stringify(row)), 50);
-        const growth = T.G.secGrowthFacts(set, TODAY);
-        pick = { ps: fig?.ps ?? fig?.priceToSales ?? null, why: fig?.why ?? null, revYoY: growth?.revenueYoY ?? growth?.revenue?.yoy ?? null, mi: T.Val.multipleInputs(set) };
+        const growth = T.G.secGrowthFacts(set, TODAY, {}, []);
+        const g = growth?.ok ? ((growth.revenue - growth.revenuePrior) / Math.abs(growth.revenuePrior)) * 100 : (growth?.why ?? growth?.reason ?? "refused");
+        pick = { ps: fig?.psRatio ?? null, rev: fig?.revenue ?? null, revYoY: g, mi: T.Val.multipleInputs(set) };
       } catch (e) { pick = { err: String(e?.message).slice(0, 120) }; }
       return { set, score, pick, notes: ex.notes ?? [] };
     };
@@ -133,7 +135,10 @@ async function banks() {
     for (const k of keys) {
       const a = ob.get(k)?.v[ri] ?? null, b = nb.get(k)?.v[ri] ?? null;
       const ni = nii.get(k)?.val ?? null;
-      if (ni != null && ni > 0) { if (a != null && a < ni) belowOld++; if (b != null && b < ni) belowNew++; }
+      const nn = non.get(k)?.val ?? null;
+      // BELOW NII ONLY COUNTS where noninterest income is not itself negative
+      // (a securities loss makes net revenue below NII, truthfully).
+      if (ni != null && ni > 0 && !(nn != null && nn < 0)) { if (a != null && a < ni) belowOld++; if (b != null && b < ni) { belowNew++; belowList.push(`${sym} ${k} new ${M(b)} < NII ${M(ni)} (NonII ${M(nn)})`); } }
       if (a !== b) changed++;
       const r = rv.get(k), x = ni != null && non.get(k) ? ni + non.get(k).val : null;
       if (r && x && Math.abs(r.val - x) > 0.02 * Math.abs(x)) off2.push(`${sym} ${k} Revenues ${M(r.val)} vs NII+NonII ${M(x)} (${pct(((r.val - x) / x) * 100)}) accn ${r.accn}`);
@@ -147,11 +152,13 @@ async function banks() {
       const match = sec[0] != null && newV != null ? (Math.abs(newV - sec[0]) <= 0.02 * Math.abs(sec[0]) ? "Y" : "N") : "—";
       console.log(`${sym} | ${y.e} | ${M(op?.v[ri])} (${op?.d?.[ri] ?? "-"}) | ${M(newV)} (${np?.d?.[ri] ?? "-"}) | ${M(sec[0])} [${sec[1]}] | ${match} | ${M(nii.get(k)?.val)} | ${M(non.get(k)?.val)} | ${o.score.score}→${n.score.score}`);
     }
-    const pk = (p) => (p?.err ? `ERR ${p.err}` : `ttmRev ${M(p?.mi?.revenue?.val ?? p?.mi?.ttmRevenue ?? null)} incomplete=${p?.mi?.revenueIncomplete ?? "?"} ps=${typeof p?.ps === "number" ? p.ps.toFixed(2) : JSON.stringify(p?.ps ?? null)} revYoY=${typeof p?.revYoY === "number" ? p.revYoY.toFixed(1) : JSON.stringify(p?.revYoY ?? null)}`);
+    const pk = (p) => (p?.err ? `ERR ${p.err}` : `ttmRev ${M(p?.mi?.revenue?.val ?? null)} pickersRev ${M(p?.rev)} incomplete=${p?.mi?.revenueIncomplete ?? "?"} P/S@$50=${typeof p?.ps === "number" ? p.ps.toFixed(2) : JSON.stringify(p?.ps ?? null)} revGrowth=${typeof p?.revYoY === "number" ? p.revYoY.toFixed(1) + "%" : JSON.stringify(p?.revYoY ?? null)}`);
     console.log(`  ${sym} summary: frames ${keys.length}, changed ${changed}, below NII old ${belowOld} → new ${belowNew}; pickers old {${pk(o.pick)}} new {${pk(n.pick)}}`);
     for (const note of n.notes) if (/bank|net interest|NoninterestIncome/i.test(note)) console.log(`  ${sym} note: ${note.slice(0, 220)}`);
     await pause();
   }
+  console.log(`\nSTILL BELOW NII WITH NON-NEGATIVE NONINTEREST INCOME (${belowList.length} frames)`);
+  for (const l of belowList) console.log(`  ${l}`);
   console.log(`\nREVENUES MORE THAN 2% OFF NII + NONINTEREST INCOME (${off2.length} frames)`);
   for (const l of off2) console.log(`  ${l}`);
 }
