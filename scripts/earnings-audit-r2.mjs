@@ -144,7 +144,7 @@ async function banks() {
         const g = growth?.ok ? ((growth.revenue - growth.revenuePrior) / Math.abs(growth.revenuePrior)) * 100 : (growth?.why ?? growth?.reason ?? "refused");
         pick = { ps: fig?.psRatio ?? null, rev: fig?.revenue ?? null, revYoY: g, mi: T.Val.multipleInputs(set) };
       } catch (e) { pick = { err: String(e?.message).slice(0, 120) }; }
-      return { set, score, pick, notes: ex.notes ?? [] };
+      return { ex, set, score, pick, notes: ex.notes ?? [] };
     };
     let o, n;
     try { o = await side(OLD); n = await side(NEW); }
@@ -187,6 +187,17 @@ async function banks() {
         const match = sec[0] != null && newV != null ? (Math.abs(newV - sec[0]) <= 0.02 * Math.abs(sec[0]) ? "Y" : "N") : "—";
         console.log(`FLAGGED | ${sym} | ${flag} ${k} | ${M(op?.v[ri])} (${op?.d?.[ri] ?? "-"}) | ${M(newV)} (${np?.d?.[ri] ?? "-"}) | ${M(sec[0])} | ${sec[1]} | accn ${sec[2]} | ${match} | filed Revenues ${M(rv.get(k)?.val)} | NII ${M(nii.get(k)?.val)} | NonII ${M(non.get(k)?.val)} | ${o.score.score}→${n.score.score}`);
       }
+    }
+    // WHICH PERIODS TRIGGERED THE RULE: main's extraction (every period, not
+    // only the stored window), revenue more than 2% off NII + NonII.
+    {
+      const offs = [];
+      for (const p of [...o.ex.years, ...o.ex.quarters]) {
+        const c = p.values?.[ri], k = `${p.start}..${p.end}`;
+        const x = nii.get(k) && non.get(k) ? nii.get(k).val + non.get(k).val : null;
+        if (c?.val != null && x != null && x > 0 && Math.abs(c.val - x) > 0.02 * Math.abs(x)) offs.push(`${k} ${M(c.val)} [${c.tag ?? c.derived}] vs ${M(x)}`);
+      }
+      if (offs.length) console.log(`  ${sym} trigger periods (${offs.length}): ${offs.slice(0, 12).join("; ")}`);
     }
     // A FEW CHANGED FRAMES (controls): name them.
     if (changed > 0 && changed <= 4) for (const k of keys) {
