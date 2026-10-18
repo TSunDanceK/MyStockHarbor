@@ -27,7 +27,8 @@ const failures = [];
 // guard it. They are run and their output is printed (the first `lines` lines,
 // then a pointer to the script), but they are never a failure and never counted
 // as one: a non-zero exit is printed as a note, not added to `failed`.
-const REPORT_ONLY = new Map([["check-bottleneck-links.mjs", { lines: 20, args: ["--brief"] }]]);
+// Empty now: check-bottleneck-links.mjs became a guard (a failing check) once the mirror gaps were closed or excepted.
+const REPORT_ONLY = new Map();
 
 for (const f of scripts) {
   const report = REPORT_ONLY.get(f);

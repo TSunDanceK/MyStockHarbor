@@ -72,20 +72,38 @@ entries in `vrt.md` (supplier) and `wolf.md` (customer) say `ticker: IFNNY`, not
 Keep the name spelling used on the company's own page ("Infineon Technologies",
 as in `ifnny.md`'s title) so the displayed name matches.
 
-### Mirror links between pages: a report, not a check (2026-10-18, #553)
+### Mirror links between pages: a guard (2026-10-18, #553)
 
 A page lists up to ten suppliers (`supplyChain`) and ten key customers
 (`customers`). When an entry's ticker has a page of its own, that page holds the
 other half of the same relationship: if X lists Y as a **supplier**, Y's page
 should list X as a **customer** (and the reverse).
-`scripts/check-bottleneck-links.mjs` prints the missing mirrors, split into
-"other list is full (10)" (an entry would have to give way) and "other list has
-room". `scripts/check-all.mjs` runs it as a **report** (`REPORT_ONLY`): it
-prints a summary and the first few of each group, and it can never fail check-all
-or count as a failure. Run it by itself for the full list; add `--brief` for the
-short form. It matches by ticker (`GOOG` folds into `GOOGL`) and skips entries
-with no ticker or whose ticker has no page. Nothing is fixed automatically:
-whether a missing mirror belongs on the page is an editorial call.
+`scripts/check-bottleneck-links.mjs` is now a **check** in `check-all`: it exits
+non-zero on an **unexplained gap** (a missing mirror with no exception) and on a
+**stale exception** (one that no longer matches a gap). It matches by ticker
+(`GOOG` folds into `GOOGL`) and skips entries with no ticker or whose ticker has
+no page. `--brief` prints the short form.
+
+- **Exceptions:** `content/bottlenecks/_mirror-exceptions.json` (not a page; the
+  hub, sitemap and page readers only read `.md`). Each row: `source`, `target`,
+  `role` (the role `target` has on `source`'s page) and a one-line `reason`.
+  Immaterial relationships (pct under 10 and not the list's top grade) are
+  accepted exceptions. A material gap that could not be closed (no sourced
+  weight, or the only removable entries have pages of their own) is recorded with
+  `"provisional": true`; the guard prints the provisional count on every run and
+  does not fail on them. Close them when sourced and delete the row.
+- **When you add a page or an entry, add the mirror in the same change** (or an
+  exception with its reason).
+- **How a mirror weight is derived:** from the *target* company's own filings and
+  public disclosures (10-K customer or supplier concentration, a named contract
+  value, a credible ranking), placed on the scale of the neighbouring entries in
+  that list. `pct` is a relative weight inside the page's list, not a real revenue
+  share. Rescale the edited list to whole numbers summing to 100. If no weight can
+  be sourced, do not estimate: leave the gap as a provisional exception. Blurbs
+  are hedged ("may"/"might"), never "would"/"should", and make no unsourced claim.
+- **Making room in a full list:** remove the lowest-weight entry that has no page
+  of its own (and is not a material mirror for another page). If only entries with
+  pages are removable, leave the gap as a provisional exception instead.
 
 ### The dependency web's rim (2026-10-06, COWORK #131)
 

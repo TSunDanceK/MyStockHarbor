@@ -82,7 +82,7 @@ customers:
       exceeding 10% of consolidated revenue. Infineon uses these wafers for
       its own SiC power devices sold into EV and industrial markets. Infineon
       trades primarily on Frankfurt (XETRA: IFX) and only as a thin OTC ADR
-      (IFNNY) in the US, with no proper US-listed ticker.
+      (IFNNY) in the US.
   - name: Renesas Electronics
     ticker: null
     pct: 17

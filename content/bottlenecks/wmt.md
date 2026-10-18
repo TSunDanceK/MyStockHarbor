@@ -5,6 +5,7 @@ category: Multinational discount retail & e-commerce (mass merchandiser)
 domain: walmart.com
 title: "Walmart (WMT) Bottlenecks: Who Walmart Depends On"
 date: 2026-07-09
+updated: 2026-10-18
 summary: >
   Walmart is the world's largest retailer by revenue, spanning Walmart US,
   Walmart International, and Sam's Club alongside a fast-growing e-commerce
@@ -35,7 +36,7 @@ disclaimer: >
 supplyChain:
   - name: Procter & Gamble
     ticker: PG
-    pct: 20
+    pct: 19
     grade: some
     blurb: >
       Walmart is P&G's largest customer, at roughly 16% of P&G's total
@@ -114,15 +115,17 @@ supplyChain:
       Discloses Walmart at roughly 14% of its consolidated net sales — its
       largest customer — driven by paper and personal-care staples that
       are hard to source elsewhere at comparable scale and price.
-  - name: Clorox
-    ticker: CLX
-    pct: 3
+  - name: Keurig Dr Pepper
+    ticker: KDP
+    pct: 4
     grade: spread
     blurb: >
-      Walmart is Clorox's largest customer by far, at roughly 27% of its
-      fiscal net sales — the highest dependency ratio of any supplier on
-      this list, even though Clorox's smaller absolute dollar volume gives
-      it a lower weight in Walmart's total supplier mix.
+      Keurig Dr Pepper supplies Walmart with soft drinks, Keurig coffee pods and
+      brewers, and other beverages. In fiscal 2025 KDP reported about $2.65
+      billion of net sales to Walmart, roughly 16% of its consolidated net
+      sales, which makes Walmart KDP's largest customer. The volume is
+      meaningful for Walmart's beverage aisles, though it is smaller than its
+      largest packaged-goods suppliers.
 customers:
   - name: Procter & Gamble
     ticker: PG

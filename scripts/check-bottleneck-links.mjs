@@ -1,4 +1,4 @@
-// MIRROR LINKS BETWEEN BOTTLENECK PAGES: A REPORT, NOT A CHECK (#553).
+// MIRROR LINKS BETWEEN BOTTLENECK PAGES: A GUARD (#553).
 //
 // A page lists who supplies the company (`supplyChain`) and who its key
 // customers are (`customers`), each up to ten entries. When an entry's ticker
@@ -6,13 +6,17 @@
 //   - X lists Y as a SUPPLIER  -> Y's page should list X as a CUSTOMER;
 //   - X lists Y as a CUSTOMER  -> Y's page should list X as a SUPPLIER.
 // A relationship written on one side only reads as a gap on the other page.
-// This lists the missing mirrors, split by whether the list that would take the
-// entry is full (10, so an entry would have to give way) or has room.
 //
-// It NEVER FAILS: check-all runs it as a report (REPORT_ONLY in check-all.mjs)
-// and it always exits 0. Matching is by ticker (GOOG folds into GOOGL, as the
-// leaderboard does); an entry with no ticker, or whose ticker has no page, is
-// not checked.
+// A missing mirror passes only when it is an accepted exception in
+// content/bottlenecks/_mirror-exceptions.json ({ source, target, role, reason,
+// provisional? }, where role is the role `target` has on `source`'s page).
+// It FAILS (exit 1) on an unexplained gap, and on a stale exception (one that no
+// longer matches a gap, e.g. because the mirror was added). Provisional
+// exceptions are gaps we could not yet close (no sourced weight, or nothing
+// removable); their count is printed on every run and does not fail.
+//
+// Matching is by ticker (GOOG folds into GOOGL, as the leaderboard does); an
+// entry with no ticker, or whose ticker has no page, is not checked.
 //
 //   node scripts/check-bottleneck-links.mjs            the full list
 //   node scripts/check-bottleneck-links.mjs --brief    the counts and the first few of each (what check-all prints)
@@ -56,23 +60,38 @@ for (const [fromKey, from] of pages) {
   }
 }
 
+const EXC_FILE = path.join(DIR, "_mirror-exceptions.json");
+const exceptions = fs.existsSync(EXC_FILE) ? JSON.parse(fs.readFileSync(EXC_FILE, "utf8")) : [];
+const ek = (source, target, role) => `${String(source).toUpperCase()}|${String(target).toUpperCase()}|${role}`;
+const excMap = new Map(exceptions.map((e) => [ek(e.source, e.target, e.role), e]));
+const gapKeys = new Set(missing.map((m) => ek(m.from, m.to, m.role)));
+const unexplained = missing.filter((m) => !excMap.has(ek(m.from, m.to, m.role)));
+const stale = exceptions.filter((e) => !gapKeys.has(ek(e.source, e.target, e.role)));
+const provisional = exceptions.filter((e) => e.provisional).length;
+
 const line = (m) => `${m.to} should list ${m.from} as a ${m.mirror === "customers" ? "customer" : "supplier"} (${m.from} lists ${m.to} as a ${m.role}; ${m.to}'s ${m.mirror === "customers" ? "customers" : "suppliers"} list has ${m.count})`;
 const sorted = (xs) => [...xs].sort((a, b) => a.to.localeCompare(b.to) || a.from.localeCompare(b.from));
-const full = sorted(missing.filter((m) => m.full));
-const room = sorted(missing.filter((m) => !m.full));
+const full = sorted(unexplained.filter((m) => m.full));
+const room = sorted(unexplained.filter((m) => !m.full));
 
 let pairs = 0;
 for (const [fromKey, from] of pages) for (const list of ["supplyChain", "customers"]) for (const t of from[list]) if (t !== fromKey && pages.has(t)) pairs++;
 
-console.log(`bottleneck mirror links: ${pairs} entries name a company that has its own page; ${missing.length} have no mirror on that page (${full.length} where the other list is full, ${room.length} where it has room). Report only.`);
+console.log(`bottleneck mirror links: ${pairs} entries name a company that has its own page; ${missing.length} have no mirror on that page; ${missing.length - unexplained.length} are accepted exceptions (${provisional} provisional); ${unexplained.length} unexplained; ${stale.length} stale exceptions.`);
 const BRIEF = process.argv.includes("--brief");
 const SHOWN = 5;
 const show = (xs) => {
   for (const m of BRIEF ? xs.slice(0, SHOWN) : xs) console.log(`  ${line(m)}`);
   if (BRIEF && xs.length > SHOWN) console.log(`  ... ${xs.length - SHOWN} more`);
 };
-console.log(`\nOther list is full (${CAP}): ${full.length}`);
-show(full);
-console.log(`\nOther list has room: ${room.length}`);
-show(room);
+if (full.length) { console.log(`\nUnexplained, other list is full (${CAP}): ${full.length}`); show(full); }
+if (room.length) { console.log(`\nUnexplained, other list has room: ${room.length}`); show(room); }
+if (stale.length) {
+  console.log(`\nStale exceptions (no matching gap - delete them): ${stale.length}`);
+  for (const e of BRIEF ? stale.slice(0, SHOWN) : stale) console.log(`  ${e.source} -> ${e.target} (${e.role})`);
+}
+if (unexplained.length || stale.length) {
+  console.log("\nFix: add the mirror on the target page (and make room), or record an exception in content/bottlenecks/_mirror-exceptions.json.");
+  process.exit(1);
+}
 process.exit(0);
