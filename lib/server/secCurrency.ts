@@ -187,20 +187,13 @@ export function reportingCurrency(facts: CompanyFacts): string | null {
 }
 
 /** What a converted set records about how it was converted. */
-export type AppliedRate = { end: string; start?: string | null; usdPerUnit: number; basis: "average" | "spot" };
-
 export type FxConversion = {
   /** The currency the filer reports in. */
   from: string;
   /** Which adapter produced the rates. */
   source: string;
-  /**
-   * Rates actually applied, by period — the audit trail. `start` identifies
-   * the period with `end`: a fiscal year, its Q4 and the balance sheet all end
-   * on one date at three different rates. Absent on sets written before it was
-   * recorded; see appliedRateFor.
-   */
-  applied: AppliedRate[];
+  /** Rates actually applied, by period end — the audit trail. */
+  applied: { end: string; usdPerUnit: number; basis: "average" | "spot" }[];
   /** Periods dropped because no honest rate covered them. */
   refused: string[];
 };
@@ -233,33 +226,8 @@ export type FxConversion = {
  * fixing nothing. Only CROSS-PERIOD ratios are exposed, which is why this
  * function exists for growth and not for margins.
  */
-export function reportingRateFor(conversion: FxConversion, end: string, start: string | null): number | null {
-  return appliedRateFor(conversion.applied, end, start)?.usdPerUnit ?? null;
-}
-
-/**
- * THE RATE ONE PERIOD WAS CONVERTED AT — matched on start AND end.
- *
- * By end alone, a fiscal year found its own Q4's rate first: the quarters are
- * converted (and recorded) before the years, and both end on the same date. So
- * a year's reporting-currency figure was its USD figure divided by a
- * three-month average it was never multiplied by, and its growth was off by
- * the gap between the two rates. CM's FY2023-FY2025 revenue growth printed
- * +7.5%, +9.5%, +12.3% against +6.9%, +9.8%, +13.8% in its filed CAD; FY2022,
- * whose prior Q4 is outside the stored window, was right.
- *
- * A SET WRITTEN BEFORE `start` WAS RECORDED is matched by what the writer's
- * order makes certain: an instant took the spot rate; a duration took an
- * average, recorded quarters first and years after, so a quarter is the first
- * average entry for its end and a year the last.
- */
-export function appliedRateFor(applied: readonly AppliedRate[], end: string, start: string | null): AppliedRate | null {
-  const atEnd = applied.filter((a) => a.end === end);
-  if (atEnd.some((a) => a.start !== undefined)) return atEnd.find((a) => (a.start ?? null) === start) ?? null;
-  if (!start) return atEnd.find((a) => a.basis === "spot") ?? null;
-  const averages = atEnd.filter((a) => a.basis === "average");
-  const yearLong = (Date.parse(end) - Date.parse(start)) / 86_400_000 > 200;
-  return (yearLong ? averages.at(-1) : averages[0]) ?? null;
+export function reportingRateFor(conversion: FxConversion, end: string): number | null {
+  return conversion.applied.find((a) => a.end === end)?.usdPerUnit ?? null;
 }
 
 /**
@@ -273,7 +241,7 @@ export function inReportingCurrency(
   period: PeriodRecord,
   conversion: FxConversion
 ): PeriodRecord | null {
-  const rate = reportingRateFor(conversion, period.end, period.start);
+  const rate = reportingRateFor(conversion, period.end);
   if (rate === null || !(rate > 0)) return null;
   const money = moneyFieldIndexes();
   return {
@@ -329,7 +297,7 @@ export function convertExtractResult(
     for (const p of periods) {
       const rate = rateForPeriod(p, series);
       if (!rate) { refused.push(p.end); continue; }
-      applied.push({ end: p.end, start: p.start, usdPerUnit: rate.usdPerUnit, basis: rate.basis });
+      applied.push({ end: p.end, usdPerUnit: rate.usdPerUnit, basis: rate.basis });
       out.push({
         ...p,
         values: p.values.map((v, i) => {
@@ -382,7 +350,7 @@ export function storedInReportingCurrency(
   fx: StoredFactSet["fx"] | undefined
 ): StoredPeriod | null {
   if (!fx) return period;
-  const rate = appliedRateFor(fx.applied, period.e, period.s)?.usdPerUnit ?? null;
+  const rate = fx.applied.find((a) => a.end === period.e)?.usdPerUnit ?? null;
   // NO RATE MEANS NO HONEST ANSWER. Returning the converted values would hand
   // back dollars labelled as the filer's currency, which is the mislabelling
   // this file exists to prevent — and growth computed on them would be the FX

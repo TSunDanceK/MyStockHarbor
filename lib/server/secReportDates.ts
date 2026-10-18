@@ -1342,20 +1342,6 @@ export function latestResultsAnnouncement(subs: Submissions): ReportEvent | null
   return best;
 }
 
-/**
- * CAN THIS NOTICE BE TRUE? A quarter cannot be announced before it ends.
- *
- * SYF's record read "the quarter ended 30 Sep 2026 was announced on 14 Aug
- * 2026": the record was written after 30 Sep, before SYF's October release,
- * so its newest results 8-K was a mid-quarter Item 2.02 and the cadence named
- * the next quarter after the stored one. pendingResults now refuses that, and
- * every reader of a STORED `pending` applies this too, because records written
- * before the guard stay in the store until their filer is rebuilt.
- */
-export function pendingIsCredible(p: Pick<PendingResults, "periodEnd" | "announcedOn"> | null | undefined): boolean {
-  return Boolean(p && typeof p.periodEnd === "string" && typeof p.announcedOn === "string" && p.announcedOn >= p.periodEnd);
-}
-
 /** A results release the SEC's data feed has not caught up with. */
 export type PendingResults = {
   /** The quarter the announcement is about, derived from the filer's cadence. */
@@ -1411,9 +1397,6 @@ export function pendingResults(
   // must already have ENDED — a quarter that has not finished cannot have been
   // reported, and naming one would be worse than saying nothing.
   if (periodEnd <= newestPlaced.periodEnd! || periodEnd > today) return null;
-  // AND THE ANNOUNCEMENT MUST POSTDATE IT: an 8-K filed before the quarter
-  // ended is about something else (pendingIsCredible).
-  if (!pendingIsCredible({ periodEnd, announcedOn: latest.announcedOn })) return null;
   // ── THE CURRENT PERIOD HAS NO 10-Q TO PAIR AGAINST, SO THE PAST DECIDES ─
   // A filer whose past quarters show an early non-results 2.02 (TSLA's
   // delivery numbers) files one again two days into this quarter, and without

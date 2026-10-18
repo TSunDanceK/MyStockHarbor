@@ -451,7 +451,6 @@ export const EMPTY_REASONS = {
   revenueIncomplete: "Not meaningful — this filer's revenue line is incomplete in its tagged data",
   epsPerClass: "EPS is reported per share class in the filing",
   epsPerUnit: "EPS is not reported per share for this filer's units",
-  epsNotTagged: "EPS is not tagged in SEC data",
 } as const;
 
 /**
@@ -490,12 +489,9 @@ export const EPS_FILED_OTHERWISE: Record<string, { kind: "class" | "units"; evid
 };
 
 /** The named reason for a blank EPS, or null to keep the caller's default. */
-export function epsBlankReason(symbol: string, untagged: readonly string[] | null = null): string | null {
+export function epsBlankReason(symbol: string): string | null {
   const hit = EPS_FILED_OTHERWISE[symbol.trim().toUpperCase()];
-  // NO EPS CONCEPT AT ALL in the filer's companyfacts (ONON: an IFRS filer
-  // whose data carries no per-share figure), so "Not reported" would be a
-  // claim about the company the data cannot support (earnings audit r1).
-  if (!hit) return untagged?.includes("epsDiluted") ? EMPTY_REASONS.epsNotTagged : null;
+  if (!hit) return null;
   return hit.kind === "class" ? EMPTY_REASONS.epsPerClass : EMPTY_REASONS.epsPerUnit;
 }
 
@@ -1876,7 +1872,7 @@ export function buildSecEarningsView(
   return {
     symbol: set.symbol,
     annualFiler,
-    epsReason: epsBlankReason(set.symbol, set.nt ?? null),
+    epsReason: epsBlankReason(set.symbol),
     entityName: set.entityName,
     latestLabel: periodLabel(latest),
     latestEnd: latest.e,

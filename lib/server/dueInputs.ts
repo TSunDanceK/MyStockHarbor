@@ -40,7 +40,6 @@
 import { readPickersSymbolsIfCached } from "./pickersBuilder";
 import { readReportDatesBulk, type StoredReportDates } from "./secReportDatesStore";
 import { selectDue, type DueInput } from "./dueToReport";
-import { pendingIsCredible } from "./secReportDates";
 import { resolveDueStrip, type DueStripState } from "./dueStripState";
 import { buildExpected, type ExpectedSectionState } from "./expectedToReport";
 import cut from "../../data/due-strip.json";
@@ -121,7 +120,7 @@ export function dueInputFrom(
   // carries medianLagDays; reading it off the others yields undefined, which
   // selectDue would then drop anyway -- but silently, and counted as though a
   // lag had been offered. Checking the kind is what makes the skip reportable.
-  if (rec.pending && pendingIsCredible(rec.pending) && rec.pending.periodEnd >= rec.nextPeriodEnd) {
+  if (rec.pending && typeof rec.pending.periodEnd === "string" && rec.pending.periodEnd >= rec.nextPeriodEnd) {
     return { skip: "results-filed" };
   }
   if (rec.next?.kind !== "date") return { skip: "no-median-lag" };

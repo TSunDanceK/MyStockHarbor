@@ -193,7 +193,6 @@ const EMPTY_SHORT: Record<string, string> = {
   [EMPTY_REASONS.notCaptured]: "Not captured",
   [EMPTY_REASONS.epsPerClass]: "Per share class",
   [EMPTY_REASONS.epsPerUnit]: "Per unit",
-  [EMPTY_REASONS.epsNotTagged]: "Not tagged in SEC data",
   [EMPTY_REASONS.noRevenueLine]: "No revenue line",
   [NOT_REPORTED]: NOT_REPORTED,
   // SENTENCES THAT WERE CELL VALUES (#552 COWORK #124): the short word in the
@@ -208,7 +207,6 @@ const EMPTY_FULL: Record<string, string> = {
   [EMPTY_REASONS.notCaptured]: `${EMPTY_REASONS.notCaptured}: the figure may be filed under a concept this page does not read yet.`,
   [EMPTY_REASONS.epsPerClass]: `${EMPTY_REASONS.epsPerClass}: the company files a separate EPS for each class of its shares, so there is no single figure to show here.`,
   [EMPTY_REASONS.epsPerUnit]: `${EMPTY_REASONS.epsPerUnit}: the partnership files its earnings per unit rather than per share.`,
-  [EMPTY_REASONS.epsNotTagged]: `${EMPTY_REASONS.epsNotTagged}: the company\u2019s filings carry no diluted EPS figure in the SEC's structured data, so there is none to show.`,
   [EMPTY_REASONS.noRevenueLine]: `${EMPTY_REASONS.noRevenueLine}: the company publishes no revenue figure this page reads.`,
   [NOT_REPORTED]: "The company\u2019s SEC filing has no figure for that line. It may be zero, or included under another heading.",
   [INTEREST_IN_OTHER_INCOME]: "The company files interest inside other income (net), shown below, not on its own line.",
@@ -555,8 +553,6 @@ export function SecSnapshotCard({
   // the card already shows (within the 10 days a 52/53-week end moves).
   const pendingShown =
     pending && !view.filedNotInFeed && !view.latestFromFiling &&
-    // NEVER A QUARTER ANNOUNCED BEFORE IT ENDED (secReportDates.pendingIsCredible).
-    pending.announcedOn >= pending.periodEnd &&
     Date.parse(pending.periodEnd) - Date.parse(view.latestEnd) > 10 * 86400000
       ? pending
       : null;
