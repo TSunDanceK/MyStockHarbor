@@ -156,7 +156,7 @@ export type StoredFactSet = {
   fx?: {
     from: string;
     source: string;
-    applied: { end: string; usdPerUnit: number; basis: "average" | "spot" }[];
+    applied: { end: string; start?: string | null; usdPerUnit: number; basis: "average" | "spot" }[];
     refused: string[];
   };
   /** Currencies a mapped tag was published in and refused. See rowsForField. */
