@@ -150,7 +150,31 @@ console.log("\n5. it replaces, it does not backfill; USD filers only");
     `${j.reportingCurrency} ${JSON.stringify(rev(j, "2025-12-31"))}`);
 }
 
-console.log("\n6. mutation");
+console.log("\n6. a filed net total keeps its securities gains and losses (owner ruling, STT)");
+{
+  // STT 2023: Revenues 11,945 = NII 2,759 + NonII 9,480 less a 294 securities loss
+  // the NonII line leaves out; 2.4% under the halves, and the figure STT reports.
+  const stt = payload({ Revenues: [Y(2023, 11945), Y(2024, 13000)], [NII]: [Y(2023, 2759), Y(2024, 2923)], [NON]: [Y(2023, 9480), Y(2024, 10156)] });
+  const t = X.extractCompanyFacts("STT", stt);
+  check("STT keeps its filed 11,945M (2.4% under the halves, above NII)", rev(t, "2023-12-31")?.val === 11945 * M && rev(t, "2023-12-31")?.tag === "Revenues", JSON.stringify(rev(t, "2023-12-31")));
+  check("...and the bank rule does not fire on it", !(t.notes ?? []).some((n) => /bank net basis/.test(n)));
+  // UCB: 2021 744.4 vs 706.9 (+5.3%) and 2022 826.2 vs 890.1 (-7.2%) kept; 2020 577.4 vs 657.9 (-12.2%) moves.
+  const ucb = payload({
+    Revenues: [Y(2020, 577.4), Y(2021, 744.4), Y(2022, 826.2)],
+    [NII]: [Y(2020, 501.8), Y(2021, 549.0), Y(2022, 752.4)], [NON]: [Y(2020, 156.1), Y(2021, 157.8), Y(2022, 137.7)],
+  });
+  const u = X.extractCompanyFacts("UCB", ucb);
+  check("UCB: 2021 and 2022 keep their filed Revenues (within 8%, above NII)",
+    rev(u, "2021-12-31")?.val === 744.4 * M && rev(u, "2022-12-31")?.val === 826.2 * M, `${rev(u, "2021-12-31")?.val} ${rev(u, "2022-12-31")?.val}`);
+  check("...2020's, 12.2% under, moves to the halves (657.9M computed)", Math.abs((rev(u, "2020-12-31")?.val ?? 0) - 657.9 * M) < 1 && rev(u, "2020-12-31")?.derived === "computed");
+  // A `Revenues` below NII is a sub-line even within 8% of the halves.
+  const sub = payload({ Revenues: [Y(2025, 480)], [NII]: [Y(2025, 500)], [NON]: [Y(2025, 20)] });
+  check("a Revenues below NII is not a net total even 7.7% from the halves", rev(X.extractCompanyFacts("SUB", sub), "2025-12-31")?.derived === "computed");
+  const XG = await load(extractRaw.replace("export const BANK_NET_GAINS_TOLERANCE = 0.08;", "export const BANK_NET_GAINS_TOLERANCE = 0.02;"));
+  check("MUTATION: without the gains band STT moves to 12,239M (caught)", rev(XG.extractCompanyFacts("STT", stt), "2023-12-31")?.val === 12239 * M);
+}
+
+console.log("\n7. mutation");
 {
   const start = extractRaw.indexOf("    // ── A BANK'S REVENUE IS ITS NET REVENUE (earnings audit r2)");
   const stop = extractRaw.indexOf("    // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD");
@@ -169,7 +193,7 @@ console.log("\n6. mutation");
     [CONTRACT]: [Y(2025, 1562), Y(2023, 1400)],
     [NII]: [Y(2025, 5991), Y(2024, 5450), Y(2023, 5100)], [NON]: [Y(2025, 2175), Y(2024, 1980), Y(2023, 1900)],
   });
-  const XB = await cut('              if (m.get("revenue")?.val == null && end <= newestValued) continue;\n');
+  const XB = await cut('              if (c?.val == null && end <= newestValued) continue;\n');
   check("MUTATION: the no-backfill guard removed -> FY2024 filled with 7,430M (caught)",
     rev(XB.extractCompanyFacts("GAP", gap), "2024-12-31")?.val === 7430 * M);
   const XU = await cut('currency === "USD" && nii.n && non.n', "nii.n && non.n");

@@ -1265,6 +1265,17 @@ export const BANK_REVENUE_HALVES = ["InterestIncomeExpenseNet", "NoninterestInco
  * +37%), and is not taken. See the bank net-basis block in extractCompanyFactsWith.
  */
 export const BANK_NET_TOLERANCE = 0.02;
+/**
+ * A FILED NET TOTAL KEEPS ITS SECURITIES GAINS AND LOSSES (earnings audit r2,
+ * owner ruling on STT). A bank's own total revenue counts a securities-sale
+ * loss that its NoninterestIncome line may leave out: STT's 2023 `Revenues`
+ * $11,945M is net of a $294M loss, 2.4% under the halves' $12,239M, and it is
+ * the figure STT reports. A filed RevenuesNetOfInterestExpense, or a filed
+ * `Revenues` at or above net interest income, within this of the halves is
+ * that net total and is kept; a sub-line sits below NII and a gross figure
+ * further off (BBT +13%, GABC +35%, BANC +62%).
+ */
+export const BANK_NET_GAINS_TOLERANCE = 0.08;
 /** The in-memory tag of a derived contract + not-from-contract total (option G, LUNR). Never stored. */
 const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
 
@@ -1813,13 +1824,19 @@ function extractCompanyFactsWith(
     // these carry a fee line (or a `Revenues` that is itself a sub-line, a zero,
     // or gross of interest expense), so it never reached them.
     //
-    // A FILER THAT TAGS BOTH HALVES, on any period whose revenue (as every rule
-    // above left it) is more than BANK_NET_TOLERANCE off net interest income
-    // plus noninterest income for the same frame, moves its WHOLE SERIES to net
-    // revenue, frame by frame:
-    //   1. RevenuesNetOfInterestExpense as filed, when within tolerance of the
-    //      two halves (or the halves are not both filed for that frame);
-    //   2. `Revenues` as filed, only within tolerance of the two halves;
+    // A NET TOTAL, for one frame, is a revenue within BANK_NET_TOLERANCE of
+    // net interest income plus noninterest income, or a filed
+    // RevenuesNetOfInterestExpense, or a filed `Revenues` at or above NII,
+    // within BANK_NET_GAINS_TOLERANCE of them (it carries the securities gains
+    // and losses the halves may not: STT, CASH, UCB, WSFS).
+    //
+    // A FILER THAT TAGS BOTH HALVES, with any period whose revenue (as every
+    // rule above left it) is not a net total, moves its series to net revenue,
+    // frame by frame. A period already on a net total keeps it, and so does
+    // one with no halves to judge it by; any other takes:
+    //   1. RevenuesNetOfInterestExpense as filed, when a net total (or the
+    //      halves are not both filed for that frame);
+    //   2. `Revenues` as filed, when a net total;
     //   3. the two halves' sum, marked computed.
     // A period with none of these reads Not reported rather than keep the fee
     // line beside net revenue, so a series cannot carry two bases. The halves
@@ -1865,14 +1882,21 @@ function extractCompanyFactsWith(
           const a = nii[kind].get(end)?.get("revenue"), b = non[kind].get(end)?.get("revenue");
           return a && b && a.val != null && b.val != null && sameFrame(a.covers, b.covers) ? { a, sum: a.val + b.val } : null;
         };
-        const near = (v: number, sum: number) => Math.abs(v - sum) <= BANK_NET_TOLERANCE * Math.abs(sum);
+        const within = (v: number, sum: number, tol: number) => Math.abs(v - sum) <= tol * Math.abs(sum);
+        type Halves = NonNullable<ReturnType<typeof halvesAt>>;
+        const netTotal = (c: FieldValue, h: Halves) => {
+          const v = c.val as number;
+          if (within(v, h.sum, BANK_NET_TOLERANCE)) return true;
+          if (!within(v, h.sum, BANK_NET_GAINS_TOLERANCE)) return false;
+          return c.tag === LAST_RESORT_REVENUE_TAG || (c.tag === "Revenues" && v >= (h.a.val as number));
+        };
         const netAt = (kind: "qc" | "yc", end: string): FieldValue | null => {
           const h = halvesAt(kind, end);
           const r = rnoie[kind].get(end)?.get("revenue");
-          if (r?.val != null && r.val > 0 && (!h || near(r.val, h.sum))) return r;
+          if (r?.val != null && r.val > 0 && (!h || netTotal(r, h))) return r;
           if (!h || !(h.sum > 0)) return null;
           const t = rv[kind].get(end)?.get("revenue");
-          if (t?.val != null && near(t.val, h.sum) && sameFrame(t.covers, h.a.covers)) return t;
+          if (t?.val != null && netTotal(t, h) && sameFrame(t.covers, h.a.covers)) return t;
           return {
             val: h.sum, tag: null, ns: h.a.ns, unit: h.a.unit, derived: "computed",
             covers: h.a.covers, computedFrom: [BANK_REVENUE_HALVES[0], BANK_REVENUE_HALVES[1]],
@@ -1884,7 +1908,7 @@ function extractCompanyFactsWith(
             const c = m.get("revenue");
             const h = halvesAt(kind, end);
             if (c?.val == null || !h || !(h.sum > 0) || !sameFrame(c.covers, h.a.covers)) continue;
-            if (!near(c.val, h.sum)) off++;
+            if (!netTotal(c, h)) off++;
           }
         }
         if (off) {
@@ -1893,13 +1917,18 @@ function extractCompanyFactsWith(
             let newestValued = "";
             for (const [end, m] of cells) if (m.get("revenue")?.val != null && end > newestValued) newestValued = end;
             for (const [end, m] of cells) {
-              if (m.get("revenue")?.val == null && end <= newestValued) continue;
+              const c = m.get("revenue");
+              if (c?.val == null && end <= newestValued) continue;
+              if (c?.val != null) {
+                const h = halvesAt(kind, end);
+                if (!h || !sameFrame(c.covers, h.a.covers) || netTotal(c, h)) continue;
+              }
               const t = netAt(kind, end);
               if (t) { m.set("revenue", t); moved++; if (t.derived === "computed") computed++; }
               else if (m.has("revenue")) { m.delete("revenue"); blanked++; }
             }
           }
-          notes.push(`revenue: bank net basis — ${off} period(s) more than ${BANK_NET_TOLERANCE * 100}% off ${BANK_REVENUE_HALVES.join(" + ")}; net revenue used for ${moved} period(s) (${computed} computed), ${blanked} without it left unreported`);
+          notes.push(`revenue: bank net basis — ${off} period(s) not a net total of ${BANK_REVENUE_HALVES.join(" + ")}; net revenue used for ${moved} period(s) (${computed} computed), ${blanked} without it left unreported`);
         }
       }
     }
