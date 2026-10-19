@@ -682,9 +682,9 @@ export function newer(a: FactRow, b: FactRow): FactRow {
  * year — so a real quarter exists to be found. Q4 then comes from FY − 9M as
  * for any filer, and a mid-year quarter from the 10-Q that stated it.
  *
- * ALSO refused: an annual filing's quarter-length row with NO year row to match
- * (LHX's FY2025 10-K tags $21,865M on 2025-10-04..2026-01-02 and no 2025 year
- * at all) whose value is the nine months just before it plus about one more of
+ * ALSO refused: an annual filing's quarter-length row with NO year row ending
+ * on its date (LHX's FY2025 10-K tags $21,865M on 2025-10-04..2026-01-02 and
+ * no 2025 year at all) whose value is the nine months just before it plus about one more of
  * its average quarters: $16,217M + $5,648M against a $5,406M average. A real
  * fourth quarter is near the average, not three and a half times it, so this
  * cannot catch one; that quarter then reads Not reported, not the year. PURE.
@@ -701,6 +701,10 @@ export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Set<FactRow> {
     const y = years.find((y) => y.accn === q.accn && y.val === q.val && y.start! <= q.start! && y.end! >= q.end!);
     if (!y) {
       if (!/^(10-K|20-F|40-F)/.test(q.form ?? "")) continue;
+      // NO YEAR ROW AT ALL, not merely none of equal value: HHH's FY2025 10-K
+      // files a real 983.6M Q4 2024 beside its 1,750.7M year, and that Q4 is
+      // the nine months plus about one average quarter too (lumpy land sales).
+      if (years.some((r) => Math.abs(Date.parse(r.end!) - Date.parse(q.end!)) <= 8 * DAY)) continue;
       const before = (r: FactRow) => (Date.parse(q.start!) - Date.parse(r.end!)) / DAY;
       const nine = rows.find((r) => typeof r.val === "number" && r.val > 0 && r.start && days(r) >= 255 && days(r) <= 290
         && before(r) >= 0 && before(r) <= 8);

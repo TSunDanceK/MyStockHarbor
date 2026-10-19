@@ -115,6 +115,21 @@ const LHX25 = facts([
     ["2025-10-01", "2025-12-31", 260, "10-K", 2025, "FY", "2026-02-20", "0000000000-26-000001"],
     ["2024-01-01", "2024-12-31", 380, "10-K", 2025, "FY", "2026-02-20", "0000000000-26-000001"],
   ]);
+  // HHH: a real 983.6M Q4 2024 filed in the 10-K beside its 1,750.7M year.
+  // It is the nine months (767.1) plus about one average quarter too, but a
+  // year row ends on its date, so it is no year-on-a-quarter's-dates.
+  const hhh = facts([
+    ["2024-01-01", "2024-03-31", 156.5, "10-Q", 2024, "Q1", "2024-05-08", "0001981792-24-000010"],
+    ["2024-04-01", "2024-06-30", 283.5, "10-Q", 2024, "Q2", "2024-08-07", "0001981792-24-000020"],
+    ["2024-01-01", "2024-09-30", 767.1, "10-Q", 2024, "Q3", "2024-11-06", "0001981792-24-000030"],
+    ["2024-07-01", "2024-09-30", 327.1, "10-Q", 2024, "Q3", "2024-11-06", "0001981792-24-000030"],
+    ["2024-10-01", "2024-12-31", 983.6, "10-K", 2025, "FY", "2026-02-25", "0001981792-26-000005"],
+    ["2024-01-01", "2024-12-31", 1750.7, "10-K", 2025, "FY", "2026-02-25", "0001981792-26-000005"],
+  ]);
+  const hx = X.extractCompanyFacts("HHH", hhh);
+  check("HHH: a real large Q4 beside its own year row is not refused (983.6M), and the year stays 1,750.7M",
+    X.fullYearOnQuarterFrame(hhh.facts["us-gaap"][TAG].units.USD).size === 0 && y(hx, "2024-12-31")?.val === 1750.7 * M,
+    JSON.stringify({ q4: q(hx, "2024-12-31"), fy: y(hx, "2024-12-31") }));
   check("a genuine Q4 of 2.6x the average (260 after 300) is kept", q(X.extractCompanyFacts("BIG", big), "2025-12-31")?.val === 260 * M,
     JSON.stringify(q(X.extractCompanyFacts("BIG", big), "2025-12-31")));
 }
@@ -134,6 +149,19 @@ console.log("\n5. mutation");
   const XN = await load(extractRaw.replace(from, ""));
   const m = q(XN.extractCompanyFacts("LHX", LHX25), "2026-01-02");
   check("MUTATION: without the no-year branch LHX's Q4 FY2025 reads the 21,865M year (caught)", m?.val === 21865 * M, JSON.stringify(m));
+}
+
+{
+  const guard = "      if (years.some((r) => Math.abs(Date.parse(r.end!) - Date.parse(q.end!)) <= 8 * DAY)) continue;\n";
+  if (extractRaw.split(guard).length !== 2) throw new Error("mutation anchor (year-row guard) not unique");
+  const XY = await load(extractRaw.replace(guard, ""));
+  const hhh = facts([
+    ["2024-01-01", "2024-09-30", 767.1, "10-Q", 2024, "Q3", "2024-11-06", "0001981792-24-000030"],
+    ["2024-10-01", "2024-12-31", 983.6, "10-K", 2025, "FY", "2026-02-25", "0001981792-26-000005"],
+    ["2024-01-01", "2024-12-31", 1750.7, "10-K", 2025, "FY", "2026-02-25", "0001981792-26-000005"],
+  ]);
+  check("MUTATION: without the year-row guard HHH's real Q4 2024 is refused (caught)",
+    XY.fullYearOnQuarterFrame(hhh.facts["us-gaap"][TAG].units.USD).size === 1);
 }
 
 if (failures) {
