@@ -1270,7 +1270,19 @@ export function filerTagsExcise(facts: CompanyFacts): boolean {
   // repurchases (ShareRepurchaseProgramExciseTax, tagged by many filers since
   // 2023) says nothing about revenue, and it kept KEY's $1.44B contract line
   // beside its $6.41B total.
-  return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k) && !/Repurchase|Buyback|TreasuryStock/.test(k));
+  //
+  // NOR A BALANCE-SHEET EXCISE (earnings audit r2): SalesAndExciseTaxPayable
+  // is a liability, and says nothing about how revenue is presented (APLD,
+  // PRCH, VIPS). NOR, AT A FINANCIAL FILER, "taxes other than income and
+  // excise" (TaxesExcludingIncomeAndExciseTaxes): a lender's or broker's
+  // non-income tax line, beside a `Revenues` that is its total net revenue
+  // (ALLY's $7.9B against a $1.2B contract line). A financial filer is one
+  // that tags NoninterestIncome. COP and CEG tag that concept too, and no
+  // NoninterestIncome, so their "revenues and other income" stay excluded.
+  const gaap = facts.facts?.["us-gaap"] ?? {};
+  const financial = Boolean(gaap.NoninterestIncome);
+  return Object.keys(gaap).some((k) => /Excise/.test(k) && !/Repurchase|Buyback|TreasuryStock/.test(k)
+    && !/Payable|Receivable/.test(k) && !(financial && k === "TaxesExcludingIncomeAndExciseTaxes"));
 }
 
 /** Names of other income and gains: a gap one of these also equals is not called revenue. */
