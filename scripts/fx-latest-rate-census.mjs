@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 import { loadMainAndBranch } from "./lib/earnings-audit-lift.mjs";
+import { symbolSpellings } from "../lib/symbolSpellings.mjs";
 
 const { NEW, OLD } = await loadMainAndBranch();
 if (!OLD) { console.error("FATAL: main's source is needed for the before column"); process.exit(2); }
@@ -37,7 +38,7 @@ const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).row
 const MONTHS = Number((fs.readFileSync("lib/server/annualOnly.ts", "utf8").match(/ANNUAL_ONLY_QUARTER_MONTHS = (\d+)/) ?? [])[1]);
 const cut = (() => { const d = new Date(); d.setUTCMonth(d.getUTCMonth() - MONTHS); return d.toISOString().slice(0, 10); })();
 const annualFormOf = (sym, set) => {
-  const row = REG[sym] ?? REG[sym.replace(/-/g, ".")] ?? REG[sym.replace(/\./g, "-")] ?? null;
+  const row = symbolSpellings(sym).map((s) => REG[s]).find(Boolean) ?? null;
   const form = String(row?.annualForm ?? "").toUpperCase();
   const kind = form.startsWith("20-F") ? "20-F" : form.startsWith("40-F") ? "40-F" : null;
   return kind && set.years.length && !set.quarters.some((q) => q.e >= cut) ? kind : null;
