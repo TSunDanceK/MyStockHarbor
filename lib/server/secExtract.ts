@@ -1717,16 +1717,21 @@ function extractCompanyFactsWith(
     // new as the contract line's. The second condition keeps a superseded
     // presentation out: CXT's Q1 2023 `Revenues` (842.9M, Crane Holdings
     // before the spin, filed 2023) lost to its restated 329.1M (filed 2024).
-    // ONLY A SERIES THAT ALREADY MIXES THE TWO, judged on the cells as
-    // tagged: it moves a mixed series toward its total and never mixes a
-    // series the rule above left on one concept (its 5% test and its floor
-    // stand: NEAR, BANC, AHR). Excise-tagged filers are left as it leaves them.
-    const tagsAsFiled = new Set<string | null>();
+    // ONLY A SERIES MOSTLY ON ITS TOTAL ALREADY, judged on the cells as
+    // tagged: more as-filed periods read `Revenues` than the contract line,
+    // and both appear. It brings a total series' odd sub-line frames into
+    // line; a series on the contract line, mixed or not, stays as the rule
+    // above leaves it (its 5% test and floor: NEAR, BANC, AHR, and the
+    // contract-line filers whose `Revenues` adds hedging or lease income).
+    // Excise-tagged filers are left as it leaves them.
+    let asFiledTotal = 0, asFiledContract = 0;
     for (const cells of [quarterCells, yearCells]) for (const m of cells.values()) {
       const c = taggedBefore.get(m) ?? m.get("revenue");
-      if (c?.val != null && c.derived === "as-filed") tagsAsFiled.add(c.tag);
+      if (c?.val == null || c.derived !== "as-filed") continue;
+      if (c.tag === "Revenues") asFiledTotal++;
+      else if (c.tag === CONTRACT_REVENUE_TAG) asFiledContract++;
     }
-    if (!excise && tagsAsFiled.has("Revenues") && tagsAsFiled.has(CONTRACT_REVENUE_TAG)) {
+    if (!excise && asFiledContract > 0 && asFiledTotal > asFiledContract) {
       const keys = unitKeysFor(revenueField.unit, currency);
       const newestFor = (tag: string, covers: [string, string]) => {
         let best: FactRow | null = null;

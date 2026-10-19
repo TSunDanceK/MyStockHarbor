@@ -6,10 +6,13 @@
 // 2024, RCAT's quarters). Per frame, an as-filed contract cell now takes
 // `Revenues` for the same frame when it is larger and filed no earlier.
 // Figures are the filers' own ($M, filed month as in companyfacts). Pinned:
-// PIPR's years move and its quarters keep; CXT's pre-spin total (filed before
-// its restated contract line) does not; SON's smaller, restated `Revenues`
-// does not; an excise-tagged filer does not; a series on one concept is not
-// mixed by it; and three mutations.
+// PIPR's years move; SON's smaller, restated `Revenues` does not; an
+// excise-tagged filer does not; a series mostly on the contract line is not
+// touched (AHR, WMT, VST and the like stay as #913 left them); two mutations.
+// NOT PINNED: the vintage guard (a total filed before the contract line for
+// the same frame is not taken, CXT's pre-spin Q1 2023). In a series mostly on
+// `Revenues` the resolver already reads that frame's `Revenues`, so no fixture
+// reaches the guard alone; it stays as a stated, defensive condition.
 import fs from "node:fs";
 import { lift } from "./lib/earnings-plan.mjs";
 
@@ -45,7 +48,9 @@ const PIPR = payload({
     ["2025-01-01", "2025-12-31", 1834.1, "2026-02-26"], ["2026-01-01", "2026-03-31", 459.0, "2026-05-01"]],
   Revenues: [["2023-01-01", "2023-12-31", 1358.1, "2026-02-26"], ["2024-01-01", "2024-12-31", 1531.6, "2026-02-26"],
     ["2025-01-01", "2025-12-31", 1904.2, "2026-02-26"], ["2026-01-01", "2026-03-31", 475.1, "2026-05-01"],
-    ["2025-10-01", "2025-12-31", 667.0, "2026-02-26"]],
+    ["2025-10-01", "2025-12-31", 667.0, "2026-02-26"], ["2024-01-01", "2024-03-31", 344.4, "2026-02-26"],
+    ["2024-04-01", "2024-06-30", 340.8, "2026-02-26"], ["2024-07-01", "2024-09-30", 360.9, "2026-02-26"],
+    ["2024-10-01", "2024-12-31", 485.4, "2026-02-26"], ["2025-07-01", "2025-09-30", 480.1, "2026-02-26"]],
 });
 {
   const ex = X.extractCompanyFacts("PIPR", PIPR);
@@ -64,14 +69,6 @@ const PURE = payload({
 
 console.log("\n2. what does not move");
 {
-  // CXT: Crane Holdings' pre-spin Q1 2023 total (filed May 2023) beside the
-  // restated continuing-operations line (filed May 2024).
-  const cxt = payload({
-    [CONTRACT]: [["2023-01-01", "2023-03-31", 329.1, "2024-05-02"], ["2024-01-01", "2024-03-31", 313.6, "2025-05-01"]],
-    Revenues: [["2023-01-01", "2023-03-31", 842.9, "2023-05-03"]],
-  });
-  check("CXT Q1 2023: an older total does not replace the restated line (329.1 kept)",
-    cell(X.extractCompanyFacts("CXT", cxt), "quarters", "2023-03-31")?.val === 329.1 * M);
   // SON: a smaller `Revenues`, restated after a divestiture, is not a total over a sub-line.
   const son = payload({
     [CONTRACT]: [["2023-01-01", "2023-04-02", 1729.8, "2024-05-01"], ["2024-01-01", "2024-03-31", 1308.6, "2025-05-01"]],
@@ -85,24 +82,18 @@ console.log("\n2. what does not move");
     ExciseAndSalesTaxes: [["2025-01-01", "2025-12-31", 10, "2026-02-15"]],
   });
   check("an excise-tagged filer keeps its contract line (FY2024 49,418)", cell(X.extractCompanyFacts("COP", cop), "years", "2024-12-31")?.val === 49418 * M);
-  // A series wholly on the contract line, its total under 5% above it: the
+  // A series on the contract line, its total under 5% above it: the
   // one-concept rule (and its 5% test) leaves it, and so does this.
-  check("a series on one concept is not mixed by this (contract 1,834.1 kept)",
+  check("a series on the contract line is not moved by this (contract 1,834.1 kept)",
     cell(X.extractCompanyFacts("PURE", PURE), "years", "2025-12-31")?.val === 1834.1 * M);
 }
 
 console.log("\n3. mutations");
 {
-  const guard = 'if (!rv || !cr || String(rv.filed ?? "") < String(cr.filed ?? "")) continue;';
-  if (extractRaw.split(guard).length !== 2) throw new Error("mutation anchor (vintage guard) not unique");
-  const XV = await load(extractRaw.replace(guard, ""));
-  const cxt = payload({ [CONTRACT]: [["2023-01-01", "2023-03-31", 329.1, "2024-05-02"]], Revenues: [["2023-01-01", "2023-03-31", 842.9, "2023-05-03"]] });
-  check("MUTATION: without the vintage guard CXT's Q1 2023 reads the pre-spin 842.9 (caught)",
-    cell(XV.extractCompanyFacts("CXT", cxt), "quarters", "2023-03-31")?.val === 842.9 * M);
-  const mixed = '!excise && tagsAsFiled.has("Revenues") && tagsAsFiled.has(CONTRACT_REVENUE_TAG)';
+  const mixed = "!excise && asFiledContract > 0 && asFiledTotal > asFiledContract";
   if (extractRaw.split(mixed).length !== 2) throw new Error("mutation anchor (mixed series) not unique");
   const XM = await load(extractRaw.replace(mixed, "!excise"));
-  check("MUTATION: without the mixed-series condition a one-concept series is mixed (caught)",
+  check("MUTATION: without the mostly-on-its-total condition a contract-line series is mixed (caught)",
     cell(XM.extractCompanyFacts("PURE", PURE), "years", "2025-12-31")?.val === 1904.2 * M);
   const start = extractRaw.indexOf("    // ── A TOTAL BESIDE ITS SUB-LINE, FRAME BY FRAME");
   const stop = extractRaw.indexOf("    // ── A BANK'S QUARTERS: NO REVENUE LINE AT ALL");
