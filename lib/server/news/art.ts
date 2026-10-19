@@ -8,10 +8,9 @@
 // ── THE MANIFEST IS THE ONLY SOURCE OF COUNTS ──────────────────────────────
 // Never count files by hand and never guess. A bucket absent from the manifest
 // has no art, and the caller falls back to the generated data card. That is what
-// makes the library shippable while it is still incomplete: five sector buckets
-// (staples, realestate, materials, aerospace, insurance) have no images yet, and
-// today the manifest is empty entirely, so every card takes the generated card.
-// When images land, raising the count is the only change needed here.
+// made the library shippable while it was still incomplete. Every sector bucket
+// here now holds images (sector-aerospace has 6, re-checked 2026-10-19); when
+// more land, raising the count is the only change needed here.
 //
 // ── EVENT BUCKETS, LIVE SINCE STEP 6 ───────────────────────────────────────
 // §6's full rule is `eventType ? pick(event-*) : pick(sector-*)`. Step 0 shipped
