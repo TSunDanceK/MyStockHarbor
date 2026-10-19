@@ -595,6 +595,15 @@ const TASKS = {
   // classes counted over the manifest, main's extraction vs this branch's, plus
   // stored pending notices dated before their quarter. GETs/MGETs only.
   // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  // EARNINGS AUDIT ROUND 2 (fix/earnings-audit-r2-banks): banks below NII, FY
+  // below its quarters, the mixed-concept census. The write- prefix is for the
+  // job's node_modules ONLY: the script deletes the Upstash variables before its
+  // first import, so it cannot send a single Redis command. companyfacts only.
+  "write-earnings-audit-r2-banks": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["banks", env.SYMBOLS ?? ""], writes: true, env: { MODE: "banks" } },
+  "write-earnings-audit-r2-raw": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["raw", env.SYMBOLS ?? ""], writes: true, env: { MODE: "raw" } },
+  "write-earnings-audit-r2-fysum": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["fysum", env.SYMBOLS ?? ""], writes: true, env: { MODE: "fysum" } },
+  "write-earnings-audit-r2-mixed": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["mixed", env.SYMBOLS ?? ""], writes: true, env: { MODE: "mixed" } },
+  "write-earnings-audit-r2-cells": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["cells", env.SYMBOLS ?? ""], writes: true, env: { MODE: "cells" } },
   "write-earnings-audit-r1-scan": {
     script: "scripts/earnings-audit-r1-scan.mjs",
     args: () => [],

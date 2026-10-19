@@ -192,7 +192,8 @@ for (const [sym, cik] of targets) {
     for (const k of new Set([...ca.keys(), ...cb.keys()])) if ((ca.get(k) ?? null) !== (cb.get(k) ?? null)) changed++;
     if (changed) {
       const tagB = [...new Set([...b.years, ...b.quarters].map((p) => p.values[ri]?.tag).filter(Boolean))].join("+");
-      const why = /RegulatedAndUnregulated/.test(tagB) ? "utility"
+      const why = (b.notes ?? []).some((n) => /bank net basis/.test(n)) ? "bank-net-basis"
+        : /RegulatedAndUnregulated/.test(tagB) ? "utility"
         : OLD.filerTagsExcise(facts) && !NEW.filerTagsExcise(facts) ? "buyback-excise"
         : (b.notes ?? []).some((n) => /^revenue: (Revenues|the gap)/.test(n)) ? "total-over-contract" : "other";
       hit("changed", why, sym, `${changed} cell(s) -> ${tagB}`);
@@ -215,7 +216,7 @@ for (const c of classes) {
     console.log(`  ${side}: ${ex.join("; ").slice(0, 3000)}`);
   }
 }
-for (const why of ["total-over-contract", "buyback-excise", "utility", "other"]) {
+for (const why of ["bank-net-basis", "total-over-contract", "buyback-excise", "utility", "other"]) {
   const ex = examples[`changed|${why}`] ?? [];
   console.log(`changed (${why}): ${ex.length} filer(s)`);
   if (ex.length) console.log(`  ${ex.join("; ").slice(0, 4000)}`);
