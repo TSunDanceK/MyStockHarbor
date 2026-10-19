@@ -459,7 +459,7 @@
   {
    "symbol": "LHX",
    "requestedAt": "2026-10-22T00:00:00Z",
-   "reason": "earnings audit r2: a full year's value filed on a quarter's dates under the same accession is no longer read as that quarter, so the derived Q4 (or Q3) and the FY-vs-quarters sum are right; the stored set carries the old figure. LHX FY2024 Q4 read 21,325M (the year) on 2024-09-28..2025-01-03, accn 0000202058-26-000015; and its FY2025 Q4 (21,865M on 2025-10-04..2026-01-02, no year row) now reads Not reported"
+   "reason": "earnings audit r2: a full year's value filed on a quarter's dates under the same accession is no longer read as that quarter, so the derived Q4 (or Q3) and the FY-vs-quarters sum are right; the stored set carries the old figure. LHX FY2024 Q4 read 21,325M (the year) on 2024-09-28..2025-01-03, accn 0000202058-26-000015; and its FY2025 10-K's 21,865M on 2025-10-04..2026-01-02 (no year row) is read as FY2025, so Q4 FY2025 = 21,865 - 16,217 = 5,648M"
   },
   {
    "symbol": "NI",

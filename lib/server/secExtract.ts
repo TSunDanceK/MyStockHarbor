@@ -682,15 +682,21 @@ export function newer(a: FactRow, b: FactRow): FactRow {
  * year — so a real quarter exists to be found. Q4 then comes from FY − 9M as
  * for any filer, and a mid-year quarter from the 10-Q that stated it.
  *
- * ALSO refused: an annual filing's quarter-length row with NO year row ending
- * on its date (LHX's FY2025 10-K tags $21,865M on 2025-10-04..2026-01-02 and
- * no 2025 year at all) whose value is the nine months just before it plus about one more of
- * its average quarters: $16,217M + $5,648M against a $5,406M average. A real
- * fourth quarter is near the average, not three and a half times it, so this
- * cannot catch one; that quarter then reads Not reported, not the year. PURE.
+ * READ AS THE YEAR: an annual filing's quarter-length row with NO year row
+ * ending on its date (LHX's FY2025 10-K tags $21,865M on 2025-10-04..2026-01-02
+ * and no 2025 year at all) whose value is the nine months just before it plus
+ * about one more of its average quarters: $16,217M + $5,648M against a $5,406M
+ * average. That is the year's value on the quarter's dates, so it is re-dated
+ * to the year (the nine months' start to its end) and Q4 = FY − 9M: $5,648M,
+ * the Q4 and the $21,865M year L3Harris reported. A real fourth quarter is
+ * near the average, not three and a half times it, and one beside its own
+ * year row (HHH's lumpy Q4 2024) is never touched.
+ *
+ * Returns each such row mapped to what is read instead: null (refused) or the
+ * re-dated year row. PURE.
  */
-export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Set<FactRow> {
-  const out = new Set<FactRow>();
+export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Map<FactRow, FactRow | null> {
+  const out = new Map<FactRow, FactRow | null>();
   const days = (r: FactRow) => (r.start && r.end ? (Date.parse(r.end) - Date.parse(r.start)) / DAY : NaN);
   const years = rows.filter((r) => typeof r.val === "number" && days(r) >= 350 && days(r) <= 380);
   if (!years.length) return out;
@@ -710,12 +716,12 @@ export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Set<FactRow> {
         && before(r) >= 0 && before(r) <= 8);
       if (!nine) continue;
       const avg = nine.val! / 3, rest = q.val - nine.val!;
-      if (q.val > 2 * avg && rest >= 0.5 * avg && rest <= 1.5 * avg) out.add(q);
+      if (q.val > 2 * avg && rest >= 0.5 * avg && rest <= 1.5 * avg) out.set(q, { ...q, start: nine.start, fp: "FY" });
       continue;
     }
     const smaller = rows.some((r) => r !== q && r !== y && typeof r.val === "number" && r.start && r.start >= y.start! && r.end! <= y.end!
       && days(r) > d && days(r) < 350 && Math.abs(r.val) < Math.abs(y.val!));
-    if (smaller) out.add(q);
+    if (smaller) out.set(q, null);
   }
   return out;
 }
@@ -769,8 +775,9 @@ export function rowsForField(
         for (const row of units[unit] ?? []) {
           if (typeof row?.val !== "number" || !Number.isFinite(row.val)) continue;
           if (!row.end) continue;
-          if (misdated.has(row)) continue;
-          out.push({ row, tag, ns, rank: thisRank, unit });
+          const asRead = misdated.has(row) ? misdated.get(row) : row;
+          if (!asRead) continue;
+          out.push({ row: asRead, tag, ns, rank: thisRank, unit });
           took++;
         }
       }
