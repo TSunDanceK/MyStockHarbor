@@ -458,27 +458,27 @@
   },
   {
    "symbol": "LHX",
-   "requestedAt": "2026-10-19T00:00:00Z",
+   "requestedAt": "2026-10-22T00:00:00Z",
    "reason": "earnings audit r2: a full year's value filed on a quarter's dates under the same accession is no longer read as that quarter, so the derived Q4 (or Q3) and the FY-vs-quarters sum are right; the stored set carries the old figure. LHX FY2024 Q4 read 21,325M (the year) on 2024-09-28..2025-01-03, accn 0000202058-26-000015; and its FY2025 Q4 (21,865M on 2025-10-04..2026-01-02, no year row) now reads Not reported"
   },
   {
    "symbol": "NI",
-   "requestedAt": "2026-10-19T00:00:00Z",
+   "requestedAt": "2026-10-22T00:00:00Z",
    "reason": "earnings audit r2: a full year's value filed on a quarter's dates under the same accession is no longer read as that quarter, so the derived Q4 (or Q3) and the FY-vs-quarters sum are right; the stored set carries the old figure. NI Q4 2024/2025 read the full year on 10-01..12-31, accns 0001111711-25-000008 / -26-000027"
   },
   {
    "symbol": "DINO",
-   "requestedAt": "2026-10-19T00:00:00Z",
+   "requestedAt": "2026-10-22T00:00:00Z",
    "reason": "earnings audit r2: a full year's value filed on a quarter's dates under the same accession is no longer read as that quarter, so the derived Q4 (or Q3) and the FY-vs-quarters sum are right; the stored set carries the old figure. DINO Q4 2024 read 28,580M (the year), accn 0001915657-26-000016"
   },
   {
    "symbol": "VICR",
-   "requestedAt": "2026-10-19T00:00:00Z",
+   "requestedAt": "2026-10-22T00:00:00Z",
    "reason": "earnings audit r2: a full year's value filed on a quarter's dates under the same accession is no longer read as that quarter, so the derived Q4 (or Q3) and the FY-vs-quarters sum are right; the stored set carries the old figure. VICR Q3 2025 read 407.7M (the year) from the 10-K, accn 0001193125-26-085102"
   },
   {
    "symbol": "AZZ",
-   "requestedAt": "2026-10-19T00:00:00Z",
+   "requestedAt": "2026-10-22T00:00:00Z",
    "reason": "earnings audit r2: a full year's value filed on a quarter's dates under the same accession is no longer read as that quarter, so the derived Q4 (or Q3) and the FY-vs-quarters sum are right; the stored set carries the old figure. AZZ Q4 FY2024 (2023-11-30..2024-02-29) read 1,537.6M, the whole year; now 366.6M (FY - 9M). Found by the r1 scan, not one of the nine"
   }
  ]
