@@ -77,6 +77,9 @@ const ev = await loadTs(evSrc, "eventtype");
 const buildArtSrc = (manifestJson) => read("lib/server/news/art.ts")
   .replace(/^import manifest from "@\/public\/news-art\/manifest.json";$/m,
     () => `const manifest = ${manifestJson};`)
+  // The real-photo pool's manifest (news surfaces only), as committed.
+  .replace(/^import realManifest from "@\/public\/news-art\/real\/manifest.json";$/m,
+    () => `const realManifest = ${read("public/news-art/real/manifest.json")};`)
   .replace(/^import type \{ EventType \} from ".\/eventType";$/m, "")
   .replace("const BUCKET_COUNTS = manifest as Record<string, number>;", "const BUCKET_COUNTS = manifest;")
   .replace(/const EVENT_BUCKETS: Record<EventType, string>/, "const EVENT_BUCKETS")
