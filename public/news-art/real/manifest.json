@@ -1,0 +1,4 @@
+{
+ "_comment": "THE REAL-PHOTO POOL, news cards only (lib/server/news/art.ts, pickReal). One name per image, real-<subject>-NN, each with <name>.webp (1200x675) and <name>-sm.webp (320x180) beside this file. <subject> is a v2 tag (manifest-v2.json: aerospace-defence, chips, ...) or a v1 bucket (manifest.json: sector-aerospace, event-earnings, ...); the picker tries it before that tag or bucket, on news surfaces only. Empty: every surface behaves exactly as before. scripts/check-news-art.mjs fails on a listed name without both files.",
+ "files": []
+}

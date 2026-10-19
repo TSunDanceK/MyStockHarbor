@@ -283,7 +283,8 @@ async function readNews(): Promise<DashboardCards["news"]> {
   const taken = { names: new Set<string>(), buckets: new Map<string, Set<number>>() };
   const top = items.sort((a, b) => time(b.date) - time(a.date)).slice(0, NEWS_SHOWN).map(({ image, ...n }) => {
     if (SHOW_PUBLISHER_IMAGES && image && /^https:\/\//.test(image)) return { ...n, thumb: image };
-    const art = artFor(n.symbol, n.title, `dash-news:${n.url}`, taken);
+    // The Headlines card is a news surface: the real-photo pool may answer first.
+    const art = artFor(n.symbol, n.title, `dash-news:${n.url}`, taken, { surface: "news" });
     return { ...n, thumb: art.kind === "library" ? art.art.src : null };
   });
   return top.length ? top : null;
