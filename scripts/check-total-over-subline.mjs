@@ -9,6 +9,9 @@
 // PIPR's years move; SON's smaller, restated `Revenues` does not; an
 // excise-tagged filer does not; a series mostly on the contract line is not
 // touched (AHR, WMT, VST and the like stay as #913 left them); two mutations.
+// The scan pins the as-read mix condition (both concepts read as filed): on
+// the tag count alone it moved nine filers read on one concept (NRG, WERN,
+// DDS, WTW...) into a new mix. The first mutation removes it with the rest.
 // NOT PINNED: the vintage guard (a total filed before the contract line for
 // the same frame is not taken, CXT's pre-spin Q1 2023). In a series mostly on
 // `Revenues` the resolver already reads that frame's `Revenues`, so no fixture
@@ -90,7 +93,7 @@ console.log("\n2. what does not move");
 
 console.log("\n3. mutations");
 {
-  const mixed = "!excise && asFiledContract > 0 && asFiledTotal > asFiledContract";
+  const mixed = "!excise && readTotal && readContract && asFiledTotal > asFiledContract";
   if (extractRaw.split(mixed).length !== 2) throw new Error("mutation anchor (mixed series) not unique");
   const XM = await load(extractRaw.replace(mixed, "!excise"));
   check("MUTATION: without the mostly-on-its-total condition a contract-line series is mixed (caught)",
