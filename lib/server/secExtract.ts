@@ -1706,6 +1706,51 @@ function extractCompanyFactsWith(
       }
     }
 
+    // ── A TOTAL BESIDE ITS SUB-LINE, FRAME BY FRAME (earnings audit r2) ─────
+    // The rule above moves a whole series only when the NEWEST period carries
+    // both concepts more than 5% apart. A filer whose total and contract line
+    // sit side by side on older frames kept the sub-line there: PIPR's years
+    // read 1,834.1M (contract) between quarters on `Revenues`, against its
+    // filed 1,904.2M total; RITM's FY2023 3,679.5M against 3,732.6M.
+    // Per frame, an as-filed contract-line cell takes `Revenues` for the SAME
+    // frame when `Revenues` is larger and its newest filing is at least as
+    // new as the contract line's. The second condition keeps a superseded
+    // presentation out: CXT's Q1 2023 `Revenues` (842.9M, Crane Holdings
+    // before the spin, filed 2023) lost to its restated 329.1M (filed 2024).
+    // ONLY A SERIES THAT ALREADY MIXES THE TWO, judged on the cells as
+    // tagged: it moves a mixed series toward its total and never mixes a
+    // series the rule above left on one concept (its 5% test and its floor
+    // stand: NEAR, BANC, AHR). Excise-tagged filers are left as it leaves them.
+    const tagsAsFiled = new Set<string | null>();
+    for (const cells of [quarterCells, yearCells]) for (const m of cells.values()) {
+      const c = taggedBefore.get(m) ?? m.get("revenue");
+      if (c?.val != null && c.derived === "as-filed") tagsAsFiled.add(c.tag);
+    }
+    if (!excise && tagsAsFiled.has("Revenues") && tagsAsFiled.has(CONTRACT_REVENUE_TAG)) {
+      const keys = unitKeysFor(revenueField.unit, currency);
+      const newestFor = (tag: string, covers: [string, string]) => {
+        let best: FactRow | null = null;
+        for (const u of keys) for (const r of facts.facts?.["us-gaap"]?.[tag]?.units?.[u] ?? []) {
+          if (typeof r.val !== "number" || r.start !== covers[0] || r.end !== covers[1]) continue;
+          best = best ? newer(best, r) : r;
+        }
+        return best;
+      };
+      let took = 0;
+      for (const [cells, totals] of [[quarterCells, totalQuarter], [yearCells, totalYear]] as const) {
+        for (const [end, m] of cells) {
+          const c = m.get("revenue"), t = totals.get(end)?.get("revenue");
+          if (!c || c.tag !== CONTRACT_REVENUE_TAG || c.derived !== "as-filed" || c.val == null || !c.covers) continue;
+          if (!t || t.tag !== "Revenues" || t.derived !== "as-filed" || t.val == null || !(t.val > c.val) || !sameFrame(t.covers, c.covers)) continue;
+          const rv = newestFor("Revenues", c.covers), cr = newestFor(CONTRACT_REVENUE_TAG, c.covers);
+          if (!rv || !cr || String(rv.filed ?? "") < String(cr.filed ?? "")) continue;
+          m.set("revenue", t);
+          took++;
+        }
+      }
+      if (took) notes.push(`revenue: Revenues filed beside a smaller contract line for the same frame, and no older than it, used for ${took} period(s)`);
+    }
+
     // ── A BANK'S QUARTERS: NO REVENUE LINE AT ALL (#552 COWORK #240 (b)) ────
     // JPM, WFC, BNY and most banks tag no contract-revenue line and no
     // quarterly `Revenues`; the quarter's total is filed only as
