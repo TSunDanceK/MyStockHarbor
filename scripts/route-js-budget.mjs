@@ -29,7 +29,12 @@ const BUDGET = {
   framework: 127_000,
   // The root layout's own client JS: the header island and the other layout
   // islands, on every page. 14,242 B before the header split, 8,456 B after.
-  layout: 9_000,
+  // 9,500 since 2026-10-19: three owner-requested header features (the no-JS
+  // mobile menu #553 COWORK #234, the greyed Company Earnings link #236, the
+  // live last symbol #238) grew the island to 9,361 B and none raised this;
+  // the cookie dialog and its footer link (#233) went over too and were moved
+  // out of the first load instead (app/components/ConsentLazy.tsx), -1,222 B.
+  layout: 9_500,
   // Page-only JS (beyond framework + layout), per route group.
   page: [
     { name: "home / dashboard", test: /^\/(dashboard)?$/, max: 100_000 },
