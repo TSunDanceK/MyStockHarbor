@@ -8,7 +8,7 @@ import {
   balanceSheetInstant, cell, periodLabel, ttm, valueOf,
   type Cell, type FilingRef, type StoredFactSet, type StoredPeriod,
 } from "./secFactCodec";
-import { storedInReportingCurrency } from "./secCurrency";
+import { appliedRateFor, storedInReportingCurrency } from "./secCurrency";
 import { SEC_FIELDS, revenueLineIncompleteValues, type Statement } from "./secFields";
 import type { AnnualForm } from "./annualOnly";
 import { splitAdjusted, type SplitAdjustment } from "./secSplitAdjust";
@@ -1919,8 +1919,10 @@ export function buildSecEarningsView(
         : {
             reporting: set.cur as string,
             source: set.fx!.source,
-            latestRate: set.fx?.applied.find((a) => a.end === latest.e)?.usdPerUnit ?? null,
-            latestBasis: set.fx?.applied.find((a) => a.end === latest.e)?.basis ?? null,
+            // By start AND end: a fiscal year ends on its Q4's date, and by end
+            // alone the year found the Q4's three-month rate first.
+            latestRate: appliedRateFor(set.fx!.applied, latest.e, latest.s)?.usdPerUnit ?? null,
+            latestBasis: appliedRateFor(set.fx!.applied, latest.e, latest.s)?.basis ?? null,
             refused: set.fx?.refused ?? [],
           },
     basis,
