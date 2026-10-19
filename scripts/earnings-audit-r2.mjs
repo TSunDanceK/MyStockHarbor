@@ -375,13 +375,29 @@ async function cells() {
     console.log(`\n===== ${sym}: ${diff.length} of ${keys.length} stored cells differ`);
     const f = got.facts;
     const filed = Object.fromEntries(["RevenuesNetOfInterestExpense", "Revenues", "InterestIncomeExpenseNet", "NoninterestIncome"].map((t) => [t, frames(f, t)]));
+    // The extraction's own cell (tag, derivation) and, for a quarter, the
+    // 3-month rows ending on its date: a stored quarter's start can be the
+    // prior quarter's end, which no raw row carries.
+    const ox = OLD.X.extractCompanyFacts(sym, f), nx = NEW.X.extractCompanyFacts(sym, f);
+    const meta = (x, k) => {
+      const [, e] = k.split("..");
+      const want = Date.parse(e) - Date.parse(k.slice(0, 10));
+      const p = [...x.years, ...x.quarters].find((q) => q.end === e && Math.abs(Date.parse(q.end) - Date.parse(q.start) - want) < 10 * 864e5);
+      const c = p?.values[ri];
+      return c ? `${c.tag ?? "?"}/${c.derived ?? "filed"}${c.from ? ` from ${c.from.join("→")}` : ""}` : "-";
+    };
+    const near = (t, k) => {
+      const [st, e] = k.split("..");
+      const want = Date.parse(e) - Date.parse(st);
+      return [...filed[t].values()].find((r) => r.end === e && Math.abs(Date.parse(r.end) - Date.parse(r.start) - want) < 10 * 864e5) ?? null;
+    };
     for (const k of diff) {
       const a = ob.get(k), b = nb.get(k);
-      const at = (t) => M(filed[t].get(k)?.val ?? null);
-      const nii = filed.InterestIncomeExpenseNet.get(k)?.val, non = filed.NoninterestIncome.get(k)?.val;
+      const at = (t) => M((filed[t].get(k) ?? near(t, k))?.val ?? null);
+      const nii = (filed.InterestIncomeExpenseNet.get(k) ?? near("InterestIncomeExpenseNet", k))?.val, non = (filed.NoninterestIncome.get(k) ?? near("NoninterestIncome", k))?.val;
       const halves = nii != null && non != null ? nii + non : null;
       console.log(`  ${k} ${(b ?? a).fp ?? ""}${(b ?? a).fy ?? ""} ${M(a?.v[ri] ?? null)} (${a?.d?.[ri] ?? "-"}) → ${M(b?.v[ri] ?? null)} (${b?.d?.[ri] ?? "-"})`
-        + ` | filed RNOIE ${at("RevenuesNetOfInterestExpense")} Revenues ${at("Revenues")} NII ${at("InterestIncomeExpenseNet")} NonII ${at("NoninterestIncome")} halves ${M(halves)}`);
+        + ` | filed RNOIE ${at("RevenuesNetOfInterestExpense")} Revenues ${at("Revenues")} NII ${at("InterestIncomeExpenseNet")} NonII ${at("NoninterestIncome")} halves ${M(halves)} | main ${meta(ox, k)} branch ${meta(nx, k)}`);
     }
     await pause();
   }
