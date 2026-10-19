@@ -170,6 +170,22 @@ console.log("\n6. a filed net total keeps its securities gains and losses (owner
   // A `Revenues` below NII is a sub-line even within 8% of the halves.
   const sub = payload({ Revenues: [Y(2025, 480)], [NII]: [Y(2025, 500)], [NON]: [Y(2025, 20)] });
   check("a Revenues below NII is not a net total even 7.7% from the halves", rev(X.extractCompanyFacts("SUB", sub), "2025-12-31")?.derived === "computed");
+  // A quarter takes its year's verdict: STT's 294M loss is all in Q3 2023
+  // (filed 2,691M, halves 624 + 2,361 = 2,985M, 9.8% under). Q1 2024 has no
+  // year yet and, 16.7% under its halves, is judged on its own and moves.
+  const sttQ = payload({
+    Revenues: [...quartered(2023, 11945, [3105, 3108, 2691]), ["2024-01-01", "2024-03-31", 2500]],
+    [NII]: [...quartered(2023, 2759, [784, 727, 624]), ["2024-01-01", "2024-03-31", 700]],
+    [NON]: [...quartered(2023, 9480, [2342, 2384, 2361]), ["2024-01-01", "2024-03-31", 2300]],
+  });
+  const tq = X.extractCompanyFacts("STT", sttQ);
+  check("STT Q3 2023 keeps its filed 2,691M (its year is a net total)", rev(tq, "2023-09-30", "quarters")?.val === 2691 * M && rev(tq, "2023-09-30", "quarters")?.derived === "as-filed",
+    JSON.stringify(rev(tq, "2023-09-30", "quarters")));
+  check("...Q4 2023 stays FY - 9M on the same concept (3,041M)", rev(tq, "2023-12-31", "quarters")?.val === 3041 * M && rev(tq, "2023-12-31", "quarters")?.tag === "Revenues");
+  check("...a quarter after the newest year is judged on its own (Q1 2024 -> 3,000M computed)",
+    rev(tq, "2024-03-31", "quarters")?.val === 3000 * M && rev(tq, "2024-03-31", "quarters")?.derived === "computed");
+  const XQ = await load(extractRaw.replace('return kind === "qc" && yearIsNet(c);', "return false;"));
+  check("MUTATION: without the year's verdict STT Q3 2023 moves to 2,985M (caught)", rev(XQ.extractCompanyFacts("STT", sttQ), "2023-09-30", "quarters")?.val === 2985 * M);
   const XG = await load(extractRaw.replace("export const BANK_NET_GAINS_TOLERANCE = 0.08;", "export const BANK_NET_GAINS_TOLERANCE = 0.02;"));
   check("MUTATION: without the gains band STT moves to 12,239M (caught)", rev(XG.extractCompanyFacts("STT", stt), "2023-12-31")?.val === 12239 * M);
 }

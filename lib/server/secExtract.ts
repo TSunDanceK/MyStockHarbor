@@ -1890,6 +1890,31 @@ function extractCompanyFactsWith(
           if (!within(v, h.sum, BANK_NET_GAINS_TOLERANCE)) return false;
           return c.tag === LAST_RESORT_REVENUE_TAG || (c.tag === "Revenues" && v >= (h.a.val as number));
         };
+        // A QUARTER TAKES ITS YEAR'S VERDICT. A loss or gain lands in one
+        // quarter (STT's 294M repositioning loss, all in Q3 2023: filed 2,691M
+        // against halves of 2,985M), so a quarter on the same concept as a
+        // fiscal year that is a net total is one too, filed or differenced
+        // from that year; moving it alone would put the year and its quarters
+        // on two bases. A quarter after the newest year is judged on its own.
+        const yearIsNet = (c: FieldValue) => {
+          const [qs, qe] = c.covers ?? [null, null];
+          if (!qs || !qe) return false;
+          for (const [end, m] of yearCells) {
+            const y = m.get("revenue");
+            if (y?.val == null || !y.covers || y.tag !== c.tag || y.ns !== c.ns) continue;
+            if (!(y.covers[0] <= qs && qe <= y.covers[1])) continue;
+            const h = halvesAt("yc", end);
+            return !!h && sameFrame(y.covers, h.a.covers) && netTotal(y, h);
+          }
+          return false;
+        };
+        // Whether a valued period stays: no halves to judge it, a different
+        // frame, a net total, or a quarter of a net-total year.
+        const stays = (kind: "qc" | "yc", end: string, c: FieldValue) => {
+          const h = halvesAt(kind, end);
+          if (!h || !(h.sum > 0) || !sameFrame(c.covers, h.a.covers) || netTotal(c, h)) return true;
+          return kind === "qc" && yearIsNet(c);
+        };
         const netAt = (kind: "qc" | "yc", end: string): FieldValue | null => {
           const h = halvesAt(kind, end);
           const r = rnoie[kind].get(end)?.get("revenue");
@@ -1906,9 +1931,7 @@ function extractCompanyFactsWith(
         for (const [cells, kind] of kinds) {
           for (const [end, m] of cells) {
             const c = m.get("revenue");
-            const h = halvesAt(kind, end);
-            if (c?.val == null || !h || !(h.sum > 0) || !sameFrame(c.covers, h.a.covers)) continue;
-            if (!netTotal(c, h)) off++;
+            if (c?.val != null && !stays(kind, end, c)) off++;
           }
         }
         if (off) {
@@ -1919,10 +1942,7 @@ function extractCompanyFactsWith(
             for (const [end, m] of cells) {
               const c = m.get("revenue");
               if (c?.val == null && end <= newestValued) continue;
-              if (c?.val != null) {
-                const h = halvesAt(kind, end);
-                if (!h || !sameFrame(c.covers, h.a.covers) || netTotal(c, h)) continue;
-              }
+              if (c?.val != null && stays(kind, end, c)) continue;
               const t = netAt(kind, end);
               if (t) { m.set("revenue", t); moved++; if (t.derived === "computed") computed++; }
               else if (m.has("revenue")) { m.delete("revenue"); blanked++; }
