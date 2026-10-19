@@ -430,7 +430,7 @@ async function concepts() {
       const [a, b] = k.split("..");
       const p = [...ex.years, ...ex.quarters].find((q) => q.start === a && q.end === b);
       const c = p?.values[ri];
-      const cols = tags.map((t) => { const r = fr[t].get(k); return r ? `${SHORT[t] ?? t}=${M(r.val)}` : null; }).filter(Boolean).join(" ");
+      const cols = tags.map((t) => { const r = fr[t].get(k); return r ? `${SHORT[t] ?? t}=${M(r.val)}@${String(r.filed).slice(0, 7)}` : null; }).filter(Boolean).join(" ");
       console.log(`  ${k} (${days(a, b)}d) main ${c ? `${M(c.val)} [${SHORT[c.tag] ?? c.tag ?? "-"} ${c.derived}]` : "-"} | ${cols}`);
     }
     await pause();
