@@ -52,6 +52,21 @@
    "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
   },
   {
+   "symbol": "ALLY",
+   "requestedAt": "2026-10-22T00:00:00Z",
+   "reason": "earnings audit r2: the excise exclusion no longer counts a balance-sheet excise or a financial filer's TaxesExcludingIncomeAndExciseTaxes, so #913's total-over-contract rule reads its Revenues total; the stored set carries the old figure. ALLY FY2025 1,244M contract line -> 7,914M Revenues (total net revenue)"
+  },
+  {
+   "symbol": "PRCH",
+   "requestedAt": "2026-10-22T00:00:00Z",
+   "reason": "earnings audit r2: the excise exclusion no longer counts a balance-sheet excise or a financial filer's TaxesExcludingIncomeAndExciseTaxes, so #913's total-over-contract rule reads its Revenues total; the stored set carries the old figure. PRCH FY2025 418.9M -> 482.4M; its excise concept is SalesAndExciseTaxPayableCurrent"
+  },
+  {
+   "symbol": "SNEX",
+   "requestedAt": "2026-10-22T00:00:00Z",
+   "reason": "earnings audit r2: the excise exclusion no longer counts a balance-sheet excise or a financial filer's TaxesExcludingIncomeAndExciseTaxes, so #913's total-over-contract rule reads its Revenues total; the stored set carries the old figure. SNEX quarters move from the contract line (~1.2B) to Revenues, the gross total its years already read"
+  },
+  {
    "symbol": "ABNB",
    "requestedAt": "2026-09-25T00:00:00Z",
    "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
