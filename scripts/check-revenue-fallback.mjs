@@ -210,6 +210,31 @@ console.log("\n3d. the concept is judged on the line AS TAGGED (earnings audit r
   // KEY's only excise concept is the 1% tax on its buybacks.
   key.facts["us-gaap"].ShareRepurchaseProgramExciseTax = { units: { USD: [row("2025-01-01", "2025-12-31", 2 * M)] } };
   check("a buyback excise is not the excise the rule excludes", X.filerTagsExcise(key) === false);
+  // Earnings audit r2: a balance-sheet excise, and a financial filer's "taxes
+  // other than income and excise", are not it either; COP's is (no
+  // NoninterestIncome), and so is CVX's ExciseAndSalesTaxes.
+  const tagged = (tags) => ({ facts: { "us-gaap": Object.fromEntries(tags.map((t) => [t, { units: { USD: [row("2025-01-01", "2025-12-31", 1 * M)] } }])) } });
+  check("an excise payable (APLD, PRCH, VIPS) is not the excise the rule excludes", X.filerTagsExcise(tagged(["SalesAndExciseTaxPayableCurrent"])) === false);
+  check("a financial filer's TaxesExcludingIncomeAndExciseTaxes (ALLY) is not either",
+    X.filerTagsExcise(tagged(["TaxesExcludingIncomeAndExciseTaxes", "NoninterestIncome"])) === false);
+  check("...but COP's, with no NoninterestIncome, still is", X.filerTagsExcise(tagged(["TaxesExcludingIncomeAndExciseTaxes"])) === true);
+  check("...and CVX's ExciseAndSalesTaxes still is", X.filerTagsExcise(tagged(["ExciseAndSalesTaxes", "NoninterestIncome"])) === true);
+
+  // ALLY ($M, its filings): `Revenues` is total net revenue; the contract line
+  // a $0.3B sub-line. The newest quarter (Q2 2026) carries both.
+  const ally = payload({
+    [CONTRACT]: [yr(2023, 968), yr(2024, 1198), yr(2025, 1244), ["2026-04-01", "2026-06-30", 310 * M]],
+    Revenues: [yr(2023, 8234), yr(2024, 8181), yr(2025, 7914), ["2026-04-01", "2026-06-30", 2286 * M]],
+    NoninterestIncome: [yr(2023, 2013), yr(2024, 2167), yr(2025, 1738), ["2026-04-01", "2026-06-30", 602 * M]],
+  });
+  ally.facts["us-gaap"].TaxesExcludingIncomeAndExciseTaxes = { units: { USD: [row("2025-01-01", "2025-12-31", 50 * M)] } };
+  const ar = X.extractCompanyFacts("ALLY", ally);
+  const av = (y) => ar.years.find((p) => p.end === `${y}-12-31`)?.values?.[REV];
+  check("ALLY FY2024/FY2025 read Revenues 8,181 / 7,914, not the 1,198 / 1,244 contract line",
+    av(2024)?.val === 8181 * M && av(2025)?.val === 7914 * M && [2023, 2024, 2025].every((y) => av(y)?.tag === "Revenues"), JSON.stringify(av(2025)));
+  const old = await load(extractRaw.replace("&& !/Payable|Receivable/.test(k) && !(financial && k === \"TaxesExcludingIncomeAndExciseTaxes\")", ""));
+  check("MUTATION: the old excise test keeps ALLY's FY2025 on the 1,244 contract line (caught)",
+    old.extractCompanyFacts("ALLY", ally).years.find((p) => p.end === "2025-12-31")?.values?.[REV]?.val === 1244 * M);
   const kr = X.extractCompanyFacts("KEY", key);
   const kv = (y) => kr.years.find((p) => p.end === `${y}-12-31`)?.values?.[REV];
   check("KEY FY2023 reads Revenues $6,413M, not the $1,435M contract line", kv(2023)?.val === 6413 * M && kv(2023)?.tag === "Revenues", JSON.stringify(kv(2023)));
