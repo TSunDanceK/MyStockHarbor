@@ -31,6 +31,8 @@ export type BlogPost = {
   latestNews: string;
   latestEarnings: string;
   investorUsefulInfo: string;
+  /** The frontmatter's `heroArt` (a news-art image name that overrides the automatic picture), else null. */
+  heroArt: string | null;
 };
 
 export type InsightSnapshotPoint = {
@@ -158,6 +160,7 @@ function readSortedPosts(): BlogPost[] {
       latestNews: normalizeFrontmatterText(data.latestNews),
       latestEarnings: normalizeFrontmatterText(data.latestEarnings),
       investorUsefulInfo: normalizeFrontmatterText(data.investorUsefulInfo),
+      heroArt: typeof data.heroArt === "string" && data.heroArt.trim() ? data.heroArt.trim() : null,
     };
   });
 

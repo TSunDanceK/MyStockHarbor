@@ -5,6 +5,7 @@ symbol: "UMAC"
 eventType: "earnings"
 timeframe: "d"
 levels: []
+heroArt: "aerospace-defence-any-04"
 summary: "Unusual Machines makes NDAA-compliant drone components and grew second-quarter revenue sharply, but management has said Q3 may come in below Q2 before a hoped-for Q4 ramp. The next report may show whether that ramp is on track."
 why: "One customer made up about 42% of Q2 revenue and the Q4 hopes rest on Pentagon drone orders reaching its customers, so the path from one quarter to the next may matter more here than usual."
 sources:

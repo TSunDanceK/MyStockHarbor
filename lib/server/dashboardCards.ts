@@ -18,8 +18,9 @@
 //   Pickers             getPickersData            ~3 commands, Data Cache 6 h (below); the
 //                                                 biggest mover from its tickerFeed (#164 A: the
 //                                                 retired ticker tape's top item, same payload)
-//   Earnings            getCalendarForwardSections  2 commands + 1 HMGET for the caps (the calendar's);
-//                       names from the committed directory snapshot, 0 commands (#154 §2)
+//   Earnings            readComingUpWeeks         getCalendarForwardSections, 2 commands + 1 HMGET for the
+//                       caps (the calendar's), one Data Cache entry shared with the insight page's
+//                       calendar card; names from the committed directory snapshot, 0 commands (#154 §2)
 //   Insight of the day  getInsightPageDataCached  Data Cache 6 h (shared with the post's own page),
 //                       for the newest two posts (#563 COWORK #154 §4)
 //   News                getStockNewsBaseData × 5  the news page's own cached read for the five
@@ -46,11 +47,8 @@ import { getAllBottleneckPosts, getBottleneckHub } from "@/lib/bottlenecks";
 import { artFor, readCapexShared, getInsightPageDataCached } from "@/lib/server/insightPage";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import { getPickersData } from "@/lib/server/pickersBuilder";
-import { getCalendarForwardSections } from "@/lib/server/dueInputs";
 import { easternDate } from "@/lib/server/calendarDayState";
-import { readPricePoolBulk } from "@/lib/server/pricePool";
-import { registrantFor } from "@/lib/server/stockProfile";
-import { addDays, comingUpColumns, onePerCompany } from "@/lib/server/earningsWeek";
+import { readComingUpWeeks, shortDay } from "@/lib/server/earningsWeeksShared";
 import { getAllPosts } from "@/lib/blog";
 import { getStockNewsBaseData } from "@/lib/stock-news-data";
 import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
@@ -218,22 +216,12 @@ async function readCapex(): Promise<DashboardCards["capex"]> {
 
 /** Names listed per week on the earnings card, biggest first (#164 C: three a week); the week heading counts them all. */
 export const EARNINGS_ROWS = 3;
-const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-/** "Tue 14 Oct" for a yyyy-mm-dd day. */
-export const shortDay = (d: string) => { const t = new Date(`${d}T00:00:00Z`); return `${WEEKDAY[t.getUTCDay()]} ${t.getUTCDate()} ${MON[t.getUTCMonth()]}`; };
 
-/** The calendar's "Coming up" windows after this week: count and the largest names. */
+/** The calendar's "Coming up" windows after this week: count and the largest names (the list shared with the insight page). */
 async function readEarnings(): Promise<DashboardCards["earnings"]> {
-  const today = easternDate(new Date());
-  const forward = await getCalendarForwardSections(today).catch(() => null);
-  if (!forward || forward.expected.kind !== "listed") return null;
-  const rows = forward.expected.rows;
-  const pool = rows.length ? await readPricePoolBulk(rows.map((r) => r.symbol)).catch(() => new Map()) : new Map();
-  const cikOf = (s: string) => registrantFor(s)?.cik ?? null;
-  const list = onePerCompany(rows.map((r) => ({ symbol: r.symbol, estimatedOn: addDays(today, r.daysAway), cap: pool.get(r.symbol)?.marketCap ?? null })), cikOf);
-  // TWO WINDOWS (#148 §5): this week (when anything is estimated in it, else
-  // comingUpColumns starts at next week), then the one after.
-  const windows = comingUpColumns(list, today).slice(0, 2)
+  const cols = await readComingUpWeeks(easternDate(new Date()));
+  if (!cols) return null;
+  const windows = cols
     .map((c) => ({ label: c.label, range: c.range, count: c.items.length, top: c.items.slice(0, EARNINGS_ROWS).map((i) => ({ symbol: i.symbol, name: cleanName(snapshotCompanyName(i.symbol)) || i.symbol, day: shortDay(i.estimatedOn) })) }));
   return windows.length ? { windows } : null;
 }
