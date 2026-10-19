@@ -123,6 +123,17 @@ function artFor(name: string): NewsArt {
   };
 }
 
+/**
+ * ONE IMAGE BY ITS WHOLE NAME, or null when the manifest has no such name.
+ *
+ * For an insight post's `heroArt` frontmatter (an editor's pick that overrides
+ * the plan). The manifest is the list of files that exist, so a name it does
+ * not hold is a broken picture, never served; check-insight-page fails on one.
+ */
+export function taggedArtByName(name: string): NewsArt | null {
+  return Object.hasOwn(ENTRIES, name) ? artFor(name) : null;
+}
+
 /** Every name that ties for the top score, or an empty array when the top is 0. */
 export function topScoring(subjectTags: Set<string>, articleMotifs: Set<string>): string[] {
   let best = 0;

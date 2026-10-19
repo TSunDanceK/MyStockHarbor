@@ -32,6 +32,7 @@ import type { InsightLink } from "@/lib/blog";
 import InsightRailAd from "@/app/components/InsightRailAd";
 import { ETORO_INSIGHT_RAIL } from "@/lib/affiliateCreatives";
 import { dayWords, miniLabel, outcomeWords, pctWords, ptsWords, sourceGroups } from "@/lib/insightView";
+import { indexWords } from "@/lib/spxWeekly";
 
 export type InsightHtml = { whatHappened: string | null; why: string | null; originalRest: string | null };
 
@@ -464,15 +465,62 @@ function MoreCardView({ m, sym }: { m: MoreCard; sym: string }) {
       </div>
     );
   }
-  const words = m.kind === "calendar" ? { eyebrow: "Earnings calendar", big: "This week", line: "Who reports this week, and the latest results.", go: "Open the calendar →" }
-    : { eyebrow: "The market", big: "S&P 500", line: "The index's trend, levels and this week's read.", go: "Open the S&P 500 page →" };
+  if (m.kind === "calendar") {
+    // FILLED (the dashboard's week list, #154 §2): up to four of the week's
+    // largest reporters, this post's own ticker first when it is one of them,
+    // each on its estimated day. Estimates only; the calendar has the rest.
+    const w = m.week;
+    return (
+      <div className="inMoreCard" data-more="calendar">
+        <span className="inEyebrow">Earnings calendar</span>
+        <Link href={m.href} className="inMoreBig inMoreMid inMoreTitleLink">{w ? w.label : "This week"}</Link>
+        {w ? (
+          <>
+            <span className="inRead">Estimated report days, {w.range}. Dates can move.</span>
+            <ul className="inScreenList" data-calendar-rows={w.rows.length}>
+              {w.rows.map((r) => (
+                <li key={r.symbol}>
+                  <Link href={`/stock/${encodeURIComponent(r.symbol)}`} className="inScreenRow" title={r.name} {...(r.own ? { "data-calendar-own": "" } : {})}>
+                    <TickerLogo symbol={r.symbol} size={20} radius={5} alt="" />
+                    <strong>{r.symbol}</strong>
+                    {r.name !== r.symbol ? <span className="inScreenCo" data-fine-print="">{r.name}</span> : null}
+                    <span className="inCalDay">{r.day}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {w.more > 0 ? <span className="inRead" data-calendar-more="">+{w.more} more in the calendar</span> : null}
+            {w.next ? <span className="inRead" data-calendar-next="">{w.next.label}, {w.next.range}: {w.next.count} {w.next.count === 1 ? "company" : "companies"} estimated.</span> : null}
+          </>
+        ) : <span className="inRead">Who reports this week, and the latest results.</span>}
+        <Link href={m.href} className="inMoreGo">Open the calendar →</Link>
+      </div>
+    );
+  }
+  // FILLED (what /markets/spx reads): the index's close from the weekly file,
+  // SPY's latest session and five sessions, and the Trend score. Each line only
+  // when its figure exists; descriptive, never a forecast.
+  const x = m.market;
+  const move = (label: string, v: number | null | undefined) => v === null || v === undefined ? null : (
+    <li><span>{label}</span><strong className={tone(v) === "up" ? "inUp" : tone(v) === "down" ? "inDown" : ""}>{pctWords(v, 2)}</strong></li>
+  );
   return (
-    <Link href={m.href} className="inMoreCard" data-more={m.kind}>
-      <span className="inEyebrow">{words.eyebrow}</span>
-      <span className="inMoreBig inMoreMid">{words.big}</span>
-      <span className="inRead">{words.line}</span>
-      <span className="inMoreGo">{words.go}</span>
-    </Link>
+    <div className="inMoreCard" data-more="spx">
+      <span className="inEyebrow">The market</span>
+      <Link href={m.href} className="inMoreBig inMoreMid inMoreTitleLink">S&amp;P 500</Link>
+      {x ? (
+        <ul className="inList inTight" data-spx-figures="">
+          {x.index ? <li><span>Index close, {dayWords(x.index.date)}</span><strong>{indexWords(x.index.close)}</strong></li> : null}
+          {x.fromHigh ? <li><span>From the record close ({indexWords(x.fromHigh.level)}, {dayWords(x.fromHigh.date)})</span><strong>{pctWords(x.fromHigh.pct)}</strong></li> : null}
+          {move("Latest session (SPY)", x.moves?.dayPct)}
+          {move("Past 5 sessions (SPY)", x.moves?.weekPct)}
+          {x.trend ? <li><span>Trend score</span><strong>{x.trend.score}/100</strong></li> : null}
+        </ul>
+      ) : null}
+      {x?.trend ? <span className="inRead" data-spx-read="">{x.trend.words}, from SPY&apos;s moving averages and RSI (14){x.moves ? ` to ${dayWords(x.moves.date)}` : ""}: a reading of the trend so far, not a forecast.</span>
+        : x ? null : <span className="inRead">The index&apos;s trend, levels and this week&apos;s read.</span>}
+      <Link href={m.href} className="inMoreGo">Open the S&amp;P 500 page →</Link>
+    </div>
   );
 }
 
@@ -750,6 +798,8 @@ const CSS = `
 .inScreenRow { max-width: 100%; display: flex; align-items: center; gap: 8px; min-width: 0; color: #e2e8f0; text-decoration: none; font-size: var(--fs-label); }
 .inScreenRow strong { color: #f8fafc; font-weight: 900; flex: 0 0 auto; }
 .inScreenCo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #94a3b8; }
+.inCalDay { margin-left: auto; flex: 0 0 auto; white-space: nowrap; color: #cbd5e1; font-variant-numeric: tabular-nums; }
+[data-calendar-own] strong { color: #5fd4c7; }
 .inSkel { height: 20px; border-radius: 6px; background: linear-gradient(90deg, rgba(148,163,184,0.10), rgba(148,163,184,0.18), rgba(148,163,184,0.10)); }
 .inMoreTitleLink { color: inherit; text-decoration: none; }
 .inFlowHead { margin: 0 0 4px; font-size: var(--fs-read); line-height: 1.35; font-weight: 800; color: rgba(203,213,225,0.85); }
