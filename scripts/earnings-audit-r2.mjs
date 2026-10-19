@@ -373,9 +373,15 @@ async function cells() {
     const keys = [...new Set([...ob.keys(), ...nb.keys()])].sort((a, b) => a.split("..")[1].localeCompare(b.split("..")[1]));
     const diff = keys.filter((k) => (ob.get(k)?.v[ri] ?? null) !== (nb.get(k)?.v[ri] ?? null));
     console.log(`\n===== ${sym}: ${diff.length} of ${keys.length} stored cells differ`);
+    const f = got.facts;
+    const filed = Object.fromEntries(["RevenuesNetOfInterestExpense", "Revenues", "InterestIncomeExpenseNet", "NoninterestIncome"].map((t) => [t, frames(f, t)]));
     for (const k of diff) {
       const a = ob.get(k), b = nb.get(k);
-      console.log(`  ${k} ${(b ?? a).fp ?? ""}${(b ?? a).fy ?? ""} ${M(a?.v[ri] ?? null)} (${a?.d?.[ri] ?? "-"}) → ${M(b?.v[ri] ?? null)} (${b?.d?.[ri] ?? "-"})`);
+      const at = (t) => M(filed[t].get(k)?.val ?? null);
+      const nii = filed.InterestIncomeExpenseNet.get(k)?.val, non = filed.NoninterestIncome.get(k)?.val;
+      const halves = nii != null && non != null ? nii + non : null;
+      console.log(`  ${k} ${(b ?? a).fp ?? ""}${(b ?? a).fy ?? ""} ${M(a?.v[ri] ?? null)} (${a?.d?.[ri] ?? "-"}) → ${M(b?.v[ri] ?? null)} (${b?.d?.[ri] ?? "-"})`
+        + ` | filed RNOIE ${at("RevenuesNetOfInterestExpense")} Revenues ${at("Revenues")} NII ${at("InterestIncomeExpenseNet")} NonII ${at("NoninterestIncome")} halves ${M(halves)}`);
     }
     await pause();
   }
