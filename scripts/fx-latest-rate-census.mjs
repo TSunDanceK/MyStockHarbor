@@ -30,7 +30,20 @@ console.log(`manifest symbols with a CIK: ${all.length}; this shard ${shard}/${s
 
 let sets = 0, foreign = 0, yearLatest = 0, errors = 0;
 const changed = [];
-const note = (M, set) => { const v = M.buildSecEarningsView(set); return { basis: v?.basis ?? null, rate: v?.currency?.latestRate ?? null, kind: v?.currency?.latestBasis ?? null }; };
+// THE PAGE'S annualForm: a 20-F/40-F filer with no quarter in the last six
+// months is anchored on its fiscal year (lib/server/annualOnly.ts), which is
+// the path this fix is about. Same rule, read from the committed registrants.
+const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows ?? {};
+const MONTHS = Number((fs.readFileSync("lib/server/annualOnly.ts", "utf8").match(/ANNUAL_ONLY_QUARTER_MONTHS = (\d+)/) ?? [])[1]);
+const cut = (() => { const d = new Date(); d.setUTCMonth(d.getUTCMonth() - MONTHS); return d.toISOString().slice(0, 10); })();
+const annualFormOf = (sym, set) => {
+  const row = REG[sym] ?? REG[sym.replace(/-/g, ".")] ?? REG[sym.replace(/\./g, "-")] ?? null;
+  const form = String(row?.annualForm ?? "").toUpperCase();
+  const kind = form.startsWith("20-F") ? "20-F" : form.startsWith("40-F") ? "40-F" : null;
+  return kind && set.years.length && !set.quarters.some((q) => q.e >= cut) ? kind : null;
+};
+let annualOnly = 0;
+const note = (M, set, annualForm) => { const v = M.buildSecEarningsView(set, { annualForm }); return { basis: v?.basis ?? null, rate: v?.currency?.latestRate ?? null, kind: v?.currency?.latestBasis ?? null }; };
 for (let i = 0; i < targets.length; i += 20) {
   const batch = targets.slice(i, i + 20);
   const got = await redis.mget(...batch.map((s) => `${FACTS_PREFIX}:${s}`));
@@ -41,18 +54,20 @@ for (let i = 0; i < targets.length; i += 20) {
     if ((set.cur ?? "USD") === "USD") return;
     foreign++;
     try {
-      const a = note(OLD, set), b = note(NEW, set);
+      const af = annualFormOf(sym, set);
+      if (af) annualOnly++;
+      const a = note(OLD, set, af), b = note(NEW, set, af);
       if (b.basis === "year") yearLatest++;
       if (a.rate === b.rate && a.kind === b.kind) return;
       const latest = b.basis === "year" ? set.years[0] : set.quarters[0];
       const entries = (set.fx?.applied ?? []).filter((x) => x.end === latest?.e)
         .map((x) => `${x.basis[0]}${x.usdPerUnit}${x.start !== undefined ? `@${x.start}` : ""}`).join(",");
-      changed.push(`${sym} ${set.cur} ${b.basis} ${latest?.s ?? "-"}..${latest?.e} main ${a.rate} (${a.kind}) -> branch ${b.rate} (${b.kind}) entries ${entries || "-"} set at ${String(set.at).slice(0, 10)}`);
+      changed.push(`${sym} ${set.cur} ${af ?? "-"} ${b.basis} ${latest?.s ?? "-"}..${latest?.e} main ${a.rate} (${a.kind}) -> branch ${b.rate} (${b.kind}) entries ${entries || "-"} set at ${String(set.at).slice(0, 10)}`);
     } catch (e) {
       errors++;
       console.log(`  error ${sym}: ${e.message}`);
     }
   });
 }
-console.log(`SETS ${sets}, non-USD ${foreign}, latest is a year ${yearLatest}, view errors ${errors}, quoted rate changes ${changed.length}`);
+console.log(`SETS ${sets}, non-USD ${foreign}, annual-only (20-F/40-F, no recent quarter) ${annualOnly}, latest is a year ${yearLatest}, view errors ${errors}, quoted rate changes ${changed.length}`);
 for (const c of changed) console.log(`  changed ${c}`);
