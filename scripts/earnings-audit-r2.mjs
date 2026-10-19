@@ -404,32 +404,34 @@ async function cells() {
 }
 
 // ── concepts (one filer's revenue concepts, raw, beside the extraction) ────
+// One line per year- or quarter-length frame since 2023: main's revenue cell
+// (value, tag, derivation) and each revenue concept's newest filed value for
+// that frame, plus the filer's excise concepts. Read-only.
 async function concepts() {
   ensureMainTree();
   const OLD = await load(MAIN_TREE);
   const ri = OLD.F.SEC_FIELD_KEYS.indexOf("revenue");
+  const SHORT = { Revenues: "Rev", RevenueFromContractWithCustomerExcludingAssessedTax: "RFCWCx", RevenueFromContractWithCustomerIncludingAssessedTax: "RFCWCi", RevenuesNetOfInterestExpense: "RNOIE", SalesRevenueNet: "SRN", InterestIncomeExpenseNet: "NII", NoninterestIncome: "NonII" };
   for (const sym of SYMBOLS) {
     const got = await factsFor(sym);
     if (!got.facts) { console.log(`${sym}: ${got.err}`); continue; }
     const f = got.facts;
     const ex = OLD.X.extractCompanyFacts(sym, f);
-    console.log(`\n===== ${sym} (CIK ${got.cik}) — main's revenue cells`);
-    for (const p of [...ex.years, ...ex.quarters].sort((a, b) => a.end.localeCompare(b.end) || a.start.localeCompare(b.start))) {
-      const c = p.values[ri];
-      if (p.end < "2022-01-01") continue;
-      console.log(`  ${p.fp}${p.fy} ${p.start}..${p.end} ${M(c?.val ?? null)} [${c?.tag ?? "-"} ${c?.derived ?? "-"}]`);
-    }
-    const tags = Object.keys(f.facts?.["us-gaap"] ?? {}).filter((t) => /Revenue|InterestIncomeExpenseNet|NoninterestIncome|CostOfGoods|CostOfRevenue/.test(t));
-    for (const t of tags) {
-      const rows = (f.facts["us-gaap"][t].units?.USD ?? []).filter((r) => r.start && r.end >= "2023-01-01");
-      if (!rows.length) continue;
-      const newest = new Map();
-      for (const r of rows) { const k = `${r.start}..${r.end}`; const prev = newest.get(k); if (!prev || String(r.filed) > String(prev.filed)) newest.set(k, r); }
-      console.log(`  raw ${t} (${newest.size} frames since 2023)`);
-      for (const [k, r] of [...newest].sort((a, b) => a[0].split("..")[1].localeCompare(b[0].split("..")[1]) || a[0].localeCompare(b[0]))) {
-        const d = Math.round((Date.parse(r.end) - Date.parse(r.start)) / 864e5);
-        console.log(`    ${k} (${d}d) ${M(r.val)} ${r.form} ${r.fy}${r.fp} filed ${r.filed} accn ${r.accn}`);
-      }
+    const gaap = f.facts?.["us-gaap"] ?? {};
+    const excise = Object.keys(gaap).filter((t) => /Excise/.test(t) && !/Repurchase|Buyback|TreasuryStock/.test(t));
+    const tags = [...Object.keys(SHORT).filter((t) => gaap[t]), ...excise];
+    const fr = Object.fromEntries(tags.map((t) => [t, frames(f, t)]));
+    console.log(`\n===== ${sym} (CIK ${got.cik}) excise concepts: ${excise.join(", ") || "none"}`);
+    const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+    const keys = new Set();
+    for (const p of [...ex.years, ...ex.quarters]) if (p.end >= "2023-01-01") keys.add(`${p.start}..${p.end}`);
+    for (const t of tags) for (const k of fr[t].keys()) { const [a, b] = k.split(".."); const d = days(a, b); if (b >= "2023-01-01" && ((d >= 80 && d <= 100) || (d >= 350 && d <= 380))) keys.add(k); }
+    for (const k of [...keys].sort((x, y) => x.split("..")[1].localeCompare(y.split("..")[1]) || x.localeCompare(y))) {
+      const [a, b] = k.split("..");
+      const p = [...ex.years, ...ex.quarters].find((q) => q.start === a && q.end === b);
+      const c = p?.values[ri];
+      const cols = tags.map((t) => { const r = fr[t].get(k); return r ? `${SHORT[t] ?? t}=${M(r.val)}` : null; }).filter(Boolean).join(" ");
+      console.log(`  ${k} (${days(a, b)}d) main ${c ? `${M(c.val)} [${SHORT[c.tag] ?? c.tag ?? "-"} ${c.derived}]` : "-"} | ${cols}`);
     }
     await pause();
   }
