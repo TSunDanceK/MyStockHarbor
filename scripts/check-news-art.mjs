@@ -2026,11 +2026,11 @@ const insightReal = (tagsMod, artMod) => {
   }
   return hits;
 };
-const asNews = (tagsMod, artMod) => INSIGHT_POSTS.filter((p) => isReal(tagsMod.planSymbolCardArt({ variant: "lead", title: p.title, description: p.summary, eventType: null,
+const asNews = (tagsMod) => INSIGHT_POSTS.filter((p) => isReal(tagsMod.planSymbolCardArt({ variant: "lead", title: p.title, description: p.summary, eventType: null,
   industry: staticProfile.sicProfileFor(p.symbol)?.industry ?? null, sectorBucket: "sector-banks", key: p.slug, takenNames: new Set(), takenBuckets: new Map(), canGenerate: true, surface: "news" }))).length;
 check(
   `no insight hero or Related card resolves to a real- file (${INSIGHT_POSTS.length} posts, a photo for every one of ${ALL_SUBJECTS.length} subjects)`,
-  insightReal(realTags, realArt).length === 0 && asNews(realTags, realArt) === INSIGHT_POSTS.length &&
+  insightReal(realTags, realArt).length === 0 && asNews(realTags) === INSIGHT_POSTS.length &&
     /surface: post\.surface \?\? "other",/.test(readCodeOnly("lib/server/insightPage.ts")) &&
     (() => { const calls = readCodeOnly("lib/server/insightPage.ts").split("\n").filter((l) => /(= |art: )artFor\(/.test(l)); return calls.length === 2 && calls.every((l) => !/surface/.test(l)); })(),
   "the same posts as a news surface DO reach the pool, so the default's answer is not an empty pool's"
@@ -2104,6 +2104,36 @@ const realFileProblems = async (manifestObj, dir = REAL_DIR) => {
   const one = (realManifestOnDisk.files ?? [])[0];
   const built = one ? (await loadArtWith(V1_SHIPPED, realManifestOnDisk)).pickReal("news", [one.match(realArt.REAL_NAME)[1]], "k") : null;
   check("the picker's src for a real file is its path under public/", !one || (built && fs.existsSync(path.join(ROOT, "public", built.src)) && fs.existsSync(path.join(ROOT, "public", built.srcSet.split(" ")[0]))));
+}
+
+// ── EACH real- FILE IS LISTED EXACTLY ONCE, AND ONLY IN THE REAL MANIFEST ──
+/** Problems: a real name twice, a real- key in manifest.json, a real-*.webp outside public/news-art/real/. */
+const realOnceProblems = (realM, v1) => {
+  const out = [], seen = new Set();
+  for (const n of realM.files ?? []) { if (seen.has(n)) out.push(`${n} listed twice`); seen.add(n); }
+  for (const k of Object.keys(v1)) if (/^real-/.test(k)) out.push(`${k} in manifest.json`);
+  for (const f of fs.readdirSync(path.join(ROOT, "public/news-art"))) if (/^real-.*\.webp$/.test(f)) out.push(`${f} outside real/`);
+  return out;
+};
+check(
+  "every real- file appears exactly once, in the real manifest only, with its -sm beside it (checked above)",
+  (() => { const p = realOnceProblems(realManifestOnDisk, V1_SHIPPED); if (p.length) console.log(`        ${p.join("\n        ")}`); return p.length === 0; })()
+);
+check(
+  "mutant bites: a real name listed twice, or a real- key in manifest.json, fails",
+  realOnceProblems({ files: [...(realManifestOnDisk.files ?? []), (realManifestOnDisk.files ?? ["real-chips-01"])[0]] }, V1_SHIPPED).some((p) => /listed twice/.test(p)) &&
+    realOnceProblems(realManifestOnDisk, { ...V1_SHIPPED, "real-sector-energy": 5 }).some((p) => /in manifest\.json/.test(p))
+);
+{
+  // An -sm left behind: its full-size file moved without it.
+  const one = (realManifestOnDisk.files ?? [])[0];
+  if (one) {
+    const sm = path.join(ROOT, REAL_DIR, `${one}-sm.webp`), tmp = `${sm}.mutant`;
+    fs.renameSync(sm, tmp);
+    let caught = false;
+    try { caught = (await realFileProblems(realManifestOnDisk)).some((p) => p === `${one}-sm.webp missing`); } finally { fs.renameSync(tmp, sm); }
+    check("mutant bites: a real file whose -sm variant was not moved with it fails", caught);
+  }
 }
 
 // ── EVERY SECTOR AND EVENT BUCKET KEEPS REAL_FLOOR IMAGES ─────────────────
