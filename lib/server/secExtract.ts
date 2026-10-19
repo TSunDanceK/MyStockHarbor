@@ -1320,6 +1320,25 @@ const RATIO_CLOSE_YEARS = 4;
 const LAST_RESORT_YEARS = 4;
 /** A bank's two revenue halves (#552 COWORK #241): summed, marked computed, only where no total is tagged. */
 export const BANK_REVENUE_HALVES = ["InterestIncomeExpenseNet", "NoninterestIncome"] as const;
+/**
+ * HOW CLOSE A BANK'S FILED TOTAL MUST SIT TO ITS NET REVENUE (earnings audit
+ * r2): net interest income plus noninterest income for the same frame. A
+ * `Revenues` outside this is a sub-line (ZION's $662M of $3,385M), a zero
+ * (UVSP, CBSH, OFG) or a gross figure before interest expense (BBT +13%, BFH
+ * +37%), and is not taken. See the bank net-basis block in extractCompanyFactsWith.
+ */
+export const BANK_NET_TOLERANCE = 0.02;
+/**
+ * A FILED NET TOTAL KEEPS ITS SECURITIES GAINS AND LOSSES (earnings audit r2,
+ * owner ruling on STT). A bank's own total revenue counts a securities-sale
+ * loss that its NoninterestIncome line may leave out: STT's 2023 `Revenues`
+ * $11,945M is net of a $294M loss, 2.4% under the halves' $12,239M, and it is
+ * the figure STT reports. A filed RevenuesNetOfInterestExpense, or a filed
+ * `Revenues` at or above net interest income, within this of the halves is
+ * that net total and is kept; a sub-line sits below NII and a gross figure
+ * further off (BBT +13%, GABC +35%, BANC +62%).
+ */
+export const BANK_NET_GAINS_TOLERANCE = 0.08;
 /** The in-memory tag of a derived contract + not-from-contract total (option G, LUNR). Never stored. */
 const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
 
@@ -1859,6 +1878,142 @@ function extractCompanyFactsWith(
         }
       }
       if (summed) notes.push(`revenue: no revenue total tagged; ${BANK_REVENUE_HALVES.join(" + ")} used for ${summed} period(s) (computed)`);
+    }
+
+    // ── A BANK'S REVENUE IS ITS NET REVENUE (earnings audit r2) ─────────────
+    // HBAN's revenue read $1,562M, its 606 fee line, beside $5,991M of net
+    // interest income; 55 filers sat below their own net interest income. The
+    // block above only fills a bank whose newest periods carry NO revenue, and
+    // these carry a fee line (or a `Revenues` that is itself a sub-line, a zero,
+    // or gross of interest expense), so it never reached them.
+    //
+    // A NET TOTAL, for one frame, is a revenue within BANK_NET_TOLERANCE of
+    // net interest income plus noninterest income, or a filed
+    // RevenuesNetOfInterestExpense, or a filed `Revenues` at or above NII,
+    // within BANK_NET_GAINS_TOLERANCE of them (it carries the securities gains
+    // and losses the halves may not: STT, CASH, UCB, WSFS).
+    //
+    // A FILER THAT TAGS BOTH HALVES, with any period whose revenue (as every
+    // rule above left it) is not a net total, moves its series to net revenue,
+    // frame by frame. A period already on a net total keeps it, and so does
+    // one with no halves to judge it by; any other takes:
+    //   1. RevenuesNetOfInterestExpense as filed, when a net total (or the
+    //      halves are not both filed for that frame);
+    //   2. `Revenues` as filed, when a net total;
+    //   3. the two halves' sum, marked computed.
+    // A period with none of these reads Not reported rather than keep the fee
+    // line beside net revenue, so a series cannot carry two bases. The halves
+    // and both totals are differenced like any concept, so a derived Q4 is on
+    // the same basis as its year.
+    //
+    // IT REPLACES, IT DOES NOT BACKFILL. A period the rules above left with no
+    // revenue is filled only when it is newer than every period that has one
+    // (FITB, OFG, UBSI: the newest years blank), the gap the block above is for.
+    // An older blank stays as those rules left it: USB's 2020-21 and FCNCA's
+    // 2023 quarters were withheld upstream, and a bank already on net revenue
+    // must not move because one stray period somewhere tripped the test.
+    //
+    // USD FILERS ONLY. A 20-F bank's halves and its `Revenues` need not share a
+    // unit or a presentation (HDB, MFG, MUFG), so the 2% test means nothing
+    // there; like minorityInterestAt, the block reads US filers.
+    //
+    // AFTER #913's total-over-contract rule, and it cannot fight it: that rule
+    // only chooses between the contract line and `Revenues`; this one checks
+    // whatever was chosen against the bank's own net revenue and replaces it
+    // only when it is off. A bank already on a net total (KEY's `Revenues`
+    // within 0.5%, SYF's computed halves) is untouched.
+    {
+      const seriesOf = (tag: string) => {
+        const f: FieldDef = { ...revenueField, chain: [tag], ifrsChain: undefined };
+        const rows = rowsForField(facts, f, new Set<string>(), currency);
+        const bucket: Bucket = new Map();
+        for (const c of rows) {
+          const k = periodKey(c.row);
+          const list = bucket.get(k);
+          if (list) list.push(c);
+          else bucket.set(k, [c]);
+        }
+        const qc = new Map<string, Map<string, FieldValue>>(), yc = new Map<string, Map<string, FieldValue>>();
+        if (rows.length) runCumulative([f], new Map([["revenue", bucket]]), new Map([["revenue", tag]]), qc, yc, new Map(), new Map(), []);
+        return { qc, yc, n: rows.length };
+      };
+      const [nii, non] = BANK_REVENUE_HALVES.map(seriesOf);
+      if (currency === "USD" && nii.n && non.n) {
+        const rnoie = seriesOf(LAST_RESORT_REVENUE_TAG), rv = seriesOf("Revenues");
+        const kinds = [[quarterCells, "qc"], [yearCells, "yc"]] as const;
+        const halvesAt = (kind: "qc" | "yc", end: string) => {
+          const a = nii[kind].get(end)?.get("revenue"), b = non[kind].get(end)?.get("revenue");
+          return a && b && a.val != null && b.val != null && sameFrame(a.covers, b.covers) ? { a, sum: a.val + b.val } : null;
+        };
+        const within = (v: number, sum: number, tol: number) => Math.abs(v - sum) <= tol * Math.abs(sum);
+        type Halves = NonNullable<ReturnType<typeof halvesAt>>;
+        const netTotal = (c: FieldValue, h: Halves) => {
+          const v = c.val as number;
+          if (within(v, h.sum, BANK_NET_TOLERANCE)) return true;
+          if (!within(v, h.sum, BANK_NET_GAINS_TOLERANCE)) return false;
+          return c.tag === LAST_RESORT_REVENUE_TAG || (c.tag === "Revenues" && v >= (h.a.val as number));
+        };
+        // A QUARTER TAKES ITS YEAR'S VERDICT. A loss or gain lands in one
+        // quarter (STT's 294M repositioning loss, all in Q3 2023: filed 2,691M
+        // against halves of 2,985M), so a quarter on the same concept as a
+        // fiscal year that is a net total is one too, filed or differenced
+        // from that year; moving it alone would put the year and its quarters
+        // on two bases. A quarter after the newest year is judged on its own.
+        const yearIsNet = (c: FieldValue) => {
+          const [qs, qe] = c.covers ?? [null, null];
+          if (!qs || !qe) return false;
+          for (const [end, m] of yearCells) {
+            const y = m.get("revenue");
+            if (y?.val == null || !y.covers || y.tag !== c.tag || y.ns !== c.ns) continue;
+            if (!(y.covers[0] <= qs && qe <= y.covers[1])) continue;
+            const h = halvesAt("yc", end);
+            return !!h && sameFrame(y.covers, h.a.covers) && netTotal(y, h);
+          }
+          return false;
+        };
+        // Whether a valued period stays: no halves to judge it, a different
+        // frame, a net total, or a quarter of a net-total year.
+        const stays = (kind: "qc" | "yc", end: string, c: FieldValue) => {
+          const h = halvesAt(kind, end);
+          if (!h || !(h.sum > 0) || !sameFrame(c.covers, h.a.covers) || netTotal(c, h)) return true;
+          return kind === "qc" && yearIsNet(c);
+        };
+        const netAt = (kind: "qc" | "yc", end: string): FieldValue | null => {
+          const h = halvesAt(kind, end);
+          const r = rnoie[kind].get(end)?.get("revenue");
+          if (r?.val != null && r.val > 0 && (!h || netTotal(r, h))) return r;
+          if (!h || !(h.sum > 0)) return null;
+          const t = rv[kind].get(end)?.get("revenue");
+          if (t?.val != null && netTotal(t, h) && sameFrame(t.covers, h.a.covers)) return t;
+          return {
+            val: h.sum, tag: null, ns: h.a.ns, unit: h.a.unit, derived: "computed",
+            covers: h.a.covers, computedFrom: [BANK_REVENUE_HALVES[0], BANK_REVENUE_HALVES[1]],
+          };
+        };
+        let off = 0;
+        for (const [cells, kind] of kinds) {
+          for (const [end, m] of cells) {
+            const c = m.get("revenue");
+            if (c?.val != null && !stays(kind, end, c)) off++;
+          }
+        }
+        if (off) {
+          let moved = 0, computed = 0, blanked = 0;
+          for (const [cells, kind] of kinds) {
+            let newestValued = "";
+            for (const [end, m] of cells) if (m.get("revenue")?.val != null && end > newestValued) newestValued = end;
+            for (const [end, m] of cells) {
+              const c = m.get("revenue");
+              if (c?.val == null && end <= newestValued) continue;
+              if (c?.val != null && stays(kind, end, c)) continue;
+              const t = netAt(kind, end);
+              if (t) { m.set("revenue", t); moved++; if (t.derived === "computed") computed++; }
+              else if (m.has("revenue")) { m.delete("revenue"); blanked++; }
+            }
+          }
+          notes.push(`revenue: bank net basis — ${off} period(s) not a net total of ${BANK_REVENUE_HALVES.join(" + ")}; net revenue used for ${moved} period(s) (${computed} computed), ${blanked} without it left unreported`);
+        }
+      }
     }
 
     // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD (#552 COWORK #196/#200) ──
