@@ -42,6 +42,18 @@ check("a filed 1-for-100 reverse split: every year left as filed", sh(r, 2022) =
 const ok = facts([[2021, 100e6], [2022, 140e6], [2023, 300e6], [2024, 310e6]]);
 check("an ordinary series (x3 in a year) is untouched", sh(X.extractCompanyFacts("OK", ok), 2023) === 300e6);
 
+// A genuine issuance (QXO-shaped): net income / (EPS x shares) closes on both years.
+{
+  const NI = "NetIncomeLoss", EPS = "EarningsPerShareDiluted";
+  const yr = (y, v) => ({ start: `${y}-01-01`, end: `${y}-12-31`, val: v, form: "10-K", fy: y, fp: "FY", filed: `${y + 1}-02-15`, accn: `k${y}` });
+  const g = facts([[2021, 0.7e6], [2022, 0.7e6], [2023, 0.7e6], [2024, 400e6]], {
+    [NI]: { units: { USD: [yr(2021, 7e6), yr(2022, 7e6), yr(2023, 7e6), yr(2024, 400e6)] } },
+    [EPS]: { units: { "USD/shares": [yr(2021, 10), yr(2022, 10), yr(2023, 10), yr(2024, 1)] } },
+  });
+  const ge = X.extractCompanyFacts("QXO", g);
+  check("a genuine issuance whose EPS closes on both counts: both kept", sh(ge, 2024) === 400e6 && sh(ge, 2023) === 0.7e6, `${sh(ge, 2023)} ${sh(ge, 2024)}`);
+}
+
 console.log("\n3. mutation");
 {
   const m = extractRaw.replace("if (ratio <= SHARE_JUMP_MAX && ratio >= 1 / SHARE_JUMP_MAX) continue;", "continue;");

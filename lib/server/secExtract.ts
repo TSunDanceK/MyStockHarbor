@@ -2154,8 +2154,9 @@ function extractCompanyFactsWith(
   // HST +100,623,218%, TDW +107,515%, NN +428,698%, CLDX +112,660%, AMSC
   // +111,297% (relay write-yoy60-classify): one of each pair is on a unit slip
   // the rescale above could not prove. The move alone does not say which, so
-  // the cell FARTHER from the filer's own median (in log terms) is refused,
-  // Not reported, before the ratio fallback can compute EPS from it. A filer
+  // a count its own net income / (filed EPS x count) proves is kept, and of
+  // the rest the cell FARTHER from the filer's own median (in log terms) is
+  // refused, Not reported, before the ratio fallback can compute EPS from it. A filer
   // whose own split facts carry a ratio this large (a 1-for-100 reverse split)
   // is left as filed: that move is real.
   {
@@ -2175,7 +2176,19 @@ function extractCompanyFactsWith(
           if (ago?.val == null || !(ago.val > 0)) continue;
           const ratio = sh.val / ago.val;
           if (ratio <= SHARE_JUMP_MAX && ratio >= 1 / SHARE_JUMP_MAX) continue;
-          const [badEnd, bad] = off(sh.val) >= off(ago.val) ? [end, sh] : [agoEnd!, ago];
+          // A COUNT ITS OWN FIGURES PROVE IS KEPT: where the period's net income
+          // over (filed EPS x shares) closes within SHARE_UNIT_SLIP_TOLERANCE, the
+          // count is the filer's real basis (QXO's 2024 recapitalisation, SBET's
+          // 2025 issuance, LOAR's IPO), whatever the median says.
+          const closes = (e: string, c: FieldValue) => {
+            const row = cells.get(e);
+            const ni = row?.get("netIncome")?.val, eps = row?.get("epsDiluted");
+            return ni != null && ni !== 0 && eps?.val != null && eps.val !== 0 && eps.derived === "as-filed"
+              && Math.abs(ni / (eps.val * (c.val as number)) - 1) <= SHARE_UNIT_SLIP_TOLERANCE;
+          };
+          const okNew = closes(end, sh), okAgo = closes(agoEnd!, ago);
+          if (okNew && okAgo) continue;
+          const [badEnd, bad] = okNew ? [agoEnd!, ago] : okAgo ? [end, sh] : off(sh.val) >= off(ago.val) ? [end, sh] : [agoEnd!, ago];
           cells.get(badEnd)?.set("sharesDiluted", { ...bad, val: null, derived: "withheld" });
           notes.push(`sharesDiluted ${badEnd}: ${bad.val} moved x${ratio >= 1 ? ratio.toPrecision(3) : (1 / ratio).toPrecision(3)} against the same period a year apart and sits farther from the filer's median ${median}; withheld (unproved unit slip)`);
         }
