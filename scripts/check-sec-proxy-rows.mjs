@@ -7,7 +7,8 @@
 //   MET  FY2022: 10-K 0001099219-24-000035 5,284.0 (restated); DEF 14A
 //        0001099219-26-000026 2,354.0 (net income to common)
 // Pinned: both read their 10-K figure, a 10-K filed after a proxy still wins as
-// usual, a concept tagged ONLY in a proxy reads as absent, and the mutation that
+// usual, a frame only a proxy carries is kept (BLK FY2021), a proxy row a few
+// days off a 10-K frame is dropped (ONTO), and the mutation that
 // drops the filter is caught.
 import fs from "node:fs";
 import { lift } from "./lib/earnings-plan.mjs";
@@ -59,8 +60,20 @@ const later = facts({ NetIncomeLoss: [
   ["2024-01-01", "2024-12-31", 900.0, "10-K/A", 2024, "FY", "2025-06-01", "b"],
 ] });
 check("a 10-K/A filed after the proxy still reads", ni(X.extractCompanyFacts("X", later), "2024-12-31") === 900 * M);
-const only = facts({ NetIncomeLoss: [["2024-01-01", "2024-12-31", 7.0, "DEF 14A", null, null, "2025-04-01", "a"]] });
-check("a concept tagged only in a proxy reads as absent", ni(X.extractCompanyFacts("X", only), "2024-12-31") === null);
+// BLK FY2021: filed under its former CIK, so the proxy (5,901.0) is the only row.
+const only = facts({ NetIncomeLoss: [
+  ["2021-01-01", "2021-12-31", 5901.0, "DEF 14A", null, null, "2026-04-10", "0001308179-26-000262"],
+  ["2022-01-01", "2022-12-31", 5178.0, "10-K", 2024, "FY", "2025-02-25", "0000950170-25-026584"],
+  ["2022-01-01", "2022-12-31", 5178.0, "DEF 14A", null, null, "2026-04-10", "0001308179-26-000262"],
+] });
+check("a frame only a proxy carries is kept (BLK FY2021 5,901.0)", ni(X.extractCompanyFacts("BLK", only), "2021-12-31") === 5901 * M);
+// ONTO: the proxy's calendar year sits 3 days off the 52-week fiscal year.
+const onto = facts({ NetIncomeLoss: [
+  ["2022-01-02", "2022-12-31", 223.3, "10-K", 2022, "FY", "2023-02-21", "k22"],
+  ["2022-01-01", "2022-12-31", 0.2233, "DEF 14A", null, null, "2026-04-01", "p"],
+] });
+const o = X.extractCompanyFacts("ONTO", onto);
+check("a proxy row 1 day off a 10-K frame is dropped; the 10-K year reads 223.3", ni(o, "2022-12-31") === 223.3 * M && o.years.length === 1, JSON.stringify(o.years.map((p) => [p.start, p.end, p.values[NI]?.val])));
 check("a payload with a proxy row is copied, not mutated", X.withoutProxyRows(SCHW) !== SCHW && SCHW.facts["us-gaap"].NetIncomeLoss.units.USD.length === 4);
 {
   const plain = facts({ NetIncomeLoss: [["2024-01-01", "2024-12-31", 1, "10-K", 2024, "FY", "2025-01-01", "c"]] });

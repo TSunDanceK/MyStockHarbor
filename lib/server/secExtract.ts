@@ -1415,31 +1415,44 @@ export function revenueGapConcept(facts: CompanyFacts, currency = "USD"): string
  * only for a filer that tags two or more concepts of such a field -- the only
  * case where the two readings can differ.
  */
-// ── A PROXY STATEMENT IS NOT A FINANCIAL STATEMENT (earnings audit r2) ─────
+// ── A PROXY STATEMENT DOES NOT OVERRIDE A FINANCIAL STATEMENT (earnings audit r2) ──
 // Since 2023 the pay-versus-performance table puts NetIncomeLoss (and
 // sometimes revenue) in DEF 14A / PRE 14A. companyfacts carries those rows, and
 // a proxy is filed AFTER the 10-K, so newest-filed made it win the frame:
 //   SCHW FY2021-25 read 5.9M .. 8.9M (the proxy tagged millions as units),
 //   against the 10-K's 5,855M .. 8,852M;
 //   MET FY2022 read 2,354M (the proxy's net income to common), against the
-//   10-K's 5,284M (restated); DELL FY2022-25 read the proxy's figures too.
-// Dropped once, here, so every reader below sees the statements only.
+//   10-K's 5,284M (restated); DELL FY2022-25 read the proxy's figures too;
+//   ONTO's proxy rows on calendar-year dates (0.1M) displaced its 52/53-week
+//   fiscal years, 2-5 days off, so FY2020-23 read blank.
+// So a proxy row is dropped wherever the same concept has a statement row
+// (any other form) for that frame, within FRAME_SLACK_DAYS at both ends. A
+// frame ONLY a proxy carries is kept: BLK's FY2021 and PNFP's FY2021-22 are
+// filed under their former CIKs, and the proxy is the one source here (BLK's
+// proxy matches its 10-K on every year both carry). Dropped once, here, so
+// every reader below sees the same rows.
 const PROXY_FORM = /^(PRE|DEF|DEFA|DEFR|DEFM|PREM|DEFC|PREC)\s?14[AC]/i;
+const FRAME_SLACK_DAYS = 10;
 
 export function withoutProxyRows(facts: CompanyFacts): CompanyFacts {
   const src = facts?.facts;
   if (!src) return facts;
+  type R = { form?: string; start?: string; end?: string };
+  const day = (d?: string) => (d ? Date.parse(d) / 86_400_000 : NaN);
+  const near = (a?: string, b?: string) => (!a && !b) || Math.abs(day(a) - day(b)) <= FRAME_SLACK_DAYS;
   let touched = false;
   const out: Record<string, Record<string, unknown>> = {};
   for (const [ns, concepts] of Object.entries(src)) {
     const nsOut: Record<string, unknown> = {};
     for (const [tag, def] of Object.entries(concepts ?? {})) {
-      const units = (def as { units?: Record<string, { form?: string }[]> })?.units;
+      const units = (def as { units?: Record<string, R[]> })?.units;
       if (!units) { nsOut[tag] = def; continue; }
+      const statements = Object.values(units).flat().filter((r) => !PROXY_FORM.test(r?.form ?? ""));
       let changed = false;
       const kept: Record<string, unknown[]> = {};
       for (const [u, rows] of Object.entries(units)) {
-        const k = (rows ?? []).filter((r) => !PROXY_FORM.test(r?.form ?? ""));
+        const k = (rows ?? []).filter((r) => !PROXY_FORM.test(r?.form ?? "")
+          || !statements.some((t) => near(t.start, r.start) && near(t.end, r.end)));
         if (k.length !== (rows ?? []).length) changed = true;
         if (k.length) kept[u] = k;
       }
