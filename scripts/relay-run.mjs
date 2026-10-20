@@ -622,6 +622,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY DESPITE THE PREFIX (fix/fx-latest-rate-fy): the non-USD stored
+  // sets whose "About these figures" rate changes. GET/MGETs only.
+  // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  "write-fx-latest-rate-census": {
+    script: "scripts/fx-latest-rate-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // REPORT DATES AND TIMING FROM EDGAR, measured against the stored FMP dates.
   // Credentialled to read the store; fetches EDGAR itself. No writes.
   // SEEDS THE REPORT-DATES STORE for a preview, using the shipped functions.

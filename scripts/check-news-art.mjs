@@ -207,6 +207,12 @@ const artModuleSrc = read("lib/server/news/art.ts")
     // show the fall-through.
     () => 'const manifest = { "sector-banks": 4, "sector-semiconductors": 6, "event-earnings": 5 };'
   )
+  // THE REAL-PHOTO POOL'S MANIFEST, injectable: empty unless a rule below sets
+  // globalThis.__newsRealManifest and loads its own copy (loadArtWithReal).
+  .replace(
+    /^import realManifest from "@\/public\/news-art\/real\/manifest.json";$/m,
+    () => "const realManifest = globalThis.__newsRealManifest ?? { files: [] };"
+  )
   // Step 6 added a type-only import for EventType. Erasing it keeps this
   // harness about art selection, which is what it is for.
   .replace(/^import type \{ EventType \} from ".\/eventType";$/m, "")
@@ -1137,8 +1143,8 @@ const loadTagged = async (manifestObject, label) => {
     // of hashKey in this harness, which is the duplication the module header
     // forbids in the app.
     .replace(
-      /^import \{ ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt, type CardArt, type NewsArt \} from "\.\/art";$/m,
-      "const { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt } = globalThis.__newsArtV1;"
+      /^import \{ ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, pickReal, planCardArt, type ArtSurface, type CardArt, type NewsArt \} from "\.\/art";$/m,
+      "const { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, pickReal, planCardArt } = globalThis.__newsArtV1;"
     )
     // The classifier and the event-type leg are handed over already loaded, for
     // the same reason: a `data:` module cannot resolve a relative specifier, and
@@ -1165,15 +1171,17 @@ const loadTagged = async (manifestObject, label) => {
   }
   for (const [marker, why] of [
     ["const manifest = {", "the manifest was not substituted"],
-    ["const { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt } = globalThis.__newsArtV1;", "the art.ts import was not rewired"],
+    ["const { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, pickReal, planCardArt } = globalThis.__newsArtV1;", "the art.ts import was not rewired"],
     ["const { industryTag } = globalThis.__newsIndustry;", "the industry table import was not rewired"],
     ["const { articleTopic, MARKET_WIDE_SUBJECTS } = globalThis.__newsTopic;", "the classifier import was not rewired"],
     ["const { eventTypeFromTitle } = globalThis.__newsEventType;", "the eventType import was not rewired"],
   ]) {
     if (!src.includes(marker)) { console.error(`FAIL: ${why} (${label}).`); process.exit(1); }
   }
+  // The label in the source: two loads with the same manifest are still two
+  // modules (a data: URL is cached by content), each bound to its own art.ts.
   return import(`data:text/javascript;base64,${Buffer.from(
-    ts.transpileModule(src, {
+    ts.transpileModule(`${src}\n// ${label}`, {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
     }).outputText
   ).toString("base64")}`);
@@ -1515,7 +1523,7 @@ check(
   "/sector/*/news: a compact 56px row with no constituent takes a square crop of the generic picture (#553 COWORK #42)",
   (() => {
     const sector = readCodeOnly("app/sector/[slug]/news/page.tsx");
-    return /plan=\{withGenericFallback\(planCardArt\(\{\s*variant: "compact",[\s\S]{0,200}canGenerate: symbol !== null,\s*\}\), item\.guid \?\? item\.link, takenGeneric\)\}/.test(sector) &&
+    return /plan=\{withGenericFallback\(planCardArt\(\{\s*variant: "compact",[\s\S]{0,200}canGenerate: symbol !== null,\s*surface: "news",\s*\}\), item\.guid \?\? item\.link, takenGeneric\)\}/.test(sector) &&
       /const compactThumbStyle: CSSProperties = \{ width: 56, height: 56,[^}]*objectFit: "cover"/.test(sector);
   })(),
   "no row without a picture; the lead cards and the rows share one takenGeneric set so a picture is not repeated on the page"
@@ -1920,6 +1928,236 @@ check(
     !/planSymbolCardArt|industryArt/.test(readCodeOnly("lib/server/internalNews.ts")),
   "the sector page has a slug and no industry, and the strip is a different payload; both are their own change"
 );
+
+// ──────────────────────── 11. THE REAL-PHOTO POOL: NEWS SURFACES ONLY
+//
+// public/news-art/real/ (its own manifest, `real-<subject>-NN`) is reachable
+// only with surface "news". These rules hold the call sites to that, prove by
+// CALLING the pickers against a synthetic real pool that the default never
+// reaches it, check every listed file is on disk at the library's two sizes,
+// and keep every sector and event bucket at REAL_FLOOR images or more.
+console.log("\n=== 11. The real-photo pool: news surfaces only ===\n");
+
+const REAL_FLOOR = 3;
+const PICKER_CALL = /\b(planSymbolCardArt|planCardArt|pickArt|planHeadlineArt|artFor)\(/;
+/** Where "news" may be passed, and (dashboardCards) the one function it may appear in. */
+const NEWS_SITES = {
+  "app/headlines/page.tsx": null,
+  "app/stock/[symbol]/news/page.tsx": null,
+  "app/sector/[slug]/news/page.tsx": null,
+  "lib/server/dashboardCards.ts": "readNews",
+};
+const walkSrc = (dir) => fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).flatMap((e) => {
+  const p = `${dir}/${e.name}`;
+  return e.isDirectory() ? (e.name === "node_modules" || e.name.startsWith(".") ? [] : walkSrc(p)) : /\.(ts|tsx)$/.test(e.name) ? [p] : [];
+});
+const PICKER_FILES = [...walkSrc("app"), ...walkSrc("lib")].filter((f) => f !== "lib/server/news/art.ts" && f !== "lib/server/news/artTags.ts" && PICKER_CALL.test(readCodeOnly(f)));
+const fnBody = (code, name) => {
+  const at = code.search(new RegExp(`(async )?function ${name}\\(`));
+  if (at < 0) return "";
+  const open = code.indexOf("{", code.indexOf(")", at));
+  let depth = 0;
+  for (let i = open; i < code.length; i += 1) { if (code[i] === "{") depth += 1; else if (code[i] === "}" && --depth === 0) return code.slice(open, i + 1); }
+  return "";
+};
+/** The call-site rule over a map of file -> code (so a mutant can swap one file). */
+const newsSitesOk = (codeOf) => {
+  const bad = [];
+  for (const f of PICKER_FILES) {
+    const code = codeOf(f), n = (code.match(/surface: "news"/g) ?? []).length;
+    if (!(f in NEWS_SITES)) { if (n || /surface: ["'`]news/.test(code)) bad.push(`${f} passes "news"`); continue; }
+    if (!n) bad.push(`${f} is a news surface and does not pass "news"`);
+    const fn = NEWS_SITES[f];
+    if (fn && (fnBody(code, fn).match(/surface: "news"/g) ?? []).length !== n) bad.push(`${f}: "news" outside ${fn}()`);
+  }
+  return bad;
+};
+check(
+  `the picker call sites: only the four news surfaces pass "news" (${PICKER_FILES.length} files scanned)`,
+  (() => { const bad = newsSitesOk((f) => readCodeOnly(f)); if (bad.length) console.log(`        ${bad.join("\n        ")}`); return bad.length === 0 && PICKER_FILES.length >= 6 && PICKER_FILES.includes("lib/server/insightPage.ts") && PICKER_FILES.includes("lib/server/internalNews.ts"); })(),
+  "/headlines, /stock/[symbol]/news, /sector/[slug]/news and the dashboard's Headlines card (readNews) only"
+);
+check(
+  "mutant bites: the insight hero, or the dashboard's analyser strip, passing \"news\" fails the call-site rule",
+  newsSitesOk((f) => f === "lib/server/insightPage.ts"
+    ? readCodeOnly(f).replace("{ heroArt: n.heroArt, summary: n.summary }", '{ heroArt: n.heroArt, summary: n.summary, surface: "news" }')
+    : readCodeOnly(f)).some((b) => b.startsWith("lib/server/insightPage.ts")) &&
+    newsSitesOk((f) => f === "lib/server/internalNews.ts"
+      ? readCodeOnly(f).replace("canGenerate: true,", 'canGenerate: true, surface: "news",')
+      : readCodeOnly(f)).some((b) => b.startsWith("lib/server/internalNews.ts")),
+  "a scan that misses a non-news caller is the gap this pool must not have"
+);
+
+// ── THE DEFAULT NEVER REACHES IT, BY CALLING THE PICKERS ──────────────────
+// A synthetic real pool with a photo for EVERY subject the library knows (each
+// v2 tag and each v1 bucket), loaded into fresh copies of art.ts and artTags.ts.
+const V1_SHIPPED = JSON.parse(read("public/news-art/manifest.json"));
+const V2_SHIPPED = JSON.parse(read("public/news-art/manifest-v2.json"));
+const ALL_SUBJECTS = [...new Set([...Object.values(V2_SHIPPED).flatMap((e) => [...(e.primary ?? []), ...(e.motif ?? [])]).filter((t) => t !== "any"), ...Object.keys(V1_SHIPPED)])];
+let nonce = 0;
+const loadArtWith = async (v1, realManifest, mutate = (s) => s) => {
+  const src = mutate(artModuleSrc).replace(/^const manifest = \{ "sector-banks".*$/m, () => `const manifest = ${JSON.stringify(v1)};`);
+  globalThis.__newsRealManifest = realManifest;
+  try {
+    return await import(`data:text/javascript;base64,${Buffer.from(`// ${nonce++}\n` + ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText).toString("base64")}`);
+  } finally { delete globalThis.__newsRealManifest; }
+};
+const SYN_REAL = { files: ALL_SUBJECTS.flatMap((s) => [`real-${s}-01`, `real-${s}-02`]) };
+const withV1 = async (v1mod, fn) => { const prev = globalThis.__newsArtV1; globalThis.__newsArtV1 = v1mod; try { return await fn(); } finally { globalThis.__newsArtV1 = prev; } };
+const realArt = await loadArtWith(V1_SHIPPED, SYN_REAL);
+const realTags = await withV1(realArt, () => loadTagged(V2_SHIPPED, "synthetic real pool"));
+const isReal = (plan) => plan.kind === "library" && /\/news-art\/real\/real-/.test(plan.art.src);
+const INSIGHT_POSTS = ["content/insights", "content/insights-fixtures"].flatMap((d) => fs.readdirSync(path.join(ROOT, d)).filter((f) => f.endsWith(".md")).map((f) => {
+  const fm = read(`${d}/${f}`).split(/^---$/m)[1] ?? "";
+  const field = (k) => fm.match(new RegExp(`^${k}:\\s*"?(.*?)"?\\s*$`, "m"))?.[1] ?? "";
+  return { slug: f.replace(/\.md$/, ""), symbol: field("symbol").toUpperCase(), title: field("title"), summary: field("summary") || field("excerpt") };
+}));
+/** Every insight hero and Related card, as artFor plans them (no surface), against a pool with a photo for everything. */
+const insightReal = (tagsMod, artMod) => {
+  const hits = [];
+  for (const p of INSIGHT_POSTS) {
+    const prof = staticProfile.sicProfileFor(p.symbol);
+    const sectorBucket = artMod.bucketFor(prof?.sector ? prof.sector.toLowerCase().replace(/ /g, "-") : null, prof?.industry ?? null);
+    for (const eventType of [null, "earnings"]) {
+      const plan = tagsMod.planSymbolCardArt({ variant: "lead", title: p.title, description: p.summary, eventType, industry: prof?.industry ?? null, sectorBucket,
+        key: `insight:${p.slug}`, takenNames: new Set(), takenBuckets: new Map(), canGenerate: true });
+      if (isReal(plan)) hits.push(p.slug);
+    }
+  }
+  return hits;
+};
+const asNews = (tagsMod) => INSIGHT_POSTS.filter((p) => isReal(tagsMod.planSymbolCardArt({ variant: "lead", title: p.title, description: p.summary, eventType: null,
+  industry: staticProfile.sicProfileFor(p.symbol)?.industry ?? null, sectorBucket: "sector-banks", key: p.slug, takenNames: new Set(), takenBuckets: new Map(), canGenerate: true, surface: "news" }))).length;
+check(
+  `no insight hero or Related card resolves to a real- file (${INSIGHT_POSTS.length} posts, a photo for every one of ${ALL_SUBJECTS.length} subjects)`,
+  insightReal(realTags, realArt).length === 0 && asNews(realTags) === INSIGHT_POSTS.length &&
+    /surface: post\.surface \?\? "other",/.test(readCodeOnly("lib/server/insightPage.ts")) &&
+    (() => { const calls = readCodeOnly("lib/server/insightPage.ts").split("\n").filter((l) => /(= |art: )artFor\(/.test(l)); return calls.length === 2 && calls.every((l) => !/surface/.test(l)); })(),
+  "the same posts as a news surface DO reach the pool, so the default's answer is not an empty pool's"
+);
+check(
+  "every non-news default stays off the pool: planCardArt, pickArt and planHeadlineArt with no surface",
+  (() => {
+    const taken = new Map();
+    const v1 = Object.keys(V1_SHIPPED).every((b) => !isReal(realArt.planCardArt({ variant: "lead", sectorBucket: b, key: b, taken, canGenerate: true })) &&
+      !/\/real\//.test(realArt.pickArt(b, b)?.src ?? "") && /\/real\//.test(realArt.pickArt(b, b, undefined, "repeat", "news")?.src ?? ""));
+    const h = ["Oil prices jump as OPEC cuts output", "Fed holds rates steady", "Chipmaker beats estimates"].every((title) =>
+      !isReal(realTags.planHeadlineArt({ title, key: title, takenNames: new Set(), takenBuckets: new Map() })));
+    return v1 && h;
+  })(),
+  "the default is the guarantee: a caller that forgets the option gets the library"
+);
+{
+  // MUTANT: the default flipped to "news" in artTags.ts must fail the insight rule.
+  const flipped = await withV1(realArt, () => loadTagged(V2_SHIPPED, "control for the mutant"));
+  const src = read("lib/server/news/artTags.ts");
+  const applies = src.includes('const surface = input.surface ?? "other";');
+  let caught = false;
+  if (applies) {
+    const mod = await withV1(realArt, async () => {
+      const s = src.replace('const surface = input.surface ?? "other";', 'const surface = input.surface ?? "news";');
+      return import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(
+        s.replace(/^import manifest from "@\/public\/news-art\/manifest-v2\.json";$/m, () => `const manifest = ${JSON.stringify(V2_SHIPPED)};`)
+          .replace(/^import \{ ART_WIDTH[^\n]*from "\.\/art";$/m, "const { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, pickReal, planCardArt } = globalThis.__newsArtV1;")
+          .replace(/^import \{ articleTopic, MARKET_WIDE_SUBJECTS \} from "\.\/articleTopic";$/m, "const { articleTopic, MARKET_WIDE_SUBJECTS } = globalThis.__newsTopic;")
+          .replace(/^import \{ eventTypeFromTitle, type EventType \} from "\.\/eventType";$/m, "const { eventTypeFromTitle } = globalThis.__newsEventType;")
+          .replace(/^import \{ industryTag \} from "\.\/industryArt";$/m, "const { industryTag } = globalThis.__newsIndustry;") + `\n// ${nonce++}`,
+        { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText).toString("base64")}`);
+    });
+    caught = insightReal(mod, realArt).length > 0 && insightReal(flipped, realArt).length === 0;
+  }
+  check("mutant bites: planSymbolCardArt defaulting to \"news\" puts a real photo on an insight hero", caught, applies ? "" : "the mutation did not apply");
+}
+
+// ── THE FILES: EVERY LISTED NAME ON DISK, AT BOTH SIZES ───────────────────
+const REAL_DIR = "public/news-art/real";
+const realManifestOnDisk = JSON.parse(read(`${REAL_DIR}/manifest.json`));
+const { default: sharp } = await import("sharp");
+/** Problems with a real manifest against a folder: names, subjects, both files, their sizes; strays. */
+const realFileProblems = async (manifestObj, dir = REAL_DIR) => {
+  const out = [];
+  const files = Array.isArray(manifestObj.files) ? manifestObj.files : null;
+  if (!files) return ["files is not an array"];
+  for (const name of files) {
+    const m = typeof name === "string" ? name.match(realArt.REAL_NAME) : null;
+    if (!m) { out.push(`${name}: not real-<subject>-NN`); continue; }
+    if (!ALL_SUBJECTS.includes(m[1])) out.push(`${name}: "${m[1]}" is no v2 tag or v1 bucket`);
+    for (const [suffix, w, h] of [["", 1200, 675], ["-sm", 320, 180]]) {
+      const f = path.join(ROOT, dir, `${name}${suffix}.webp`);
+      if (!fs.existsSync(f)) { out.push(`${name}${suffix}.webp missing`); continue; }
+      const meta = await sharp(f).metadata().catch(() => null);
+      if (!meta || meta.width !== w || meta.height !== h) out.push(`${name}${suffix}.webp is ${meta ? `${meta.width}x${meta.height}` : "unreadable"}, not ${w}x${h}`);
+    }
+  }
+  const listed = new Set(files.flatMap((n) => [`${n}.webp`, `${n}-sm.webp`]));
+  for (const f of fs.readdirSync(path.join(ROOT, dir))) if (f.endsWith(".webp") && !listed.has(f)) out.push(`${f} on disk, not in the manifest`);
+  return out;
+};
+{
+  const problems = await realFileProblems(realManifestOnDisk);
+  if (problems.length) console.log(`        ${problems.slice(0, 12).join("\n        ")}`);
+  check(`every real- file in ${REAL_DIR}/manifest.json is on disk at 1200x675 and 320x180 (${realManifestOnDisk.files?.length ?? 0} listed)`, problems.length === 0,
+    "a name with no file is a broken image on a live news card");
+  const missing = await realFileProblems({ files: [...(realManifestOnDisk.files ?? []), "real-chips-99"] });
+  check("mutant bites: a listed real- name with no file fails", missing.some((p) => /real-chips-99\.webp missing/.test(p)));
+  // And the src the picker builds is that file's own path.
+  const one = (realManifestOnDisk.files ?? [])[0];
+  const built = one ? (await loadArtWith(V1_SHIPPED, realManifestOnDisk)).pickReal("news", [one.match(realArt.REAL_NAME)[1]], "k") : null;
+  check("the picker's src for a real file is its path under public/", !one || (built && fs.existsSync(path.join(ROOT, "public", built.src)) && fs.existsSync(path.join(ROOT, "public", built.srcSet.split(" ")[0]))));
+}
+
+// ── EACH real- FILE IS LISTED EXACTLY ONCE, AND ONLY IN THE REAL MANIFEST ──
+/** Problems: a real name twice, a real- key in manifest.json, a real-*.webp outside public/news-art/real/. */
+const realOnceProblems = (realM, v1) => {
+  const out = [], seen = new Set();
+  for (const n of realM.files ?? []) { if (seen.has(n)) out.push(`${n} listed twice`); seen.add(n); }
+  for (const k of Object.keys(v1)) if (/^real-/.test(k)) out.push(`${k} in manifest.json`);
+  for (const f of fs.readdirSync(path.join(ROOT, "public/news-art"))) if (/^real-.*\.webp$/.test(f)) out.push(`${f} outside real/`);
+  return out;
+};
+check(
+  "every real- file appears exactly once, in the real manifest only, with its -sm beside it (checked above)",
+  (() => { const p = realOnceProblems(realManifestOnDisk, V1_SHIPPED); if (p.length) console.log(`        ${p.join("\n        ")}`); return p.length === 0; })()
+);
+check(
+  "mutant bites: a real name listed twice, or a real- key in manifest.json, fails",
+  realOnceProblems({ files: [...(realManifestOnDisk.files ?? []), (realManifestOnDisk.files ?? ["real-chips-01"])[0]] }, V1_SHIPPED).some((p) => /listed twice/.test(p)) &&
+    realOnceProblems(realManifestOnDisk, { ...V1_SHIPPED, "real-sector-energy": 5 }).some((p) => /in manifest\.json/.test(p))
+);
+{
+  // An -sm left behind: its full-size file moved without it.
+  const one = (realManifestOnDisk.files ?? [])[0];
+  if (one) {
+    const sm = path.join(ROOT, REAL_DIR, `${one}-sm.webp`), tmp = `${sm}.mutant`;
+    fs.renameSync(sm, tmp);
+    let caught = false;
+    try { caught = (await realFileProblems(realManifestOnDisk)).some((p) => p === `${one}-sm.webp missing`); } finally { fs.renameSync(tmp, sm); }
+    check("mutant bites: a real file whose -sm variant was not moved with it fails", caught);
+  }
+}
+
+// ── EVERY SECTOR AND EVENT BUCKET KEEPS REAL_FLOOR IMAGES ─────────────────
+const bucketsShort = (v1) => {
+  const referenced = new Set([...artModuleSrc.matchAll(/"((?:sector|event)-[a-z]+)"/g)].map((m) => m[1]));
+  const all = [...new Set([...referenced, ...Object.keys(v1).filter((b) => /^(sector|event)-/.test(b))])];
+  return all.filter((b) => !(Number(v1[b]) >= REAL_FLOOR)).map((b) => `${b}=${v1[b] ?? 0}`);
+};
+check(
+  `every sector and event bucket holds at least ${REAL_FLOOR} images (${Object.keys(V1_SHIPPED).length} buckets)`,
+  (() => { const s = bucketsShort(V1_SHIPPED); if (s.length) console.log(`        short: ${s.join(", ")}`); return s.length === 0; })(),
+  "moving photographs into the real pool must not leave a bucket the non-news surfaces depend on near empty"
+);
+check(
+  `mutant bites: a bucket at ${REAL_FLOOR - 1} fails the floor`,
+  bucketsShort({ ...V1_SHIPPED, "sector-banks": REAL_FLOOR - 1 }).includes(`sector-banks=${REAL_FLOOR - 1}`)
+);
+{
+  // Contiguous numbering: artAt builds <bucket>-01..NN from the count, so a gap is a broken image.
+  const gaps = Object.entries(V1_SHIPPED).flatMap(([b, n]) => Array.from({ length: n }, (_, i) => `${b}-${String(i + 1).padStart(2, "0")}`)
+    .flatMap((stem) => [`${stem}.webp`, `${stem}-sm.webp`]).filter((f) => !fs.existsSync(path.join(ROOT, "public/news-art", f))));
+  if (gaps.length) console.log(`        missing: ${gaps.slice(0, 10).join(", ")}`);
+  check("every v1 bucket's files run 01..count with no gap (artAt builds the name from the index)", gaps.length === 0);
+}
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

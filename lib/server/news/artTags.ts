@@ -26,7 +26,7 @@
 // picture asserts something false about the article, a missing one asserts
 // nothing. /headlines falls through to the event-art path it already had.
 import manifest from "@/public/news-art/manifest-v2.json";
-import { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt, type CardArt, type NewsArt } from "./art";
+import { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, pickReal, planCardArt, type ArtSurface, type CardArt, type NewsArt } from "./art";
 import { articleTopic, MARKET_WIDE_SUBJECTS } from "./articleTopic";
 import { eventTypeFromTitle, type EventType } from "./eventType";
 import { industryTag } from "./industryArt";
@@ -121,6 +121,17 @@ function artFor(name: string): NewsArt {
     // what the check script and any debugging actually want.
     bucket: name,
   };
+}
+
+/**
+ * ONE IMAGE BY ITS WHOLE NAME, or null when the manifest has no such name.
+ *
+ * For an insight post's `heroArt` frontmatter (an editor's pick that overrides
+ * the plan). The manifest is the list of files that exist, so a name it does
+ * not hold is a broken picture, never served; check-insight-page fails on one.
+ */
+export function taggedArtByName(name: string): NewsArt | null {
+  return Object.hasOwn(ENTRIES, name) ? artFor(name) : null;
 }
 
 /** Every name that ties for the top score, or an empty array when the top is 0. */
@@ -311,8 +322,13 @@ export function planHeadlineArt(input: {
   takenNames: Set<string>;
   /** v1 no-repeat state, keyed by BUCKET. Mutated; one per page. */
   takenBuckets: Map<string, Set<number>>;
+  /** Only "news" may resolve to a real photo (art.ts, pickReal). Default "other". */
+  surface?: ArtSurface;
 }): CardArt {
   const { subjects, motifs } = articleTopic(input.title, input.description ?? null);
+  // 0. On a news surface, a real photo of the article's subject (or motif) first.
+  const real = pickReal(input.surface, [...subjects, ...motifs], input.key, input.takenNames);
+  if (real) return { kind: "library", art: real };
   const tagged = pickTagged({
     subjectTags: subjects,
     articleMotifs: motifs,
@@ -335,6 +351,8 @@ export function planHeadlineArt(input: {
     key: input.key,
     taken: input.takenBuckets,
     canGenerate: false,
+    surface: input.surface,
+    takenReal: input.takenNames,
   }), input.key, input.takenNames);
 }
 
@@ -389,11 +407,18 @@ export function planSymbolCardArt(input: {
   /** v1 no-repeat state, keyed by BUCKET. Mutated; one per page. */
   takenBuckets: Map<string, Set<number>>;
   canGenerate: boolean;
+  /**
+   * Only "news" may resolve to a real photo (art.ts, pickReal), and it tries
+   * one before each layer's own tag or bucket. Default "other": insight heroes,
+   * Related cards and every other caller never see the real pool.
+   */
+  surface?: ArtSurface;
 }): CardArt {
   const {
     variant, title, description, eventType, industry, sectorBucket,
     key, takenNames, takenBuckets, canGenerate,
   } = input;
+  const surface = input.surface ?? "other";
 
   if (variant === "lead") {
     // ── LAYER 1 ──────────────────────────────────────────────────────────
@@ -424,6 +449,8 @@ export function planSymbolCardArt(input: {
       (tag) => !MARKET_WIDE_SUBJECTS.has(tag) && tag !== ownTag
     );
     if (specific.length) {
+      const real = pickReal(surface, specific, key, takenNames);
+      if (real) return { kind: "library", art: real };
       const art = pickTagged({
         subjectTags: specific,
         articleMotifs: [],
@@ -440,6 +467,8 @@ export function planSymbolCardArt(input: {
     // A null sector argument makes it answer about the EVENT half alone.
     if (!bucketForItem(eventType ?? null, null)) {
       if (ownTag) {
+        const real = pickReal(surface, [ownTag], key, takenNames);
+        if (real) return { kind: "library", art: real };
         const art = pickTagged({
           subjectTags: [ownTag],
           articleMotifs: [],
@@ -468,5 +497,8 @@ export function planSymbolCardArt(input: {
     // stories are the same one; the generated card says nothing it does not
     // know. On this surface the second is always the better trade.
     onExhausted: "skip",
+    // One real-name set across every layer, so no real photo repeats on a page.
+    surface,
+    takenReal: takenNames,
   });
 }

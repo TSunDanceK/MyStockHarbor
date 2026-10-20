@@ -26271,6 +26271,17 @@
    "entityType": "operating",
    "annualForm": "10-K"
   },
+  "UMAC": {
+   "cik": "0001956955",
+   "sic": "3663",
+   "sicDescription": "Radio & Tv Broadcasting & Communications Equipment",
+   "stateOrCountry": "FL",
+   "stateOfIncorporation": "NV",
+   "website": null,
+   "fiscalYearEnd": "1231",
+   "entityType": "operating",
+   "annualForm": "10-K"
+  },
   "UMBF": {
    "cik": "0000101382",
    "sic": "6021",

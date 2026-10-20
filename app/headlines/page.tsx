@@ -112,6 +112,8 @@ export default async function HeadlinesPage() {
       key: item.url,
       takenNames: takenTagNames,
       takenBuckets: takenByBucket,
+      // A news surface: the real-photo pool may answer first (lib/server/news/art.ts).
+      surface: "news",
     })
   );
 

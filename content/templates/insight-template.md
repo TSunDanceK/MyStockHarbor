@@ -42,6 +42,7 @@ symbol: "AMZN"                                                      # the ticker
 eventType: "level-test"                                             # one of the list below
 timeframe: "d"                                                      # "d" (daily) or "w" (weekly)
 levels: ["MA200"]                                                   # the level(s) discussed, kinds only
+# heroArt: "aerospace-defence-any-04"                               # optional: a news-art image name for the hero (see below)
 summary: "Two or three sentences: what the setup is and why it is in focus now."
 why: "One or two sentences on why that level or event may matter here."
 sources:
@@ -87,6 +88,12 @@ drivers:                                                            # what's dri
   `WMA200` (200-week, weekly posts), `BBMID` (the 20-day average, the
   Bollinger midline). Leave it `[]` when the post is about an event with no
   level; the "Since" strip then shows the move and the S&P comparison only.
+- **heroArt**: optional. The hero picture is chosen automatically from the
+  title and the company's industry; when that finds nothing (the hero shows
+  only the faint ticker letters), name a picture instead: a key of
+  `public/news-art/manifest-v2.json`, e.g. `aerospace-defence-any-04`. It also
+  becomes the share image. A name not in the manifest fails
+  `scripts/check-insight-page.mjs`.
 
 ---
 

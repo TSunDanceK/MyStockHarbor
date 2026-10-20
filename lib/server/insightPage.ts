@@ -13,6 +13,8 @@
 //   getSectorPerformanceRow                            1 GET (15 min key)
 //   readScreenFlags (pickers payload, below)           ~3 commands, Data Cache 6 h, shared by every post
 //   capex records                                      2 GETs, Data Cache 1 h, shared by every post
+//   readComingUpWeeks (the calendar card, when shown)  ~3 commands, Data Cache 15 min, shared with the dashboard
+//   content/markets/spx-weekly.json (the S&P card)     0 (a committed file; the rest is SPY's bars, above)
 // About 9 commands a refill, at most 4 refills a post a day: under 2,200 a day
 // for all 59 posts if every one is read every 6 hours, plus the shared
 // caches' refills. Nothing here writes.
@@ -38,8 +40,8 @@ import { peSectorLine } from "@/lib/peSectorLine";
 import { sicProfileFor } from "@/lib/server/staticProfile";
 import { getSectorByLabel } from "@/lib/sectors";
 import { getSectorPerformanceRow } from "@/lib/server/sectorPanels";
-import { bucketFor, type CardArt } from "@/lib/server/news/art";
-import { planSymbolCardArt } from "@/lib/server/news/artTags";
+import { bucketFor, type ArtSurface, type CardArt } from "@/lib/server/news/art";
+import { planSymbolCardArt, taggedArtByName } from "@/lib/server/news/artTags";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { readSpendingRecord } from "@/lib/server/capexSpending";
 import { RECEIVER_ENTRIES, readReceiversRecord } from "@/lib/server/capexReceivers";
@@ -55,7 +57,7 @@ import { toSpendingInput } from "@/lib/server/capexSpendingJob";
 import { confluence } from "@/lib/ta/confluence";
 import type { KeyBar } from "@/lib/ta/keyLevels";
 import {
-  dayWords, differenceNote, indexOnOrBefore, levelSeries, normaliseInsight, publishBar, sectorPeers, setupLabel, sinceView, LEVEL_NAME,
+  calendarRows, dayWords, differenceNote, indexOnOrBefore, spyMoves, levelSeries, normaliseInsight, publishBar, sectorPeers, setupLabel, sinceView, LEVEL_NAME,
   type EodBar, type NormalisedInsight, type SetupLabel, type SinceView,
 } from "@/lib/insightView";
 import { SCREEN_ROUTES, screenFor, type ScreenFlag } from "@/lib/insightScreens";
@@ -64,6 +66,11 @@ import { sectorOf } from "@/lib/server/sectorOf";
 import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
 import { cleanName } from "@/lib/server/companyNames";
 import { easternDate } from "@/lib/server/calendarDayState";
+import { readComingUpWeeks, shortDay } from "@/lib/server/earningsWeeksShared";
+import { buildMarketMoodScore } from "@/lib/market-mood";
+import { rsiWilder, lastNum } from "@/lib/indicators";
+import { trendWords } from "@/lib/spxPage";
+import { parseSpxWeekly } from "@/lib/spxWeekly";
 
 const INSIGHTS_DIR = path.join(process.cwd(), "content/insights");
 /**
@@ -220,8 +227,26 @@ export type MoreCard =
   // THE SECTOR CARD, FILLED (#563 COWORK #181): the figures the side box already
   // has (no new read), and up to SECTOR_PEERS same-sector stocks with a page here.
   | { kind: "sector"; href: string; name: string; move: SectorMoveFigures | null; peers: ScreenMember[] }
-  | { kind: "calendar"; href: string }
-  | { kind: "spx"; href: string };
+  // FILLED FROM DATA THE SITE ALREADY HOLDS: the calendar's shared week list
+  // (the dashboard's), and SPY's bars this page already reads plus the
+  // committed weekly S&P file. A missing value is left out, never a placeholder.
+  | { kind: "calendar"; href: string; week: CalendarWeek | null }
+  | { kind: "spx"; href: string; market: SpxFigures | null };
+
+/** The first week-window the calendar lists ("This week", else "Next week"): up to CALENDAR_ROWS companies, the post's own first. */
+export type CalendarWeek = {
+  label: string; range: string; rows: { symbol: string; name: string; day: string; own: boolean }[]; more: number;
+  /** The window after it, from the same list: how many companies it holds. */
+  next: { label: string; range: string; count: number } | null;
+};
+/** The S&P 500 card: the index's close from the weekly file, SPY's moves and the /markets/spx Trend score. */
+export type SpxFigures = {
+  index: { close: number; date: string } | null;
+  /** The index close against the record close, from the same weekly file. */
+  fromHigh: { pct: number; level: number; date: string } | null;
+  moves: { date: string; dayPct: number | null; weekPct: number | null } | null;
+  trend: { score: number; words: string } | null;
+};
 
 /** The headlines the news card shows under the drivers paragraph, at most (#146). */
 export const NEWS_SHOWN = 3;
@@ -269,14 +294,64 @@ export type InsightPageData = {
 
 const capText = (v: number) => (v >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`);
 
-/** The news pipeline's library art for a symbol's item (the insight hero's, and the dashboard news thumbnails'). Pure. */
-export function artFor(symbol: string, title: string, key: string, taken: { names: Set<string>; buckets: Map<string, Set<number>> }): CardArt {
+/**
+ * The news pipeline's library art for a symbol's item (the insight hero's, and the dashboard news thumbnails'). No reads.
+ *
+ * AN INSIGHT POST'S `heroArt` COMES FIRST: an editor's pick, by its news-art
+ * name, for a post the automatic plan cannot illustrate (UMAC's title says
+ * nothing about drones and its filer has no industry here). A name the manifest
+ * does not hold is logged and the plan is used; check-insight-page fails on it.
+ * The post's summary joins the topic match as the description: measured on
+ * the 65 posts of 2026-10-19 it changed none of their heroes (a description
+ * needs two mentions of a subject; see articleTopic.ts).
+ */
+export function artFor(symbol: string, title: string, key: string, taken: { names: Set<string>; buckets: Map<string, Set<number>> },
+  post: { heroArt?: string | null; summary?: string | null; surface?: ArtSurface } = {}): CardArt {
+  if (post.heroArt) {
+    const art = taggedArtByName(post.heroArt);
+    if (art) {
+      taken.names.add(post.heroArt);
+      return { kind: "library", art };
+    }
+    console.error(`insight heroArt "${post.heroArt}" is not in public/news-art/manifest-v2.json; using the automatic picture`);
+  }
   const prof = sicProfileFor(symbol);
   const slug = getSectorByLabel(prof?.sector ?? null)?.slug ?? null;
   return planSymbolCardArt({
-    variant: "lead", title, industry: prof?.industry ?? null, sectorBucket: bucketFor(slug, prof?.industry ?? null),
+    variant: "lead", title, description: post.summary ?? null, industry: prof?.industry ?? null, sectorBucket: bucketFor(slug, prof?.industry ?? null),
     key, takenNames: taken.names, takenBuckets: taken.buckets, canGenerate: true,
+    // "other" unless a NEWS caller says so (the dashboard's Headlines card): the
+    // insight hero and Related cards never pass it, so never reach a real photo.
+    surface: post.surface ?? "other",
   });
+}
+
+/**
+ * THE S&P 500 CARD'S FIGURES, from what /markets/spx reads and nothing new: the
+ * index's own close from content/markets/spx-weekly.json (committed, dated),
+ * and from SPY's bars (already read for the "Since" strip) the latest session,
+ * the five sessions to it and the Trend score, computed as the dashboard does.
+ */
+function spxFigures(spy: EodBar[]): SpxFigures | null {
+  let index: SpxFigures["index"] = null, fromHigh: SpxFigures["fromHigh"] = null;
+  try {
+    const r = parseSpxWeekly(JSON.parse(fs.readFileSync(path.join(process.cwd(), "content/markets/spx-weekly.json"), "utf8")));
+    if (r.ok) {
+      index = { close: r.data.indexClose, date: r.data.asOf };
+      fromHigh = { pct: (r.data.indexClose / r.data.ath.level - 1) * 100, level: r.data.ath.level, date: r.data.ath.date };
+    }
+  } catch {
+    // No weekly file: the card leaves the index close out.
+  }
+  const closes = spy.map((b) => b[4]);
+  let trend: SpxFigures["trend"] = null;
+  if (closes.length >= 200) {
+    const avg = (n: number) => closes.slice(-n).reduce((a, b) => a + b, 0) / n;
+    const t = buildMarketMoodScore({ lastClose: closes[closes.length - 1], ma50: avg(50), ma200: avg(200), rsi: lastNum(rsiWilder(closes, 14)) });
+    if (t) trend = { score: t.score, words: trendWords(t.score) };
+  }
+  const moves = spyMoves(spy);
+  return index || moves || trend ? { index, fromHigh, moves, trend } : null;
 }
 
 /** The chart's window: from 60 sessions before publication (at least 120 bars) to today. */
@@ -409,17 +484,27 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
         (s) => normaliseCompanyName(snapshotCompanyName(s))),
     });
   }
-  if (more.length < 3) more.push({ kind: "calendar", href: "/earnings-calendar" });
-  if (more.length < 3) more.push({ kind: "spx", href: "/markets/spx" });
+  if (more.length < 3) {
+    // The dashboard's week list, one shared Data Cache entry (read only when this card shows).
+    const weeks = await readComingUpWeeks(easternDate(new Date(nowMs))).catch(() => null);
+    const wk = weeks?.[0] ?? null, after = weeks?.[1] ?? null;
+    const cal = wk ? calendarRows(wk.items, sym) : null;
+    more.push({ kind: "calendar", href: "/earnings-calendar", week: wk && cal?.rows.length ? {
+      label: wk.label, range: wk.range, more: cal.more,
+      next: after ? { label: after.label, range: after.range, count: after.items.length } : null,
+      rows: cal.rows.map((i) => ({ symbol: i.symbol, name: cleanName(snapshotCompanyName(i.symbol)) || i.symbol, day: shortDay(i.estimatedOn), own: i.own })),
+    } : null });
+  }
+  if (more.length < 3) more.push({ kind: "spx", href: "/markets/spx", market: spxFigures(spy) });
 
   // RELATED: three by peer, then sector, then newest; each with its picture.
   const taken = { names: new Set<string>(), buckets: new Map<string, Set<number>>() };
-  const art = artFor(sym, n.title, `insight:${slug}`, taken);
+  const art = artFor(sym, n.title, `insight:${slug}`, taken, { heroArt: n.heroArt, summary: n.summary });
   const all = getAllPosts().filter((p) => p.slug !== slug && p.symbol);
   const same = (p: (typeof all)[number]) => (p.symbol ?? "").toUpperCase() === sym;
   const sameSector = (p: (typeof all)[number]) => !!sector && sectorOf(String(p.symbol))?.name === sector.name;
   const ranked = [...all.filter(same), ...all.filter((p) => !same(p) && sameSector(p)), ...all.filter((p) => !same(p) && !sameSector(p))].slice(0, 3);
-  const related = ranked.map((p) => ({ slug: p.slug, title: p.title, date: p.date, symbol: String(p.symbol).toUpperCase(), art: artFor(String(p.symbol), p.title, `insight:${p.slug}`, taken) }));
+  const related = ranked.map((p) => ({ slug: p.slug, title: p.title, date: p.date, symbol: String(p.symbol).toUpperCase(), art: artFor(String(p.symbol), p.title, `insight:${p.slug}`, taken, { heroArt: p.heroArt, summary: p.excerpt }) }));
 
   // WHAT'S DRIVING IT NOW: the news page's lead items (newest, deduped, on topic) and its score.
   const news: InsightNews | null = newsBase ? {
@@ -455,6 +540,6 @@ export async function getInsightPageData(slug: string, nowMs = Date.now()): Prom
 /** The page's data, cached per post for 6 hours (the reads above, at most four times a day a post). */
 export const getInsightPageDataCached = unstable_cache(
   (slug: string) => getInsightPageData(slug),
-  ["insight-page-data-v6"],
+  ["insight-page-data-v7"],
   { revalidate: 21600, tags: ["insight-page-data"] },
 );

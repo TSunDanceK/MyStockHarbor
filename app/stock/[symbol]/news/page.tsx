@@ -464,6 +464,8 @@ function DetailedNewsSection({
       takenNames: takenTagNames,
       takenBuckets: takenByBucket,
       canGenerate: true,
+      // A news surface: the real-photo pool may answer first (lib/server/news/art.ts).
+      surface: "news",
     })
   );
   return (
@@ -559,6 +561,7 @@ function DetailedNewsSection({
                       key: item.guid ?? item.link,
                       taken: takenByBucket,
                       canGenerate: true,
+                      surface: "news",
                     })}
                     symbol={symbol}
                     changePct={changePct}

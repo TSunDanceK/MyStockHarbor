@@ -325,6 +325,9 @@ finally { fs.unlinkSync(spFile); }
 const artSrc = read("lib/server/news/art.ts")
   .replace(/^import manifest from "@\/public\/news-art\/manifest.json";$/m,
     () => `const manifest = ${read("public/news-art/manifest.json")};`)
+  // The real-photo pool's manifest (news surfaces only), as committed.
+  .replace(/^import realManifest from "@\/public\/news-art\/real\/manifest.json";$/m,
+    () => `const realManifest = ${read("public/news-art/real/manifest.json")};`)
   .replace(/^import type \{ EventType \} from "\.\/eventType";$/m, "");
 // LOADED, NOT OPTIONAL. An earlier draft swallowed a load failure into
 // `art = null` and let the assertion below pass on `true` — which is the

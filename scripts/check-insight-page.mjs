@@ -37,6 +37,15 @@
 //     box's row, no second read) and up to 8 same-sector peers with a map or a
 //     post here, never the post's own ticker; no peers, no heading; the mini
 //     map's labels are a ticker or a whole word, on every bottleneck page.
+//   - heroArt: a post's `heroArt` names an image in the news-art manifest (an
+//     unknown name fails here, it never falls back silently); the loader puts
+//     it ahead of the automatic plan; UMAC's is the drone; the share image and
+//     the JSON-LD use the hero's picture.
+//   - the "Earnings calendar" card: up to 4 of the week's reporters from the
+//     dashboard's shared list, the post's own ticker first, "+N more", the link
+//     last; the S&P 500 card: the index close, SPY's day and 5 sessions, the
+//     Trend score, each only when it exists; neither predicts; no new read;
+//     the page-data cache key bumped.
 // A mutant each.
 //
 //   node scripts/check-insight-page.mjs
@@ -50,6 +59,10 @@ const PRICE = "app/components/PriceChart.tsx";
 const CHART = "app/insights/[slug]/InsightChart.tsx", LOADER = "lib/server/insightPage.ts", TEMPLATE = "content/templates/insight-template.md";
 const FIXTURE = "content/insights-fixtures/fixture-aapl-new-format.md", AMZN = "content/insights/amzn-daily-ma200-buy-zone-july-2026.md";
 const read = (f) => fs.readFileSync(f, "utf8");
+const OG = "app/insights/[slug]/opengraph-image.tsx", UMAC = "content/insights/umac-softer-q3-before-q4-ramp-october-2026.md";
+// Every post's frontmatter, both folders: the heroArt rule reads them from here so a mutant can swap one.
+const POSTS = ["content/insights", "content/insights-fixtures"].flatMap((d) => fs.readdirSync(d).filter((f) => f.endsWith(".md")).map((f) => ({ file: `${d}/${f}`, data: matter(read(`${d}/${f}`)).data })));
+const MANIFEST = JSON.parse(read("public/news-art/manifest-v2.json"));
 // The owner's words for AMZN's update (#563 COWORK #149 §3), verbatim.
 const AMZN_UPDATE = "This post was written two days before Amazon's Q2 report on 30 July. That report has since come and gone: Amazon raised its 2026 capital-spending estimate to about $220bn, and AWS growth sped up again. The strip above shows how the price has moved since, and whether the 200-day held. The next test may be the Q3 report, expected around 29 October; \"What's driving AMZN now\" below has the details. The original post follows, unchanged.";
 
@@ -288,6 +301,51 @@ const RULES = {
       g[1].publisher === "StockTitan" && g[1].items.length === 1 &&
       /sourceGroups\(n\.drivers\.sources\)\.map\(/.test(page) && /\{g\.publisher\} \(\{g\.items\.map\(/.test(page) && /data-source-n="">\{j \+ 1\}<\/a>/.test(page);
   },
+  "heroArt: every name is in the manifest (with its files), read by the loader ahead of the plan; UMAC's is the drone": ({ V, loader, route, posts, manifest }) => {
+    const named = posts.filter((p) => p.data.heroArt !== undefined);
+    const known = (n) => typeof n === "string" && Object.hasOwn(manifest, n) && fs.existsSync(`public/news-art/${n}.webp`) && fs.existsSync(`public/news-art/${n}-sm.webp`);
+    const umac = posts.find((p) => p.file === UMAC);
+    return named.length >= 1 && named.every((p) => known(p.data.heroArt)) && umac?.data.heroArt === "aerospace-defence-any-04" &&
+      V.normaliseInsight("x", { title: "t", date: "2026-10-18", symbol: "umac", eventType: "earnings", summary: "s", heroArt: " aerospace-defence-any-04 " }, "").heroArt === "aerospace-defence-any-04" &&
+      V.normaliseInsight("x", { title: "t", date: "2026-10-18", symbol: "umac", eventType: "earnings", summary: "s" }, "").heroArt === null &&
+      /if \(post\.heroArt\) \{\s*const art = taggedArtByName\(post\.heroArt\);\s*if \(art\) \{\s*taken\.names\.add\(post\.heroArt\);\s*return \{ kind: "library", art \};/.test(loader) &&
+      loader.indexOf("taggedArtByName(post.heroArt)") < loader.indexOf("return planSymbolCardArt(") &&
+      /const art = artFor\(sym, n\.title, `insight:\$\{slug\}`, taken, \{ heroArt: n\.heroArt, summary: n\.summary \}\);/.test(loader) &&
+      /return Object\.hasOwn\(ENTRIES, name\) \? artFor\(name\) : null;/.test(read("lib/server/news/artTags.ts")) &&
+      /const heroImage = data\.art\.kind === "library" \? `https:\/\/www\.mystockharbor\.com\$\{data\.art\.art\.src\}`/.test(route) &&
+      /if \(d\?\.art\.kind === "library"\) art = await heroArt\(d\.art\.art\.src\);/.test(stripComments(read(OG), { file: OG }));
+  },
+  "the calendar card: up to 4 of the week's reporters, the post's own first, '+N more', the link last; from the shared list": ({ V, page, loader }) => {
+    const wk = ["A", "B", "UMAC", "C", "D", "E"].map((symbol) => ({ symbol }));
+    const own = V.calendarRows(wk, "umac"), other = V.calendarRows(wk, "ZZZ"), few = V.calendarRows(wk.slice(0, 2), "A");
+    const card = page.match(/if \(m\.kind === "calendar"\) \{[\s\S]*?\n  \}\n/)?.[0] ?? "";
+    return V.CALENDAR_ROWS === 4 && own.rows.map((r) => r.symbol).join() === "UMAC,A,B,C" && own.rows[0].own && !own.rows[1].own && own.more === 2 &&
+      other.rows.map((r) => r.symbol).join() === "A,B,UMAC,C" && other.rows.every((r) => !r.own) && other.more === 2 && few.more === 0 && few.rows.length === 2 &&
+      /data-calendar-rows=\{w\.rows\.length\}/.test(card) && /\{w\.more > 0 \? <span className="inRead" data-calendar-more="">\+\{w\.more\} more in the calendar<\/span> : null\}/.test(card) &&
+      /<span className="inCalDay">\{r\.day\}<\/span>/.test(card) && /<TickerLogo symbol=\{r\.symbol\}/.test(card) &&
+      /<Link href=\{m\.href\} className="inMoreGo">Open the calendar →<\/Link>\s*<\/div>\s*\);\s*\}\s*$/.test(card) &&
+      /readComingUpWeeks\(easternDate\(new Date\(nowMs\)\)\)/.test(loader) && /const cal = wk \? calendarRows\(wk\.items, sym\) : null;/.test(loader) &&
+      /readComingUpWeeks\(easternDate\(new Date\(\)\)\)/.test(stripComments(read("lib/server/dashboardCards.ts"), { file: "lib/server/dashboardCards.ts" })) &&
+      !/getCalendarForwardSections|readPricePoolBulk/.test(loader) && /\["insight-page-data-v7"\]/.test(loader);
+  },
+  "the S&P 500 card: index close, SPY's day and 5 sessions, the Trend score, each only when it exists; from bars already read": ({ V, page, loader }) => {
+    const m = V.spyMoves(series((i) => 100 + i).slice(0, 10)), one = V.spyMoves(series(() => FLAT).slice(0, 1));
+    const card = page.slice(page.indexOf("const x = m.market;"), page.indexOf("async function ScreenMembers"));
+    return Math.abs(m.dayPct - ((109 - 108) / 108) * 100) < 1e-9 && Math.abs(m.weekPct - ((109 - 104) / 104) * 100) < 1e-9 && m.date === days[9] &&
+      one.dayPct === null && one.weekPct === null && V.spyMoves([]) === null &&
+      /\{x\.index \? <li><span>Index close, \{dayWords\(x\.index\.date\)\}<\/span><strong>\{indexWords\(x\.index\.close\)\}<\/strong><\/li> : null\}/.test(card) &&
+      /v === null \|\| v === undefined \? null :/.test(card) && /\{move\("Past 5 sessions \(SPY\)", x\.moves\?\.weekPct\)\}/.test(card) &&
+      /\{x\.trend \? <li><span>Trend score<\/span><strong>\{x\.trend\.score\}\/100<\/strong><\/li> : null\}/.test(card) &&
+      !/—|n\/a|N\/A/.test(card) && /Open the S&amp;P 500 page →<\/Link>\s*<\/div>\s*\);\s*\}\s*$/.test(card) &&
+      /if \(more\.length < 3\) more\.push\(\{ kind: "spx", href: "\/markets\/spx", market: spxFigures\(spy\) \}\);/.test(loader) &&
+      (loader.match(/readTiingoHistory\(/g) ?? []).length === 2 && /parseSpxWeekly\(JSON\.parse\(fs\.readFileSync\(path\.join\(process\.cwd\(\), "content\/markets\/spx-weekly\.json"\)/.test(loader);
+  },
+  "neither card predicts: no forecast words in the calendar or S&P card": ({ page }) => {
+    const cards = page.slice(page.indexOf('if (m.kind === "calendar") {'), page.indexOf("async function ScreenMembers"));
+    // The whole source of both cards (comments already stripped): the words sit in JSX text and template strings alike.
+    const words = cards.replace(/not a forecast/g, "");
+    return cards.length > 500 && /Dates can move\./.test(cards) && !/\b(will|won't|likely|expect\w*|poised|set to|forecast\w*|predict\w*|should|target)\b/i.test(words);
+  },
 };
 
 const MUTANTS = [
@@ -314,6 +372,10 @@ const MUTANTS = [
   ["#181 sector card", "v", (s) => s.replace(".filter((s) => s !== me && sectorOfName(s) === sectorName)", ".filter((s) => s !== me)")],
   ["#181 mini map", "v", (s) => s.replace("  if (ticker) return ticker;\n  const first", "  if (ticker) return ticker;\n  return name.slice(0, 5);\n  const first")],
   ["#177 sources", "v", (s) => s.replace("if (g) g.items.push(s);", "if (g && false) g.items.push(s);")],
+  ["heroArt:", "v", (s) => s.replace("const heroArt = str(data.heroArt) || null;", "const heroArt = null;")],
+  ["the calendar card:", "v", (s) => s.replace("const picked = [...(mine ? [mine] : []), ...items.filter((i) => i !== mine)].slice(0, max);", "const picked = items.slice(0, max);")],
+  ["the calendar card:", "v", (s) => s.replace("more: Math.max(0, items.length - picked.length)", "more: 0")],
+  ["the S&P 500 card:", "v", (s) => s.replace("return { date: last[0], dayPct: vs(1), weekPct: vs(5) };", "return { date: last[0], dayPct: vs(1), weekPct: vs(4) };")],
   ["no advice words", "v", (s) => s.replace('case "held": return { word: "Held", detail: "No daily close below it since", tone: "up" };', 'case "held": return { word: "Held", detail: "A level to buy while it holds", tone: "up" };')],
 ];
 
@@ -350,6 +412,15 @@ const SRC_MUTANTS = [
   ["update: the box", PAGE, (s) => s.replace("The original post · {dayWords(n.date)}", "The original post")],
   ["update: the box", PAGE, (s) => s.replace("{chartCard}\n                {newsCard}\n                <section", "<section")],
   ["update: the box", PAGE, (s) => s.replace("{shortCard}\n                  {whatCard}\n                </section>", "</section>\n                {shortCard}\n                {whatCard}")],
+  ["heroArt:", LOADER, (s) => s.replace("  if (post.heroArt) {\n", "  if (false && post.heroArt) {\n")],
+  ["heroArt:", LOADER, (s) => s.replace("taken, { heroArt: n.heroArt, summary: n.summary });", "taken, { summary: n.summary });")],
+  ["the calendar card:", PAGE, (s) => s.replace('{w.more > 0 ? <span className="inRead" data-calendar-more="">+{w.more} more in the calendar</span> : null}', "")],
+  ["the calendar card:", LOADER, (s) => s.replace("calendarRows(wk.items, sym)", 'calendarRows(wk.items, "")')],
+  ["the calendar card:", LOADER, (s) => s.replace('["insight-page-data-v7"]', '["insight-page-data-v6"]')],
+  ["the S&P 500 card:", PAGE, (s) => s.replace("{x.index ? <li><span>Index close, {dayWords(x.index.date)}</span><strong>{indexWords(x.index.close)}</strong></li> : null}", "<li><span>Index close</span><strong>{x.index ? indexWords(x.index.close) : \"—\"}</strong></li>")],
+  ["the S&P 500 card:", LOADER, (s) => s.replace("market: spxFigures(spy) });", "market: null });")],
+  ["neither card predicts", PAGE, (s) => s.replace("Dates can move.</span>", "Dates can move. Expect a busy week.</span>")],
+  ["neither card predicts", PAGE, (s) => s.replace("a reading of the trend so far, not a forecast.</span>", "the index will likely keep rising.</span>")],
   ["the rail:", PAGE, (s) => s.replace('{d.snapshot?.available ? <EarningsTiles d={d} /> : <p className="inRead" data-insight-no-facts="">Filed figures not available yet.</p>}', "<EarningsTiles d={d} />")],
 ];
 const R = Object.keys(RULES);
@@ -357,7 +428,7 @@ let failures = 0;
 const check = (label, ok) => { console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}`); if (!ok) failures++; };
 const run = (rule, m) => { try { return !!rule(m); } catch (e) { if (process.env.DEBUG) console.log(e); return false; } };
 const srcOf = (over = {}) => ({ chart: stripComments(over[CHART] ?? read(CHART), { file: CHART }), price: stripComments(over[PRICE] ?? read(PRICE), { file: PRICE }), route: stripComments(over[ROUTE] ?? read(ROUTE), { file: ROUTE }), page: stripComments(over[PAGE] ?? read(PAGE), { file: PAGE }), loader: stripComments(over[LOADER] ?? read(LOADER), { file: LOADER }) });
-const measure = async (v = read(VIEW), s = read(SCREENS), over = {}) => ({ V: await load(v, "view"), S: await load(s, "screens"), ...srcOf(over) });
+const measure = async (v = read(VIEW), s = read(SCREENS), over = {}) => ({ V: await load(v, "view"), S: await load(s, "screens"), posts: POSTS, manifest: MANIFEST, ...srcOf(over) });
 
 console.log("=== Rules ===");
 const base = await measure();
@@ -376,6 +447,18 @@ for (const [start, file, mutate] of SRC_MUTANTS) {
   const label = R.find((x) => x.startsWith(start)), src = read(file), mut = mutate(src);
   if (mut === src) { check(`mutant bites: ${label} — the mutation did not apply`, false); continue; }
   check(`mutant bites: ${label}`, !run(RULES[label], { ...base, ...srcOf({ [file]: mut }) }));
+}
+// Data mutants: [rule start, what the rule is handed instead].
+const swapHero = (name) => POSTS.map((p) => (p.file === UMAC ? { ...p, data: { ...p.data, heroArt: name } } : p));
+const DATA_MUTANTS = [
+  // A name the manifest does not hold must fail, not fall back to the automatic picture.
+  ["heroArt:", (m) => ({ ...m, posts: swapHero("aerospace-defence-any-99") })],
+  ["heroArt:", (m) => ({ ...m, posts: swapHero("aerospace-defence-any-01") })],
+  ["heroArt:", (m) => ({ ...m, manifest: Object.fromEntries(Object.entries(m.manifest).filter(([k]) => k !== "aerospace-defence-any-04")) })],
+];
+for (const [start, mutate] of DATA_MUTANTS) {
+  const label = R.find((x) => x.startsWith(start));
+  check(`mutant bites: ${label}`, !!label && !run(RULES[label], mutate(base)));
 }
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

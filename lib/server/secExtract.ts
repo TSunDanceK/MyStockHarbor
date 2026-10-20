@@ -666,6 +666,66 @@ export function newer(a: FactRow, b: FactRow): FactRow {
  * Collapsing here is trap 2: AAPL's revenue is `RevenueFromContractWith...`
  * from 2018 and `Revenues` before it, and one tag for the symbol loses half.
  */
+/**
+ * A FULL YEAR'S VALUE FILED ON A QUARTER'S DATES (earnings audit r2).
+ *
+ * LHX's FY2025 10-K tags its FY2024 revenue, $21,325M, on a 97-day context
+ * (2024-09-28..2025-01-03) as well as on the year, under one accession; NI's
+ * 10-Ks do it for Q4 2024 and Q4 2025, DINO's for Q4 2024, and VICR's FY2025
+ * 10-K puts $407.7M on 2025-07-01..09-30 beside its 10-Q's $110.4M. Read as
+ * filed, each became a quarter equal to its whole year, and the year fell 40%+
+ * below the sum of its quarters.
+ *
+ * Refused: a quarter-length row whose value equals a year-length row of the
+ * SAME concept and SAME accession that contains it, while another row of that
+ * concept inside the year (a six- or nine-month figure) is smaller than the
+ * year — so a real quarter exists to be found. Q4 then comes from FY − 9M as
+ * for any filer, and a mid-year quarter from the 10-Q that stated it.
+ *
+ * READ AS THE YEAR: an annual filing's quarter-length row with NO year row
+ * ending on its date (LHX's FY2025 10-K tags $21,865M on 2025-10-04..2026-01-02
+ * and no 2025 year at all) whose value is the nine months just before it plus
+ * about one more of its average quarters: $16,217M + $5,648M against a $5,406M
+ * average. That is the year's value on the quarter's dates, so it is re-dated
+ * to the year (the nine months' start to its end) and Q4 = FY − 9M: $5,648M,
+ * the Q4 and the $21,865M year L3Harris reported. A real fourth quarter is
+ * near the average, not three and a half times it, and one beside its own
+ * year row (HHH's lumpy Q4 2024) is never touched.
+ *
+ * Returns each such row mapped to what is read instead: null (refused) or the
+ * re-dated year row. PURE.
+ */
+export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Map<FactRow, FactRow | null> {
+  const out = new Map<FactRow, FactRow | null>();
+  const days = (r: FactRow) => (r.start && r.end ? (Date.parse(r.end) - Date.parse(r.start)) / DAY : NaN);
+  const years = rows.filter((r) => typeof r.val === "number" && days(r) >= 350 && days(r) <= 380);
+  if (!years.length) return out;
+  for (const q of rows) {
+    if (typeof q.val !== "number" || q.val === 0 || !q.start || !q.accn) continue;
+    const d = days(q);
+    if (!(d >= 80 && d <= 100)) continue;
+    const y = years.find((y) => y.accn === q.accn && y.val === q.val && y.start! <= q.start! && y.end! >= q.end!);
+    if (!y) {
+      if (!/^(10-K|20-F|40-F)/.test(q.form ?? "")) continue;
+      // NO YEAR ROW AT ALL, not merely none of equal value: HHH's FY2025 10-K
+      // files a real 983.6M Q4 2024 beside its 1,750.7M year, and that Q4 is
+      // the nine months plus about one average quarter too (lumpy land sales).
+      if (years.some((r) => Math.abs(Date.parse(r.end!) - Date.parse(q.end!)) <= 8 * DAY)) continue;
+      const before = (r: FactRow) => (Date.parse(q.start!) - Date.parse(r.end!)) / DAY;
+      const nine = rows.find((r) => typeof r.val === "number" && r.val > 0 && r.start && days(r) >= 255 && days(r) <= 290
+        && before(r) >= 0 && before(r) <= 8);
+      if (!nine) continue;
+      const avg = nine.val! / 3, rest = q.val - nine.val!;
+      if (q.val > 2 * avg && rest >= 0.5 * avg && rest <= 1.5 * avg) out.set(q, { ...q, start: nine.start, fp: "FY" });
+      continue;
+    }
+    const smaller = rows.some((r) => r !== q && r !== y && typeof r.val === "number" && r.start && r.start >= y.start! && r.end! <= y.end!
+      && days(r) > d && days(r) < 350 && Math.abs(r.val) < Math.abs(y.val!));
+    if (smaller) out.set(q, null);
+  }
+  return out;
+}
+
 export function rowsForField(
   facts: CompanyFacts,
   field: FieldDef,
@@ -711,10 +771,13 @@ export function rowsForField(
       const keys = unitKeysFor(field.unit, currency);
       let took = 0;
       for (const unit of keys) {
+        const misdated = fullYearOnQuarterFrame(units[unit] ?? []);
         for (const row of units[unit] ?? []) {
           if (typeof row?.val !== "number" || !Number.isFinite(row.val)) continue;
           if (!row.end) continue;
-          out.push({ row, tag, ns, rank: thisRank, unit });
+          const asRead = misdated.has(row) ? misdated.get(row) : row;
+          if (!asRead) continue;
+          out.push({ row: asRead, tag, ns, rank: thisRank, unit });
           took++;
         }
       }
@@ -1289,7 +1352,19 @@ export function filerTagsExcise(facts: CompanyFacts): boolean {
   // repurchases (ShareRepurchaseProgramExciseTax, tagged by many filers since
   // 2023) says nothing about revenue, and it kept KEY's $1.44B contract line
   // beside its $6.41B total.
-  return Object.keys(facts.facts?.["us-gaap"] ?? {}).some((k) => /Excise/.test(k) && !/Repurchase|Buyback|TreasuryStock/.test(k));
+  //
+  // NOR A BALANCE-SHEET EXCISE (earnings audit r2): SalesAndExciseTaxPayable
+  // is a liability, and says nothing about how revenue is presented (APLD,
+  // PRCH, VIPS). NOR, AT A FINANCIAL FILER, "taxes other than income and
+  // excise" (TaxesExcludingIncomeAndExciseTaxes): a lender's or broker's
+  // non-income tax line, beside a `Revenues` that is its total net revenue
+  // (ALLY's $7.9B against a $1.2B contract line). A financial filer is one
+  // that tags NoninterestIncome. COP and CEG tag that concept too, and no
+  // NoninterestIncome, so their "revenues and other income" stay excluded.
+  const gaap = facts.facts?.["us-gaap"] ?? {};
+  const financial = Boolean(gaap.NoninterestIncome);
+  return Object.keys(gaap).some((k) => /Excise/.test(k) && !/Repurchase|Buyback|TreasuryStock/.test(k)
+    && !/Payable|Receivable/.test(k) && !(financial && k === "TaxesExcludingIncomeAndExciseTaxes"));
 }
 
 /** Names of other income and gains: a gap one of these also equals is not called revenue. */

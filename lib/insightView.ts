@@ -77,6 +77,36 @@ export function sectorPeers(
     .map((symbol) => ({ symbol, name: names.get(symbol) || nameOf(symbol) || symbol }));
 }
 
+/** At most this many companies on the "Earnings calendar" card. */
+export const CALENDAR_ROWS = 4;
+
+/**
+ * The "Earnings calendar" card's rows: the week's largest reporters, in the
+ * calendar's own order (largest first), the post's own ticker first when it is
+ * in the week. `more` counts the rest, for "+N more in the calendar". Pure.
+ */
+export function calendarRows<T extends { symbol: string }>(items: readonly T[], own: string, max = CALENDAR_ROWS): { rows: (T & { own: boolean })[]; more: number } {
+  const me = own.toUpperCase();
+  const mine = items.find((i) => i.symbol.toUpperCase() === me);
+  const picked = [...(mine ? [mine] : []), ...items.filter((i) => i !== mine)].slice(0, max);
+  return { rows: picked.map((i) => ({ ...i, own: i === mine })), more: Math.max(0, items.length - picked.length) };
+}
+
+/**
+ * The S&P 500 card's moves, from SPY's daily closes (the bars the page already
+ * reads): the latest session against the one before, and against the close
+ * five sessions earlier. A move with too few bars is null. Pure.
+ */
+export function spyMoves(bars: readonly EodBar[]): { date: string; dayPct: number | null; weekPct: number | null } | null {
+  const last = bars.at(-1);
+  if (!last) return null;
+  const vs = (back: number) => {
+    const from = bars[bars.length - 1 - back];
+    return from && from[4] > 0 ? ((last[4] - from[4]) / from[4]) * 100 : null;
+  };
+  return { date: last[0], dayPct: vs(1), weekPct: vs(5) };
+}
+
 /**
  * A supplier's label on the insight page's mini map (#563 COWORK #181): the
  * ticker for a listed company, else the name's first whole word ("Molicel",
@@ -183,6 +213,8 @@ export type NormalisedInsight = {
   drivers: InsightDrivers | null;
   /** A dated update shown above the original text, when the post has a valid one (#149). */
   update: InsightUpdate | null;
+  /** The frontmatter's `heroArt`: a news-art image name that overrides the automatic hero picture, else null. */
+  heroArt: string | null;
 };
 
 // ── FRONTMATTER → ONE SHAPE ─────────────────────────────────────────────────
@@ -243,6 +275,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
   const whatHappened = find(/^what happened$/i)?.body || null;
   const drivers = parseDrivers(data.drivers).drivers;
   const update = parseUpdate(data.update).update;
+  const heroArt = str(data.heroArt) || null;
 
   if (data.eventType !== undefined || data.summary !== undefined) {
     // THE NEW SHAPE. No price fields are read even if present.
@@ -253,7 +286,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
     return {
       format: "v2", slug, title: str(data.title), date, updated: str(data.updated) || null, symbol, timeframe, eventType: str(data.eventType) || null, levels,
       summary: str(data.summary), why: str(data.why) || find(/^why it matter/i)?.body || null, whatHappened, sources,
-      bull: str(data.bull) || null, bear: str(data.bear) || null, originalRest: null, claimedSide: null, drivers, update,
+      bull: str(data.bull) || null, bear: str(data.bear) || null, originalRest: null, claimedSide: null, drivers, update, heroArt,
     };
   }
 
@@ -269,7 +302,7 @@ export function normaliseInsight(slug: string, data: Record<string, unknown>, bo
     format: "v1", slug, title: str(data.title), date, updated: str(data.updated) || null, symbol, timeframe, eventType: null, levels,
     summary, why: find(/^why it matters$/i)?.body || null, whatHappened, sources: [],
     bull: SCENARIO("Bullish", scen), bear: SCENARIO("Bearish", scen), originalRest: rest || null,
-    claimedSide: claimedSideOf(`${str(data.excerpt)} ${str(data.overallBreakdown)}`, levels[0]), drivers, update,
+    claimedSide: claimedSideOf(`${str(data.excerpt)} ${str(data.overallBreakdown)}`, levels[0]), drivers, update, heroArt,
   };
 }
 
