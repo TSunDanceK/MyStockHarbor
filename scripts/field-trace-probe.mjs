@@ -9,23 +9,26 @@ const M = OLD ?? NEW;
 const tick = JSON.parse(fs.readFileSync("data/sec/company-tickers.json", "utf8"));
 const ix = Object.fromEntries(tick.fields.map((f, i) => [f, i]));
 const near = (a, b) => a && b && Math.abs(Date.parse(a) - Date.parse(b)) <= 10 * 864e5;
-const field = process.env.FIELD || "netIncome";
-const concepts = String(process.env.CONCEPTS || "NetIncomeLoss").split(",").filter(Boolean);
-const years = Number(process.env.YEARS || 6);
+// The relay passes SYMBOLS only, so it carries everything: "SCHW,MET|netIncome|NetIncomeLoss,ProfitLoss|cover,qrows"
+const [symArg, fieldArg, conceptArg, flagArg] = String(process.env.SYMBOLS || "SCHW").split("|");
+const flags = new Set(String(flagArg || "").split(","));
+const field = fieldArg || "netIncome";
+const concepts = String(conceptArg || "NetIncomeLoss").split(",").filter(Boolean);
+const years = 6;
 const fmt = (v) => (v == null ? "—" : Math.abs(v) >= 1e5 ? `${(v / 1e6).toFixed(1)}M` : String(v));
-for (const sym of String(process.env.SYMBOLS || "SCHW").split(",")) {
+for (const sym of symArg.split(",")) {
   const row = tick.data.find((r) => r[ix.ticker] === sym);
   if (!row) { console.log(`${sym}: not in company-tickers`); continue; }
   const facts = await (await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${String(row[ix.cik]).padStart(10, "0")}.json`, { headers: { "User-Agent": UA } })).json();
   const ex = M.extractCompanyFacts(sym, facts);
   const fi = M.SEC_FIELD_KEYS.indexOf(field);
   console.log(`\n=== ${sym} ${field} (notes: ${(ex.notes ?? []).filter((n) => n.toLowerCase().includes(field.toLowerCase().slice(0, 6))).join(" | ") || "none"}) ===`);
-  if (process.env.COVER) console.log(`cover: ${JSON.stringify(ex.coverShares ?? ex.cover ?? null)}`);
+  if (flags.has("cover")) console.log(`cover: ${JSON.stringify(ex.coverShares ?? ex.cover ?? null)}`);
   for (const [label, list] of [["Y", ex.years.slice(0, years)], ["Q", ex.quarters.slice(0, years * 2)]]) {
     for (const p of list) {
       const c = fi >= 0 ? p.values[fi] : null;
       console.log(`${label} ${p.fp ?? ""}${p.fy ?? ""} ${p.start}..${p.end}: site ${fmt(c?.val)} [${c?.tag ?? "-"}${c?.derived ? ` ${c.derived}` : ""}${c?.covers ? ` covers ${c.covers.join("..")}` : ""}]`);
-      if (label === "Q" && !process.env.QROWS) continue;
+      if (label === "Q" && !flags.has("qrows")) continue;
       for (const k of concepts) {
         const ns = facts.facts?.["us-gaap"]?.[k] ? "us-gaap" : facts.facts?.dei?.[k] ? "dei" : "ifrs-full";
         const units = facts.facts?.[ns]?.[k]?.units ?? {};
