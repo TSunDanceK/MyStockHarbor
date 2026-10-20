@@ -138,7 +138,7 @@ console.log("\n5. it replaces; it backfills only an empty frame with both halves
   {
     const halfOnly = payload({ [CONTRACT]: [Y(2025, 1562)], [NII]: [Y(2025, 5991), Y(2024, 5450)], [NON]: [Y(2025, 2175)] });
     check("...but not with only one half filed (FY2024 stays blank)", rev(X.extractCompanyFacts("GAP", halfOnly), "2024-12-31")?.val == null);
-    const mutated = extractRaw.replace("(m.has(\"revenue\") || !halvesAt(kind, end))", "true");
+    const mutated = extractRaw.replace("(m.has(\"revenue\") || !filedHalvesAt(kind, end))", "true");
     check("the backfill mutation is applied", mutated !== extractRaw);
     check("MUTATION: no backfill → FY2024 blank again, caught", rev((await load(mutated)).extractCompanyFacts("GAP", gap), "2024-12-31")?.val !== 7430 * M);
   }
