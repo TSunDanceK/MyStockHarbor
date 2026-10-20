@@ -1294,6 +1294,8 @@ export const LAST_RESORT_REVENUE_TAG = "RevenuesNetOfInterestExpense";
 export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
 /** A diluted share count that moves more than this, either way, against the same period a year apart is refused (unless a split this large is filed). */
 export const SHARE_JUMP_MAX = 100;
+/** Filers whose >SHARE_JUMP_MAX move is filed and real (owner ruling on #937). QXO: its FY2024 10-K (0001628280-25-009626) files 204.0M diluted for FY2024 beside 0.7M for FY2023, the June 2024 recapitalisation. */
+export const SHARE_JUMP_EXEMPT = new Set(["QXO"]);
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
 /** How close a closure ratio must sit to one of the filer's split ratios to read as a split, not a wrong count. */
@@ -2162,7 +2164,7 @@ function extractCompanyFactsWith(
   {
     const splits = readSplitFacts(facts).map(([, r]) => r);
     const bigSplit = splits.some((r) => r >= SHARE_JUMP_MAX / 2 || r <= 2 / SHARE_JUMP_MAX);
-    if (!bigSplit) {
+    if (!bigSplit && !SHARE_JUMP_EXEMPT.has(symbol.toUpperCase())) {
       for (const cells of [quarterCells, yearCells]) {
         const vals = [...cells.values()].map((m) => m.get("sharesDiluted")?.val).filter((v): v is number => v != null && v > 0).sort((a, b) => a - b);
         if (vals.length < 3) continue;
@@ -2192,6 +2194,11 @@ function extractCompanyFactsWith(
           };
           const okNew = closes(end, sh), okAgo = closes(agoEnd!, ago);
           if (okNew && okAgo) continue;
+          // A PROOF CONVICTS ITS PARTNER ONLY IF THE PARTNER IS THE OUTLIER.
+          // NIQ's pre-IPO 100 shares close on that period's EPS, but the 245M a
+          // year later (restated in its Q2 2026 10-Q) sits by the cover count:
+          // two real bases, neither a slip, so both stand.
+          if ((okNew && off(ago.val) <= off(sh.val)) || (okAgo && off(sh.val) <= off(ago.val))) continue;
           const [badEnd, bad] = okNew ? [agoEnd!, ago] : okAgo ? [end, sh] : off(sh.val) >= off(ago.val) ? [end, sh] : [agoEnd!, ago];
           cells.get(badEnd)?.set("sharesDiluted", { ...bad, val: null, derived: "withheld" });
           notes.push(`sharesDiluted ${badEnd}: ${bad.val} moved x${ratio >= 1 ? ratio.toPrecision(3) : (1 / ratio).toPrecision(3)} against the same period a year apart and sits farther from the filer's cover count / median ${median}; withheld (unproved unit slip)`);
