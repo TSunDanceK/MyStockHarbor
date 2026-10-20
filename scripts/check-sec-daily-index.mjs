@@ -98,8 +98,9 @@ const man = await lift(
    grabFunction(MANIFEST_SRC, "seedManifest"), grabFunction(MANIFEST_SRC, "symbolsByCik"),
    grabFunction(MANIFEST_SRC, "mapChangeThreshold"), grabFunction(MANIFEST_SRC, "reconcileCiks"),
    grabFunction(MANIFEST_SRC, "reconcileDelistings"), grabFunction(MANIFEST_SRC, "reconcileExchanges"),
-   grabFunction(MANIFEST_SRC, "exchangeHistogram"), grabFunction(MANIFEST_SRC, "secRereadQueue")].join("\n") +
-    "\nexport { emptyEntry, emptyManifest, dotDashSpellings, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram, secRereadQueue };",
+   grabFunction(MANIFEST_SRC, "exchangeHistogram"), grabFunction(MANIFEST_SRC, "secRereadQueue"),
+   grabFunction(MANIFEST_SRC, "retickerEntry")].join("\n") +
+    "\nexport { emptyEntry, emptyManifest, dotDashSpellings, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram, secRereadQueue, retickerEntry };",
   // THE TRANSITIVE CALLEE, AND IT FAILED AT RUN TIME FIRST. grabFunction lifts
   // ONE body and does not follow imports, so seedManifest's lookupBySpelling
   // threw ReferenceError the moment it was called. The helper's REAL source is
@@ -108,7 +109,9 @@ const man = await lift(
   // check would then pass against a spelling rule the app does not use.
   fs.readFileSync(path.join(ROOT, "lib/symbolSpellings.mjs"), "utf8")
     .replace(/^export /gm, "") +
-    "\nconst SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;\nconst SEC_REREAD_DRAIN_PER_RUN = 40;"
+    "\nconst SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;\nconst SEC_REREAD_DRAIN_PER_RUN = 40;" +
+    // The cited reticker map, read from the committed file (seedManifest's fallback).
+    `\nconst RETICKERS = ${JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, "data/sec/reticker-ciks.json"), "utf8")).retickers)};`
 );
 
 const tick = await lift(
@@ -175,6 +178,17 @@ console.log("\n3. Seeding");
 check("seeds the universe once", seed.seeded && seed.symbols === 5, `${seed.symbols} symbols`);
 check("every symbol has a CIK", seed.withCik === 5 && seed.withoutCik.length === 0);
 check("reseeding is idempotent and adds nothing", man.seedManifest(manifest, [...FIXTURE_CIK.keys()], FIXTURE_CIK, true).seeded === false);
+{
+  // A RETICKERED symbol (data/sec/reticker-ciks.json): absent from the live map,
+  // its existing CIK-less entry takes the cited CIK; an unlisted symbol does not.
+  const m2 = man.emptyManifest();
+  m2.symbols.BK = man.emptyEntry(null);
+  const live = new Map([["BNY", { cik: "0001390777", exchange: "NYSE" }]]);
+  man.seedManifest(m2, ["BK", "EQR", "ZZZZ"], live, true);
+  check("a retickered symbol's existing entry takes the cited CIK (BK 0001390777)", m2.symbols.BK?.cik === "0001390777", JSON.stringify(m2.symbols.BK?.cik));
+  check("...and a new one is seeded with it (EQR 0000906107)", m2.symbols.EQR?.cik === "0000906107", JSON.stringify(m2.symbols.EQR?.cik));
+  check("...but an unlisted symbol with no cited CIK stays CIK-less", (m2.symbols.ZZZZ?.cik ?? null) === null);
+}
 // ── THE DOTTED TICKER, WHICH HAD NO CIK AND THEREFORE NO PAGE ──────────────
 //
 // `cikByTicker.get(symbol)` alone gave BRK.B nothing: the universe spells it
@@ -1420,7 +1434,8 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
       man.dotDashSpellings("MER-PK").join(" ") === "MER-PK MER.PK" && !man.dotDashSpellings("MER-PK").includes("MER$K"));
     const naive = await lift(
       [grabFunction(MANIFEST_SRC, "emptyEntry"), grabFunction(MANIFEST_SRC, "emptyManifest"), grabFunction(MANIFEST_SRC, "dotDashSpellings"),
-       grabFunction(MANIFEST_SRC, "seedManifest").replace(/const existingKey = [^\n]+\n/, "const existingKey = symbol;\n")].join("\n") +
+       grabFunction(MANIFEST_SRC, "seedManifest").replace(/const existingKey = [^\n]+\n/, "const existingKey = symbol;\n"),
+       grabFunction(MANIFEST_SRC, "retickerEntry"), "const RETICKERS = {};"].join("\n") +
         "\nexport { emptyManifest, seedManifest };",
       fs.readFileSync(path.join(ROOT, "lib/symbolSpellings.mjs"), "utf8").replace(/^export /gm, "") + "\nconst SEC_SCORE_VERSION = 1;"
     );
