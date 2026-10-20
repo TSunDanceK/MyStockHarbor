@@ -23,7 +23,12 @@ for (const sym of symArg.split(",")) {
   const ex = M.extractCompanyFacts(sym, facts);
   const fi = M.SEC_FIELD_KEYS.indexOf(field);
   console.log(`\n=== ${sym} ${field} (notes: ${(ex.notes ?? []).filter((n) => n.toLowerCase().includes(field.toLowerCase().slice(0, 6))).join(" | ") || "none"}) ===`);
-  if (flags.has("cover")) console.log(`cover: ${JSON.stringify(ex.coverShares ?? ex.cover ?? null)}`);
+  if (flags.has("cover")) {
+    console.log(`cover: ${JSON.stringify(ex.coverShares ?? ex.cover ?? null)}`);
+    const dei = Object.entries(facts.facts?.dei?.EntityCommonStockSharesOutstanding?.units ?? {}).flatMap(([u, rs]) => rs.map((r) => ({ ...r, u })));
+    for (const r of dei.sort((a, b) => String(b.end).localeCompare(String(a.end))).slice(0, 8)) console.log(`    dei cover [${r.u}] ${r.val} end ${r.end} ${r.form} ${r.accn} filed ${r.filed}`);
+    console.log(`    dei cover rows total: ${dei.length}`);
+  }
   for (const [label, list] of [["Y", ex.years.slice(0, years)], ["Q", ex.quarters.slice(0, years * 2)]]) {
     for (const p of list) {
       const c = fi >= 0 ? p.values[fi] : null;
