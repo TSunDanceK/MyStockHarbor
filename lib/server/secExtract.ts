@@ -1291,14 +1291,28 @@ export function q4RevenueScope(
  * DERIVED_Q4_BAND): a biotech's milestone quarters judge nothing. With no
  * year-ago Q4 there is no second opinion, and the Q4 stands.
  *
- * Upward only spikes are left alone: the dry run's were real (milestones,
+ * A Q4 whose nine months reconcile to the three filed quarters (within
+ * NINE_MONTHS_TOLERANCE) stands: the year adds up on one basis, so only a
+ * true collapse -- FY − 9M across unlike numbers -- is blocked.
+ * Upward spikes are left alone: the dry run's were real (milestones,
  * asset sales). "seasonal" = under the band, cleared by its year-ago Q4 (kept,
  * noted).
  */
 export const DERIVED_Q4_BAND = 4;
 export const DERIVED_Q4_YOY_BAND = 3;
-export function q4OutlierVerdict(q4: number, siblings: number[], yearAgoQ4: number | null): "outlier" | "seasonal" | null {
+export function q4OutlierVerdict(
+  q4: number,
+  siblings: number[],
+  yearAgoQ4: number | null,
+  /** The nine months Q4 was differenced from (FY − Q4, same concept), or null. */
+  nine: number | null = null,
+): "outlier" | "seasonal" | null {
   if (!Number.isFinite(q4) || !(q4 > 0) || siblings.length !== 3 || !siblings.every((x) => Number.isFinite(x) && x > 0)) return null;
+  // A Q4 THAT RECONCILES STANDS (owner ruling on #942, LNC): when the nine
+  // months it came from equal the three filed quarters, FY = Q1+Q2+Q3+Q4 on
+  // one basis, and a low Q4 is the filer's own (an insurer's realised losses).
+  const sum = siblings[0] + siblings[1] + siblings[2];
+  if (nine != null && Number.isFinite(nine) && nine > 0 && Math.abs(nine - sum) <= NINE_MONTHS_TOLERANCE * nine) return null;
   if (Math.max(...siblings) / Math.min(...siblings) >= DERIVED_Q4_BAND) return null;
   const r = q4 / (siblings.reduce((a, b) => a + b, 0) / 3);
   // ONLY A COLLAPSE. The dry run's upward outliers were real (a biotech's
@@ -2094,7 +2108,7 @@ function extractCompanyFactsWith(
         // yoy60 2b: far outside its neighbours AND its own year-ago Q4.
         const agoEnd = [...quarterCells.keys()].find((e) => Math.abs(Date.parse(e) - (Date.parse(end) - 365.25 * DAY)) <= 10 * DAY);
         const ago = agoEnd ? quarterCells.get(agoEnd)?.get("revenue")?.val ?? null : null;
-        const v2 = q4OutlierVerdict(q4.val, siblings, ago);
+        const v2 = q4OutlierVerdict(q4.val, siblings, ago, nine);
         const mean = siblings.reduce((a, b) => a + b, 0) / 3;
         if (v2 === "seasonal") notes.push(`revenue ${end}: derived Q4 ${q4.val} is x${(q4.val / mean).toPrecision(3)} its year's other quarters but within x${DERIVED_Q4_YOY_BAND} of its year-ago Q4 ${ago}; kept (seasonal)`);
         if (v2 === "outlier") {
