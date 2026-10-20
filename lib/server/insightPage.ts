@@ -40,7 +40,7 @@ import { peSectorLine } from "@/lib/peSectorLine";
 import { sicProfileFor } from "@/lib/server/staticProfile";
 import { getSectorByLabel } from "@/lib/sectors";
 import { getSectorPerformanceRow } from "@/lib/server/sectorPanels";
-import { bucketFor, type CardArt } from "@/lib/server/news/art";
+import { bucketFor, type ArtSurface, type CardArt } from "@/lib/server/news/art";
 import { planSymbolCardArt, taggedArtByName } from "@/lib/server/news/artTags";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { readSpendingRecord } from "@/lib/server/capexSpending";
@@ -306,7 +306,7 @@ const capText = (v: number) => (v >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : v >= 
  * needs two mentions of a subject; see articleTopic.ts).
  */
 export function artFor(symbol: string, title: string, key: string, taken: { names: Set<string>; buckets: Map<string, Set<number>> },
-  post: { heroArt?: string | null; summary?: string | null } = {}): CardArt {
+  post: { heroArt?: string | null; summary?: string | null; surface?: ArtSurface } = {}): CardArt {
   if (post.heroArt) {
     const art = taggedArtByName(post.heroArt);
     if (art) {
@@ -320,6 +320,9 @@ export function artFor(symbol: string, title: string, key: string, taken: { name
   return planSymbolCardArt({
     variant: "lead", title, description: post.summary ?? null, industry: prof?.industry ?? null, sectorBucket: bucketFor(slug, prof?.industry ?? null),
     key, takenNames: taken.names, takenBuckets: taken.buckets, canGenerate: true,
+    // "other" unless a NEWS caller says so (the dashboard's Headlines card): the
+    // insight hero and Related cards never pass it, so never reach a real photo.
+    surface: post.surface ?? "other",
   });
 }
 

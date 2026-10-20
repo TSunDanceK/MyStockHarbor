@@ -256,8 +256,8 @@ function wiring(client, page, cardsSrc, root = read(ROOT)) {
   want("C: four headlines from the top preset names' own news", /export const NEWS_SYMBOLS = 5, NEWS_SHOWN = 4;/.test(d) && /PRESET_UNIVERSE\.slice\(0, NEWS_SYMBOLS\)/.test(d) && /getStockNewsBaseData\(sym, \{ maxDetailedItems: 5 \}\)/.test(d));
   want("C: the insight card reads the newest two posts (one featured, one \"Also\")", /export const INSIGHTS_SHOWN = 2;/.test(d) && /getAllPosts\(\)\.slice\(0, INSIGHTS_SHOWN\)/.test(d));
   want("E: the landing cache key bumped (v6), 15 minutes", /unstable_cache\(loadDashboardLanding, \["dashboard-landing-v6"\], \{ revalidate: 900/.test(d));
-  want("news thumbnails come from the stored image (where allowed) or the art library, no new read",
-    /if \(SHOW_PUBLISHER_IMAGES && image && \/\^https:\\\/\\\/\/\.test\(image\)\) return \{ \.\.\.n, thumb: image \};/.test(d) && /const art = artFor\(n\.symbol, n\.title, `dash-news:\$\{n\.url\}`, taken\);/.test(d) && !/\bfetch\(/.test(d));
+  want("news thumbnails come from the stored image (where allowed) or the art library (a news surface: the real-photo pool may answer), no new read",
+    /if \(SHOW_PUBLISHER_IMAGES && image && \/\^https:\\\/\\\/\/\.test\(image\)\) return \{ \.\.\.n, thumb: image \};/.test(d) && /const art = artFor\(n\.symbol, n\.title, `dash-news:\$\{n\.url\}`, taken, \{ surface: "news" \}\);/.test(d) && !/\bfetch\(/.test(d));
   want("the title is the hero line; /dashboard canonicalises to \"/\" (#149 §1)", /const DASHBOARD_TITLE = "Stock research from the filings, not the hype \| MyStockHarbor";/.test(p) && /title: DASHBOARD_TITLE,/.test(p) && /canonical: "https:\/\/www\.mystockharbor\.com\/",/.test(p));
   const r = stripComments(root, { file: ROOT });
   want("\"/\" renders the dashboard's page, with no phone-only branch", /import DashboardPage from "\.\/dashboard\/page";/.test(r) && /<DashboardPage searchParams=\{searchParams\} \/>/.test(r) && !/HomePageRouter|MobileHomePage|user-agent|headers\(\)/i.test(r));

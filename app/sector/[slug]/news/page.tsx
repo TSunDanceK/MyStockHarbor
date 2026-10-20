@@ -635,6 +635,8 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
       // drawing an empty one. Every sector slug maps to a bucket that holds
       // art, so in practice the lead cards take library art regardless.
       canGenerate: primarySymbol(item, constituents) !== null,
+      // A news surface: the real-photo pool may answer first (lib/server/news/art.ts).
+      surface: "news",
     }), item.guid ?? item.link, takenGeneric)
   );
 
@@ -810,6 +812,7 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
                         key: item.guid ?? item.link,
                         taken: takenByBucket,
                         canGenerate: symbol !== null,
+                        surface: "news",
                       }), item.guid ?? item.link, takenGeneric)}
                       symbol={symbol ?? ""}
                       changePct={null}

@@ -8,10 +8,9 @@
 // ── THE MANIFEST IS THE ONLY SOURCE OF COUNTS ──────────────────────────────
 // Never count files by hand and never guess. A bucket absent from the manifest
 // has no art, and the caller falls back to the generated data card. That is what
-// makes the library shippable while it is still incomplete: five sector buckets
-// (staples, realestate, materials, aerospace, insurance) have no images yet, and
-// today the manifest is empty entirely, so every card takes the generated card.
-// When images land, raising the count is the only change needed here.
+// made the library shippable while it was still incomplete. Every sector bucket
+// here now holds images (sector-aerospace has 6, re-checked 2026-10-19); when
+// more land, raising the count is the only change needed here.
 //
 // ── EVENT BUCKETS, LIVE SINCE STEP 6 ───────────────────────────────────────
 // §6's full rule is `eventType ? pick(event-*) : pick(sector-*)`. Step 0 shipped
@@ -22,9 +21,76 @@
 // wrong event type puts event-earnings art on a lawsuit story and asserts
 // something false, where a sector illustration asserts nothing.
 import manifest from "@/public/news-art/manifest.json";
+import realManifest from "@/public/news-art/real/manifest.json";
 import type { EventType } from "./eventType";
 
 const BUCKET_COUNTS = manifest as Record<string, number>;
+
+// ── THE REAL-PHOTO POOL: NEWS CARDS ONLY ────────────────────────────────────
+// public/news-art/real/, its own manifest, files `real-<subject>-NN`. A
+// separate pool rather than more buckets so that NO surface can reach it by
+// default: every picker takes `surface`, defaulting to "other", and only
+// "news" (/headlines, /stock/[symbol]/news, /sector/[slug]/news and the
+// dashboard's Headlines card) tries it. Insight heroes, Related cards and
+// everything else stay on the illustrated library. scripts/check-news-art.mjs
+// holds the call sites to that.
+//
+// Tried BEFORE the tag or bucket of the same subject, and never instead of the
+// layers under it: an exhausted or empty subject falls through to the library
+// exactly as before, whatever onExhausted says (that rule is the library's).
+/** Which kind of page a card is on. Only "news" may resolve to a real photo. */
+export type ArtSurface = "news" | "other";
+/** `real-<subject>-NN`: the subject is everything between. */
+export const REAL_NAME = /^real-([a-z0-9]+(?:-[a-z0-9]+)*)-(\d{2})$/;
+const REAL_FILES = (realManifest as { files?: unknown }).files;
+const REAL_NAMES: string[] = (Array.isArray(REAL_FILES) ? REAL_FILES : [])
+  .filter((n): n is string => typeof n === "string" && REAL_NAME.test(n)).sort();
+function realSubject(name: string): string | null {
+  return name.match(REAL_NAME)?.[1] ?? null;
+}
+/** Every real photo of one subject, A–Z. */
+export function realNamesFor(subject: string): string[] {
+  return REAL_NAMES.filter((n) => realSubject(n) === subject);
+}
+function realAt(name: string): NewsArt {
+  const stem = `/news-art/real/${name}`;
+  return { src: `${stem}.webp`, srcSet: `${stem}-sm.webp 320w, ${stem}.webp 1200w`, width: ART_WIDTH, height: ART_HEIGHT, bucket: name };
+}
+
+/**
+ * One real-name set per page, kept beside the page's bucket map, so a caller
+ * that passes only `taken` (the sector page, the dashboard strip) still never
+ * repeats a real photo.
+ */
+const REAL_TAKEN = new WeakMap<Map<string, Set<number>>, Set<string>>();
+export function realTakenFor(taken: Map<string, Set<number>>): Set<string> {
+  let set = REAL_TAKEN.get(taken);
+  if (!set) REAL_TAKEN.set(taken, (set = new Set()));
+  return set;
+}
+
+/**
+ * A real photo for the first of `subjects` that has one not yet on the page,
+ * or null. Null on any surface but "news", and when the pool has nothing left:
+ * the caller then goes on to the library as before. `taken` is the page's
+ * no-repeat set of real names (mutated).
+ */
+export function pickReal(surface: ArtSurface | undefined, subjects: readonly (string | null | undefined)[], key: string, taken?: Set<string>): NewsArt | null {
+  if (surface !== "news") return null;
+  for (const subject of subjects) {
+    const names = subject ? realNamesFor(subject) : [];
+    if (!names.length) continue;
+    const first = hashKey(key) % names.length;
+    for (let step = 0; step < names.length; step += 1) {
+      const name = names[(first + step) % names.length];
+      if (!taken?.has(name)) {
+        taken?.add(name);
+        return realAt(name);
+      }
+    }
+  }
+  return null;
+}
 
 /** Lead-card art. The 320x180 -sm variant ships but is unused -- see §6. */
 export const ART_WIDTH = 1200;
@@ -209,9 +275,15 @@ export function planCardArt(input: {
   canGenerate: boolean;
   /** See pickArt. Default "repeat", which is what three surfaces were built on. */
   onExhausted?: "repeat" | "skip";
+  /** Only "news" may resolve to a real photo (see pickReal). Default "other". */
+  surface?: ArtSurface;
+  /** The page's no-repeat set of real names; by default one kept beside `taken`. */
+  takenReal?: Set<string>;
 }): CardArt {
   const { variant, eventType, sectorBucket, key, taken, canGenerate } = input;
   const onExhausted = input.onExhausted ?? "repeat";
+  const surface = input.surface ?? "other";
+  const takenReal = input.takenReal ?? realTakenFor(taken);
 
   if (variant === "lead") {
     // ── TWO BUCKETS TO TRY UNDER "skip", NOT ONE ──────────────────────────
@@ -233,7 +305,7 @@ export function planCardArt(input: {
         used = new Set<number>();
         taken.set(bucket, used);
       }
-      const art = pickArt(bucket, key, used, onExhausted);
+      const art = pickArt(bucket, key, used, onExhausted, surface, takenReal);
       if (art) return { kind: "library", art };
     }
   }
@@ -317,8 +389,14 @@ export function pickArt(
    * and the dashboard strip keep "repeat"; the layered symbol picker passes
    * "skip" and falls through.
    */
-  onExhausted: "repeat" | "skip" = "repeat"
+  onExhausted: "repeat" | "skip" = "repeat",
+  /** "news" tries a real photo of this bucket first (pickReal); anything else never does. */
+  surface: ArtSurface = "other",
+  /** The page's no-repeat set of real names, for surface "news". */
+  takenReal?: Set<string>
 ): NewsArt | null {
+  const real = pickReal(surface, [bucket], key, takenReal);
+  if (real) return real;
   const count = bucketCount(bucket);
   if (!bucket || count <= 0) return null;
 
