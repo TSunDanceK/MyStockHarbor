@@ -765,6 +765,11 @@
    "symbol": "AZZ",
    "requestedAt": "2026-10-22T00:00:00Z",
    "reason": "earnings audit r2: a full year's value filed on a quarter's dates under the same accession is no longer read as that quarter, so the derived Q4 (or Q3) and the FY-vs-quarters sum are right; the stored set carries the old figure. AZZ Q4 FY2024 (2023-11-30..2024-02-29) read 1,537.6M, the whole year; now 366.6M (FY - 9M). Found by the r1 scan, not one of the nine"
+  },
+  {
+   "symbol": "SNEX",
+   "requestedAt": "2026-10-26T00:00:00Z",
+   "reason": "earnings audit r2 (owner ruling): SNEX reads net operating revenues (RevenuesNetOfInterestExpense) for every year and quarter, not its gross Revenues; the stored set carries the gross figure. FY2025 132,378.2M -> 2,052.8M; dated after the expected merge, so a routine re-read before it cannot retire the request"
   }
  ]
 }
