@@ -100,9 +100,14 @@ if (process.env.EVIDENCE !== "0") {
     const i = rec.form.findIndex((f) => f === "10-K");
     console.log(`\n=== ${sym} evidence: ${i < 0 ? "no 10-K" : `10-K ${rec.accessionNumber[i]} (${rec.primaryDocument[i]})`} ===`);
     if (i < 0) continue;
-    const url = `https://www.sec.gov/Archives/edgar/data/${cikNum}/${rec.accessionNumber[i].replace(/-/g, "")}/${rec.primaryDocument[i]}`;
-    const doc = await get(url, false);
-    if (!doc.ok) { console.log(`primary doc ${doc.status}`); continue; }
+    const base = `https://www.sec.gov/Archives/edgar/data/${cikNum}/${rec.accessionNumber[i].replace(/-/g, "")}`;
+    // The primary document, then any Exhibit 4 (description of securities) in the same filing.
+    const fidx = await get(`${base}/index.json`);
+    const ex4 = fidx.ok ? fidx.body.directory.item.map((x) => x.name).filter((n) => /ex-?4[^/]*\.htm$/i.test(n)) : [];
+    for (const name of [rec.primaryDocument[i], ...ex4]) {
+    const doc = await get(`${base}/${name}`, false);
+    console.log(`  -- ${name}${doc.ok ? "" : ` ${doc.status}`}`);
+    if (!doc.ok) continue;
     const text = doc.body.replace(/<ix:header>[\s\S]*?<\/ix:header>/gi, " ").replace(/<[^>]+>/g, " ")
       .replace(/&#160;|&nbsp;/g, " ").replace(/&#8217;|&rsquo;/g, "'").replace(/&#8220;|&#8221;|&ldquo;|&rdquo;/g, '"')
       .replace(/&amp;/g, "&").replace(/&#\d+;/g, " ").replace(/\s+/g, " ");
@@ -115,6 +120,7 @@ if (process.env.EVIDENCE !== "0") {
       seen.add(s);
       console.log(`- ${s.trim()}`);
       if (++n >= 30) break;
+    }
     }
   }
 }
