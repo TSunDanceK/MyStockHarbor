@@ -1292,6 +1292,23 @@ export const LAST_RESORT_REVENUE_TAG = "RevenuesNetOfInterestExpense";
  * two measures into their series (relay scan, write-earnings-audit-r1-scan).
  */
 export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
+/**
+ * THE OWNER'S RULING ON A FILER'S HEADLINE TOTAL (earnings audit r2), by symbol:
+ * the concept that is its revenue for every year and quarter, as filed.
+ *   WMT: `Revenues` (total revenues, net sales plus membership and other
+ *        income): 713,163M for FY2026 against a 706,413M contract line. The
+ *        gap is under REVENUE_TOTAL_OVER_CONTRACT and is no listed gap concept,
+ *        so the total-over-contract rule kept the contract line.
+ *   DUK: total operating revenues, RegulatedAndUnregulatedOperatingRevenue:
+ *        32,237M for FY2025 against a 31,741M contract line (including tax).
+ *        Not a chain entry (see UTILITY_REVENUE_TAG): only this filer moves.
+ * A period without the ruled concept reads Not reported rather than keep the
+ * contract line beside the total, so the series stays on one basis.
+ */
+export const REVENUE_TOTAL_RULINGS: Readonly<Record<string, string>> = {
+  WMT: "Revenues",
+  DUK: UTILITY_REVENUE_TAG,
+};
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
 /** How close a closure ratio must sit to one of the filer's split ratios to read as a split, not a wrong count. */
@@ -2025,6 +2042,37 @@ function extractCompanyFactsWith(
           }
           notes.push(`revenue: bank net basis — ${off} period(s) not a net total of ${BANK_REVENUE_HALVES.join(" + ")}; net revenue used for ${moved} period(s) (${computed} computed), ${blanked} without it left unreported`);
         }
+      }
+    }
+
+    // ── THE OWNER'S TOTAL (REVENUE_TOTAL_RULINGS, earnings audit r2) ─────────
+    // After every other revenue choice, so none of them can put the contract
+    // line back; before the derived-Q4 check, which then judges the total.
+    {
+      const ruled = REVENUE_TOTAL_RULINGS[String(symbol ?? "").toUpperCase()];
+      if (ruled) {
+        const f: FieldDef = { ...revenueField, chain: [ruled], ifrsChain: undefined };
+        const rows = rowsForField(facts, f, new Set<string>(), currency);
+        const bucket: Bucket = new Map();
+        for (const c of rows) {
+          const k = periodKey(c.row);
+          const list = bucket.get(k);
+          if (list) list.push(c);
+          else bucket.set(k, [c]);
+        }
+        const qc = new Map<string, Map<string, FieldValue>>(), yc = new Map<string, Map<string, FieldValue>>();
+        if (rows.length) runCumulative([f], new Map([["revenue", bucket]]), new Map([["revenue", ruled]]), qc, yc, new Map(), new Map(), []);
+        let moved = 0, blanked = 0;
+        for (const [cells, ruledCells] of [[quarterCells, qc], [yearCells, yc]] as const) {
+          for (const [end, m] of cells) {
+            const t = ruledCells.get(end)?.get("revenue");
+            if (t?.val != null && t.val > 0) {
+              if (m.get("revenue")?.val !== t.val || m.get("revenue")?.tag !== t.tag) moved++;
+              m.set("revenue", t);
+            } else if (m.has("revenue")) { m.delete("revenue"); blanked++; }
+          }
+        }
+        notes.push(`revenue: owner ruling — ${ruled} for every period; ${moved} period(s) moved, ${blanked} without it left unreported`);
       }
     }
 
