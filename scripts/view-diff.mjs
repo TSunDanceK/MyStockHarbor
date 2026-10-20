@@ -43,10 +43,16 @@ for (let i = 0; i < syms.length; i += 25) {
         byReason[mb] = (byReason[mb] ?? 0) + 1;
       };
       cmp("snapshot", "latest", a.snapshot, b.snapshot);
-      // Paired by label, not index: a row-selection difference must not pair two periods.
+      // Paired by label AND its occurrence: a row-selection difference must not
+      // pair two periods, and a filer with two rows of one label (HAS, ONTO,
+      // SAM: a 52/53-week year) must not pair the second with the first.
+      const keyed = (rows) => {
+        const seen = {};
+        return rows.map((g) => [`${g.label}#${(seen[g.label] = (seen[g.label] ?? 0) + 1)}`, g]);
+      };
       for (const [surface, key] of [["quarter", "growth"], ["year", "annual"]]) {
-        const before = new Map(a[key].map((g) => [g.label, g]));
-        for (const g of b[key]) cmp(surface, g.label, before.get(g.label), g);
+        const before = new Map(keyed(a[key]));
+        for (const [k, g] of keyed(b[key])) cmp(surface, k.endsWith("#1") ? g.label : k, before.get(k), g);
       }
       if (lines.length) { changed++; cells += lines.length; for (const l of lines) console.log(l); }
     } catch (e) { failed++; console.log(`ERR ${s}: ${String(e).slice(0, 120)}`); }
