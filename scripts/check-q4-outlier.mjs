@@ -1,11 +1,11 @@
 // A DERIVED Q4 FAR OUTSIDE ITS NEIGHBOURS (yoy60 2b).
 //
-// FY - 9M beyond DERIVED_Q4_BAND of the year's other quarters is withheld only
-// when it is also beyond DERIVED_Q4_YOY_BAND of the filer's own year-ago Q4,
-// and only when the three siblings are steady. Pinned: an outlier refused; a
-// retailer's holiday Q4 (4.5x its siblings, as it is every year) kept and noted
-// seasonal; a first year with no year-ago Q4 stands; a lumpy biotech is not
-// judged; and the rule's two tests are each caught by a mutation.
+// FY - 9M under 1/DERIVED_Q4_BAND of the year's other quarters is withheld only
+// when it is also under 1/DERIVED_Q4_YOY_BAND of the filer's own year-ago Q4,
+// and only when the three siblings are steady. Pinned: a collapse refused; an
+// off-season Q4 (0.2x its siblings, as every year) kept and noted seasonal; an
+// upward spike never judged; a first year stands; lumpy siblings not judged;
+// and the rule's two tests are each caught by a mutation.
 import fs from "node:fs";
 import { lift } from "./lib/earnings-plan.mjs";
 
@@ -43,33 +43,36 @@ const year = (y0, vals, fyVal, q4Override) => {
 
 const N = (ex) => (ex.notes ?? []).join(" | ");
 console.log("1. the pure verdict");
-check("x10 its siblings and x10 its year-ago Q4: outlier", X.q4OutlierVerdict(1000, [100, 100, 100], 100) === "outlier");
-check("x5 its siblings, as last year: seasonal", X.q4OutlierVerdict(500, [100, 100, 110], 480) === "seasonal");
-check("x2 its siblings: not judged", X.q4OutlierVerdict(200, [100, 100, 100], 50) === null);
-check("no year-ago Q4: stands", X.q4OutlierVerdict(1000, [100, 100, 100], null) === null);
-check("lumpy siblings (x10 apart): not judged", X.q4OutlierVerdict(1000, [10, 100, 50], 100) === null);
+check("x0.1 its siblings and its year-ago Q4: outlier", X.q4OutlierVerdict(10, [100, 100, 100], 100) === "outlier");
+check("x0.2 its siblings, as last year: seasonal", X.q4OutlierVerdict(20, [100, 100, 110], 22) === "seasonal");
+check("x0.5 its siblings: not judged", X.q4OutlierVerdict(50, [100, 100, 100], 200) === null);
+check("an upward spike (x10, a milestone) is never judged", X.q4OutlierVerdict(1000, [100, 100, 100], 100) === null);
+check("no year-ago Q4: stands", X.q4OutlierVerdict(10, [100, 100, 100], null) === null);
+check("lumpy siblings (x10 apart): not judged", X.q4OutlierVerdict(5, [10, 100, 50], 100) === null);
 check("a collapse (x0.1) against a normal year-ago Q4: outlier", X.q4OutlierVerdict(10, [100, 100, 100], 100) === "outlier");
 
 console.log("\n2. through the extraction");
-const OUT = facts([...year(2023, [100, 100, 100, 100]), ...year(2024, [100, 105, 110, 0], 1300)]);
+// The collapse is above the scope rule's 40% floor's reach only when that rule
+// has no second opinion; here the year is simply short (GEF/MIDD shape).
+const OUT = facts([...year(2023, [1000, 1000, 1000, 1000]), ...year(2024, [1000, 1050, 1100, 0], 3350)]);
 const o = X.extractCompanyFacts("OUT", OUT);
-check("derived Q4 985 against siblings ~105 and a year-ago Q4 100: refused", q(o, "2024-12-31") === null, String(q(o, "2024-12-31")));
-check("...the year stays", y(o, "2024-12-31") === 1300 * M);
-const RTL = facts([...year(2023, [100, 100, 110, 480]), ...year(2024, [105, 100, 110, 500])]);
-const r = X.extractCompanyFacts("RTL", RTL);
-check("a holiday Q4 4.8x its siblings, as the year before: kept", q(r, "2024-12-31") === 500 * M, String(q(r, "2024-12-31")));
+check("derived Q4 200 against siblings ~1,050 and a year-ago Q4 1,000: refused", q(o, "2024-12-31") === null, String(q(o, "2024-12-31")));
+check("...the year stays", y(o, "2024-12-31") === 3350 * M);
+const SKI = facts([...year(2023, [1000, 1000, 1100, 200]), ...year(2024, [1050, 1000, 1100, 210])]);
+const r = X.extractCompanyFacts("SKI", SKI);
+check("an off-season Q4 at 0.2x its siblings, as the year before: kept", q(r, "2024-12-31") === 210 * M, String(q(r, "2024-12-31")));
 check("...and noted seasonal", /kept \(seasonal\)/.test(N(r)), N(r));
-const FIRST = facts([...year(2024, [100, 105, 110, 0], 1300)]);
-check("a first year (no year-ago Q4) stands", q(X.extractCompanyFacts("FST", FIRST), "2024-12-31") === 985 * M);
+const FIRST = facts([...year(2024, [1000, 1050, 1100, 0], 3350)]);
+check("a first year (no year-ago Q4) stands", q(X.extractCompanyFacts("FST", FIRST), "2024-12-31") === 200 * M);
 
 console.log("\n3. mutations");
 {
-  const a = extractRaw.replace("if (r <= DERIVED_Q4_BAND && r >= 1 / DERIVED_Q4_BAND) return null;", "");
+  const a = extractRaw.replace("if (r >= 1 / DERIVED_Q4_BAND) return null;", "");
   check("the band mutation is applied", a !== extractRaw);
-  check("MUTATION: band off → the ordinary x2 Q4 judged, caught", (await load(a)).q4OutlierVerdict(200, [100, 100, 100], 50) !== null);
+  check("MUTATION: band off → the ordinary x0.5 Q4 judged, caught", (await load(a)).q4OutlierVerdict(50, [100, 100, 100], 200) !== null);
   const b = extractRaw.replace('return y <= DERIVED_Q4_YOY_BAND && y >= 1 / DERIVED_Q4_YOY_BAND ? "seasonal" : "outlier";', 'return "outlier";');
   check("the year-ago mutation is applied", b !== extractRaw);
-  check("MUTATION: year-ago test off → the retailer's Q4 refused, caught", q((await load(b)).extractCompanyFacts("RTL", RTL), "2024-12-31") === null);
+  check("MUTATION: year-ago test off → the off-season Q4 refused, caught", q((await load(b)).extractCompanyFacts("SKI", SKI), "2024-12-31") === null);
 }
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

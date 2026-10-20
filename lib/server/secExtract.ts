@@ -1281,17 +1281,19 @@ export function q4RevenueScope(
 }
 
 /**
- * A DERIVED Q4 FAR OUTSIDE ITS NEIGHBOURS (yoy60 2b). FY − 9M that lands
- * beyond DERIVED_Q4_BAND times (either way) the mean of the year's other three
+ * A DERIVED Q4 FAR BELOW ITS NEIGHBOURS (yoy60 2b). FY − 9M that lands
+ * under 1/DERIVED_Q4_BAND of the mean of the year's other three
  * quarters is one subtraction over unlike numbers -- unless the filer's own
- * year-ago Q4 says the quarter is like that: a retailer's holiday quarter, a
- * ski resort's off season, a utility's winter. So it is withheld only when it
- * is ALSO beyond DERIVED_Q4_YOY_BAND of the same quarter a year earlier, and
+ * year-ago Q4 says the quarter is like that: a ski resort's off season, a
+ * publisher's quiet quarter. So it is withheld only when it is ALSO beyond
+ * DERIVED_Q4_YOY_BAND of the same quarter a year earlier, and
  * only for a filer whose three siblings are themselves steady (max/min under
  * DERIVED_Q4_BAND): a biotech's milestone quarters judge nothing. With no
  * year-ago Q4 there is no second opinion, and the Q4 stands.
  *
- * "seasonal" = outside the band, cleared by its year-ago Q4 (kept, noted).
+ * Upward only spikes are left alone: the dry run's were real (milestones,
+ * asset sales). "seasonal" = under the band, cleared by its year-ago Q4 (kept,
+ * noted).
  */
 export const DERIVED_Q4_BAND = 4;
 export const DERIVED_Q4_YOY_BAND = 3;
@@ -1299,7 +1301,10 @@ export function q4OutlierVerdict(q4: number, siblings: number[], yearAgoQ4: numb
   if (!Number.isFinite(q4) || !(q4 > 0) || siblings.length !== 3 || !siblings.every((x) => Number.isFinite(x) && x > 0)) return null;
   if (Math.max(...siblings) / Math.min(...siblings) >= DERIVED_Q4_BAND) return null;
   const r = q4 / (siblings.reduce((a, b) => a + b, 0) / 3);
-  if (r <= DERIVED_Q4_BAND && r >= 1 / DERIVED_Q4_BAND) return null;
+  // ONLY A COLLAPSE. The dry run's upward outliers were real (a biotech's
+  // milestone Q4 -- BEAM, CRSP, STOK; NuScale's; Rayonier's land sale): a
+  // year read as a quarter is the year/quarter guard's case, not this one.
+  if (r >= 1 / DERIVED_Q4_BAND) return null;
   if (yearAgoQ4 == null || !(yearAgoQ4 > 0)) return null;
   const y = q4 / yearAgoQ4;
   return y <= DERIVED_Q4_YOY_BAND && y >= 1 / DERIVED_Q4_YOY_BAND ? "seasonal" : "outlier";
