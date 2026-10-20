@@ -1,7 +1,7 @@
 // ONE BASIS PER REVENUE SERIES (yoy60 2c; the #913 rule, LYG).
 //
 // Pinned: a year older than the newest filing's comparatives is withheld when
-// that filing restated a comparative by over 10% (LYG's net-basis 20-F); with
+// that filing restated a comparative by over 25% (LYG's net-basis 20-F); with
 // no restatement it stays; a year on another concept that disagrees with the
 // series' concept where both are filed is withheld, and one that agrees stays;
 // each rule's mutation is caught.
@@ -50,6 +50,11 @@ const PLAIN = facts([
   ...tenK(R, 2025, { 2022: 40100, 2023: 41000, 2024: 42000 }),
 ]);
 check("a 0.25% revision is not a restatement: FY2021 stays", y(X.extractCompanyFacts("PLN", PLAIN), 2021) === 38950 * M);
+const RECAST = facts([
+  ...tenK(R, 2023, { 2020: 36000, 2021: 38950, 2022: 40000 }),
+  ...tenK(R, 2025, { 2022: 34000, 2023: 35000, 2024: 36000 }),
+]);
+check("a 15% recast (a divestiture) is under the 25% ruling: FY2021 keeps its history", y(X.extractCompanyFacts("RCS", RECAST), 2021) === 38950 * M);
 
 console.log("\n2. a mixed-concept series");
 const MIX = facts([

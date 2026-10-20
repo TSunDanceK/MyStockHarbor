@@ -1280,8 +1280,8 @@ export function q4RevenueScope(
   return null;
 }
 
-/** yoy60 2c: a comparative restated by more than this against its first filing means the series changed basis. */
-export const SERIES_RESTATED_MIN = 0.1;
+/** yoy60 2c: a comparative restated by more than this against its first filing means the series changed basis (owner ruling: 25%, so a small recast keeps its history). */
+export const SERIES_RESTATED_MIN = 0.25;
 /** yoy60 2c: two revenue concepts within this of each other wherever both are filed are one measure. */
 export const SERIES_CONCEPT_AGREE = 0.05;
 /** The contract-revenue tag the total-over-contract rule compares against. */
@@ -2083,7 +2083,7 @@ function extractCompanyFactsWith(
   // the comparatives by itself. What it cannot reach is a period OLDER than the
   // newest filing's comparatives, or one on another concept. Withheld:
   //   1. a period older than every comparative in the newest filing, when that
-  //      filing restated a comparative by more than SERIES_RESTATED_MIN against
+  //      filing restated a comparative by more than SERIES_RESTATED_MIN (25%) against
   //      its first filing: the old period is on the basis the filer abandoned
   //      (LYG's 20-F: FY2022-24 restated to a net basis, FY2021 gross 38,950M);
   //   2. a period on another concept, where the basis concept files nothing
