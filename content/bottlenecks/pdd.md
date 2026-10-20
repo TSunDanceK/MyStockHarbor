@@ -103,9 +103,9 @@ supplyChain:
       used to attract shoppers. The Wall Street Journal reported Temu spent
       roughly $2 billion on Meta ads in 2023, which made it Meta's largest
       advertiser, though Goldman Sachs estimated a lower figure of about $1.2
-      billion. Morgan Stanley estimated about $1.4 billion for 2024, and Temu
-      appeared to cut its US Meta spending sharply in 2025 after tariff changes.
-      Spend may keep moving with trade policy, so the weight could shift.
+      billion. Morgan Stanley estimated about $1.4 billion for 2024. These are
+      reported or estimated figures, and spend may vary from year to year, so
+      the weight could shift.
   - name: Alphabet (Google)
     ticker: GOOGL
     pct: 7

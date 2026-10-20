@@ -75,7 +75,7 @@ supplyChain:
     grade: spread
     blurb: >
       Google is reported to supply Meta with cloud computing capacity. The
-      Information reported in February 2026 that Meta agreed a multi-year,
+      Information reported that Meta agreed a multi-year,
       multibillion-dollar deal to rent Google Cloud TPUs, and an earlier report
       described a Google Cloud contract worth more than $10 billion over six
       years. These figures come from anonymous sources and Google did not

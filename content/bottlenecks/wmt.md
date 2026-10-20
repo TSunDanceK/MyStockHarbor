@@ -121,10 +121,9 @@ supplyChain:
     grade: spread
     blurb: >
       Keurig Dr Pepper supplies Walmart with soft drinks, coffee pods and other
-      beverages. KDP's fiscal 2025 10-K names Walmart as a customer above 10% of
-      its net sales, with about $2.65 billion of sales to Walmart, roughly 16%
-      of KDP's consolidated net sales. The volume may be smaller than Walmart's
-      largest packaged-goods suppliers.
+      beverages. KDP's fiscal 2025 10-K is reported to name Walmart as its largest
+      customer, above 10% of net sales. The volume may be smaller than
+      Walmart's largest packaged-goods suppliers.
 customers:
   - name: Procter & Gamble
     ticker: PG
