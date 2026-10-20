@@ -1,0 +1,1682 @@
+{
+  "provisionalCount": 165,
+  "exceptions": [
+    {
+      "source": "ABNB",
+      "target": "AAPL",
+      "role": "supplier",
+      "reason": "Immaterial on ABNB's page (6%, spread); AAPL's page does not need to mirror it."
+    },
+    {
+      "source": "ABNB",
+      "target": "GOOGL",
+      "role": "supplier",
+      "reason": "Immaterial on ABNB's page (7%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "ACHR",
+      "target": "HON",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ACHR's page (15%, some) but no sourced weight for ACHR as HON's customer yet; left open."
+    },
+    {
+      "source": "ADBE",
+      "target": "AAPL",
+      "role": "supplier",
+      "reason": "Immaterial on ADBE's page (9%, spread); AAPL's page does not need to mirror it."
+    },
+    {
+      "source": "ADBE",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADBE's page (24%, some) but no sourced weight for ADBE as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "ADBE",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADBE's page (13%, some) but no sourced weight for ADBE as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "ADBE",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADBE's page (15%, some) but no sourced weight for ADBE as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "ADBE",
+      "target": "NVDA",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADBE's page (16%, some) but no sourced weight for ADBE as NVDA's customer yet, and NVDA's list is full; left open."
+    },
+    {
+      "source": "ADBE",
+      "target": "PYPL",
+      "role": "supplier",
+      "reason": "Immaterial on ADBE's page (5%, spread); PYPL's page does not need to mirror it."
+    },
+    {
+      "source": "ADI",
+      "target": "ASX",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADI's page (20%, some) but no sourced weight for ADI as ASX's customer yet, and ASX's list is full; left open."
+    },
+    {
+      "source": "ADI",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADI's page (26%, some) but no sourced weight for ADI as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "ADP",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADP's page (35%, hard) but no sourced weight for ADP as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "ADSK",
+      "target": "AAPL",
+      "role": "supplier",
+      "reason": "Immaterial on ADSK's page (8%, spread); AAPL's page does not need to mirror it."
+    },
+    {
+      "source": "ADSK",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADSK's page (30%, hard) but no sourced weight for ADSK as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "ADSK",
+      "target": "GOOGL",
+      "role": "supplier",
+      "reason": "Immaterial on ADSK's page (8%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "ADSK",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADSK's page (20%, some) but no sourced weight for ADSK as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "ADSK",
+      "target": "NVDA",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ADSK's page (18%, some) but no sourced weight for ADSK as NVDA's customer yet, and NVDA's list is full; left open."
+    },
+    {
+      "source": "AEP",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on AEP's page (14%, some) but no sourced weight for AEP as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "AEP",
+      "target": "GOOGL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on AEP's page (12%, some) but no sourced weight for AEP as GOOGL's supplier yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "AEP",
+      "target": "META",
+      "role": "customer",
+      "reason": "Immaterial on AEP's page (9%, spread); META's page does not need to mirror it."
+    },
+    {
+      "source": "AEP",
+      "target": "MSFT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on AEP's page (10%, some) but no sourced weight for AEP as MSFT's supplier yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "ALAB",
+      "target": "AMD",
+      "role": "customer",
+      "reason": "Immaterial on ALAB's page (3%, spread); AMD's page does not need to mirror it."
+    },
+    {
+      "source": "ALAB",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on ALAB's page but Amazon's supplier list is full (10) and the only removable entry, Samsung Electronics, was kept; left open until a better removal is agreed."
+    },
+    {
+      "source": "ALAB",
+      "target": "ASML",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ALAB's page (5%, hard) but no sourced weight for ALAB as ASML's customer yet; left open."
+    },
+    {
+      "source": "ALAB",
+      "target": "ASX",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ALAB's page (15%, some) but no sourced weight for ALAB as ASX's customer yet, and ASX's list is full; left open."
+    },
+    {
+      "source": "ALAB",
+      "target": "CDNS",
+      "role": "supplier",
+      "reason": "Immaterial on ALAB's page (7%, spread); CDNS's page does not need to mirror it."
+    },
+    {
+      "source": "ALAB",
+      "target": "DELL",
+      "role": "customer",
+      "reason": "Immaterial on ALAB's page (2%, spread); DELL's page does not need to mirror it."
+    },
+    {
+      "source": "ALAB",
+      "target": "GOOGL",
+      "role": "customer",
+      "reason": "Immaterial on ALAB's page (3%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "ALAB",
+      "target": "META",
+      "role": "customer",
+      "reason": "Immaterial on ALAB's page (4%, spread); META's page does not need to mirror it."
+    },
+    {
+      "source": "ALAB",
+      "target": "MSFT",
+      "role": "customer",
+      "reason": "Immaterial on ALAB's page (6%, spread); MSFT's page does not need to mirror it."
+    },
+    {
+      "source": "ALAB",
+      "target": "NVDA",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on ALAB's page (10%, some) but no sourced weight for ALAB as NVDA's supplier yet, and NVDA's list is full; left open."
+    },
+    {
+      "source": "ALAB",
+      "target": "SNPS",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ALAB's page (12%, some) but no sourced weight for ALAB as SNPS's customer yet; left open."
+    },
+    {
+      "source": "ALAB",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ALAB's page (34%, hard) but no sourced weight for ALAB as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "AMD",
+      "target": "CDNS",
+      "role": "supplier",
+      "reason": "Immaterial on AMD's page (1%, spread); CDNS's page does not need to mirror it."
+    },
+    {
+      "source": "AMD",
+      "target": "GOOGL",
+      "role": "customer",
+      "reason": "Immaterial on AMD's page (4%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "AMD",
+      "target": "MU",
+      "role": "supplier",
+      "reason": "Immaterial on AMD's page (8%, spread); MU's page does not need to mirror it."
+    },
+    {
+      "source": "AMD",
+      "target": "SKHY",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on AMD's page (12%, some) but no sourced weight for AMD as SKHY's customer yet, and SKHY's list is full; left open."
+    },
+    {
+      "source": "AMZN",
+      "target": "AMD",
+      "role": "supplier",
+      "reason": "Immaterial on AMZN's page (8%, spread); AMD's page does not need to mirror it."
+    },
+    {
+      "source": "AMZN",
+      "target": "AVGO",
+      "role": "supplier",
+      "reason": "Immaterial on AMZN's page (2%, spread); AVGO's page does not need to mirror it."
+    },
+    {
+      "source": "APP",
+      "target": "AAPL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on APP's page (28%, some) but no sourced weight for APP as AAPL's customer yet; left open."
+    },
+    {
+      "source": "APP",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on APP's page (40%, hard) but no sourced weight for APP as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "APP",
+      "target": "NVDA",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on APP's page (12%, some) but no sourced weight for APP as NVDA's customer yet, and NVDA's list is full; left open."
+    },
+    {
+      "source": "ARM",
+      "target": "AAPL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on ARM's page (11%, some) but no sourced weight for ARM as AAPL's supplier yet, and AAPL's list is full; left open."
+    },
+    {
+      "source": "ARM",
+      "target": "AMZN",
+      "role": "customer",
+      "reason": "Immaterial on ARM's page (6%, spread); AMZN's page does not need to mirror it."
+    },
+    {
+      "source": "ARM",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ARM's page (20%, some) but no sourced weight for ARM as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "ARM",
+      "target": "CDNS",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ARM's page (25%, some) but no sourced weight for ARM as CDNS's customer yet; left open."
+    },
+    {
+      "source": "ARM",
+      "target": "NVDA",
+      "role": "customer",
+      "reason": "Immaterial on ARM's page (8%, spread); NVDA's page does not need to mirror it."
+    },
+    {
+      "source": "ARM",
+      "target": "SNPS",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ARM's page (30%, hard) but no sourced weight for ARM as SNPS's customer yet; left open."
+    },
+    {
+      "source": "ARM",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ARM's page (25%, some) but no sourced weight for ARM as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "ASX",
+      "target": "AAPL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on ASX's page (10%, some) but no sourced weight for ASX as AAPL's supplier yet, and AAPL's list is full; left open."
+    },
+    {
+      "source": "ASX",
+      "target": "NXPI",
+      "role": "customer",
+      "reason": "Immaterial on ASX's page (2%, spread); NXPI's page does not need to mirror it."
+    },
+    {
+      "source": "AXON",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on AXON's page (15%, some) but no sourced weight for AXON as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "AXON",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on AXON's page (30%, hard) but no sourced weight for AXON as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "BKNG",
+      "target": "AAPL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on BKNG's page (10%, some) but no sourced weight for BKNG as AAPL's supplier yet, and AAPL's list is full; left open."
+    },
+    {
+      "source": "BKNG",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on BKNG's page (18%, some) but no sourced weight for BKNG as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "BKNG",
+      "target": "GOOGL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on BKNG's page (40%, hard) but no sourced weight for BKNG as GOOGL's supplier yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "BKNG",
+      "target": "META",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on BKNG's page (15%, some) but no sourced weight for BKNG as META's supplier yet, and META's list is full; left open."
+    },
+    {
+      "source": "BKR",
+      "target": "GEV",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on BKR's page (22%, some) but no sourced weight for BKR as GEV's customer yet; left open."
+    },
+    {
+      "source": "CCEP",
+      "target": "COST",
+      "role": "customer",
+      "reason": "Immaterial on CCEP's page (6%, spread); COST's page does not need to mirror it."
+    },
+    {
+      "source": "CDNS",
+      "target": "AAPL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on CDNS's page (18%, spread) but no sourced weight for CDNS as AAPL's supplier yet, and AAPL's list is full; left open."
+    },
+    {
+      "source": "CDNS",
+      "target": "AMD",
+      "role": "supplier",
+      "reason": "Immaterial on CDNS's page (4%, spread); AMD's page does not need to mirror it."
+    },
+    {
+      "source": "CDNS",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on CDNS's page (10%, some) but no sourced weight for CDNS as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "CDNS",
+      "target": "ARM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on CDNS's page (14%, some) but no sourced weight for CDNS as ARM's customer yet; left open."
+    },
+    {
+      "source": "CDNS",
+      "target": "ASML",
+      "role": "supplier",
+      "reason": "Immaterial on CDNS's page (3%, spread); ASML's page does not need to mirror it."
+    },
+    {
+      "source": "CDNS",
+      "target": "AVGO",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on CDNS's page (22%, some) but no sourced weight for CDNS as AVGO's supplier yet, and AVGO's list is full; left open."
+    },
+    {
+      "source": "CDNS",
+      "target": "GOOGL",
+      "role": "supplier",
+      "reason": "Immaterial on CDNS's page (8%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "CDNS",
+      "target": "INTC",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on CDNS's page (14%, some) but no sourced weight for CDNS as INTC's customer yet; left open."
+    },
+    {
+      "source": "CDNS",
+      "target": "MSFT",
+      "role": "supplier",
+      "reason": "Immaterial on CDNS's page (9%, spread); MSFT's page does not need to mirror it."
+    },
+    {
+      "source": "CDNS",
+      "target": "NVDA",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on CDNS's page (30%, hard) but no sourced weight for CDNS as NVDA's supplier yet, and NVDA's list is full; left open."
+    },
+    {
+      "source": "CDNS",
+      "target": "QCOM",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on CDNS's page (16%, some) but no sourced weight for CDNS as QCOM's supplier yet; left open."
+    },
+    {
+      "source": "CDNS",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on CDNS's page (22%, some) but no sourced weight for CDNS as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "CEG",
+      "target": "GEV",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on CEG's page (18%, some) but no sourced weight for CEG as GEV's customer yet; left open."
+    },
+    {
+      "source": "CEG",
+      "target": "WMT",
+      "role": "customer",
+      "reason": "Immaterial on CEG's page (8%, spread); WMT's page does not need to mirror it."
+    },
+    {
+      "source": "CMCSA",
+      "target": "AAPL",
+      "role": "customer",
+      "reason": "Immaterial on CMCSA's page (5%, spread); AAPL's page does not need to mirror it."
+    },
+    {
+      "source": "CMCSA",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on CMCSA's page (10%, some) but no sourced weight for CMCSA as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "CMCSA",
+      "target": "AMZN",
+      "role": "supplier",
+      "reason": "Immaterial on CMCSA's page (8%, spread); AMZN's page does not need to mirror it."
+    },
+    {
+      "source": "CMCSA",
+      "target": "AVGO",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on CMCSA's page (14%, some) but no sourced weight for CMCSA as AVGO's customer yet, and AVGO's list is full; left open."
+    },
+    {
+      "source": "CMCSA",
+      "target": "CSCO",
+      "role": "supplier",
+      "reason": "Immaterial on CMCSA's page (6%, spread); CSCO's page does not need to mirror it."
+    },
+    {
+      "source": "CMCSA",
+      "target": "GOOGL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on CMCSA's page (18%, some) but no sourced weight for CMCSA as GOOGL's supplier yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "CMCSA",
+      "target": "WMT",
+      "role": "customer",
+      "reason": "Immaterial on CMCSA's page (7%, spread); WMT's page does not need to mirror it."
+    },
+    {
+      "source": "COST",
+      "target": "BRK.B",
+      "role": "supplier",
+      "reason": "Immaterial on COST's page (7%, spread); BRK.B's page does not need to mirror it."
+    },
+    {
+      "source": "CRWD",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on CRWD's page (45%, hard) but no sourced weight for CRWD as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "CRWD",
+      "target": "GOOGL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on CRWD's page (15%, some) but no sourced weight for CRWD as GOOGL's supplier yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "CRWD",
+      "target": "MSFT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on CRWD's page (20%, some) but no sourced weight for CRWD as MSFT's supplier yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "CRWD",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on CRWD's page (30%, hard) but no sourced weight for CRWD as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "CRWD",
+      "target": "NVDA",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on CRWD's page (15%, some) but no sourced weight for CRWD as NVDA's customer yet, and NVDA's list is full; left open."
+    },
+    {
+      "source": "CSCO",
+      "target": "AMZN",
+      "role": "customer",
+      "reason": "Immaterial on CSCO's page (9%, spread); AMZN's page does not need to mirror it."
+    },
+    {
+      "source": "CSCO",
+      "target": "GOOGL",
+      "role": "customer",
+      "reason": "Immaterial on CSCO's page (8%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "CSCO",
+      "target": "META",
+      "role": "customer",
+      "reason": "Immaterial on CSCO's page (8%, spread); META's page does not need to mirror it."
+    },
+    {
+      "source": "CSCO",
+      "target": "MRVL",
+      "role": "supplier",
+      "reason": "Immaterial on CSCO's page (8%, spread); MRVL's page does not need to mirror it."
+    },
+    {
+      "source": "CSCO",
+      "target": "MSFT",
+      "role": "customer",
+      "reason": "Immaterial on CSCO's page (9%, spread); MSFT's page does not need to mirror it."
+    },
+    {
+      "source": "CSCO",
+      "target": "MU",
+      "role": "supplier",
+      "reason": "Immaterial on CSCO's page (7%, spread); MU's page does not need to mirror it."
+    },
+    {
+      "source": "CSCO",
+      "target": "SKHY",
+      "role": "supplier",
+      "reason": "Immaterial on CSCO's page (5%, spread); SKHY's page does not need to mirror it."
+    },
+    {
+      "source": "CSCO",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on CSCO's page (14%, some) but no sourced weight for CSCO as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "DASH",
+      "target": "AAPL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on DASH's page (15%, some) but no sourced weight for DASH as AAPL's customer yet; left open."
+    },
+    {
+      "source": "DASH",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on DASH's page (40%, hard) but no sourced weight for DASH as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "DASH",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on DASH's page (20%, some) but no sourced weight for DASH as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "DDOG",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on DDOG's page (50%, hard) but no sourced weight for DDOG as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "DDOG",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on DDOG's page (15%, some) but no sourced weight for DDOG as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "DDOG",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on DDOG's page (20%, some) but no sourced weight for DDOG as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "DELL",
+      "target": "JPM",
+      "role": "customer",
+      "reason": "Immaterial on DELL's page (9%, spread); JPM's page does not need to mirror it."
+    },
+    {
+      "source": "DELL",
+      "target": "META",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on DELL's page (14%, some) but no sourced weight for DELL as META's supplier yet, and META's list is full; left open."
+    },
+    {
+      "source": "DELL",
+      "target": "MSFT",
+      "role": "customer",
+      "reason": "Immaterial on DELL's page (9%, spread); MSFT's page does not need to mirror it."
+    },
+    {
+      "source": "DELL",
+      "target": "TSLA",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on DELL's page (10%, some) but no sourced weight for DELL as TSLA's supplier yet, and TSLA's list is full; left open."
+    },
+    {
+      "source": "DELL",
+      "target": "WMT",
+      "role": "customer",
+      "reason": "Immaterial on DELL's page (8%, spread); WMT's page does not need to mirror it."
+    },
+    {
+      "source": "EA",
+      "target": "AAPL",
+      "role": "supplier",
+      "reason": "Immaterial on EA's page (8%, spread); AAPL's page does not need to mirror it."
+    },
+    {
+      "source": "EA",
+      "target": "AMZN",
+      "role": "supplier",
+      "reason": "Immaterial on EA's page (5%, spread); AMZN's page does not need to mirror it."
+    },
+    {
+      "source": "EA",
+      "target": "GOOGL",
+      "role": "supplier",
+      "reason": "Immaterial on EA's page (6%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "EA",
+      "target": "MSFT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on EA's page (14%, some) but no sourced weight for EA as MSFT's supplier yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "EA",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on EA's page (12%, some) but no sourced weight for EA as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "EXC",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on EXC's page (12%, some) but no sourced weight for EXC as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "EXC",
+      "target": "ETN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on EXC's page (12%, some) but no sourced weight for EXC as ETN's customer yet; left open."
+    },
+    {
+      "source": "EXC",
+      "target": "GEV",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on EXC's page (18%, some) but no sourced weight for EXC as GEV's customer yet; left open."
+    },
+    {
+      "source": "FTNT",
+      "target": "AVGO",
+      "role": "supplier",
+      "reason": "Immaterial on FTNT's page (9%, spread); AVGO's page does not need to mirror it."
+    },
+    {
+      "source": "FTNT",
+      "target": "INTC",
+      "role": "supplier",
+      "reason": "Immaterial on FTNT's page (8%, spread); INTC's page does not need to mirror it."
+    },
+    {
+      "source": "FTNT",
+      "target": "MRVL",
+      "role": "supplier",
+      "reason": "Immaterial on FTNT's page (7%, spread); MRVL's page does not need to mirror it."
+    },
+    {
+      "source": "FTNT",
+      "target": "MU",
+      "role": "supplier",
+      "reason": "Immaterial on FTNT's page (6%, spread); MU's page does not need to mirror it."
+    },
+    {
+      "source": "FTNT",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on FTNT's page (20%, some) but no sourced weight for FTNT as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "HON",
+      "target": "MSFT",
+      "role": "supplier",
+      "reason": "Immaterial on HON's page (8%, spread); MSFT's page does not need to mirror it."
+    },
+    {
+      "source": "IDXX",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on IDXX's page (15%, some) but no sourced weight for IDXX as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "IDXX",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on IDXX's page (12%, some) but no sourced weight for IDXX as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "IFNNY",
+      "target": "ASML",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on IFNNY's page (25%, some) but no sourced weight for IFNNY as ASML's customer yet; left open."
+    },
+    {
+      "source": "IFNNY",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on IFNNY's page (25%, some) but no sourced weight for IFNNY as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "INTC",
+      "target": "CDNS",
+      "role": "supplier",
+      "reason": "Immaterial on INTC's page (7%, spread); CDNS's page does not need to mirror it."
+    },
+    {
+      "source": "INTC",
+      "target": "MSFT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on INTC's page (10%, some) but no sourced weight for INTC as MSFT's supplier yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "INTC",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on INTC's page (22%, some) but no sourced weight for INTC as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "INTU",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on INTU's page (28%, some) but no sourced weight for INTU as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "INTU",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on INTU's page (12%, some) but no sourced weight for INTU as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "ISRG",
+      "target": "NVDA",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ISRG's page (20%, some) but no sourced weight for ISRG as NVDA's customer yet, and NVDA's list is full; left open."
+    },
+    {
+      "source": "KDP",
+      "target": "AMZN",
+      "role": "customer",
+      "reason": "Immaterial on KDP's page (7%, spread); AMZN's page does not need to mirror it."
+    },
+    {
+      "source": "KDP",
+      "target": "COST",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on KDP's page (10%, some) but no sourced weight for KDP as COST's supplier yet, and COST's list is full; left open."
+    },
+    {
+      "source": "MAR",
+      "target": "BKNG",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on MAR's page (21%, some) but no sourced weight for MAR as BKNG's supplier yet; left open."
+    },
+    {
+      "source": "MAR",
+      "target": "BKNG",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on MAR's page (16%, some) but no sourced weight for MAR as BKNG's customer yet; left open."
+    },
+    {
+      "source": "MAR",
+      "target": "JPM",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on MAR's page (26%, some) but no sourced weight for MAR as JPM's supplier yet; left open."
+    },
+    {
+      "source": "MAR",
+      "target": "JPM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on MAR's page (14%, some) but no sourced weight for MAR as JPM's customer yet; left open."
+    },
+    {
+      "source": "MAR",
+      "target": "ORCL",
+      "role": "supplier",
+      "reason": "Immaterial on MAR's page (9%, spread); ORCL's page does not need to mirror it."
+    },
+    {
+      "source": "MCHP",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on MCHP's page (28%, some) but no sourced weight for MCHP as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "MDLZ",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on MDLZ's page (10%, some) but no sourced weight for MDLZ as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "MDLZ",
+      "target": "COST",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on MDLZ's page (12%, some) but no sourced weight for MDLZ as COST's supplier yet, and COST's list is full; left open."
+    },
+    {
+      "source": "MELI",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on MELI's page (30%, hard) but no sourced weight for MELI as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "META",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on META's page (13%, some) but no sourced weight for META as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "META",
+      "target": "DASH",
+      "role": "customer",
+      "reason": "Immaterial on META's page (8%, spread); DASH's page does not need to mirror it."
+    },
+    {
+      "source": "META",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on META's page (24%, some) but no sourced weight for META as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "META",
+      "target": "WMT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on META's page (10%, some) but no sourced weight for META as WMT's supplier yet, and WMT's list is full; left open."
+    },
+    {
+      "source": "MNST",
+      "target": "CCEP",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on MNST's page (15%, some) but no sourced weight for MNST as CCEP's supplier yet; left open."
+    },
+    {
+      "source": "MRVL",
+      "target": "MSFT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on MRVL's page (15%, some) but no sourced weight for MRVL as MSFT's supplier yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "MRVL",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on MRVL's page (55%, hard) but no sourced weight for MRVL as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "MSFT",
+      "target": "META",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on MSFT's page (10%, some) but no sourced weight for MSFT as META's supplier yet, and META's list is full; left open."
+    },
+    {
+      "source": "MSFT",
+      "target": "WMT",
+      "role": "customer",
+      "reason": "Immaterial on MSFT's page (9%, spread); WMT's page does not need to mirror it."
+    },
+    {
+      "source": "MSTR",
+      "target": "AMZN",
+      "role": "supplier",
+      "reason": "Immaterial on MSTR's page (6%, spread); AMZN's page does not need to mirror it."
+    },
+    {
+      "source": "MSTR",
+      "target": "MSFT",
+      "role": "supplier",
+      "reason": "Immaterial on MSTR's page (4%, spread); MSFT's page does not need to mirror it."
+    },
+    {
+      "source": "MU",
+      "target": "AAPL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on MU's page (15%, some) but no sourced weight for MU as AAPL's supplier yet, and AAPL's list is full; left open."
+    },
+    {
+      "source": "NFLX",
+      "target": "AAPL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on NFLX's page (12%, some) but no sourced weight for NFLX as AAPL's supplier yet, and AAPL's list is full; left open."
+    },
+    {
+      "source": "NFLX",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on NFLX's page (16%, some) but no sourced weight for NFLX as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "NFLX",
+      "target": "CMCSA",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on NFLX's page (15%, some) but no sourced weight for NFLX as CMCSA's customer yet; left open."
+    },
+    {
+      "source": "NFLX",
+      "target": "GOOGL",
+      "role": "customer",
+      "reason": "Immaterial on NFLX's page (5%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "NFLX",
+      "target": "MSFT",
+      "role": "customer",
+      "reason": "Immaterial on NFLX's page (3%, spread); MSFT's page does not need to mirror it."
+    },
+    {
+      "source": "NFLX",
+      "target": "TMUS",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on NFLX's page (10%, some) but no sourced weight for NFLX as TMUS's supplier yet, and TMUS's list is full; left open."
+    },
+    {
+      "source": "NVDA",
+      "target": "AVGO",
+      "role": "supplier",
+      "reason": "Immaterial on NVDA's page (6%, spread); AVGO's page does not need to mirror it."
+    },
+    {
+      "source": "NVDA",
+      "target": "TXN",
+      "role": "supplier",
+      "reason": "Immaterial on NVDA's page (5%, spread); TXN's page does not need to mirror it."
+    },
+    {
+      "source": "NXPI",
+      "target": "AMAT",
+      "role": "supplier",
+      "reason": "Immaterial on NXPI's page (8%, spread); AMAT's page does not need to mirror it."
+    },
+    {
+      "source": "NXPI",
+      "target": "ARM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on NXPI's page (20%, some) but no sourced weight for NXPI as ARM's customer yet; left open."
+    },
+    {
+      "source": "NXPI",
+      "target": "ASML",
+      "role": "supplier",
+      "reason": "Immaterial on NXPI's page (7%, spread); ASML's page does not need to mirror it."
+    },
+    {
+      "source": "NXPI",
+      "target": "CDNS",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on NXPI's page (10%, some) but no sourced weight for NXPI as CDNS's customer yet; left open."
+    },
+    {
+      "source": "NXPI",
+      "target": "SNPS",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on NXPI's page (12%, some) but no sourced weight for NXPI as SNPS's customer yet; left open."
+    },
+    {
+      "source": "NXPI",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on NXPI's page (25%, some) but no sourced weight for NXPI as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "ONDS",
+      "target": "PLTR",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ONDS's page (15%, some) but no sourced weight for ONDS as PLTR's customer yet; left open."
+    },
+    {
+      "source": "ORCL",
+      "target": "AVGO",
+      "role": "supplier",
+      "reason": "Immaterial on ORCL's page (2%, spread); AVGO's page does not need to mirror it."
+    },
+    {
+      "source": "ORCL",
+      "target": "DELL",
+      "role": "supplier",
+      "reason": "Immaterial on ORCL's page (8%, spread); DELL's page does not need to mirror it."
+    },
+    {
+      "source": "ORCL",
+      "target": "INTC",
+      "role": "supplier",
+      "reason": "Immaterial on ORCL's page (8%, spread); INTC's page does not need to mirror it."
+    },
+    {
+      "source": "ORCL",
+      "target": "META",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on ORCL's page (10%, some) but no sourced weight for ORCL as META's supplier yet, and META's list is full; left open."
+    },
+    {
+      "source": "ORCL",
+      "target": "MU",
+      "role": "supplier",
+      "reason": "Immaterial on ORCL's page (5%, spread); MU's page does not need to mirror it."
+    },
+    {
+      "source": "ORCL",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ORCL's page (10%, some) but no sourced weight for ORCL as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "PANW",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on PANW's page (15%, some) but no sourced weight for PANW as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "PANW",
+      "target": "INTC",
+      "role": "supplier",
+      "reason": "Immaterial on PANW's page (9%, spread); INTC's page does not need to mirror it."
+    },
+    {
+      "source": "PANW",
+      "target": "MRVL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on PANW's page (17%, some) but no sourced weight for PANW as MRVL's customer yet; left open."
+    },
+    {
+      "source": "PANW",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on PANW's page (10%, some) but no sourced weight for PANW as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "PAYX",
+      "target": "UNH",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on PAYX's page (25%, some) but no sourced weight for PAYX as UNH's customer yet; left open."
+    },
+    {
+      "source": "PCAR",
+      "target": "ETN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on PCAR's page (14%, some) but no sourced weight for PCAR as ETN's customer yet; left open."
+    },
+    {
+      "source": "PDD",
+      "target": "AAPL",
+      "role": "supplier",
+      "reason": "Immaterial on PDD's page (8%, spread); AAPL's page does not need to mirror it."
+    },
+    {
+      "source": "PDD",
+      "target": "GOOGL",
+      "role": "supplier",
+      "reason": "Immaterial on PDD's page (7%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "PEP",
+      "target": "AMZN",
+      "role": "customer",
+      "reason": "Immaterial on PEP's page (5%, spread); AMZN's page does not need to mirror it."
+    },
+    {
+      "source": "PEP",
+      "target": "COST",
+      "role": "customer",
+      "reason": "Immaterial on PEP's page (8%, spread); COST's page does not need to mirror it."
+    },
+    {
+      "source": "PLTR",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on PLTR's page (28%, some) but no sourced weight for PLTR as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "PLTR",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on PLTR's page (14%, some) but no sourced weight for PLTR as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "PLTR",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on PLTR's page (22%, some) but no sourced weight for PLTR as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "PLTR",
+      "target": "NVDA",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on PLTR's page (26%, some) but no sourced weight for PLTR as NVDA's customer yet, and NVDA's list is full; left open."
+    },
+    {
+      "source": "PYPL",
+      "target": "SHOP",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on PYPL's page (16%, some) but no sourced weight for PYPL as SHOP's supplier yet; left open."
+    },
+    {
+      "source": "ROP",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on ROP's page (20%, some) but no sourced weight for ROP as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "SBUX",
+      "target": "KDP",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on SBUX's page (12%, some) but no sourced weight for SBUX as KDP's customer yet; left open."
+    },
+    {
+      "source": "SBUX",
+      "target": "PEP",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on SBUX's page (30%, hard) but no sourced weight for SBUX as PEP's supplier yet, and PEP's list is full; left open."
+    },
+    {
+      "source": "SHOP",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on SHOP's page (15%, some) but no sourced weight for SHOP as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "SHOP",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on SHOP's page (35%, hard) but no sourced weight for SHOP as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "SKHY",
+      "target": "TSLA",
+      "role": "customer",
+      "reason": "Immaterial on SKHY's page (5%, spread); TSLA's page does not need to mirror it."
+    },
+    {
+      "source": "SKHY",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on SKHY's page (12%, some) but no sourced weight for SKHY as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "SNPS",
+      "target": "AMD",
+      "role": "supplier",
+      "reason": "Immaterial on SNPS's page (5%, spread); AMD's page does not need to mirror it."
+    },
+    {
+      "source": "SNPS",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on SNPS's page (15%, some) but no sourced weight for SNPS as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "SNPS",
+      "target": "AVGO",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on SNPS's page (10%, some) but no sourced weight for SNPS as AVGO's supplier yet, and AVGO's list is full; left open."
+    },
+    {
+      "source": "SNPS",
+      "target": "GOOGL",
+      "role": "supplier",
+      "reason": "Immaterial on SNPS's page (8%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "SNPS",
+      "target": "INTC",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on SNPS's page (15%, some) but no sourced weight for SNPS as INTC's customer yet; left open."
+    },
+    {
+      "source": "SNPS",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on SNPS's page (15%, some) but no sourced weight for SNPS as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "SNPS",
+      "target": "NVDA",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on SNPS's page (12%, some) but no sourced weight for SNPS as NVDA's supplier yet, and NVDA's list is full; left open."
+    },
+    {
+      "source": "SNPS",
+      "target": "NVDA",
+      "role": "supplier",
+      "reason": "Immaterial on SNPS's page (4%, spread); NVDA's page does not need to mirror it."
+    },
+    {
+      "source": "SNPS",
+      "target": "QCOM",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on SNPS's page (10%, some) but no sourced weight for SNPS as QCOM's supplier yet; left open."
+    },
+    {
+      "source": "SNPS",
+      "target": "TSM",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on SNPS's page (15%, some) but no sourced weight for SNPS as TSM's supplier yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "SNPS",
+      "target": "TSM",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on SNPS's page (20%, some) but no sourced weight for SNPS as TSM's customer yet, and TSM's list is full; left open."
+    },
+    {
+      "source": "STX",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on STX's page (20%, some) but no sourced weight for STX as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "STX",
+      "target": "AVGO",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on STX's page (18%, some) but no sourced weight for STX as AVGO's customer yet, and AVGO's list is full; left open."
+    },
+    {
+      "source": "STX",
+      "target": "GOOGL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on STX's page (14%, some) but no sourced weight for STX as GOOGL's supplier yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "STX",
+      "target": "META",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on STX's page (11%, some) but no sourced weight for STX as META's supplier yet, and META's list is full; left open."
+    },
+    {
+      "source": "STX",
+      "target": "MSFT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on STX's page (17%, some) but no sourced weight for STX as MSFT's supplier yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "TMUS",
+      "target": "NVDA",
+      "role": "supplier",
+      "reason": "Immaterial on TMUS's page (5%, spread); NVDA's page does not need to mirror it."
+    },
+    {
+      "source": "TRI",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on TRI's page (35%, hard) but no sourced weight for TRI as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "TRI",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on TRI's page (20%, some) but no sourced weight for TRI as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "TSLA",
+      "target": "AVGO",
+      "role": "supplier",
+      "reason": "Immaterial on TSLA's page (2%, spread); AVGO's page does not need to mirror it."
+    },
+    {
+      "source": "TSLA",
+      "target": "TSM",
+      "role": "supplier",
+      "reason": "Immaterial on TSLA's page (4%, spread); TSM's page does not need to mirror it."
+    },
+    {
+      "source": "TTWO",
+      "target": "AAPL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on TTWO's page (24%, some) but no sourced weight for TTWO as AAPL's supplier yet, and AAPL's list is full; left open."
+    },
+    {
+      "source": "TTWO",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on TTWO's page (15%, some) but no sourced weight for TTWO as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "TTWO",
+      "target": "GOOGL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on TTWO's page (18%, some) but no sourced weight for TTWO as GOOGL's supplier yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "TTWO",
+      "target": "MSFT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on TTWO's page (15%, some) but no sourced weight for TTWO as MSFT's supplier yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "TTWO",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on TTWO's page (15%, some) but no sourced weight for TTWO as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "TXN",
+      "target": "AMAT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on TXN's page (22%, some) but no sourced weight for TXN as AMAT's customer yet; left open."
+    },
+    {
+      "source": "TXN",
+      "target": "CDNS",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on TXN's page (12%, some) but no sourced weight for TXN as CDNS's customer yet; left open."
+    },
+    {
+      "source": "TXN",
+      "target": "KLAC",
+      "role": "supplier",
+      "reason": "Immaterial on TXN's page (8%, spread); KLAC's page does not need to mirror it."
+    },
+    {
+      "source": "TXN",
+      "target": "LRCX",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on TXN's page (10%, some) but no sourced weight for TXN as LRCX's customer yet; left open."
+    },
+    {
+      "source": "TXN",
+      "target": "SNPS",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on TXN's page (12%, some) but no sourced weight for TXN as SNPS's customer yet; left open."
+    },
+    {
+      "source": "UMAC",
+      "target": "AVAV",
+      "role": "customer",
+      "reason": "Immaterial on UMAC's page (8%, some); AVAV's page does not need to mirror it."
+    },
+    {
+      "source": "UNH",
+      "target": "MSFT",
+      "role": "supplier",
+      "reason": "Immaterial on UNH's page (6%, some); MSFT's page does not need to mirror it."
+    },
+    {
+      "source": "VRT",
+      "target": "ETN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on VRT's page (12%, some) but no sourced weight for VRT as ETN's customer yet; left open."
+    },
+    {
+      "source": "VRT",
+      "target": "IFNNY",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on VRT's page (16%, some) but no sourced weight for VRT as IFNNY's customer yet; left open."
+    },
+    {
+      "source": "VRTX",
+      "target": "UNH",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on VRTX's page (12%, some) but no sourced weight for VRTX as UNH's supplier yet; left open."
+    },
+    {
+      "source": "WBD",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on WBD's page (12%, some) but no sourced weight for WBD as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "WBD",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on WBD's page (30%, hard) but no sourced weight for WBD as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "WBD",
+      "target": "GOOGL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on WBD's page (20%, some) but no sourced weight for WBD as GOOGL's supplier yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "WBD",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on WBD's page (15%, some) but no sourced weight for WBD as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "WDAY",
+      "target": "AMZN",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on WDAY's page (32%, hard) but no sourced weight for WDAY as AMZN's customer yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "WDAY",
+      "target": "GOOGL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on WDAY's page (26%, some) but no sourced weight for WDAY as GOOGL's customer yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "WDAY",
+      "target": "MSFT",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on WDAY's page (12%, some) but no sourced weight for WDAY as MSFT's customer yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "WDC",
+      "target": "AMZN",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on WDC's page (19%, some) but no sourced weight for WDC as AMZN's supplier yet, and AMZN's list is full; left open."
+    },
+    {
+      "source": "WDC",
+      "target": "AVGO",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on WDC's page (15%, some) but no sourced weight for WDC as AVGO's customer yet, and AVGO's list is full; left open."
+    },
+    {
+      "source": "WDC",
+      "target": "DELL",
+      "role": "customer",
+      "reason": "Immaterial on WDC's page (8%, spread); DELL's page does not need to mirror it."
+    },
+    {
+      "source": "WDC",
+      "target": "GOOGL",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on WDC's page (14%, some) but no sourced weight for WDC as GOOGL's supplier yet, and GOOGL's list is full; left open."
+    },
+    {
+      "source": "WDC",
+      "target": "META",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on WDC's page (11%, some) but no sourced weight for WDC as META's supplier yet, and META's list is full; left open."
+    },
+    {
+      "source": "WDC",
+      "target": "MRVL",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on WDC's page (25%, some) but no sourced weight for WDC as MRVL's customer yet; left open."
+    },
+    {
+      "source": "WDC",
+      "target": "MSFT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on WDC's page (16%, some) but no sourced weight for WDC as MSFT's supplier yet, and MSFT's list is full; left open."
+    },
+    {
+      "source": "WDC",
+      "target": "MU",
+      "role": "supplier",
+      "provisional": true,
+      "reason": "Material on WDC's page (12%, some) but no sourced weight for WDC as MU's customer yet, and MU's list is full; left open."
+    },
+    {
+      "source": "WDC",
+      "target": "SKHY",
+      "role": "supplier",
+      "reason": "Immaterial on WDC's page (7%, spread); SKHY's page does not need to mirror it."
+    },
+    {
+      "source": "WMT",
+      "target": "MDLZ",
+      "role": "customer",
+      "reason": "Immaterial on WMT's page (7%, spread); MDLZ's page does not need to mirror it."
+    },
+    {
+      "source": "WMT",
+      "target": "PEP",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on WMT's page (16%, some) but no sourced weight for WMT as PEP's supplier yet, and PEP's list is full; left open."
+    },
+    {
+      "source": "XEL",
+      "target": "GOOGL",
+      "role": "customer",
+      "reason": "Immaterial on XEL's page (8%, spread); GOOGL's page does not need to mirror it."
+    },
+    {
+      "source": "XEL",
+      "target": "META",
+      "role": "customer",
+      "reason": "Immaterial on XEL's page (8%, spread); META's page does not need to mirror it."
+    },
+    {
+      "source": "XEL",
+      "target": "MSFT",
+      "role": "customer",
+      "provisional": true,
+      "reason": "Material on XEL's page (10%, some) but no sourced weight for XEL as MSFT's supplier yet, and MSFT's list is full; left open."
+    }
+  ]
+}

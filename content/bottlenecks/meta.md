@@ -5,6 +5,7 @@ category: Social media, digital advertising & AI infrastructure
 domain: meta.com
 title: "Meta (META) Bottlenecks: Who Meta Depends On"
 date: 2026-07-08
+updated: 2026-10-18
 summary: >
   Meta's advertising revenue comes from millions of advertisers with no
   single advertiser representing a materially concentrated share - a real
@@ -29,13 +30,13 @@ disclaimer: >
 supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
-    pct: 26
+    pct: 24
     grade: some
     blurb: >
       Fabricates Meta's custom MTIA AI accelerator chips.
   - name: NVIDIA
     ticker: NVDA
-    pct: 24
+    pct: 22
     grade: some
     blurb: >
       Meta is one of Nvidia's single largest GPU customers, buying at
@@ -43,31 +44,42 @@ supplyChain:
       recommendation systems.
   - name: Broadcom
     ticker: AVGO
-    pct: 14
+    pct: 13
     grade: some
     blurb: >
       Co-designs Meta's custom MTIA AI accelerator chips.
   - name: AMD
     ticker: AMD
-    pct: 10
+    pct: 9
     grade: some
     blurb: >
       Supplies GPUs and CPUs used across Meta's AI training and data-center
       infrastructure.
   - name: Micron Technology
     ticker: MU
-    pct: 8
+    pct: 7
     grade: spread
     blurb: >
       Supplies memory used across Meta's AI training infrastructure.
   - name: SK hynix
     ticker: SKHY
-    pct: 8
+    pct: 7
     grade: spread
     blurb: >
       A major memory and HBM supplier to Meta's AI infrastructure. Its
       primary listing is the Korea Exchange, but it has also traded on
       Nasdaq as an ADR since July 2026.
+  - name: Alphabet (Google)
+    ticker: GOOGL
+    pct: 6
+    grade: spread
+    blurb: >
+      Google is reported to supply Meta with cloud computing capacity. The
+      Information reported that Meta agreed a multi-year,
+      multibillion-dollar deal to rent Google Cloud TPUs, and an earlier report
+      described a Google Cloud contract worth more than $10 billion over six
+      years. These figures come from anonymous sources and Google did not
+      comment, so the true size may differ.
   - name: Vertiv Holdings
     ticker: VRT
     pct: 5
@@ -75,6 +87,16 @@ supplyChain:
     blurb: >
       Supplies power and cooling infrastructure across Meta's AI data
       centers.
+  - name: Constellation Energy
+    ticker: CEG
+    pct: 4
+    grade: spread
+    blurb: >
+      Constellation Energy agreed in June 2025 to supply power to Meta under a
+      20-year agreement tied to the Clinton Clean Energy Center nuclear plant in
+      Illinois, announced at about 1,121 megawatts. Deliveries are scheduled to
+      start in June 2027. The parties have not said what share of the plant's
+      output Meta takes, and no dollar value was disclosed.
   - name: Arista Networks
     ticker: ANET
     pct: 3
@@ -82,21 +104,6 @@ supplyChain:
     blurb: >
       Supplies networking hardware used across Meta's data-center
       infrastructure.
-  - name: Corning
-    ticker: GLW
-    pct: 1
-    grade: spread
-    blurb: >
-      Supplies fiber and optical components used in Meta's data-center
-      networking.
-  - name: Quanta Computer
-    ticker: null
-    pct: 1
-    grade: spread
-    blurb: >
-      An ODM manufacturing partner supporting Meta's server production.
-      Trades primarily on the Taiwan Stock Exchange with no proper
-      US-listed ticker.
 customers:
   - name: PDD Holdings (Temu)
     ticker: PDD

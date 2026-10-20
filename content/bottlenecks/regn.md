@@ -5,6 +5,7 @@ category: Biotechnology (immunology, ophthalmology, oncology)
 domain: regeneron.com
 title: "Regeneron (REGN) Bottlenecks: Who Regeneron Depends On"
 date: 2026-07-25
+updated: 2026-10-18
 summary: >
   Regeneron discovers and manufactures its own drugs, but two of its
   biggest products are actually co-developed and co-commercialized with
@@ -38,7 +39,7 @@ disclaimer: >
 supplyChain:
   - name: Sanofi
     ticker: SNY
-    pct: 35
+    pct: 33
     grade: hard
     blurb: >
       Sanofi co-develops and co-commercializes Dupixent, Kevzara, and
@@ -47,7 +48,7 @@ supplyChain:
       roughly evenly, with a sliding scale outside the US.
   - name: Bayer AG
     ticker: null
-    pct: 20
+    pct: 19
     grade: some
     blurb: >
       Bayer co-commercializes EYLEA outside the US, funding half of ex-US
@@ -56,7 +57,7 @@ supplyChain:
       thin OTC ADR (BAYRY) in the US.
   - name: Fujifilm Diosynth Biotechnologies (FUJIFILM Holdings)
     ticker: null
-    pct: 25
+    pct: 23
     grade: some
     blurb: >
       Under a 10-year, $3 billion-plus deal announced in 2025, Fujifilm
@@ -66,13 +67,24 @@ supplyChain:
       ADR (FUJIY) in the US.
   - name: Novo Nordisk (Catalent Indiana)
     ticker: NVO
-    pct: 20
+    pct: 19
     grade: some
     blurb: >
       Regeneron's EYLEA HD fill-finish manufacturing runs through a
       former Catalent plant in Indiana that Novo Nordisk acquired in
       2025; a July 2025 FDA inspection issue at that site caused a real,
       disclosed manufacturing delay.
+  - name: Alnylam Pharmaceuticals
+    ticker: ALNY
+    pct: 6
+    grade: spread
+    blurb: >
+      Alnylam supplies Regeneron with RNAi (gene-silencing) drug technology
+      under a broad collaboration signed in 2019. Regeneron paid a $400 million
+      upfront fee and separately bought $400 million of Alnylam stock. The
+      research term is five years, and Regeneron may extend it for a fee that
+      Alnylam's 2023-25 filings put at $300.0 million, so the relationship might grow or stay fixed
+      depending on early programs.
 customers:
   - name: Sanofi
     ticker: SNY

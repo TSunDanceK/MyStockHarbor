@@ -23,7 +23,31 @@ const scripts = fs
 let failed = 0;
 const failures = [];
 
+// REPORT ONLY (#553): scripts that describe the state of the content rather than
+// guard it. They are run and their output is printed (the first `lines` lines,
+// then a pointer to the script), but they are never a failure and never counted
+// as one: a non-zero exit is printed as a note, not added to `failed`.
+// Empty now: check-bottleneck-links.mjs became a guard (a failing check) once the mirror gaps were closed or excepted.
+const REPORT_ONLY = new Map();
+
 for (const f of scripts) {
+  const report = REPORT_ONLY.get(f);
+  if (report) {
+    let out = "";
+    let note = "";
+    try {
+      out = execFileSync(process.execPath, [path.join(DIR, f), ...(report.args ?? [])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    } catch (e) {
+      out = `${e.stdout ?? ""}`;
+      note = "  (the report script exited non-zero; reports never fail check-all)";
+    }
+    console.log(`REPORT  ${f}`);
+    const rows = out.split("\n").filter((l) => l.trim() !== "");
+    for (const l of rows.slice(0, report.lines)) console.log(`        ${l}`);
+    if (rows.length > report.lines) console.log(`        ... ${rows.length - report.lines} more lines: node scripts/${f}`);
+    if (note) console.log(note);
+    continue;
+  }
   let ok = true;
   let output = "";
   try {
@@ -48,5 +72,10 @@ if (failures.length) {
   }
 }
 
-console.log(`\n${failed ? `${failed} of ${scripts.length} FAILED` : `all ${scripts.length} passed`}\n`);
+const checkCount = scripts.length - [...REPORT_ONLY.keys()].filter((f) => scripts.includes(f)).length;
+try {
+  const exc = JSON.parse(fs.readFileSync(path.join(process.cwd(), "content/bottlenecks/_mirror-exceptions.json"), "utf8"));
+  console.log(`\nbottleneck mirror links: ${exc.provisionalCount} provisional gaps still open (ratchet; may only fall)`);
+} catch {}
+console.log(`\n${failed ? `${failed} of ${checkCount} FAILED` : `all ${checkCount} passed`}\n`);
 process.exit(failed ? 1 : 0);

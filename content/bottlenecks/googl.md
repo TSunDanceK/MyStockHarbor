@@ -5,6 +5,7 @@ category: Internet search, digital advertising & cloud/AI infrastructure
 domain: google.com
 title: "Alphabet (GOOGL) Bottlenecks: Who Google Depends On"
 date: 2026-07-08
+updated: 2026-10-18
 summary: >
   Alphabet's core advertising business is famously diversified across
   millions of advertisers with no real concentration risk. But its custom
@@ -100,7 +101,7 @@ supplyChain:
 customers:
   - name: Anthropic
     ticker: null
-    pct: 30
+    pct: 27
     grade: hard
     blurb: >
       One of the largest known users of Google's TPUs and Cloud compute,
@@ -108,20 +109,30 @@ customers:
       private company with no public ticker.
   - name: Meta Platforms
     ticker: META
-    pct: 14
+    pct: 13
     grade: some
     blurb: >
       Reportedly evaluating deployment of Google's TPUs starting in 2027 as
       part of diversifying its AI chip supply.
+  - name: Palo Alto Networks
+    ticker: PANW
+    pct: 11
+    grade: some
+    blurb: >
+      Palo Alto Networks announced a multibillion-dollar agreement with Google
+      Cloud in December 2025 to move internal workloads onto Google Cloud. Press
+      reports citing Reuters put the multi-year spending commitment at nearly
+      $10 billion, though neither company confirmed the figure, so the true size
+      may differ.
   - name: Salesforce
     ticker: CRM
-    pct: 10
+    pct: 9
     grade: some
     blurb: >
       Runs significant enterprise infrastructure on Google Cloud.
   - name: Spotify
     ticker: SPOT
-    pct: 10
+    pct: 9
     grade: some
     blurb: >
       Runs its streaming platform substantially on Google Cloud
@@ -134,21 +145,21 @@ customers:
       Relies on Google Cloud for a significant share of its infrastructure.
   - name: Deutsche Bank
     ticker: DB
-    pct: 8
+    pct: 7
     grade: spread
     blurb: >
       A major enterprise customer for Google Cloud's infrastructure and AI
       products.
   - name: General Motors
     ticker: GM
-    pct: 8
+    pct: 7
     grade: spread
     blurb: >
       Works with Google Cloud on AI and autonomous-driving data
       infrastructure.
   - name: Target Corporation
     ticker: TGT
-    pct: 8
+    pct: 7
     grade: spread
     blurb: >
       A large enterprise customer running retail infrastructure on Google
@@ -160,11 +171,4 @@ customers:
     blurb: >
       Uses Google Cloud infrastructure and AI tools across parts of its
       platform.
-  - name: US federal government
-    ticker: null
-    pct: 2
-    grade: spread
-    blurb: >
-      Federal and public-sector agencies are customers of Google Cloud's
-      infrastructure. Not a publicly traded company.
 ---

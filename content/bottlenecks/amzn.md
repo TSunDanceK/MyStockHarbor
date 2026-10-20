@@ -5,6 +5,7 @@ category: E-commerce, cloud computing & AI infrastructure
 domain: amazon.com
 title: "Amazon (AMZN) Bottlenecks: Who Amazon Depends On"
 date: 2026-07-08
+updated: 2026-10-18
 summary: >
   Amazon's overall business - dominated by its diversified e-commerce
   operation - has no meaningful customer concentration. But its fast-growing
@@ -94,7 +95,7 @@ supplyChain:
 customers:
   - name: Anthropic
     ticker: null
-    pct: 24
+    pct: 23
     grade: some
     blurb: >
       Reported as one of the very largest customers of Amazon's own
@@ -152,11 +153,14 @@ customers:
     blurb: >
       Runs Fortnite and other game infrastructure substantially on AWS. A
       private company with no public ticker.
-  - name: US federal government
-    ticker: null
-    pct: 3
+  - name: CrowdStrike
+    ticker: CRWD
+    pct: 4
     grade: spread
     blurb: >
-      AWS GovCloud serves federal agencies as large, long-standing
-      customers. Not a publicly traded company.
+      CrowdStrike buys cloud hosting from AWS. In October 2021 it signed a
+      private pricing addendum with AWS that sets a minimum of $600 million of
+      spend through September 2026, and it had used $498.2 million of that by
+      October 31, 2023. The size is modest next to the AI labs, and the terms
+      after September 2026 may differ.
 ---

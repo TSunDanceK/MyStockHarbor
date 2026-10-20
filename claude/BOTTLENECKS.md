@@ -54,6 +54,63 @@ So the exact spelling no longer splits a ticker'd company. For a company with
 **no ticker** the spelling still decides the key unless it normalises the same
 or an alias joins it, so consistent spelling still matters there.
 
+### A company with a page of its own carries that page's ticker (2026-10-18, #553)
+
+If a company has a page in `content/bottlenecks/`, every entry for it on other
+pages is written with that page's ticker, **even when it is only an OTC ADR**
+that the ticker-availability policy would otherwise send to `ticker: null`.
+Infineon is the case: `ifnny.md` exists (`symbol: IFNNY`), so the Infineon
+entries in `vrt.md` (supplier) and `wolf.md` (customer) say `ticker: IFNNY`, not
+`null`. Why it matters:
+
+- The leaderboard keys by ticker, so a `null` entry only joins the company by
+  spelling luck (or an alias), while `IFNNY` joins it for certain.
+- The mirror report below finds a company's page **by ticker**; a `null` entry
+  is invisible to it.
+- The entry gets the stock and page links, which is what a ticker is for here.
+
+Keep the name spelling used on the company's own page ("Infineon Technologies",
+as in `ifnny.md`'s title) so the displayed name matches.
+
+### Mirror links between pages: a guard (2026-10-18, #553)
+
+A page lists up to ten suppliers (`supplyChain`) and ten key customers
+(`customers`). When an entry's ticker has a page of its own, that page holds the
+other half of the same relationship: if X lists Y as a **supplier**, Y's page
+should list X as a **customer** (and the reverse).
+`scripts/check-bottleneck-links.mjs` is now a **check** in `check-all`: it exits
+non-zero on an **unexplained gap** (a missing mirror with no exception) and on a
+**stale exception** (one that no longer matches a gap). It matches by ticker
+(`GOOG` folds into `GOOGL`) and skips entries with no ticker or whose ticker has
+no page. `--brief` prints the short form.
+
+- **Exceptions:** `content/bottlenecks/_mirror-exceptions.json` (not a page; the
+  hub, sitemap and page readers only read `.md`). Each row: `source`, `target`,
+  `role` (the role `target` has on `source`'s page) and a one-line `reason`.
+  Immaterial relationships (pct under 10 and not the list's top grade) are
+  accepted exceptions. A material gap that could not be closed (no sourced
+  weight, or the only removable entries have pages of their own) is recorded with
+  `"provisional": true`; the guard prints the provisional count on every run and
+  does not fail on them by themselves. Close them when sourced and delete the row.
+- **Ratchet:** the exceptions file is `{ "provisionalCount": N, "exceptions": [...] }`.
+  The guard fails if the real number of provisional rows differs from
+  `provisionalCount`: a rise is refused (close the gap, do not add a provisional
+  row), and a fall must be written down by lowering `provisionalCount` in the same
+  change that removes the exception. `check-all` prints one line with the current
+  count at the end of the run.
+- **When you add a page or an entry, add the mirror in the same change** (or an
+  exception with its reason).
+- **How a mirror weight is derived:** from the *target* company's own filings and
+  public disclosures (10-K customer or supplier concentration, a named contract
+  value, a credible ranking), placed on the scale of the neighbouring entries in
+  that list. `pct` is a relative weight inside the page's list, not a real revenue
+  share. Rescale the edited list to whole numbers summing to 100. If no weight can
+  be sourced, do not estimate: leave the gap as a provisional exception. Blurbs
+  are hedged ("may"/"might"), never "would"/"should", and make no unsourced claim.
+- **Making room in a full list:** remove the lowest-weight entry that has no page
+  of its own (and is not a material mirror for another page). If only entries with
+  pages are removable, leave the gap as a provisional exception instead.
+
 ### The dependency web's rim (2026-10-06, COWORK #131)
 
 - **Hubs:** the top 8 companies by distinct-page count, keyed as above.
@@ -84,13 +141,16 @@ the more useful half.**
   NYSE/Nasdaq ADR that trades with real volume" and must be written as
   `ticker: SKHY`, never `ticker: null`.
 
-**Spelling matters as much as the ticker.** *(Superseded 2026-10-06: the
-leaderboard now keys by ticker, then by normalised name -- see "How the
-leaderboard keys and counts companies" above. Kept as history.)*
-`getBottleneckCompanyCounts()` keyed by company **name**, so `SK Hynix` and
-`SK hynix` counted as two separate companies and silently undercounted both on
-the Bottleneck Leaderboard. The
-company's own styling is lowercase-h: always write **`SK hynix`**.
+**The ticker is what joins the entries, not the spelling.** *(Rewritten
+2026-10-18 (#553): this paragraph used to say the leaderboard keyed by company
+**name**, so `SK Hynix` and `SK hynix` counted as two companies. That stopped
+being true on 2026-10-06 (COWORK #125): `lib/bottleneckHub.ts` keys by ticker
+when there is one, then by normalised name -- see "How the leaderboard keys and
+counts companies" above.)* With `ticker: SKHY` on every entry, `SK Hynix` and
+`SK hynix` are one company and the count is right whichever way a page spells
+it. Spelling still decides the key only for an entry with **no ticker**. Write
+the company's own styling anyway (**`SK hynix`**, lowercase h) so the displayed
+name is consistent.
 
 The content backfill landed in **PR #246** (merged `136523bf`, 2026-08-20):
 `content/bottlenecks/skhy.md` plus `ticker: SKHY` across the 13 existing pages
