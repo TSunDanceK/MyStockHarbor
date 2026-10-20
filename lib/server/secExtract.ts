@@ -2098,6 +2098,18 @@ function extractCompanyFactsWith(
         }
         return null;
       };
+      // The newest filing of the cell's own frame, concept and unit; null
+      // for a cell no row files whole (a differenced quarter).
+      const frameRows = (c: FieldValue) => {
+        if (!c.tag || !c.covers) return [];
+        const rows = (facts.facts?.[c.ns ?? "us-gaap"]?.[c.tag]?.units?.[c.unit ?? ""] ?? []) as { start?: string; end: string; val: number; filed?: string }[];
+        return rows.filter((r) => r.start === c.covers![0] && r.end === c.covers![1] && r.filed);
+      };
+      const filedOf = (c: FieldValue): string | null => frameRows(c).map((r) => r.filed as string).sort().at(-1) ?? null;
+      // A RECAST year: refiled at a different value (a later 10-K's
+      // comparative, discontinued operations taken out). Every year is filed
+      // after its own 10-Qs, so "newer" alone would convict FIX's misread year.
+      const recast = (c: FieldValue) => new Set(frameRows(c).map((r) => r.val)).size > 1;
       const quartersIn = (y: FieldValue) => {
         const out: { end: string; c: FieldValue }[] = [];
         for (const [end, qm] of quarterCells) {
@@ -2113,6 +2125,18 @@ function extractCompanyFactsWith(
         if (qs.length < 2) continue;
         const sum = qs.reduce((a, o) => a + (o.c.val as number), 0);
         if (y.val < YEAR_OF_QUARTERS_MIN * sum) {
+          // WHICH SIDE IS STALE (owner ruling, #934 option 2): a RECAST year
+          // filed after every quarter inside it makes the quarters the stale
+          // side, so they go, the derived Q4 with them (recast year minus
+          // stale nine months). Otherwise the year is the older or unrecast
+          // filing: the year goes.
+          const yf = filedOf(y);
+          const qf = qs.map((o) => filedOf(o.c)).filter((f): f is string => f != null).sort().at(-1) ?? null;
+          if (yf && qf && yf > qf && recast(y)) {
+            for (const o of qs) quarterCells.get(o.end)?.set("revenue", { ...o.c, val: null, derived: "withheld" });
+            notes.push(`revenue ${end}: year ${y.val} (filed ${yf}) is under ${YEAR_OF_QUARTERS_MIN * 100}% of its ${qs.length} quarters' sum ${sum} (newest filed ${qf}); quarters withheld (stale against a recast year)`);
+            continue;
+          }
           m.set("revenue", { ...y, val: null, derived: "withheld" });
           for (const o of qs) if (o.c.derived === "differenced" && o.end === end) quarterCells.get(o.end)?.set("revenue", { ...o.c, val: null, derived: "withheld" });
           notes.push(`revenue ${end}: year ${y.val} is under ${YEAR_OF_QUARTERS_MIN * 100}% of its ${qs.length} quarters' sum ${sum}; withheld (a quarter read as a year)`);

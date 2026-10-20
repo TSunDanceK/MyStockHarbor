@@ -53,6 +53,14 @@ const f = X.extractCompanyFacts("FIX", FIX);
 check("FY 1,831.3 against quarters of 5,180+: refused", y(f, "2025-12-31") === null, String(y(f, "2025-12-31")));
 check("Q1 1,600 stays", q(f, "2025-03-31") === 1600 * M);
 
+console.log("\n2b. a RECAST year (a later 10-K's comparative, discontinued operations out): the quarters are stale");
+const RECAST = facts([...year(2024, [1000, 1000, 1000, 1000], 4000), ["2024-01-01", "2024-12-31", 1100, "10-K", 2025, "FY", "2026-02-15", "k-2025"]]);
+const rc = X.extractCompanyFacts("RCST", RECAST);
+check("the recast year 1,100 stays", y(rc, "2024-12-31") === 1100 * M, String(y(rc, "2024-12-31")));
+check("the stale Q1 1,000 is refused", q(rc, "2024-03-31") === null, String(q(rc, "2024-03-31")));
+check("the derived Q4 is refused", q(rc, "2024-12-31") === null, String(q(rc, "2024-12-31")));
+check("FIX (year filed once, not recast) still loses the year", y(f, "2025-12-31") === null);
+
 console.log("\n3. what must stay");
 const LUMP = facts([...year(2024, [0.1, 0.2, 100, 0.1], 100.4)]);
 check("a lumpy biotech quarter (100 of 100.4, siblings 0.4) stays", q(X.extractCompanyFacts("BIO", LUMP), "2024-09-30") === 100 * M);
@@ -71,6 +79,11 @@ console.log("\n4. mutations");
   const b = extractRaw.replace("if (y.val < YEAR_OF_QUARTERS_MIN * sum) {", "if (false) {");
   check("the year mutation is applied", b !== extractRaw);
   check("MUTATION: year test off → FIX FY kept, caught", y((await load(b)).extractCompanyFacts("FIX", FIX), "2025-12-31") !== null);
+  const c = extractRaw.replace("yf > qf && recast(y)", "false");
+  check("the recast mutation is applied", c !== extractRaw);
+  check("MUTATION: recast side off → RCST year refused, caught", y((await load(c)).extractCompanyFacts("RCST", RECAST), "2024-12-31") === null);
+  const d = extractRaw.replace("yf > qf && recast(y)", "yf > qf");
+  check("MUTATION: recast proof off → FIX quarters refused instead, caught", y((await load(d)).extractCompanyFacts("FIX", FIX), "2025-12-31") !== null);
 }
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);
