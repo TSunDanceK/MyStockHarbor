@@ -54,6 +54,16 @@ check("an ordinary series (x3 in a year) is untouched", sh(X.extractCompanyFacts
   check("a genuine issuance whose EPS closes on both counts: both kept", sh(ge, 2024) === 400e6 && sh(ge, 2023) === 0.7e6, `${sh(ge, 2023)} ${sh(ge, 2024)}`);
 }
 
+// A pre-IPO placeholder series (NIQ-shaped): the cover count (285M) is the reference,
+// so the real 245M is kept and the 100-share placeholder a year earlier is refused.
+{
+  const cov = { EntityCommonStockSharesOutstanding: { units: { shares: [{ end: "2026-02-10", val: 285e6, form: "10-K", fy: 2025, fp: "FY", filed: "2026-02-20", accn: "k2025" }] } } };
+  const n = facts([[2022, 100], [2023, 100], [2024, 100], [2025, 245e6]], {});
+  n.facts.dei = cov;
+  const ne = X.extractCompanyFacts("NIQ", n);
+  check("a placeholder series: the real count beside the cover count is kept, the placeholder refused", sh(ne, 2025) === 245e6 && sh(ne, 2024) === null, `${sh(ne, 2024)} ${sh(ne, 2025)}`);
+}
+
 console.log("\n3. mutation");
 {
   const m = extractRaw.replace("if (ratio <= SHARE_JUMP_MAX && ratio >= 1 / SHARE_JUMP_MAX) continue;", "continue;");

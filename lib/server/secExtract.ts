@@ -2166,7 +2166,11 @@ function extractCompanyFactsWith(
       for (const cells of [quarterCells, yearCells]) {
         const vals = [...cells.values()].map((m) => m.get("sharesDiluted")?.val).filter((v): v is number => v != null && v > 0).sort((a, b) => a - b);
         if (vals.length < 3) continue;
-        const median = vals[vals.length >> 1];
+        // THE REFERENCE IS THE COVER COUNT where the filer states one (an
+        // independent figure, as the rescale above uses it), else the median:
+        // a series mostly on a slip or pre-IPO counts (NIQ's 100, QXO's 0.7M)
+        // has its median among the wrong values.
+        const median = cover != null && cover > 0 ? cover : vals[vals.length >> 1];
         const off = (v: number) => Math.abs(Math.log(v / median));
         for (const [end, m] of cells) {
           const sh = m.get("sharesDiluted");
@@ -2190,7 +2194,7 @@ function extractCompanyFactsWith(
           if (okNew && okAgo) continue;
           const [badEnd, bad] = okNew ? [agoEnd!, ago] : okAgo ? [end, sh] : off(sh.val) >= off(ago.val) ? [end, sh] : [agoEnd!, ago];
           cells.get(badEnd)?.set("sharesDiluted", { ...bad, val: null, derived: "withheld" });
-          notes.push(`sharesDiluted ${badEnd}: ${bad.val} moved x${ratio >= 1 ? ratio.toPrecision(3) : (1 / ratio).toPrecision(3)} against the same period a year apart and sits farther from the filer's median ${median}; withheld (unproved unit slip)`);
+          notes.push(`sharesDiluted ${badEnd}: ${bad.val} moved x${ratio >= 1 ? ratio.toPrecision(3) : (1 / ratio).toPrecision(3)} against the same period a year apart and sits farther from the filer's cover count / median ${median}; withheld (unproved unit slip)`);
         }
       }
     }
