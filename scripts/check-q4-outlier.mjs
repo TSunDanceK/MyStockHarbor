@@ -42,7 +42,6 @@ const year = (y0, vals, fyVal, q4Override) => {
   ];
 };
 
-const N = (ex) => (ex.notes ?? []).join(" | ");
 console.log("1. the pure verdict");
 check("x0.1 its siblings and its year-ago Q4: outlier", X.q4OutlierVerdict(10, [100, 100, 100], 100) === "outlier");
 check("x0.2 its siblings, as last year: seasonal", X.q4OutlierVerdict(20, [100, 100, 110], 22) === "seasonal");
