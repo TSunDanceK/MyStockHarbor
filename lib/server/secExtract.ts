@@ -1280,6 +1280,31 @@ export function q4RevenueScope(
   return null;
 }
 
+/**
+ * A DERIVED Q4 FAR OUTSIDE ITS NEIGHBOURS (yoy60 2b). FY − 9M that lands
+ * beyond DERIVED_Q4_BAND times (either way) the mean of the year's other three
+ * quarters is one subtraction over unlike numbers -- unless the filer's own
+ * year-ago Q4 says the quarter is like that: a retailer's holiday quarter, a
+ * ski resort's off season, a utility's winter. So it is withheld only when it
+ * is ALSO beyond DERIVED_Q4_YOY_BAND of the same quarter a year earlier, and
+ * only for a filer whose three siblings are themselves steady (max/min under
+ * DERIVED_Q4_BAND): a biotech's milestone quarters judge nothing. With no
+ * year-ago Q4 there is no second opinion, and the Q4 stands.
+ *
+ * "seasonal" = outside the band, cleared by its year-ago Q4 (kept, noted).
+ */
+export const DERIVED_Q4_BAND = 4;
+export const DERIVED_Q4_YOY_BAND = 3;
+export function q4OutlierVerdict(q4: number, siblings: number[], yearAgoQ4: number | null): "outlier" | "seasonal" | null {
+  if (!Number.isFinite(q4) || !(q4 > 0) || siblings.length !== 3 || !siblings.every((x) => Number.isFinite(x) && x > 0)) return null;
+  if (Math.max(...siblings) / Math.min(...siblings) >= DERIVED_Q4_BAND) return null;
+  const r = q4 / (siblings.reduce((a, b) => a + b, 0) / 3);
+  if (r <= DERIVED_Q4_BAND && r >= 1 / DERIVED_Q4_BAND) return null;
+  if (yearAgoQ4 == null || !(yearAgoQ4 > 0)) return null;
+  const y = q4 / yearAgoQ4;
+  return y <= DERIVED_Q4_YOY_BAND && y >= 1 / DERIVED_Q4_YOY_BAND ? "seasonal" : "outlier";
+}
+
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
@@ -2060,7 +2085,19 @@ function extractCompanyFactsWith(
       const nine = fy && fy.val != null && `${fy.ns}|${fy.tag}` === `${q4.ns}|${q4.tag}` ? fy.val - q4.val : null;
       const siblings = siblingsOf(quarterCells, q4);
       const verdict = q4RevenueScope(q4.val, siblings, total, nine);
-      if (!verdict) continue;
+      if (!verdict) {
+        // yoy60 2b: far outside its neighbours AND its own year-ago Q4.
+        const agoEnd = [...quarterCells.keys()].find((e) => Math.abs(Date.parse(e) - (Date.parse(end) - 365.25 * DAY)) <= 10 * DAY);
+        const ago = agoEnd ? quarterCells.get(agoEnd)?.get("revenue")?.val ?? null : null;
+        const v2 = q4OutlierVerdict(q4.val, siblings, ago);
+        const mean = siblings.reduce((a, b) => a + b, 0) / 3;
+        if (v2 === "seasonal") notes.push(`revenue ${end}: derived Q4 ${q4.val} is x${(q4.val / mean).toPrecision(3)} its year's other quarters but within x${DERIVED_Q4_YOY_BAND} of its year-ago Q4 ${ago}; kept (seasonal)`);
+        if (v2 === "outlier") {
+          m.set("revenue", { ...q4, derived: "withheld", val: null });
+          notes.push(`revenue ${end}: derived Q4 ${q4.val} is x${(q4.val / mean).toPrecision(3)} its year's other quarters and x${(q4.val / (ago as number)).toPrecision(3)} its year-ago Q4 ${ago}; withheld (outlier)`);
+        }
+        continue;
+      }
       m.set("revenue", { ...q4, val: null, derived: "withheld" });
       notes.push(
         verdict === "negative"
