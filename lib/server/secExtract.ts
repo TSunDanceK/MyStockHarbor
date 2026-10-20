@@ -1959,6 +1959,11 @@ function extractCompanyFactsWith(
           const a = nii[kind].get(end)?.get("revenue"), b = non[kind].get(end)?.get("revenue");
           return a && b && a.val != null && b.val != null && sameFrame(a.covers, b.covers) ? { a, sum: a.val + b.val } : null;
         };
+        const filedHalvesAt = (kind: "qc" | "yc", end: string) => {
+          const h = halvesAt(kind, end);
+          const b = non[kind].get(end)?.get("revenue");
+          return h && h.sum > 0 && h.a.derived === "as-filed" && b?.derived === "as-filed" ? h : null;
+        };
         const within = (v: number, sum: number, tol: number) => Math.abs(v - sum) <= tol * Math.abs(sum);
         type Halves = NonNullable<ReturnType<typeof halvesAt>>;
         const netTotal = (c: FieldValue, h: Halves) => {
@@ -2019,10 +2024,11 @@ function extractCompanyFactsWith(
             for (const [end, m] of cells) {
               const c = m.get("revenue");
               // AN OLDER PERIOD WITH NO REVENUE CELL AT ALL takes net revenue when
-              // both halves are filed for its frame (MCHB FY2020-23, BPOP's 2024-25
-              // quarters). One the rules above WITHHELD keeps its marker and stays
-              // blank (USB 2020-21, FCNCA 2023): that cell exists, with a null value.
-              if (c?.val == null && end <= newestValued && (m.has("revenue") || !halvesAt(kind, end))) continue;
+              // both halves are FILED for its frame, as filed, not differenced
+              // (MCHB FY2020-23, BPOP's 2024-25 Q2/Q3). A Q4 whose halves exist only
+              // as year minus nine months stays blank (owner ruling 2026-10-20), and
+              // so does one the rules above withheld: that cell exists, null-valued.
+              if (c?.val == null && end <= newestValued && (m.has("revenue") || !filedHalvesAt(kind, end))) continue;
               if (c?.val != null && stays(kind, end, c)) continue;
               const t = netAt(kind, end);
               if (t) { m.set("revenue", t); moved++; if (t.derived === "computed") computed++; }
