@@ -1280,6 +1280,8 @@ export function q4RevenueScope(
   return null;
 }
 
+/** IRM: a year whose revenue differs from its own first filing by more than this was restated onto another basis. */
+export const QUARTER_RESTATED_YEAR_MIN = 0.25;
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
@@ -2069,6 +2071,50 @@ function extractCompanyFactsWith(
             ? `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
             : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters and the nine months ${nine} differ from those quarters' sum ${siblings.reduce((a, b) => a + b, 0)}; withheld (scope mismatch)`
       );
+    }
+  }
+
+  // ── QUARTERS FILED BEFORE THEIR OWN YEAR WAS RESTATED (IRM, owner ruling) ──
+  // IRM's FY2022 10-K re-tagged FY2020 and FY2021 on the contract line with
+  // storage rental in (FY2020 1,393.2M as first filed -> 4,147.3M), while the
+  // 2020-21 quarters stayed as their 10-Qs filed them, rental out. Q4 = FY - 9M
+  // then subtracted old-basis quarters from a restated year: 3,116M against
+  // quarters near 1,030M. A year whose stored revenue differs from its own
+  // first filing by more than QUARTER_RESTATED_YEAR_MIN, and every quarter
+  // inside it last filed BEFORE the filing that restated it, are on two bases:
+  // those quarters are withheld, and the year's derived Q4 with them. The
+  // restated year stands (it is the filer's current figure).
+  {
+    type Row = { start?: string; end?: string; val?: number; filed?: string };
+    const frameRows = (c: FieldValue): Row[] => !c.tag || !c.covers ? [] :
+      ((facts.facts?.[c.ns ?? "us-gaap"]?.[c.tag]?.units?.[c.unit ?? ""] ?? []) as Row[])
+        .filter((r) => r.start === c.covers![0] && r.end === c.covers![1] && typeof r.val === "number" && r.filed)
+        .sort((a, b) => String(a.filed).localeCompare(String(b.filed)));
+    for (const [yEnd, ym] of yearCells) {
+      const y = ym.get("revenue");
+      if (!y || y.val == null || y.derived !== "as-filed" || !y.covers) continue;
+      const rows = frameRows(y);
+      const first = rows[0];
+      if (!first || Math.abs((y.val as number) - (first.val as number)) <= QUARTER_RESTATED_YEAR_MIN * Math.max(Math.abs(y.val as number), Math.abs(first.val as number))) continue;
+      const restatedOn = rows.find((r) => r.val === y.val)?.filed;
+      if (!restatedOn) continue;
+      const inside = [...quarterCells].filter(([, qm]) => {
+        const q = qm.get("revenue");
+        return q?.covers && q.val != null && y.covers![0] <= q.covers[0] && q.covers[1] <= y.covers![1];
+      });
+      const stale = inside.filter(([, qm]) => {
+        const q = qm.get("revenue")!;
+        if (q.derived !== "as-filed") return false;
+        const last = frameRows(q).at(-1)?.filed;
+        return Boolean(last && last < restatedOn);
+      });
+      if (!stale.length) continue;
+      for (const [qEnd, qm] of inside) {
+        const q = qm.get("revenue")!;
+        if (!stale.some(([e]) => e === qEnd) && q.derived !== "differenced") continue;
+        qm.set("revenue", { ...q, val: null, derived: "withheld" });
+        notes.push(`revenue ${qEnd}: filed before its year (${yEnd}) was restated on ${restatedOn} (${first.val} -> ${y.val}); withheld (two bases in one year)`);
+      }
     }
   }
 
