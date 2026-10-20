@@ -85,3 +85,36 @@ for (const sym of symbols) {
   const sec12b = [...xml.matchAll(/<dei:TradingSymbol\b([^>]*)>([^<]*)</g)].map((m) => m[2]);
   console.log(`  dei:TradingSymbol in this filing: ${sec12b.join(", ") || "none"}`);
 }
+
+// ── EVIDENCE: the newest 10-K's own sentences on class rights, verbatim ──────
+// For a share-classes.json entry (weights need the filer's words). Prints each
+// sentence naming a Class and conversion / dividend / liquidation / equal rights.
+if (process.env.EVIDENCE !== "0") {
+  for (const sym of symbols) {
+    const row = map.data.find((r) => r[ix.ticker] === sym);
+    if (!row) continue;
+    const cikNum = row[ix.cik];
+    const subs = await get(`https://data.sec.gov/submissions/CIK${String(cikNum).padStart(10, "0")}.json`);
+    if (!subs.ok) continue;
+    const rec = subs.body.filings.recent;
+    const i = rec.form.findIndex((f) => f === "10-K");
+    console.log(`\n=== ${sym} evidence: ${i < 0 ? "no 10-K" : `10-K ${rec.accessionNumber[i]} (${rec.primaryDocument[i]})`} ===`);
+    if (i < 0) continue;
+    const url = `https://www.sec.gov/Archives/edgar/data/${cikNum}/${rec.accessionNumber[i].replace(/-/g, "")}/${rec.primaryDocument[i]}`;
+    const doc = await get(url, false);
+    if (!doc.ok) { console.log(`primary doc ${doc.status}`); continue; }
+    const text = doc.body.replace(/<ix:header>[\s\S]*?<\/ix:header>/gi, " ").replace(/<[^>]+>/g, " ")
+      .replace(/&#160;|&nbsp;/g, " ").replace(/&#8217;|&rsquo;/g, "'").replace(/&#8220;|&#8221;|&ldquo;|&rdquo;/g, '"')
+      .replace(/&amp;/g, "&").replace(/&#\d+;/g, " ").replace(/\s+/g, " ");
+    const seen = new Set();
+    const sentences = text.split(/(?<=[.;])\s+(?=[A-Z(])/);
+    let n = 0;
+    for (const s of sentences) {
+      if (!/\bClass [A-C]\b/.test(s) || !/(convert|dividend|liquidat|identical|equal|rank equally|same rights)/i.test(s)) continue;
+      if (s.length > 600 || seen.has(s)) continue;
+      seen.add(s);
+      console.log(`- ${s.trim()}`);
+      if (++n >= 30) break;
+    }
+  }
+}
