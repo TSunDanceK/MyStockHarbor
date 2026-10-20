@@ -1125,6 +1125,9 @@ const TASKS = {
   // records from measurement that companyfacts carries no class label. Both
   // cannot be acted on, and guessing produces a plausible wrong market cap.
   "multiclass-shares": { script: "scripts/multiclass-shares-probe.mjs", args: () => [] },
+  // Per-class cover counts from the newest 10-Q/10-K instance (contexts carry the
+  // class axis companyfacts drops). Read-only. SYMBOLS=AFRM,RDDT,CRCL
+  "multiclass-cover-instance": { script: "scripts/multiclass-cover-instance-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   "due-strip-universe": {
     script: "scripts/due-strip-universe.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
