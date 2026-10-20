@@ -391,13 +391,15 @@ async function cells() {
       const want = Date.parse(e) - Date.parse(st);
       return [...filed[t].values()].find((r) => r.end === e && Math.abs(Date.parse(r.end) - Date.parse(r.start) - want) < 10 * 864e5) ?? null;
     };
+    // The filing behind a filed RNOIE cell (a differenced Q4 has none of its own).
+    const rnAccn = (k) => { const r = filed.RevenuesNetOfInterestExpense.get(k) ?? near("RevenuesNetOfInterestExpense", k); return r ? ` | RNOIE accn ${r.accn} ${r.form} filed ${r.filed}` : ""; };
     for (const k of diff) {
       const a = ob.get(k), b = nb.get(k);
       const at = (t) => M((filed[t].get(k) ?? near(t, k))?.val ?? null);
       const nii = (filed.InterestIncomeExpenseNet.get(k) ?? near("InterestIncomeExpenseNet", k))?.val, non = (filed.NoninterestIncome.get(k) ?? near("NoninterestIncome", k))?.val;
       const halves = nii != null && non != null ? nii + non : null;
       console.log(`  ${k} ${(b ?? a).fp ?? ""}${(b ?? a).fy ?? ""} ${M(a?.v[ri] ?? null)} (${a?.d?.[ri] ?? "-"}) → ${M(b?.v[ri] ?? null)} (${b?.d?.[ri] ?? "-"})`
-        + ` | filed RNOIE ${at("RevenuesNetOfInterestExpense")} Revenues ${at("Revenues")} NII ${at("InterestIncomeExpenseNet")} NonII ${at("NoninterestIncome")} halves ${M(halves)} | main ${meta(ox, k)} branch ${meta(nx, k)}`);
+        + ` | filed RNOIE ${at("RevenuesNetOfInterestExpense")} Revenues ${at("Revenues")} NII ${at("InterestIncomeExpenseNet")} NonII ${at("NoninterestIncome")} halves ${M(halves)} | main ${meta(ox, k)} branch ${meta(nx, k)}${rnAccn(k)}`);
     }
     await pause();
   }
