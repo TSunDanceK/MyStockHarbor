@@ -604,6 +604,7 @@ const TASKS = {
   "write-earnings-audit-r2-fysum": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["fysum", env.SYMBOLS ?? ""], writes: true, env: { MODE: "fysum" } },
   "write-earnings-audit-r2-mixed": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["mixed", env.SYMBOLS ?? ""], writes: true, env: { MODE: "mixed" } },
   "write-earnings-audit-r2-cells": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["cells", env.SYMBOLS ?? ""], writes: true, env: { MODE: "cells" } },
+  "revenue-blanks": { script: "scripts/revenue-blanks-probe.mjs", args: () => [], needsTypescript: true },
   "write-earnings-audit-r1-scan": {
     script: "scripts/earnings-audit-r1-scan.mjs",
     args: () => [],
