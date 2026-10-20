@@ -1292,6 +1292,8 @@ export const LAST_RESORT_REVENUE_TAG = "RevenuesNetOfInterestExpense";
  * two measures into their series (relay scan, write-earnings-audit-r1-scan).
  */
 export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
+/** A diluted share count that moves more than this, either way, against the same period a year apart is refused (unless a split this large is filed). */
+export const SHARE_JUMP_MAX = 100;
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
 /** How close a closure ratio must sit to one of the filer's split ratios to read as a split, not a wrong count. */
@@ -2144,6 +2146,39 @@ function extractCompanyFactsWith(
         }
         m.set(shareKey, { ...sh, val: sh.val * f });
         notes.push(`${shareKey} ${end}: ${sh.val} rescaled x${f} (net income ${ni} / (EPS ${eps.val} x shares) = ${(ni / (eps.val * sh.val)).toPrecision(4)})`);
+      }
+    }
+  }
+
+  // ── A DILUTED SHARE COUNT THAT MOVES OVER SHARE_JUMP_MAX IN A YEAR (yoy60 2d) ──
+  // HST +100,623,218%, TDW +107,515%, NN +428,698%, CLDX +112,660%, AMSC
+  // +111,297% (relay write-yoy60-classify): one of each pair is on a unit slip
+  // the rescale above could not prove. The move alone does not say which, so
+  // the cell FARTHER from the filer's own median (in log terms) is refused,
+  // Not reported, before the ratio fallback can compute EPS from it. A filer
+  // whose own split facts carry a ratio this large (a 1-for-100 reverse split)
+  // is left as filed: that move is real.
+  {
+    const splits = readSplitFacts(facts).map(([, r]) => r);
+    const bigSplit = splits.some((r) => r >= SHARE_JUMP_MAX / 2 || r <= 2 / SHARE_JUMP_MAX);
+    if (!bigSplit) {
+      for (const cells of [quarterCells, yearCells]) {
+        const vals = [...cells.values()].map((m) => m.get("sharesDiluted")?.val).filter((v): v is number => v != null && v > 0).sort((a, b) => a - b);
+        if (vals.length < 3) continue;
+        const median = vals[vals.length >> 1];
+        const off = (v: number) => Math.abs(Math.log(v / median));
+        for (const [end, m] of cells) {
+          const sh = m.get("sharesDiluted");
+          if (sh?.val == null || !(sh.val > 0)) continue;
+          const agoEnd = [...cells.keys()].find((e) => Math.abs(Date.parse(e) - (Date.parse(end) - 365.25 * 86_400_000)) <= 10 * 86_400_000);
+          const ago = agoEnd ? cells.get(agoEnd)?.get("sharesDiluted") : undefined;
+          if (ago?.val == null || !(ago.val > 0)) continue;
+          const ratio = sh.val / ago.val;
+          if (ratio <= SHARE_JUMP_MAX && ratio >= 1 / SHARE_JUMP_MAX) continue;
+          const [badEnd, bad] = off(sh.val) >= off(ago.val) ? [end, sh] : [agoEnd!, ago];
+          cells.get(badEnd)?.set("sharesDiluted", { ...bad, val: null, derived: "withheld" });
+          notes.push(`sharesDiluted ${badEnd}: ${bad.val} moved x${ratio >= 1 ? ratio.toPrecision(3) : (1 / ratio).toPrecision(3)} against the same period a year apart and sits farther from the filer's median ${median}; withheld (unproved unit slip)`);
+        }
       }
     }
   }
