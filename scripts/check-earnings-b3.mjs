@@ -6,7 +6,7 @@
 //      cuts the Tiingo series to the same window.
 //   2. The valuation price: readSurfacePrice on Tiingo (labelled, and the FMP
 //      read skipped), the last FMP bar otherwise; the card prints the label.
-//   3. The title's price follows the same gate.
+//   3. The title's price is the valuation's own (audit r3 item 5).
 //   4. The linked credit shows whenever a figure on the page is Tiingo's.
 //   5. Mutants: each rule broken once, and caught.
 //
@@ -39,10 +39,15 @@ const RULES = {
   "on Tiingo the valuation price is readSurfacePrice's, and the FMP read is skipped":
     (p) => /onTiingo \? Promise\.resolve\(\[\] as Point\[\]\) : getDailyHistory\(symbol, \{ caller: "stock-earnings-valuation" \}\)/.test(p)
       && /onTiingo \? readSurfacePrice\(symbol\)/.test(p)
-      && /const latestClose = onTiingo\s*\? surfacePrice\?\.price \?\? null/.test(p),
-  "the price's own label reaches the card": (p, c) => /priceLabel=\{data\.latestPriceLabel\}/.test(p)
-    && /\$\{priceLabel \?\? `close\$\{priceAsOf \? `, \$\{readableDate\(priceAsOf\)\}` : ""\}`\}/.test(c),
-  "the title's price follows the gate": (p) => /historyForSurface\("CHARTS", clean, \(\) => getDailyHistory\(clean, \{ caller: "stock-earnings-meta" \}\)\)/.test(p),
+      && /const pagePrice = earningsPrice\(onTiingo, surfacePrice, lastBar\);/.test(p)
+      && /const latestClose = pagePrice\?\.price \?\? null;/.test(p),
+  "the price's own basis reaches the card, which prints its words": (p, c) => /priceBasis=\{data\.latestPriceBasis\}/.test(p)
+    && /× \$\$\{price\.toFixed\(2\)\} \$\{basisWords\}/.test(c),
+  "the title's price is the valuation's (same gate, same reads, same earningsPrice)": (p) =>
+    /const onTiingo = historyOnTiingo\("CHARTS"\);\s*const \[metaSurface, metaBars\]/.test(p)
+      && /onTiingo \? readSurfacePrice\(clean\)/.test(p)
+      && /const metaPrice = earningsPrice\(onTiingo, metaSurface, /.test(p)
+      && /Price \$\$\{metaPrice\.price\.toFixed\(2\)\} \(\$\{priceBasisWords\(metaPrice\.basis\)\}\)/.test(p),
   "the linked credit shows whenever a figure is Tiingo's":
     (p) => /const pricesFromTiingo = chartHistory\.provider === "tiingo" \|\| \(onTiingo && surfacePrice !== null\);/.test(p)
       // B's linked "powered by Tiingo" (#552 COWORK #205), not hand-typed text.
@@ -54,8 +59,8 @@ const MUTANTS = [
   ["the reaction chart back on the bare FMP read", PAGE, "historyForSurface(\"CHARTS\", symbol, () =>", "((_f) => _f())(() =>"],
   ["the partial bar kept", PAGE, "!p.partial && ", ""],
   ["the FMP valuation read kept on Tiingo", PAGE, "onTiingo ? Promise.resolve([] as Point[]) : getDailyHistory(symbol", "getDailyHistory(symbol"],
-  ["an IEX trade printed as a \"close\"", CARD, "${priceLabel ?? `close${priceAsOf ? `, ${readableDate(priceAsOf)}` : \"\"}`}", "close${priceAsOf ? `, ${readableDate(priceAsOf)}` : \"\"}"],
-  ["the title off the gate", PAGE, "historyForSurface(\"CHARTS\", clean, () => getDailyHistory(clean, { caller: \"stock-earnings-meta\" }))", "getDailyHistory(clean, { caller: \"stock-earnings-meta\" }).then((p) => ({ points: p }))"],
+  ["an IEX trade printed as a \"close\"", CARD, "× $${price.toFixed(2)} ${basisWords}", "× $${price.toFixed(2)} close"],
+  ["the title back on its own price", PAGE, "const metaPrice = earningsPrice(onTiingo, metaSurface, ", "const metaPrice = earningsPrice(false, null, "],
   ["the credit only for the chart", PAGE, " || (onTiingo && surfacePrice !== null)", ""],
   ["the credit printed as plain text", PAGE, "Prices <TiingoLink />", "Prices from Tiingo"],
 ];

@@ -5,11 +5,10 @@ import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
 import { reactionDayRows } from "./reactionDays";
 import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
 import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";
+import { earningsPrice } from "@/lib/server/earningsPrice";
+import { priceBasisWords } from "@/lib/priceBasis";
 import { TiingoLink } from "@/app/components/TiingoCredit";
-import {
-  computeIndicatorSeed,
-  type Point,
-} from "@/lib/indicators";
+import { type Point } from "@/lib/indicators";
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
@@ -524,19 +523,20 @@ async function getEarningsData(symbol: string) {
   // 2026" or "last IEX trade, 14:05 ET"); its date is the ET trading day, which
   // the card's staleness test reads as before. A miss shows no price: there is
   // no FMP fallback on the Tiingo path (#552 COWORK #108 item 2).
+  // ONE PRICE FOR THE CARD AND THE TITLE (audit r3 item 5): earningsPrice is
+  // what generateMetadata reads too, and its basis is the label both print.
   const lastBar = (latestBars as Point[]).at(-1) ?? null;
-  const latestClose = onTiingo
-    ? surfacePrice?.price ?? null
-    : typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
-  const latestCloseOn = onTiingo ? surfacePrice?.date ?? null : lastBar?.date ?? null;
-  const latestPriceLabel = onTiingo ? surfacePrice?.label ?? null : null;
+  const pagePrice = earningsPrice(onTiingo, surfacePrice, lastBar);
+  const latestClose = pagePrice?.price ?? null;
+  const latestCloseOn = pagePrice?.basis.date ?? null;
+  const latestPriceBasis = pagePrice?.basis ?? null;
   /** The linked credit shows when any figure on the page is Tiingo's. */
   const pricesFromTiingo = chartHistory.provider === "tiingo" || (onTiingo && surfacePrice !== null);
 
   return {
     earningsRows, completedRows, latest, next, nextReport,
     priceReactionQuarters, reactionDays, score, secView, cold, annualForm, hidePriceReaction,
-    valuation, latestClose, latestCloseOn, latestPriceLabel, pricesFromTiingo,
+    valuation, latestClose, latestCloseOn, latestPriceBasis, pricesFromTiingo,
     /**
      * THE DATE THIS RENDER RAN, read once here rather than inside a component.
      * A card that called Date.now() itself would be untestable and would also
@@ -565,11 +565,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // FMP's /stable/quote into seed.price, and the title never read it: it
   // prints seed.lastClose, the newest bar of getDailyHistory.
   // THE TITLE FOLLOWS PRICE_PROVIDER_CHARTS too (B3), as /stock's does.
-  const rawHistory = await historyForSurface("CHARTS", clean, () => getDailyHistory(clean, { caller: "stock-earnings-meta" }))
-    .then((h) => h.points.filter((p) => !p.partial), () => [] as Point[]);
-  const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
-  const seed = computeIndicatorSeed(points, "", null, null);
-  const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
+  // THE VALUATION CARD'S PRICE, NOT A SECOND ONE (audit r3 item 5). The title
+  // used to print the last completed close while the card used the newer of
+  // that close and today's IEX trade, so the two disagreed intraday (CAVA
+  // −3.0%, GILD −2.3%). Same reads as the page, same earningsPrice, same words.
+  const onTiingo = historyOnTiingo("CHARTS");
+  const [metaSurface, metaBars] = await Promise.all([
+    onTiingo ? readSurfacePrice(clean).catch(() => null) : Promise.resolve(null),
+    onTiingo ? Promise.resolve([] as Point[]) : getDailyHistory(clean, { caller: "stock-earnings-meta" }).catch(() => [] as Point[]),
+  ]);
+  const metaPrice = earningsPrice(onTiingo, metaSurface, (metaBars as Point[]).at(-1) ?? null);
+  const priceStr = metaPrice ? ` — Price $${metaPrice.price.toFixed(2)} (${priceBasisWords(metaPrice.basis)})` : "";
   const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
   // NO LONGER "EPS surprise, revenue surprise" -- the page stopped showing
   // either when FMP's analyst consensus left on 2026-09-15, and a description
@@ -1216,7 +1222,7 @@ export default async function StockEarningsPage({ params }: Props) {
                     inputs={data.valuation}
                     price={data.latestClose}
                     priceAsOf={data.latestCloseOn}
-                    priceLabel={data.latestPriceLabel}
+                    priceBasis={data.latestPriceBasis}
                     today={data.renderedOn}
                   />
                   <SecCashQualityCard view={secView} />

@@ -3,6 +3,7 @@
 // Presentational and server-rendered: every decision about which number is
 // which, and what is derived, is made in lib/server/secEarningsView.ts and
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
+import { PRICE_BASIS_NOTE, priceBasisLabel, priceBasisWords, type PriceBasis } from "@/lib/priceBasis";
 import Link from "next/link";
 import GrowthVisuals, { SeeAllTheNumbers } from "./GrowthVisuals";
 import { anyDerived, buildGrowthVisuals, introLine, marginMeans } from "@/lib/growthVisuals";
@@ -2222,17 +2223,18 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
  * end, and the price is today's close.
  */
 export function SecValuationCard({
-  view, inputs, price, priceAsOf, priceLabel = null, today,
+  view, inputs, price, priceAsOf, priceBasis = null, today,
 }: {
   view: SecEarningsView;
   inputs: ValuationInputs;
   price: number | null;
   priceAsOf: string | null;
   /**
-   * What the price IS, where the source says ("close, 29 Sep 2026" / "last IEX
-   * trade, 14:05 ET", tiingoSurfacePrice). Absent: "close, <priceAsOf>", as before.
+   * What the price IS (lib/priceBasis): the page's one price, the same the
+   * title prints, labelled "Price: close, 20 Oct 2026" / "Price: last trade
+   * 14:05 ET". Absent: a close on priceAsOf, as before.
    */
-  priceLabel?: string | null;
+  priceBasis?: PriceBasis | null;
   /** The render date, passed in rather than read from the clock — see priceIsCurrent. */
   today: string;
 }) {
@@ -2255,13 +2257,15 @@ export function SecValuationCard({
   // 14px, and the price, the GAAP note and the source ran on underneath as one
   // paragraph — the layout the owner flagged as broken on AVAV.
   const sentence = (t: string) => `${t[0].toUpperCase()}${t.slice(1)}.`;
+  const basis: PriceBasis | null = priceBasis ?? (priceAsOf ? { kind: "close", date: priceAsOf, time: null } : null);
+  const basisWords = basis ? priceBasisWords(basis) : "close";
   const capValue = !current ? STALE_PRICE_WORDS : cap === null ? NOT_REPORTED : cap.ok ? shortMoney(cap.val) : "Not available";
   const capSub = !current
     ? readableIsoDates(stalePriceNote(price, priceAsOf ?? "an unknown date"))
     : cap !== null && !cap.ok
       ? sentence(REFUSAL_WORDS[cap.why])
       : inputs.shares
-        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} ${priceLabel ?? `close${priceAsOf ? `, ${readableDate(priceAsOf)}` : ""}`}`
+        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} ${basisWords}`
         : null;
   const peValue = !current ? STALE_PRICE_WORDS
     : pe === null ? NOT_REPORTED
@@ -2288,6 +2292,13 @@ export function SecValuationCard({
     <section className="card">
       <div className="eyebrow">Valuation</div>
       <h3>What the market is paying for these earnings</h3>
+      {/* THE SAME LABEL THE TITLE USES (lib/priceBasis), so a reader can see
+          which price the two figures below are built on. */}
+      {basis ? (
+        <p className="smallLabel" style={{ marginTop: 0 }}>
+          {priceBasisLabel(basis)} · ${price.toFixed(2)}
+        </p>
+      ) : null}
       <div className="metricGrid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
         {/* THE WORD OR THE FIGURE; ITS REASON OR ITS METHOD BEHIND A TAP
             (#552 COWORK #124). A refusal ("Not meaningful", "Not available")
@@ -2304,6 +2315,7 @@ export function SecValuationCard({
             dollars, so both sides of these figures are dollars.
           </p>
         ) : null}
+        <p>{PRICE_BASIS_NOTE}</p>
         <p data-fine-print="">Source: {SEC_ATTRIBUTION}; share price from market data.</p>
       </CardDetails>
     </section>

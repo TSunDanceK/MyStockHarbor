@@ -606,6 +606,9 @@ const TASKS = {
   "write-earnings-audit-r2-cells": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["cells", env.SYMBOLS ?? ""], writes: true, env: { MODE: "cells" } },
   // DRY RUN: every cell an extraction change moves, main against the branch. Read-only (manifest GET).
   "write-extraction-diff": { script: "scripts/extraction-diff.mjs", args: () => [], needsTypescript: true, writes: true },
+  // Read-only despite the prefix (it needs the Redis credentials): which earnings
+  // titles change price basis when they take the valuation card's price.
+  "write-price-basis-dry-run": { script: "scripts/price-basis-dry-run.mjs", args: () => [], needsTypescript: true },
   // One field's cells beside every raw companyfacts row of the named concepts. Read-only.
   // SYMBOLS="SCHW,MET|netIncome|NetIncomeLoss,ProfitLoss|cover,qrows"
   "field-trace": { script: "scripts/field-trace-probe.mjs", args: () => [], needsTypescript: true },
