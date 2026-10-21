@@ -62,7 +62,7 @@ for (const [sym, cik] of targets) {
         keys.forEach((f, i) => {
           const va = pa?.values?.[i]?.val ?? null, vb = pb?.values?.[i]?.val ?? null;
           if (va === vb) return;
-          lines.push(`${sym}\t${f}\t${kind === "years" ? "Y" : kind === "quarters" ? "Q" : "I"} ${kind === "instants" ? p.end : label(p)}\t${fmt(va)} -> ${fmt(vb)}`);
+          lines.push(`${sym}\t${f}\t${kind === "years" ? "Y" : kind === "quarters" ? "Q" : "I"} ${kind === "instants" ? p.end : label(p)}\t${fmt(va)} -> ${fmt(vb)}${kind === "instants" && /Debt$/.test(f) && pb?.values?.[i]?.tag ? `\t[${pb.values[i].tag}${pb.values[i].derived === "computed" ? ", netted" : ""}]` : ""}`);
           byField[f] = (byField[f] ?? 0) + 1;
         });
       }

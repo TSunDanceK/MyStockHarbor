@@ -1289,6 +1289,10 @@ export const COMBINED_DEBT: Readonly<Record<string, readonly string[] | "all">> 
   LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: ["LongTermDebtCurrent"],
   NotesPayable: ["NotesPayableCurrent"],
 };
+/** The audit r3 debt fallbacks (ranked last in their chains in secFields). */
+const DEBT_FALLBACK_TAGS: ReadonlySet<string> = new Set([
+  "CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(COMBINED_DEBT),
+]);
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
@@ -2367,6 +2371,15 @@ function extractCompanyFactsWith(
   // disjoint and add as filed. Lease obligations are never added: the
   // ...CapitalLeaseObligations concepts already ARE the filed debt-and-finance-
   // lease figure, and no lease line is in either chain.
+  // A date only a fallback concept filed (ONDS 2026-01-16, ESLT 2023-09-30) is
+  // not a balance sheet: it would take a slot under keepInstants and push the
+  // oldest real one out. Fallbacks only fill dates something else opened.
+  for (const [end, m] of instantCells) {
+    if ([...m.values()].every((c) => c.tag && DEBT_FALLBACK_TAGS.has(c.tag))) {
+      instantCells.delete(end);
+      instantMeta.delete(end);
+    }
+  }
   for (const [end, m] of instantCells) {
     const lt = m.get("longTermDebt"), st = m.get("shortTermDebt");
     const inside = lt?.tag ? COMBINED_DEBT[lt.tag] : undefined;

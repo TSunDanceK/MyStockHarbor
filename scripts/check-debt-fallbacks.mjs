@@ -42,14 +42,15 @@ const TRV = facts({
 const t = X.extractCompanyFacts("TRV", TRV);
 check("TRV: the combined 9,267 is the total (its 300 current is inside it, not added)", near(total(t, "2025-12-31"), 9267), String(total(t, "2025-12-31")));
 check("...long-term reads 8,967, computed", near(at(t, "2025-12-31")?.values?.[LT]?.val ?? null, 8967) && at(t, "2025-12-31")?.values?.[LT]?.derived === "computed");
-const TRVQ = facts({ DebtLongtermAndShorttermCombinedAmount: [inst("2026-09-30", 9813, "10-Q", "2026-10-16", "trv-q3")] });
+const TRVQ = facts({ DebtLongtermAndShorttermCombinedAmount: [inst("2026-09-30", 9813, "10-Q", "2026-10-16", "trv-q3")], Assets: [inst("2026-09-30", 140000, "10-Q", "2026-10-16", "trv-q3")] });
 check("TRV's 10-Q: 9,813 with no short-term line", near(total(X.extractCompanyFacts("TRV", TRVQ), "2026-09-30"), 9813));
 const O = facts({
   NotesPayable: [inst("2026-06-30", 25091.6, "10-Q", "2026-08-06", "o-q2")],
   CommercialPaper: [inst("2026-06-30", 1400, "10-Q", "2026-08-06", "o-q2")],
+  Assets: [inst("2026-06-30", 69000, "10-Q", "2026-08-06", "o-q2")],
 });
 check("O: notes 25,091.6 + commercial paper 1,400 = 26,491.6", near(total(X.extractCompanyFacts("O", O), "2026-06-30"), 26491.6), String(total(X.extractCompanyFacts("O", O), "2026-06-30")));
-const HIMS = facts({ ConvertibleDebtNoncurrent: [inst("2026-06-30", 1365.3, "10-Q", "2026-08-10", "hims-q2")] });
+const HIMS = facts({ ConvertibleDebtNoncurrent: [inst("2026-06-30", 1365.3, "10-Q", "2026-08-10", "hims-q2")], Assets: [inst("2026-06-30", 2900, "10-Q", "2026-08-10", "hims-q2")] });
 check("HIMS: convertible notes 1,365.3", near(total(X.extractCompanyFacts("HIMS", HIMS), "2026-06-30"), 1365.3));
 
 console.log("\n2. what must stay");
@@ -58,11 +59,23 @@ check("an ordinary noncurrent + current filer adds as filed (5,500)", near(total
 const BOTH = facts({ LongTermDebtNoncurrent: [inst("2026-06-30", 5000, "10-Q", "2026-08-01", "b")], DebtLongtermAndShorttermCombinedAmount: [inst("2026-06-30", 5600, "10-Q", "2026-08-01", "b")] });
 check("a filer with a noncurrent line keeps it over the combined fallback", near(at(X.extractCompanyFacts("BTH", BOTH), "2026-06-30")?.values?.[LT]?.val ?? null, 5000));
 
+const ODD = facts({
+  Assets: [inst("2025-12-31", 100, "10-K", "2026-03-01", "k")],
+  ConvertibleDebtNoncurrent: [inst("2025-12-31", 10, "10-K", "2026-03-01", "k"), inst("2026-01-16", 12, "8-K", "2026-01-20", "e")],
+});
+const odd = X.extractCompanyFacts("ODD", ODD);
+check("a date only a fallback filed (ONDS 2026-01-16) opens no balance-sheet column", !at(odd, "2026-01-16") && near(at(odd, "2025-12-31")?.values?.[LT]?.val ?? null, 10));
+
 console.log("\n3. mutation");
 {
   const a = extractRaw.replace("if (inside !== \"all\" && !inside.includes(st.tag)) continue;", "continue;");
   check("the mutation is applied", a !== extractRaw);
   check("MUTATION: netting off → TRV double-counts its 300 (9,567), caught", near(total((await load(a)).extractCompanyFacts("TRV", TRV), "2025-12-31"), 9567));
+}
+{
+  const a = extractRaw.replace("instantCells.delete(end);", "");
+  check("the second mutation is applied", a !== extractRaw);
+  check("MUTATION: fallback-only dates kept → ODD's 2026-01-16 column appears, caught", !!at((await load(a)).extractCompanyFacts("ODD", ODD), "2026-01-16"));
 }
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);
