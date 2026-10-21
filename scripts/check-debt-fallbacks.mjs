@@ -73,7 +73,27 @@ const ZTS = facts({
 });
 const z = X.extractCompanyFacts("ZTS", ZTS);
 check("ZTS: a fallback on the newest period does not displace the filed 1,350 borrowings", near(at(z, "2025-06-30")?.values?.[ST]?.val ?? null, 1350), String(at(z, "2025-06-30")?.values?.[ST]?.val));
-check("...and fills the date the primary line misses (0)", at(z, "2026-06-30")?.values?.[ST]?.val === 0);
+check("...and, filing a primary line, takes no fallback on the date it misses", at(z, "2026-06-30")?.values?.[ST]?.val == null);
+const CVXB = facts({
+  Assets: [inst("2025-12-31", 250000, "10-K", "2026-02-20", "ck"), inst("2026-06-30", 255000, "10-Q", "2026-08-06", "cq")],
+  LongTermDebtAndCapitalLeaseObligations: [inst("2025-12-31", 20135, "10-K", "2026-02-20", "ck")],
+  LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: [inst("2025-12-31", 24541, "10-K", "2026-02-20", "ck"), inst("2026-06-30", 36674, "10-Q", "2026-08-06", "cq")],
+});
+check("CVX: on a date both are filed, the primary noncurrent figure wins (20,135)", near(at(X.extractCompanyFacts("CVX", CVXB), "2025-12-31")?.values?.[LT]?.val ?? null, 20135));
+
+const AAT = facts({
+  Assets: [inst("2025-12-31", 3000, "10-K", "2026-02-10", "a1"), inst("2026-03-31", 3000, "10-Q", "2026-05-01", "a2")],
+  LongTermDebt: [inst("2025-12-31", 1700, "10-K", "2026-02-10", "a1")],
+  NotesPayable: [inst("2025-12-31", 75, "10-K", "2026-02-10", "a1"), inst("2026-03-31", 75, "10-Q", "2026-05-01", "a2")],
+});
+const aat = X.extractCompanyFacts("AAT", AAT);
+check("AAT: a filer with a primary long-term line never reads a fallback (Q1 stays empty, not 75)", at(aat, "2026-03-31")?.values?.[LT]?.val == null && near(at(aat, "2025-12-31")?.values?.[LT]?.val ?? null, 1700));
+const CVXK = facts({
+  Assets: [inst("2025-12-31", 250000, "10-K", "2026-02-20", "ck"), inst("2026-06-30", 255000, "10-Q", "2026-08-06", "cq")],
+  LongTermDebtAndCapitalLeaseObligations: [inst("2025-12-31", 20135, "10-K", "2026-02-20", "ck")],
+  LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: [inst("2026-06-30", 36674, "10-Q", "2026-08-06", "cq")],
+});
+check("CVX: the same figure tagged the other way still fills its 10-Q date", near(at(X.extractCompanyFacts("CVX", CVXK), "2026-06-30")?.values?.[LT]?.val ?? null, 36674));
 
 console.log("\n3. mutation");
 {
@@ -89,7 +109,12 @@ console.log("\n3. mutation");
 {
   const a = extractRaw.replace("return primary.length ? primary : cands;", "return cands;");
   check("the third mutation is applied", a !== extractRaw);
-  check("MUTATION: fallbacks compete with primaries → ZTS reads 0, caught", (await load(a)).extractCompanyFacts("ZTS", ZTS).instants.find((p) => p.end === "2025-06-30")?.values?.[ST]?.val === 0);
+  check("MUTATION: fallbacks compete with primaries → CVX's 10-K reads the newer concept's 24,541, caught", near((await load(a)).extractCompanyFacts("CVX", CVXB).instants.find((p) => p.end === "2025-12-31")?.values?.[LT]?.val ?? null, 24541));
+}
+{
+  const a = extractRaw.replace("if (!primaryTags.size) return rows;", "return rows;");
+  check("the fourth mutation is applied", a !== extractRaw);
+  check("MUTATION: filer-level gate off → AAT's Q1 reads 75, caught", near((await load(a)).extractCompanyFacts("AAT", AAT).instants.find((p) => p.end === "2026-03-31")?.values?.[LT]?.val ?? null, 75));
 }
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

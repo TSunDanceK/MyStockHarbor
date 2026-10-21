@@ -1304,6 +1304,22 @@ function primaryFirst<T extends { tag: string }>(cands: T[]): T[] {
   const primary = cands.filter((c) => !DEBT_FALLBACK_TAGS.has(c.tag));
   return primary.length ? primary : cands;
 }
+/**
+ * AND ONLY FOR A FILER WITH NO PRIMARY CONCEPT AT ALL, so a series never
+ * interleaves two measures: AAT's 10-K LongTermDebt is 1.70B and its 10-Qs
+ * tag only NotesPayable 75M, which read the quarters as net cash. The one
+ * exception is the same figure tagged two ways: CVX's 10-K files
+ * LongTermDebtAndCapitalLeaseObligations and its 10-Qs the IncludingCurrent-
+ * Maturities concept, so that pair may fill dates the other misses.
+ */
+const SAME_MEASURE: Readonly<Record<string, string>> = {
+  LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: "LongTermDebtAndCapitalLeaseObligations",
+};
+function debtFallbackGate<T extends { tag: string }>(rows: T[]): T[] {
+  const primaryTags = new Set(rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag)).map((r) => r.tag));
+  if (!primaryTags.size) return rows;
+  return rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag) || primaryTags.has(SAME_MEASURE[r.tag] ?? ""));
+}
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
@@ -1582,7 +1598,7 @@ function extractCompanyFactsWith(
   const preferred = new Map<string, string | null>();
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    const all = rowsForField(facts, field, refusedUnits, currency);
+    const all = debtFallbackGate(rowsForField(facts, field, refusedUnits, currency));
     for (const c of all) {
       const k = periodKey(c.row);
       const list = bucket.get(k);
