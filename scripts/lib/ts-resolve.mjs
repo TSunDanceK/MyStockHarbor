@@ -19,8 +19,27 @@
 // So the shim is scoped to the process that needs it: one resolve hook, no app
 // file touched, no tsconfig touched, and nothing about the deployed build
 // changes.
+//
+// THE APP'S "@/" ALIAS AND ITS JSON IMPORTS, TOO. lib/server/secManifest.ts
+// reads `@/data/sec/reticker-ciks.json` (#932), and nine checks that load it
+// through this hook (check-pickers-sec and its siblings) failed on main with
+// ERR_MODULE_NOT_FOUND. The same two rules ts-resolve-app.mjs already applies:
+// "@/" is the repo root, and a JSON import without `with { type: "json" }`
+// loads as its default export, as the bundler gives it.
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+
 export async function resolve(specifier, context, nextResolve) {
-  if (specifier.startsWith(".") && !/\.[mc]?[jt]s$/.test(specifier)) {
+  if (specifier.startsWith("@/")) {
+    const base = path.join(ROOT, specifier.slice(2));
+    for (const cand of [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")]) {
+      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) return nextResolve(pathToFileURL(cand).href, context);
+    }
+  }
+  if (specifier.startsWith(".") && !/\.[mc]?[jt]s$|\.json$/.test(specifier)) {
     try {
       return await nextResolve(`${specifier}.ts`, context);
     } catch {
@@ -29,4 +48,12 @@ export async function resolve(specifier, context, nextResolve) {
     }
   }
   return nextResolve(specifier, context);
+}
+
+export async function load(url, context, nextLoad) {
+  if (url.endsWith(".json") && context.importAttributes?.type !== "json") {
+    const text = fs.readFileSync(fileURLToPath(url), "utf8");
+    return { format: "module", source: `export default ${text};`, shortCircuit: true };
+  }
+  return nextLoad(url, context);
 }
