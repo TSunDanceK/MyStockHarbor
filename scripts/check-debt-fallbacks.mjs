@@ -66,6 +66,15 @@ const ODD = facts({
 const odd = X.extractCompanyFacts("ODD", ODD);
 check("a date only a fallback filed (ONDS 2026-01-16) opens no balance-sheet column", !at(odd, "2026-01-16") && near(at(odd, "2025-12-31")?.values?.[LT]?.val ?? null, 10));
 
+const ZTS = facts({
+  Assets: [inst("2025-06-30", 14000, "10-Q", "2025-08-05", "z1"), inst("2026-06-30", 15000, "10-Q", "2026-08-05", "z2")],
+  ShortTermBorrowings: [inst("2025-06-30", 1350, "10-Q", "2025-08-05", "z1")],
+  CommercialPaper: [inst("2025-06-30", 0, "10-Q", "2025-08-05", "z1"), inst("2026-06-30", 0, "10-Q", "2026-08-05", "z2")],
+});
+const z = X.extractCompanyFacts("ZTS", ZTS);
+check("ZTS: a fallback on the newest period does not displace the filed 1,350 borrowings", near(at(z, "2025-06-30")?.values?.[ST]?.val ?? null, 1350), String(at(z, "2025-06-30")?.values?.[ST]?.val));
+check("...and fills the date the primary line misses (0)", at(z, "2026-06-30")?.values?.[ST]?.val === 0);
+
 console.log("\n3. mutation");
 {
   const a = extractRaw.replace("if (inside !== \"all\" && !inside.includes(st.tag)) continue;", "continue;");
@@ -76,6 +85,11 @@ console.log("\n3. mutation");
   const a = extractRaw.replace("instantCells.delete(end);", "");
   check("the second mutation is applied", a !== extractRaw);
   check("MUTATION: fallback-only dates kept → ODD's 2026-01-16 column appears, caught", !!at((await load(a)).extractCompanyFacts("ODD", ODD), "2026-01-16"));
+}
+{
+  const a = extractRaw.replace("return primary.length ? primary : cands;", "return cands;");
+  check("the third mutation is applied", a !== extractRaw);
+  check("MUTATION: fallbacks compete with primaries → ZTS reads 0, caught", (await load(a)).extractCompanyFacts("ZTS", ZTS).instants.find((p) => p.end === "2025-06-30")?.values?.[ST]?.val === 0);
 }
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

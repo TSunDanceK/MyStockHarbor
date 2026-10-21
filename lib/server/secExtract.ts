@@ -1293,6 +1293,17 @@ export const COMBINED_DEBT: Readonly<Record<string, readonly string[] | "all">> 
 const DEBT_FALLBACK_TAGS: ReadonlySet<string> = new Set([
   "CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(COMBINED_DEBT),
 ]);
+/**
+ * A FALLBACK NEVER DISPLACES A FILED PRIMARY CONCEPT. Chain rank alone is not
+ * enough: the preferred concept is the one on the newest period, so a fallback
+ * filed there (ZTS's CommercialPaper 0, AAT's NotesPayable 75M) would win every
+ * date it covers over the debt line the filer already reads. Where any primary
+ * candidate exists, the fallbacks are dropped; where none does, they stand.
+ */
+function primaryFirst<T extends { tag: string }>(cands: T[]): T[] {
+  const primary = cands.filter((c) => !DEBT_FALLBACK_TAGS.has(c.tag));
+  return primary.length ? primary : cands;
+}
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
@@ -1589,7 +1600,7 @@ function extractCompanyFactsWith(
       // anchors both on the filer's newest period carrying a figure.
       // A rankPerPeriod field (a total ahead of its component) takes no
       // preference: chain rank decides each period. See FieldDef.rankPerPeriod.
-      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(all)
+      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(primaryFirst(all))
     );
   }
 
@@ -2349,7 +2360,7 @@ function extractCompanyFactsWith(
   for (const field of instantFields()) {
     const bucket = buckets.get(field.key)!;
     for (const [, cands] of bucket) {
-      const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
+      const best = resolve(primaryFirst(cands), preferred.get(field.key), field.oneConceptPerFiler);
       if (!best?.row.end || best.row.start) continue; // a duration is not an instant
       const end = best.row.end;
 

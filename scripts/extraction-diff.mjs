@@ -80,7 +80,15 @@ for (const [sym, cik] of targets) {
       const na = net(a), nb = net(b), side = (n) => (n === null ? "n/a" : n >= 0 ? "net cash" : "net debt");
       lines.push(`NET ${sym}\t${b.instants[0]?.end ?? "—"}\t${side(na)} ${fmt(na)} -> ${side(nb)} ${fmt(nb)}${side(na) !== side(nb) && na !== null ? "\tFLIP" : ""}`);
     }
-    if (lines.length) { filersChanged++; cells += lines.filter((l) => !l.startsWith("NET ")).length; for (const l of lines) console.log(l); }
+    // MIX: a debt series that reads a primary concept on some dates and a
+    // fallback on others -- the two may not measure the same debt.
+    const FB = new Set(["CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(NEW.COMBINED_DEBT ?? {})]);
+    for (const f of ["shortTermDebt", "longTermDebt"]) {
+      const tags = new Set(b.instants.map((p) => p.values[keys.indexOf(f)]?.tag).filter(Boolean));
+      const fb = [...tags].filter((t) => FB.has(t)), pr = [...tags].filter((t) => !FB.has(t));
+      if (fb.length && pr.length && lines.length) lines.push(`MIX ${sym}\t${f}\t${pr.join(",")} + ${fb.join(",")}`);
+    }
+    if (lines.length) { filersChanged++; cells += lines.filter((l) => !/^(NET|MIX) /.test(l)).length; for (const l of lines) console.log(l); }
   } catch (e) { failed++; console.log(`ERR ${sym}: ${e.message}`); }
   await new Promise((r) => setTimeout(r, 250));
 }
