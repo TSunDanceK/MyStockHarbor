@@ -609,6 +609,8 @@ const TASKS = {
   // One field's cells beside every raw companyfacts row of the named concepts. Read-only.
   // SYMBOLS="SCHW,MET|netIncome|NetIncomeLoss,ProfitLoss|cover,qrows"
   "field-trace": { script: "scripts/field-trace-probe.mjs", args: () => [], needsTypescript: true },
+  // CENSUS (audit r3, NEE): filers whose RegulatedAndUnregulatedOperatingRevenue sits >3% above the contract line. Read-only (manifest GET).
+  "write-utility-revenue-census": { script: "scripts/utility-revenue-census.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-earnings-audit-r1-scan": {
     script: "scripts/earnings-audit-r1-scan.mjs",
     args: () => [],
