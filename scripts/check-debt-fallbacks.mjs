@@ -119,7 +119,7 @@ console.log("\n3. mutation");
   check("MUTATION: fallbacks compete with primaries → CVX's 10-K reads the newer concept's 24,541, caught", near((await load(a)).extractCompanyFacts("CVX", CVXB).instants.find((p) => p.end === "2025-12-31")?.values?.[LT]?.val ?? null, 24541));
 }
 {
-  const a = extractRaw.replace("if (!primaryTags.size) return rows;", "return rows;");
+  const a = extractRaw.replace("if (!newestFallback || newestFallback <= yearAfter) return primary;", "");
   check("the fourth mutation is applied", a !== extractRaw);
   check("MUTATION: filer-level gate off → AAT's Q1 reads 75, caught", near((await load(a)).extractCompanyFacts("AAT", AAT).instants.find((p) => p.end === "2026-03-31")?.values?.[LT]?.val ?? null, 75));
 }

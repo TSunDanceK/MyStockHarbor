@@ -1305,8 +1305,8 @@ function primaryFirst<T extends { tag: string }>(cands: T[]): T[] {
   return primary.length ? primary : cands;
 }
 /**
- * AND ONLY FOR A FILER WITH NO PRIMARY CONCEPT AT ALL, so a series never
- * interleaves two measures: AAT's 10-K LongTermDebt is 1.70B and its 10-Qs
+ * AND NEVER INTERLEAVED WITH A PRIMARY CONCEPT (switchOver), so a series never
+ * mixes two measures: AAT's 10-K LongTermDebt is 1.70B and its 10-Qs
  * tag only NotesPayable 75M, which read the quarters as net cash. The one
  * exception is the same figure tagged two ways: CVX's 10-K files
  * LongTermDebtAndCapitalLeaseObligations and its 10-Qs the IncludingCurrent-
@@ -1316,16 +1316,28 @@ const SAME_MEASURE: Readonly<Record<string, string>> = {
   LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: "LongTermDebtAndCapitalLeaseObligations",
 };
 function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[]): T[] {
-  // CURRENT HISTORY ONLY: a primary concept last filed years ago (O's and
-  // TRV's) is not the series the page shows, so it does not hold back the
-  // concept the filer tags now. Three years before its newest figure.
-  const newest = rows.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
-  const since = newest ? `${Number(newest.slice(0, 4)) - 3}${newest.slice(4)}` : "";
-  const primaryTags = new Set(
-    rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag) && (r.row.end ?? "") >= since).map((r) => r.tag)
-  );
-  if (!primaryTags.size) return rows;
-  return rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag) || primaryTags.has(SAME_MEASURE[r.tag] ?? ""));
+  const primaryTags = new Set(rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag)).map((r) => r.tag));
+  // The same figure tagged the other way counts with the primary it mirrors.
+  return switchOver(rows, (t) => DEBT_FALLBACK_TAGS.has(t) && !primaryTags.has(SAME_MEASURE[t] ?? ""));
+}
+
+/**
+ * A FILER THAT CHANGED CONCEPTS, NOT ONE THAT TAGS TWO. Where the newest
+ * fallback figure is more than a year past the newest primary one, the filer
+ * switched (O and TRV filed a primary debt line years ago and only the
+ * fallback since): the primary is read up to its last date and the fallback
+ * after it, never interleaved. Otherwise the primary is current and the
+ * fallback is dropped (AAT). A filer with no primary reads the fallback.
+ */
+export function switchOver<T extends { tag: string; row: FactRow }>(rows: T[], isFallback: (tag: string) => boolean): T[] {
+  const newestOf = (rs: T[]) => rs.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
+  const primary = rows.filter((r) => !isFallback(r.tag));
+  if (!primary.length) return rows;
+  const lastPrimary = newestOf(primary);
+  const newestFallback = newestOf(rows.filter((r) => isFallback(r.tag)));
+  const yearAfter = lastPrimary ? `${Number(lastPrimary.slice(0, 4)) + 1}${lastPrimary.slice(4)}` : "";
+  if (!newestFallback || newestFallback <= yearAfter) return primary;
+  return rows.filter((r) => !isFallback(r.tag) || (r.row.end ?? "") > lastPrimary);
 }
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
