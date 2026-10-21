@@ -905,6 +905,41 @@ export function resolve(
  * Anchoring on the newest period keeps those columns and still fixes one
  * measure per filer. It is now the mutation, not the rule.
  */
+/**
+ * LAST-RESORT CONCEPTS USED ONLY BY A FILER THAT FILES NOTHING ELSE for the
+ * field (audit r3). LIN files share-based pay only as the note line,
+ * AllocatedShareBasedCompensationExpense; a filer that files the cash-flow
+ * add-back on any period keeps it everywhere, so the note line never
+ * overwrites or interleaves with it (the per-period dry run moved 1,433 filed
+ * cells and filled 2,373 gaps across ~700 filers that way).
+ */
+const FILER_LEVEL_FALLBACKS: Readonly<Record<string, readonly string[]>> = {
+  shareBasedCompensation: ["AllocatedShareBasedCompensationExpense"],
+};
+function filerLevelFallback<T extends { tag: string; row: FactRow }>(key: string, rows: T[]): T[] {
+  const fb = FILER_LEVEL_FALLBACKS[key];
+  return fb ? switchOver(rows, (t) => fb.includes(t)) : rows;
+}
+
+/**
+ * A FILER THAT CHANGED CONCEPTS, NOT ONE THAT TAGS TWO. Where the newest
+ * fallback figure is more than a year past the newest primary one, the filer
+ * switched (LIN tagged ShareBasedCompensation until Q3 2023, then only the
+ * note line): the primary is read up to its last date and the fallback after
+ * it, never interleaved. Otherwise the primary is current and the fallback is
+ * dropped. A filer with no primary at all reads the fallback throughout.
+ */
+export function switchOver<T extends { tag: string; row: FactRow }>(rows: T[], isFallback: (tag: string) => boolean): T[] {
+  const newestOf = (rs: T[]) => rs.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
+  const primary = rows.filter((r) => !isFallback(r.tag));
+  if (!primary.length) return rows;
+  const lastPrimary = newestOf(primary);
+  const newestFallback = newestOf(rows.filter((r) => isFallback(r.tag)));
+  const yearAfter = lastPrimary ? `${Number(lastPrimary.slice(0, 4)) + 1}${lastPrimary.slice(4)}` : "";
+  if (!newestFallback || newestFallback <= yearAfter) return primary;
+  return rows.filter((r) => !isFallback(r.tag) || (r.row.end ?? "") > lastPrimary);
+}
+
 export function preferredTag(
   candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]
 ): string | null {
@@ -1558,7 +1593,7 @@ function extractCompanyFactsWith(
   const preferred = new Map<string, string | null>();
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    const all = rowsForField(facts, field, refusedUnits, currency);
+    const all = filerLevelFallback(field.key, rowsForField(facts, field, refusedUnits, currency));
     for (const c of all) {
       const k = periodKey(c.row);
       const list = bucket.get(k);

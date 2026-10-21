@@ -455,7 +455,10 @@ const CASH_FLOW: FieldDef[] = ([
   // spellings of one, and three filers in 119 file both on a still-stored period
   // and disagree by up to 78.9%.
   { key: "capex", chain: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"], unit: "USD", oneConceptPerFiler: true },
-  { key: "shareBasedCompensation", chain: ["ShareBasedCompensation"], unit: "USD" },
+  // AllocatedShareBasedCompensationExpense is the same expense as disclosed in
+  // the notes, not the cash-flow add-back; ranked last so a filer that files the
+  // add-back is unchanged (audit r3: LIN, 164M FY2025, files only the note line).
+  { key: "shareBasedCompensation", chain: ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"], unit: "USD" },
   { key: "depreciationAndAmortization", chain: ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet", "DepreciationAndAmortization"], unit: "USD" },
   { key: "investingCashFlow", chain: ["NetCashProvidedByUsedInInvestingActivities", "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations"], unit: "USD" },
   { key: "financingCashFlow", chain: ["NetCashProvidedByUsedInFinancingActivities", "NetCashProvidedByUsedInFinancingActivitiesContinuingOperations"], unit: "USD" },
