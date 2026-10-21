@@ -346,6 +346,20 @@
    ],
    "source": "0001628280-26-008114"
   },
+  "SHOP": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "FounderShareMember": 0
+   },
+   "evidence": [
+    "The Class B restricted voting shares are convertible into Class A subordinate voting shares on a one -for-one basis at the option of the holder.",
+    "Net Income per Share The Company applies the two-class method to calculate its basic and diluted net loss per share as Class A subordinate voting shares and Class B restricted voting shares are participating securities with equal participation rights and are entitled to receive dividends on a share for share basis.",
+    "The Founder share cannot convert into either Class A subordinate voting shares or Class B restricted voting shares."
+   ],
+   "source": "0001594805-26-000007"
+  },
   "SPCX": {
    "listed": "CommonClassAMember",
    "weights": {

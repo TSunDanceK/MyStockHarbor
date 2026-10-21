@@ -104,6 +104,18 @@ check("V reads its rates from the filing: every rate class is null in the map", 
 check("MUTATION: a fixed V rate written back into the map → caught",
   !validEntry({ ...MAP.V, weights: { ...MAP.V.weights, CommonClassB1Member: 1.5445 } }));
 
+// SHOP: its newest 10-Q cover as filed (relay multiclass-cover-instance; 10-Q
+// 0001594805-26-000047): Class A, Class B and the one Founder share, which is
+// on the filer's own namespace. The Founder share carries no economic weight.
+{
+  const cover = (date, rows) => M.parseCoverClasses(rows.map(([m, v], i) => ctx(`s${i}`, date, [[AX, m]]) + fact(`s${i}`, v)).join("\n"));
+  const SHOP = ["2026-07-31", [["us-gaap:CommonClassAMember", "1208570347"], ["us-gaap:CommonClassBMember", "78073584"], ["shop:FounderShareMember", "1"]]];
+  const got = MAP.SHOP && M.coverFromClasses(cover(...SHOP), MAP.SHOP, {});
+  check("SHOP: Class A + Class B on 2026-07-31 = 1,286,643,931 (Founder share at weight 0)", got?.ok && got.cover.val === 1286643931 && got.cover.asOf === "2026-07-31", JSON.stringify(got));
+  const noFounder = { ...MAP.SHOP, weights: { CommonClassAMember: 1, CommonClassBMember: 1 } };
+  check("MUTATION: SHOP's entry without the Founder share → the cover refuses", !M.coverFromClasses(cover(...SHOP), noFounder, {}).ok);
+}
+
 console.log("\n5. filing-stated rates (V)");
 {
   const R = await lift([grabFunction(SRC, "parseClassRates"), grabFunction(SRC, "withFilingRates"), grabFunction(SRC, "parseCoverClasses"), grabFunction(SRC, "coverFromClasses"),
