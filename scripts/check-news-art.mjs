@@ -1423,11 +1423,11 @@ check(
   tags.GENERIC_FALLBACK_NAMES.join(", ")
 );
 check(
-  "/headlines: in the REAL library the generic set is 16 images, and every file (and its -sm) ships",
+  "/headlines: in the REAL library the generic set is 18 images, and every file (and its -sm) ships",
   (() => {
     const real = Object.keys(JSON.parse(fs.readFileSync(path.join(ROOT, "public/news-art/manifest-v2.json"), "utf8")))
       .filter((n) => /^(any-macro|exchanges-any)-/.test(n));
-    return real.length === 16 && real.every((n) => fs.existsSync(path.join(ROOT, `public/news-art/${n}.webp`)) && fs.existsSync(path.join(ROOT, `public/news-art/${n}-sm.webp`)));
+    return real.length === 18 && real.every((n) => fs.existsSync(path.join(ROOT, `public/news-art/${n}.webp`)) && fs.existsSync(path.join(ROOT, `public/news-art/${n}-sm.webp`)));
   })(),
   "a generic name without its file is a broken image on every card that falls back"
 );

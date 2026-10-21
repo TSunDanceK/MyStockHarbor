@@ -31,6 +31,7 @@ const SYMBOLS = (process.env.SYMBOLS || process.argv[2] || "KEY,CRCL,CM,GIB,XEL,
 const { NEW, OLD } = await loadMainAndBranch();
 
 const cikMap = JSON.parse(fs.readFileSync("data/cik-map.json", "utf8"));
+const SHARE_CLASSES = JSON.parse(fs.readFileSync("data/sec/share-classes.json", "utf8")).entries ?? {};
 const tickers = JSON.parse(fs.readFileSync("data/sec/company-tickers.json", "utf8"));
 const cikOf = (sym) => {
   if (cikMap[sym]) return String(cikMap[sym]).padStart(10, "0");
@@ -52,7 +53,11 @@ const pad = (s, n) => String(s).padEnd(n);
 const SEC_CONCEPTS = [
   "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "RevenuesNetOfInterestExpense",
   "InterestIncomeExpenseNet", "NoninterestIncome", "RegulatedAndUnregulatedOperatingRevenue",
-  "RegulatedOperatingRevenue", "ElectricUtilityRevenue", "NetIncomeLoss", "EarningsPerShareDiluted",
+  "RegulatedOperatingRevenue", "ElectricUtilityRevenue", "RevenueFromContractWithCustomerIncludingAssessedTax",
+  // KHC tags only the including-tax contract line; CAT's 10-K tags its profit as
+  // ProfitLoss and NetIncomeLossAvailableToCommonStockholdersBasic, never
+  // NetIncomeLoss (audit round 2 printed no SEC figure for either).
+  "NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic", "EarningsPerShareDiluted",
 ];
 function secAnnual(facts) {
   const out = new Map();
@@ -141,7 +146,11 @@ for (const symbol of SYMBOLS) {
     for (const note of nb.ex.notes ?? []) if (/^revenue/.test(note)) console.log(`  note: ${note.slice(0, 240)}`);
     const c = nb.set.cover;
     console.log(`  untagged (nt): ${(nb.set.nt ?? []).filter((k) => /revenue|eps/i.test(k)).join(", ") || "none of revenue/EPS"} · epsReason ${nb.view?.epsReason ?? "null"}`);
-    console.log(`  cover: ${c ? `val ${c.val ?? "—"} asOf ${c.asOf ?? "—"} candidates ${c.candidates?.length ?? 0}` : "none"}`);
+    // A MULTI-CLASS FILER'S COVER IS SUMMED FROM ITS FILING (secCoverClasses), which
+    // this lift does not fetch: NKE's 2015 undimensioned row printed here while
+    // production stores the per-class sum. Say so rather than print a stale count bare.
+    const classes = SHARE_CLASSES[symbol] ? " (multi-class: production sums the filing's per-class cover, data/sec/share-classes.json; not fetched here)" : "";
+    console.log(`  cover: ${c ? `val ${c.val ?? "—"} asOf ${c.asOf ?? "—"} candidates ${c.candidates?.length ?? 0}` : "none"}${classes}`);
   } catch (e) {
     console.log(`  FAILED: ${e?.name}: ${String(e?.message).slice(0, 300)}`);
     for (const l of String(e?.stack ?? "").split("\n").slice(1, 5)) console.log(`    ${l.trim()}`);

@@ -155,6 +155,46 @@
    "serial": "28"
   }
  },
+ "aerospace-defence-any-05": {
+  "primary": [
+   "aerospace-defence"
+  ],
+  "related": [
+   "airlines",
+   "rockets-space",
+   "satellites",
+   "machinery"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "11"
+  }
+ },
+ "aerospace-defence-any-06": {
+  "primary": [
+   "aerospace-defence"
+  ],
+  "related": [
+   "airlines",
+   "rockets-space",
+   "satellites",
+   "machinery"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "12"
+  }
+ },
  "agriculture-any-01": {
   "primary": [
    "agriculture"
@@ -229,6 +269,63 @@
   "source": {
    "batch": "batch-03",
    "serial": "84"
+  }
+ },
+ "agriculture-any-05": {
+  "primary": [
+   "agriculture"
+  ],
+  "related": [
+   "packaged-food",
+   "chemicals",
+   "machinery"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "53"
+  }
+ },
+ "agriculture-any-06": {
+  "primary": [
+   "agriculture"
+  ],
+  "related": [
+   "packaged-food",
+   "chemicals",
+   "machinery"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "54"
+  }
+ },
+ "agriculture-any-07": {
+  "primary": [
+   "agriculture"
+  ],
+  "related": [
+   "packaged-food",
+   "chemicals",
+   "machinery"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "55"
   }
  },
  "ai-compute-any-01": {
@@ -311,6 +408,46 @@
    "serial": "12"
   }
  },
+ "ai-compute-any-05": {
+  "primary": [
+   "ai-compute"
+  ],
+  "related": [
+   "chips",
+   "cloud",
+   "software",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "6"
+  }
+ },
+ "ai-compute-any-06": {
+  "primary": [
+   "ai-compute"
+  ],
+  "related": [
+   "chips",
+   "cloud",
+   "software",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "26"
+  }
+ },
  "airlines-any-01": {
   "primary": [
    "airlines"
@@ -383,6 +520,24 @@
    "serial": "36"
   }
  },
+ "airlines-any-05": {
+  "primary": [
+   "airlines"
+  ],
+  "related": [
+   "aerospace-defence",
+   "hotels-resorts"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "8"
+  }
+ },
  "any-analyst-01": {
   "primary": [],
   "related": [
@@ -447,6 +602,22 @@
    "serial": "16"
   }
  },
+ "any-analyst-05": {
+  "primary": [],
+  "related": [
+   "finance",
+   "guidance"
+  ],
+  "motif": [
+   "analyst"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "83"
+  }
+ },
  "any-cash-01": {
   "primary": [],
   "related": [
@@ -509,6 +680,22 @@
   "source": {
    "batch": "batch-06",
    "serial": "08"
+  }
+ },
+ "any-cash-05": {
+  "primary": [],
+  "related": [
+   "finance",
+   "earnings"
+  ],
+  "motif": [
+   "cash"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "7"
   }
  },
  "any-contract-01": {
@@ -639,6 +826,22 @@
    "serial": "12"
   }
  },
+ "any-deal-05": {
+  "primary": [],
+  "related": [
+   "finance",
+   "partnership"
+  ],
+  "motif": [
+   "deal"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "89"
+  }
+ },
  "any-earnings-01": {
   "primary": [],
   "related": [
@@ -767,6 +970,22 @@
    "serial": "24"
   }
  },
+ "any-earnings-09": {
+  "primary": [],
+  "related": [
+   "finance",
+   "results"
+  ],
+  "motif": [
+   "earnings"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "2"
+  }
+ },
  "any-filing-01": {
   "primary": [],
   "related": [
@@ -831,6 +1050,22 @@
    "serial": "20"
   }
  },
+ "any-filing-05": {
+  "primary": [],
+  "related": [
+   "legal",
+   "earnings"
+  ],
+  "motif": [
+   "filing"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "85"
+  }
+ },
  "any-guidance-01": {
   "primary": [],
   "related": [
@@ -893,6 +1128,38 @@
   "source": {
    "batch": "batch-06",
    "serial": "36"
+  }
+ },
+ "any-guidance-05": {
+  "primary": [],
+  "related": [
+   "analyst",
+   "macro"
+  ],
+  "motif": [
+   "guidance"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "30"
+  }
+ },
+ "any-guidance-06": {
+  "primary": [],
+  "related": [
+   "analyst",
+   "macro"
+  ],
+  "motif": [
+   "guidance"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "88"
   }
  },
  "any-ipo-01": {
@@ -1147,6 +1414,21 @@
    "serial": "56"
   }
  },
+ "any-leadership-05": {
+  "primary": [],
+  "related": [
+   "jobs"
+  ],
+  "motif": [
+   "leadership"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "87"
+  }
+ },
  "any-legal-01": {
   "primary": [],
   "related": [
@@ -1205,6 +1487,36 @@
   "source": {
    "batch": "batch-06",
    "serial": "24"
+  }
+ },
+ "any-legal-05": {
+  "primary": [],
+  "related": [
+   "filing"
+  ],
+  "motif": [
+   "legal"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "1"
+  }
+ },
+ "any-legal-06": {
+  "primary": [],
+  "related": [
+   "filing"
+  ],
+  "motif": [
+   "legal"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "86"
   }
  },
  "any-macro-01": {
@@ -1335,6 +1647,38 @@
    "serial": "04"
   }
  },
+ "any-macro-09": {
+  "primary": [],
+  "related": [
+   "guidance",
+   "utilities-grid"
+  ],
+  "motif": [
+   "macro"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "3"
+  }
+ },
+ "any-macro-10": {
+  "primary": [],
+  "related": [
+   "guidance",
+   "utilities-grid"
+  ],
+  "motif": [
+   "macro"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "90"
+  }
+ },
  "any-partnership-01": {
   "primary": [],
   "related": [
@@ -1393,6 +1737,21 @@
   "source": {
    "batch": "batch-06",
    "serial": "52"
+  }
+ },
+ "any-partnership-05": {
+  "primary": [],
+  "related": [
+   "deal"
+  ],
+  "motif": [
+   "partnership"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "84"
   }
  },
  "any-split-01": {
@@ -1457,6 +1816,22 @@
   "source": {
    "batch": "batch-06",
    "serial": "60"
+  }
+ },
+ "any-split-05": {
+  "primary": [],
+  "related": [
+   "deal",
+   "earnings"
+  ],
+  "motif": [
+   "split"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "28"
   }
  },
  "any-supply-01": {
@@ -1525,6 +1900,23 @@
   "source": {
    "batch": "batch-06",
    "serial": "48"
+  }
+ },
+ "any-supply-05": {
+  "primary": [],
+  "related": [
+   "shipping",
+   "trucking-logistics",
+   "machinery"
+  ],
+  "motif": [
+   "supply"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "43"
   }
  },
  "apparel-any-01": {
@@ -1751,6 +2143,25 @@
    "serial": "24"
   }
  },
+ "autos-any-05": {
+  "primary": [
+   "autos"
+  ],
+  "related": [
+   "ev",
+   "trucking-logistics",
+   "steel"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "13"
+  }
+ },
  "banks-any-01": {
   "primary": [
    "banks"
@@ -1827,6 +2238,44 @@
    "serial": "04"
   }
  },
+ "banks-any-05": {
+  "primary": [
+   "banks"
+  ],
+  "related": [
+   "finance",
+   "fintech-payments",
+   "investment-banks"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "31"
+  }
+ },
+ "banks-any-06": {
+  "primary": [
+   "banks"
+  ],
+  "related": [
+   "finance",
+   "fintech-payments",
+   "investment-banks"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "32"
+  }
+ },
  "beverages-any-01": {
   "primary": [
    "beverages"
@@ -1897,6 +2346,24 @@
   "source": {
    "batch": "batch-03",
    "serial": "52"
+  }
+ },
+ "beverages-any-05": {
+  "primary": [
+   "beverages"
+  ],
+  "related": [
+   "restaurants",
+   "packaged-food"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "78"
   }
  },
  "biotech-any-01": {
@@ -1973,6 +2440,44 @@
   "source": {
    "batch": "batch-01",
    "serial": "72"
+  }
+ },
+ "biotech-any-05": {
+  "primary": [
+   "biotech"
+  ],
+  "related": [
+   "pharma",
+   "lab-diagnostics",
+   "healthcare"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "44"
+  }
+ },
+ "biotech-any-06": {
+  "primary": [
+   "biotech"
+  ],
+  "related": [
+   "pharma",
+   "lab-diagnostics",
+   "healthcare"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "49"
   }
  },
  "casinos-any-01": {
@@ -2117,6 +2622,25 @@
   "source": {
    "batch": "batch-03",
    "serial": "16"
+  }
+ },
+ "chemicals-any-05": {
+  "primary": [
+   "chemicals"
+  ],
+  "related": [
+   "refining",
+   "pharma",
+   "agriculture"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "56"
   }
  },
  "chip-equipment-any-01": {
@@ -2279,6 +2803,46 @@
    "serial": "89"
   }
  },
+ "chips-any-05": {
+  "primary": [
+   "chips"
+  ],
+  "related": [
+   "semiconductors",
+   "ai-compute",
+   "electronics",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "4"
+  }
+ },
+ "chips-any-06": {
+  "primary": [
+   "chips"
+  ],
+  "related": [
+   "semiconductors",
+   "ai-compute",
+   "electronics",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "5"
+  }
+ },
  "cloud-any-01": {
   "primary": [
    "cloud"
@@ -2359,6 +2923,26 @@
    "serial": "16"
   }
  },
+ "cloud-any-05": {
+  "primary": [
+   "cloud"
+  ],
+  "related": [
+   "software",
+   "ai-compute",
+   "internet-platform",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "27"
+  }
+ },
  "construction-any-01": {
   "primary": [
    "construction"
@@ -2433,6 +3017,44 @@
   "source": {
    "batch": "batch-02",
    "serial": "56"
+  }
+ },
+ "construction-any-05": {
+  "primary": [
+   "construction"
+  ],
+  "related": [
+   "machinery",
+   "homebuilders",
+   "steel"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "59"
+  }
+ },
+ "construction-any-06": {
+  "primary": [
+   "construction"
+  ],
+  "related": [
+   "machinery",
+   "homebuilders",
+   "steel"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "62"
   }
  },
  "consumer-electronics-any-01": {
@@ -2511,6 +3133,44 @@
    "serial": "32"
   }
  },
+ "consumer-electronics-any-05": {
+  "primary": [
+   "consumer-electronics"
+  ],
+  "related": [
+   "phones",
+   "gaming",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "71"
+  }
+ },
+ "consumer-electronics-any-06": {
+  "primary": [
+   "consumer-electronics"
+  ],
+  "related": [
+   "phones",
+   "gaming",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "73"
+  }
+ },
  "cruise-lines-any-01": {
   "primary": [
    "cruise-lines"
@@ -2581,6 +3241,24 @@
   "source": {
    "batch": "batch-05",
    "serial": "01"
+  }
+ },
+ "cruise-lines-any-05": {
+  "primary": [
+   "cruise-lines"
+  ],
+  "related": [
+   "hotels-resorts",
+   "shipping"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "80"
   }
  },
  "crypto-any-01": {
@@ -2727,6 +3405,24 @@
    "serial": "20"
   }
  },
+ "crypto-any-09": {
+  "primary": [
+   "crypto"
+  ],
+  "related": [
+   "fintech-payments",
+   "finance"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "29"
+  }
+ },
  "cybersecurity-any-01": {
   "primary": [
    "cybersecurity"
@@ -2803,6 +3499,44 @@
    "serial": "24"
   }
  },
+ "cybersecurity-any-05": {
+  "primary": [
+   "cybersecurity"
+  ],
+  "related": [
+   "software",
+   "cloud",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "24"
+  }
+ },
+ "cybersecurity-any-06": {
+  "primary": [
+   "cybersecurity"
+  ],
+  "related": [
+   "software",
+   "cloud",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "25"
+  }
+ },
  "ecommerce-any-01": {
   "primary": [
    "ecommerce"
@@ -2877,6 +3611,25 @@
   "source": {
    "batch": "batch-01",
    "serial": "40"
+  }
+ },
+ "ecommerce-any-05": {
+  "primary": [
+   "ecommerce"
+  ],
+  "related": [
+   "retail-stores",
+   "trucking-logistics",
+   "internet-platform"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "37"
   }
  },
  "education-any-01": {
@@ -3025,6 +3778,44 @@
   "source": {
    "batch": "batch-03",
    "serial": "28"
+  }
+ },
+ "ev-any-05": {
+  "primary": [
+   "ev"
+  ],
+  "related": [
+   "autos",
+   "utilities-grid",
+   "chemicals"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "14"
+  }
+ },
+ "ev-any-06": {
+  "primary": [
+   "ev"
+  ],
+  "related": [
+   "autos",
+   "utilities-grid",
+   "chemicals"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "15"
   }
  },
  "exchanges-any-01": {
@@ -3259,6 +4050,26 @@
    "serial": "48"
   }
  },
+ "fintech-payments-any-05": {
+  "primary": [
+   "fintech-payments"
+  ],
+  "related": [
+   "banks",
+   "software",
+   "crypto",
+   "finance"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "35"
+  }
+ },
  "gaming-any-01": {
   "primary": [
    "gaming"
@@ -3333,6 +4144,25 @@
   "source": {
    "batch": "batch-03",
    "serial": "91"
+  }
+ },
+ "gaming-any-05": {
+  "primary": [
+   "gaming"
+  ],
+  "related": [
+   "consumer-electronics",
+   "streaming-media",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "69"
   }
  },
  "grocery-any-01": {
@@ -3487,6 +4317,44 @@
    "serial": "80"
   }
  },
+ "homebuilders-any-05": {
+  "primary": [
+   "homebuilders"
+  ],
+  "related": [
+   "construction",
+   "insurance",
+   "reit-commercial"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "60"
+  }
+ },
+ "homebuilders-any-06": {
+  "primary": [
+   "homebuilders"
+  ],
+  "related": [
+   "construction",
+   "insurance",
+   "reit-commercial"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "61"
+  }
+ },
  "hospitals-any-01": {
   "primary": [
    "hospitals"
@@ -3557,6 +4425,42 @@
   "source": {
    "batch": "batch-01",
    "serial": "80"
+  }
+ },
+ "hospitals-any-05": {
+  "primary": [
+   "hospitals"
+  ],
+  "related": [
+   "medtech-devices",
+   "healthcare"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "48"
+  }
+ },
+ "hospitals-any-06": {
+  "primary": [
+   "hospitals"
+  ],
+  "related": [
+   "medtech-devices",
+   "healthcare"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "52"
   }
  },
  "hotels-resorts-any-01": {
@@ -3635,6 +4539,25 @@
    "serial": "60"
   }
  },
+ "hotels-resorts-any-05": {
+  "primary": [
+   "hotels-resorts"
+  ],
+  "related": [
+   "cruise-lines",
+   "airlines",
+   "restaurants"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "79"
+  }
+ },
  "insurance-any-01": {
   "primary": [
    "insurance"
@@ -3709,6 +4632,44 @@
   "source": {
    "batch": "batch-02",
    "serial": "12"
+  }
+ },
+ "insurance-any-05": {
+  "primary": [
+   "insurance"
+  ],
+  "related": [
+   "finance",
+   "banks",
+   "homebuilders"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "81"
+  }
+ },
+ "insurance-any-06": {
+  "primary": [
+   "insurance"
+  ],
+  "related": [
+   "finance",
+   "banks",
+   "homebuilders"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "82"
   }
  },
  "internet-platform-any-01": {
@@ -3871,6 +4832,26 @@
    "serial": "08"
   }
  },
+ "investment-banks-any-05": {
+  "primary": [
+   "investment-banks"
+  ],
+  "related": [
+   "banks",
+   "asset-management",
+   "exchanges",
+   "finance"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "33"
+  }
+ },
  "lab-diagnostics-any-01": {
   "primary": [
    "lab-diagnostics"
@@ -3945,6 +4926,25 @@
   "source": {
    "batch": "batch-01",
    "serial": "84"
+  }
+ },
+ "lab-diagnostics-any-05": {
+  "primary": [
+   "lab-diagnostics"
+  ],
+  "related": [
+   "biotech",
+   "pharma",
+   "healthcare"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "46"
   }
  },
  "luxury-any-01": {
@@ -4099,6 +5099,44 @@
    "serial": "52"
   }
  },
+ "machinery-any-05": {
+  "primary": [
+   "machinery"
+  ],
+  "related": [
+   "construction",
+   "chip-equipment",
+   "mining-industrial"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "57"
+  }
+ },
+ "machinery-any-06": {
+  "primary": [
+   "machinery"
+  ],
+  "related": [
+   "construction",
+   "chip-equipment",
+   "mining-industrial"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "58"
+  }
+ },
  "medtech-devices-any-01": {
   "primary": [
    "medtech-devices"
@@ -4169,6 +5207,42 @@
   "source": {
    "batch": "batch-01",
    "serial": "76"
+  }
+ },
+ "medtech-devices-any-05": {
+  "primary": [
+   "medtech-devices"
+  ],
+  "related": [
+   "hospitals",
+   "healthcare"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "47"
+  }
+ },
+ "medtech-devices-any-06": {
+  "primary": [
+   "medtech-devices"
+  ],
+  "related": [
+   "hospitals",
+   "healthcare"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "50"
   }
  },
  "mining-industrial-any-01": {
@@ -4247,6 +5321,25 @@
    "serial": "08"
   }
  },
+ "mining-industrial-any-05": {
+  "primary": [
+   "mining-industrial"
+  ],
+  "related": [
+   "mining-precious",
+   "steel",
+   "machinery"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "63"
+  }
+ },
  "mining-precious-any-01": {
   "primary": [
    "mining-precious"
@@ -4319,6 +5412,24 @@
    "serial": "04"
   }
  },
+ "mining-precious-any-05": {
+  "primary": [
+   "mining-precious"
+  ],
+  "related": [
+   "mining-industrial",
+   "finance"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "64"
+  }
+ },
  "nuclear-any-01": {
   "primary": [
    "nuclear"
@@ -4385,6 +5496,23 @@
   "source": {
    "batch": "batch-02",
    "serial": "92"
+  }
+ },
+ "nuclear-any-05": {
+  "primary": [
+   "nuclear"
+  ],
+  "related": [
+   "utilities-grid"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "23"
   }
  },
  "oil-gas-upstream-any-01": {
@@ -4540,6 +5668,25 @@
    "serial": "12"
   }
  },
+ "oil-gas-upstream-any-09": {
+  "primary": [
+   "oil-gas-upstream"
+  ],
+  "related": [
+   "refining",
+   "pipelines",
+   "oilfield-services"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "16"
+  }
+ },
  "oilfield-services-any-01": {
   "primary": [
    "oilfield-services"
@@ -4610,6 +5757,24 @@
   "source": {
    "batch": "batch-02",
    "serial": "80"
+  }
+ },
+ "oilfield-services-any-05": {
+  "primary": [
+   "oilfield-services"
+  ],
+  "related": [
+   "oil-gas-upstream",
+   "machinery"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "17"
   }
  },
  "packaged-food-any-01": {
@@ -4917,6 +6082,25 @@
    "serial": "28"
   }
  },
+ "pharma-any-09": {
+  "primary": [
+   "pharma"
+  ],
+  "related": [
+   "biotech",
+   "lab-diagnostics",
+   "healthcare"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "51"
+  }
+ },
  "phones-any-01": {
   "primary": [
    "phones"
@@ -4991,6 +6175,25 @@
   "source": {
    "batch": "batch-01",
    "serial": "28"
+  }
+ },
+ "phones-any-05": {
+  "primary": [
+   "phones"
+  ],
+  "related": [
+   "consumer-electronics",
+   "telecom",
+   "technology"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "72"
   }
  },
  "pipelines-any-01": {
@@ -5069,6 +6272,25 @@
    "serial": "76"
   }
  },
+ "pipelines-any-05": {
+  "primary": [
+   "pipelines"
+  ],
+  "related": [
+   "oil-gas-upstream",
+   "refining",
+   "utilities-grid"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "19"
+  }
+ },
  "railroads-any-01": {
   "primary": [
    "railroads"
@@ -5139,6 +6361,24 @@
   "source": {
    "batch": "batch-02",
    "serial": "40"
+  }
+ },
+ "railroads-any-05": {
+  "primary": [
+   "railroads"
+  ],
+  "related": [
+   "trucking-logistics",
+   "shipping"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "41"
   }
  },
  "refining-any-01": {
@@ -5293,6 +6533,25 @@
    "serial": "08"
   }
  },
+ "refining-any-09": {
+  "primary": [
+   "refining"
+  ],
+  "related": [
+   "oil-gas-upstream",
+   "pipelines",
+   "chemicals"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "18"
+  }
+ },
  "reit-commercial-any-01": {
   "primary": [
    "reit-commercial"
@@ -5363,6 +6622,24 @@
   "source": {
    "batch": "batch-03",
    "serial": "72"
+  }
+ },
+ "reit-commercial-any-05": {
+  "primary": [
+   "reit-commercial"
+  ],
+  "related": [
+   "investment-banks",
+   "construction"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "34"
   }
  },
  "reit-datacenter-any-01": {
@@ -5517,6 +6794,25 @@
    "serial": "44"
   }
  },
+ "restaurants-any-05": {
+  "primary": [
+   "restaurants"
+  ],
+  "related": [
+   "packaged-food",
+   "beverages",
+   "hotels-resorts"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "77"
+  }
+ },
  "retail-stores-any-01": {
   "primary": [
    "retail-stores"
@@ -5593,6 +6889,25 @@
    "serial": "32"
   }
  },
+ "retail-stores-any-05": {
+  "primary": [
+   "retail-stores"
+  ],
+  "related": [
+   "ecommerce",
+   "apparel",
+   "grocery"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "36"
+  }
+ },
  "rockets-space-any-01": {
   "primary": [
    "rockets-space"
@@ -5663,6 +6978,24 @@
   "source": {
    "batch": "batch-02",
    "serial": "32"
+  }
+ },
+ "rockets-space-any-05": {
+  "primary": [
+   "rockets-space"
+  ],
+  "related": [
+   "satellites",
+   "aerospace-defence"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "10"
   }
  },
  "satellites-any-01": {
@@ -5741,6 +7074,44 @@
    "serial": "56"
   }
  },
+ "satellites-any-05": {
+  "primary": [
+   "satellites"
+  ],
+  "related": [
+   "rockets-space",
+   "telecom",
+   "aerospace-defence"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "9"
+  }
+ },
+ "satellites-any-06": {
+  "primary": [
+   "satellites"
+  ],
+  "related": [
+   "rockets-space",
+   "telecom",
+   "aerospace-defence"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "76"
+  }
+ },
  "shipping-any-01": {
   "primary": [
    "shipping"
@@ -5815,6 +7186,44 @@
   "source": {
    "batch": "batch-02",
    "serial": "48"
+  }
+ },
+ "shipping-any-05": {
+  "primary": [
+   "shipping"
+  ],
+  "related": [
+   "trucking-logistics",
+   "railroads",
+   "oil-gas-upstream"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "39"
+  }
+ },
+ "shipping-any-06": {
+  "primary": [
+   "shipping"
+  ],
+  "related": [
+   "trucking-logistics",
+   "railroads",
+   "oil-gas-upstream"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "40"
   }
  },
  "software-any-01": {
@@ -5965,6 +7374,24 @@
    "serial": "84"
   }
  },
+ "solar-any-05": {
+  "primary": [
+   "solar"
+  ],
+  "related": [
+   "utilities-grid",
+   "wind"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "20"
+  }
+ },
  "staffing-services-any-01": {
   "primary": [
    "staffing-services"
@@ -6113,6 +7540,44 @@
    "serial": "12"
   }
  },
+ "steel-any-05": {
+  "primary": [
+   "steel"
+  ],
+  "related": [
+   "mining-industrial",
+   "construction",
+   "autos"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "65"
+  }
+ },
+ "steel-any-06": {
+  "primary": [
+   "steel"
+  ],
+  "related": [
+   "mining-industrial",
+   "construction",
+   "autos"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "66"
+  }
+ },
  "streaming-media-any-01": {
   "primary": [
    "streaming-media"
@@ -6187,6 +7652,44 @@
   "source": {
    "batch": "batch-01",
    "serial": "60"
+  }
+ },
+ "streaming-media-any-05": {
+  "primary": [
+   "streaming-media"
+  ],
+  "related": [
+   "gaming",
+   "advertising",
+   "internet-platform"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "67"
+  }
+ },
+ "streaming-media-any-06": {
+  "primary": [
+   "streaming-media"
+  ],
+  "related": [
+   "gaming",
+   "advertising",
+   "internet-platform"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "68"
   }
  },
  "telecom-any-01": {
@@ -6265,6 +7768,44 @@
    "serial": "52"
   }
  },
+ "telecom-any-05": {
+  "primary": [
+   "telecom"
+  ],
+  "related": [
+   "phones",
+   "satellites",
+   "utilities-grid"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "74"
+  }
+ },
+ "telecom-any-06": {
+  "primary": [
+   "telecom"
+  ],
+  "related": [
+   "phones",
+   "satellites",
+   "utilities-grid"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "75"
+  }
+ },
  "trucking-logistics-any-01": {
   "primary": [
    "trucking-logistics"
@@ -6339,6 +7880,44 @@
   "source": {
    "batch": "batch-02",
    "serial": "44"
+  }
+ },
+ "trucking-logistics-any-05": {
+  "primary": [
+   "trucking-logistics"
+  ],
+  "related": [
+   "shipping",
+   "railroads",
+   "ecommerce"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "38"
+  }
+ },
+ "trucking-logistics-any-06": {
+  "primary": [
+   "trucking-logistics"
+  ],
+  "related": [
+   "shipping",
+   "railroads",
+   "ecommerce"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "42"
   }
  },
  "utilities-grid-any-01": {
@@ -6419,6 +7998,26 @@
   "source": {
    "batch": "batch-02",
    "serial": "96"
+  }
+ },
+ "utilities-grid-any-05": {
+  "primary": [
+   "utilities-grid"
+  ],
+  "related": [
+   "solar",
+   "wind",
+   "nuclear",
+   "telecom"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "22"
   }
  },
  "waste-recycling-any-01": {
@@ -6563,6 +8162,24 @@
   "source": {
    "batch": "batch-02",
    "serial": "88"
+  }
+ },
+ "wind-any-05": {
+  "primary": [
+   "wind"
+  ],
+  "related": [
+   "utilities-grid",
+   "solar"
+  ],
+  "motif": [
+   "any"
+  ],
+  "tone": "flat",
+  "palette": "green wireframe",
+  "source": {
+   "batch": "batch-09",
+   "serial": "21"
   }
  }
 }
