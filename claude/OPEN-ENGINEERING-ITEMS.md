@@ -81,6 +81,20 @@ Detail: `claude/picker-columns-needed-2026-08-22.md`.
 
 ---
 
+## 7. NEE capex and free cash flow read "Not reported" (held, owner 2026-10-21)
+
+NEE files no capex under either chain concept
+(`PaymentsToAcquirePropertyPlantAndEquipment`,
+`PaymentsToAcquireProductiveAssets`). Its cash-flow statement splits capex
+across company-specific lines (FPL capital expenditures; NEER independent
+power and other investments) under its own `nee:` extension tags, and only the
+investing total (-23,865M FY2025) is in us-gaap. So capex, and free cash flow
+built on it, read "Not reported".
+
+**Decision taken: do not build.** Showing it would need a per-filer ruling
+that sums NEE's own tags, like `REVENUE_TOTAL_RULINGS`. Held at the owner's
+instruction (audit round 3, item 6; PR #951).
+
 ## Closed since this file was started
 
 - **`recencyScore = 100`** — removed. Flat 5.00 on every candidate; that
