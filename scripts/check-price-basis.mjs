@@ -5,7 +5,8 @@
 //   2. earningsPrice: on Tiingo, pickSurfacePrice's pick with its kind and ET
 //      time; off Tiingo, the newest FMP bar as a close; nothing on a miss.
 //   3. pickSurfacePrice carries the print's own ET time.
-//   4. The card prints the label and the hedge; the title prints the same words.
+//   4. The card prints the label and the hedge; the title stays on the last
+//      completed close with no label (owner ruling).
 //   5. Mutants, caught.
 //
 //   node scripts/check-price-basis.mjs
@@ -36,7 +37,8 @@ console.log("1. the words");
 check("a close: Price: close, 20 Oct 2026", B.priceBasisLabel({ kind: "close", date: "2026-10-20", time: null }) === "Price: close, 20 Oct 2026");
 check("a trade: Price: last trade 14:05 ET", B.priceBasisLabel({ kind: "trade", date: "2026-10-21", time: "14:05" }) === "Price: last trade 14:05 ET");
 check("a trade with no time is dated, not called a close", B.priceBasisWords({ kind: "trade", date: "2026-10-21", time: null }) === "last trade, 21 Oct 2026");
-check("the hedge names the single exchange and the lag", /single exchange \(IEX\)/.test(B.PRICE_BASIS_NOTE) && /may lag/.test(B.PRICE_BASIS_NOTE));
+check("the hedge names the single exchange, the lag, and the title's close",
+  /single exchange \(IEX\)/.test(B.PRICE_BASIS_NOTE) && /may lag/.test(B.PRICE_BASIS_NOTE) && /title shows the last completed close/.test(B.PRICE_BASIS_NOTE));
 
 console.log("\n2. earningsPrice");
 const iex = { price: 103, kind: "iex", date: "2026-10-21", time: "14:05", label: "today so far (IEX, 14:05 ET)" };
@@ -58,16 +60,16 @@ check("a session print: kind iex, time 14:05", live?.kind === "iex" && live.time
 const done = S.pickSurfacePrice(null, bars, et(21, 14, 10));
 check("a close: time null", done?.kind === "close" && done.time === null);
 
-console.log("\n4. the card and the title share the words");
+console.log("\n4. the card is labelled; the title is not");
 const PAGE = "app/stock/[symbol]/earnings/page.tsx", CARD = "app/stock/[symbol]/earnings/SecEarningsCards.tsx";
 const P = stripComments(fs.readFileSync(PAGE, "utf8"), { file: PAGE });
 const C = stripComments(fs.readFileSync(CARD, "utf8"), { file: CARD });
 const RULES = {
   "the card prints the label beside the price": (p, c) => /\{priceBasisLabel\(basis\)\} · \$\{price\.toFixed\(2\)\}/.test(c),
   "the card prints the hedge": (p, c) => /<p>\{PRICE_BASIS_NOTE\}<\/p>/.test(c),
-  "the title prints the same words": (p) => /\(\$\{priceBasisWords\(metaPrice\.basis\)\}\)/.test(p),
-  "the page and the title both go through earningsPrice": (p) =>
-    /earningsPrice\(onTiingo, surfacePrice, lastBar\)/.test(p) && /earningsPrice\(onTiingo, metaSurface, /.test(p),
+  "the title stays on the last close and prints no basis words": (p) =>
+    /const priceStr = seed\.lastClose != null \? ` — Price \$\$\{seed\.lastClose\.toFixed\(2\)\}` : "";/.test(p) && !/priceBasisWords/.test(p),
+  "the card's price goes through earningsPrice": (p) => /earningsPrice\(onTiingo, surfacePrice, lastBar\)/.test(p),
 };
 for (const [name, rule] of Object.entries(RULES)) check(name, rule(P, C));
 
@@ -80,7 +82,7 @@ const once = (src, from, to) => {
 const MUTANTS = [
   ["the label dropped from the card", CARD, "{priceBasisLabel(basis)} · ${price.toFixed(2)}", "${price.toFixed(2)}"],
   ["the hedge dropped", CARD, "<p>{PRICE_BASIS_NOTE}</p>", ""],
-  ["the title's own wording", PAGE, "(${priceBasisWords(metaPrice.basis)})", "(close)"],
+  ["the card off earningsPrice", PAGE, "earningsPrice(onTiingo, surfacePrice, lastBar)", "earningsPrice(false, null, lastBar)"],
 ];
 for (const [label, file, from, to] of MUTANTS) {
   const p = file === PAGE ? once(P, from, to) : P;

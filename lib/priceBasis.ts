@@ -1,17 +1,17 @@
-// ONE PRICE, ONE LABEL, ON THE EARNINGS PAGE (audit r3 item 5).
+// THE VALUATION CARD'S PRICE, LABELLED (audit r3 item 5).
 //
-// The page's title printed the last completed EOD close while the valuation
-// card's market cap and P/E used the newer of that close and today's IEX
-// trade, so the two could disagree by a few percent (CAVA −3.0%, GILD −2.3%,
-// SO +2.0%, JNJ −1.7%) with nothing on screen to say why. Both now read the
-// same price and describe it with the words below, so they cannot drift:
+// The card's market cap and P/E use the newer of the last EOD close and
+// today's session IEX print, while the page title prints the last completed
+// close (owner ruling: stable for crawlers, no hourly title churn). Intraday
+// the two differ by a few percent (CAVA −3.0%, GILD −2.3%, SO +2.0%, JNJ
+// −1.7%), so the card says which price it used:
 //
 //   "Price: close, 20 Oct 2026"    the stored EOD close
 //   "Price: last trade 14:05 ET"   today's session print (IEX, one venue)
 //
-// Pure, and free of server imports, so the card and the title share it.
-// Its private names are prefixed: the render harness lifts this file into one
-// unit with the view's modules (scripts/lib/render-cards.mjs).
+// Pure, and free of server imports. Its private names are prefixed: the render
+// harness lifts this file into one unit with the view's modules
+// (scripts/lib/render-cards.mjs).
 
 export type PriceBasis = {
   /** "close": a completed day's close; "trade": a print during today's session. */
@@ -44,4 +44,4 @@ export function priceBasisLabel(b: PriceBasis): string {
 
 /** The hedge printed beside the label: what a last trade is, and that either can lag. */
 export const PRICE_BASIS_NOTE =
-  "The page title and these figures use this same price. A last trade comes from a single exchange (IEX), so it can differ slightly from the consolidated price, and either may lag the market.";
+  "Market cap and P/E use this price. A last trade comes from a single exchange (IEX), so it can differ slightly from the consolidated price, and either may lag the market. The page title shows the last completed close.";

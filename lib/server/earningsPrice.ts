@@ -1,7 +1,6 @@
-// THE EARNINGS PAGE'S ONE PRICE (audit r3 item 5): what the valuation card's
-// market cap and P/E use, and — since this PR — what the page title prints.
-// Both the page and generateMetadata call this with the same reads, so the
-// title and the card cannot show two different prices again.
+// THE VALUATION CARD'S PRICE AND ITS BASIS (audit r3 item 5): what market cap
+// and P/E use, with what it is, so the card can label it. The page title
+// deliberately stays on the last completed close (owner ruling).
 import type { PriceBasis } from "../priceBasis";
 import type { SurfacePrice } from "./tiingoSurfacePrice";
 

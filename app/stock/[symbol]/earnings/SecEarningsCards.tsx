@@ -2230,9 +2230,8 @@ export function SecValuationCard({
   price: number | null;
   priceAsOf: string | null;
   /**
-   * What the price IS (lib/priceBasis): the page's one price, the same the
-   * title prints, labelled "Price: close, 20 Oct 2026" / "Price: last trade
-   * 14:05 ET". Absent: a close on priceAsOf, as before.
+   * What the price IS (lib/priceBasis), labelled "Price: close, 20 Oct 2026" /
+   * "Price: last trade 14:05 ET". Absent: a close on priceAsOf, as before.
    */
   priceBasis?: PriceBasis | null;
   /** The render date, passed in rather than read from the clock — see priceIsCurrent. */
@@ -2292,8 +2291,8 @@ export function SecValuationCard({
     <section className="card">
       <div className="eyebrow">Valuation</div>
       <h3>What the market is paying for these earnings</h3>
-      {/* THE SAME LABEL THE TITLE USES (lib/priceBasis), so a reader can see
-          which price the two figures below are built on. */}
+      {/* WHICH PRICE THE TWO FIGURES BELOW ARE BUILT ON (lib/priceBasis). It can
+          differ from the title's, which is the last completed close. */}
       {basis ? (
         <p className="smallLabel" style={{ marginTop: 0 }}>
           {priceBasisLabel(basis)} · ${price.toFixed(2)}

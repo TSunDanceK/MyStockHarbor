@@ -6,9 +6,11 @@ import { reactionDayRows } from "./reactionDays";
 import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
 import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";
 import { earningsPrice } from "@/lib/server/earningsPrice";
-import { priceBasisWords } from "@/lib/priceBasis";
 import { TiingoLink } from "@/app/components/TiingoCredit";
-import { type Point } from "@/lib/indicators";
+import {
+  computeIndicatorSeed,
+  type Point,
+} from "@/lib/indicators";
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
@@ -523,8 +525,8 @@ async function getEarningsData(symbol: string) {
   // 2026" or "last IEX trade, 14:05 ET"); its date is the ET trading day, which
   // the card's staleness test reads as before. A miss shows no price: there is
   // no FMP fallback on the Tiingo path (#552 COWORK #108 item 2).
-  // ONE PRICE FOR THE CARD AND THE TITLE (audit r3 item 5): earningsPrice is
-  // what generateMetadata reads too, and its basis is the label both print.
+  // THE CARD'S PRICE AND ITS BASIS (audit r3 item 5): earningsPrice, labelled
+  // by lib/priceBasis. The title deliberately stays on the last close.
   const lastBar = (latestBars as Point[]).at(-1) ?? null;
   const pagePrice = earningsPrice(onTiingo, surfacePrice, lastBar);
   const latestClose = pagePrice?.price ?? null;
@@ -565,17 +567,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // FMP's /stable/quote into seed.price, and the title never read it: it
   // prints seed.lastClose, the newest bar of getDailyHistory.
   // THE TITLE FOLLOWS PRICE_PROVIDER_CHARTS too (B3), as /stock's does.
-  // THE VALUATION CARD'S PRICE, NOT A SECOND ONE (audit r3 item 5). The title
-  // used to print the last completed close while the card used the newer of
-  // that close and today's IEX trade, so the two disagreed intraday (CAVA
-  // −3.0%, GILD −2.3%). Same reads as the page, same earningsPrice, same words.
-  const onTiingo = historyOnTiingo("CHARTS");
-  const [metaSurface, metaBars] = await Promise.all([
-    onTiingo ? readSurfacePrice(clean).catch(() => null) : Promise.resolve(null),
-    onTiingo ? Promise.resolve([] as Point[]) : getDailyHistory(clean, { caller: "stock-earnings-meta" }).catch(() => [] as Point[]),
-  ]);
-  const metaPrice = earningsPrice(onTiingo, metaSurface, (metaBars as Point[]).at(-1) ?? null);
-  const priceStr = metaPrice ? ` — Price $${metaPrice.price.toFixed(2)} (${priceBasisWords(metaPrice.basis)})` : "";
+  // THE LAST COMPLETED CLOSE, ON PURPOSE (owner ruling, audit r3 item 5). The
+  // valuation card uses the newer of that close and today's IEX print, and
+  // labels it; the title stays on the close so it changes once a day for
+  // crawlers rather than on every hourly render during the session.
+  const rawHistory = await historyForSurface("CHARTS", clean, () => getDailyHistory(clean, { caller: "stock-earnings-meta" }))
+    .then((h) => h.points.filter((p) => !p.partial), () => [] as Point[]);
+  const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
+  const seed = computeIndicatorSeed(points, "", null, null);
+  const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
   const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
   // NO LONGER "EPS surprise, revenue surprise" -- the page stopped showing
   // either when FMP's analyst consensus left on 2026-09-15, and a description
