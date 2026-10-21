@@ -21,7 +21,16 @@ for (const sym of symArg.split(",")) {
   console.log(`\n=== ${sym} (notes: ${(ex.notes ?? []).filter((n) => /debt|borrow/i.test(n)).join(" | ") || "none"}) ===`);
   for (const p of ex.instants.slice(0, 3)) {
     console.log(`I ${p.end}: ${fields.map((f) => { const c = p.values[NEW.SEC_FIELD_KEYS.indexOf(f)]; return `${f}=${fmt(c?.val)}${c?.tag ? ` [${c.tag}]` : ""}`; }).join("  ")}`);
-    for (const t of concepts) {
+    // "~36670" searches EVERY us-gaap concept for a value within 0.5% of 36,670M at this date.
+    for (const q of concepts.filter((t) => t.startsWith("~"))) {
+      const target = Number(q.slice(1)) * 1e6;
+      for (const [t, def] of Object.entries(facts.facts?.["us-gaap"] ?? {})) {
+        for (const r of (def.units?.USD ?? []).filter((r) => !r.start && r.end === p.end && Math.abs(r.val - target) <= 0.005 * target).slice(-1)) {
+          console.log(`    ~ ${t} ${fmt(r.val)} ${r.form} ${r.accn}`);
+        }
+      }
+    }
+    for (const t of concepts.filter((t) => !t.startsWith("~"))) {
       const rows = (facts.facts?.["us-gaap"]?.[t]?.units?.USD ?? []).filter((r) => !r.start && r.end === p.end);
       for (const r of rows.slice(-2)) console.log(`    ${t} ${fmt(r.val)} ${r.form} ${r.accn} filed ${r.filed}`);
     }
