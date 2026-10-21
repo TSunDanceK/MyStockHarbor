@@ -95,6 +95,13 @@ const CVXK = facts({
 });
 check("CVX: the same figure tagged the other way still fills its 10-Q date", near(at(X.extractCompanyFacts("CVX", CVXK), "2026-06-30")?.values?.[LT]?.val ?? null, 36674));
 
+const OLD = facts({
+  Assets: [inst("2015-12-31", 900, "10-K", "2016-02-10", "o0"), inst("2026-06-30", 69000, "10-Q", "2026-08-06", "o-q2")],
+  LongTermDebt: [inst("2015-12-31", 400, "10-K", "2016-02-10", "o0")],
+  NotesPayable: [inst("2026-06-30", 25091.6, "10-Q", "2026-08-06", "o-q2")],
+});
+check("O: a primary concept last filed in 2015 does not hold back today's NotesPayable", near(at(X.extractCompanyFacts("O", OLD), "2026-06-30")?.values?.[LT]?.val ?? null, 25091.6));
+
 console.log("\n3. mutation");
 {
   const a = extractRaw.replace("if (inside !== \"all\" && !inside.includes(st.tag)) continue;", "continue;");

@@ -1315,8 +1315,15 @@ function primaryFirst<T extends { tag: string }>(cands: T[]): T[] {
 const SAME_MEASURE: Readonly<Record<string, string>> = {
   LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: "LongTermDebtAndCapitalLeaseObligations",
 };
-function debtFallbackGate<T extends { tag: string }>(rows: T[]): T[] {
-  const primaryTags = new Set(rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag)).map((r) => r.tag));
+function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[]): T[] {
+  // CURRENT HISTORY ONLY: a primary concept last filed years ago (O's and
+  // TRV's) is not the series the page shows, so it does not hold back the
+  // concept the filer tags now. Three years before its newest figure.
+  const newest = rows.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
+  const since = newest ? `${Number(newest.slice(0, 4)) - 3}${newest.slice(4)}` : "";
+  const primaryTags = new Set(
+    rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag) && (r.row.end ?? "") >= since).map((r) => r.tag)
+  );
   if (!primaryTags.size) return rows;
   return rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag) || primaryTags.has(SAME_MEASURE[r.tag] ?? ""));
 }
