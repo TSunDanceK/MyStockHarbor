@@ -1850,7 +1850,10 @@ function extractCompanyFactsWith(
       const floorHolds = covers(quarterCells, totalQuarter, 8) && covers(yearCells, totalYear, 4);
       const shippedTest = !excise && fb?.tag === "Revenues" && fb.val != null && rev?.val != null && fb.val > rev.val * REVENUE_TOTAL_OVER_CONTRACT;
       const gapTest = gapConcept != null && fb?.val != null && rev?.val != null && fb.val > rev.val;
-      const qualifies = Boolean(rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val > 0 && isTotal(fb) && (shippedTest || gapTest));
+      // A ZERO CONTRACT LINE QUALIFIES (yoy60 2e, REXR): its newest quarter files
+      // 0 under the contract tag beside a filed Revenues total (lease income is
+      // the rest), and "> 0" kept every period on a 0.1-0.6M sub-line.
+      const qualifies = Boolean(rev && rev.tag === CONTRACT_REVENUE_TAG && rev.val != null && rev.val >= 0 && isTotal(fb) && (shippedTest || gapTest));
       if (qualifies && !floorHolds) {
         notes.push(`revenue: Revenues exceeds the contract line on ${newest} but covers fewer of the newest 8 quarters / 4 years; the contract line is kept (floor)`);
       } else if (qualifies) {
