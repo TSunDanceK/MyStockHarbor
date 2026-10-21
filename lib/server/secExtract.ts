@@ -916,11 +916,16 @@ export function resolve(
 const FILER_LEVEL_FALLBACKS: Readonly<Record<string, readonly string[]>> = {
   shareBasedCompensation: ["AllocatedShareBasedCompensationExpense"],
 };
-function filerLevelFallback<T extends { tag: string }>(key: string, rows: T[]): T[] {
+function filerLevelFallback<T extends { tag: string; row: FactRow }>(key: string, rows: T[]): T[] {
   const fb = FILER_LEVEL_FALLBACKS[key];
   if (!fb) return rows;
-  const primary = rows.filter((r) => !fb.includes(r.tag));
-  return primary.length ? primary : rows;
+  // CURRENT HISTORY ONLY: a primary last filed years ago (LIN's) is not the
+  // series the page shows. Three years before the filer's newest figure.
+  const newest = rows.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
+  const since = newest ? `${Number(newest.slice(0, 4)) - 3}${newest.slice(4)}` : "";
+  const primary = rows.filter((r) => !fb.includes(r.tag) && (r.row.end ?? "") >= since);
+  if (primary.length) return rows.filter((r) => !fb.includes(r.tag));
+  return rows;
 }
 
 export function preferredTag(

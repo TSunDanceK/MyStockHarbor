@@ -38,9 +38,11 @@ const MIXED = facts({
   ShareBasedCompensation: [dur("2024-01-01", "2024-12-31", 150)],
   AllocatedShareBasedCompensationExpense: [dur("2025-01-01", "2025-12-31", 164)],
 });
-check("a filer that files the add-back on any year never reads the note line (FY2025 stays empty)", fy(X.extractCompanyFacts("MIX", MIXED)) === null);
+const OLDLIN = facts({ ...base, ShareBasedCompensation: [dur("2015-01-01", "2015-12-31", 90)], AllocatedShareBasedCompensationExpense: [dur("2025-01-01", "2025-12-31", 164)] });
+check("LIN: an add-back last filed in 2015 does not hold back the note line", fy(X.extractCompanyFacts("LIN", OLDLIN)) === 164 * M);
+check("a filer that files the add-back in current history never reads the note line (FY2025 stays empty)", fy(X.extractCompanyFacts("MIX", MIXED)) === null);
 {
-  const mut = extractRaw.replace("return primary.length ? primary : rows;", "return rows;");
+  const mut = extractRaw.replace("if (primary.length) return rows.filter((r) => !fb.includes(r.tag));", "");
   check("the filer-level mutation is applied", mut !== extractRaw);
   const Y = await lift(`${fieldsSrc}\n${fxSrc}\n${currencySrc}\n${mut}`);
   check("MUTATION: per-period fallback → MIX FY2025 reads 164M, caught", fy(Y.extractCompanyFacts("MIX", MIXED)) === 164 * M);
