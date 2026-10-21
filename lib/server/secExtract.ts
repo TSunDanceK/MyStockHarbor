@@ -1309,6 +1309,15 @@ export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
  *        (audit r3): 1,813.0M for FY2025 against a 1,747.0M contract line. The
  *        gap is regulatory: RegulatedOperatingRevenueOther 62.6M (alternative
  *        revenue programs and the like) plus ~3.4M, the same kind as DUK's.
+ * HELD, NOT RULED (owner, audit r3), each read from its 10-K revenue note:
+ *   NJR: FY2025 total 2,036.4M against a 1,351.3M contract line. The 685.1M
+ *        is "revenues out of scope" of ASC 606: derivative instruments 713.9M
+ *        (Energy Services 405.8M, Natural Gas Distribution 240.4M, Clean Energy
+ *        Ventures 67.7M) less alternative revenue programs (28.7M).
+ *   SRE: FY2025 total 13,702M against 12,418M. The 1,284M is utilities
+ *        regulatory revenues 364M (alternative revenue programs) and Sempra
+ *        Infrastructure other revenues 920M (lease income ~389M; gas and power
+ *        derivative revenue; the Tangguh LNG diversion fee).
  * A period without the ruled concept reads Not reported rather than keep the
  * contract line beside the total, so the series stays on one basis.
  */
