@@ -905,6 +905,24 @@ export function resolve(
  * Anchoring on the newest period keeps those columns and still fixes one
  * measure per filer. It is now the mutation, not the rule.
  */
+/**
+ * LAST-RESORT CONCEPTS USED ONLY BY A FILER THAT FILES NOTHING ELSE for the
+ * field (audit r3). LIN files share-based pay only as the note line,
+ * AllocatedShareBasedCompensationExpense; a filer that files the cash-flow
+ * add-back on any period keeps it everywhere, so the note line never
+ * overwrites or interleaves with it (the per-period dry run moved 1,433 filed
+ * cells and filled 2,373 gaps across ~700 filers that way).
+ */
+const FILER_LEVEL_FALLBACKS: Readonly<Record<string, readonly string[]>> = {
+  shareBasedCompensation: ["AllocatedShareBasedCompensationExpense"],
+};
+function filerLevelFallback<T extends { tag: string }>(key: string, rows: T[]): T[] {
+  const fb = FILER_LEVEL_FALLBACKS[key];
+  if (!fb) return rows;
+  const primary = rows.filter((r) => !fb.includes(r.tag));
+  return primary.length ? primary : rows;
+}
+
 export function preferredTag(
   candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]
 ): string | null {
@@ -1558,7 +1576,7 @@ function extractCompanyFactsWith(
   const preferred = new Map<string, string | null>();
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    const all = rowsForField(facts, field, refusedUnits, currency);
+    const all = filerLevelFallback(field.key, rowsForField(facts, field, refusedUnits, currency));
     for (const c of all) {
       const k = periodKey(c.row);
       const list = bucket.get(k);

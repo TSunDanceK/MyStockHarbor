@@ -33,6 +33,18 @@ const LIN = facts({ ...base, AllocatedShareBasedCompensationExpense: [dur("2025-
 check("LIN: the note line 164M is read when no add-back is filed", fy(X.extractCompanyFacts("LIN", LIN)) === 164 * M, String(fy(X.extractCompanyFacts("LIN", LIN))));
 const BOTH = facts({ ...base, ShareBasedCompensation: [dur("2025-01-01", "2025-12-31", 170)], AllocatedShareBasedCompensationExpense: [dur("2025-01-01", "2025-12-31", 164)] });
 check("a filer with the cash-flow add-back keeps it (170M)", fy(X.extractCompanyFacts("BTH", BOTH)) === 170 * M);
+const MIXED = facts({
+  ...base,
+  ShareBasedCompensation: [dur("2024-01-01", "2024-12-31", 150)],
+  AllocatedShareBasedCompensationExpense: [dur("2025-01-01", "2025-12-31", 164)],
+});
+check("a filer that files the add-back on any year never reads the note line (FY2025 stays empty)", fy(X.extractCompanyFacts("MIX", MIXED)) === null);
+{
+  const mut = extractRaw.replace("return primary.length ? primary : rows;", "return rows;");
+  check("the filer-level mutation is applied", mut !== extractRaw);
+  const Y = await lift(`${fieldsSrc}\n${fxSrc}\n${currencySrc}\n${mut}`);
+  check("MUTATION: per-period fallback → MIX FY2025 reads 164M, caught", fy(Y.extractCompanyFacts("MIX", MIXED)) === 164 * M);
+}
 {
   const mut = fieldsSrc.replace('"ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"', '"ShareBasedCompensation"');
   check("the mutation is applied", mut !== fieldsSrc);
