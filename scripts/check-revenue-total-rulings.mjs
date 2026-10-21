@@ -57,6 +57,14 @@ const NEE = facts({
 });
 check("FY2025 reads 27,410.0, not the 25,800 contract line", rev(X.extractCompanyFacts("NEE", NEE), "2025-12-31") === 27410 * M, String(rev(X.extractCompanyFacts("NEE", NEE), "2025-12-31")));
 
+console.log("\n2c. IDA reads total operating revenues (audit r3)");
+const IDA = facts({
+  RegulatedAndUnregulatedOperatingRevenue: [["2025-01-01", "2025-12-31", 1812.997, "10-K", 2025, "FY", "2026-02-20", "ida-k-2025"]],
+  RevenueFromContractWithCustomerExcludingAssessedTax: [["2025-01-01", "2025-12-31", 1746.972, "10-K", 2025, "FY", "2026-02-20", "ida-k-2025"]],
+});
+check("FY2025 reads 1,813.0, not the 1,747.0 contract line", rev(X.extractCompanyFacts("IDA", IDA), "2025-12-31") === 1812.997 * M, String(rev(X.extractCompanyFacts("IDA", IDA), "2025-12-31")));
+check("NJR and SRE are not ruled (held)", !("NJR" in X.REVENUE_TOTAL_RULINGS) && !("SRE" in X.REVENUE_TOTAL_RULINGS));
+
 console.log("\n3. mutation");
 {
   const src = extractRaw.replace('const ruled = REVENUE_TOTAL_RULINGS[String(symbol ?? "").toUpperCase()];', "const ruled = undefined as string | undefined;");

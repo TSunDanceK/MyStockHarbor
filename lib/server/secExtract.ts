@@ -1305,13 +1305,17 @@ export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
  *   NEE: total operating revenues, RegulatedAndUnregulatedOperatingRevenue
  *        (audit r3): FY2023 28,114M, FY2024 24,753M, FY2025 27,410M, against a
  *        contract line read at 24.8B / 23.5B / 25.8B; quarters 4-8% low.
+ *   IDA: total operating revenues, RegulatedAndUnregulatedOperatingRevenue
+ *        (audit r3): 1,813.0M for FY2025 against a 1,747.0M contract line. The
+ *        gap is regulatory: RegulatedOperatingRevenueOther 62.6M (alternative
+ *        revenue programs and the like) plus ~3.4M, the same kind as DUK's.
  * A period without the ruled concept reads Not reported rather than keep the
  * contract line beside the total, so the series stays on one basis.
  */
 export const REVENUE_TOTAL_RULINGS: Readonly<Record<string, string>> = {
   WMT: "Revenues",
   DUK: UTILITY_REVENUE_TAG,
-  NEE: UTILITY_REVENUE_TAG,
+  NEE: UTILITY_REVENUE_TAG, IDA: UTILITY_REVENUE_TAG,
 };
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
