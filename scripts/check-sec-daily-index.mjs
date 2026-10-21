@@ -99,8 +99,8 @@ const man = await lift(
    grabFunction(MANIFEST_SRC, "mapChangeThreshold"), grabFunction(MANIFEST_SRC, "reconcileCiks"),
    grabFunction(MANIFEST_SRC, "reconcileDelistings"), grabFunction(MANIFEST_SRC, "reconcileExchanges"),
    grabFunction(MANIFEST_SRC, "exchangeHistogram"), grabFunction(MANIFEST_SRC, "secRereadQueue"),
-   grabFunction(MANIFEST_SRC, "retickerEntry")].join("\n") +
-    "\nexport { emptyEntry, emptyManifest, dotDashSpellings, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram, secRereadQueue, retickerEntry };",
+   grabFunction(MANIFEST_SRC, "retickerEntry"), grabFunction(MANIFEST_SRC, "delistedEntry")].join("\n") +
+    "\nexport { emptyEntry, emptyManifest, dotDashSpellings, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram, secRereadQueue, retickerEntry, delistedEntry };",
   // THE TRANSITIVE CALLEE, AND IT FAILED AT RUN TIME FIRST. grabFunction lifts
   // ONE body and does not follow imports, so seedManifest's lookupBySpelling
   // threw ReferenceError the moment it was called. The helper's REAL source is
@@ -111,7 +111,8 @@ const man = await lift(
     .replace(/^export /gm, "") +
     "\nconst SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;\nconst SEC_REREAD_DRAIN_PER_RUN = 40;" +
     // The cited reticker map, read from the committed file (seedManifest's fallback).
-    `\nconst RETICKERS = ${JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, "data/sec/reticker-ciks.json"), "utf8")).retickers)};`
+    `\nconst RETICKERS = ${JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, "data/sec/reticker-ciks.json"), "utf8")).retickers)};` +
+    `\nconst DELISTED = ${JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, "data/sec/delisted-ciks.json"), "utf8")).delisted)};`
 );
 
 const tick = await lift(
@@ -188,6 +189,18 @@ check("reseeding is idempotent and adds nothing", man.seedManifest(manifest, [..
   check("a retickered symbol's existing entry takes the cited CIK (BK 0001390777)", m2.symbols.BK?.cik === "0001390777", JSON.stringify(m2.symbols.BK?.cik));
   check("...and a new one is seeded with it (EQR 0000906107)", m2.symbols.EQR?.cik === "0000906107", JSON.stringify(m2.symbols.EQR?.cik));
   check("...but an unlisted symbol with no cited CIK stays CIK-less", (m2.symbols.ZZZZ?.cik ?? null) === null);
+  check("...and a retickered one is not marked delisted", m2.symbols.BK?.delisted === false && m2.symbols.EQR?.delisted === false);
+  // A DELISTED symbol (data/sec/delisted-ciks.json, owner approval on #932):
+  // the cited CIK, and delisted at once; an existing entry is flagged too.
+  const m4 = man.emptyManifest();
+  m4.symbols.EA = man.emptyEntry(null);
+  man.seedManifest(m4, ["EA", "WBS", "AAPL"], new Map([["AAPL", { cik: "0000320193", exchange: "Nasdaq" }]]), true);
+  check("a delisted symbol's existing entry takes the cited CIK and delisted (EA 0000712515)", m4.symbols.EA?.cik === "0000712515" && m4.symbols.EA?.delisted === true, JSON.stringify(m4.symbols.EA));
+  check("...and a new one is seeded with both (WBS 0000801337)", m4.symbols.WBS?.cik === "0000801337" && m4.symbols.WBS?.delisted === true, JSON.stringify(m4.symbols.WBS));
+  check("...but a live symbol is untouched", m4.symbols.AAPL?.delisted === false);
+  const m5 = man.emptyManifest();
+  man.seedManifest(m5, ["WBS"], new Map([["WBS", { cik: "0009999999", exchange: "NYSE" }]]), true);
+  check("a ticker the live map lists again (reused) takes the live CIK, not the delisted one", m5.symbols.WBS?.cik === "0009999999" && m5.symbols.WBS?.delisted === false, JSON.stringify(m5.symbols.WBS));
 }
 // ── THE DOTTED TICKER, WHICH HAD NO CIK AND THEREFORE NO PAGE ──────────────
 //
@@ -858,14 +871,15 @@ check("no hardcoded successor table exists in the manifest CODE",
   !/\bBNY\b|\bVMRK\b|\bWBS\b/.test(readCodeOnly("lib/server/secManifest.ts")),
   "the successor is derived from the map's own CIK index, not from a September 2026 table");
 
-// A symbol that NEVER resolved has no identity to trace.
+// A symbol that NEVER resolved has no identity to trace. (Was WBS, which now
+// has a cited CIK in data/sec/delisted-ciks.json: a fictional ticker keeps the case.)
 const nc = man.emptyManifest();
-man.seedManifest(nc, ["WBS", "AAPL"], new Map([["AAPL", { cik: "0000320193", exchange: "Nasdaq" }]]), true);
+man.seedManifest(nc, ["ZZZQ", "AAPL"], new Map([["AAPL", { cik: "0000320193", exchange: "Nasdaq" }]]), true);
 const ncRes = man.reconcileDelistings(nc, new Map([["AAPL", { cik: "0000320193", exchange: "Nasdaq" }]]));
 check("a no-CIK symbol is 'unresolvable', not 'newly absent'",
-  ncRes.unresolvable.includes("WBS") && !ncRes.newlyAbsent.includes("WBS"), JSON.stringify(ncRes.unresolvable));
+  ncRes.unresolvable.includes("ZZZQ") && !ncRes.newlyAbsent.includes("ZZZQ"), JSON.stringify(ncRes.unresolvable));
 check("...and gets NO delisting clock",
-  nc.symbols.WBS.notInTickerMapSince === null && nc.symbols.WBS.absentRefreshCount === 0 && nc.symbols.WBS.delisted === false,
+  nc.symbols.ZZZQ.notInTickerMapSince === null && nc.symbols.ZZZQ.absentRefreshCount === 0 && nc.symbols.ZZZQ.delisted === false,
   "absence from the ticker file is not proof of deregistration, and with no CIK there is even less evidence");
 
 // A reticker that reverts clears the marker.
@@ -1435,7 +1449,8 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
     const naive = await lift(
       [grabFunction(MANIFEST_SRC, "emptyEntry"), grabFunction(MANIFEST_SRC, "emptyManifest"), grabFunction(MANIFEST_SRC, "dotDashSpellings"),
        grabFunction(MANIFEST_SRC, "seedManifest").replace(/const existingKey = [^\n]+\n/, "const existingKey = symbol;\n"),
-       grabFunction(MANIFEST_SRC, "retickerEntry"), "const RETICKERS = {};"].join("\n") +
+       grabFunction(MANIFEST_SRC, "retickerEntry"), "const RETICKERS = {};",
+       grabFunction(MANIFEST_SRC, "delistedEntry"), "const DELISTED = {};"].join("\n") +
         "\nexport { emptyManifest, seedManifest };",
       fs.readFileSync(path.join(ROOT, "lib/symbolSpellings.mjs"), "utf8").replace(/^export /gm, "") + "\nconst SEC_SCORE_VERSION = 1;"
     );
