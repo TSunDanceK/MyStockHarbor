@@ -1,0 +1,17 @@
+{
+ "_comment": "Delisted universe tickers whose registrant has left SEC's live ticker map (owner approval on #932). Read by seedManifest (lib/server/secManifest.ts) ONLY when the live map has no entry for the ticker: the entry takes the cited CIK so its filings stay readable as history, and is marked delisted:true so the filing jobs stop queuing it. The page stays up at 200 + noindex ('No data available' when no market data): no 404, no redirect, as neither has a successor ticker of its own.",
+ "delisted": {
+  "EA": {
+   "cik": "0000712515",
+   "name": "Electronic Arts Inc.",
+   "delistedOn": "2026-08-04",
+   "evidence": "Taken private 2026-08-04 (see #932). CIK 712515 is EA's registrant number on EDGAR (data/sec/company-tickers.json no longer lists EA)."
+  },
+  "WBS": {
+   "cik": "0000801337",
+   "name": "Webster Financial Corp",
+   "delistedOn": "2026-08-20",
+   "evidence": "Acquired by Banco Santander, closing 2026-08-20: joint press release filed with Webster's 8-K, https://www.sec.gov/Archives/edgar/data/0000801337/000080133726000025/ex991jointpressreleaseofba.htm, and Santander's release https://www.santander.com/en/press-room/press-releases/2026/08/santander-expands-us-presence-with-completion-of-webster-acquisition"
+  }
+ }
+}

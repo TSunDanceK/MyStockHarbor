@@ -775,6 +775,21 @@
    "symbol": "DUK",
    "requestedAt": "2026-10-23T00:00:00Z",
    "reason": "earnings audit r2: owner ruling (REVENUE_TOTAL_RULINGS): revenue is the filer's headline total for every period (WMT Revenues, DUK RegulatedAndUnregulatedOperatingRevenue), not the contract line"
+  },
+  {
+   "symbol": "SCHW",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "earnings audit r2: proxy-statement (DEF 14A / PRE 14A) rows no longer read; the pay-versus-performance NetIncomeLoss had displaced the 10-K's figure (SCHW 1000x low, MET net income to common, DELL)"
+  },
+  {
+   "symbol": "MET",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "earnings audit r2: proxy-statement (DEF 14A / PRE 14A) rows no longer read; the pay-versus-performance NetIncomeLoss had displaced the 10-K's figure (SCHW 1000x low, MET net income to common, DELL)"
+  },
+  {
+   "symbol": "DELL",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "earnings audit r2: proxy-statement (DEF 14A / PRE 14A) rows no longer read; the pay-versus-performance NetIncomeLoss had displaced the 10-K's figure (SCHW 1000x low, MET net income to common, DELL)"
   }
  ]
 }
