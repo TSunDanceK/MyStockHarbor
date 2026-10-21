@@ -680,6 +680,17 @@ export type ViewCell = Cell & {
  */
 const PER_SHARE_KEYS = new Set(["epsBasic", "epsDiluted"]);
 
+/**
+ * WHAT THE REVENUE LINE COVERS, per filer, where a reader comparing it with
+ * another source would otherwise see a different number (audit r3). CVX: the
+ * figure is "Sales and other operating revenues"; its income statement adds
+ * "Income from equity affiliates" and "Other income" above that to a larger
+ * "Total revenues and other income", which is not revenue.
+ */
+export const REVENUE_BASIS_NOTES: Readonly<Record<string, string>> = {
+  CVX: "Sales and other operating revenues, excluding other income",
+};
+
 /** Which statement each stored field sits on, from the field table itself. */
 const STATEMENT_OF = new Map<string, Statement>(SEC_FIELDS.map((f) => [f.key, f.statement]));
 
@@ -848,6 +859,8 @@ export function withDerivedNonOperating(rows: ViewCell[]): ViewCell[] {
 
 export type SecEarningsView = {
   symbol: string;
+  /** What the filer's revenue line covers, where the figure needs saying (REVENUE_BASIS_NOTES). */
+  revenueBasis: string | null;
   /**
    * "20-F" / "40-F" when the page is in the annual-only layout (#535 COWORK
    * #15): anchored on fiscal years, quarterly-only cards hidden. Null otherwise.
@@ -1822,7 +1835,9 @@ export function buildSecEarningsView(
     ["epsDiluted", `Diluted EPS (${epsStd})`],
     ["sharesDiluted", "Diluted shares"],
   ];
-  const incomeRows = withNonOperatingMarker(withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => (k === "epsDiluted" ? q4EpsCell(latest, label) : view(latest, k, label))))));
+  const revenueBasis = REVENUE_BASIS_NOTES[set.symbol.toUpperCase()] ?? null;
+  const incomeRows = withNonOperatingMarker(withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => (k === "epsDiluted" ? q4EpsCell(latest, label) : view(latest, k, label))))))
+    .map((c) => (c.key === "revenue" && revenueBasis ? { ...c, sub: revenueBasis } : c));
   // EACH PERIOD'S OWN INCOME ROWS, for the per-period one-off check: the table
   // basis's periods and every stored fiscal year (#552 COWORK #117). Labels are
   // distinct across the two ("Q1 FY2026" / "FY2025"); a label in both is one row.
@@ -1875,6 +1890,7 @@ export function buildSecEarningsView(
 
   return {
     symbol: set.symbol,
+    revenueBasis,
     annualFiler,
     epsReason: epsBlankReason(set.symbol, set.nt ?? null),
     entityName: set.entityName,
