@@ -54,7 +54,7 @@ for (const [sym, cik] of targets) {
     const a = OLD.extractCompanyFacts(sym, facts), b = NEW.extractCompanyFacts(sym, facts);
     const keys = NEW.SEC_FIELD_KEYS;
     const lines = [];
-    for (const kind of ["years", "quarters"]) {
+    for (const kind of ["years", "quarters", "instants"]) {
       const am = new Map(a[kind].map((p) => [`${p.start}|${p.end}`, p]));
       const bm = new Map(b[kind].map((p) => [`${p.start}|${p.end}`, p]));
       for (const k of new Set([...am.keys(), ...bm.keys()])) {
@@ -62,12 +62,25 @@ for (const [sym, cik] of targets) {
         keys.forEach((f, i) => {
           const va = pa?.values?.[i]?.val ?? null, vb = pb?.values?.[i]?.val ?? null;
           if (va === vb) return;
-          lines.push(`${sym}\t${f}\t${kind === "years" ? "Y" : "Q"} ${label(p)}\t${fmt(va)} -> ${fmt(vb)}`);
+          lines.push(`${sym}\t${f}\t${kind === "years" ? "Y" : kind === "quarters" ? "Q" : "I"} ${kind === "instants" ? p.end : label(p)}\t${fmt(va)} -> ${fmt(vb)}`);
           byField[f] = (byField[f] ?? 0) + 1;
         });
       }
     }
-    if (lines.length) { filersChanged++; cells += lines.length; for (const l of lines) console.log(l); }
+    // NET CASH OR NET DEBT on the newest balance sheet, before and after:
+    // cash (+ short-term investments) - (short-term + long-term debt), the
+    // view's own definition; total debt needs a long-term line.
+    const net = (ex) => {
+      const p = ex.instants[0]; if (!p) return null;
+      const v = (f) => p.values[keys.indexOf(f)]?.val ?? null;
+      const cash = v("cash"); if (cash === null || v("longTermDebt") === null) return null;
+      return cash + (v("shortTermInvestments") ?? 0) - ((v("shortTermDebt") ?? 0) + v("longTermDebt"));
+    };
+    if (lines.some((l) => /\t(shortTermDebt|longTermDebt)\tI /.test(l))) {
+      const na = net(a), nb = net(b), side = (n) => (n === null ? "n/a" : n >= 0 ? "net cash" : "net debt");
+      lines.push(`NET ${sym}\t${b.instants[0]?.end ?? "—"}\t${side(na)} ${fmt(na)} -> ${side(nb)} ${fmt(nb)}${side(na) !== side(nb) && na !== null ? "\tFLIP" : ""}`);
+    }
+    if (lines.length) { filersChanged++; cells += lines.filter((l) => !l.startsWith("NET ")).length; for (const l of lines) console.log(l); }
   } catch (e) { failed++; console.log(`ERR ${sym}: ${e.message}`); }
   await new Promise((r) => setTimeout(r, 250));
 }

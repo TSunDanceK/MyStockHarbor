@@ -1280,6 +1280,15 @@ export function q4RevenueScope(
   return null;
 }
 
+/**
+ * Combined long-term debt concepts and the short-term concepts each one
+ * already contains ("all": every short-term line). See the netting block.
+ */
+export const COMBINED_DEBT: Readonly<Record<string, readonly string[] | "all">> = {
+  DebtLongtermAndShorttermCombinedAmount: "all",
+  LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: ["LongTermDebtCurrent"],
+  NotesPayable: ["NotesPayableCurrent"],
+};
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
@@ -2348,6 +2357,23 @@ function extractCompanyFactsWith(
         val: best.row.val!, tag: best.tag, ns: best.ns, unit: best.unit, derived: "as-filed",
       });
     }
+  }
+
+  // ── A COMBINED DEBT FIGURE IS NETTED AGAINST THE SHORT-TERM LINE IT HOLDS ──
+  // (audit r3: CVX, O, TRV). The view's total is short-term + long-term, so a
+  // long-term cell that is itself a total would count the overlap twice. Where
+  // the short-term line's concept is one the combined concept includes,
+  // long-term becomes combined - short-term (computed); otherwise the two are
+  // disjoint and add as filed. Lease obligations are never added: the
+  // ...CapitalLeaseObligations concepts already ARE the filed debt-and-finance-
+  // lease figure, and no lease line is in either chain.
+  for (const [end, m] of instantCells) {
+    const lt = m.get("longTermDebt"), st = m.get("shortTermDebt");
+    const inside = lt?.tag ? COMBINED_DEBT[lt.tag] : undefined;
+    if (!lt || lt.val == null || !inside || !st || st.val == null || !st.tag) continue;
+    if (inside !== "all" && !inside.includes(st.tag)) continue;
+    m.set("longTermDebt", { ...lt, val: lt.val - st.val, derived: "computed" });
+    notes.push(`longTermDebt ${end}: ${lt.tag} ${lt.val} includes ${st.tag} ${st.val}; long-term read as the difference`);
   }
 
   // ── the cover page, read ONCE for the symbol ────────────────────────────────
