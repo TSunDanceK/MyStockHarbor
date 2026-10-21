@@ -918,14 +918,26 @@ const FILER_LEVEL_FALLBACKS: Readonly<Record<string, readonly string[]>> = {
 };
 function filerLevelFallback<T extends { tag: string; row: FactRow }>(key: string, rows: T[]): T[] {
   const fb = FILER_LEVEL_FALLBACKS[key];
-  if (!fb) return rows;
-  // CURRENT HISTORY ONLY: a primary last filed years ago (LIN's) is not the
-  // series the page shows. Three years before the filer's newest figure.
-  const newest = rows.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
-  const since = newest ? `${Number(newest.slice(0, 4)) - 3}${newest.slice(4)}` : "";
-  const primary = rows.filter((r) => !fb.includes(r.tag) && (r.row.end ?? "") >= since);
-  if (primary.length) return rows.filter((r) => !fb.includes(r.tag));
-  return rows;
+  return fb ? switchOver(rows, (t) => fb.includes(t)) : rows;
+}
+
+/**
+ * A FILER THAT CHANGED CONCEPTS, NOT ONE THAT TAGS TWO. Where the newest
+ * fallback figure is more than a year past the newest primary one, the filer
+ * switched (LIN tagged ShareBasedCompensation until Q3 2023, then only the
+ * note line): the primary is read up to its last date and the fallback after
+ * it, never interleaved. Otherwise the primary is current and the fallback is
+ * dropped. A filer with no primary at all reads the fallback throughout.
+ */
+export function switchOver<T extends { tag: string; row: FactRow }>(rows: T[], isFallback: (tag: string) => boolean): T[] {
+  const newestOf = (rs: T[]) => rs.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
+  const primary = rows.filter((r) => !isFallback(r.tag));
+  if (!primary.length) return rows;
+  const lastPrimary = newestOf(primary);
+  const newestFallback = newestOf(rows.filter((r) => isFallback(r.tag)));
+  const yearAfter = lastPrimary ? `${Number(lastPrimary.slice(0, 4)) + 1}${lastPrimary.slice(4)}` : "";
+  if (!newestFallback || newestFallback <= yearAfter) return primary;
+  return rows.filter((r) => !isFallback(r.tag) || (r.row.end ?? "") > lastPrimary);
 }
 
 export function preferredTag(

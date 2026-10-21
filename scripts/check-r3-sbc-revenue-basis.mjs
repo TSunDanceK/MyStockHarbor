@@ -38,11 +38,18 @@ const MIXED = facts({
   ShareBasedCompensation: [dur("2024-01-01", "2024-12-31", 150)],
   AllocatedShareBasedCompensationExpense: [dur("2025-01-01", "2025-12-31", 164)],
 });
-const OLDLIN = facts({ ...base, ShareBasedCompensation: [dur("2015-01-01", "2015-12-31", 90)], AllocatedShareBasedCompensationExpense: [dur("2025-01-01", "2025-12-31", 164)] });
-check("LIN: an add-back last filed in 2015 does not hold back the note line", fy(X.extractCompanyFacts("LIN", OLDLIN)) === 164 * M);
+const OLDLIN = facts({
+  ...base,
+  ShareBasedCompensation: [dur("2022-01-01", "2022-12-31", 120)],
+  AllocatedShareBasedCompensationExpense: [dur("2022-01-01", "2022-12-31", 118), dur("2025-01-01", "2025-12-31", 164)],
+});
+const ol = X.extractCompanyFacts("LIN", OLDLIN);
+const fyOf = (ex, end) => ex.years.find((p) => p.end === end)?.values?.[SBC]?.val ?? null;
+check("LIN: switched concepts after 2022, so FY2025 reads the note line (164M)", fyOf(ol, "2025-12-31") === 164 * M);
+check("...and FY2022 keeps the add-back it filed (120M, not the note line's 118M)", fyOf(ol, "2022-12-31") === 120 * M);
 check("a filer that files the add-back in current history never reads the note line (FY2025 stays empty)", fy(X.extractCompanyFacts("MIX", MIXED)) === null);
 {
-  const mut = extractRaw.replace("if (primary.length) return rows.filter((r) => !fb.includes(r.tag));", "");
+  const mut = extractRaw.replace("if (!newestFallback || newestFallback <= yearAfter) return primary;", "");
   check("the filer-level mutation is applied", mut !== extractRaw);
   const Y = await lift(`${fieldsSrc}\n${fxSrc}\n${currencySrc}\n${mut}`);
   check("MUTATION: per-period fallback → MIX FY2025 reads 164M, caught", fy(Y.extractCompanyFacts("MIX", MIXED)) === 164 * M);
