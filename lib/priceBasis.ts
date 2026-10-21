@@ -10,6 +10,8 @@
 //   "Price: last trade 14:05 ET"   today's session print (IEX, one venue)
 //
 // Pure, and free of server imports, so the card and the title share it.
+// Its private names are prefixed: the render harness lifts this file into one
+// unit with the view's modules (scripts/lib/render-cards.mjs).
 
 export type PriceBasis = {
   /** "close": a completed day's close; "trade": a print during today's session. */
@@ -20,19 +22,19 @@ export type PriceBasis = {
   time: string | null;
 };
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const BASIS_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "20 Oct 2026" from YYYY-MM-DD. */
-function readableDay(iso: string): string {
+function basisDay(iso: string): string {
   const [y, m, d] = iso.split("-");
-  return `${Number(d)} ${MONTHS[Number(m) - 1]} ${y}`;
+  return `${Number(d)} ${BASIS_MONTHS[Number(m) - 1]} ${y}`;
 }
 
 /** What the price is, without the "Price:" lead: "close, 20 Oct 2026" / "last trade 14:05 ET". */
 export function priceBasisWords(b: PriceBasis): string {
-  if (b.kind === "close") return `close, ${readableDay(b.date)}`;
+  if (b.kind === "close") return `close, ${basisDay(b.date)}`;
   // A trade with no time the source states is dated rather than timed.
-  return b.time ? `last trade ${b.time} ET` : `last trade, ${readableDay(b.date)}`;
+  return b.time ? `last trade ${b.time} ET` : `last trade, ${basisDay(b.date)}`;
 }
 
 /** The label itself: "Price: close, 20 Oct 2026" / "Price: last trade 14:05 ET". */

@@ -9,7 +9,7 @@
 // it no longer has. Those are properties of the source, and the source is where
 // a future deploy would break them.
 import fs from "node:fs";
-import { readCodeOnly } from "./lib/source-code.mjs";
+import { grabConst, readCodeOnly } from "./lib/source-code.mjs";
 import { lift, grabFunction } from "./lib/earnings-plan.mjs";
 import { splitAdjustSource } from "./lib/split-adjust-source.mjs";
 
@@ -814,6 +814,14 @@ console.log("\n7i. the meta description describes the page, not the price chart"
         // B3: the title reads through historyForSurface; gate unset, it is the FMP read.
         "const historyForSurface = async (_surface, _symbol, fmp) => ({ points: await fmp(), provider: \"fmp\" });",
         "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
+        // AUDIT R3 ITEM 5: the title reads the valuation card's price. Gate unset
+        // (the FMP bar, a close); earningsPrice and the label words are the real ones.
+        "const historyOnTiingo = () => false;",
+        "const readSurfacePrice = async () => null;",
+        unexport(grabFunction(readCodeOnly("lib/server/earningsPrice.ts"), "earningsPrice")),
+        grabConst("lib/priceBasis.ts", "BASIS_MONTHS"),
+        grabFunction(readCodeOnly("lib/priceBasis.ts"), "basisDay"),
+        unexport(grabFunction(readCodeOnly("lib/priceBasis.ts"), "priceBasisWords")),
         // A SEED WITH A TREND IN IT. The point is that one is AVAILABLE and
         // still does not reach the description — a stub returning null would
         // make this pass for the wrong reason.
@@ -847,6 +855,8 @@ console.log("\n7i. the meta description describes the page, not the price chart"
   {
     const withCik = await runMeta(pageRaw, labels[0], "AAPL");
     const without = await runMeta(pageRaw, labels[0], "NOCIK");
+    check("the title prints the valuation price with its basis (audit r3 item 5)",
+      String(withCik.title).includes("— Price $200.00 (close, 15 Sep 2026) |"), String(withCik.title));
     check("a symbol with a CIK stays indexable",
       withCik.robots?.index === true, JSON.stringify(withCik.robots));
     check("a symbol with no registrant is noindex",
@@ -954,7 +964,9 @@ console.log("\n7i. the meta description describes the page, not the price chart"
     src.replace(
       "margins, cash flow and balance sheet, with year-over-year context",
       "margins, cash flow and balance sheet${seed.trend ? `, ${seed.trend}` : \"\"}, with year-over-year context"
-    );
+    // The title stopped computing a seed (audit r3 item 5), so the mutant
+    // brings back the one it leaked from, as the page used to compute it.
+    ).replace("  const description = ", "  const seed = computeIndicatorSeed([], \"\", null, null);\n  const description = ");
   check("the trend-leak mutation actually applied", restoreLeak(metaSrc) !== metaSrc);
   const leakMod = await lift(
     [
@@ -962,6 +974,14 @@ console.log("\n7i. the meta description describes the page, not the price chart"
       "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
       "const historyForSurface = async (_surface, _symbol, fmp) => ({ points: await fmp(), provider: \"fmp\" });",
       "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
+      // AUDIT R3 ITEM 5: the title reads the valuation card's price. Gate unset
+      // (the FMP bar, a close); earningsPrice and the label words are the real ones.
+      "const historyOnTiingo = () => false;",
+      "const readSurfacePrice = async () => null;",
+      unexport(grabFunction(readCodeOnly("lib/server/earningsPrice.ts"), "earningsPrice")),
+      grabConst("lib/priceBasis.ts", "BASIS_MONTHS"),
+      grabFunction(readCodeOnly("lib/priceBasis.ts"), "basisDay"),
+      unexport(grabFunction(readCodeOnly("lib/priceBasis.ts"), "priceBasisWords")),
       "const computeIndicatorSeed = () => ({ lastClose: 200, trend: \"Uptrend\" });",
       // Same stub and same reason as runMeta above — the mutation harness lifts
       // the SAME function, so it needs the same closure.
