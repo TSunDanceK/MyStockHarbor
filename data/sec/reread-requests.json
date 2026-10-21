@@ -790,6 +790,11 @@
    "symbol": "DELL",
    "requestedAt": "2026-10-23T00:00:00Z",
    "reason": "earnings audit r2: proxy-statement (DEF 14A / PRE 14A) rows no longer read; the pay-versus-performance NetIncomeLoss had displaced the 10-K's figure (SCHW 1000x low, MET net income to common, DELL)"
+  },
+  {
+   "symbol": "SHOP",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "audit r3: SHOP's multi-class cover (Class A + Class B + Founder share) is now cited in data/sec/share-classes.json, so the cover count, and with it market cap, can be read"
   }
  ]
 }
