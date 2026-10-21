@@ -446,6 +446,9 @@ const TASKS = {
   },
   // Read-only: every balance-sheet-total and non-operating concept a filer
   // publishes for its newest periods, with values (earnings page round 2).
+  // Read-only: a filer's latest 10-K text around the words asked for.
+  // SYMBOLS="NJR:356309,SRE:1032208|not within the scope|ASC 815"
+  "sec-filing-text": { script: "scripts/filing-text-probe.mjs", args: () => [] },
   "sec-concept-list": {
     script: "scripts/sec-concept-list-probe.mjs",
     args: () => [],
