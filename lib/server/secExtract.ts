@@ -2215,7 +2215,12 @@ function extractCompanyFactsWith(
       const m = cells.get(end)!;
       const c = m.get("revenue")!;
       if ((c.derived !== "as-filed" && c.derived !== "differenced") || !c.covers) continue;
-      if (restated && oldestComp && end < oldestComp) {
+      // A PERIOD THE FILER ITSELF RESTATED IS ON THE NEW BASIS (AIG FY2022:
+      // 56,437M as first filed, 29,996M in the FY2024 10-K after Corebridge):
+      // older than the comparatives, but carried across, so it stays.
+      const ownRows = basisRows.filter((r) => r.start === c.covers![0] && r.end === c.covers![1]).sort((a, b) => String(a.filed).localeCompare(String(b.filed)));
+      const carried = `${c.ns}|${c.tag}` === basis && ownRows.length > 1 && differs(ownRows[0].val as number, ownRows.at(-1)!.val as number, SERIES_RESTATED_MIN);
+      if (restated && oldestComp && end < oldestComp && !carried) {
         m.set("revenue", { ...c, val: null, derived: "withheld" });
         notes.push(`revenue ${end}: older than the newest filing's comparatives (from ${oldestComp}), which restated this series by over ${SERIES_RESTATED_MIN * 100}%; withheld (old basis)`);
         continue;

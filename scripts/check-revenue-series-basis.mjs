@@ -56,6 +56,24 @@ const RECAST = facts([
 ]);
 check("a 15% recast (a divestiture) is under the 25% ruling: FY2021 keeps its history", y(X.extractCompanyFacts("RCS", RECAST), 2021) === 38950 * M);
 
+// AIG (Corebridge deconsolidated): the FY2025 10-K's comparatives start at
+// FY2023, but FY2022 was itself restated in the FY2024 10-K (56,437M first
+// filed, 29,996M after), so it is on the new basis and stays.
+const AIG = facts([
+  ...tenK(R, 2023, { 2020: 43736, 2021: 52057, 2022: 56437 }),
+  ...tenK(R, 2024, { 2021: 52157, 2022: 54450, 2023: 46802 }),
+  ...tenK(R, 2025, { 2022: 29996, 2023: 27938, 2024: 27251 }),
+  ...tenK(R, 2026, { 2023: 27938, 2024: 27251, 2025: 26775 }),
+]);
+const aig = X.extractCompanyFacts("AIG", AIG);
+check("AIG: FY2022, restated onto the new basis by a later 10-K, stays at 29,996", y(aig, 2022) === 29996 * M, String(y(aig, 2022)));
+check("AIG: FY2021 and FY2020, never restated, are withheld (old basis)", y(aig, 2021) === null && y(aig, 2020) === null);
+{
+  const a = extractRaw.replace("if (restated && oldestComp && end < oldestComp && !carried) {", "if (restated && oldestComp && end < oldestComp) {");
+  check("the carried-period mutation is applied", a !== extractRaw);
+  check("MUTATION: a restated old period no longer counts as carried → AIG FY2022 withheld, caught", y((await load(a)).extractCompanyFacts("AIG", AIG), 2022) === null);
+}
+
 console.log("\n2. a mixed-concept series");
 const MIX = facts([
   ...tenK(C, 2022, { 2019: 1000, 2020: 1100, 2021: 1200 }),
@@ -75,7 +93,7 @@ check("concepts agreeing within 5% are one measure: FY2020 stays", y(X.extractCo
 
 console.log("\n3. mutations");
 {
-  const a = extractRaw.replace("if (restated && oldestComp && end < oldestComp) {", "if (false) {");
+  const a = extractRaw.replace("if (restated && oldestComp && end < oldestComp && !carried) {", "if (false) {");
   check("the restatement mutation is applied", a !== extractRaw);
   check("MUTATION: restatement rule off → LYG FY2021 kept, caught", y((await load(a)).extractCompanyFacts("LYG", LYG), 2021) !== null);
   const b = extractRaw.replace("if (!disagree) continue;", "continue;");
