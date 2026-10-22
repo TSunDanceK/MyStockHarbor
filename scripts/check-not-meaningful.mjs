@@ -81,6 +81,15 @@ console.log("1. the helper");
   check("growth beyond ±1,000% off $3.7M → n/m", M.revenueGrowthNotMeaningful(8608.6, 3.7e6));
   check("NBIS +479% off $91.5M → stands (the owner's real-base case)", !M.revenueGrowthNotMeaningful(479, 91.5e6));
   check("a crossing is never n/m (it already says what happened)", !M.revenueGrowthNotMeaningful("turned-profitable", 0));
+  check("yoy60 2f: growth off a $20M base → n/m; off $30M → stands", M.revenueGrowthNotMeaningful(80, 20e6) && !M.revenueGrowthNotMeaningful(80, 30e6));
+  check("...a quarter's floor is $6M: off a $5M year-ago quarter → n/m; off $7M → stands",
+    M.revenueGrowthNotMeaningful(80, 5e6, M.NOT_MEANINGFUL_QUARTER_GROWTH_BASE_USD) && !M.revenueGrowthNotMeaningful(80, 7e6, M.NOT_MEANINGFUL_QUARTER_GROWTH_BASE_USD));
+  check("...a 91-day period takes the quarter floor, a 365-day one the year floor",
+    M.growthBaseFloorUsd({ s: "2025-01-01", e: "2025-03-31" }) === 6e6 && M.growthBaseFloorUsd({ s: "2025-01-01", e: "2025-12-31" }) === 25e6);
+  check("...the margin floor stays $1M: a margin on $5M revenue stands", !M.marginNotMeaningful(-20, 5e6));
+  check("yoy60 2f: an ARS reporter's growth carries the high-inflation reason", M.revenueGrowthNotMeaningfulReason(150, 900e6, 360e6, true, "ARS") === M.HIGH_INFLATION_REASON);
+  check("...a USD or BRL reporter's does not", M.revenueGrowthNotMeaningfulReason(150, 900e6, 360e6, true, "USD") === null && M.revenueGrowthNotMeaningfulReason(150, 900e6, 360e6, true, "BRL") === null);
+  check("...a crossing word is left alone even in pesos", M.revenueGrowthNotMeaningfulReason("turned-profitable", 900e6, 360e6, true, "ARS") === null);
   check("margin on $500k of revenue → n/m; −675% on $38.6M → stands; −5,584% on $5M → n/m",
     M.marginNotMeaningful(-20, 5e5) && !M.marginNotMeaningful(-675.2, 38.6e6) && M.marginNotMeaningful(-5584, 5e6));
   check("a change is n/m when EITHER end is", M.marginChangeNotMeaningful({ margin: -675.2, revenueUsd: 38.6e6 }, { margin: -1119093, revenueUsd: 15e3 })
@@ -122,6 +131,17 @@ console.log("\n3. the cards");
   check("ACHR growth table: the margin cells read n/m, no −5,584", ga.includes("Revenue YoY") && /n\/m/.test(table) && !/5,?584/.test(table), table.slice(0, 160));
   const ko = out(M.SecGrowthMarginsCard, views.KO) + out(M.SecSnapshotCard, views.KO);
   check("KO: no n/m on either card", !/n\/m/.test(ko));
+  // ONE VISIBLE LINE FOR n/m (owner, audit r3), only where the table shows one.
+  const legend = "n/m: not meaningful, typically when the year-ago figure is very small.";
+  check("ACHR growth card: the n/m legend line is printed under its table", ga.includes(legend));
+  const anyAnnualNm = Object.values(views).find((v) => v.annual.some((r) => r.revenueYoYNotMeaningful || r.marginsRefused || Object.values(r.notMeaningful ?? {}).some(Boolean)));
+  check("an annual card with an n/m prints the legend", !!anyAnnualNm && out(M.SecAnnualCard, anyAnnualNm).includes(legend), anyAnnualNm ? anyAnnualNm.symbol : "no fixture has an annual n/m");
+  check("KO: no n/m, so no legend either", !ko.includes(legend));
+  {
+    let applied = false;
+    const Mm = await loadCards((src) => { applied = src.split("{anyNm([...view.growth, ...view.margins]) ? <NmLegend /> : null}").length === 2; return src.replace("{anyNm([...view.growth, ...view.margins]) ? <NmLegend /> : null}", ""); });
+    check("MUTANT the growth card's legend dropped (caught)", applied && !visibleText(html(React.createElement(Mm.SecGrowthMarginsCard, { view: Mm.buildSecEarningsView(mk(Mm).ACHR) }))).includes(legend));
+  }
 }
 
 console.log("\n4. the trend summary and the score");
@@ -176,8 +196,12 @@ console.log("\n6. mutants, one per clause");
     if (!applied) throw new Error(`mutant anchor must match once: ${from}`);
     return Mm;
   };
-  const m1 = await mutant("usd > 0 && usd < NOT_MEANINGFUL_REVENUE_USD", "false");
-  check("MUTANT the $1M floor off: WKHS's +374.9% back (caught)", m1.buildSecEarningsView(committed("WKHS")).snapshot.revenueYoYNotMeaningful === false);
+  const m1 = await mutant("yearAgoRevenueUsd > 0 && yearAgoRevenueUsd < floorUsd", "false");
+  check("MUTANT the growth floor off: WKHS's +374.9% back (caught)", m1.buildSecEarningsView(committed("WKHS")).snapshot.revenueYoYNotMeaningful === false);
+  const m1b = await mutant("usd > 0 && usd < NOT_MEANINGFUL_REVENUE_USD", "false");
+  check("MUTANT the $1M margin floor off: a $500k margin back (caught)", m1b.marginNotMeaningful(-20, 5e5) === false);
+  const m1c = await mutant("if (isPct(growth) && HIGH_INFLATION_CURRENCIES.has(", "if (false && HIGH_INFLATION_CURRENCIES.has(");
+  check("MUTANT the high-inflation rule off: an ARS +150% back (caught)", m1c.revenueGrowthNotMeaningfulReason(150, 900e6, 360e6, true, "ARS") === null);
   const m2 = await mutant("export const NOT_MEANINGFUL_PCT = 1_000;", "export const NOT_MEANINGFUL_PCT = 1e12;");
   check("MUTANT the ±1,000% ceiling off: ACHR's −5,584% back (caught)", m2.buildSecEarningsView(mk(m2).ACHR).margins.at(-1).notMeaningful.operating === false);
   const m3 = await mutant("return marginNotMeaningful(now.margin, now.revenueUsd) || marginNotMeaningful(then.margin, then.revenueUsd);", "return marginNotMeaningful(now.margin, now.revenueUsd);");

@@ -310,6 +310,19 @@ const Q4_EPS_NOTE =
 /** A growth value that prints as a number; a crossing word or a missing value prints as words. */
 const isNumberPct = (v: Pct | undefined): boolean => typeof v === "number" && Number.isFinite(v);
 
+/**
+ * ONE VISIBLE LINE FOR "n/m" (owner, audit r3): the tap note says why each
+ * one is n/m, but a reader who never taps should still know what it means.
+ * Printed under a table only when that table shows one.
+ */
+export const NM_LEGEND = "n/m: not meaningful, typically when the year-ago figure is very small.";
+type NmRow = { revenueYoYNotMeaningful?: boolean; marginsRefused?: boolean; notMeaningful?: Record<string, boolean | undefined> | null };
+const anyNm = (rows: readonly (NmRow | null | undefined)[]) =>
+  rows.some((r) => !!r && (r.revenueYoYNotMeaningful || r.marginsRefused || Object.values(r.notMeaningful ?? {}).some(Boolean)));
+function NmLegend() {
+  return <p className="smallLabel" data-nm-legend="" style={{ marginTop: 6 }}>{NM_LEGEND}</p>;
+}
+
 function PctCell({ v, missing, note, notMeaningful, notMeaningfulReason }: { v: Pct | undefined; missing?: string | null; note?: string | null; notMeaningful?: boolean; notMeaningfulReason?: string | null }) {
   // A RATE OFF A TINY BASE (#552 COWORK #212): JOBY's "+257,493.3%". FIRST,
   // ahead of the crossing words: a revenue column that went from no revenue to
@@ -864,6 +877,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           </tbody>
         </table>
       </div>
+      {anyNm([...view.growth, ...view.margins]) ? <NmLegend /> : null}
       </SeeAllTheNumbers>
     </section>
   );
@@ -961,6 +975,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
           </tbody>
         </table>
       </div>
+      {anyNm(view.annual) ? <NmLegend /> : null}
       <CardDetails>
         {crossingNoteHome(view) === "annual" ? <p>{CROSSING_NOTE}</p> : null}
         <p data-fine-print="">Source: {SEC_ATTRIBUTION}.</p>

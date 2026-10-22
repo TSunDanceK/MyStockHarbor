@@ -56,10 +56,11 @@ check("the narrative no longer names a 658pp move", !/658/.test(W.explanation) &
 console.log("\n2. rule 2 — growth off a very small base is not scored (floor only)");
 check("WKHS's revenue growth is out of the score", W.contributions.revenueGrowth === undefined);
 // 2026-10-12 (#552 COWORK #214): WKHS's +374.9% is on ~$0.76M, under the view's $1M n/m floor (#855),
-// so its sentence now says it in words, without the figure. AUR (not n/m, under the score's $5M floor) keeps the old wording.
+// so its sentence now says it in words, without the figure. AUR (+100% on $1.0M) was not n/m then; under the
+// yoy60 2f quarter floor ($6M on the year-ago quarter, owner ruling on #940) it is, and reads the same way.
 check("...and it says 'off a very small base'", W.unavailableWhy.some((u) => u.key === "revenueGrowth" && u.reason === "off a very small base") &&
   /revenue rose from a very small base in Q2 FY2025, so the growth rate isn't meaningful/i.test(W.explanation) && !/374\.9%/.test(W.explanation), W.explanation);
-check("...AUR, not n/m, keeps 'revenue grew 100.0% against Q2 FY2025, off a very small base'", /revenue grew 100\.0% against Q2 FY2025, off a very small base/i.test(A.explanation), A.explanation);
+check("...AUR, n/m under the $6M quarter floor, says it in words too", /revenue rose from a very small base in Q2 FY2025, so the growth rate isn't meaningful/i.test(A.explanation) && !/100\.0%/.test(A.explanation), A.explanation);
 check("AUR (+100% on $1.0M) likewise", A.contributions.revenueGrowth === undefined);
 check("NBIS (+479% on $91.5M) KEEPS its revenue-growth points", N.contributions.revenueGrowth === 22, JSON.stringify(N.contributions));
 {
