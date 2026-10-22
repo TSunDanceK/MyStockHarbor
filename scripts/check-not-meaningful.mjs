@@ -131,6 +131,17 @@ console.log("\n3. the cards");
   check("ACHR growth table: the margin cells read n/m, no −5,584", ga.includes("Revenue YoY") && /n\/m/.test(table) && !/5,?584/.test(table), table.slice(0, 160));
   const ko = out(M.SecGrowthMarginsCard, views.KO) + out(M.SecSnapshotCard, views.KO);
   check("KO: no n/m on either card", !/n\/m/.test(ko));
+  // ONE VISIBLE LINE FOR n/m (owner, audit r3), only where the table shows one.
+  const legend = "n/m: not meaningful, typically when the year-ago figure is very small.";
+  check("ACHR growth card: the n/m legend line is printed under its table", ga.includes(legend));
+  const anyAnnualNm = Object.values(views).find((v) => v.annual.some((r) => r.revenueYoYNotMeaningful || r.marginsRefused || Object.values(r.notMeaningful ?? {}).some(Boolean)));
+  check("an annual card with an n/m prints the legend", !!anyAnnualNm && out(M.SecAnnualCard, anyAnnualNm).includes(legend), anyAnnualNm ? anyAnnualNm.symbol : "no fixture has an annual n/m");
+  check("KO: no n/m, so no legend either", !ko.includes(legend));
+  {
+    let applied = false;
+    const Mm = await loadCards((src) => { applied = src.split("{anyNm([...view.growth, ...view.margins]) ? <NmLegend /> : null}").length === 2; return src.replace("{anyNm([...view.growth, ...view.margins]) ? <NmLegend /> : null}", ""); });
+    check("MUTANT the growth card's legend dropped (caught)", applied && !visibleText(html(React.createElement(Mm.SecGrowthMarginsCard, { view: Mm.buildSecEarningsView(mk(Mm).ACHR) }))).includes(legend));
+  }
 }
 
 console.log("\n4. the trend summary and the score");
