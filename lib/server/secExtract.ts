@@ -1280,6 +1280,10 @@ export function q4RevenueScope(
   return null;
 }
 
+/** yoy60 2c: a comparative restated by more than this against its first filing means the series changed basis (owner ruling: 25%, so a small recast keeps its history). */
+export const SERIES_RESTATED_MIN = 0.25;
+/** yoy60 2c: two revenue concepts within this of each other wherever both are filed are one measure. */
+export const SERIES_CONCEPT_AGREE = 0.05;
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
@@ -2168,6 +2172,70 @@ function extractCompanyFactsWith(
             ? `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
             : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters and the nine months ${nine} differ from those quarters' sum ${siblings.reduce((a, b) => a + b, 0)}; withheld (scope mismatch)`
       );
+    }
+  }
+
+  // ── ONE BASIS PER REVENUE SERIES (yoy60 2c; the #913 rule, LYG) ─────────────
+  // The newest period's concept and filing set the series' basis. Growth
+  // against the year-ago period already reads the newest filing's comparative
+  // (resolve(): newest filing wins within a concept), so a restatement reaches
+  // the comparatives by itself. What it cannot reach is a period OLDER than the
+  // newest filing's comparatives, or one on another concept. Withheld:
+  //   1. a period older than every comparative in the newest filing, when that
+  //      filing restated a comparative by more than SERIES_RESTATED_MIN (25%) against
+  //      its first filing: the old period is on the basis the filer abandoned
+  //      (LYG's 20-F: FY2022-24 restated to a net basis, FY2021 gross 38,950M);
+  //   2. a period on another concept, where the basis concept files nothing
+  //      for its frame and the two concepts, wherever both are filed for one
+  //      frame, differ by more than SERIES_CONCEPT_AGREE: two measures in one
+  //      column (#913's KEY/CRCL, beyond what its rule reached).
+  // Rule 1 judges as-filed and differenced cells, rule 2 as-filed ones; only a
+  // series whose newest cell is as-filed: a computed (bank net-basis) series
+  // is left alone.
+  for (const cells of [quarterCells, yearCells]) {
+    const ends = [...cells.keys()].filter((e) => cells.get(e)?.get("revenue")?.val != null).sort();
+    if (ends.length < 2) continue;
+    const top = cells.get(ends.at(-1)!)!.get("revenue")!;
+    if (top.derived !== "as-filed" || !top.tag || !top.covers) continue;
+    const rowsOf = (c: FieldValue) => ((facts.facts?.[c.ns ?? "us-gaap"]?.[c.tag ?? ""]?.units?.[c.unit ?? ""] ?? []) as FactRow[])
+      .filter((r) => r.start && r.end && typeof r.val === "number" && r.filed);
+    const basisRows = rowsOf(top);
+    const span = (r: { start?: string; end?: string }) => (Date.parse(r.end!) - Date.parse(r.start!)) / DAY;
+    const topSpan = span({ start: top.covers[0], end: top.covers[1] });
+    const accN = basisRows.filter((r) => r.start === top.covers![0] && r.end === top.covers![1]).sort((a, b) => String(a.filed).localeCompare(String(b.filed))).at(-1)?.accn;
+    const comps = basisRows.filter((r) => r.accn === accN && Math.abs(span(r) - topSpan) <= 20);
+    const differs = (a: number, b: number, tol: number) => Math.abs(a - b) > tol * Math.max(Math.abs(a), Math.abs(b));
+    const restated = comps.some((r) => {
+      const first = basisRows.filter((x) => x.start === r.start && x.end === r.end).sort((a, b) => String(a.filed).localeCompare(String(b.filed)))[0];
+      return first && first.accn !== accN && differs(r.val as number, first.val as number, SERIES_RESTATED_MIN);
+    });
+    const oldestComp = comps.map((r) => r.end as string).sort()[0];
+    const basis = `${top.ns}|${top.tag}`;
+    for (const end of ends.slice(0, -1)) {
+      const m = cells.get(end)!;
+      const c = m.get("revenue")!;
+      if ((c.derived !== "as-filed" && c.derived !== "differenced") || !c.covers) continue;
+      // A PERIOD THE FILER ITSELF RESTATED IS ON THE NEW BASIS (AIG FY2022:
+      // 56,437M as first filed, 29,996M in the FY2024 10-K after Corebridge):
+      // older than the comparatives, but carried across, so it stays.
+      const ownRows = basisRows.filter((r) => r.start === c.covers![0] && r.end === c.covers![1]).sort((a, b) => String(a.filed).localeCompare(String(b.filed)));
+      const carried = `${c.ns}|${c.tag}` === basis && ownRows.length > 1 && differs(ownRows[0].val as number, ownRows.at(-1)!.val as number, SERIES_RESTATED_MIN);
+      if (restated && oldestComp && end < oldestComp && !carried) {
+        m.set("revenue", { ...c, val: null, derived: "withheld" });
+        notes.push(`revenue ${end}: older than the newest filing's comparatives (from ${oldestComp}), which restated this series by over ${SERIES_RESTATED_MIN * 100}%; withheld (old basis)`);
+        continue;
+      }
+      if (c.derived !== "as-filed" || `${c.ns}|${c.tag}` === basis) continue;
+      if (basisRows.some((r) => r.start === c.covers![0] && r.end === c.covers![1])) continue;
+      const other = rowsOf(c);
+      const overlap = basisRows.filter((r) => other.some((o) => o.start === r.start && o.end === r.end));
+      const disagree = overlap.some((r) => {
+        const o = other.filter((x) => x.start === r.start && x.end === r.end).sort((a, b) => String(a.filed).localeCompare(String(b.filed))).at(-1)!;
+        return differs(r.val as number, o.val as number, SERIES_CONCEPT_AGREE);
+      });
+      if (!disagree) continue;
+      m.set("revenue", { ...c, val: null, derived: "withheld" });
+      notes.push(`revenue ${end}: on ${c.tag}, while the series reads ${top.tag}, which files nothing for this period and differs from ${c.tag} where both are filed; withheld (mixed concept)`);
     }
   }
 
