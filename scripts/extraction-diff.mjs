@@ -73,7 +73,11 @@ for (const [sym, cik] of targets) {
     const net = (ex) => {
       const p = ex.instants[0]; if (!p) return null;
       const v = (f) => p.values[keys.indexOf(f)]?.val ?? null;
-      const cash = v("cash"); if (cash === null || v("longTermDebt") === null) return null;
+      // The view's own cash rule (secEarningsView cashCell): the plain figure,
+      // else the one including restricted cash. Reading only `cash` left CVX
+      // and TRV at n/a here while the page computes their net position.
+      const cash = v("cash") ?? v("cashIncludingRestricted");
+      if (cash === null || v("longTermDebt") === null) return null;
       return cash + (v("shortTermInvestments") ?? 0) - ((v("shortTermDebt") ?? 0) + v("longTermDebt"));
     };
     if (lines.some((l) => /\t(shortTermDebt|longTermDebt)\tI /.test(l))) {
