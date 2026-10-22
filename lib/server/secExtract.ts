@@ -1358,6 +1358,9 @@ export const BANK_NET_TOLERANCE = 0.02;
 export const BANK_NET_GAINS_TOLERANCE = 0.08;
 /** The in-memory tag of a derived contract + not-from-contract total (option G, LUNR). Never stored. */
 const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
+/** The lessor's derived total (owner ruling, CPT audit): contract revenue plus OperatingLeaseLeaseIncome. */
+export const LEASE_INCOME_TAG = "OperatingLeaseLeaseIncome";
+const LEASE_TOTAL_TAG = "RevenueFromContractWithCustomerPlusOperatingLeaseLeaseIncome";
 
 /**
  * DOES THE FILER TAG EXCISE AT ALL (#552 COWORK #192 ruling A)? Any us-gaap
@@ -2093,6 +2096,53 @@ function extractCompanyFactsWith(
           }
           notes.push(`revenue: bank net basis — ${off} period(s) not a net total of ${BANK_REVENUE_HALVES.join(" + ")}; net revenue used for ${moved} period(s) (${computed} computed), ${blanked} without it left unreported`);
         }
+      }
+    }
+
+    // ── A LESSOR'S REVENUE IS ITS LEASE INCOME TOO (owner ruling, CPT audit) ──
+    // Camden files no `Revenues` total: its contract line (FY2025 13.0M) is the
+    // fee sliver beside 1,573.5M of OperatingLeaseLeaseIncome, which ASC 606
+    // leaves out by definition. For a filer with NO `Revenues` (or net-of-
+    // interest) total for a period, whose contract line is the revenue cell and
+    // whose lease income is filed for the same frame, revenue is their sum,
+    // marked computed. ONLY A LESSOR: the filer's newest year must carry lease
+    // income at least equal to its contract line, so a retailer's sublease
+    // footnote (often other income) cannot inflate a sales line.
+    {
+      const lField: FieldDef = { ...revenueField, chain: [LEASE_INCOME_TAG], ifrsChain: undefined };
+      const lRows = rowsForField(facts, lField, new Set<string>(), currency);
+      if (lRows.length) {
+        const lBucket: Bucket = new Map();
+        for (const c of lRows) {
+          const k = periodKey(c.row);
+          const list = lBucket.get(k);
+          if (list) list.push(c);
+          else lBucket.set(k, [c]);
+        }
+        const lQuarter = new Map<string, Map<string, FieldValue>>();
+        const lYear = new Map<string, Map<string, FieldValue>>();
+        runCumulative([lField], new Map([["revenue", lBucket]]), new Map([["revenue", LEASE_INCOME_TAG]]), lQuarter, lYear, new Map(), new Map(), []);
+        const g = facts.facts?.["us-gaap"] ?? {};
+        const totalFiled = (c: FieldValue) => REVENUE_FALLBACK_CHAIN.some((t) =>
+          Object.values(g[t]?.units ?? {}).some((rows) => (rows as FactRow[]).some((r) => r.start === c.covers?.[0] && r.end === c.covers?.[1])));
+        const newestYear = [...yearCells.keys()].sort().reverse().find((e) => yearCells.get(e)?.get("revenue")?.tag === CONTRACT_REVENUE_TAG);
+        const ny = newestYear ? yearCells.get(newestYear)!.get("revenue")! : null;
+        const nl = newestYear ? lYear.get(newestYear)?.get("revenue") : null;
+        const lessor = Boolean(ny?.val != null && nl?.val != null && nl.val >= ny.val);
+        let summed = 0;
+        if (lessor) {
+          for (const [cells, lCells] of [[quarterCells, lQuarter], [yearCells, lYear]] as const) {
+            for (const [end, m] of cells) {
+              const c = m.get("revenue"), l = lCells.get(end)?.get("revenue");
+              if (!c || c.tag !== CONTRACT_REVENUE_TAG || c.val == null || !l || l.val == null) continue;
+              if (!c.covers || !l.covers || c.covers[0] !== l.covers[0] || c.covers[1] !== l.covers[1]) continue;
+              if (totalFiled(c)) continue;
+              m.set("revenue", { val: c.val + l.val, tag: LEASE_TOTAL_TAG, ns: c.ns, unit: c.unit, derived: "computed", covers: c.covers });
+              summed++;
+            }
+          }
+        }
+        if (summed) notes.push(`revenue: lessor with no total — ${summed} period(s) read as the contract line plus ${LEASE_INCOME_TAG}`);
       }
     }
 

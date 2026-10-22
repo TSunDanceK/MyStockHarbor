@@ -16,7 +16,11 @@ const UA = process.env.SEC_USER_AGENT ?? "MyStockHarbor/1.0 (+https://www.mystoc
 const { NEW, OLD } = await loadMainAndBranch();
 if (!OLD) { console.error("FATAL: main's source is needed for the before column"); process.exit(2); }
 
-const arg = String(process.env.SYMBOLS || "").trim();
+// "SHARD 0/4|notes=seasonal": the relay passes SYMBOLS only, so a notes filter
+// rides after a bar; the branch's notes matching it print as NOTE lines.
+const [argRaw, ...opts] = String(process.env.SYMBOLS || "").split("|");
+const arg = argRaw.trim();
+const notesRe = (opts.find((o) => o.startsWith("notes=")) ?? "").slice(6);
 const shardM = arg.match(/SHARD\s+(\d+)\s*\/\s*(\d+)/i);
 let targets;
 if (!arg || shardM) {
@@ -67,6 +71,7 @@ for (const [sym, cik] of targets) {
         });
       }
     }
+    if (notesRe) for (const n of b.notes ?? []) if (new RegExp(notesRe, "i").test(n)) console.log(`NOTE ${sym}\t${n}`);
     if (lines.length) { filersChanged++; cells += lines.length; for (const l of lines) console.log(l); }
   } catch (e) { failed++; console.log(`ERR ${sym}: ${e.message}`); }
   await new Promise((r) => setTimeout(r, 250));
