@@ -1,0 +1,17 @@
+{
+ "_comment": "Corporate retickers: a universe ticker SEC's live map no longer lists, whose registrant SEC now lists under another ticker. Each CIK is cited from SEC's own ticker file (data/sec/company-tickers.json, which lists the CIK under the new ticker only). Read by seedManifest (lib/server/secManifest.ts) ONLY when the live map has no entry for the old ticker, so the manifest entry keeps its CIK and reconcile records retickeredTo. Not a rename of the page: the old ticker's page reads the same registrant's filings.",
+ "retickers": {
+  "BK": {
+   "cik": "0001390777",
+   "nowTicker": "BNY",
+   "name": "Bank of New York Mellon Corp",
+   "evidence": "data/sec/company-tickers.json: [1390777, \"Bank of New York Mellon Corp\", \"BNY\", \"NYSE\"] and [1390777, ..., \"BNY-PK\", \"NYSE\"]; no row for BK. Reticker first observed 2026-09-13 (secManifest retickeredTo note)."
+  },
+  "EQR": {
+   "cik": "0000906107",
+   "nowTicker": "VMRK",
+   "name": "Vivmark Residential (formerly Equity Residential)",
+   "evidence": "data/sec/company-tickers.json: [906107, \"VIVMARK RESIDENTIAL\", \"VMRK\", \"NYSE\"]; no row for EQR. Reticker first observed 2026-09-13 (secManifest retickeredTo note)."
+  }
+ }
+}

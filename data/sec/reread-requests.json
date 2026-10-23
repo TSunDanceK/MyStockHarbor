@@ -765,6 +765,31 @@
    "symbol": "AZZ",
    "requestedAt": "2026-10-22T00:00:00Z",
    "reason": "earnings audit r2: a full year's value filed on a quarter's dates under the same accession is no longer read as that quarter, so the derived Q4 (or Q3) and the FY-vs-quarters sum are right; the stored set carries the old figure. AZZ Q4 FY2024 (2023-11-30..2024-02-29) read 1,537.6M, the whole year; now 366.6M (FY - 9M). Found by the r1 scan, not one of the nine"
+  },
+  {
+   "symbol": "WMT",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "earnings audit r2: owner ruling (REVENUE_TOTAL_RULINGS): revenue is the filer's headline total for every period (WMT Revenues, DUK RegulatedAndUnregulatedOperatingRevenue), not the contract line"
+  },
+  {
+   "symbol": "DUK",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "earnings audit r2: owner ruling (REVENUE_TOTAL_RULINGS): revenue is the filer's headline total for every period (WMT Revenues, DUK RegulatedAndUnregulatedOperatingRevenue), not the contract line"
+  },
+  {
+   "symbol": "SCHW",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "earnings audit r2: proxy-statement (DEF 14A / PRE 14A) rows no longer read; the pay-versus-performance NetIncomeLoss had displaced the 10-K's figure (SCHW 1000x low, MET net income to common, DELL)"
+  },
+  {
+   "symbol": "MET",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "earnings audit r2: proxy-statement (DEF 14A / PRE 14A) rows no longer read; the pay-versus-performance NetIncomeLoss had displaced the 10-K's figure (SCHW 1000x low, MET net income to common, DELL)"
+  },
+  {
+   "symbol": "DELL",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "earnings audit r2: proxy-statement (DEF 14A / PRE 14A) rows no longer read; the pay-versus-performance NetIncomeLoss had displaced the 10-K's figure (SCHW 1000x low, MET net income to common, DELL)"
   }
  ]
 }
