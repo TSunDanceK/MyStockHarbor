@@ -66,8 +66,10 @@ const M = await load(SRC);
   check("at most `cap` a run", M.applyRereadRequests(manifest(), [REQ("XOM"), REQ("MSFT")], NOW, 1).join() === "XOM");
   const PER_RUN = Number(SRC.match(/^export const SEC_REREAD_REQUESTS_PER_RUN = (\d+);$/m)?.[1]);
   const REVERIFY = Number(readCodeOnly("app/api/jobs/sec-facts/route.ts").match(/^export const SEC_REVERIFY_PER_RUN = (\d+);$/m)?.[1]);
-  check("the per-run cap is a small slice of the reverify queue (<= 1/10 of SEC_REVERIFY_PER_RUN)",
-    PER_RUN >= 1 && PER_RUN * 10 <= REVERIFY, `${PER_RUN} of ${REVERIFY}`);
+  // WAS <= 1/10 (12 of 150). Relaxed to <= 1/2 by the owner's ruling of
+  // 2026-10-23 (cap 60): requests still cannot take over the reverify queue.
+  check("the per-run cap is at most half the reverify queue (<= 1/2 of SEC_REVERIFY_PER_RUN)",
+    PER_RUN >= 1 && PER_RUN * 2 <= REVERIFY, `${PER_RUN} of ${REVERIFY}`);
   const Mm = await load(once(SRC, "if ((entry.verifiedAt ?? 0) >= at) continue;", ""));
   check("MUTATION: the verifiedAt test removed → a re-read symbol is flagged again forever",
     Mm.applyRereadRequests(manifest(), [REQ("AAPL")], NOW).length === 1);
