@@ -1,6 +1,11 @@
 {
- "_comment": "One-off re-read requests for the sec-facts cron: a symbol whose stored set was last verified BEFORE requestedAt is put on the manifest's reverify queue (reason 'requested'), at most SEC_REREAD_REQUESTS_PER_RUN (12) a run. The cron's own verifiedAt stamp retires the request once the re-read lands, so an entry left here is inert. Read by lib/server/secRereadRequests.ts. No secret, no manual call: a code change, reviewed like any other.",
+ "_comment": "One-off re-read requests for the sec-facts cron: a symbol whose stored set was last verified BEFORE requestedAt is put on the manifest's reverify queue (reason 'requested'), at most SEC_REREAD_REQUESTS_PER_RUN (60) a run. The cron's own verifiedAt stamp retires the request once the re-read lands, so an entry left here is inert. Read by lib/server/secRereadRequests.ts. No secret, no manual call: a code change, reviewed like any other.",
  "requests": [
+  {
+   "symbol": "AXP",
+   "requestedAt": "2026-10-22T00:00:00Z",
+   "reason": "earnings audit r2: a bank's revenue is its net revenue (a filed net total: RevenuesNetOfInterestExpense or Revenues within 2% of net interest income + noninterest income, or within 8% where it carries securities gains and losses; else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
+  },
   {
    "symbol": "KEY",
    "requestedAt": "2026-10-22T00:00:00Z",
@@ -225,11 +230,6 @@
    "symbol": "WAL",
    "requestedAt": "2026-10-22T00:00:00Z",
    "reason": "earnings audit r2: a bank's revenue is its net revenue (a filed net total: RevenuesNetOfInterestExpense or Revenues within 2% of net interest income + noninterest income, or within 8% where it carries securities gains and losses; else the two halves' sum marked computed); the stored set carries the old figure. One of the 55 filers read below their own net interest income"
-  },
-  {
-   "symbol": "AXP",
-   "requestedAt": "2026-10-22T00:00:00Z",
-   "reason": "earnings audit r2: a bank's revenue is its net revenue (a filed net total: RevenuesNetOfInterestExpense or Revenues within 2% of net interest income + noninterest income, or within 8% where it carries securities gains and losses; else the two halves' sum marked computed); the stored set carries the old figure. Not one of the 55; its series moved onto the same basis"
   },
   {
    "symbol": "NTRS",
