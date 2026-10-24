@@ -606,6 +606,10 @@ const TASKS = {
   "write-earnings-audit-r2-cells": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["cells", env.SYMBOLS ?? ""], writes: true, env: { MODE: "cells" } },
   // DRY RUN: every cell an extraction change moves, main against the branch. Read-only (manifest GET).
   "write-extraction-diff": { script: "scripts/extraction-diff.mjs", args: () => [], needsTypescript: true, writes: true },
+  // The earnings page's valuation-card price basis against its title's close.
+  // Two HGETALLs, nothing written; the write- prefix and `writes` are what
+  // route it to the credentialled job (as write-extraction-diff).
+  "write-price-basis-dry-run": { script: "scripts/price-basis-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
   // One field's cells beside every raw companyfacts row of the named concepts. Read-only.
   // SYMBOLS="SCHW,MET|netIncome|NetIncomeLoss,ProfitLoss|cover,qrows"
   "field-trace": { script: "scripts/field-trace-probe.mjs", args: () => [], needsTypescript: true },
