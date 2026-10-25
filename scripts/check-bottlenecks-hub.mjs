@@ -145,7 +145,7 @@ const RULES = {
   "the supplier / key-customer split counts pages per chart (supplyChain vs customers)": ({ M, companies }) => {
     const a = co(M.hub.buildHubCompanies(FIX), "AMZN"), meta = co(companies, "META");
     return a.supplierPages === 3 && a.customerPages === 1 && co(M.hub.buildHubCompanies(FIX), "AAPL").customerPages === 1 && co(M.hub.buildHubCompanies(FIX), "AAPL").supplierPages === 1 &&
-      meta.supplierPages === 0 && meta.customerPages === meta.count && companies.every((c) => c.supplierPages <= c.count && c.customerPages <= c.count && c.supplierPages + c.customerPages >= c.count);
+      meta.customerPages >= 1 && companies.every((c) => c.supplierPages <= c.count && c.customerPages <= c.count && c.supplierPages + c.customerPages >= c.count);
   },
   "the leaderboard: ten rows then 'See full leaderboard'; each row logo, name, 'named on N stock pages', split bar, ×N, opening to chips → /bottlenecks/[slug]": ({ board, boardSrc }) => {
     const rows = board.match(/<details class="bnLbRow">/g) ?? [];

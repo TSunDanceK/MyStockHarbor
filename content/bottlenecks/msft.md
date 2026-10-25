@@ -5,6 +5,7 @@ category: Enterprise software, cloud computing & AI infrastructure
 domain: microsoft.com
 title: "Microsoft (MSFT) Bottlenecks: Who Microsoft Depends On"
 date: 2026-07-08
+updated: 2026-10-18
 summary: >
   Microsoft's revenue is broadly diversified across enterprise software,
   Azure cloud, and consumer products - but building Azure's AI capacity
@@ -28,14 +29,14 @@ disclaimer: >
 supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
-    pct: 24
+    pct: 23
     grade: some
     blurb: >
       Fabricates Microsoft's custom Maia AI accelerator and Cobalt CPU
       chips.
   - name: NVIDIA
     ticker: NVDA
-    pct: 24
+    pct: 23
     grade: some
     blurb: >
       Supplies the GPUs underpinning most of Azure's AI compute capacity.
@@ -82,6 +83,17 @@ supplyChain:
     blurb: >
       Supplies networking silicon used across Microsoft's data-center
       infrastructure.
+  - name: Constellation Energy
+    ticker: CEG
+    pct: 4
+    grade: spread
+    blurb: >
+      Constellation Energy has agreed to supply Microsoft with the full output
+      of the restarted Three Mile Island Unit 1 (the Crane Clean Energy Center),
+      about 835 megawatts, under a 20-year power purchase agreement announced in
+      September 2024. The plant is expected to return to service around 2028, so
+      supply may not begin until then. No price or share of Microsoft's total
+      power use was disclosed.
   - name: Corning
     ticker: GLW
     pct: 3
@@ -89,12 +101,6 @@ supplyChain:
     blurb: >
       Supplies fiber and optical components used in Microsoft's networking
       infrastructure.
-  - name: Arista Networks
-    ticker: ANET
-    pct: 2
-    grade: spread
-    blurb: >
-      Supplies networking hardware used across Microsoft's data centers.
 customers:
   - name: OpenAI
     ticker: null

@@ -20,13 +20,13 @@ disclaimer: >
   stock/earnings links. This is not financial advice.
 supplyChain:
   - name: Infineon Technologies
-    ticker: null
+    ticker: IFNNY
     pct: 16
     grade: some
     blurb: >
       A major supplier of the power semiconductors used in Vertiv's power
       distribution systems. Trades primarily on the Frankfurt Stock Exchange
-      with no proper US-listed ticker.
+      and in the US only as a thin OTC ADR (IFNNY).
   - name: ON Semiconductor
     ticker: ON
     pct: 14
