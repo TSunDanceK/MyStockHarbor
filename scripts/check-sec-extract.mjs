@@ -801,11 +801,35 @@ check("...and the refusal names both concepts in a note",
   tc.notes.some((n) => n.startsWith("operatingCashFlow ") && n.includes(OCF_A) && n.includes(OCF_B)),
   tc.notes.find((n) => n.startsWith("operatingCashFlow ")) ?? "(none)");
 
+// THE COMMON CONCEPT (audit r4, FOXA): the later frame resolves to one concept
+// but also files the earlier frame's, so the quarter is differenced on that
+// one, both operands the same concept, and never across the two.
+const common = {
+  cik: 1,
+  facts: { "us-gaap": {
+    [OCF_A]: { units: { USD: [
+      { start: "2026-01-01", end: "2026-06-30", val: 900, accn: "b", filed: "2026-07-20" },
+    ] } },
+    [OCF_B]: { units: { USD: [
+      { start: "2026-01-01", end: "2026-03-31", val: 400, accn: "a", filed: "2026-04-20" },
+      { start: "2026-01-01", end: "2026-06-30", val: 880, accn: "b", filed: "2026-07-20" },
+    ] } },
+  } },
+};
+const cm = extractCompanyFacts("COMMON", common);
+const cmQ2 = cm.quarters.find((q) => q.end === "2026-06-30")?.values[ocfIdx];
+check("a later frame that also files the earlier frame's concept is differenced on that concept",
+  cmQ2?.val === 480 && cmQ2?.tag === OCF_B && cmQ2?.derived === "differenced",
+  `Q2 = ${JSON.stringify(cmQ2 ?? null)} — 880 - 400 under ${OCF_B}, never 900 - 400 across the two`);
+check("...and the note says which concept it used",
+  cm.notes.some((n) => n.startsWith("operatingCashFlow ") && n.includes(`differenced on us-gaap|${OCF_B}`)),
+  cm.notes.find((n) => n.startsWith("operatingCashFlow ")) ?? "(none)");
+
 {
   // MUTATION: the same-concept test removed, so the differencing takes whatever
   // frame sits one length below regardless of which concept filed it.
   const mixMod = await liftMutated((src) =>
-    src.replace("if (conceptKey(prior.best) !== conceptKey(f.best)) {", "if (false) {")
+    src.replace("if (conceptKey(lo) !== conceptKey(hi)) {", "if (false) {")
   );
   const mixed = mixMod.extractCompanyFacts("TWOC", twoConcept);
   const mixedQ2 = mixed.quarters.find((q) => q.end === "2026-06-30");
@@ -881,8 +905,8 @@ check("...and the refusal names both concepts in a note",
   // This is the defect as it shipped, not an invented one.
   const bareMod = await liftMutated((src) =>
     src.replace(
-      "if (conceptKey(prior.best) !== conceptKey(f.best)) {",
-      "if (prior.best.tag !== f.best.tag) {"
+      "if (conceptKey(lo) !== conceptKey(hi)) {",
+      "if (lo.tag !== hi.tag) {"
     )
   );
   const bare = bareMod.extractCompanyFacts("DUALNS", crossNs);
@@ -1216,9 +1240,19 @@ check("oneConceptPerFiler is fed into secChainsHash",
     check("FIGR shape: the annual keeps the TOTAL, and the differenced Q4 is filled back, not emptied",
       at(fy, "nonOperatingIncomeExpense")?.val === 12e6 && cell?.val === 4e6,
       `FY2024 ${at(fy, "nonOperatingIncomeExpense")?.val} · Q4 2024 ${cell?.val ?? "empty"}`);
+    // Since audit r4 the common-concept differencing fills this cell on the
+    // first reading too (10 - 6 under the component, which both frames file),
+    // so the fill-back alone removed changes nothing; both removed empty it.
     const noFill = await liftMutated((src) => src.replace("if (!ranked.length) return primary;", "return primary;"));
-    const bad = q4(noFill.extractCompanyFacts("FIGR", figr));
-    check("MUTATION: without the fill-back, Q4 2024 is emptied (the 37-cell cost on the census)",
+    const still = q4(noFill.extractCompanyFacts("FIGR", figr));
+    check("without the fill-back, the common-concept differencing gives the same Q4 2024",
+      still && at(still, "nonOperatingIncomeExpense")?.val === 4e6, still ? String(at(still, "nonOperatingIncomeExpense")?.val) : "no Q4 row");
+    const noBoth = await liftMutated((src) => src
+      .replace("if (!ranked.length) return primary;", "return primary;")
+      .replace("const altHi = sameAs(f.cands, conceptKey(lo));", "const altHi = null;")
+      .replace("const altLo = altHi ? null : sameAs(prior.cands, conceptKey(hi));", "const altLo = null;"));
+    const bad = q4(noBoth.extractCompanyFacts("FIGR", figr));
+    check("MUTATION: without the fill-back AND the common concept, Q4 2024 is emptied (the 37-cell cost on the census)",
       !bad || at(bad, "nonOperatingIncomeExpense") == null, bad ? String(at(bad, "nonOperatingIncomeExpense")?.val) : "no Q4 row");
     const jdAgain = nonOpBy(noFill.extractCompanyFacts("JD", jd));
     check("...and the fill-back never overrides a cell the per-period rule filled (JD FY2023 stays the total)",

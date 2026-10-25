@@ -1611,7 +1611,8 @@ function extractCompanyFactsWith(
     // Cumulative frames grouped by the fiscal year they start: a 3M, 6M, 9M and
     // FY row for one year all share a `start`. Q4 = FY - 9M falls out of this
     // with no special case, which is trap 4 handled structurally.
-    const byStart = new Map<string, { end: string; n: number; best: NonNullable<ReturnType<typeof resolve>> }[]>();
+    type Cand = NonNullable<ReturnType<typeof resolve>>;
+    const byStart = new Map<string, { end: string; n: number; best: Cand; cands: Cand[] }[]>();
 
     for (const [, cands] of bucket) {
       const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
@@ -1619,7 +1620,7 @@ function extractCompanyFactsWith(
       const n = quartersCovered(spanDays(best.row.start, best.row.end), calendar);
       if (n === null) continue;
       const list = byStart.get(best.row.start);
-      const entry = { end: best.row.end, n, best };
+      const entry = { end: best.row.end, n, best, cands };
       if (list) list.push(entry);
       else byStart.set(best.row.start, [entry]);
     }
@@ -1687,21 +1688,40 @@ function extractCompanyFactsWith(
         // nothing had noticed a change. That is the same bare-tag mistake this
         // file's own conceptKey comment records catching in preferredTag — the
         // guard here had not followed it.
-        if (conceptKey(prior.best) !== conceptKey(f.best)) {
+        //
+        // UNLESS ONE SIDE ALSO FILED THE OTHER'S CONCEPT (audit r4, FOXA): its
+        // FY resolves to NetIncomeLoss while its 3M, 6M and 9M carry only
+        // ProfitLoss, and the 10-K files ProfitLoss for the year too (1,727M).
+        // The difference is then taken on that common concept, the later
+        // frame's first (the quarters' own measure), so both operands are one
+        // concept and the quarter reads 1,727 - 1,031 = 696M.
+        let [hi, lo] = [f.best, prior.best];
+        if (conceptKey(lo) !== conceptKey(hi)) {
+          const sameAs = (cs: Cand[], k: string) => resolve(cs.filter((c) => conceptKey(c) === k));
+          const altHi = sameAs(f.cands, conceptKey(lo));
+          const altLo = altHi ? null : sameAs(prior.cands, conceptKey(hi));
+          if (!altHi && !altLo) {
+            notes.push(
+              `${field.key} ${start}..${f.end}: concept changed mid-year ` +
+                `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}), not differenced`
+            );
+            continue;
+          }
+          if (altHi) hi = altHi;
+          else lo = altLo!;
           notes.push(
             `${field.key} ${start}..${f.end}: concept changed mid-year ` +
-              `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}), not differenced`
+              `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}); differenced on ${conceptKey(hi)}, filed on both frames`
           );
-          continue;
         }
         const m = cell(quarterCells, quarterMeta);
         // The quarter's own start is the prior frame's end, not the year's.
-        quarterMeta.set(f.end, { start: prior.end, row: f.best.row });
+        quarterMeta.set(f.end, { start: prior.end, row: hi.row });
         m.set(field.key, {
-          val: f.best.row.val! - prior.best.row.val!,
-          tag: f.best.tag,
-          ns: f.best.ns,
-          unit: f.best.unit,
+          val: hi.row.val! - lo.row.val!,
+          tag: hi.tag,
+          ns: hi.ns,
+          unit: hi.unit,
           derived: "differenced",
           covers: [prior.end, f.end],
           from: [prior.end, f.end],
