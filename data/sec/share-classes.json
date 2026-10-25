@@ -458,20 +458,6 @@
    ],
    "source": "0001628280-26-008114"
   },
-  "SHOP": {
-   "listed": "CommonClassAMember",
-   "weights": {
-    "CommonClassAMember": 1,
-    "CommonClassBMember": 1,
-    "FounderShareMember": 0
-   },
-   "evidence": [
-    "The Class B restricted voting shares are convertible into Class A subordinate voting shares on a one -for-one basis at the option of the holder.",
-    "holders of Class A subordinate voting shares and Class B restricted voting shares are treated equally and identically, on a per share basis, in certain change of control transactions",
-    "There are no economic rights associated with the Founder Share"
-   ],
-   "source": "0001594805-26-000007"
-  },
   "SPCX": {
    "listed": "CommonClassAMember",
    "weights": {
