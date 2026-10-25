@@ -1317,14 +1317,19 @@ function primaryFirst<T extends { tag: string }>(cands: T[]): T[] {
 const SAME_MEASURE: Readonly<Record<string, string>> = {
   LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: "LongTermDebtAndCapitalLeaseObligations",
 };
-function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[]): T[] {
+function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[], newestAnnualEnd = ""): T[] {
   const primaryTags = new Set(rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag)).map((r) => r.tag));
   // The same figure tagged the other way counts with the primary it mirrors.
   return switchOver(
     rows,
     (t) => DEBT_FALLBACK_TAGS.has(t) && !primaryTags.has(SAME_MEASURE[t] ?? ""),
-    rows.some((r) => STI_FALLBACK_TAGS.has(r.tag)),
+    rows.some((r) => STI_FALLBACK_TAGS.has(r.tag)) ? newestAnnualEnd : "",
   );
+}
+/** The newest balance-sheet date a 10-K reports (its Assets row), or "". */
+function newestAnnualBalanceEnd(facts: CompanyFacts): string {
+  const rows = (facts.facts?.["us-gaap"]?.Assets?.units ?? {}) as Record<string, FactRow[]>;
+  return Object.values(rows).flat().reduce((m, r) => (r.form === "10-K" && !r.start && r.end && r.end > m ? r.end : m), "");
 }
 
 /**
@@ -1335,14 +1340,16 @@ function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[]): T
  * after it, never interleaved. Otherwise the primary is current and the
  * fallback is dropped (AAT). A filer with no primary reads the fallback.
  *
- * `annualSwitch` (short-term investments only): a 10-K dated after the last
- * primary figure that files only the fallback is a switch too. NVDA moved
- * from MarketableSecuritiesCurrent (last 2025-10-26) to DebtSecuritiesCurrent
- * nine months ago, inside the year, but its FY2026 10-K already reads the new
- * concept alone. AAT's shape (10-K primary, 10-Qs fallback) is not this.
+ * `newestAnnualEnd` (short-term investments only): a filer whose newest 10-K
+ * balance sheet is dated after its last primary figure no longer files the
+ * primary, so a fallback after that date is a switch too, inside the year.
+ * NVDA filed MarketableSecuritiesCurrent last at 2025-10-26; its FY2026 10-K
+ * (2026-01-25) carries no primary, and its 10-Qs since file
+ * DebtSecuritiesCurrent. AAT's shape (the 10-K files the primary, only the
+ * 10-Qs the fallback) is not this: its newest 10-K is the last primary date.
  */
 export function switchOver<T extends { tag: string; row: FactRow }>(
-  rows: T[], isFallback: (tag: string) => boolean, annualSwitch = false,
+  rows: T[], isFallback: (tag: string) => boolean, newestAnnualEnd = "",
 ): T[] {
   const newestOf = (rs: T[]) => rs.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
   const primary = rows.filter((r) => !isFallback(r.tag));
@@ -1350,7 +1357,7 @@ export function switchOver<T extends { tag: string; row: FactRow }>(
   const lastPrimary = newestOf(primary);
   const newestFallback = newestOf(rows.filter((r) => isFallback(r.tag)));
   const yearAfter = lastPrimary ? `${Number(lastPrimary.slice(0, 4)) + 1}${lastPrimary.slice(4)}` : "";
-  const annualAfter = annualSwitch && rows.some((r) => isFallback(r.tag) && r.row.form === "10-K" && (r.row.end ?? "") > lastPrimary);
+  const annualAfter = Boolean(newestAnnualEnd) && newestAnnualEnd > lastPrimary;
   if (!newestFallback || (newestFallback <= yearAfter && !annualAfter)) return primary;
   return rows.filter((r) => !isFallback(r.tag) || (r.row.end ?? "") > lastPrimary);
 }
@@ -1630,9 +1637,10 @@ function extractCompanyFactsWith(
   // superseded one on its oldest.
   const buckets = new Map<string, Bucket>();
   const preferred = new Map<string, string | null>();
+  const annualEnd = newestAnnualBalanceEnd(facts);
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    const all = debtFallbackGate(rowsForField(facts, field, refusedUnits, currency));
+    const all = debtFallbackGate(rowsForField(facts, field, refusedUnits, currency), annualEnd);
     for (const c of all) {
       const k = periodKey(c.row);
       const list = bucket.get(k);

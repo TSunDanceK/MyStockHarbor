@@ -119,9 +119,29 @@ console.log("\n3. mutation");
   check("MUTATION: fallbacks compete with primaries → CVX's 10-K reads the newer concept's 24,541, caught", near((await load(a)).extractCompanyFacts("CVX", CVXB).instants.find((p) => p.end === "2025-12-31")?.values?.[LT]?.val ?? null, 24541));
 }
 {
-  const a = extractRaw.replace("if (!newestFallback || newestFallback <= yearAfter) return primary;", "");
+  const a = extractRaw.replace("if (!newestFallback || (newestFallback <= yearAfter && !annualAfter)) return primary;", "");
   check("the fourth mutation is applied", a !== extractRaw);
   check("MUTATION: filer-level gate off → AAT's Q1 reads 75, caught", near((await load(a)).extractCompanyFacts("AAT", AAT).instants.find((p) => p.end === "2026-03-31")?.values?.[LT]?.val ?? null, 75));
 }
+console.log("\n4. short-term investments (audit r4)");
+const STI = X.SEC_FIELD_KEYS.indexOf("shortTermInvestments");
+const sti = (ex, end) => at(ex, end)?.values?.[STI]?.val ?? null;
+const NVDA = facts({
+  Assets: [inst("2025-10-26", 160000, "10-Q", "2025-11-19", "n3"), inst("2026-01-25", 180000, "10-K", "2026-02-25", "nk"), inst("2026-04-26", 190000, "10-Q", "2026-05-28", "n1")],
+  MarketableSecuritiesCurrent: [inst("2025-10-26", 49122, "10-Q", "2025-11-19", "n3")],
+  DebtSecuritiesCurrent: [inst("2026-01-25", 39065, "10-Q", "2026-05-28", "n1"), inst("2026-04-26", 37098, "10-Q", "2026-05-28", "n1")],
+});
+const nv = X.extractCompanyFacts("NVDA", NVDA);
+check("NVDA: its 10-K after the last primary date carries none, so DebtSecuritiesCurrent reads after it",
+  near(sti(nv, "2026-04-26"), 37098) && near(sti(nv, "2026-01-25"), 39065) && near(sti(nv, "2025-10-26"), 49122),
+  `${sti(nv, "2025-10-26")} / ${sti(nv, "2026-01-25")} / ${sti(nv, "2026-04-26")}`);
+const AATS = facts({
+  Assets: [inst("2025-12-31", 100, "10-K", "2026-02-20", "k"), inst("2026-03-31", 100, "10-Q", "2026-05-01", "q")],
+  ShortTermInvestments: [inst("2025-12-31", 50, "10-K", "2026-02-20", "k")],
+  DebtSecuritiesCurrent: [inst("2026-03-31", 7, "10-Q", "2026-05-01", "q")],
+});
+check("AAT's shape: the newest 10-K files the primary, so a 10-Q's fallback is not read",
+  sti(X.extractCompanyFacts("AATS", AATS), "2026-03-31") === null && near(sti(X.extractCompanyFacts("AATS", AATS), "2025-12-31"), 50));
+
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);
