@@ -98,6 +98,20 @@
    ],
    "source": "0001628280-26-004994"
   },
+  "CME": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "ClassBCommonStockClassB1Member": 1,
+    "ClassBCommonStockClassB2Member": 1,
+    "ClassBCommonStockClassB3Member": 1,
+    "ClassBCommonStockClassB4Member": 1
+   },
+   "evidence": [
+    "Although our Class B shareholders have special voting rights, because our Class B shares have the same equitable interest in our earnings and the same dividend payments as our Class A shares, we expect that the market price of our Class B common stock, if reported separately from the associated trading rights, would be primarily determined by the value of our Class A common stock ."
+   ],
+   "source": "0001156375-26-000009"
+  },
   "COKE": {
    "listed": "CommonClassUndefinedMember",
    "weights": {
@@ -122,6 +136,30 @@
     "The rights, including the liquidation and dividend rights, of the holders of the Company's Class A common stock and Class B common stock are identical, except with respect to voting."
    ],
    "source": "0001769628-26-000104"
+  },
+  "DASH": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "CommonClassCMember": 1
+   },
+   "evidence": [
+    "The rights, including the liquidation and dividend rights, of the Class A common stock, Class B common stock, and Class C common stock are substantially identical, other than voting rights."
+   ],
+   "source": "0001792789-26-000013"
+  },
+  "DDOG": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The rights of the holders of Class A and Class B common stock are identical, except with respect to voting and conversion.",
+    "each share of Class B common stock is convertible at any time at the option of the holder into one share of Class A common stock"
+   ],
+   "source": "0001628280-26-008819"
   },
   "DKS": {
    "listed": "CommonClassAMember",
@@ -207,6 +245,17 @@
     "The rights are identical, including liquidation and dividend rights, except Class V common stock has additional voting rights."
    ],
    "source": "0001773751-26-000022"
+  },
+  "HOOD": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The rights, including the liquidation and dividend rights, of the holders of Class A common stock and Class B common stock are identical, except with respect to voting."
+   ],
+   "source": "0001783879-26-000023"
   },
   "HSY": {
    "listed": "CommonStockMember",
@@ -340,6 +389,19 @@
    ],
    "source": "0001943896-26-000013"
   },
+  "RDDT": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "CommonClassCMember": 1
+   },
+   "evidence": [
+    "The rights of the holders of Class A and Class B common stock are identical, except with respect to voting and conversion rights.",
+    "Class C: 0 shares on the cover (the count, not a weight, decides it)."
+   ],
+   "source": "0001713445-26-000022"
+  },
   "REGN": {
    "listed": "CommonStockMember",
    "weights": {
@@ -363,6 +425,17 @@
    ],
    "source": "0001874178-26-000008"
   },
+  "RKT": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassLMember": 1
+   },
+   "evidence": [
+    "Class A common stock and Class L common stock have identical rights with respect to dividends and residual net assets on a per share basis, and each carry one vote per share."
+   ],
+   "source": "0001628280-26-013283"
+  },
   "RL": {
    "listed": "CommonClassAMember",
    "weights": {
@@ -384,6 +457,20 @@
     "Except with respect to certain voting, conversion, and transfer rights and as otherwise expressly provided in the Company's amended and restated certificate of incorporation or required by applicable law, shares of the Company's Class A common stock and Class B common stock have the same rights and privileges and rank equally, share ratably, and are identical in all respects as to all matters."
    ],
    "source": "0001628280-26-008114"
+  },
+  "SHOP": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "FounderShareMember": 0
+   },
+   "evidence": [
+    "The Class B restricted voting shares are convertible into Class A subordinate voting shares on a one -for-one basis at the option of the holder.",
+    "holders of Class A subordinate voting shares and Class B restricted voting shares are treated equally and identically, on a per share basis, in certain change of control transactions",
+    "There are no economic rights associated with the Founder Share"
+   ],
+   "source": "0001594805-26-000007"
   },
   "SPCX": {
    "listed": "CommonClassAMember",
@@ -408,6 +495,17 @@
     "Shares of Class B common stock convert automatically into an equal number of shares of common stock upon the occurrence of certain events and can be converted into shares of common stock at the option of the holders."
    ],
    "source": "0001104659-26-019419"
+  },
+  "TEAM": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "As the liquidation and dividend rights for both Class A and Class B Common Stock are identical, the net loss is allocated on a proportionate basis to the weighted-average number of shares of common stock outstanding"
+   ],
+   "source": "0001650372-26-000036"
   },
   "TSN": {
    "listed": "CommonClassAMember",
@@ -443,6 +541,18 @@
     "Class A and Class B common stock each convey the same rights and privileges to their respective holders, except that Class A common stock entitles its holders to 1 vote per share in respect of matters on which stockholders are entitled to vote and Class B common stock entitles its holders to 10 votes per share."
    ],
    "source": "0001901440-26-000005"
+  },
+  "UPS": {
+   "listed": "CommonClassBMember",
+   "weights": {
+    "CommonClassBMember": 1,
+    "CommonClassAMember": 1
+   },
+   "evidence": [
+    "each share of the registrant's class A common stock is convertible into one share of the registrant's class B common stock",
+    "are distinguished from each other primarily by their respective voting rights. Class A shares of UPS are entitled to 10 votes per share, whereas class B shares are entitled to one vote per share."
+   ],
+   "source": "0001628280-26-008432"
   },
   "V": {
    "listed": "CommonClassAMember",
@@ -480,6 +590,17 @@
     "All such Class B shares of common stock are convertible into our Class A common stock on a one-to-one basis at any time at the option of the holder thereof."
    ],
    "source": "0002007855-26-000013"
+  },
+  "WDAY": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The holders of our Class A and Class B common stock have identical liquidation and dividend rights but different voting rights."
+   ],
+   "source": "0001327811-26-000014"
   },
   "WTS": {
    "listed": "CommonClassAMember",
