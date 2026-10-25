@@ -1292,6 +1292,19 @@ export const COMBINED_DEBT: Readonly<Record<string, readonly string[] | "all">> 
   DebtAndCapitalLeaseObligations: "all",
   UnsecuredDebt: "all",
 };
+/**
+ * A DEBT CONCEPT READ ONLY BY OWNER RULING (audit r4), by symbol. UnsecuredDebt
+ * is AIZ's whole debt (2,208.1M at 2026-06-30, its senior notes) but at other
+ * filers one component of it: as a chain fallback it read DLR at 0.39B to
+ * 1.30B, STWD 4.88B and KRC 4.00B beside secured lines it does not include,
+ * and mixed with SUI's and EDU's own long-term line (dry run, first commit).
+ * AIZN is AIZ's listed notes on the same CIK.
+ */
+export const DEBT_TOTAL_RULINGS: Readonly<Record<string, string>> = {
+  AIZ: "UnsecuredDebt",
+  AIZN: "UnsecuredDebt",
+};
+const RULED_DEBT_TAGS: ReadonlySet<string> = new Set(Object.values(DEBT_TOTAL_RULINGS));
 /** The audit r3 debt fallbacks (ranked last in their chains in secFields). */
 const DEBT_FALLBACK_TAGS: ReadonlySet<string> = new Set([
   "CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(COMBINED_DEBT),
@@ -1620,7 +1633,8 @@ function extractCompanyFactsWith(
   const preferred = new Map<string, string | null>();
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    const all = debtFallbackGate(rowsForField(facts, field, refusedUnits, currency));
+    const all = debtFallbackGate(rowsForField(facts, field, refusedUnits, currency)
+      .filter((c) => !RULED_DEBT_TAGS.has(c.tag) || DEBT_TOTAL_RULINGS[String(symbol ?? "").toUpperCase()] === c.tag));
     for (const c of all) {
       const k = periodKey(c.row);
       const list = bucket.get(k);

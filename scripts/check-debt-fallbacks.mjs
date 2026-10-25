@@ -57,6 +57,8 @@ check("AFL (r4): debt and finance lease obligations 8,729", near(total(X.extract
 const AIZ = facts({ UnsecuredDebt: [inst("2026-06-30", 2208.1, "10-Q", "2026-08-05", "aiz-q2")], DebtCurrent: [inst("2026-06-30", 100, "10-Q", "2026-08-05", "aiz-q2")] });
 check("AIZ (r4): unsecured debt 2,208.1 is a total, a short-term line inside it is not added", near(total(X.extractCompanyFacts("AIZ", AIZ), "2026-06-30"), 2208.1), String(total(X.extractCompanyFacts("AIZ", AIZ), "2026-06-30")));
 
+check("...and UnsecuredDebt is read only by ruling: DLR's 432M component is not its debt", total(X.extractCompanyFacts("DLR", AIZ), "2026-06-30") === null);
+
 console.log("\n2. what must stay");
 const PLAIN = facts({ LongTermDebtNoncurrent: [inst("2026-06-30", 5000, "10-Q", "2026-08-01", "p")], LongTermDebtCurrent: [inst("2026-06-30", 500, "10-Q", "2026-08-01", "p")] });
 check("an ordinary noncurrent + current filer adds as filed (5,500)", near(total(X.extractCompanyFacts("PLN", PLAIN), "2026-06-30"), 5500));
