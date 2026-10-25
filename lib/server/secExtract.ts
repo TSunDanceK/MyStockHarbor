@@ -1280,6 +1280,19 @@ export function q4RevenueScope(
   return null;
 }
 
+/**
+ * A SECOND CURRENT INVESTMENTS LINE, BY OWNER RULING (audit r4), by symbol:
+ * the concept added to the short-term investments cell on every balance sheet
+ * that files it. NOT a chain entry: MarketableSecurities carries no current/
+ * noncurrent split in its name, and another filer's may be a total.
+ *   KO: "Marketable securities" is its own line in current assets, below the
+ *       cash and short-term investments subtotal (10-Q 0001628280-26-050503,
+ *       R4: short-term investments 622M, marketable securities 2,842M at
+ *       2026-07-03). Read alone, the cell held only the first.
+ */
+export const STI_ADDED_LINE: Readonly<Record<string, string>> = {
+  KO: "MarketableSecurities",
+};
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
@@ -2347,6 +2360,23 @@ function extractCompanyFactsWith(
       m.set(field.key, {
         val: best.row.val!, tag: best.tag, ns: best.ns, unit: best.unit, derived: "as-filed",
       });
+    }
+  }
+
+  // ── THE OWNER'S SECOND SHORT-TERM LINE (STI_ADDED_LINE, audit r4) ─────────
+  // Only onto dates a balance sheet already opened, and the same date's row.
+  {
+    const added = STI_ADDED_LINE[String(symbol ?? "").toUpperCase()];
+    const rows = added ? ((facts.facts?.["us-gaap"]?.[added]?.units?.[currency] ?? []) as FactRow[]) : [];
+    for (const [end, m] of added ? instantCells : []) {
+      const hits = rows.filter((r) => r.end === end && !r.start && Number.isFinite(r.val));
+      if (!hits.length) continue;
+      const extra = hits.reduce((a, b) => newer(a, b));
+      const sti = m.get("shortTermInvestments");
+      m.set("shortTermInvestments", sti && sti.val != null
+        ? { ...sti, val: sti.val + extra.val!, derived: "computed" }
+        : { val: extra.val!, tag: added, ns: "us-gaap", unit: currency, derived: "as-filed" });
+      notes.push(`shortTermInvestments ${end}: ${added} ${extra.val} added by owner ruling`);
     }
   }
 

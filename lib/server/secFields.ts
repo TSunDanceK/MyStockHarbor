@@ -526,6 +526,10 @@ const BALANCE_SHEET: FieldDef[] = ([
   { key: "shortTermInvestments", chain: [
       "ShortTermInvestments",
       "MarketableSecuritiesCurrent",
+      // KO's "Short-term investments" line (audit r4): 509M at 2026-04-03,
+      // and 10,574M cash + 509M = its 11,083M CashCashEquivalentsAndShort-
+      // TermInvestments subtotal, so the figure is current by its own total.
+      "OtherShortTermInvestments",
       "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
       "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
     ], unit: "USD", taxonomy: "us-gaap" },
