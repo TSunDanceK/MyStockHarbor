@@ -1290,9 +1290,7 @@ export const COMBINED_DEBT: Readonly<Record<string, readonly string[] | "all">> 
   NotesPayable: ["NotesPayableCurrent"],
 };
 /** The audit r4 short-term investments fallbacks (last in their chain). */
-const STI_FALLBACK_TAGS: ReadonlySet<string> = new Set([
-  "DebtSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecurities",
-]);
+const STI_FALLBACK_TAGS: ReadonlySet<string> = new Set(["DebtSecuritiesCurrent"]);
 /** The audit r3 debt fallbacks (ranked last in their chains in secFields), and r4's. */
 const DEBT_FALLBACK_TAGS: ReadonlySet<string> = new Set([
   "CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(COMBINED_DEBT), ...STI_FALLBACK_TAGS,
