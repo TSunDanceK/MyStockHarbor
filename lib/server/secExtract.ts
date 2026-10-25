@@ -1288,6 +1288,9 @@ export const COMBINED_DEBT: Readonly<Record<string, readonly string[] | "all">> 
   DebtLongtermAndShorttermCombinedAmount: "all",
   LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: ["LongTermDebtCurrent"],
   NotesPayable: ["NotesPayableCurrent"],
+  // Audit r4 (AFL, AIZ): whole-debt totals with no current/noncurrent split.
+  DebtAndCapitalLeaseObligations: "all",
+  UnsecuredDebt: "all",
 };
 /** The audit r3 debt fallbacks (ranked last in their chains in secFields). */
 const DEBT_FALLBACK_TAGS: ReadonlySet<string> = new Set([
