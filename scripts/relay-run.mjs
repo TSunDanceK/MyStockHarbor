@@ -694,6 +694,8 @@ const TASKS = {
   },
   // READS ONLY: how many Pickers names a multi-class market-cap rule could
   // recover (#552 COWORK #26). SEC values only; ~30 commands.
+  // READS ONLY: stored sets whose newest filing came from its own XBRL (ff) or could not be read (lg).
+  "write-filing-fill-census": { script: "scripts/filing-fill-census.mjs", args: () => [], writes: true },
   "write-multiclass-cap-census": {
     script: "scripts/multiclass-cap-census.mjs",
     args: () => [],
