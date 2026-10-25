@@ -135,6 +135,33 @@
    ],
    "source": "0001089063-26-000007"
   },
+  "FIG": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "CommonClassCMember": 1
+   },
+   "evidence": [
+    "The holders of all classes of common stock shall be treated equally, identically and ratably, on a per share basis, with respect to any dividends.",
+    "Future transfers by the holders of Class B common stock will generally result in those shares converting into shares of Class A common stock, subject to limited exceptions, such as certain transfers effected for estate planning or charitable purposes.",
+    "any and all outstanding shares of Class C common stock will convert automatically into Class A common stock, on a share-for-share basis"
+   ],
+   "source": "0001628280-26-009228"
+  },
+  "FOXA": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "to its stockholders, ratably in proportion to the number of shares held by Class A Common Stock holders and Class B Common Stock holders, respectively.",
+    "In the event of any merger or consolidation with or into another entity, the holders of Class A Common Stock and the holders of Class B Common Stock generally are entitled to receive substantially identical per share consideration.",
+    "The following table summarizes the dividends declared and paid per share on both the Company's Class A Common Stock and Class B Common Stock"
+   ],
+   "source": "0001628280-26-053960"
+  },
   "GSAT": {
    "listed": "CommonStockMember",
    "weights": {
@@ -157,6 +184,18 @@
     "converted on a share-for-share basis into shares of Class A common stock"
    ],
    "source": "0001468174-26-000007"
+  },
+  "HEI": {
+   "listed": "CommonStockMember",
+   "weights": {
+    "CommonStockMember": 1,
+    "CommonClassAMember": 1
+   },
+   "evidence": [
+    "The Company has two classes of common stock that are virtually identical in all economic respects except voting rights.",
+    "We have historically paid semi-annual cash dividends on both our Class A Common Stock and Common Stock."
+   ],
+   "source": "0000046619-25-000082"
   },
   "HIMS": {
    "listed": "CommonClassAMember",
