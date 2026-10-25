@@ -186,9 +186,9 @@
    "source": "0001468174-26-000007"
   },
   "HEI": {
-   "listed": "CommonStockMember",
+   "listed": "HeicoCommonStockMember",
    "weights": {
-    "CommonStockMember": 1,
+    "HeicoCommonStockMember": 1,
     "CommonClassAMember": 1
    },
    "evidence": [
