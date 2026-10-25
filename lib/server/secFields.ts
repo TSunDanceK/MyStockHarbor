@@ -526,12 +526,14 @@ const BALANCE_SHEET: FieldDef[] = ([
   { key: "shortTermInvestments", chain: [
       "ShortTermInvestments",
       "MarketableSecuritiesCurrent",
+      "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
+      "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
       // KO's "Short-term investments" line (audit r4): 509M at 2026-04-03,
       // and 10,574M cash + 509M = its 11,083M CashCashEquivalentsAndShort-
       // TermInvestments subtotal, so the figure is current by its own total.
+      // LAST, so a filer that resolves today keeps its concept: ranked above
+      // the AFS and HTM lines it displaced them at CLOV, PFE and EG.
       "OtherShortTermInvestments",
-      "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
-      "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
     ], unit: "USD", taxonomy: "us-gaap" },
   { key: "receivables", chain: ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "inventory", chain: ["InventoryNet"], unit: "USD", taxonomy: "us-gaap" },
