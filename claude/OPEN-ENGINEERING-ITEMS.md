@@ -95,6 +95,19 @@ built on it, read "Not reported".
 that sums NEE's own tags, like `REVENUE_TOTAL_RULINGS`. Held at the owner's
 instruction (audit round 3, item 6; PR #951).
 
+## 8. FOXA's annual net income and its quarters are on different bases (held, owner 2026-10-25)
+
+FOXA's 10-K tags no `NetIncomeLoss` (10-K 0001628280-26-053960). The year
+reads 1,685M `NetIncomeLoss` from the DEF 14A pay-versus-performance table,
+which is the 10-K's `NetIncomeLossAvailableToCommonStockholdersBasic`
+(attributable to Fox). The 10-Qs file only `ProfitLoss`, so the quarters,
+including the derived Q4 (696M FY2026, PR #957), include noncontrolling
+interests. The four quarters sum to 1,727M against the year's 1,685M; the
+gap is NCI (42M FY2026).
+
+**Decision taken: leave as is.** Held at the owner's instruction (audit
+round 4, item 3).
+
 ## Closed since this file was started
 
 - **`recencyScore = 100`** — removed. Flat 5.00 on every candidate; that
