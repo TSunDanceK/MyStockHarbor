@@ -528,6 +528,15 @@ const BALANCE_SHEET: FieldDef[] = ([
       "MarketableSecuritiesCurrent",
       "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
       "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
+      // AUDIT R4 FALLBACKS, ranked last and gated like the debt ones (see
+      // STI_FALLBACK_TAGS in secExtract). NVDA filed MarketableSecuritiesCurrent
+      // up to 2025-10-26 (49.12B) and DebtSecuritiesCurrent since (34.14B at
+      // 2026-07-26), so its newest balance sheets read no short-term
+      // investments and the card said net debt. The AFS total is last: it
+      // includes noncurrent holdings (NVDA 46.9B against 41.0B due within a
+      // year), so it only stands where nothing current is filed.
+      "DebtSecuritiesCurrent",
+      "AvailableForSaleSecuritiesDebtSecurities",
     ], unit: "USD", taxonomy: "us-gaap" },
   { key: "receivables", chain: ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "inventory", chain: ["InventoryNet"], unit: "USD", taxonomy: "us-gaap" },

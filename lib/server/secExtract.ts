@@ -1289,9 +1289,13 @@ export const COMBINED_DEBT: Readonly<Record<string, readonly string[] | "all">> 
   LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: ["LongTermDebtCurrent"],
   NotesPayable: ["NotesPayableCurrent"],
 };
-/** The audit r3 debt fallbacks (ranked last in their chains in secFields). */
+/** The audit r4 short-term investments fallbacks (last in their chain). */
+const STI_FALLBACK_TAGS: ReadonlySet<string> = new Set([
+  "DebtSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecurities",
+]);
+/** The audit r3 debt fallbacks (ranked last in their chains in secFields), and r4's. */
 const DEBT_FALLBACK_TAGS: ReadonlySet<string> = new Set([
-  "CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(COMBINED_DEBT),
+  "CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(COMBINED_DEBT), ...STI_FALLBACK_TAGS,
 ]);
 /**
  * A FALLBACK NEVER DISPLACES A FILED PRIMARY CONCEPT. Chain rank alone is not
@@ -1318,7 +1322,11 @@ const SAME_MEASURE: Readonly<Record<string, string>> = {
 function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[]): T[] {
   const primaryTags = new Set(rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag)).map((r) => r.tag));
   // The same figure tagged the other way counts with the primary it mirrors.
-  return switchOver(rows, (t) => DEBT_FALLBACK_TAGS.has(t) && !primaryTags.has(SAME_MEASURE[t] ?? ""));
+  return switchOver(
+    rows,
+    (t) => DEBT_FALLBACK_TAGS.has(t) && !primaryTags.has(SAME_MEASURE[t] ?? ""),
+    rows.some((r) => STI_FALLBACK_TAGS.has(r.tag)),
+  );
 }
 
 /**
@@ -1328,15 +1336,24 @@ function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[]): T
  * fallback since): the primary is read up to its last date and the fallback
  * after it, never interleaved. Otherwise the primary is current and the
  * fallback is dropped (AAT). A filer with no primary reads the fallback.
+ *
+ * `annualSwitch` (short-term investments only): a 10-K dated after the last
+ * primary figure that files only the fallback is a switch too. NVDA moved
+ * from MarketableSecuritiesCurrent (last 2025-10-26) to DebtSecuritiesCurrent
+ * nine months ago, inside the year, but its FY2026 10-K already reads the new
+ * concept alone. AAT's shape (10-K primary, 10-Qs fallback) is not this.
  */
-export function switchOver<T extends { tag: string; row: FactRow }>(rows: T[], isFallback: (tag: string) => boolean): T[] {
+export function switchOver<T extends { tag: string; row: FactRow }>(
+  rows: T[], isFallback: (tag: string) => boolean, annualSwitch = false,
+): T[] {
   const newestOf = (rs: T[]) => rs.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
   const primary = rows.filter((r) => !isFallback(r.tag));
   if (!primary.length) return rows;
   const lastPrimary = newestOf(primary);
   const newestFallback = newestOf(rows.filter((r) => isFallback(r.tag)));
   const yearAfter = lastPrimary ? `${Number(lastPrimary.slice(0, 4)) + 1}${lastPrimary.slice(4)}` : "";
-  if (!newestFallback || newestFallback <= yearAfter) return primary;
+  const annualAfter = annualSwitch && rows.some((r) => isFallback(r.tag) && r.row.form === "10-K" && (r.row.end ?? "") > lastPrimary);
+  if (!newestFallback || (newestFallback <= yearAfter && !annualAfter)) return primary;
   return rows.filter((r) => !isFallback(r.tag) || (r.row.end ?? "") > lastPrimary);
 }
 /** The contract-revenue tag the total-over-contract rule compares against. */
