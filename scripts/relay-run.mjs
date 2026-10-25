@@ -817,6 +817,8 @@ const TASKS = {
   "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
   "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },
+  // Per-class cover counts by StatementClassOfStockAxis member, newest 10-Q/10-K. Read-only.
+  "sec-cover-members": { script: "scripts/cover-members-probe.mjs", args: () => [] },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {
