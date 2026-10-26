@@ -1,69 +1,69 @@
 {
-  "asOf": "2026-10-16",
-  "indexClose": 29187.55,
+  "asOf": "2026-10-23",
+  "indexClose": 28957.53,
   "ath": {
     "level": 31224.47,
     "date": "2026-10-06"
   },
-  "oneLiner": "Closed at 29,187.55 Friday, down 2.5% on the day and 5.49% on the week, about 6.5% below the record close of 31,224.47 set on October 6.",
-  "intro": "The Nasdaq-100 closed at 29,187.55 on Friday, October 16, down about 2.5% on the day and 5.49% on the week, roughly 6.5% below its October 6 record close of 31,224.47. Chip stocks fell for an eighth straight session as doubts about AI spending and debt spread, and oil prices climbed.",
+  "oneLiner": "Closed at 28,957.53 Friday, little changed on the day and down about 0.8% on the week, roughly 7.3% below the record close of 31,224.47 set on October 6.",
+  "intro": "The Nasdaq-100 closed at 28,957.53 on Friday, October 23, little changed on the day and down about 0.8% on the week, roughly 7.3% below its October 6 record close of 31,224.47. A 2.90% drop on Thursday, as doubts about AI spending hit chip stocks and Meta, erased a strong start to the week. Oil prices also climbed.",
   "sections": {
     "performance": {
       "heading": "How the index has done",
-      "body": "The strip above tracks QQQ, the ETF that follows the Nasdaq-100, through the same week. After finishing last week just off its record, the Nasdaq-100 gave back roughly 5.5% over five sessions, with Friday among the sharpest days. The longer-period cards show how this pullback sits against the longer trend."
+      "body": "The strip above tracks QQQ, the ETF that follows the Nasdaq-100, through the same week. The index rose on Monday and Wednesday, slipped a little on Tuesday, fell 2.90% on Thursday and finished Friday close to flat. The longer-period cards show how this second weekly loss in a row sits against the longer trend."
     },
     "chart": {
       "heading": "The trend against its moving averages",
-      "body": "The daily chart above plots QQQ against its 50- and 200-day moving averages. After this week's slide, the chart may show how far price has moved from those averages and whether the longer trend still looks intact."
+      "body": "The daily chart above plots QQQ against its 50- and 200-day moving averages. After Thursday's drop, the chart may show how close price sits to those lines and whether the slide from the October 6 record has paused or is still extending."
     },
     "levels": {
       "heading": "Where the nearby levels sit",
-      "body": "The October 6 record close of 31,224.47 is the nearest marker above for the index, with Friday's close about 6.5% below it. This week's slide has opened a much wider gap than a week earlier, when the index finished just off its record. The Price zones and Key levels cards above show where the nearby levels sit on QQQ today."
+      "body": "The week's highest close for the index was 29,822.52 on Wednesday, October 21. The October 6 record close of 31,224.47 sits further up, with Friday's close about 7.3% below it. The Price zones and Key levels cards above show where the nearby levels sit on QQQ today."
     },
     "signals": {
       "heading": "Momentum in plain words",
-      "body": "A drop of about 5.5% in a week, led by chip stocks, may show momentum fading after the October 6 record close. The panel above shows today's RSI and MACD readings on QQQ, which can differ from the index."
+      "body": "Momentum may look strained after a second weekly loss in a row and Thursday's 2.90% drop, which was led by chip stocks. The Nasdaq-100 was flat on Friday even as the S&P 500 and Dow fell, which may show pressure on the index easing, though one quiet day settles little. The panel above shows today's RSI and MACD readings on QQQ, which can differ from the index."
     },
     "change": {
       "heading": "The weekly and monthly pattern",
-      "body": "Close to close, the index fell about 5.5% this week, after finishing the prior week just off its record, and about 2.5% on Friday alone. Chip stocks fell for eight sessions in a row, their longest losing run since 2008. The tabs above show the daily, weekly and monthly changes on QQQ."
+      "body": "Close to close, the index fell about 0.8% this week, after a 5.49% slide the week before, and was almost unchanged on Friday. It rose 1.17% on Monday, slipped 0.13% on Tuesday, gained 1.13% on Wednesday and fell 2.90% on Thursday. The tabs above show the daily, weekly and monthly changes on QQQ."
     }
   },
   "marketRead": [
-    "The Nasdaq-100 ended the week at 29,187.55, down 5.49% on the week and about 6.5% below its October 6 record close of 31,224.47. The Philadelphia Semiconductor Index fell about 3.8% on Friday, its eighth straight daily decline and longest losing run since 2008, as investors questioned whether AI revenue can cover the spending behind it. CoreWeave, an AI cloud company that reported about $51 billion of debt at the end of June, fell about 12% on Friday.",
-    "Rates and oil added pressure. September consumer prices rose 3.7% from a year earlier, and the 10-year Treasury yield sat near 5.1% on Friday. Brent crude rose about 3.7% to near $110 a barrel. Fed Chair Kevin Warsh declined to signal the October decision, and markets increasingly expect the Fed to hold this month, with CME FedWatch putting a December rate rise at about 89%. Among chip names on Friday, Broadcom fell about 4.5% and AMD about 6%.",
-    "We could not confirm a dated figure for the share of Nasdaq-100 members above their 200-day average, so none is shown. The optimistic case is that the 10-year yield, which touched above 5.3% at points this week, has since eased, and that the pullback has so far been led by chip stocks. The cautious case is that financing worries may spread from smaller AI borrowers to larger names, while high oil and yields keep pressure on growth valuations.",
-    "The coming weeks may hinge on third-quarter earnings, with Tesla and Meta among the early reports next week, and on whether results ease the doubts about AI returns. The Fed's late-October meeting and the path of oil prices may also shape how the index moves."
+    "The Nasdaq-100 ended the week at 28,957.53, down about 0.8% and roughly 7.3% below its October 6 record close of 31,224.47. It was a two-way week. The index gained 1.17% on Monday, October 19, and 1.13% on Wednesday, October 21, but Thursday, October 22 undid that with a 2.90% drop as worries about AI spending hit chip stocks, with the Philadelphia Semiconductor Index down about 6.7%. Meta fell sharply after its results, with investors focused on its rising capital spending plans and its first negative free cash flow in over a decade.",
+    "Oil and rates framed the backdrop. Brent crude settled at $116.72 a barrel on Friday, its highest since late April, as Houthi attacks on Saudi targets, including energy infrastructure, and fears of escalation in the Iran war added to Middle East tension. U.S. crude closed near $103. The 10-year Treasury yield fell by about 11 basis points over the week and closed Friday just under 5%, edging up on the day. The Fed meets October 27-28 and is widely expected to hold rates, though Reuters reported futures priced roughly an 80% chance of a rate rise in December, after the Fed's September increase.",
+    "We could not confirm a dated figure for the share of Nasdaq-100 members above their 200-day average, so none is shown. The optimistic case is that the 10-year yield has stayed close to or below 5% and that Friday's flat finish may show the index finding a footing after Thursday's drop. The cautious case is that investors are questioning how AI spending will pay back, while high oil prices and a December rate rise that futures price at about 80% could keep pressure on growth valuations.",
+    "The coming weeks may hinge on results from Microsoft, Alphabet and Amazon next week, when capital spending plans will be watched closely, and on the Fed's meeting. Oil prices and any further moves in chip stocks may also shape how the index trades."
   ],
   "points": [
     {
       "label": "Catalyst",
-      "text": "Chip stocks fell for an eighth straight session as worries about AI spending and debt spread; CoreWeave fell about 12% on Friday."
+      "text": "A 2.90% drop on Thursday as AI-spending worries hit chip stocks and Meta; Friday was little changed."
     },
     {
       "label": "Record",
-      "text": "The index set a record close of 31,224.47 on October 6; Friday's close sits about 6.5% below it."
+      "text": "The index set a record close of 31,224.47 on October 6; Friday's close sits about 7.3% below it."
     },
     {
       "label": "Rates",
-      "text": "The 10-year yield was near 5.1% on Friday, and Brent crude rose to near $110 a barrel."
+      "text": "The 10-year yield closed just under 5% on Friday, and Brent crude settled at $116.72 a barrel."
     }
   ],
   "breadth": {
     "pct200": null,
     "source": "Not confirmed",
-    "date": "2026-10-16"
+    "date": "2026-10-23"
   },
   "watchDown": [
-    "Financing worries around AI infrastructure spread from smaller borrowers such as CoreWeave to larger technology names.",
-    "Chip stocks extend their eight-session slide as doubts about AI returns persist.",
+    "Worries about AI spending spread from chip stocks to other large technology names.",
     "Oil prices and Treasury yields climb further, pressing on growth company valuations.",
-    "The pullback broadens beyond chip stocks into other large technology names."
+    "Results from Microsoft, Alphabet or Amazon next week deepen the questions about AI spending.",
+    "The Fed's October 27-28 meeting brings a more cautious tone on inflation than investors expect."
   ],
   "watchUp": [
-    "Chip stocks stabilise after eight straight daily declines.",
-    "Third-quarter results from large technology companies ease the questions about AI spending.",
-    "Oil prices and the 10-year yield ease from current levels.",
+    "Chip stocks steady after Thursday's sharp drop and the Nasdaq-100's flat Friday.",
+    "Results from Microsoft, Alphabet and Amazon next week ease the questions about AI returns.",
+    "Oil prices ease and the 10-year yield stays close to or below 5%.",
     "The index recovers toward its October 6 record close of 31,224.47."
   ]
 }
