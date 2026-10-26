@@ -819,6 +819,8 @@ const TASKS = {
   "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },
   // Every fact of the named concepts in one filing's instance, with its context. Read-only.
   // Every companyfacts row of the named concepts from a date on (6M/9M frames included). Read-only.
+  // READS ONLY: do the stored quarters add up to the stored year (audit r5)? Pickers universe, MGET.
+  "write-quarter-sum-sweep": { script: "scripts/quarter-sum-sweep.mjs", args: () => [], needsTypescript: true, writes: true },
   "sec-concept-rows": { script: "scripts/concept-rows-probe.mjs", args: () => [] },
   "sec-instance-concepts": { script: "scripts/instance-concepts-probe.mjs", args: () => [] },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
