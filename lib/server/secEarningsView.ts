@@ -569,6 +569,26 @@ export const isCrossing = (v: Pct): v is PctCrossing =>
 
 /** Revenue under this (USD), now or a year earlier, carries no meaningful ratio. */
 export const NOT_MEANINGFUL_REVENUE_USD = 1_000_000;
+/**
+ * A YEAR's revenue growth off a year-ago base under this (USD) prints n/m
+ * (owner ruling, yoy60 2f): the census's ±60% movers below it were nearly all
+ * small-base arithmetic, not results. A quarter's uses
+ * NOT_MEANINGFUL_QUARTER_GROWTH_BASE_USD. Margins keep NOT_MEANINGFUL_REVENUE_USD.
+ */
+export const NOT_MEANINGFUL_GROWTH_BASE_USD = 25_000_000;
+/** The same rule for a QUARTER's growth, on the year-ago quarter (owner ruling on #940: about a quarter of the year floor). */
+export const NOT_MEANINGFUL_QUARTER_GROWTH_BASE_USD = 6_000_000;
+/** The growth floor for a period: a quarter's (under 200 days) or a year's. */
+export const growthBaseFloorUsd = (p: { s: string | null; e: string } | null | undefined): number =>
+  p?.s && (Date.parse(p.e) - Date.parse(p.s)) / 86_400_000 < 200 ? NOT_MEANINGFUL_QUARTER_GROWTH_BASE_USD : NOT_MEANINGFUL_GROWTH_BASE_USD;
+/**
+ * Reporting currencies whose inflation swamps a year-on-year rate (owner
+ * ruling, yoy60 2f: the Argentine peso names). Growth is taken in the
+ * reporting currency (see `home` below), so a peso filer's +200% is mostly
+ * the peso. Revenue growth prints n/m with HIGH_INFLATION_REASON.
+ */
+export const HIGH_INFLATION_CURRENCIES: ReadonlySet<string> = new Set(["ARS"]);
+export const HIGH_INFLATION_REASON = "Reported in a high-inflation currency, so year-on-year growth mostly reflects inflation";
 /** A growth rate or a margin beyond ±this (percent) is the same artefact on a larger base. */
 export const NOT_MEANINGFUL_PCT = 1_000;
 /** The tap note under an n/m growth figure. */
@@ -592,9 +612,15 @@ const tinyRevenue = (usd: number | null | undefined) =>
  * NOT_MEANINGFUL_REVENUE_USD, or the rate is beyond ±NOT_MEANINGFUL_PCT. Only a
  * number can be n/m — a crossing already says what happened instead.
  */
-export function revenueGrowthNotMeaningful(growth: Pct, yearAgoRevenueUsd: number | null | undefined): boolean {
+export function revenueGrowthNotMeaningful(
+  growth: Pct,
+  yearAgoRevenueUsd: number | null | undefined,
+  /** NOT_MEANINGFUL_GROWTH_BASE_USD for a year, NOT_MEANINGFUL_QUARTER_GROWTH_BASE_USD for a quarter (growthBaseFloorUsd). */
+  floorUsd: number = NOT_MEANINGFUL_GROWTH_BASE_USD,
+): boolean {
   if (!isPct(growth)) return false;
-  return tinyRevenue(yearAgoRevenueUsd) || Math.abs(growth) > NOT_MEANINGFUL_PCT;
+  const smallBase = typeof yearAgoRevenueUsd === "number" && Number.isFinite(yearAgoRevenueUsd) && yearAgoRevenueUsd > 0 && yearAgoRevenueUsd < floorUsd;
+  return smallBase || Math.abs(growth) > NOT_MEANINGFUL_PCT;
 }
 
 /**
@@ -609,10 +635,14 @@ export function revenueGrowthNotMeaningfulReason(
   nowRevenueUsd: number | null | undefined,
   yearAgoRevenueUsd: number | null | undefined,
   yearAgoOnFile: boolean,
+  /** The set's reporting currency (`set.cur`); a HIGH_INFLATION_CURRENCIES one marks every number. */
+  reportingCurrency?: string | null,
+  floorUsd: number = NOT_MEANINGFUL_GROWTH_BASE_USD,
 ): string | null {
   const now = typeof nowRevenueUsd === "number" && Number.isFinite(nowRevenueUsd) && nowRevenueUsd > 0;
   if (yearAgoOnFile && now && (yearAgoRevenueUsd == null || yearAgoRevenueUsd === 0)) return NOT_MEANINGFUL_NO_BASE_REASON;
-  return revenueGrowthNotMeaningful(growth, yearAgoRevenueUsd) ? NOT_MEANINGFUL_GROWTH_REASON : null;
+  if (isPct(growth) && HIGH_INFLATION_CURRENCIES.has(String(reportingCurrency ?? "").toUpperCase())) return HIGH_INFLATION_REASON;
+  return revenueGrowthNotMeaningful(growth, yearAgoRevenueUsd, floorUsd) ? NOT_MEANINGFUL_GROWTH_REASON : null;
 }
 
 /** A margin that is not meaningful: its period's revenue (USD) is tiny, or it is beyond ±NOT_MEANINGFUL_PCT. */
@@ -1284,13 +1314,13 @@ const pctOf = (part: number | null, whole: number | null) =>
 /**
  * One period's n/m markers against its year-earlier period (#552 COWORK #212):
  * the revenue growth, each margin, and the gross and operating changes. The
- * $1M floor reads the USD figures (`valueOf(p)`); the growth rate is the one
+ * floors (growth $25M a year / $6M a quarter, margins $1M) read the USD figures (`valueOf(p)`); the growth rate is the one
  * the view already computed, in the reporting currency.
  */
-const periodNotMeaningful = (p: StoredPeriod, prior: StoredPeriod | null, revenueYoY: Pct) => {
+const periodNotMeaningful = (p: StoredPeriod, prior: StoredPeriod | null, revenueYoY: Pct, cur?: string | null) => {
   const m = marginsOf(p), was = prior ? marginsOf(prior) : null;
   const rev = valueOf(p, "revenue"), revBefore = prior ? valueOf(prior, "revenue") : null;
-  const reason = revenueGrowthNotMeaningfulReason(revenueYoY, rev, revBefore, prior !== null);
+  const reason = revenueGrowthNotMeaningfulReason(revenueYoY, rev, revBefore, prior !== null, cur, growthBaseFloorUsd(p));
   return {
     revenueYoYNotMeaningful: reason !== null,
     revenueYoYNotMeaningfulReason: reason,
@@ -1602,7 +1632,7 @@ export function buildSecEarningsView(
     // filing is absent from the store or present with nothing in it.
     gapAfter: annualOnly ? false : shown[i + 1] ? !isConsecutive(p, shown[i + 1]) : false,
     gross, operating, net, marginsRefused,
-    notMeaningful: periodNotMeaningful(p, prior, revenueYoY).notMeaningful,
+    notMeaningful: periodNotMeaningful(p, prior, revenueYoY, set.cur).notMeaningful,
     // THE MARGIN'S OWN YEAR-ON-YEAR MOVE, in points (#552 COWORK #187 §2): the
     // trend card counts the periods that actually widened or narrowed, so it
     // needs each period against its year-earlier one, not the window's median.
@@ -1619,8 +1649,8 @@ export function buildSecEarningsView(
     // same wrong base was visible in one place and silent in the other.
     comparedWith: prior ? periodLabel(prior) : null,
     revenueYoY,
-    revenueYoYNotMeaningful: periodNotMeaningful(p, prior, revenueYoY).revenueYoYNotMeaningful,
-    revenueYoYNotMeaningfulReason: periodNotMeaningful(p, prior, revenueYoY).revenueYoYNotMeaningfulReason,
+    revenueYoYNotMeaningful: periodNotMeaningful(p, prior, revenueYoY, set.cur).revenueYoYNotMeaningful,
+    revenueYoYNotMeaningfulReason: periodNotMeaningful(p, prior, revenueYoY, set.cur).revenueYoYNotMeaningfulReason,
     epsYoY,
   })).reverse();
 
@@ -1708,7 +1738,7 @@ export function buildSecEarningsView(
       epsYoY: yoy(valueOf(home(p), "epsDiluted"), valueOf(home(prior), "epsDiluted")),
       ...marginsOf(p),
       netIncome: view(p, "netIncome", "Net income"),
-      ...periodNotMeaningful(p, prior, yoy(valueOf(home(p), "revenue"), valueOf(home(prior), "revenue"))),
+      ...periodNotMeaningful(p, prior, yoy(valueOf(home(p), "revenue"), valueOf(home(prior), "revenue")), set.cur),
     };
   }).reverse();
 
@@ -1901,6 +1931,8 @@ export function buildSecEarningsView(
           valueOf(latest, "revenue"),
           valueOf(yearAgo, "revenue"),
           yearAgo !== null,
+          set.cur,
+          growthBaseFloorUsd(latest),
         );
         return { revenueYoYNotMeaningful: reason !== null, revenueYoYNotMeaningfulReason: reason };
       })(),

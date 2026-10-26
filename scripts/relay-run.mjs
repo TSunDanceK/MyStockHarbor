@@ -609,6 +609,8 @@ const TASKS = {
   // One field's cells beside every raw companyfacts row of the named concepts. Read-only.
   // SYMBOLS="SCHW,MET|netIncome|NetIncomeLoss,ProfitLoss|cover,qrows"
   "field-trace": { script: "scripts/field-trace-probe.mjs", args: () => [], needsTypescript: true },
+  // DRY RUN: every revenue-growth marker a display-rule change moves, main's view against the branch's. Read-only (MGET).
+  "write-view-diff": { script: "scripts/view-diff.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-earnings-audit-r1-scan": {
     script: "scripts/earnings-audit-r1-scan.mjs",
     args: () => [],
