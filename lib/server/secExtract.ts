@@ -1356,6 +1356,15 @@ export const BANK_NET_TOLERANCE = 0.02;
  * further off (BBT +13%, GABC +35%, BANC +62%).
  */
 export const BANK_NET_GAINS_TOLERANCE = 0.08;
+
+/**
+ * Filers whose revenue is their net operating revenue, filed as
+ * RevenuesNetOfInterestExpense, for every period (owner ruling, earnings audit
+ * r2): a broker whose `Revenues` is gross of physical commodity sales. SNEX:
+ * FY2025 net operating revenues 2,052.8M against `Revenues` 132,378M.
+ */
+export const REVENUE_IS_NET_OPERATING: ReadonlySet<string> = new Set(["SNEX"]);
+
 /** The in-memory tag of a derived contract + not-from-contract total (option G, LUNR). Never stored. */
 const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
 
@@ -1960,6 +1969,23 @@ function extractCompanyFactsWith(
       if (summed) notes.push(`revenue: no revenue total tagged; ${BANK_REVENUE_HALVES.join(" + ")} used for ${summed} period(s) (computed)`);
     }
 
+    // One concept's own series, as filed and differenced (Q4 = FY - 9M), the
+    // way the main chain builds it: the net-basis rules below read from it.
+    const seriesOf = (tag: string) => {
+      const f: FieldDef = { ...revenueField, chain: [tag], ifrsChain: undefined };
+      const rows = rowsForField(facts, f, new Set<string>(), currency);
+      const bucket: Bucket = new Map();
+      for (const c of rows) {
+        const k = periodKey(c.row);
+        const list = bucket.get(k);
+        if (list) list.push(c);
+        else bucket.set(k, [c]);
+      }
+      const qc = new Map<string, Map<string, FieldValue>>(), yc = new Map<string, Map<string, FieldValue>>();
+      if (rows.length) runCumulative([f], new Map([["revenue", bucket]]), new Map([["revenue", tag]]), qc, yc, new Map(), new Map(), []);
+      return { qc, yc, n: rows.length };
+    };
+
     // ── A BANK'S REVENUE IS ITS NET REVENUE (earnings audit r2) ─────────────
     // HBAN's revenue read $1,562M, its 606 fee line, beside $5,991M of net
     // interest income; 55 filers sat below their own net interest income. The
@@ -1986,12 +2012,14 @@ function extractCompanyFactsWith(
     // and both totals are differenced like any concept, so a derived Q4 is on
     // the same basis as its year.
     //
-    // IT REPLACES, IT DOES NOT BACKFILL. A period the rules above left with no
-    // revenue is filled only when it is newer than every period that has one
-    // (FITB, OFG, UBSI: the newest years blank), the gap the block above is for.
-    // An older blank stays as those rules left it: USB's 2020-21 and FCNCA's
-    // 2023 quarters were withheld upstream, and a bank already on net revenue
-    // must not move because one stray period somewhere tripped the test.
+    // IT REPLACES; IT BACKFILLS ONLY AN EMPTY FRAME WITH BOTH HALVES FILED. A
+    // period newer than every valued one is filled as before (FITB, OFG, UBSI:
+    // the newest years blank). An older period is filled only when it has no
+    // revenue cell at all and both halves are filed for its frame (MCHB's
+    // FY2020-23 and its 2023-24 quarters, owner ruling 2026-10-20). A period
+    // withheld upstream keeps its marker and stays blank (USB's 2020-21,
+    // FCNCA's 2023 quarters), and a bank already on net revenue must not move
+    // because one stray period somewhere tripped the test.
     //
     // USD FILERS ONLY. A 20-F bank's halves and its `Revenues` need not share a
     // unit or a presentation (HDB, MFG, MUFG), so the 2% test means nothing
@@ -2003,20 +2031,6 @@ function extractCompanyFactsWith(
     // only when it is off. A bank already on a net total (KEY's `Revenues`
     // within 0.5%, SYF's computed halves) is untouched.
     {
-      const seriesOf = (tag: string) => {
-        const f: FieldDef = { ...revenueField, chain: [tag], ifrsChain: undefined };
-        const rows = rowsForField(facts, f, new Set<string>(), currency);
-        const bucket: Bucket = new Map();
-        for (const c of rows) {
-          const k = periodKey(c.row);
-          const list = bucket.get(k);
-          if (list) list.push(c);
-          else bucket.set(k, [c]);
-        }
-        const qc = new Map<string, Map<string, FieldValue>>(), yc = new Map<string, Map<string, FieldValue>>();
-        if (rows.length) runCumulative([f], new Map([["revenue", bucket]]), new Map([["revenue", tag]]), qc, yc, new Map(), new Map(), []);
-        return { qc, yc, n: rows.length };
-      };
       const [nii, non] = BANK_REVENUE_HALVES.map(seriesOf);
       if (currency === "USD" && nii.n && non.n) {
         const rnoie = seriesOf(LAST_RESORT_REVENUE_TAG), rv = seriesOf("Revenues");
@@ -2024,6 +2038,11 @@ function extractCompanyFactsWith(
         const halvesAt = (kind: "qc" | "yc", end: string) => {
           const a = nii[kind].get(end)?.get("revenue"), b = non[kind].get(end)?.get("revenue");
           return a && b && a.val != null && b.val != null && sameFrame(a.covers, b.covers) ? { a, sum: a.val + b.val } : null;
+        };
+        const filedHalvesAt = (kind: "qc" | "yc", end: string) => {
+          const h = halvesAt(kind, end);
+          const b = non[kind].get(end)?.get("revenue");
+          return h && h.sum > 0 && h.a.derived === "as-filed" && b?.derived === "as-filed" ? h : null;
         };
         const within = (v: number, sum: number, tol: number) => Math.abs(v - sum) <= tol * Math.abs(sum);
         type Halves = NonNullable<ReturnType<typeof halvesAt>>;
@@ -2084,7 +2103,12 @@ function extractCompanyFactsWith(
             for (const [end, m] of cells) if (m.get("revenue")?.val != null && end > newestValued) newestValued = end;
             for (const [end, m] of cells) {
               const c = m.get("revenue");
-              if (c?.val == null && end <= newestValued) continue;
+              // AN OLDER PERIOD WITH NO REVENUE CELL AT ALL takes net revenue when
+              // both halves are FILED for its frame, as filed, not differenced
+              // (MCHB FY2020-23, BPOP's 2024-25 Q2/Q3). A Q4 whose halves exist only
+              // as year minus nine months stays blank (owner ruling 2026-10-20), and
+              // so does one the rules above withheld: that cell exists, null-valued.
+              if (c?.val == null && end <= newestValued && (m.has("revenue") || !filedHalvesAt(kind, end))) continue;
               if (c?.val != null && stays(kind, end, c)) continue;
               const t = netAt(kind, end);
               if (t) { m.set("revenue", t); moved++; if (t.derived === "computed") computed++; }
@@ -2125,6 +2149,29 @@ function extractCompanyFactsWith(
         }
         notes.push(`revenue: owner ruling — ${ruled} for every period; ${moved} period(s) moved, ${blanked} without it left unreported`);
       }
+    }
+
+    // ── A FILER WHOSE REVENUE IS ITS NET OPERATING REVENUE (owner ruling) ──
+    // StoneX's `Revenues` is gross: physical commodity sales at full value
+    // (132,378M FY2025), a basis on which its P/S reads near zero. Its own
+    // headline, "net operating revenues", is filed as
+    // RevenuesNetOfInterestExpense (2,052.8M FY2025) for every frame. A filer
+    // named in REVENUE_IS_NET_OPERATING reads that concept for EVERY period,
+    // years and quarters alike, filed or differenced; a period without it
+    // reads Not reported rather than keep a gross or contract figure beside
+    // it, so the series has one basis. LAST of the revenue choices, so no
+    // rule above can put a gross frame back.
+    if (REVENUE_IS_NET_OPERATING.has(symbol.toUpperCase())) {
+      const net = seriesOf(LAST_RESORT_REVENUE_TAG);
+      let used = 0, blanked = 0;
+      for (const [cells, kind] of [[quarterCells, "qc"], [yearCells, "yc"]] as const) {
+        for (const [end, m] of cells) {
+          const r = net[kind].get(end)?.get("revenue");
+          if (r?.val != null) { m.set("revenue", r); used++; }
+          else if (m.has("revenue")) { m.delete("revenue"); blanked++; }
+        }
+      }
+      notes.push(`revenue: net operating revenues (${LAST_RESORT_REVENUE_TAG}) used for ${used} period(s), ${blanked} without it left unreported`);
     }
 
     // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD (#552 COWORK #196/#200) ──

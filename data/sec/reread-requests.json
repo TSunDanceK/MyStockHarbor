@@ -790,6 +790,11 @@
    "symbol": "DELL",
    "requestedAt": "2026-10-23T00:00:00Z",
    "reason": "earnings audit r2: proxy-statement (DEF 14A / PRE 14A) rows no longer read; the pay-versus-performance NetIncomeLoss had displaced the 10-K's figure (SCHW 1000x low, MET net income to common, DELL)"
+  },
+  {
+   "symbol": "SNEX",
+   "requestedAt": "2026-10-26T00:00:00Z",
+   "reason": "earnings audit r2 (owner ruling): SNEX reads net operating revenues (RevenuesNetOfInterestExpense) for every year and quarter, not its gross Revenues; the stored set carries the gross figure. FY2025 132,378.2M -> 2,052.8M; dated after the expected merge, so a routine re-read before it cannot retire the request"
   }
  ]
 }
