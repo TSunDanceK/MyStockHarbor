@@ -1356,6 +1356,15 @@ export const BANK_NET_TOLERANCE = 0.02;
  * further off (BBT +13%, GABC +35%, BANC +62%).
  */
 export const BANK_NET_GAINS_TOLERANCE = 0.08;
+
+/**
+ * Filers whose revenue is their net operating revenue, filed as
+ * RevenuesNetOfInterestExpense, for every period (owner ruling, earnings audit
+ * r2): a broker whose `Revenues` is gross of physical commodity sales. SNEX:
+ * FY2025 net operating revenues 2,052.8M against `Revenues` 132,378M.
+ */
+export const REVENUE_IS_NET_OPERATING: ReadonlySet<string> = new Set(["SNEX"]);
+
 /** The in-memory tag of a derived contract + not-from-contract total (option G, LUNR). Never stored. */
 const DERIVED_TOTAL_TAG = "RevenueFromContractWithCustomerPlusGapConcept";
 
@@ -1960,6 +1969,23 @@ function extractCompanyFactsWith(
       if (summed) notes.push(`revenue: no revenue total tagged; ${BANK_REVENUE_HALVES.join(" + ")} used for ${summed} period(s) (computed)`);
     }
 
+    // One concept's own series, as filed and differenced (Q4 = FY - 9M), the
+    // way the main chain builds it: the net-basis rules below read from it.
+    const seriesOf = (tag: string) => {
+      const f: FieldDef = { ...revenueField, chain: [tag], ifrsChain: undefined };
+      const rows = rowsForField(facts, f, new Set<string>(), currency);
+      const bucket: Bucket = new Map();
+      for (const c of rows) {
+        const k = periodKey(c.row);
+        const list = bucket.get(k);
+        if (list) list.push(c);
+        else bucket.set(k, [c]);
+      }
+      const qc = new Map<string, Map<string, FieldValue>>(), yc = new Map<string, Map<string, FieldValue>>();
+      if (rows.length) runCumulative([f], new Map([["revenue", bucket]]), new Map([["revenue", tag]]), qc, yc, new Map(), new Map(), []);
+      return { qc, yc, n: rows.length };
+    };
+
     // ── A BANK'S REVENUE IS ITS NET REVENUE (earnings audit r2) ─────────────
     // HBAN's revenue read $1,562M, its 606 fee line, beside $5,991M of net
     // interest income; 55 filers sat below their own net interest income. The
@@ -2005,20 +2031,6 @@ function extractCompanyFactsWith(
     // only when it is off. A bank already on a net total (KEY's `Revenues`
     // within 0.5%, SYF's computed halves) is untouched.
     {
-      const seriesOf = (tag: string) => {
-        const f: FieldDef = { ...revenueField, chain: [tag], ifrsChain: undefined };
-        const rows = rowsForField(facts, f, new Set<string>(), currency);
-        const bucket: Bucket = new Map();
-        for (const c of rows) {
-          const k = periodKey(c.row);
-          const list = bucket.get(k);
-          if (list) list.push(c);
-          else bucket.set(k, [c]);
-        }
-        const qc = new Map<string, Map<string, FieldValue>>(), yc = new Map<string, Map<string, FieldValue>>();
-        if (rows.length) runCumulative([f], new Map([["revenue", bucket]]), new Map([["revenue", tag]]), qc, yc, new Map(), new Map(), []);
-        return { qc, yc, n: rows.length };
-      };
       const [nii, non] = BANK_REVENUE_HALVES.map(seriesOf);
       if (currency === "USD" && nii.n && non.n) {
         const rnoie = seriesOf(LAST_RESORT_REVENUE_TAG), rv = seriesOf("Revenues");
@@ -2137,6 +2149,29 @@ function extractCompanyFactsWith(
         }
         notes.push(`revenue: owner ruling — ${ruled} for every period; ${moved} period(s) moved, ${blanked} without it left unreported`);
       }
+    }
+
+    // ── A FILER WHOSE REVENUE IS ITS NET OPERATING REVENUE (owner ruling) ──
+    // StoneX's `Revenues` is gross: physical commodity sales at full value
+    // (132,378M FY2025), a basis on which its P/S reads near zero. Its own
+    // headline, "net operating revenues", is filed as
+    // RevenuesNetOfInterestExpense (2,052.8M FY2025) for every frame. A filer
+    // named in REVENUE_IS_NET_OPERATING reads that concept for EVERY period,
+    // years and quarters alike, filed or differenced; a period without it
+    // reads Not reported rather than keep a gross or contract figure beside
+    // it, so the series has one basis. LAST of the revenue choices, so no
+    // rule above can put a gross frame back.
+    if (REVENUE_IS_NET_OPERATING.has(symbol.toUpperCase())) {
+      const net = seriesOf(LAST_RESORT_REVENUE_TAG);
+      let used = 0, blanked = 0;
+      for (const [cells, kind] of [[quarterCells, "qc"], [yearCells, "yc"]] as const) {
+        for (const [end, m] of cells) {
+          const r = net[kind].get(end)?.get("revenue");
+          if (r?.val != null) { m.set("revenue", r); used++; }
+          else if (m.has("revenue")) { m.delete("revenue"); blanked++; }
+        }
+      }
+      notes.push(`revenue: net operating revenues (${LAST_RESORT_REVENUE_TAG}) used for ${used} period(s), ${blanked} without it left unreported`);
     }
 
     // ── A DERIVED Q4 THAT CROSSES SCOPES IS WITHHELD (#552 COWORK #196/#200) ──
