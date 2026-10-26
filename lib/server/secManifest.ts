@@ -36,6 +36,8 @@ import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import { lookupBySpelling, toDashed, toDotted } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { TickerEntry } from "./secTickerMap";
+import retickerFile from "@/data/sec/reticker-ciks.json";
+import delistedFile from "@/data/sec/delisted-ciks.json";
 import { EARNINGS_PEAK_DAY_SHARE } from "./earningsPlan";
 import { ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
 
@@ -526,6 +528,20 @@ export function dotDashSpellings(symbol: string): string[] {
   return [...new Set([raw, toDashed(raw), toDotted(raw)])];
 }
 
+const RETICKERS = (retickerFile as unknown as { retickers: Record<string, { cik: string }> }).retickers;
+/** The cited CIK of a retickered universe symbol (data/sec/reticker-ciks.json), or null. */
+export function retickerEntry(symbol: string): TickerEntry | null {
+  const r = RETICKERS[String(symbol ?? "").trim().toUpperCase()];
+  return r?.cik ? { cik: r.cik, exchange: null } : null;
+}
+
+const DELISTED = (delistedFile as unknown as { delisted: Record<string, { cik: string }> }).delisted;
+/** The cited CIK of a delisted universe symbol (data/sec/delisted-ciks.json), or null. */
+export function delistedEntry(symbol: string): TickerEntry | null {
+  const r = DELISTED[String(symbol ?? "").trim().toUpperCase()];
+  return r?.cik ? { cik: r.cik, exchange: null } : null;
+}
+
 export function seedManifest(
   manifest: SecManifest,
   universe: string[],
@@ -544,7 +560,14 @@ export function seedManifest(
   let added = 0;
 
   for (const symbol of universe) {
-    const found = lookupBySpelling(cikByTicker, symbol)?.value ?? null;
+    // A RETICKERED symbol (BK -> BNY, EQR -> VMRK) has left SEC's live map, so
+    // the live lookup finds nothing; the cited map keeps its CIK, and
+    // reconcile then records retickeredTo. Only when the live map has no entry.
+    // A DELISTED one (EA, WBS) likewise, and is marked delisted at once rather
+    // than after DELIST_REFRESHES absences: its filings stay as history.
+    const live = lookupBySpelling(cikByTicker, symbol)?.value;
+    const gone = live ? null : delistedEntry(symbol);
+    const found = live ?? retickerEntry(symbol) ?? gone;
     const cik = found?.cik ?? null;
     if (!cik) withoutCik.push(symbol);
     // ONE ENTRY PER SECURITY ACROSS DOT/DASH (#552 COWORK #59): the stored-set
@@ -557,11 +580,13 @@ export function seedManifest(
       // Fill what was missing last time without touching anything else.
       if (!existing.cik && cik) existing.cik = cik;
       if (!existing.exchange && found?.exchange) existing.exchange = found.exchange;
+      if (gone) existing.delisted = true;
       continue;
     }
     const why = refusal(symbol, cik);
     if (why) { (refused[why] ??= []).push(symbol); continue; }
     manifest.symbols[symbol] = emptyEntry(cik, found?.exchange ?? null);
+    if (gone) manifest.symbols[symbol].delisted = true;
     added++;
   }
 

@@ -1292,6 +1292,23 @@ export const LAST_RESORT_REVENUE_TAG = "RevenuesNetOfInterestExpense";
  * two measures into their series (relay scan, write-earnings-audit-r1-scan).
  */
 export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
+/**
+ * THE OWNER'S RULING ON A FILER'S HEADLINE TOTAL (earnings audit r2), by symbol:
+ * the concept that is its revenue for every year and quarter, as filed.
+ *   WMT: `Revenues` (total revenues, net sales plus membership and other
+ *        income): 713,163M for FY2026 against a 706,413M contract line. The
+ *        gap is under REVENUE_TOTAL_OVER_CONTRACT and is no listed gap concept,
+ *        so the total-over-contract rule kept the contract line.
+ *   DUK: total operating revenues, RegulatedAndUnregulatedOperatingRevenue:
+ *        32,237M for FY2025 against a 31,741M contract line (including tax).
+ *        Not a chain entry (see UTILITY_REVENUE_TAG): only this filer moves.
+ * A period without the ruled concept reads Not reported rather than keep the
+ * contract line beside the total, so the series stays on one basis.
+ */
+export const REVENUE_TOTAL_RULINGS: Readonly<Record<string, string>> = {
+  WMT: "Revenues",
+  DUK: UTILITY_REVENUE_TAG,
+};
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
 /** How close a closure ratio must sit to one of the filer's split ratios to read as a split, not a wrong count. */
@@ -1424,7 +1441,58 @@ export function revenueGapConcept(facts: CompanyFacts, currency = "USD"): string
  * only for a filer that tags two or more concepts of such a field -- the only
  * case where the two readings can differ.
  */
-export function extractCompanyFacts(symbol: string, facts: CompanyFacts, opts: ExtractOpts = {}): ExtractResult {
+// ── A PROXY STATEMENT DOES NOT OVERRIDE A FINANCIAL STATEMENT (earnings audit r2) ──
+// Since 2023 the pay-versus-performance table puts NetIncomeLoss (and
+// sometimes revenue) in DEF 14A / PRE 14A. companyfacts carries those rows, and
+// a proxy is filed AFTER the 10-K, so newest-filed made it win the frame:
+//   SCHW FY2021-25 read 5.9M .. 8.9M (the proxy tagged millions as units),
+//   against the 10-K's 5,855M .. 8,852M;
+//   MET FY2022 read 2,354M (the proxy's net income to common), against the
+//   10-K's 5,284M (restated); DELL FY2022-25 read the proxy's figures too;
+//   ONTO's proxy rows on calendar-year dates (0.1M) displaced its 52/53-week
+//   fiscal years, 2-5 days off, so FY2020-23 read blank.
+// So a proxy row is dropped wherever the same concept has a statement row
+// (any other form) for that frame, within FRAME_SLACK_DAYS at both ends. A
+// frame ONLY a proxy carries is kept: BLK's FY2021 and PNFP's FY2021-22 are
+// filed under their former CIKs, and the proxy is the one source here (BLK's
+// proxy matches its 10-K on every year both carry). Dropped once, here, so
+// every reader below sees the same rows.
+const PROXY_FORM = /^(PRE|DEF|DEFA|DEFR|DEFM|PREM|DEFC|PREC)\s?14[AC]/i;
+const FRAME_SLACK_DAYS = 10;
+
+export function withoutProxyRows(facts: CompanyFacts): CompanyFacts {
+  const src = facts?.facts;
+  if (!src) return facts;
+  type R = { form?: string; start?: string; end?: string };
+  const day = (d?: string) => (d ? Date.parse(d) / 86_400_000 : NaN);
+  const near = (a?: string, b?: string) => (!a && !b) || Math.abs(day(a) - day(b)) <= FRAME_SLACK_DAYS;
+  let touched = false;
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [ns, concepts] of Object.entries(src)) {
+    const nsOut: Record<string, unknown> = {};
+    for (const [tag, def] of Object.entries(concepts ?? {})) {
+      const units = (def as { units?: Record<string, R[]> })?.units;
+      if (!units) { nsOut[tag] = def; continue; }
+      const statements = Object.values(units).flat().filter((r) => !PROXY_FORM.test(r?.form ?? ""));
+      let changed = false;
+      const kept: Record<string, unknown[]> = {};
+      for (const [u, rows] of Object.entries(units)) {
+        const k = (rows ?? []).filter((r) => !PROXY_FORM.test(r?.form ?? "")
+          || !statements.some((t) => near(t.start, r.start) && near(t.end, r.end)));
+        if (k.length !== (rows ?? []).length) changed = true;
+        if (k.length) kept[u] = k;
+      }
+      if (!changed) { nsOut[tag] = def; continue; }
+      touched = true;
+      if (Object.keys(kept).length) nsOut[tag] = { ...(def as object), units: kept };
+    }
+    out[ns] = nsOut;
+  }
+  return touched ? ({ ...facts, facts: out } as CompanyFacts) : facts;
+}
+
+export function extractCompanyFacts(symbol: string, factsIn: CompanyFacts, opts: ExtractOpts = {}): ExtractResult {
+  const facts = withoutProxyRows(factsIn);
   const primary = extractCompanyFactsWith(symbol, facts, opts, false);
   const ranked = SEC_FIELDS.filter((f) => f.rankPerPeriod && taggedConcepts(facts, f) > 1);
   if (!ranked.length) return primary;
@@ -1944,12 +2012,14 @@ function extractCompanyFactsWith(
     // and both totals are differenced like any concept, so a derived Q4 is on
     // the same basis as its year.
     //
-    // IT REPLACES, IT DOES NOT BACKFILL. A period the rules above left with no
-    // revenue is filled only when it is newer than every period that has one
-    // (FITB, OFG, UBSI: the newest years blank), the gap the block above is for.
-    // An older blank stays as those rules left it: USB's 2020-21 and FCNCA's
-    // 2023 quarters were withheld upstream, and a bank already on net revenue
-    // must not move because one stray period somewhere tripped the test.
+    // IT REPLACES; IT BACKFILLS ONLY AN EMPTY FRAME WITH BOTH HALVES FILED. A
+    // period newer than every valued one is filled as before (FITB, OFG, UBSI:
+    // the newest years blank). An older period is filled only when it has no
+    // revenue cell at all and both halves are filed for its frame (MCHB's
+    // FY2020-23 and its 2023-24 quarters, owner ruling 2026-10-20). A period
+    // withheld upstream keeps its marker and stays blank (USB's 2020-21,
+    // FCNCA's 2023 quarters), and a bank already on net revenue must not move
+    // because one stray period somewhere tripped the test.
     //
     // USD FILERS ONLY. A 20-F bank's halves and its `Revenues` need not share a
     // unit or a presentation (HDB, MFG, MUFG), so the 2% test means nothing
@@ -1968,6 +2038,11 @@ function extractCompanyFactsWith(
         const halvesAt = (kind: "qc" | "yc", end: string) => {
           const a = nii[kind].get(end)?.get("revenue"), b = non[kind].get(end)?.get("revenue");
           return a && b && a.val != null && b.val != null && sameFrame(a.covers, b.covers) ? { a, sum: a.val + b.val } : null;
+        };
+        const filedHalvesAt = (kind: "qc" | "yc", end: string) => {
+          const h = halvesAt(kind, end);
+          const b = non[kind].get(end)?.get("revenue");
+          return h && h.sum > 0 && h.a.derived === "as-filed" && b?.derived === "as-filed" ? h : null;
         };
         const within = (v: number, sum: number, tol: number) => Math.abs(v - sum) <= tol * Math.abs(sum);
         type Halves = NonNullable<ReturnType<typeof halvesAt>>;
@@ -2028,7 +2103,12 @@ function extractCompanyFactsWith(
             for (const [end, m] of cells) if (m.get("revenue")?.val != null && end > newestValued) newestValued = end;
             for (const [end, m] of cells) {
               const c = m.get("revenue");
-              if (c?.val == null && end <= newestValued) continue;
+              // AN OLDER PERIOD WITH NO REVENUE CELL AT ALL takes net revenue when
+              // both halves are FILED for its frame, as filed, not differenced
+              // (MCHB FY2020-23, BPOP's 2024-25 Q2/Q3). A Q4 whose halves exist only
+              // as year minus nine months stays blank (owner ruling 2026-10-20), and
+              // so does one the rules above withheld: that cell exists, null-valued.
+              if (c?.val == null && end <= newestValued && (m.has("revenue") || !filedHalvesAt(kind, end))) continue;
               if (c?.val != null && stays(kind, end, c)) continue;
               const t = netAt(kind, end);
               if (t) { m.set("revenue", t); moved++; if (t.derived === "computed") computed++; }
@@ -2037,6 +2117,37 @@ function extractCompanyFactsWith(
           }
           notes.push(`revenue: bank net basis — ${off} period(s) not a net total of ${BANK_REVENUE_HALVES.join(" + ")}; net revenue used for ${moved} period(s) (${computed} computed), ${blanked} without it left unreported`);
         }
+      }
+    }
+
+    // ── THE OWNER'S TOTAL (REVENUE_TOTAL_RULINGS, earnings audit r2) ─────────
+    // After every other revenue choice, so none of them can put the contract
+    // line back; before the derived-Q4 check, which then judges the total.
+    {
+      const ruled = REVENUE_TOTAL_RULINGS[String(symbol ?? "").toUpperCase()];
+      if (ruled) {
+        const f: FieldDef = { ...revenueField, chain: [ruled], ifrsChain: undefined };
+        const rows = rowsForField(facts, f, new Set<string>(), currency);
+        const bucket: Bucket = new Map();
+        for (const c of rows) {
+          const k = periodKey(c.row);
+          const list = bucket.get(k);
+          if (list) list.push(c);
+          else bucket.set(k, [c]);
+        }
+        const qc = new Map<string, Map<string, FieldValue>>(), yc = new Map<string, Map<string, FieldValue>>();
+        if (rows.length) runCumulative([f], new Map([["revenue", bucket]]), new Map([["revenue", ruled]]), qc, yc, new Map(), new Map(), []);
+        let moved = 0, blanked = 0;
+        for (const [cells, ruledCells] of [[quarterCells, qc], [yearCells, yc]] as const) {
+          for (const [end, m] of cells) {
+            const t = ruledCells.get(end)?.get("revenue");
+            if (t?.val != null && t.val > 0) {
+              if (m.get("revenue")?.val !== t.val || m.get("revenue")?.tag !== t.tag) moved++;
+              m.set("revenue", t);
+            } else if (m.has("revenue")) { m.delete("revenue"); blanked++; }
+          }
+        }
+        notes.push(`revenue: owner ruling — ${ruled} for every period; ${moved} period(s) moved, ${blanked} without it left unreported`);
       }
     }
 
