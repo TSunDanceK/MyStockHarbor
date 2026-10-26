@@ -801,6 +801,42 @@ check("...and the refusal names both concepts in a note",
   tc.notes.some((n) => n.startsWith("operatingCashFlow ") && n.includes(OCF_A) && n.includes(OCF_B)),
   tc.notes.find((n) => n.startsWith("operatingCashFlow ")) ?? "(none)");
 
+// THE SAME BASIS (audit r5, BAC): its FY2026 10-Qs recast Q1 and Q2 FY2025
+// and the FY2025 10-K is on the recast basis, but the only nine months is the
+// original Q3 10-Q's. Rows as filed (BAC's own values, USD millions).
+{
+  const r = (s0, e, v, accn, filed, form = "10-Q") => ({ start: s0, end: e, val: v * 1e6, accn, filed, form });
+  const bac = { cik: 70858, facts: { "us-gaap": {
+    Revenues: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 27366, "q1-25", "2025-04-30"), r("2025-01-01", "2025-03-31", 28247, "q1-26", "2026-05-01"),
+      r("2025-01-01", "2025-06-30", 53829, "q2-25", "2025-07-31"), r("2025-01-01", "2025-06-30", 55690, "q2-26", "2026-07-31"),
+      r("2025-04-01", "2025-06-30", 26463, "q2-25", "2025-07-31"), r("2025-04-01", "2025-06-30", 27443, "q2-26", "2026-07-31"),
+      r("2025-01-01", "2025-09-30", 81917, "q3-25", "2025-10-31"), r("2025-07-01", "2025-09-30", 28088, "q3-25", "2025-10-31"),
+      r("2025-01-01", "2025-12-31", 113097, "k-25", "2026-02-25", "10-K"),
+    ] } },
+    NetIncomeLoss: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 7396, "q1-25", "2025-04-30"), r("2025-01-01", "2025-03-31", 7360, "q1-26", "2026-05-01"),
+      r("2025-01-01", "2025-06-30", 14512, "q2-25", "2025-07-31"), r("2025-01-01", "2025-06-30", 14530, "q2-26", "2026-07-31"),
+      r("2025-04-01", "2025-06-30", 7116, "q2-25", "2025-07-31"), r("2025-04-01", "2025-06-30", 7170, "q2-26", "2026-07-31"),
+      r("2025-01-01", "2025-09-30", 22981, "q3-25", "2025-10-31"), r("2025-07-01", "2025-09-30", 8469, "q3-25", "2025-10-31"),
+      r("2025-01-01", "2025-12-31", 30509, "k-25", "2026-02-25", "10-K"),
+    ] } },
+  } } };
+  const revI = SEC_FIELDS.findIndex((f) => f.key === "revenue"), niI = SEC_FIELDS.findIndex((f) => f.key === "netIncome");
+  const out = extractCompanyFacts("BAC", bac);
+  const q4 = out.quarters.find((q) => q.end === "2025-12-31");
+  check("BAC: a Q4 differenced from a nine months on the old basis is withheld (113,097 - 81,917 is not a quarter)",
+    q4?.values[revI]?.val == null && q4?.values[revI]?.derived === "withheld", JSON.stringify(q4?.values[revI] ?? null));
+  check("...with a note naming the operand and the quarters' sum",
+    out.notes.some((n) => n.startsWith("revenue 2025-12-31: derived quarter withheld") && n.includes("81917000000") && n.includes("83778000000")),
+    out.notes.find((n) => n.startsWith("revenue 2025-12-31")) ?? "(none)");
+  check("...while net income, whose nine months still matches its quarters (22,981 vs 22,999, 0.08%), keeps its Q4 of 7,528",
+    q4?.values[niI]?.val === 7528e6 && q4?.values[niI]?.derived === "differenced", JSON.stringify(q4?.values[niI] ?? null));
+  const mut = await liftMutated((src) => src.replace("if (n == null || shown.length !== n) continue;", "continue;"));
+  const bad = mut.extractCompanyFacts("BAC", bac).quarters.find((q) => q.end === "2025-12-31")?.values[revI]?.val;
+  check("MUTATION: with the same-basis pass off, BAC Q4 reads the mixed 31,180", bad === 31180e6, String(bad));
+}
+
 // THE COMMON CONCEPT (audit r4, FOXA): the later frame resolves to one concept
 // but also files the earlier frame's, so the quarter is differenced on that
 // one, both operands the same concept, and never across the two.
