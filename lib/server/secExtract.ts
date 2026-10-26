@@ -552,6 +552,8 @@ export function unreadableReason(
 const DAY = 86400000;
 /** How far a differenced quarter's operand may sit from the quarters shown for its span (audit r5). */
 export const SAME_BASIS_TOLERANCE = 0.005;
+/** The fields the same-basis pass judges (owner ruling, audit r5): the headline lines only. */
+export const SAME_BASIS_FIELDS: ReadonlySet<string> = new Set(["revenue", "netIncome"]);
 
 export function spanDays(start: string, end: string): number {
   return (Date.parse(end) - Date.parse(start)) / DAY;
@@ -2220,13 +2222,18 @@ function extractCompanyFactsWith(
   // a residual of two bases, not a quarter. So every differenced quarter's
   // operand is compared with the quarters shown for its span: off by more
   // than SAME_BASIS_TOLERANCE of the larger side, the quarter is withheld
-  // with a note. Judged on the values as they stand before any is withheld,
+  // with a note. HEADLINE FIELDS ONLY (SAME_BASIS_FIELDS, owner ruling r5):
+  // on every additive field the rule withheld 2,113 cells at 694 filers,
+  // mostly minor lines whose prior-year comparatives a later 10-Q
+  // reclassified; revenue and net income, which the Earnings History table
+  // shows, are 141 cells at 122. Judged on the values as they stand before any is withheld,
   // so one withholding cannot hide another; a span whose quarters are not
   // all shown cannot be judged and is left as is. EPS is never differenced;
   // a computed EPS needs its net income, so a withheld one goes with it.
   {
     const verdicts: [Map<string, FieldValue>, string, FieldValue, number, number][] = [];
     for (const field of cumulativeFields()) {
+      if (!SAME_BASIS_FIELDS.has(field.key)) continue;
       const cells = [...quarterCells.values()].map((m) => m.get(field.key)).filter((c): c is FieldValue => c != null);
       for (const [end, m] of quarterCells) {
         const q = m.get(field.key);

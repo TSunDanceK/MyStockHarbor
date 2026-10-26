@@ -814,6 +814,15 @@ check("...and the refusal names both concepts in a note",
       r("2025-01-01", "2025-09-30", 81917, "q3-25", "2025-10-31"), r("2025-07-01", "2025-09-30", 28088, "q3-25", "2025-10-31"),
       r("2025-01-01", "2025-12-31", 113097, "k-25", "2026-02-25", "10-K"),
     ] } },
+    // The same shape on a non-headline line (owner ruling: the pass judges
+    // revenue and net income only), so this Q4 must be kept.
+    InterestExpense: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 100, "q1-25", "2025-04-30"), r("2025-01-01", "2025-03-31", 110, "q1-26", "2026-05-01"),
+      r("2025-01-01", "2025-06-30", 200, "q2-25", "2025-07-31"), r("2025-01-01", "2025-06-30", 220, "q2-26", "2026-07-31"),
+      r("2025-04-01", "2025-06-30", 100, "q2-25", "2025-07-31"), r("2025-04-01", "2025-06-30", 110, "q2-26", "2026-07-31"),
+      r("2025-01-01", "2025-09-30", 300, "q3-25", "2025-10-31"), r("2025-07-01", "2025-09-30", 100, "q3-25", "2025-10-31"),
+      r("2025-01-01", "2025-12-31", 420, "k-25", "2026-02-25", "10-K"),
+    ] } },
     NetIncomeLoss: { units: { USD: [
       r("2025-01-01", "2025-03-31", 7396, "q1-25", "2025-04-30"), r("2025-01-01", "2025-03-31", 7360, "q1-26", "2026-05-01"),
       r("2025-01-01", "2025-06-30", 14512, "q2-25", "2025-07-31"), r("2025-01-01", "2025-06-30", 14530, "q2-26", "2026-07-31"),
@@ -832,6 +841,9 @@ check("...and the refusal names both concepts in a note",
     out.notes.find((n) => n.startsWith("revenue 2025-12-31")) ?? "(none)");
   check("...while net income, whose nine months still matches its quarters (22,981 vs 22,999, 0.08%), keeps its Q4 of 7,528",
     q4?.values[niI]?.val === 7528e6 && q4?.values[niI]?.derived === "differenced", JSON.stringify(q4?.values[niI] ?? null));
+  const ieI = SEC_FIELDS.findIndex((f) => f.key === "interestExpense");
+  check("...and a non-headline line in the same shape keeps its Q4 (the pass judges revenue and net income only)",
+    q4?.values[ieI]?.val === 120e6 && q4?.values[ieI]?.derived === "differenced", JSON.stringify(q4?.values[ieI] ?? null));
   const mut = await liftMutated((src) => src.replace("if (n == null || shown.length !== n) continue;", "continue;"));
   const bad = mut.extractCompanyFacts("BAC", bac).quarters.find((q) => q.end === "2025-12-31")?.values[revI]?.val;
   check("MUTATION: with the same-basis pass off, BAC Q4 reads the mixed 31,180", bad === 31180e6, String(bad));
