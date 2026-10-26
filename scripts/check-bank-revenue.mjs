@@ -117,10 +117,12 @@ console.log("\n4. no bank below its own net interest income");
   }
 }
 
-console.log("\n5. it replaces, it does not backfill; USD filers only");
+console.log("\n5. it replaces; it backfills only an empty frame with both halves; USD filers only");
 {
-  // FY2024 carries no fee line: whatever the earlier rules leave there, the
-  // block must leave too (USB 2020-21). FY2025's fee line still moves.
+  // FY2024 carries no revenue cell at all and both halves are filed: it takes
+  // their sum (owner ruling 2026-10-20, MCHB FY2020-23). FY2025's fee line still
+  // moves. A cell WITHHELD upstream keeps its marker (the code skips any period
+  // that has a revenue cell), which this fixture does not model.
   const gap = payload({
     [CONTRACT]: [Y(2025, 1562), Y(2023, 1400)],
     [NII]: [Y(2025, 5991), Y(2024, 5450), Y(2023, 5100)], [NON]: [Y(2025, 2175), Y(2024, 1980), Y(2023, 1900)],
@@ -130,9 +132,16 @@ console.log("\n5. it replaces, it does not backfill; USD filers only");
   const XW = await load(extractRaw.slice(0, start) + extractRaw.slice(stop));
   const withB = X.extractCompanyFacts("GAP", gap), without = XW.extractCompanyFacts("GAP", gap);
   check("the fee line still moves (FY2025 8,166M)", rev(withB, "2025-12-31")?.val === 8166 * M, JSON.stringify(rev(withB, "2025-12-31")));
-  check("an older period the earlier rules left as they did is left as they did (FY2024)",
-    JSON.stringify(rev(withB, "2024-12-31") ?? null) === JSON.stringify(rev(without, "2024-12-31") ?? null),
+  check("an older period with no revenue cell and both halves filed takes their sum (FY2024 7,430M, computed)",
+    rev(withB, "2024-12-31")?.val === 7430 * M && rev(withB, "2024-12-31")?.derived === "computed" && rev(without, "2024-12-31") == null,
     `${JSON.stringify(rev(withB, "2024-12-31"))} vs ${JSON.stringify(rev(without, "2024-12-31"))}`);
+  {
+    const halfOnly = payload({ [CONTRACT]: [Y(2025, 1562)], [NII]: [Y(2025, 5991), Y(2024, 5450)], [NON]: [Y(2025, 2175)] });
+    check("...but not with only one half filed (FY2024 stays blank)", rev(X.extractCompanyFacts("GAP", halfOnly), "2024-12-31")?.val == null);
+    const mutated = extractRaw.replace("(m.has(\"revenue\") || !filedHalvesAt(kind, end))", "true");
+    check("the backfill mutation is applied", mutated !== extractRaw);
+    check("MUTATION: no backfill → FY2024 blank again, caught", rev((await load(mutated)).extractCompanyFacts("GAP", gap), "2024-12-31")?.val !== 7430 * M);
+  }
   // The newest years blank (FITB): filled, the gap the rule exists for.
   const head = payload({
     [CONTRACT]: [Y(2023, 577)],
@@ -205,13 +214,8 @@ console.log("\n7. mutation");
     if (extractRaw.split(from).length !== 2) throw new Error(`mutation anchor not unique: ${from}`);
     return load(extractRaw.replace(from, to));
   };
-  const gap = payload({
-    [CONTRACT]: [Y(2025, 1562), Y(2023, 1400)],
-    [NII]: [Y(2025, 5991), Y(2024, 5450), Y(2023, 5100)], [NON]: [Y(2025, 2175), Y(2024, 1980), Y(2023, 1900)],
-  });
-  const XB = await cut('              if (c?.val == null && end <= newestValued) continue;\n');
-  check("MUTATION: the no-backfill guard removed -> FY2024 filled with 7,430M (caught)",
-    rev(XB.extractCompanyFacts("GAP", gap), "2024-12-31")?.val === 7430 * M);
+  // The no-backfill guard became the backfill rule (owner ruling 2026-10-20);
+  // its mutation is in section 5.
   const XU = await cut('currency === "USD" && nii.n && non.n', "nii.n && non.n");
   const yen = JSON.parse(JSON.stringify(hban).replace(/"USD"/g, '"JPY"'));
   check("MUTATION: the USD gate removed -> the yen filer moves (caught)",
