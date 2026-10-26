@@ -825,6 +825,28 @@ check("...and the note says which concept it used",
   cm.notes.some((n) => n.startsWith("operatingCashFlow ") && n.includes(`differenced on us-gaap|${OCF_B}`)),
   cm.notes.find((n) => n.startsWith("operatingCashFlow ")) ?? "(none)");
 
+// FCX (audit r5): its FY2025 resolves to the proxy's NetIncomeLoss while the
+// 9M carries only ProfitLoss; the 10-K files ProfitLoss for the year (4,152M),
+// so Q4 is differenced on it: 4,152 - 3,587 = 565M. Rows as filed (USD millions).
+{
+  const r = (s0, e, v, accn, filed, form = "10-Q") => ({ start: s0, end: e, val: v * 1e6, accn, filed, form });
+  const fcx = { cik: 831259, facts: { "us-gaap": {
+    ProfitLoss: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 793, "q1", "2025-05-08"), r("2025-01-01", "2025-06-30", 2340, "q2", "2025-08-08"),
+      r("2025-04-01", "2025-06-30", 1547, "q2", "2025-08-08"), r("2025-01-01", "2025-09-30", 3587, "q3", "2025-11-06"),
+      r("2025-07-01", "2025-09-30", 1247, "q3", "2025-11-06"), r("2025-01-01", "2025-12-31", 4152, "k", "2026-02-13", "10-K"),
+    ] } },
+    NetIncomeLoss: { units: { USD: [
+      r("2025-01-01", "2025-06-30", 1124, "q2-26", "2026-08-06"), r("2025-04-01", "2025-06-30", 772, "q2-26", "2026-08-06"),
+      r("2025-01-01", "2025-12-31", 2204, "p", "2026-04-23", "DEF 14A"),
+    ] } },
+  } } };
+  const niI = SEC_FIELDS.findIndex((f) => f.key === "netIncome");
+  const q4 = extractCompanyFacts("FCX", fcx).quarters.find((q) => q.end === "2025-12-31")?.values[niI];
+  check("FCX: the FY's NetIncomeLoss and the 9M's ProfitLoss meet on ProfitLoss, Q4 4,152 - 3,587 = 565",
+    q4?.val === 565e6 && q4?.tag === "ProfitLoss" && q4?.derived === "differenced", JSON.stringify(q4 ?? null));
+}
+
 {
   // MUTATION: the same-concept test removed, so the differencing takes whatever
   // frame sits one length below regardless of which concept filed it.
