@@ -879,8 +879,12 @@ check("...and the note says which concept it used",
   } } };
   const niI = SEC_FIELDS.findIndex((f) => f.key === "netIncome");
   const q4 = extractCompanyFacts("FCX", fcx).quarters.find((q) => q.end === "2025-12-31")?.values[niI];
-  check("FCX: the FY's NetIncomeLoss and the 9M's ProfitLoss meet on ProfitLoss, Q4 4,152 - 3,587 = 565",
-    q4?.val === 565e6 && q4?.tag === "ProfitLoss" && q4?.derived === "differenced", JSON.stringify(q4 ?? null));
+  // Since audit r5's same-basis pass: the quarters shown for those nine
+  // months mix ProfitLoss (Q1 793, Q3 1,247) with NetIncomeLoss (Q2 772), so
+  // they sum to 2,812 against the ProfitLoss 9M of 3,587 and the 565 is a
+  // residual of two measures. Withheld until the quarters share one concept.
+  check("FCX: the 565 Q4 is withheld, because the quarters shown for its nine months mix ProfitLoss and NetIncomeLoss",
+    q4?.val == null && q4?.derived === "withheld" && q4?.operand?.val === 3587e6, JSON.stringify(q4 ?? null));
 }
 
 {
