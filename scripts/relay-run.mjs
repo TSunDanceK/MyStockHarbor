@@ -818,6 +818,8 @@ const TASKS = {
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
   "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },
   // Every fact of the named concepts in one filing's instance, with its context. Read-only.
+  // Every companyfacts row of the named concepts from a date on (6M/9M frames included). Read-only.
+  "sec-concept-rows": { script: "scripts/concept-rows-probe.mjs", args: () => [] },
   "sec-instance-concepts": { script: "scripts/instance-concepts-probe.mjs", args: () => [] },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
