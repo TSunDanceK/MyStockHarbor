@@ -546,6 +546,8 @@ export function unreadableReason(
 const DAY = 86400000;
 /** The fields whose Q4 is read on the year's own concept when it is filed under another (audit r5). */
 export const Q4_SAME_CONCEPT_FIELDS: ReadonlySet<string> = new Set(["revenue", "netIncome"]);
+/** How close the four quarters must come to the year for that Q4 to be used (audit r5). */
+export const SAME_CONCEPT_Q4_TOLERANCE = 0.005;
 
 export function spanDays(start: string, end: string): number {
   return (Date.parse(end) - Date.parse(start)) / DAY;
@@ -2264,6 +2266,20 @@ function extractCompanyFactsWith(
       // owner-ruling path does), so no second subtraction site exists.
       const d = onConcept(cellConcept(y)).get(end)?.get(field.key);
       if (!d || d.derived !== "differenced" || d.val == null || d.covers?.[0] == null) continue;
+      // ONLY WHERE IT MAKES THE YEAR ADD UP. The replacement must bring the
+      // three quarters shown before it plus Q4 within SAME_CONCEPT_Q4_TOLERANCE
+      // of the year, and closer than the filed Q4 did, and a revenue Q4 must be
+      // positive. Where the year's concept is not the quarters' scope (VISN's,
+      // FUBO's year less nine months is negative) nothing is changed.
+      const yStart = Date.parse(y.covers[0]);
+      const before = [...quarterCells.entries()]
+        .filter(([e, m]) => e < end && Date.parse(e) > yStart && m.get(field.key)?.val != null)
+        .map(([, m]) => m.get(field.key)!.val!);
+      if (before.length !== 3) continue;
+      const shown = before.reduce((a, b) => a + b, 0);
+      const errNew = Math.abs(shown + d.val - y.val), errOld = Math.abs(shown + q.val - y.val);
+      if (errNew >= errOld || errNew > SAME_CONCEPT_Q4_TOLERANCE * Math.abs(y.val)) continue;
+      if (field.key === "revenue" && d.val <= 0) continue;
       quarterCells.get(end)!.set(field.key, d);
       const val = d.val;
       notes.push(`${field.key} ${end}: Q4 filed as ${q.tag} ${q.val}, not the year's ${y.tag}; read as the year less its nine months on ${y.tag}, ${val}`);
