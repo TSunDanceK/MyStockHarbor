@@ -795,6 +795,21 @@
    "symbol": "SNEX",
    "requestedAt": "2026-10-26T00:00:00Z",
    "reason": "earnings audit r2 (owner ruling): SNEX reads net operating revenues (RevenuesNetOfInterestExpense) for every year and quarter, not its gross Revenues; the stored set carries the gross figure. FY2025 132,378.2M -> 2,052.8M; dated after the expected merge, so a routine re-read before it cannot retire the request"
+  },
+  {
+   "symbol": "AFRM",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "multi-class cover: a cited share-classes.json entry now sums the newest filing's per-class cover counts (class A + B, and C at 0 shares where filed), so market cap and P/E no longer refuse; the stored set refused the cover as multi-class"
+  },
+  {
+   "symbol": "RDDT",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "multi-class cover: a cited share-classes.json entry now sums the newest filing's per-class cover counts (class A + B, and C at 0 shares where filed), so market cap and P/E no longer refuse; the stored set refused the cover as multi-class"
+  },
+  {
+   "symbol": "CRCL",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "multi-class cover: a cited share-classes.json entry now sums the newest filing's per-class cover counts (class A + B, and C at 0 shares where filed), so market cap and P/E no longer refuse; the stored set refused the cover as multi-class"
   }
  ]
 }
