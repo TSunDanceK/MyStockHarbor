@@ -544,6 +544,8 @@ export function unreadableReason(
 // ── period arithmetic ───────────────────────────────────────────────────────
 
 const DAY = 86400000;
+/** The fields whose Q4 is read on the year's own concept when it is filed under another (audit r5). */
+export const Q4_SAME_CONCEPT_FIELDS: ReadonlySet<string> = new Set(["revenue", "netIncome"]);
 
 export function spanDays(start: string, end: string): number {
   return (Date.parse(end) - Date.parse(start)) / DAY;
@@ -2220,6 +2222,51 @@ function extractCompanyFactsWith(
             ? `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
             : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters and the nine months ${nine} differ from those quarters' sum ${siblings.reduce((a, b) => a + b, 0)}; withheld (scope mismatch)`
       );
+    }
+  }
+
+  // ── A Q4 FILED ONLY UNDER ANOTHER CONCEPT THAN ITS YEAR (audit r5) ────────
+  // TEVA's 10-K files Q4 2025 revenue only as `Revenues` (1,500M) while its
+  // year and other quarters are the contract line (17,258M; Q4 by difference
+  // 4,711M); D's is `Revenues` 4,093M against a contract year (4,210M by
+  // difference), PLD's net income is `ProfitLoss` 1,342.2M against a
+  // NetIncomeLoss year (1,278.9M), ALL's is net income to common 1,899M
+  // (1,928M). The filed figure beat the same-concept difference, so the four
+  // quarters did not add to the year. Where a filed Q4's concept is not its
+  // year's and the year's concept files the nine months before it, Q4 is
+  // the year minus those nine months, on one concept. Headline fields only
+  // (Q4_SAME_CONCEPT_FIELDS), the owner's scope for the r5 basis rules.
+  const cellConcept = (c: { tag: string | null; ns: string | null }) => `${c.ns}|${c.tag}`;
+  for (const field of cumulativeFields()) {
+    if (!Q4_SAME_CONCEPT_FIELDS.has(field.key)) continue;
+    const bucket = buckets.get(field.key);
+    if (!bucket) continue;
+    const byConcept = new Map<string, Map<string, Map<string, FieldValue>>>();
+    const onConcept = (key: string) => {
+      let qc = byConcept.get(key);
+      if (qc) return qc;
+      const only: Bucket = new Map();
+      for (const [k, cands] of bucket) {
+        const keep = cands.filter((c) => conceptKey(c) === key);
+        if (keep.length) only.set(k, keep);
+      }
+      qc = new Map();
+      runCumulative([field], new Map([[field.key, only]]), new Map([[field.key, key]]), qc, new Map(), new Map(), new Map(), []);
+      byConcept.set(key, qc);
+      return qc;
+    };
+    for (const [end, ym] of yearCells) {
+      const y = ym.get(field.key);
+      const q = quarterCells.get(end)?.get(field.key);
+      if (!y?.covers || y.val == null || !y.tag || !q || q.derived !== "as-filed" || q.val == null) continue;
+      if (cellConcept(q) === cellConcept(y)) continue;
+      // THE ONE DIFFERENCING ROUTINE, on the year's concept alone (as the
+      // owner-ruling path does), so no second subtraction site exists.
+      const d = onConcept(cellConcept(y)).get(end)?.get(field.key);
+      if (!d || d.derived !== "differenced" || d.val == null || d.covers?.[0] == null) continue;
+      quarterCells.get(end)!.set(field.key, d);
+      const val = d.val;
+      notes.push(`${field.key} ${end}: Q4 filed as ${q.tag} ${q.val}, not the year's ${y.tag}; read as the year less its nine months on ${y.tag}, ${val}`);
     }
   }
 
