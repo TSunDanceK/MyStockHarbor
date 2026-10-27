@@ -2279,7 +2279,10 @@ function extractCompanyFactsWith(
       const shown = before.reduce((a, b) => a + b, 0);
       const errNew = Math.abs(shown + d.val - y.val), errOld = Math.abs(shown + q.val - y.val);
       if (errNew >= errOld || errNew > SAME_CONCEPT_Q4_TOLERANCE * Math.abs(y.val)) continue;
-      if (field.key === "revenue" && d.val <= 0) continue;
+      // And the derived-Q4 floor the scope check applies to every differenced
+      // revenue Q4: SON's 2023 year less nine months is 295.9M beside quarters
+      // of about 1.7B, a scope mismatch, not a quarter.
+      if (field.key === "revenue" && (d.val <= 0 || d.val < DERIVED_Q4_FLOOR * (shown / 3))) continue;
       quarterCells.get(end)!.set(field.key, d);
       const val = d.val;
       notes.push(`${field.key} ${end}: Q4 filed as ${q.tag} ${q.val}, not the year's ${y.tag}; read as the year less its nine months on ${y.tag}, ${val}`);
