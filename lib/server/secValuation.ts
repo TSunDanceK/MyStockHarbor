@@ -988,8 +988,14 @@ export type MultipleInputs = {
  * JEF) and banks whose revenue comes from a total concept keep theirs.
  * INTERIM, 3 Oct 2026: retire it when the bank-revenue chain (COWORK #81/#83)
  * reads the total, and re-measure then.
+ *
+ * RETIRED FOR FIVE, 19 Oct 2026: KEY reads its `Revenues` total since #913,
+ * and AXP, NTRS, SOFI and ZION read net revenue since earnings audit r2's bank
+ * net basis (RevenuesNetOfInterestExpense, or net interest income +
+ * noninterest income): ZION FY2025 3,385M, not its 662M fee line. Kept on it
+ * pending their own re-measure: CFG, CFR, COF.
  */
-export const BANK_REVENUE_IS_FEES_ONLY: ReadonlySet<string> = new Set(["AXP", "CFG", "CFR", "COF", "KEY", "NTRS", "SOFI", "ZION"]);
+export const BANK_REVENUE_IS_FEES_ONLY: ReadonlySet<string> = new Set(["CFG", "CFR", "COF"]);
 
 /**
  * BOOK EQUITY FOR P/B (#552 COWORK #54, AVAV).
