@@ -1315,12 +1315,17 @@ export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
  *   DUK: total operating revenues, RegulatedAndUnregulatedOperatingRevenue:
  *        32,237M for FY2025 against a 31,741M contract line (including tax).
  *        Not a chain entry (see UTILITY_REVENUE_TAG): only this filer moves.
+ *   REXR: `Revenues` (audit r3): 1,003.1M for FY2025, where the contract line
+ *        is the 0.6M ASC 606 sliver beside 980.4M of lease income. The lessor
+ *        files the total for its years and Q1s only (later quarters year-to-
+ *        date), which kept the total-over-contract rule from reaching it.
  * A period without the ruled concept reads Not reported rather than keep the
  * contract line beside the total, so the series stays on one basis.
  */
 export const REVENUE_TOTAL_RULINGS: Readonly<Record<string, string>> = {
   WMT: "Revenues",
   DUK: UTILITY_REVENUE_TAG,
+  REXR: "Revenues",
 };
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
