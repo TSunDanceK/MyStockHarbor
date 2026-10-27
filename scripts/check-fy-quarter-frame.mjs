@@ -104,10 +104,10 @@ console.log("\n3. what is not touched");
   ]);
   const gx = X.extractCompanyFacts("GWRE", gwre);
   check("GWRE: a loss year's figure on its Q4 dates is refused, and Q4 is FY - 9M = 16.8",
-    X.fullYearOnQuarterFrame(gwre.facts["us-gaap"][TAG].units.USD).size === 1 && Math.abs((q(gx, "2024-07-31")?.val ?? NaN) - 16.8 * M) < 1,
+    X.fullYearOnQuarterFrame(gwre.facts["us-gaap"][TAG].units.USD, true).size === 1 && Math.abs((q(gx, "2024-07-31")?.val ?? NaN) - 16.8 * M) < 1,
     String(q(gx, "2024-07-31")?.val));
   {
-    const old = await load(extractRaw.replace("&& days(r) > d && days(r) < 350 && r.val !== y.val);", "&& days(r) > d && days(r) < 350 && Math.abs(r.val) < Math.abs(y.val!));"));
+    const old = await load(extractRaw.replace("(additiveAmount ? r.val !== y.val : Math.abs(r.val) < Math.abs(y.val!))", "Math.abs(r.val) < Math.abs(y.val!)"));
     check("MUTATION: the old 'smaller' test keeps GWRE's -6.1M as its Q4 (caught)", old.extractCompanyFacts("GWRE", gwre).quarters.find((p) => p.end === "2024-07-31")?.values?.[REV]?.val === -6.1 * M);
   }
 }

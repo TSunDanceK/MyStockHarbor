@@ -695,7 +695,17 @@ export function newer(a: FactRow, b: FactRow): FactRow {
  * Returns each such row mapped to what is read instead: null (refused) or the
  * re-dated year row. PURE.
  */
-export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Map<FactRow, FactRow | null> {
+export function fullYearOnQuarterFrame(
+  rows: readonly FactRow[],
+  /**
+   * A dollar amount that adds across quarters (audit r5). Only then does ANY
+   * part-year that differs from the year prove the quarter is not the year:
+   * an average share count or a per-share figure can equal the year's in a
+   * real quarter (OUT's 161.0M shares, WSM's split-restated dividend), so
+   * those keep the "smaller than the year" test.
+   */
+  additiveAmount = false,
+): Map<FactRow, FactRow | null> {
   const out = new Map<FactRow, FactRow | null>();
   const days = (r: FactRow) => (r.start && r.end ? (Date.parse(r.end) - Date.parse(r.start)) / DAY : NaN);
   const years = rows.filter((r) => typeof r.val === "number" && days(r) >= 350 && days(r) <= 380);
@@ -719,14 +729,15 @@ export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Map<FactRow, F
       if (q.val > 2 * avg && rest >= 0.5 * avg && rest <= 1.5 * avg) out.set(q, { ...q, start: nine.start, fp: "FY" });
       continue;
     }
-    // DIFFERENT FROM THE YEAR, not smaller (audit r5): GWRE's FY2026 10-K puts
+    // DIFFERENT FROM THE YEAR, not smaller, for an additive dollar amount
+    // (audit r5; see additiveAmount): GWRE's FY2026 10-K puts
     // its FY2024 loss, -6.1M, on 2024-05-01..07-31 as well as on the year,
     // while its six and nine months are -17.4M and -22.9M. A loss year near
     // zero has larger-magnitude part-years, so "smaller" let the year through
     // as the quarter; any part-year that differs from the year proves the
     // year is not one quarter's figure.
     const smaller = rows.some((r) => r !== q && r !== y && typeof r.val === "number" && r.start && r.start >= y.start! && r.end! <= y.end!
-      && days(r) > d && days(r) < 350 && r.val !== y.val);
+      && days(r) > d && days(r) < 350 && (additiveAmount ? r.val !== y.val : Math.abs(r.val) < Math.abs(y.val!)));
     if (smaller) out.set(q, null);
   }
   return out;
@@ -777,7 +788,7 @@ export function rowsForField(
       const keys = unitKeysFor(field.unit, currency);
       let took = 0;
       for (const unit of keys) {
-        const misdated = fullYearOnQuarterFrame(units[unit] ?? []);
+        const misdated = fullYearOnQuarterFrame(units[unit] ?? [], field.kind === "duration-cumulative" && field.unit === "USD");
         for (const row of units[unit] ?? []) {
           if (typeof row?.val !== "number" || !Number.isFinite(row.val)) continue;
           if (!row.end) continue;
