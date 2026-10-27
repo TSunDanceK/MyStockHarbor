@@ -109,7 +109,7 @@ const MUTANTS = [
   ["the ISO date back on the balance sheet heading", (s) => once(s, "<h3>Financial position at {readableDate(b.asOf)}</h3>", "<h3>Financial position as at {b.asOf}</h3>")],
   ["the long refusal back in the cell", (s) => once(s, "? <ReasonedValue text={NOT_AVAILABLE} reason={cantCalculate(missing)} style={MUTED_VALUE} />", "? <span style={MUTED_VALUE}>{cantCalculate(missing)}</span>")],
   ["the cash figure dropped from the legend", (s) => once(s, `{b.cashIncludesRestricted ? "Cash (incl. restricted)" : "Cash"} <CellValue cell={b.cash} compact />`, `{b.cashIncludesRestricted ? "Cash (incl. restricted)" : "Cash"}`)],
-  ["the no-chart branch taken regardless of debt", (s) => once(s, "const chart = balanceBars(num(b.cash?.val), num(b.shortTermInvestments?.val), num(b.totalDebt)) !== null;", "const chart = true;")],
+  ["the no-chart branch taken regardless of debt", (s) => once(s, "const chart = !financial && balanceBars(num(b.cash?.val), num(b.shortTermInvestments?.val), num(b.totalDebt)) !== null;", "const chart = true;")],
   ["the 'Not reported' sentence on every card", (s) => once(s, "{balanceShowsNotReported(b) ? <p>{NOT_REPORTED_NOTE}</p> : null}", "<p>{NOT_REPORTED_NOTE}</p>")],
   ["the recent-periods table back on ISO dates", (s) => once(s, `<td data-label="Period ending">{readableDate(r.end)}</td>`, `<td data-label="Period ending">{r.end}</td>`)],
 ];

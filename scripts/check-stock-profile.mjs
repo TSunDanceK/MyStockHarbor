@@ -304,16 +304,29 @@ console.log("\n8. the valuation multiples are the filings', one period basis eac
   check("...and CATCHES the floor raised to 2% (MA refused)",
     pbWith(twoPct, capAt200 * 0.014)?.ok === false);
   // A BANK WHOSE REVENUE LINE IS FEE INCOME ONLY (#552 COWORK #86b/#92): the
-  // same filed revenue under ZION refuses P/S; under JPM (a total concept) it
-  // stays. The list is named, so a mutation that empties it must show ZION.
+  // same filed revenue under CFG refuses P/S; under JPM (a total concept) it
+  // stays. The list is named, so a mutation that empties it must show CFG.
   const asBank = (sym) => M.valuationMultiples(inputs, M.multipleInputs({ ...set, symbol: sym }), 200).ps;
-  check("ZION (fee-only revenue line) refuses P/S as revenue-line-incomplete", asBank("ZION")?.why === "revenue-line-incomplete", JSON.stringify(asBank("ZION")));
+  check("CFG (still on the fee-only list) refuses P/S as revenue-line-incomplete", asBank("CFG")?.why === "revenue-line-incomplete", JSON.stringify(asBank("CFG")));
   check("the same filed revenue under JPM keeps its P/S", asBank("JPM")?.ok === true);
-  check("the list is exactly the 8 measured (CODE-A #113)",
-    [...M.BANK_REVENUE_IS_FEES_ONLY].sort().join(" ") === "AXP CFG CFR COF KEY NTRS SOFI ZION");
+  check("the list is the 3 not yet re-measured (CFG CFR COF)",
+    [...M.BANK_REVENUE_IS_FEES_ONLY].sort().join(" ") === "CFG CFR COF");
+  // RETIRED (19 Oct 2026): KEY reads its total since #913; AXP, NTRS, SOFI and
+  // ZION read net revenue since the bank net basis. Each now gets a P/S, a
+  // Pickers revenue figure and a revenue growth figure from the same set.
+  for (const sym of ["AXP", "KEY", "NTRS", "SOFI", "ZION"]) {
+    const mi = M.multipleInputs({ ...set, symbol: sym });
+    const v = M.buildSecEarningsView({ ...set, symbol: sym });
+    check(`${sym}: P/S computes, the Pickers revenue is not refused, revenue growth computes`,
+      asBank(sym)?.ok === true && mi.revenueIncomplete === false && typeof v?.snapshot?.revenueYoY === "number" && !v.snapshot.revenueYoYNotMeaningful,
+      JSON.stringify({ ps: asBank(sym), inc: mi.revenueIncomplete, yoy: v?.snapshot?.revenueYoY }));
+  }
   const noBankList = await loadComposer(once("|| BANK_REVENUE_IS_FEES_ONLY.has(set.symbol)", ""));
-  check("...and CATCHES the bank list unwired (ZION's P/S shown again)",
-    noBankList.valuationMultiples(inputs, noBankList.multipleInputs({ ...set, symbol: "ZION" }), 200).ps?.ok === true);
+  check("...and CATCHES the bank list unwired (CFG's P/S shown again)",
+    noBankList.valuationMultiples(inputs, noBankList.multipleInputs({ ...set, symbol: "CFG" }), 200).ps?.ok === true);
+  const stale = await loadComposer(once('new Set(["CFG", "CFR", "COF"])', 'new Set(["AXP", "CFG", "CFR", "COF", "KEY", "NTRS", "SOFI", "ZION"])'));
+  check("...and CATCHES the old list put back (ZION's P/S refused again)",
+    stale.valuationMultiples(inputs, stale.multipleInputs({ ...set, symbol: "ZION" }), 200).ps?.ok === false);
 
   check("no twelve months of revenue refuses P/S",
     M.valuationMultiples(inputs, { ...mi, revenue: null }, 200).ps?.why === "no-twelve-month-revenue");

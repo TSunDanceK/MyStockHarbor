@@ -50,6 +50,14 @@ const DUK = facts({
 });
 check("FY2025 reads 32,237.0", rev(X.extractCompanyFacts("DUK", DUK), "2025-12-31") === 32237 * M);
 
+console.log("\n2d. REXR reads total Revenues (audit r3)");
+const REXR = facts({
+  Revenues: [["2025-01-01", "2025-12-31", 1003.1, "10-K", 2025, "FY", "2026-02-12", "rexr-k-2025"]],
+  RevenueFromContractWithCustomerExcludingAssessedTax: [["2025-01-01", "2025-12-31", 0.6, "10-K", 2025, "FY", "2026-02-12", "rexr-k-2025"]],
+  OperatingLeaseLeaseIncome: [["2025-01-01", "2025-12-31", 980.4, "10-K", 2025, "FY", "2026-02-12", "rexr-k-2025"]],
+});
+check("FY2025 reads 1,003.1, not the 0.6 contract sliver", rev(X.extractCompanyFacts("REXR", REXR), "2025-12-31") === 1003.1 * M, String(rev(X.extractCompanyFacts("REXR", REXR), "2025-12-31")));
+
 console.log("\n2b. NEE reads total operating revenues (audit r3)");
 const NEE = facts({
   RegulatedAndUnregulatedOperatingRevenue: [["2025-01-01", "2025-12-31", 27410.0, "10-K", 2025, "FY", "2026-02-15", "nee-k-2025"]],

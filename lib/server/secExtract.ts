@@ -1309,6 +1309,10 @@ export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
  *        (audit r3): 1,813.0M for FY2025 against a 1,747.0M contract line. The
  *        gap is regulatory: RegulatedOperatingRevenueOther 62.6M (alternative
  *        revenue programs and the like) plus ~3.4M, the same kind as DUK's.
+ *   REXR: `Revenues` (audit r3): 1,003.1M for FY2025, where the contract line
+ *        is the 0.6M ASC 606 sliver beside 980.4M of lease income. The lessor
+ *        files the total for its years and Q1s only (later quarters year-to-
+ *        date), which kept the total-over-contract rule from reaching it.
  * HELD, NOT RULED (owner, audit r3), each read from its 10-K revenue note:
  *   NJR: FY2025 total 2,036.4M against a 1,351.3M contract line. The 685.1M
  *        is "revenues out of scope" of ASC 606: derivative instruments 713.9M
@@ -1325,6 +1329,7 @@ export const REVENUE_TOTAL_RULINGS: Readonly<Record<string, string>> = {
   WMT: "Revenues",
   DUK: UTILITY_REVENUE_TAG,
   NEE: UTILITY_REVENUE_TAG, IDA: UTILITY_REVENUE_TAG,
+  REXR: "Revenues",
 };
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
 export const RATIO_CLOSE_TOLERANCE = 0.1;
