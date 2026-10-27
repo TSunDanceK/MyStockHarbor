@@ -678,7 +678,7 @@ export function newer(a: FactRow, b: FactRow): FactRow {
  *
  * Refused: a quarter-length row whose value equals a year-length row of the
  * SAME concept and SAME accession that contains it, while another row of that
- * concept inside the year (a six- or nine-month figure) is smaller than the
+ * concept inside the year (a six- or nine-month figure) differs from the
  * year — so a real quarter exists to be found. Q4 then comes from FY − 9M as
  * for any filer, and a mid-year quarter from the 10-Q that stated it.
  *
@@ -719,8 +719,14 @@ export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Map<FactRow, F
       if (q.val > 2 * avg && rest >= 0.5 * avg && rest <= 1.5 * avg) out.set(q, { ...q, start: nine.start, fp: "FY" });
       continue;
     }
+    // DIFFERENT FROM THE YEAR, not smaller (audit r5): GWRE's FY2026 10-K puts
+    // its FY2024 loss, -6.1M, on 2024-05-01..07-31 as well as on the year,
+    // while its six and nine months are -17.4M and -22.9M. A loss year near
+    // zero has larger-magnitude part-years, so "smaller" let the year through
+    // as the quarter; any part-year that differs from the year proves the
+    // year is not one quarter's figure.
     const smaller = rows.some((r) => r !== q && r !== y && typeof r.val === "number" && r.start && r.start >= y.start! && r.end! <= y.end!
-      && days(r) > d && days(r) < 350 && Math.abs(r.val) < Math.abs(y.val!));
+      && days(r) > d && days(r) < 350 && r.val !== y.val);
     if (smaller) out.set(q, null);
   }
   return out;
