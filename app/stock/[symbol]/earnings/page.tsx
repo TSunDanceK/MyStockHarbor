@@ -60,6 +60,8 @@ import { reactionPeriodLabels } from "@/lib/server/secFactStore";
 import { filedEarningsGate, filedEarningsKnown } from "@/lib/server/filedEarnings";
 import { NO_PRICE_HISTORY_NOTE, pendingIsCredible, reactionBarLabels } from "@/lib/server/secReportDates";
 import { PriceReactionCard, type DriftQuarter, type SingleBarPoint } from "./ReactionCharts";
+import { sicProfileFor } from "@/lib/server/staticProfile";
+import { isBankOrInsurer } from "@/lib/pickerCellWhy";
 
 // No segment config here on purpose -- it cascades from
 // app/stock/[symbol]/layout.tsx (`revalidate = 900`), so the overview, /news
@@ -660,6 +662,12 @@ export default async function StockEarningsPage({ params }: Props) {
   // HOW MUCH OF THE SCORE RAN. Shared with the sidebar card — see coverageOf.
   const coverage = coverageOf(score);
   const secView = data.secView;
+  // A BANK OR INSURER (audit r3: WFC, PNC, CB, RY): deposits and policy
+  // liabilities fund the business, so "net debt" and operating cash flow as a
+  // share of profit (RY 271%) describe the balance sheet, not its health. The
+  // two cards drop those lines for these filers; same label rule as the
+  // pickers' (isBankOrInsurer, SIC classification).
+  const financialFiler = isBankOrInsurer(sicProfileFor(clean)?.industry);
   // THE SNAPSHOT RENDERS EXACTLY WHEN THE SEC CARDS DO (#552 COWORK #166): the
   // same conditions as the main column's chain below, which it left for the
   // top of the right column.
@@ -1225,8 +1233,8 @@ export default async function StockEarningsPage({ params }: Props) {
                     priceBasis={data.latestPriceBasis}
                     today={data.renderedOn}
                   />
-                  <SecCashQualityCard view={secView} />
-                  <SecBalanceSheetCard view={secView} />
+                  <SecCashQualityCard view={secView} financial={financialFiler} />
+                  <SecBalanceSheetCard view={secView} financial={financialFiler} />
                   {/* HIDDEN, NOT REMOVED. Revenue by product and by region, from
                       FMP /revenue-product-segmentation and
                       /revenue-geographic-segmentation, retired 2026-09-15.
