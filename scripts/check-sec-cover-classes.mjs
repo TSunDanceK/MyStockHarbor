@@ -104,6 +104,24 @@ check("V reads its rates from the filing: every rate class is null in the map", 
 check("MUTATION: a fixed V rate written back into the map → caught",
   !validEntry({ ...MAP.V, weights: { ...MAP.V.weights, CommonClassB1Member: 1.5445 } }));
 
+// AFRM, RDDT, CRCL: the newest 10-Q/10-K covers as filed (relay
+// multiclass-cover-instance, run 39468660890). Class C is on RDDT's and CRCL's
+// covers at 0 shares, so the entry must name it or the cover refuses.
+{
+  const cover = (date, rows) => M.parseCoverClasses(rows.map(([m, v], i) => ctx(`k${i}`, date, [[AX, `us-gaap:${m}`]]) + fact(`k${i}`, v)).join("\n"));
+  const REAL = {
+    AFRM: ["2026-08-21", [["CommonClassAMember", "296881962"], ["CommonClassBMember", "40539294"]], 337421256],
+    RDDT: ["2026-07-29", [["CommonClassAMember", "146103200"], ["CommonClassBMember", "46293310"], ["CommonClassCMember", "0"]], 192396510],
+    CRCL: ["2026-07-30", [["CommonClassAMember", "234685190"], ["CommonClassBMember", "19190691"], ["CommonClassCMember", "0"]], 253875881],
+  };
+  for (const [sym, [date, rows, want]] of Object.entries(REAL)) {
+    const got = MAP[sym] && M.coverFromClasses(cover(date, rows), MAP[sym], {});
+    check(`${sym}: the filed classes sum to ${want.toLocaleString("en-US")} on ${date}`, got?.ok && got.cover.val === want && got.cover.asOf === date, JSON.stringify(got));
+  }
+  const noC = { ...MAP.RDDT, weights: { CommonClassAMember: 1, CommonClassBMember: 1 } };
+  check("MUTATION: RDDT's entry without Class C → the 0-share C row refuses the cover", !M.coverFromClasses(cover(...REAL.RDDT.slice(0, 2)), noC, {}).ok);
+}
+
 // SHOP: its newest 10-Q cover as filed (relay multiclass-cover-instance; 10-Q
 // 0001594805-26-000047): Class A, Class B and the one Founder share, which is
 // on the filer's own namespace. The Founder share carries no economic weight.
