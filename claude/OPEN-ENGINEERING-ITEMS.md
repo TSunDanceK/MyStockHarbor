@@ -108,6 +108,21 @@ gap is NCI (42M FY2026).
 **Decision taken: leave as is.** Held at the owner's instruction (audit
 round 4, item 3).
 
+## 9. HON's FY2025 quarters mix two bases after a later 10-Q recast one of them (known limit, owner 2026-10-27)
+
+HON's Q3 FY2026 10-Q (filed 2026-10-22) recast only Q3 2025, to 4,929M,
+for a separation; its FY2025 10-K states that quarter as 9,437M, and its
+four 10-K quarters (8,925 + 9,322 + 9,437 + 9,758) sum to the 37,442M year.
+The site reads the newest filing for each quarter, so Q3 shows the recast
+4,929M beside Q1, Q2 and the year on the 10-K's basis, and the four rows sum
+12% under the year (audit round 5 sweep).
+
+**Decision taken: do not build.** A fix would prefer the year's own filing
+for its quarters whenever a later filing recasts only some of them, a wider
+change than the r5 rules. Recorded as a known limit (audit round 5, sweep
+item (c); PR #964 describes it too). It resolves itself when HON's FY2026
+10-K restates FY2025 on one basis.
+
 ## Closed since this file was started
 
 - **`recencyScore = 100`** — removed. Flat 5.00 on every candidate; that
