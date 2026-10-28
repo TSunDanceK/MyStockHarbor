@@ -49,7 +49,7 @@ check("LIN: switched concepts after 2022, so FY2025 reads the note line (164M)",
 check("...and FY2022 keeps the add-back it filed (120M, not the note line's 118M)", fyOf(ol, "2022-12-31") === 120 * M);
 check("a filer that files the add-back in current history never reads the note line (FY2025 stays empty)", fy(X.extractCompanyFacts("MIX", MIXED)) === null);
 {
-  const mut = extractRaw.replace("if (!newestFallback || newestFallback <= yearAfter) return primary;", "");
+  const mut = extractRaw.replace("if (!newestFallback || (newestFallback <= yearAfter && !annualAfter)) return primary;", "");
   check("the filer-level mutation is applied", mut !== extractRaw);
   const Y = await lift(`${fieldsSrc}\n${fxSrc}\n${currencySrc}\n${mut}`);
   check("MUTATION: per-period fallback → MIX FY2025 reads 164M, caught", fy(Y.extractCompanyFacts("MIX", MIXED)) === 164 * M);

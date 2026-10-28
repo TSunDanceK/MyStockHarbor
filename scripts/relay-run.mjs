@@ -614,6 +614,9 @@ const TASKS = {
   "field-trace": { script: "scripts/field-trace-probe.mjs", args: () => [], needsTypescript: true },
   // CENSUS (audit r3, NEE): filers whose RegulatedAndUnregulatedOperatingRevenue sits >3% above the contract line. Read-only (manifest GET).
   "write-utility-revenue-census": { script: "scripts/utility-revenue-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // A filer's newest balance-sheet dates beside the raw rows of the named concepts. Read-only.
+  // SYMBOLS="CVX,TRV|shortTermDebt,longTermDebt|LongTermDebtAndCapitalLeaseObligations,ShortTermBorrowings"
+  "instant-trace": { script: "scripts/instant-trace-probe.mjs", args: () => [], needsTypescript: true },
   "write-earnings-audit-r1-scan": {
     script: "scripts/earnings-audit-r1-scan.mjs",
     args: () => [],
@@ -699,6 +702,8 @@ const TASKS = {
   },
   // READS ONLY: how many Pickers names a multi-class market-cap rule could
   // recover (#552 COWORK #26). SEC values only; ~30 commands.
+  // READS ONLY: stored sets whose newest filing came from its own XBRL (ff) or could not be read (lg).
+  "write-filing-fill-census": { script: "scripts/filing-fill-census.mjs", args: () => [], writes: true },
   "write-multiclass-cap-census": {
     script: "scripts/multiclass-cap-census.mjs",
     args: () => [],

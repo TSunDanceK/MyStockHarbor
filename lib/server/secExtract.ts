@@ -921,25 +921,6 @@ function filerLevelFallback<T extends { tag: string; row: FactRow }>(key: string
   return fb ? switchOver(rows, (t) => fb.includes(t)) : rows;
 }
 
-/**
- * A FILER THAT CHANGED CONCEPTS, NOT ONE THAT TAGS TWO. Where the newest
- * fallback figure is more than a year past the newest primary one, the filer
- * switched (LIN tagged ShareBasedCompensation until Q3 2023, then only the
- * note line): the primary is read up to its last date and the fallback after
- * it, never interleaved. Otherwise the primary is current and the fallback is
- * dropped. A filer with no primary at all reads the fallback throughout.
- */
-export function switchOver<T extends { tag: string; row: FactRow }>(rows: T[], isFallback: (tag: string) => boolean): T[] {
-  const newestOf = (rs: T[]) => rs.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
-  const primary = rows.filter((r) => !isFallback(r.tag));
-  if (!primary.length) return rows;
-  const lastPrimary = newestOf(primary);
-  const newestFallback = newestOf(rows.filter((r) => isFallback(r.tag)));
-  const yearAfter = lastPrimary ? `${Number(lastPrimary.slice(0, 4)) + 1}${lastPrimary.slice(4)}` : "";
-  if (!newestFallback || newestFallback <= yearAfter) return primary;
-  return rows.filter((r) => !isFallback(r.tag) || (r.row.end ?? "") > lastPrimary);
-}
-
 export function preferredTag(
   candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]
 ): string | null {
@@ -1315,6 +1296,117 @@ export function q4RevenueScope(
   return null;
 }
 
+/**
+ * Combined long-term debt concepts and the short-term concepts each one
+ * already contains ("all": every short-term line). See the netting block.
+ */
+export const COMBINED_DEBT: Readonly<Record<string, readonly string[] | "all">> = {
+  DebtLongtermAndShorttermCombinedAmount: "all",
+  LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: ["LongTermDebtCurrent"],
+  NotesPayable: ["NotesPayableCurrent"],
+  // Audit r4 (AFL, AIZ): whole-debt totals with no current/noncurrent split.
+  DebtAndCapitalLeaseObligations: "all",
+  UnsecuredDebt: "all",
+};
+/**
+ * A DEBT CONCEPT READ ONLY BY OWNER RULING (audit r4), by symbol. UnsecuredDebt
+ * is AIZ's whole debt (2,208.1M at 2026-06-30, its senior notes) but at other
+ * filers one component of it: as a chain fallback it read DLR at 0.39B to
+ * 1.30B, STWD 4.88B and KRC 4.00B beside secured lines it does not include,
+ * and mixed with SUI's and EDU's own long-term line (dry run, first commit).
+ * AIZN is AIZ's listed notes on the same CIK.
+ */
+export const DEBT_TOTAL_RULINGS: Readonly<Record<string, string>> = {
+  AIZ: "UnsecuredDebt",
+  AIZN: "UnsecuredDebt",
+};
+const RULED_DEBT_TAGS: ReadonlySet<string> = new Set(Object.values(DEBT_TOTAL_RULINGS));
+/** The audit r4 short-term investments fallbacks (last in their chain). */
+const STI_FALLBACK_TAGS: ReadonlySet<string> = new Set(["DebtSecuritiesCurrent"]);
+/** The audit r3 debt fallbacks (ranked last in their chains in secFields), and r4's. */
+const DEBT_FALLBACK_TAGS: ReadonlySet<string> = new Set([
+  "CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(COMBINED_DEBT), ...STI_FALLBACK_TAGS,
+]);
+/**
+ * A FALLBACK NEVER DISPLACES A FILED PRIMARY CONCEPT. Chain rank alone is not
+ * enough: the preferred concept is the one on the newest period, so a fallback
+ * filed there (ZTS's CommercialPaper 0, AAT's NotesPayable 75M) would win every
+ * date it covers over the debt line the filer already reads. Where any primary
+ * candidate exists, the fallbacks are dropped; where none does, they stand.
+ */
+function primaryFirst<T extends { tag: string }>(cands: T[]): T[] {
+  const primary = cands.filter((c) => !DEBT_FALLBACK_TAGS.has(c.tag));
+  return primary.length ? primary : cands;
+}
+/**
+ * AND NEVER INTERLEAVED WITH A PRIMARY CONCEPT (switchOver), so a series never
+ * mixes two measures: AAT's 10-K LongTermDebt is 1.70B and its 10-Qs
+ * tag only NotesPayable 75M, which read the quarters as net cash. The one
+ * exception is the same figure tagged two ways: CVX's 10-K files
+ * LongTermDebtAndCapitalLeaseObligations and its 10-Qs the IncludingCurrent-
+ * Maturities concept, so that pair may fill dates the other misses.
+ */
+const SAME_MEASURE: Readonly<Record<string, string>> = {
+  LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: "LongTermDebtAndCapitalLeaseObligations",
+};
+function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[], newestAnnualEnd = ""): T[] {
+  const primaryTags = new Set(rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag)).map((r) => r.tag));
+  // The same figure tagged the other way counts with the primary it mirrors.
+  return switchOver(
+    rows,
+    (t) => DEBT_FALLBACK_TAGS.has(t) && !primaryTags.has(SAME_MEASURE[t] ?? ""),
+    rows.some((r) => STI_FALLBACK_TAGS.has(r.tag)) ? newestAnnualEnd : "",
+  );
+}
+/** The newest balance-sheet date a 10-K reports (its Assets row), or "". */
+function newestAnnualBalanceEnd(facts: CompanyFacts): string {
+  const rows = (facts.facts?.["us-gaap"]?.Assets?.units ?? {}) as Record<string, FactRow[]>;
+  return Object.values(rows).flat().reduce((m, r) => (r.form === "10-K" && !r.start && r.end && r.end > m ? r.end : m), "");
+}
+
+/**
+ * A FILER THAT CHANGED CONCEPTS, NOT ONE THAT TAGS TWO. Where the newest
+ * fallback figure is more than a year past the newest primary one, the filer
+ * switched (O and TRV filed a primary debt line years ago and only the
+ * fallback since; LIN tagged ShareBasedCompensation until Q3 2023, then only
+ * the note line, see FILER_LEVEL_FALLBACKS): the primary is read up to its last date and the fallback
+ * after it, never interleaved. Otherwise the primary is current and the
+ * fallback is dropped (AAT). A filer with no primary reads the fallback.
+ *
+ * `newestAnnualEnd` (short-term investments only): a filer whose newest 10-K
+ * balance sheet is dated after its last primary figure no longer files the
+ * primary, so a fallback after that date is a switch too, inside the year.
+ * NVDA filed MarketableSecuritiesCurrent last at 2025-10-26; its FY2026 10-K
+ * (2026-01-25) carries no primary, and its 10-Qs since file
+ * DebtSecuritiesCurrent. AAT's shape (the 10-K files the primary, only the
+ * 10-Qs the fallback) is not this: its newest 10-K is the last primary date.
+ */
+export function switchOver<T extends { tag: string; row: FactRow }>(
+  rows: T[], isFallback: (tag: string) => boolean, newestAnnualEnd = "",
+): T[] {
+  const newestOf = (rs: T[]) => rs.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
+  const primary = rows.filter((r) => !isFallback(r.tag));
+  if (!primary.length) return rows;
+  const lastPrimary = newestOf(primary);
+  const newestFallback = newestOf(rows.filter((r) => isFallback(r.tag)));
+  const yearAfter = lastPrimary ? `${Number(lastPrimary.slice(0, 4)) + 1}${lastPrimary.slice(4)}` : "";
+  const annualAfter = Boolean(newestAnnualEnd) && newestAnnualEnd > lastPrimary;
+  if (!newestFallback || (newestFallback <= yearAfter && !annualAfter)) return primary;
+  return rows.filter((r) => !isFallback(r.tag) || (r.row.end ?? "") > lastPrimary);
+}
+/**
+ * A SECOND CURRENT INVESTMENTS LINE, BY OWNER RULING (audit r4), by symbol:
+ * the concept added to the short-term investments cell on every balance sheet
+ * that files it. NOT a chain entry: MarketableSecurities carries no current/
+ * noncurrent split in its name, and another filer's may be a total.
+ *   KO: "Marketable securities" is its own line in current assets, below the
+ *       cash and short-term investments subtotal (10-Q 0001628280-26-050503,
+ *       R4: short-term investments 622M, marketable securities 2,842M at
+ *       2026-07-03). Read alone, the cell held only the first.
+ */
+export const STI_ADDED_LINE: Readonly<Record<string, string>> = {
+  KO: "MarketableSecurities",
+};
 /** The contract-revenue tag the total-over-contract rule compares against. */
 const CONTRACT_REVENUE_TAG = "RevenueFromContractWithCustomerExcludingAssessedTax";
 /** The last-resort revenue concept (#552 COWORK #240 (b)); see its block in extractCompanyFactsWith. */
@@ -1622,9 +1714,14 @@ function extractCompanyFactsWith(
   // superseded one on its oldest.
   const buckets = new Map<string, Bucket>();
   const preferred = new Map<string, string | null>();
+  const annualEnd = newestAnnualBalanceEnd(facts);
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    const all = filerLevelFallback(field.key, rowsForField(facts, field, refusedUnits, currency));
+    // Both gates, one per kind of fallback: the share-based-pay note line
+    // (filerLevelFallback) and the debt / short-term investments concepts
+    // (debtFallbackGate). Each touches only its own field's rows.
+    const all = debtFallbackGate(filerLevelFallback(field.key, rowsForField(facts, field, refusedUnits, currency))
+      .filter((c) => !RULED_DEBT_TAGS.has(c.tag) || DEBT_TOTAL_RULINGS[String(symbol ?? "").toUpperCase()] === c.tag), annualEnd);
     for (const c of all) {
       const k = periodKey(c.row);
       const list = bucket.get(k);
@@ -1642,7 +1739,7 @@ function extractCompanyFactsWith(
       // anchors both on the filer's newest period carrying a figure.
       // A rankPerPeriod field (a total ahead of its component) takes no
       // preference: chain rank decides each period. See FieldDef.rankPerPeriod.
-      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(all)
+      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(primaryFirst(all))
     );
   }
 
@@ -2440,7 +2537,7 @@ function extractCompanyFactsWith(
   for (const field of instantFields()) {
     const bucket = buckets.get(field.key)!;
     for (const [, cands] of bucket) {
-      const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
+      const best = resolve(primaryFirst(cands), preferred.get(field.key), field.oneConceptPerFiler);
       if (!best?.row.end || best.row.start) continue; // a duration is not an instant
       const end = best.row.end;
 
@@ -2451,6 +2548,49 @@ function extractCompanyFactsWith(
       m.set(field.key, {
         val: best.row.val!, tag: best.tag, ns: best.ns, unit: best.unit, derived: "as-filed",
       });
+    }
+  }
+
+  // ── A COMBINED DEBT FIGURE IS NETTED AGAINST THE SHORT-TERM LINE IT HOLDS ──
+  // (audit r3: CVX, O, TRV). The view's total is short-term + long-term, so a
+  // long-term cell that is itself a total would count the overlap twice. Where
+  // the short-term line's concept is one the combined concept includes,
+  // long-term becomes combined - short-term (computed); otherwise the two are
+  // disjoint and add as filed. Lease obligations are never added: the
+  // ...CapitalLeaseObligations concepts already ARE the filed debt-and-finance-
+  // lease figure, and no lease line is in either chain.
+  // A date only a fallback concept filed (ONDS 2026-01-16, ESLT 2023-09-30) is
+  // not a balance sheet: it would take a slot under keepInstants and push the
+  // oldest real one out. Fallbacks only fill dates something else opened.
+  for (const [end, m] of instantCells) {
+    if ([...m.values()].every((c) => c.tag && DEBT_FALLBACK_TAGS.has(c.tag))) {
+      instantCells.delete(end);
+      instantMeta.delete(end);
+    }
+  }
+  for (const [end, m] of instantCells) {
+    const lt = m.get("longTermDebt"), st = m.get("shortTermDebt");
+    const inside = lt?.tag ? COMBINED_DEBT[lt.tag] : undefined;
+    if (!lt || lt.val == null || !inside || !st || st.val == null || !st.tag) continue;
+    if (inside !== "all" && !inside.includes(st.tag)) continue;
+    m.set("longTermDebt", { ...lt, val: lt.val - st.val, derived: "computed" });
+    notes.push(`longTermDebt ${end}: ${lt.tag} ${lt.val} includes ${st.tag} ${st.val}; long-term read as the difference`);
+  }
+
+  // ── THE OWNER'S SECOND SHORT-TERM LINE (STI_ADDED_LINE, audit r4) ─────────
+  // Only onto dates a balance sheet already opened, and the same date's row.
+  {
+    const added = STI_ADDED_LINE[String(symbol ?? "").toUpperCase()];
+    const rows = added ? ((facts.facts?.["us-gaap"]?.[added]?.units?.[currency] ?? []) as FactRow[]) : [];
+    for (const [end, m] of added ? instantCells : []) {
+      const hits = rows.filter((r) => r.end === end && !r.start && Number.isFinite(r.val));
+      if (!hits.length) continue;
+      const extra = hits.reduce((a, b) => newer(a, b));
+      const sti = m.get("shortTermInvestments");
+      m.set("shortTermInvestments", sti && sti.val != null
+        ? { ...sti, val: sti.val + extra.val!, derived: "computed" }
+        : { val: extra.val!, tag: added, ns: "us-gaap", unit: currency, derived: "as-filed" });
+      notes.push(`shortTermInvestments ${end}: ${added} ${extra.val} added by owner ruling`);
     }
   }
 

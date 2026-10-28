@@ -65,6 +65,18 @@ function measure(M) {
   // (72%-194%, under it), on AAPL's eight labels, net income $1B a period.
   const withPcts = (pcts) => { const v = structuredClone(A); v.cashHistory = A.cashHistory.slice(-pcts.length).map((h, i) => ({ ...h, netIncome: 1e9, ocf: pcts[i] * 1e7 })); return v; };
   const TSLA_PCTS = [217, 288, 454, 527, 610, 700, 760, 825], TXN_PCTS = [72, 95, 110, 130, 150, 170, 185, 194];
+  // CVX'S SHAPE (audit r3, #950): no plain cash line, so the card reads the
+  // figure including restricted cash (9,582M at 2026-06-30) against total debt
+  // 37,075M; and its mirror, the same filer with cash above debt.
+  const cvxLike = (cashVal) => {
+    const v = structuredClone(A);
+    v.balance.cash = { ...v.balance.cash, val: cashVal, label: "Cash & equivalents (incl. restricted)" };
+    v.balance.cashIncludesRestricted = true;
+    v.balance.shortTermInvestments = { ...v.balance.shortTermInvestments, val: null };
+    v.balance.totalDebt = 37.075e9;
+    v.balance.netCash = cashVal - 37.075e9;
+    return v;
+  };
   return {
     views,
     cash: Object.fromEntries(SYMS.map((s) => [s, cash(views[s])])),
@@ -72,6 +84,7 @@ function measure(M) {
     behind: cash(behind), negFcf: cash(negFcf), few: cash(few), intc: cash(intc),
     tslaConv: cash(withPcts(TSLA_PCTS)), txnConv: cash(withPcts(TXN_PCTS)), convLabels: A.cashHistory.slice(-8).map((h) => h.label),
     snap: html(el(M.SecSnapshotCard, { view: lossBoth, pending: null })),
+    cvxDebt: bal(cvxLike(9.582e9)), cvxCash: bal(cvxLike(40e9)),
     toneColor: M.toneColor,
   };
 }
@@ -151,6 +164,17 @@ const RULES = {
   "B1b. net cash: green (TSLA)": (m) => {
     const l = leadOf(m.bal.TSLA);
     return l?.[1] === "net-cash" && l[2].includes(`color:${m.toneColor("good")}`) && /Cash and short-term investments are larger than debt: net cash of \$/.test(visibleText(l[2]));
+  },
+  "B1d. CVX's shape: restricted cash 9.58B under 37.08B debt reads net debt of $27.49B, red, gap on the debt side": (m) => {
+    const l = leadOf(m.cvxDebt);
+    return l?.[1] === "net-debt" && l[2].includes(`color:${m.toneColor("weak")}`)
+      && /Debt is larger than cash: net debt of \$27\.49B/.test(visibleText(l[2]))
+      && /data-gap-side="debt"/.test(m.cvxDebt) && !/net cash/.test(visibleText(m.cvxDebt).split("About these figures")[0]);
+  },
+  "B1e. ...and with cash above debt the same card reads net cash, green, gap on the cash side": (m) => {
+    const l = leadOf(m.cvxCash);
+    return l?.[1] === "net-cash" && l[2].includes(`color:${m.toneColor("good")}`)
+      && /Cash is larger than debt: net cash of \$2\.92B/.test(visibleText(l[2])) && /data-gap-side="cash"/.test(m.cvxCash);
   },
   "B1c. short-term investments missing: the lead says 'cash' (WKHS)": (m) =>
     /Debt is larger than cash: net debt of \$/.test(visibleText(leadOf(m.bal.WKHS)?.[2] ?? "")) && !/data-seg="sti"/.test(m.bal.WKHS),

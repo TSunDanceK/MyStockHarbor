@@ -233,6 +233,10 @@ export function derivationNote(
       if (context.key === "revenue") {
         return "Computed: the sum of the revenue lines the filing tags separately (for a bank, net interest income plus noninterest income). The filing tags no total.";
       }
+      // A COMBINED DEBT FIGURE NETTED (audit r3; COMBINED_DEBT in secExtract).
+      if (context.key === "longTermDebt") {
+        return "Computed: the filing tags one figure for its debt including the short-term part, so long-term debt is that figure less the short-term debt shown beside it.";
+      }
       return "Derived: net income divided by this quarter's weighted average share count.";
     case "ambiguous":
       return "The filer reports this separately for each share class and the filing does not say which is which, so no single figure is shown.";
