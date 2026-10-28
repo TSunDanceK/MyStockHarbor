@@ -87,7 +87,7 @@ for (const [sym, cik] of targets) {
           const va = pa?.values?.[i]?.val ?? null, vb = pb?.values?.[i]?.val ?? null;
           if (showField ? f !== showField : va === vb) return;
           const sec = f === "revenue" && showField ? `\tSEC ${filedFor(facts, p.start, p.end)}` : "";
-          lines.push(`${sym}\t${f}\t${kind === "years" ? "Y" : kind === "quarters" ? "Q" : "I"} ${kind === "instants" ? p.end : label(p)}\t${fmt(va)} -> ${fmt(vb)}${showField && va !== vb ? " *" : ""}${sec}${kind === "instants" && /Debt$/.test(f) && pb?.values?.[i]?.tag ? `\t[${pb.values[i].tag}${pb.values[i].derived === "computed" ? ", netted" : ""}]` : ""}`);
+          lines.push(`${sym}\t${f}\t${kind === "years" ? "Y" : kind === "quarters" ? "Q" : "I"} ${kind === "instants" ? p.end : label(p)}\t${fmt(va)} -> ${fmt(vb)}${showField && va !== vb ? " *" : ""}${sec}${kind === "instants" && /(Debt|Investments)$/.test(f) && pb?.values?.[i]?.tag ? `\t[${pb.values[i].tag}${pb.values[i].derived === "computed" ? (/Debt$/.test(f) ? ", netted" : ", computed") : ""}]` : ""}`);
           byField[f] = (byField[f] ?? 0) + 1;
         });
       }
@@ -105,7 +105,7 @@ for (const [sym, cik] of targets) {
       if (cash === null || v("longTermDebt") === null) return null;
       return cash + (v("shortTermInvestments") ?? 0) - ((v("shortTermDebt") ?? 0) + v("longTermDebt"));
     };
-    if (lines.some((l) => /\t(shortTermDebt|longTermDebt)\tI /.test(l))) {
+    if (lines.some((l) => /\t(shortTermDebt|longTermDebt|shortTermInvestments)\tI /.test(l))) {
       const na = net(a), nb = net(b), side = (n) => (n === null ? "n/a" : n >= 0 ? "net cash" : "net debt");
       lines.push(`NET ${sym}\t${b.instants[0]?.end ?? "—"}\t${side(na)} ${fmt(na)} -> ${side(nb)} ${fmt(nb)}${side(na) !== side(nb) && na !== null ? "\tFLIP" : ""}`);
     }
