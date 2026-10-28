@@ -5,6 +5,7 @@ import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
 import { reactionDayRows } from "./reactionDays";
 import { historyForSurface, historyOnTiingo } from "@/lib/server/tiingoHistory";
 import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";
+import { earningsPrice } from "@/lib/server/earningsPrice";
 import { TiingoLink } from "@/app/components/TiingoCredit";
 import {
   computeIndicatorSeed,
@@ -526,19 +527,20 @@ async function getEarningsData(symbol: string) {
   // 2026" or "last IEX trade, 14:05 ET"); its date is the ET trading day, which
   // the card's staleness test reads as before. A miss shows no price: there is
   // no FMP fallback on the Tiingo path (#552 COWORK #108 item 2).
+  // THE CARD'S PRICE AND ITS BASIS (audit r3 item 5): earningsPrice, labelled
+  // by lib/priceBasis. The title deliberately stays on the last close.
   const lastBar = (latestBars as Point[]).at(-1) ?? null;
-  const latestClose = onTiingo
-    ? surfacePrice?.price ?? null
-    : typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
-  const latestCloseOn = onTiingo ? surfacePrice?.date ?? null : lastBar?.date ?? null;
-  const latestPriceLabel = onTiingo ? surfacePrice?.label ?? null : null;
+  const pagePrice = earningsPrice(onTiingo, surfacePrice, lastBar);
+  const latestClose = pagePrice?.price ?? null;
+  const latestCloseOn = pagePrice?.basis.date ?? null;
+  const latestPriceBasis = pagePrice?.basis ?? null;
   /** The linked credit shows when any figure on the page is Tiingo's. */
   const pricesFromTiingo = chartHistory.provider === "tiingo" || (onTiingo && surfacePrice !== null);
 
   return {
     earningsRows, completedRows, latest, next, nextReport,
     priceReactionQuarters, reactionDays, score, secView, cold, annualForm, hidePriceReaction,
-    valuation, latestClose, latestCloseOn, latestPriceLabel, pricesFromTiingo,
+    valuation, latestClose, latestCloseOn, latestPriceBasis, pricesFromTiingo,
     /**
      * THE DATE THIS RENDER RAN, read once here rather than inside a component.
      * A card that called Date.now() itself would be untestable and would also
@@ -567,6 +569,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // FMP's /stable/quote into seed.price, and the title never read it: it
   // prints seed.lastClose, the newest bar of getDailyHistory.
   // THE TITLE FOLLOWS PRICE_PROVIDER_CHARTS too (B3), as /stock's does.
+  // THE LAST COMPLETED CLOSE, ON PURPOSE (owner ruling, audit r3 item 5). The
+  // valuation card uses the newer of that close and today's IEX print, and
+  // labels it; the title stays on the close so it changes once a day for
+  // crawlers rather than on every hourly render during the session.
   const rawHistory = await historyForSurface("CHARTS", clean, () => getDailyHistory(clean, { caller: "stock-earnings-meta" }))
     .then((h) => h.points.filter((p) => !p.partial), () => [] as Point[]);
   const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
@@ -1224,7 +1230,7 @@ export default async function StockEarningsPage({ params }: Props) {
                     inputs={data.valuation}
                     price={data.latestClose}
                     priceAsOf={data.latestCloseOn}
-                    priceLabel={data.latestPriceLabel}
+                    priceBasis={data.latestPriceBasis}
                     today={data.renderedOn}
                   />
                   <SecCashQualityCard view={secView} financial={financialFiler} />
