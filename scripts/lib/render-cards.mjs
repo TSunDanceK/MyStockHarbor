@@ -114,6 +114,8 @@ export async function loadCards(mutate = (src) => src) {
     // THE TRAFFIC-LIGHT RULES (#552 COWORK #137 §2), for SecIncomeStatementCard.
     // Import-free, so the whole file joins as is.
     stripImports("lib/lineTrend.ts"),
+    // THE PRICE LABEL (audit r3 item 5), which SecValuationCard prints.
+    stripImports("lib/priceBasis.ts"),
   ].join("\n");
   const cards = fs
     .readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8")

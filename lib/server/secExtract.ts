@@ -678,7 +678,7 @@ export function newer(a: FactRow, b: FactRow): FactRow {
  *
  * Refused: a quarter-length row whose value equals a year-length row of the
  * SAME concept and SAME accession that contains it, while another row of that
- * concept inside the year (a six- or nine-month figure) is smaller than the
+ * concept inside the year (a six- or nine-month figure) differs from the
  * year — so a real quarter exists to be found. Q4 then comes from FY − 9M as
  * for any filer, and a mid-year quarter from the 10-Q that stated it.
  *
@@ -695,7 +695,17 @@ export function newer(a: FactRow, b: FactRow): FactRow {
  * Returns each such row mapped to what is read instead: null (refused) or the
  * re-dated year row. PURE.
  */
-export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Map<FactRow, FactRow | null> {
+export function fullYearOnQuarterFrame(
+  rows: readonly FactRow[],
+  /**
+   * A dollar amount that adds across quarters (audit r5). Only then does ANY
+   * part-year that differs from the year prove the quarter is not the year:
+   * an average share count or a per-share figure can equal the year's in a
+   * real quarter (OUT's 161.0M shares, WSM's split-restated dividend), so
+   * those keep the "smaller than the year" test.
+   */
+  additiveAmount = false,
+): Map<FactRow, FactRow | null> {
   const out = new Map<FactRow, FactRow | null>();
   const days = (r: FactRow) => (r.start && r.end ? (Date.parse(r.end) - Date.parse(r.start)) / DAY : NaN);
   const years = rows.filter((r) => typeof r.val === "number" && days(r) >= 350 && days(r) <= 380);
@@ -719,8 +729,15 @@ export function fullYearOnQuarterFrame(rows: readonly FactRow[]): Map<FactRow, F
       if (q.val > 2 * avg && rest >= 0.5 * avg && rest <= 1.5 * avg) out.set(q, { ...q, start: nine.start, fp: "FY" });
       continue;
     }
+    // DIFFERENT FROM THE YEAR, not smaller, for an additive dollar amount
+    // (audit r5; see additiveAmount): GWRE's FY2026 10-K puts
+    // its FY2024 loss, -6.1M, on 2024-05-01..07-31 as well as on the year,
+    // while its six and nine months are -17.4M and -22.9M. A loss year near
+    // zero has larger-magnitude part-years, so "smaller" let the year through
+    // as the quarter; any part-year that differs from the year proves the
+    // year is not one quarter's figure.
     const smaller = rows.some((r) => r !== q && r !== y && typeof r.val === "number" && r.start && r.start >= y.start! && r.end! <= y.end!
-      && days(r) > d && days(r) < 350 && Math.abs(r.val) < Math.abs(y.val!));
+      && days(r) > d && days(r) < 350 && (additiveAmount ? r.val !== y.val : Math.abs(r.val) < Math.abs(y.val!)));
     if (smaller) out.set(q, null);
   }
   return out;
@@ -771,7 +788,7 @@ export function rowsForField(
       const keys = unitKeysFor(field.unit, currency);
       let took = 0;
       for (const unit of keys) {
-        const misdated = fullYearOnQuarterFrame(units[unit] ?? []);
+        const misdated = fullYearOnQuarterFrame(units[unit] ?? [], field.kind === "duration-cumulative" && field.unit === "USD");
         for (const row of units[unit] ?? []) {
           if (typeof row?.val !== "number" || !Number.isFinite(row.val)) continue;
           if (!row.end) continue;
@@ -1724,7 +1741,8 @@ function extractCompanyFactsWith(
     // Cumulative frames grouped by the fiscal year they start: a 3M, 6M, 9M and
     // FY row for one year all share a `start`. Q4 = FY - 9M falls out of this
     // with no special case, which is trap 4 handled structurally.
-    const byStart = new Map<string, { end: string; n: number; best: NonNullable<ReturnType<typeof resolve>> }[]>();
+    type Cand = NonNullable<ReturnType<typeof resolve>>;
+    const byStart = new Map<string, { end: string; n: number; best: Cand; cands: Cand[] }[]>();
 
     for (const [, cands] of bucket) {
       const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
@@ -1732,7 +1750,7 @@ function extractCompanyFactsWith(
       const n = quartersCovered(spanDays(best.row.start, best.row.end), calendar);
       if (n === null) continue;
       const list = byStart.get(best.row.start);
-      const entry = { end: best.row.end, n, best };
+      const entry = { end: best.row.end, n, best, cands };
       if (list) list.push(entry);
       else byStart.set(best.row.start, [entry]);
     }
@@ -1800,21 +1818,40 @@ function extractCompanyFactsWith(
         // nothing had noticed a change. That is the same bare-tag mistake this
         // file's own conceptKey comment records catching in preferredTag — the
         // guard here had not followed it.
-        if (conceptKey(prior.best) !== conceptKey(f.best)) {
+        //
+        // UNLESS ONE SIDE ALSO FILED THE OTHER'S CONCEPT (audit r4, FOXA): its
+        // FY resolves to NetIncomeLoss while its 3M, 6M and 9M carry only
+        // ProfitLoss, and the 10-K files ProfitLoss for the year too (1,727M).
+        // The difference is then taken on that common concept, the later
+        // frame's first (the quarters' own measure), so both operands are one
+        // concept and the quarter reads 1,727 - 1,031 = 696M.
+        let [hi, lo] = [f.best, prior.best];
+        if (conceptKey(lo) !== conceptKey(hi)) {
+          const sameAs = (cs: Cand[], k: string) => resolve(cs.filter((c) => conceptKey(c) === k));
+          const altHi = sameAs(f.cands, conceptKey(lo));
+          const altLo = altHi ? null : sameAs(prior.cands, conceptKey(hi));
+          if (!altHi && !altLo) {
+            notes.push(
+              `${field.key} ${start}..${f.end}: concept changed mid-year ` +
+                `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}), not differenced`
+            );
+            continue;
+          }
+          if (altHi) hi = altHi;
+          else lo = altLo!;
           notes.push(
             `${field.key} ${start}..${f.end}: concept changed mid-year ` +
-              `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}), not differenced`
+              `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}); differenced on ${conceptKey(hi)}, filed on both frames`
           );
-          continue;
         }
         const m = cell(quarterCells, quarterMeta);
         // The quarter's own start is the prior frame's end, not the year's.
-        quarterMeta.set(f.end, { start: prior.end, row: f.best.row });
+        quarterMeta.set(f.end, { start: prior.end, row: hi.row });
         m.set(field.key, {
-          val: f.best.row.val! - prior.best.row.val!,
-          tag: f.best.tag,
-          ns: f.best.ns,
-          unit: f.best.unit,
+          val: hi.row.val! - lo.row.val!,
+          tag: hi.tag,
+          ns: hi.ns,
+          unit: hi.unit,
           derived: "differenced",
           covers: [prior.end, f.end],
           from: [prior.end, f.end],
