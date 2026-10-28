@@ -56,6 +56,8 @@ export type SurfacePrice = {
   kind: "iex" | "close";
   /** The ET trading date the price belongs to, YYYY-MM-DD. */
   date: string;
+  /** "HH:MM" ET of an IEX print; null for a close. */
+  time: string | null;
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -106,11 +108,11 @@ export function pickSurfacePrice(
 
   // The close wins a tie: same trading day, and it is the consolidated figure.
   if (close && (!iex || close.date >= iex.date)) {
-    return { price: close.price, kind: "close", date: close.date, label: `close, ${dayMonth(close.date)} ${close.date.slice(0, 4)}` };
+    return { price: close.price, kind: "close", date: close.date, time: null, label: `close, ${dayMonth(close.date)} ${close.date.slice(0, 4)}` };
   }
   if (iex) {
     // Only today's session prints reach here (sessionPrint), so the label is the session's own.
-    return { price: iex.price, kind: "iex", date: iex.date, label: sessionPrintLabel(iex.at, nowMs) };
+    return { price: iex.price, kind: "iex", date: iex.date, time: iex.time, label: sessionPrintLabel(iex.at, nowMs) };
   }
   return null;
 }

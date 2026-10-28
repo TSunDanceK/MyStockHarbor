@@ -132,7 +132,12 @@ console.log("\n4. the pure verdict, and mutations of it");
   check("low, nine months within 2% of the quarters", V(3, [10, 10, 10], null, 30.5) === null);
   check("normal Q4, nine months off: not judged", V(9, [10, 10, 10], null, 33) === null);
 
-  const src = extractRaw;
+  // The audit r5 same-basis pass withholds OXY's Q4 on its own (its nine
+  // months is not the quarters' sum either), so the mutants run with it off:
+  // each must still be caught by the rule it removes.
+  const BASIS_ON = "if (n == null || shown.length !== n) continue;";
+  if (!extractRaw.includes(BASIS_ON)) check('the same-basis pass can be turned off', false, "anchor moved");
+  const src = extractRaw.replace(BASIS_ON, "continue;");
   const mut = async (name, from, to, probe) => {
     if (!src.includes(from)) { check(`mutant "${name}" applies`, false, "anchor moved"); return; }
     const Y = await load(src.replace(from, to));
