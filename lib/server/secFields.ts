@@ -566,8 +566,14 @@ const BALANCE_SHEET: FieldDef[] = ([
   // DebtLongtermAndShorttermCombinedAmount (TRV, 9.81B). The extraction nets a
   // combined figure against the short-term line it contains (COMBINED_DEBT in
   // secExtract), so the two lines still sum to the filer's own total.
+  // AUDIT R4: DebtAndCapitalLeaseObligations (AFL 8.73B at 2026-06-30, the
+  // only debt concept on its newest balance sheets) and UnsecuredDebt (AIZ
+  // 2.21B), both after the r3 entries and both combined: each is a total
+  // that may hold a short-term line, so either is netted the same way.
+  // UnsecuredDebt is read only for the filers DEBT_TOTAL_RULINGS names (in
+  // secExtract): elsewhere it is one component of the debt.
   { key: "shortTermDebt", chain: ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings", "NotesPayableCurrent", "CommercialPaper"], unit: "USD", taxonomy: "us-gaap" },
-  { key: "longTermDebt", chain: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "LongTermNotesPayable", "ConvertibleDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "NotesPayable", "DebtLongtermAndShorttermCombinedAmount"], unit: "USD", taxonomy: "us-gaap" },
+  { key: "longTermDebt", chain: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "LongTermNotesPayable", "ConvertibleDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "NotesPayable", "DebtLongtermAndShorttermCombinedAmount", "DebtAndCapitalLeaseObligations", "UnsecuredDebt"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalLiabilities", chain: ["Liabilities"], unit: "USD", taxonomy: "us-gaap" },
   // PARENT-ONLY, deliberately: this is the figure a reader means by
   // "shareholders' equity", and it is what the per-share book value must use.

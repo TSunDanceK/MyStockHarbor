@@ -52,6 +52,12 @@ const O = facts({
 check("O: notes 25,091.6 + commercial paper 1,400 = 26,491.6", near(total(X.extractCompanyFacts("O", O), "2026-06-30"), 26491.6), String(total(X.extractCompanyFacts("O", O), "2026-06-30")));
 const HIMS = facts({ ConvertibleDebtNoncurrent: [inst("2026-06-30", 1365.3, "10-Q", "2026-08-10", "hims-q2")], Assets: [inst("2026-06-30", 2900, "10-Q", "2026-08-10", "hims-q2")] });
 check("HIMS: convertible notes 1,365.3", near(total(X.extractCompanyFacts("HIMS", HIMS), "2026-06-30"), 1365.3));
+const AFL = facts({ DebtAndCapitalLeaseObligations: [inst("2026-06-30", 8729, "10-Q", "2026-08-05", "afl-q2")], Assets: [inst("2026-06-30", 120000, "10-Q", "2026-08-05", "afl-q2")] });
+check("AFL (r4): debt and finance lease obligations 8,729", near(total(X.extractCompanyFacts("AFL", AFL), "2026-06-30"), 8729));
+const AIZ = facts({ UnsecuredDebt: [inst("2026-06-30", 2208.1, "10-Q", "2026-08-05", "aiz-q2")], DebtCurrent: [inst("2026-06-30", 100, "10-Q", "2026-08-05", "aiz-q2")] });
+check("AIZ (r4): unsecured debt 2,208.1 is a total, a short-term line inside it is not added", near(total(X.extractCompanyFacts("AIZ", AIZ), "2026-06-30"), 2208.1), String(total(X.extractCompanyFacts("AIZ", AIZ), "2026-06-30")));
+
+check("...and UnsecuredDebt is read only by ruling: DLR's 432M component is not its debt", total(X.extractCompanyFacts("DLR", AIZ), "2026-06-30") === null);
 
 console.log("\n2. what must stay");
 const PLAIN = facts({ LongTermDebtNoncurrent: [inst("2026-06-30", 5000, "10-Q", "2026-08-01", "p")], LongTermDebtCurrent: [inst("2026-06-30", 500, "10-Q", "2026-08-01", "p")] });
