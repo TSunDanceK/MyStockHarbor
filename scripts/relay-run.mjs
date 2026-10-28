@@ -609,11 +609,18 @@ const TASKS = {
   "write-earnings-audit-r2-cells": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["cells", env.SYMBOLS ?? ""], writes: true, env: { MODE: "cells" } },
   // DRY RUN: every cell an extraction change moves, main against the branch. Read-only (manifest GET).
   "write-extraction-diff": { script: "scripts/extraction-diff.mjs", args: () => [], needsTypescript: true, writes: true },
+  // The earnings page's valuation-card price basis against its title's close.
+  // Two HGETALLs, nothing written; the write- prefix and `writes` are what
+  // route it to the credentialled job (as write-extraction-diff).
+  "write-price-basis-dry-run": { script: "scripts/price-basis-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
   // One field's cells beside every raw companyfacts row of the named concepts. Read-only.
   // SYMBOLS="SCHW,MET|netIncome|NetIncomeLoss,ProfitLoss|cover,qrows"
   "field-trace": { script: "scripts/field-trace-probe.mjs", args: () => [], needsTypescript: true },
   // CENSUS (audit r3, NEE): filers whose RegulatedAndUnregulatedOperatingRevenue sits >3% above the contract line. Read-only (manifest GET).
   "write-utility-revenue-census": { script: "scripts/utility-revenue-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // A filer's newest balance-sheet dates beside the raw rows of the named concepts. Read-only.
+  // SYMBOLS="CVX,TRV|shortTermDebt,longTermDebt|LongTermDebtAndCapitalLeaseObligations,ShortTermBorrowings"
+  "instant-trace": { script: "scripts/instant-trace-probe.mjs", args: () => [], needsTypescript: true },
   "write-earnings-audit-r1-scan": {
     script: "scripts/earnings-audit-r1-scan.mjs",
     args: () => [],
@@ -822,6 +829,8 @@ const TASKS = {
   "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
   "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },
+  // Per-class cover counts by StatementClassOfStockAxis member, newest 10-Q/10-K. Read-only.
+  "sec-cover-members": { script: "scripts/cover-members-probe.mjs", args: () => [] },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {

@@ -528,6 +528,18 @@ const BALANCE_SHEET: FieldDef[] = ([
       "MarketableSecuritiesCurrent",
       "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
       "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
+      // AUDIT R4 FALLBACKS, ranked last and gated like the debt ones (see
+      // STI_FALLBACK_TAGS in secExtract). NVDA filed MarketableSecuritiesCurrent
+      // up to 2025-10-26 (49.12B) and DebtSecuritiesCurrent since (34.14B at
+      // 2026-07-26), so its newest balance sheets read no short-term
+      // investments and the card said net debt.
+      //
+      // AvailableForSaleSecuritiesDebtSecurities IS NOT ADDED, though asked
+      // for: it is the whole AFS portfolio, current and noncurrent (NVDA 46.9B
+      // against 41.0B due within a year), and as a fallback it read entire
+      // bank and insurer books as short-term investments (APOS 229.8B, BPOP
+      // 24.8B, BRK.B 17.0B; dry run on this branch, first commit).
+      "DebtSecuritiesCurrent",
     ], unit: "USD", taxonomy: "us-gaap" },
   { key: "receivables", chain: ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "inventory", chain: ["InventoryNet"], unit: "USD", taxonomy: "us-gaap" },
@@ -546,8 +558,16 @@ const BALANCE_SHEET: FieldDef[] = ([
   // "Short-term debt" and withholds Total (secEarningsView). Ranked last, so a
   // filer that already resolves a debt line is unchanged (one filer, ORCL, in
   // the 200 cut: relay sec-chain-blast-census).
-  { key: "shortTermDebt", chain: ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings", "NotesPayableCurrent"], unit: "USD", taxonomy: "us-gaap" },
-  { key: "longTermDebt", chain: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "LongTermNotesPayable"], unit: "USD", taxonomy: "us-gaap" },
+  // AUDIT R3 FALLBACKS, ranked last so a filer that resolves today is
+  // unchanged: CommercialPaper (O 1.40B); ConvertibleDebtNoncurrent (HIMS
+  // 1.37B); and three COMBINED concepts that already hold some or all of the
+  // short-term line -- LongTermDebtAndCapitalLeaseObligationsIncludingCurrent-
+  // Maturities (CVX's 10-Qs, 36.67B), NotesPayable (O, 25.09B) and
+  // DebtLongtermAndShorttermCombinedAmount (TRV, 9.81B). The extraction nets a
+  // combined figure against the short-term line it contains (COMBINED_DEBT in
+  // secExtract), so the two lines still sum to the filer's own total.
+  { key: "shortTermDebt", chain: ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings", "NotesPayableCurrent", "CommercialPaper"], unit: "USD", taxonomy: "us-gaap" },
+  { key: "longTermDebt", chain: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "LongTermNotesPayable", "ConvertibleDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "NotesPayable", "DebtLongtermAndShorttermCombinedAmount"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalLiabilities", chain: ["Liabilities"], unit: "USD", taxonomy: "us-gaap" },
   // PARENT-ONLY, deliberately: this is the figure a reader means by
   // "shareholders' equity", and it is what the per-share book value must use.

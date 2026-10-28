@@ -92,6 +92,24 @@ console.log("\n3. what is not touched");
     ["2025-01-01", "2025-12-31", 50.0, "10-K", 2025, "FY", "2026-03-01", "0000000001-26-000001"],
   ]);
   check("no smaller year-to-date figure: a Q4 equal to its year is kept", X.fullYearOnQuarterFrame(lumpy.facts["us-gaap"][TAG].units.USD).size === 0);
+  // GWRE (audit r5): a loss year near zero. Its FY2026 10-K puts FY2024's
+  // -6.1M on the Q4 dates too; the six and nine months are LARGER losses, so
+  // "smaller than the year" never fired. Rows as filed (FY ends July).
+  const gwre = facts([
+    ["2023-08-01", "2023-10-31", -27.1, "10-Q", 2024, "Q1", "2023-12-08", "0001528396-23-000137"],
+    ["2023-08-01", "2024-01-31", -17.4, "10-Q", 2024, "Q2", "2024-03-08", "0001528396-24-000017"],
+    ["2023-08-01", "2024-04-30", -22.9, "10-Q", 2024, "Q3", "2024-06-05", "0001528396-24-000057"],
+    ["2024-05-01", "2024-07-31", -6.1, "10-K", 2026, "FY", "2026-09-11", "0001528396-26-000046"],
+    ["2023-08-01", "2024-07-31", -6.1, "10-K", 2026, "FY", "2026-09-11", "0001528396-26-000046"],
+  ]);
+  const gx = X.extractCompanyFacts("GWRE", gwre);
+  check("GWRE: a loss year's figure on its Q4 dates is refused, and Q4 is FY - 9M = 16.8",
+    X.fullYearOnQuarterFrame(gwre.facts["us-gaap"][TAG].units.USD, true).size === 1 && Math.abs((q(gx, "2024-07-31")?.val ?? NaN) - 16.8 * M) < 1,
+    String(q(gx, "2024-07-31")?.val));
+  {
+    const old = await load(extractRaw.replace("(additiveAmount ? r.val !== y.val : Math.abs(r.val) < Math.abs(y.val!))", "Math.abs(r.val) < Math.abs(y.val!)"));
+    check("MUTATION: the old 'smaller' test keeps GWRE's -6.1M as its Q4 (caught)", old.extractCompanyFacts("GWRE", gwre).quarters.find((p) => p.end === "2024-07-31")?.values?.[REV]?.val === -6.1 * M);
+  }
 }
 
 console.log("\n4. LHX FY2025: the year on Q4's dates with no year row beside it");
