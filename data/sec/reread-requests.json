@@ -2,6 +2,26 @@
  "_comment": "One-off re-read requests for the sec-facts cron: a symbol whose stored set was last verified BEFORE requestedAt is put on the manifest's reverify queue (reason 'requested'), at most SEC_REREAD_REQUESTS_PER_RUN (12) a run. The cron's own verifiedAt stamp retires the request once the re-read lands, so an entry left here is inert. Read by lib/server/secRereadRequests.ts. No secret, no manual call: a code change, reviewed like any other.",
  "requests": [
   {
+   "symbol": "BG",
+   "requestedAt": "2026-10-27T00:00:00Z",
+   "reason": "audit r5 sweep: the stored set predates the current total-over-contract reading; it reads FY2025 on the 16,944M contract line beside a 23,762M Revenues Q4, so the quarters sum 111% over the year. Main reads Revenues for every period: FY2025 70,329M = 11,643 + 12,769 + 22,155 + 23,762"
+  },
+  {
+   "symbol": "ONTO",
+   "requestedAt": "2026-10-27T00:00:00Z",
+   "reason": "audit r5 sweep: the stored set predates #933 (proxy-statement rows no longer read); its years read the DEF 14A's 0.2M / 0.1M. Main reads the 10-K: FY2024 201.7M, FY2025 136.8M, each the sum of its quarters"
+  },
+  {
+   "symbol": "FTV",
+   "requestedAt": "2026-10-27T00:00:00Z",
+   "reason": "audit r5 sweep: the stored FY2025 net income 532.7M is off its quarters' 579.2M by 8.7%; main reads 579.2M, the 10-K's figure and the quarters' sum"
+  },
+  {
+   "symbol": "ALL",
+   "requestedAt": "2026-10-27T00:00:00Z",
+   "reason": "audit r5 sweep: the stored FY2024 net income is the DEF 14A's 4,550M (predates #933); main reads the 10-K's 4,667M"
+  },
+  {
    "symbol": "KEY",
    "requestedAt": "2026-10-22T00:00:00Z",
    "reason": "#913 (earnings audit r1): bank revenue reads the filed Revenues total, not the 606 fee line; the stored set predates it"
