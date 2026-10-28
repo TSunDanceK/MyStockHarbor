@@ -847,6 +847,8 @@ console.log("\n7i. the meta description describes the page, not the price chart"
   {
     const withCik = await runMeta(pageRaw, labels[0], "AAPL");
     const without = await runMeta(pageRaw, labels[0], "NOCIK");
+    check("the title stays on the last completed close, unlabelled (owner ruling, audit r3 item 5)",
+      String(withCik.title) === "AAPL Earnings, EPS & Revenue — Price $200.00 | MyStockHarbor", String(withCik.title));
     check("a symbol with a CIK stays indexable",
       withCik.robots?.index === true, JSON.stringify(withCik.robots));
     check("a symbol with no registrant is noindex",
