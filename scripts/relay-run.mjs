@@ -614,6 +614,9 @@ const TASKS = {
   "field-trace": { script: "scripts/field-trace-probe.mjs", args: () => [], needsTypescript: true },
   // CENSUS (audit r3, NEE): filers whose RegulatedAndUnregulatedOperatingRevenue sits >3% above the contract line. Read-only (manifest GET).
   "write-utility-revenue-census": { script: "scripts/utility-revenue-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // A filer's newest balance-sheet dates beside the raw rows of the named concepts. Read-only.
+  // SYMBOLS="CVX,TRV|shortTermDebt,longTermDebt|LongTermDebtAndCapitalLeaseObligations,ShortTermBorrowings"
+  "instant-trace": { script: "scripts/instant-trace-probe.mjs", args: () => [], needsTypescript: true },
   "write-earnings-audit-r1-scan": {
     script: "scripts/earnings-audit-r1-scan.mjs",
     args: () => [],
