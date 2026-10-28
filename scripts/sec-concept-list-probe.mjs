@@ -15,10 +15,13 @@
 //   PATTERN="Liabilit|Equity|Interest|Nonoperating" to override the filter
 const UA = process.env.SEC_USER_AGENT ??
   "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; concept list)";
-const TARGETS = (process.env.SYMBOLS || "AVAV:0001368622")
+// The relay passes SYMBOLS only, so a pattern can ride after a "|":
+//   SYMBOLS="SRE:1032208,NJR:356309|Revenue|Sales"
+const [SYM_ARG, ...PATTERN_PARTS] = String(process.env.SYMBOLS || "AVAV:0001368622").split("|");
+const TARGETS = SYM_ARG
   .split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
   .map((s) => { const [sym, cik] = s.split(":"); return { sym: sym.toUpperCase(), cik: String(cik ?? "").padStart(10, "0") }; });
-const PATTERN = new RegExp(process.env.PATTERN ||
+const PATTERN = new RegExp(PATTERN_PARTS.join("|") || process.env.PATTERN ||
   "Liabilit|Equity|Interest|Nonoperating|OtherIncome|OtherExpense|OtherNonoperating|IncomeLossFromContinuingOperationsBefore|OperatingIncomeLoss|InvestmentIncome", "i");
 const PERIODS = Number(process.env.PERIODS || 4);
 

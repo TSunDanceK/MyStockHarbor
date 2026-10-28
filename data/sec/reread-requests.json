@@ -810,6 +810,11 @@
    "symbol": "CRCL",
    "requestedAt": "2026-10-23T00:00:00Z",
    "reason": "multi-class cover: a cited share-classes.json entry now sums the newest filing's per-class cover counts (class A + B, and C at 0 shares where filed), so market cap and P/E no longer refuse; the stored set refused the cover as multi-class"
+  },
+  {
+   "symbol": "SHOP",
+   "requestedAt": "2026-10-23T00:00:00Z",
+   "reason": "audit r3: SHOP's multi-class cover (Class A + Class B + Founder share) is now cited in data/sec/share-classes.json, so the cover count, and with it market cap, can be read"
   }
  ]
 }
