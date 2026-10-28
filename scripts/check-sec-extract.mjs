@@ -731,6 +731,43 @@ check("pack() does not read fy or fp off the companyfacts row",
   !/fp: row\?\.fp|fy: .*row\?\.fy/.test(extractCode),
   "those describe the filing, not the period it covers");
 
+// A Q4 FILED ONLY UNDER ANOTHER CONCEPT THAN ITS YEAR (audit r5): TEVA files
+// Q4 2025 only as `Revenues` 1,500M; its year and other quarters are the
+// contract line, so Q4 is 17,258 - 12,547 = 4,711M on that line. PLD's net
+// income is the same shape (`ProfitLoss` Q4, NetIncomeLoss year).
+{
+  const r = (s0, e, v, accn, filed, form = "10-Q") => ({ start: s0, end: e, val: v * 1e6, accn, filed, form });
+  const C = "RevenueFromContractWithCustomerExcludingAssessedTax";
+  const teva = { cik: 818686, facts: { "us-gaap": {
+    [C]: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 3891, "q1", "2025-05-07"), r("2025-01-01", "2025-06-30", 8067, "q2", "2025-07-30"),
+      r("2025-04-01", "2025-06-30", 4176, "q2", "2025-07-30"), r("2025-01-01", "2025-09-30", 12547, "q3", "2025-11-05"),
+      r("2025-07-01", "2025-09-30", 4480, "q3", "2025-11-05"), r("2025-01-01", "2025-12-31", 17258, "k", "2026-02-03", "10-K"),
+    ] } },
+    Revenues: { units: { USD: [r("2025-10-01", "2025-12-31", 1500, "k", "2026-02-03", "10-K")] } },
+  } } };
+  const revI = SEC_FIELDS.findIndex((f) => f.key === "revenue"), niI = SEC_FIELDS.findIndex((f) => f.key === "netIncome");
+  const tx = extractCompanyFacts("TEVA", teva);
+  const q4 = tx.quarters.find((q) => q.end === "2025-12-31")?.values[revI];
+  check("TEVA: a Q4 filed only as Revenues reads the contract year less its nine months, 4,711",
+    q4?.val === 4711e6 && q4?.tag === C && q4?.derived === "differenced", JSON.stringify(q4 ?? null));
+  check("...with a note naming the filed figure",
+    tx.notes.some((n) => n.startsWith("revenue 2025-12-31: Q4 filed as Revenues 1500000000")), tx.notes.find((n) => n.startsWith("revenue 2025-12-31")) ?? "(none)");
+  const pld = { cik: 1045609, facts: { "us-gaap": {
+    NetIncomeLoss: { units: { USD: [
+      r("2024-01-01", "2024-03-31", 585.7, "q1", "2024-04-25"), r("2024-01-01", "2024-06-30", 1447.0, "q2", "2024-07-26"),
+      r("2024-04-01", "2024-06-30", 861.3, "q2", "2024-07-26"), r("2024-01-01", "2024-09-30", 2452.7, "q3", "2024-10-25"),
+      r("2024-07-01", "2024-09-30", 1005.7, "q3", "2024-10-25"), r("2024-01-01", "2024-12-31", 3731.6, "k", "2025-02-14", "10-K"),
+    ] } },
+    ProfitLoss: { units: { USD: [r("2024-10-01", "2024-12-31", 1342.2, "k", "2025-02-14", "10-K"), r("2024-01-01", "2024-12-31", 3947.9, "k", "2025-02-14", "10-K")] } },
+  } } };
+  const pq = extractCompanyFacts("PLD", pld).quarters.find((q) => q.end === "2024-12-31")?.values[niI];
+  check("PLD: a ProfitLoss Q4 beside a NetIncomeLoss year reads 3,731.6 - 2,452.7 = 1,278.9 on NetIncomeLoss",
+    pq?.tag === "NetIncomeLoss" && Math.abs(pq.val - 1278.9e6) < 1, JSON.stringify(pq ?? null));
+  const mut = await liftMutated((src) => src.replace("if (!Q4_SAME_CONCEPT_FIELDS.has(field.key)) continue;", "continue;"));
+  check("MUTATION: with the rule off, TEVA's Q4 reads the 1,500 Revenues figure", mut.extractCompanyFacts("TEVA", teva).quarters.find((q) => q.end === "2025-12-31")?.values[revI]?.val === 1500e6);
+}
+
 console.log("\n7. the ASC 606 boundary");
 
 // Differencing two frames that resolved to DIFFERENT tags subtracts one concept
