@@ -1181,11 +1181,11 @@ check("a period the chosen concept does not cover is NOT filled from the other",
   // 119-symbol run is why it did not stay.
   const rankAnywhere = await liftMutated((src) =>
     src.replace(
-      "      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(all)",
+      "      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(primaryFirst(all))",
       "      field.rankPerPeriod && !ignoreRankPerPeriod ? null : field.oneConceptPerFiler\n" +
       "        ? (() => { let b = null; for (const c of all) if (!b || c.rank < b.rank) b = c;\n" +
       "                   return b ? `${b.ns}|${b.tag}` : null; })()\n" +
-      "        : preferredTag(all)"
+      "        : preferredTag(primaryFirst(all))"
     )
   );
   const m2 = rankAnywhere.extractCompanyFacts("NVSHAPE", oldPrimaryNewBroad);

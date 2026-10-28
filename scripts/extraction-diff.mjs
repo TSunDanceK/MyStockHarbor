@@ -78,7 +78,7 @@ for (const [sym, cik] of targets) {
     const a = OLD.extractCompanyFacts(sym, facts), b = NEW.extractCompanyFacts(sym, facts);
     const keys = NEW.SEC_FIELD_KEYS;
     const lines = [];
-    for (const kind of ["years", "quarters"]) {
+    for (const kind of ["years", "quarters", "instants"]) {
       const am = new Map(a[kind].map((p) => [`${p.start}|${p.end}`, p]));
       const bm = new Map(b[kind].map((p) => [`${p.start}|${p.end}`, p]));
       for (const k of new Set([...am.keys(), ...bm.keys()])) {
@@ -87,13 +87,38 @@ for (const [sym, cik] of targets) {
           const va = pa?.values?.[i]?.val ?? null, vb = pb?.values?.[i]?.val ?? null;
           if (showField ? f !== showField : va === vb) return;
           const sec = f === "revenue" && showField ? `\tSEC ${filedFor(facts, p.start, p.end)}` : "";
-          lines.push(`${sym}\t${f}\t${kind === "years" ? "Y" : "Q"} ${label(p)}\t${fmt(va)} -> ${fmt(vb)}${showField && va !== vb ? " *" : ""}${sec}`);
+          lines.push(`${sym}\t${f}\t${kind === "years" ? "Y" : kind === "quarters" ? "Q" : "I"} ${kind === "instants" ? p.end : label(p)}\t${fmt(va)} -> ${fmt(vb)}${showField && va !== vb ? " *" : ""}${sec}${kind === "instants" && /Debt$/.test(f) && pb?.values?.[i]?.tag ? `\t[${pb.values[i].tag}${pb.values[i].derived === "computed" ? ", netted" : ""}]` : ""}`);
           byField[f] = (byField[f] ?? 0) + 1;
         });
       }
     }
+    // NET CASH OR NET DEBT on the newest balance sheet, before and after:
+    // cash (+ short-term investments) - (short-term + long-term debt), the
+    // view's own definition; total debt needs a long-term line.
+    const net = (ex) => {
+      const p = ex.instants[0]; if (!p) return null;
+      const v = (f) => p.values[keys.indexOf(f)]?.val ?? null;
+      // The view's own cash rule (secEarningsView cashCell): the plain figure,
+      // else the one including restricted cash. Reading only `cash` left CVX
+      // and TRV at n/a here while the page computes their net position.
+      const cash = v("cash") ?? v("cashIncludingRestricted");
+      if (cash === null || v("longTermDebt") === null) return null;
+      return cash + (v("shortTermInvestments") ?? 0) - ((v("shortTermDebt") ?? 0) + v("longTermDebt"));
+    };
+    if (lines.some((l) => /\t(shortTermDebt|longTermDebt)\tI /.test(l))) {
+      const na = net(a), nb = net(b), side = (n) => (n === null ? "n/a" : n >= 0 ? "net cash" : "net debt");
+      lines.push(`NET ${sym}\t${b.instants[0]?.end ?? "—"}\t${side(na)} ${fmt(na)} -> ${side(nb)} ${fmt(nb)}${side(na) !== side(nb) && na !== null ? "\tFLIP" : ""}`);
+    }
+    // MIX: a debt series that reads a primary concept on some dates and a
+    // fallback on others -- the two may not measure the same debt.
+    const FB = new Set(["CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(NEW.COMBINED_DEBT ?? {})]);
+    for (const f of ["shortTermDebt", "longTermDebt"]) {
+      const tags = new Set(b.instants.map((p) => p.values[keys.indexOf(f)]?.tag).filter(Boolean));
+      const fb = [...tags].filter((t) => FB.has(t)), pr = [...tags].filter((t) => !FB.has(t));
+      if (fb.length && pr.length && lines.length) lines.push(`MIX ${sym}\t${f}\t${pr.join(",")} + ${fb.join(",")}`);
+    }
     if (notesRe) for (const n of b.notes ?? []) if (new RegExp(notesRe, "i").test(n)) console.log(`NOTE ${sym}\t${n}`);
-    if (lines.length) { filersChanged++; cells += lines.length; for (const l of lines) console.log(l); }
+    if (lines.length) { filersChanged++; cells += lines.filter((l) => !/^(NET|MIX) /.test(l)).length; for (const l of lines) console.log(l); }
   } catch (e) { failed++; console.log(`ERR ${sym}: ${e.message}`); }
   await new Promise((r) => setTimeout(r, 250));
 }
