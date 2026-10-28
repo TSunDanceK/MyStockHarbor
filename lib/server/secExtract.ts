@@ -227,6 +227,12 @@ export type FieldValue = {
   covers?: [string, string];
   /** Only on "differenced": the two cumulative ends that produced it. */
   from?: [string, string];
+  /**
+   * Only on "differenced": the cumulative frame it was subtracted from (the
+   * 9M under a Q4), value and span, so the same-basis pass can compare it
+   * with the quarters shown for that span. In memory only, like `covers`.
+   */
+  operand?: { val: number; covers: [string, string] };
   /** Only on "ambiguous": the distinct values that could not be separated. */
   candidates?: number[];
   /** Only on "computed": the two field keys it was computed from. */
@@ -548,6 +554,10 @@ const DAY = 86400000;
 export const Q4_SAME_CONCEPT_FIELDS: ReadonlySet<string> = new Set(["revenue", "netIncome"]);
 /** How close the four quarters must come to the year for that Q4 to be used (audit r5). */
 export const SAME_CONCEPT_Q4_TOLERANCE = 0.005;
+/** How far a differenced quarter's operand may sit from the quarters shown for its span (audit r5). */
+export const SAME_BASIS_TOLERANCE = 0.005;
+/** The fields the same-basis pass judges (owner ruling, audit r5): the headline lines only. */
+export const SAME_BASIS_FIELDS: ReadonlySet<string> = new Set(["revenue", "netIncome"]);
 
 export function spanDays(start: string, end: string): number {
   return (Date.parse(end) - Date.parse(start)) / DAY;
@@ -1306,16 +1316,33 @@ export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
  *   DUK: total operating revenues, RegulatedAndUnregulatedOperatingRevenue:
  *        32,237M for FY2025 against a 31,741M contract line (including tax).
  *        Not a chain entry (see UTILITY_REVENUE_TAG): only this filer moves.
+ *   NEE: total operating revenues, RegulatedAndUnregulatedOperatingRevenue
+ *        (audit r3): FY2023 28,114M, FY2024 24,753M, FY2025 27,410M, against a
+ *        contract line read at 24.8B / 23.5B / 25.8B; quarters 4-8% low.
+ *   IDA: total operating revenues, RegulatedAndUnregulatedOperatingRevenue
+ *        (audit r3): 1,813.0M for FY2025 against a 1,747.0M contract line. The
+ *        gap is regulatory: RegulatedOperatingRevenueOther 62.6M (alternative
+ *        revenue programs and the like) plus ~3.4M, the same kind as DUK's.
  *   REXR: `Revenues` (audit r3): 1,003.1M for FY2025, where the contract line
  *        is the 0.6M ASC 606 sliver beside 980.4M of lease income. The lessor
  *        files the total for its years and Q1s only (later quarters year-to-
  *        date), which kept the total-over-contract rule from reaching it.
+ * HELD, NOT RULED (owner, audit r3), each read from its 10-K revenue note:
+ *   NJR: FY2025 total 2,036.4M against a 1,351.3M contract line. The 685.1M
+ *        is "revenues out of scope" of ASC 606: derivative instruments 713.9M
+ *        (Energy Services 405.8M, Natural Gas Distribution 240.4M, Clean Energy
+ *        Ventures 67.7M) less alternative revenue programs (28.7M).
+ *   SRE: FY2025 total 13,702M against 12,418M. The 1,284M is utilities
+ *        regulatory revenues 364M (alternative revenue programs) and Sempra
+ *        Infrastructure other revenues 920M (lease income ~389M; gas and power
+ *        derivative revenue; the Tangguh LNG diversion fee).
  * A period without the ruled concept reads Not reported rather than keep the
  * contract line beside the total, so the series stays on one basis.
  */
 export const REVENUE_TOTAL_RULINGS: Readonly<Record<string, string>> = {
   WMT: "Revenues",
   DUK: UTILITY_REVENUE_TAG,
+  NEE: UTILITY_REVENUE_TAG, IDA: UTILITY_REVENUE_TAG,
   REXR: "Revenues",
 };
 /** EPS ratio fallback gate (#552 COWORK #240 (a)): the filer's own filed EPS must close on NI / shares within this, */
@@ -1629,7 +1656,8 @@ function extractCompanyFactsWith(
     // Cumulative frames grouped by the fiscal year they start: a 3M, 6M, 9M and
     // FY row for one year all share a `start`. Q4 = FY - 9M falls out of this
     // with no special case, which is trap 4 handled structurally.
-    const byStart = new Map<string, { end: string; n: number; best: NonNullable<ReturnType<typeof resolve>> }[]>();
+    type Cand = NonNullable<ReturnType<typeof resolve>>;
+    const byStart = new Map<string, { end: string; n: number; best: Cand; cands: Cand[] }[]>();
 
     for (const [, cands] of bucket) {
       const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
@@ -1637,7 +1665,7 @@ function extractCompanyFactsWith(
       const n = quartersCovered(spanDays(best.row.start, best.row.end), calendar);
       if (n === null) continue;
       const list = byStart.get(best.row.start);
-      const entry = { end: best.row.end, n, best };
+      const entry = { end: best.row.end, n, best, cands };
       if (list) list.push(entry);
       else byStart.set(best.row.start, [entry]);
     }
@@ -1705,24 +1733,44 @@ function extractCompanyFactsWith(
         // nothing had noticed a change. That is the same bare-tag mistake this
         // file's own conceptKey comment records catching in preferredTag — the
         // guard here had not followed it.
-        if (conceptKey(prior.best) !== conceptKey(f.best)) {
+        //
+        // UNLESS ONE SIDE ALSO FILED THE OTHER'S CONCEPT (audit r4, FOXA): its
+        // FY resolves to NetIncomeLoss while its 3M, 6M and 9M carry only
+        // ProfitLoss, and the 10-K files ProfitLoss for the year too (1,727M).
+        // The difference is then taken on that common concept, the later
+        // frame's first (the quarters' own measure), so both operands are one
+        // concept and the quarter reads 1,727 - 1,031 = 696M.
+        let [hi, lo] = [f.best, prior.best];
+        if (conceptKey(lo) !== conceptKey(hi)) {
+          const sameAs = (cs: Cand[], k: string) => resolve(cs.filter((c) => conceptKey(c) === k));
+          const altHi = sameAs(f.cands, conceptKey(lo));
+          const altLo = altHi ? null : sameAs(prior.cands, conceptKey(hi));
+          if (!altHi && !altLo) {
+            notes.push(
+              `${field.key} ${start}..${f.end}: concept changed mid-year ` +
+                `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}), not differenced`
+            );
+            continue;
+          }
+          if (altHi) hi = altHi;
+          else lo = altLo!;
           notes.push(
             `${field.key} ${start}..${f.end}: concept changed mid-year ` +
-              `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}), not differenced`
+              `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}); differenced on ${conceptKey(hi)}, filed on both frames`
           );
-          continue;
         }
         const m = cell(quarterCells, quarterMeta);
         // The quarter's own start is the prior frame's end, not the year's.
-        quarterMeta.set(f.end, { start: prior.end, row: f.best.row });
+        quarterMeta.set(f.end, { start: prior.end, row: hi.row });
         m.set(field.key, {
-          val: f.best.row.val! - prior.best.row.val!,
-          tag: f.best.tag,
-          ns: f.best.ns,
-          unit: f.best.unit,
+          val: hi.row.val! - lo.row.val!,
+          tag: hi.tag,
+          ns: hi.ns,
+          unit: hi.unit,
           derived: "differenced",
           covers: [prior.end, f.end],
           from: [prior.end, f.end],
+          operand: { val: lo.row.val!, covers: [start, prior.end] },
         });
       }
     }
@@ -2286,6 +2334,47 @@ function extractCompanyFactsWith(
       quarterCells.get(end)!.set(field.key, d);
       const val = d.val;
       notes.push(`${field.key} ${end}: Q4 filed as ${q.tag} ${q.val}, not the year's ${y.tag}; read as the year less its nine months on ${y.tag}, ${val}`);
+    }
+  }
+
+  // ── A DIFFERENCED QUARTER IS ON THE BASIS OF THE QUARTERS BESIDE IT (audit r5) ──
+  // A later filing can restate the earlier quarters (BAC's FY2026 10-Qs
+  // recast Q1 and Q2 FY2025 to 28,247M and 27,443M, and its FY2025 10-K is on
+  // that basis at 113,097M), while the nine months the Q4 is differenced from
+  // is still the original 10-Q's 81,917M. 113,097 - 81,917 = 31,180M is then
+  // a residual of two bases, not a quarter. So every differenced quarter's
+  // operand is compared with the quarters shown for its span: off by more
+  // than SAME_BASIS_TOLERANCE of the larger side, the quarter is withheld
+  // with a note. HEADLINE FIELDS ONLY (SAME_BASIS_FIELDS, owner ruling r5):
+  // on every additive field the rule withheld 2,113 cells at 694 filers,
+  // mostly minor lines whose prior-year comparatives a later 10-Q
+  // reclassified; revenue and net income, which the Earnings History table
+  // shows, are 141 cells at 122. Judged on the values as they stand before any is withheld,
+  // so one withholding cannot hide another; a span whose quarters are not
+  // all shown cannot be judged and is left as is. EPS is never differenced;
+  // a computed EPS needs its net income, so a withheld one goes with it.
+  {
+    const verdicts: [Map<string, FieldValue>, string, FieldValue, number, number][] = [];
+    for (const field of cumulativeFields()) {
+      if (!SAME_BASIS_FIELDS.has(field.key)) continue;
+      const cells = [...quarterCells.values()].map((m) => m.get(field.key)).filter((c): c is FieldValue => c != null);
+      for (const [end, m] of quarterCells) {
+        const q = m.get(field.key);
+        if (!q || q.derived !== "differenced" || q.val == null || !q.operand) continue;
+        const [s0, e0] = q.operand.covers;
+        const n = quartersCovered(spanDays(s0, e0), calendar);
+        const lo = Date.parse(s0) - 7 * DAY;
+        const shown = cells.filter((c) => c.covers && c.val != null && c.covers[1] > s0 && c.covers[1] <= e0 && Date.parse(c.covers[0]) >= lo);
+        if (n == null || shown.length !== n) continue;
+        const sum = shown.reduce((a, c) => a + c.val!, 0);
+        const scale = Math.max(Math.abs(q.operand.val), shown.reduce((a, c) => a + Math.abs(c.val!), 0));
+        if (scale > 0 && Math.abs(sum - q.operand.val) / scale > SAME_BASIS_TOLERANCE) verdicts.push([m, end, q, q.operand.val, sum]);
+      }
+    }
+    for (const [m, end, q, operand, sum] of verdicts) {
+      const key = [...m.entries()].find(([, c]) => c === q)![0];
+      m.set(key, { ...q, val: null, derived: "withheld" });
+      notes.push(`${key} ${end}: derived quarter withheld; the total it was differenced from (${operand}, ${q.operand!.covers.join("..")}) is not on the basis of the quarters shown for that span (${sum})`);
     }
   }
 
