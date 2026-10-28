@@ -550,6 +550,10 @@ export function unreadableReason(
 // ── period arithmetic ───────────────────────────────────────────────────────
 
 const DAY = 86400000;
+/** The fields whose Q4 is read on the year's own concept when it is filed under another (audit r5). */
+export const Q4_SAME_CONCEPT_FIELDS: ReadonlySet<string> = new Set(["revenue", "netIncome"]);
+/** How close the four quarters must come to the year for that Q4 to be used (audit r5). */
+export const SAME_CONCEPT_Q4_TOLERANCE = 0.005;
 /** How far a differenced quarter's operand may sit from the quarters shown for its span (audit r5). */
 export const SAME_BASIS_TOLERANCE = 0.005;
 /** The fields the same-basis pass judges (owner ruling, audit r5): the headline lines only. */
@@ -2367,6 +2371,68 @@ function extractCompanyFactsWith(
             ? `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
             : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters and the nine months ${nine} differ from those quarters' sum ${siblings.reduce((a, b) => a + b, 0)}; withheld (scope mismatch)`
       );
+    }
+  }
+
+  // ── A Q4 FILED ONLY UNDER ANOTHER CONCEPT THAN ITS YEAR (audit r5) ────────
+  // TEVA's 10-K files Q4 2025 revenue only as `Revenues` (1,500M) while its
+  // year and other quarters are the contract line (17,258M; Q4 by difference
+  // 4,711M); D's is `Revenues` 4,093M against a contract year (4,210M by
+  // difference), PLD's net income is `ProfitLoss` 1,342.2M against a
+  // NetIncomeLoss year (1,278.9M), ALL's is net income to common 1,899M
+  // (1,928M). The filed figure beat the same-concept difference, so the four
+  // quarters did not add to the year. Where a filed Q4's concept is not its
+  // year's and the year's concept files the nine months before it, Q4 is
+  // the year minus those nine months, on one concept. Headline fields only
+  // (Q4_SAME_CONCEPT_FIELDS), the owner's scope for the r5 basis rules.
+  const cellConcept = (c: { tag: string | null; ns: string | null }) => `${c.ns}|${c.tag}`;
+  for (const field of cumulativeFields()) {
+    if (!Q4_SAME_CONCEPT_FIELDS.has(field.key)) continue;
+    const bucket = buckets.get(field.key);
+    if (!bucket) continue;
+    const byConcept = new Map<string, Map<string, Map<string, FieldValue>>>();
+    const onConcept = (key: string) => {
+      let qc = byConcept.get(key);
+      if (qc) return qc;
+      const only: Bucket = new Map();
+      for (const [k, cands] of bucket) {
+        const keep = cands.filter((c) => conceptKey(c) === key);
+        if (keep.length) only.set(k, keep);
+      }
+      qc = new Map();
+      runCumulative([field], new Map([[field.key, only]]), new Map([[field.key, key]]), qc, new Map(), new Map(), new Map(), []);
+      byConcept.set(key, qc);
+      return qc;
+    };
+    for (const [end, ym] of yearCells) {
+      const y = ym.get(field.key);
+      const q = quarterCells.get(end)?.get(field.key);
+      if (!y?.covers || y.val == null || !y.tag || !q || q.derived !== "as-filed" || q.val == null) continue;
+      if (cellConcept(q) === cellConcept(y)) continue;
+      // THE ONE DIFFERENCING ROUTINE, on the year's concept alone (as the
+      // owner-ruling path does), so no second subtraction site exists.
+      const d = onConcept(cellConcept(y)).get(end)?.get(field.key);
+      if (!d || d.derived !== "differenced" || d.val == null || d.covers?.[0] == null) continue;
+      // ONLY WHERE IT MAKES THE YEAR ADD UP. The replacement must bring the
+      // three quarters shown before it plus Q4 within SAME_CONCEPT_Q4_TOLERANCE
+      // of the year, and closer than the filed Q4 did, and a revenue Q4 must be
+      // positive. Where the year's concept is not the quarters' scope (VISN's,
+      // FUBO's year less nine months is negative) nothing is changed.
+      const yStart = Date.parse(y.covers[0]);
+      const before = [...quarterCells.entries()]
+        .filter(([e, m]) => e < end && Date.parse(e) > yStart && m.get(field.key)?.val != null)
+        .map(([, m]) => m.get(field.key)!.val!);
+      if (before.length !== 3) continue;
+      const shown = before.reduce((a, b) => a + b, 0);
+      const errNew = Math.abs(shown + d.val - y.val), errOld = Math.abs(shown + q.val - y.val);
+      if (errNew >= errOld || errNew > SAME_CONCEPT_Q4_TOLERANCE * Math.abs(y.val)) continue;
+      // And the derived-Q4 floor the scope check applies to every differenced
+      // revenue Q4: SON's 2023 year less nine months is 295.9M beside quarters
+      // of about 1.7B, a scope mismatch, not a quarter.
+      if (field.key === "revenue" && (d.val <= 0 || d.val < DERIVED_Q4_FLOOR * (shown / 3))) continue;
+      quarterCells.get(end)!.set(field.key, d);
+      const val = d.val;
+      notes.push(`${field.key} ${end}: Q4 filed as ${q.tag} ${q.val}, not the year's ${y.tag}; read as the year less its nine months on ${y.tag}, ${val}`);
     }
   }
 
