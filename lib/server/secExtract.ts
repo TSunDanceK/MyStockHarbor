@@ -227,6 +227,12 @@ export type FieldValue = {
   covers?: [string, string];
   /** Only on "differenced": the two cumulative ends that produced it. */
   from?: [string, string];
+  /**
+   * Only on "differenced": the cumulative frame it was subtracted from (the
+   * 9M under a Q4), value and span, so the same-basis pass can compare it
+   * with the quarters shown for that span. In memory only, like `covers`.
+   */
+  operand?: { val: number; covers: [string, string] };
   /** Only on "ambiguous": the distinct values that could not be separated. */
   candidates?: number[];
   /** Only on "computed": the two field keys it was computed from. */
@@ -544,6 +550,10 @@ export function unreadableReason(
 // ── period arithmetic ───────────────────────────────────────────────────────
 
 const DAY = 86400000;
+/** How far a differenced quarter's operand may sit from the quarters shown for its span (audit r5). */
+export const SAME_BASIS_TOLERANCE = 0.005;
+/** The fields the same-basis pass judges (owner ruling, audit r5): the headline lines only. */
+export const SAME_BASIS_FIELDS: ReadonlySet<string> = new Set(["revenue", "netIncome"]);
 
 export function spanDays(start: string, end: string): number {
   return (Date.parse(end) - Date.parse(start)) / DAY;
@@ -1832,6 +1842,7 @@ function extractCompanyFactsWith(
           derived: "differenced",
           covers: [prior.end, f.end],
           from: [prior.end, f.end],
+          operand: { val: lo.row.val!, covers: [start, prior.end] },
         });
       }
     }
@@ -2333,6 +2344,47 @@ function extractCompanyFactsWith(
             ? `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
             : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters and the nine months ${nine} differ from those quarters' sum ${siblings.reduce((a, b) => a + b, 0)}; withheld (scope mismatch)`
       );
+    }
+  }
+
+  // ── A DIFFERENCED QUARTER IS ON THE BASIS OF THE QUARTERS BESIDE IT (audit r5) ──
+  // A later filing can restate the earlier quarters (BAC's FY2026 10-Qs
+  // recast Q1 and Q2 FY2025 to 28,247M and 27,443M, and its FY2025 10-K is on
+  // that basis at 113,097M), while the nine months the Q4 is differenced from
+  // is still the original 10-Q's 81,917M. 113,097 - 81,917 = 31,180M is then
+  // a residual of two bases, not a quarter. So every differenced quarter's
+  // operand is compared with the quarters shown for its span: off by more
+  // than SAME_BASIS_TOLERANCE of the larger side, the quarter is withheld
+  // with a note. HEADLINE FIELDS ONLY (SAME_BASIS_FIELDS, owner ruling r5):
+  // on every additive field the rule withheld 2,113 cells at 694 filers,
+  // mostly minor lines whose prior-year comparatives a later 10-Q
+  // reclassified; revenue and net income, which the Earnings History table
+  // shows, are 141 cells at 122. Judged on the values as they stand before any is withheld,
+  // so one withholding cannot hide another; a span whose quarters are not
+  // all shown cannot be judged and is left as is. EPS is never differenced;
+  // a computed EPS needs its net income, so a withheld one goes with it.
+  {
+    const verdicts: [Map<string, FieldValue>, string, FieldValue, number, number][] = [];
+    for (const field of cumulativeFields()) {
+      if (!SAME_BASIS_FIELDS.has(field.key)) continue;
+      const cells = [...quarterCells.values()].map((m) => m.get(field.key)).filter((c): c is FieldValue => c != null);
+      for (const [end, m] of quarterCells) {
+        const q = m.get(field.key);
+        if (!q || q.derived !== "differenced" || q.val == null || !q.operand) continue;
+        const [s0, e0] = q.operand.covers;
+        const n = quartersCovered(spanDays(s0, e0), calendar);
+        const lo = Date.parse(s0) - 7 * DAY;
+        const shown = cells.filter((c) => c.covers && c.val != null && c.covers[1] > s0 && c.covers[1] <= e0 && Date.parse(c.covers[0]) >= lo);
+        if (n == null || shown.length !== n) continue;
+        const sum = shown.reduce((a, c) => a + c.val!, 0);
+        const scale = Math.max(Math.abs(q.operand.val), shown.reduce((a, c) => a + Math.abs(c.val!), 0));
+        if (scale > 0 && Math.abs(sum - q.operand.val) / scale > SAME_BASIS_TOLERANCE) verdicts.push([m, end, q, q.operand.val, sum]);
+      }
+    }
+    for (const [m, end, q, operand, sum] of verdicts) {
+      const key = [...m.entries()].find(([, c]) => c === q)![0];
+      m.set(key, { ...q, val: null, derived: "withheld" });
+      notes.push(`${key} ${end}: derived quarter withheld; the total it was differenced from (${operand}, ${q.operand!.covers.join("..")}) is not on the basis of the quarters shown for that span (${sum})`);
     }
   }
 
