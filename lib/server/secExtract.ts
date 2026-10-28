@@ -1316,9 +1316,11 @@ export const COMBINED_DEBT: Readonly<Record<string, readonly string[] | "all">> 
   LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: ["LongTermDebtCurrent"],
   NotesPayable: ["NotesPayableCurrent"],
 };
-/** The audit r3 debt fallbacks (ranked last in their chains in secFields). */
+/** The audit r4 short-term investments fallbacks (last in their chain). */
+const STI_FALLBACK_TAGS: ReadonlySet<string> = new Set(["DebtSecuritiesCurrent"]);
+/** The audit r3 debt fallbacks (ranked last in their chains in secFields), and r4's. */
 const DEBT_FALLBACK_TAGS: ReadonlySet<string> = new Set([
-  "CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(COMBINED_DEBT),
+  "CommercialPaper", "ConvertibleDebtNoncurrent", ...Object.keys(COMBINED_DEBT), ...STI_FALLBACK_TAGS,
 ]);
 /**
  * A FALLBACK NEVER DISPLACES A FILED PRIMARY CONCEPT. Chain rank alone is not
@@ -1342,10 +1344,19 @@ function primaryFirst<T extends { tag: string }>(cands: T[]): T[] {
 const SAME_MEASURE: Readonly<Record<string, string>> = {
   LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: "LongTermDebtAndCapitalLeaseObligations",
 };
-function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[]): T[] {
+function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[], newestAnnualEnd = ""): T[] {
   const primaryTags = new Set(rows.filter((r) => !DEBT_FALLBACK_TAGS.has(r.tag)).map((r) => r.tag));
   // The same figure tagged the other way counts with the primary it mirrors.
-  return switchOver(rows, (t) => DEBT_FALLBACK_TAGS.has(t) && !primaryTags.has(SAME_MEASURE[t] ?? ""));
+  return switchOver(
+    rows,
+    (t) => DEBT_FALLBACK_TAGS.has(t) && !primaryTags.has(SAME_MEASURE[t] ?? ""),
+    rows.some((r) => STI_FALLBACK_TAGS.has(r.tag)) ? newestAnnualEnd : "",
+  );
+}
+/** The newest balance-sheet date a 10-K reports (its Assets row), or "". */
+function newestAnnualBalanceEnd(facts: CompanyFacts): string {
+  const rows = (facts.facts?.["us-gaap"]?.Assets?.units ?? {}) as Record<string, FactRow[]>;
+  return Object.values(rows).flat().reduce((m, r) => (r.form === "10-K" && !r.start && r.end && r.end > m ? r.end : m), "");
 }
 
 /**
@@ -1355,15 +1366,26 @@ function debtFallbackGate<T extends { tag: string; row: FactRow }>(rows: T[]): T
  * fallback since): the primary is read up to its last date and the fallback
  * after it, never interleaved. Otherwise the primary is current and the
  * fallback is dropped (AAT). A filer with no primary reads the fallback.
+ *
+ * `newestAnnualEnd` (short-term investments only): a filer whose newest 10-K
+ * balance sheet is dated after its last primary figure no longer files the
+ * primary, so a fallback after that date is a switch too, inside the year.
+ * NVDA filed MarketableSecuritiesCurrent last at 2025-10-26; its FY2026 10-K
+ * (2026-01-25) carries no primary, and its 10-Qs since file
+ * DebtSecuritiesCurrent. AAT's shape (the 10-K files the primary, only the
+ * 10-Qs the fallback) is not this: its newest 10-K is the last primary date.
  */
-export function switchOver<T extends { tag: string; row: FactRow }>(rows: T[], isFallback: (tag: string) => boolean): T[] {
+export function switchOver<T extends { tag: string; row: FactRow }>(
+  rows: T[], isFallback: (tag: string) => boolean, newestAnnualEnd = "",
+): T[] {
   const newestOf = (rs: T[]) => rs.reduce((m, r) => (r.row.end && r.row.end > m ? r.row.end : m), "");
   const primary = rows.filter((r) => !isFallback(r.tag));
   if (!primary.length) return rows;
   const lastPrimary = newestOf(primary);
   const newestFallback = newestOf(rows.filter((r) => isFallback(r.tag)));
   const yearAfter = lastPrimary ? `${Number(lastPrimary.slice(0, 4)) + 1}${lastPrimary.slice(4)}` : "";
-  if (!newestFallback || newestFallback <= yearAfter) return primary;
+  const annualAfter = Boolean(newestAnnualEnd) && newestAnnualEnd > lastPrimary;
+  if (!newestFallback || (newestFallback <= yearAfter && !annualAfter)) return primary;
   return rows.filter((r) => !isFallback(r.tag) || (r.row.end ?? "") > lastPrimary);
 }
 /** The contract-revenue tag the total-over-contract rule compares against. */
@@ -1673,9 +1695,10 @@ function extractCompanyFactsWith(
   // superseded one on its oldest.
   const buckets = new Map<string, Bucket>();
   const preferred = new Map<string, string | null>();
+  const annualEnd = newestAnnualBalanceEnd(facts);
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    const all = debtFallbackGate(rowsForField(facts, field, refusedUnits, currency));
+    const all = debtFallbackGate(rowsForField(facts, field, refusedUnits, currency), annualEnd);
     for (const c of all) {
       const k = periodKey(c.row);
       const list = bucket.get(k);

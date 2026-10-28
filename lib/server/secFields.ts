@@ -528,6 +528,18 @@ const BALANCE_SHEET: FieldDef[] = ([
       "MarketableSecuritiesCurrent",
       "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
       "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
+      // AUDIT R4 FALLBACKS, ranked last and gated like the debt ones (see
+      // STI_FALLBACK_TAGS in secExtract). NVDA filed MarketableSecuritiesCurrent
+      // up to 2025-10-26 (49.12B) and DebtSecuritiesCurrent since (34.14B at
+      // 2026-07-26), so its newest balance sheets read no short-term
+      // investments and the card said net debt.
+      //
+      // AvailableForSaleSecuritiesDebtSecurities IS NOT ADDED, though asked
+      // for: it is the whole AFS portfolio, current and noncurrent (NVDA 46.9B
+      // against 41.0B due within a year), and as a fallback it read entire
+      // bank and insurer books as short-term investments (APOS 229.8B, BPOP
+      // 24.8B, BRK.B 17.0B; dry run on this branch, first commit).
+      "DebtSecuritiesCurrent",
     ], unit: "USD", taxonomy: "us-gaap" },
   { key: "receivables", chain: ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "inventory", chain: ["InventoryNet"], unit: "USD", taxonomy: "us-gaap" },
