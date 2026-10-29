@@ -917,6 +917,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
       </h2>
       <p>
         Each fiscal year as filed, compared with the year before.
+        {view.revenueBasis ? <> Revenue: {view.revenueBasis.charAt(0).toLowerCase() + view.revenueBasis.slice(1)}.</> : null}
         {fiscalYearEndNote(view.annual.map((r) => r.end)) ? <> {fiscalYearEndNote(view.annual.map((r) => r.end))}</> : null}
         {sole ? (
           <>
