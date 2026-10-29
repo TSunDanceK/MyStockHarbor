@@ -1,5 +1,5 @@
 {
- "_comment": "Cited share-class weights for multi-class filers (#552 COWORK #31), in listed-class equivalents per share, keyed by StatementClassOfStockAxis member. Weight 1 only where the filer's own 10-K (or, for a new listing with no 10-K yet, its IPO prospectus, 424B4) states the classes are economically equal (1:1 convertible and equal dividend/liquidation rights); a stated conversion ratio otherwise. A filer not listed here, or a class not named in its entry, is refused. Read by lib/server/secCoverClasses.ts. An optional epsMember names the class to read EPS for when it is not the listed cover class (BRK's EPS is per equivalent Class B share); read by lib/server/secInstanceEps.ts.",
+ "_comment": "Cited share-class weights for multi-class filers (#552 COWORK #31), in listed-class equivalents per share, keyed by StatementClassOfStockAxis member. Weight 1 only where the filer's own 10-K (or, for a new listing with no 10-K yet, its IPO prospectus, 424B4) states the classes are economically equal (1:1 convertible and equal dividend/liquidation rights); a stated conversion ratio otherwise. A filer not listed here, or a class not named in its entry, is refused. Read by lib/server/secCoverClasses.ts. An optional epsMember names the class to read EPS for when it is not the listed cover class (BRK's EPS is per equivalent Class B share); read by lib/server/secInstanceEps.ts. AFRM and CRCL (added 2026-10-20) are weighted 1 on conversion alone: each 10-K says only that the classes convert one-for-one into Class A, and no equal-dividend or equal-liquidation statement was found in it (primary document scanned; neither filing attaches an Exhibit 4). RDDT's 10-K states both.",
  "entries": {
   "ABNB": {
    "listed": "CommonClassAMember",
@@ -26,6 +26,18 @@
     "A Class X ordinary share does not entitle its holder to receive dividends, and holders of those shares are not entitled to be paid any amount upon a winding-up of Accenture plc."
    ],
    "source": "0001467373-25-000217"
+  },
+  "AFRM": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Each holder of Class B common stock has the right to 15 votes and can be converted at any time into one share of Class A common stock.",
+    "In addition, all shares of Class B common stock will automatically convert into shares of Class A common stock upon the occurrence of certain events described in our articles of incorporation."
+   ],
+   "source": "0001628280-26-059279"
   },
   "AI": {
    "listed": "CommonClassAMember",
@@ -123,6 +135,19 @@
     "each class of common stock has participated equally in all dividends declared by the Board of Directors and paid by the Company since 1994."
    ],
    "source": "0001628280-26-009057"
+  },
+  "CRCL": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "CommonClassCMember": 1
+   },
+   "evidence": [
+    "Class B common stock is convertible into Class A common stock on a one-for-one basis at the option of the holder.",
+    "Class C common stock is convertible into Class A common stock on a one-for-one basis in connection with certain assignments and transfers."
+   ],
+   "source": "0001876042-26-000062"
   },
   "CRWV": {
    "listed": "CommonClassAMember",
@@ -398,7 +423,8 @@
    },
    "evidence": [
     "The rights of the holders of Class A and Class B common stock are identical, except with respect to voting and conversion rights.",
-    "Class C: 0 shares on the cover (the count, not a weight, decides it)."
+    "Shares of Class B common stock may be converted to Class A common stock at any time at the option of the stockholder.",
+    "each share of Class C common stock shall automatically convert into one share of our Class A common stock."
    ],
    "source": "0001713445-26-000022"
   },
@@ -457,6 +483,20 @@
     "Except with respect to certain voting, conversion, and transfer rights and as otherwise expressly provided in the Company's amended and restated certificate of incorporation or required by applicable law, shares of the Company's Class A common stock and Class B common stock have the same rights and privileges and rank equally, share ratably, and are identical in all respects as to all matters."
    ],
    "source": "0001628280-26-008114"
+  },
+  "SHOP": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "FounderShareMember": 0
+   },
+   "evidence": [
+    "The Class B restricted voting shares are convertible into Class A subordinate voting shares on a one -for-one basis at the option of the holder.",
+    "Net Income per Share The Company applies the two-class method to calculate its basic and diluted net loss per share as Class A subordinate voting shares and Class B restricted voting shares are participating securities with equal participation rights and are entitled to receive dividends on a share for share basis.",
+    "The Founder share cannot convert into either Class A subordinate voting shares or Class B restricted voting shares."
+   ],
+   "source": "0001594805-26-000007"
   },
   "SPCX": {
    "listed": "CommonClassAMember",

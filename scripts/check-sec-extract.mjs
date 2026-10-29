@@ -731,6 +731,43 @@ check("pack() does not read fy or fp off the companyfacts row",
   !/fp: row\?\.fp|fy: .*row\?\.fy/.test(extractCode),
   "those describe the filing, not the period it covers");
 
+// A Q4 FILED ONLY UNDER ANOTHER CONCEPT THAN ITS YEAR (audit r5): TEVA files
+// Q4 2025 only as `Revenues` 1,500M; its year and other quarters are the
+// contract line, so Q4 is 17,258 - 12,547 = 4,711M on that line. PLD's net
+// income is the same shape (`ProfitLoss` Q4, NetIncomeLoss year).
+{
+  const r = (s0, e, v, accn, filed, form = "10-Q") => ({ start: s0, end: e, val: v * 1e6, accn, filed, form });
+  const C = "RevenueFromContractWithCustomerExcludingAssessedTax";
+  const teva = { cik: 818686, facts: { "us-gaap": {
+    [C]: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 3891, "q1", "2025-05-07"), r("2025-01-01", "2025-06-30", 8067, "q2", "2025-07-30"),
+      r("2025-04-01", "2025-06-30", 4176, "q2", "2025-07-30"), r("2025-01-01", "2025-09-30", 12547, "q3", "2025-11-05"),
+      r("2025-07-01", "2025-09-30", 4480, "q3", "2025-11-05"), r("2025-01-01", "2025-12-31", 17258, "k", "2026-02-03", "10-K"),
+    ] } },
+    Revenues: { units: { USD: [r("2025-10-01", "2025-12-31", 1500, "k", "2026-02-03", "10-K")] } },
+  } } };
+  const revI = SEC_FIELDS.findIndex((f) => f.key === "revenue"), niI = SEC_FIELDS.findIndex((f) => f.key === "netIncome");
+  const tx = extractCompanyFacts("TEVA", teva);
+  const q4 = tx.quarters.find((q) => q.end === "2025-12-31")?.values[revI];
+  check("TEVA: a Q4 filed only as Revenues reads the contract year less its nine months, 4,711",
+    q4?.val === 4711e6 && q4?.tag === C && q4?.derived === "differenced", JSON.stringify(q4 ?? null));
+  check("...with a note naming the filed figure",
+    tx.notes.some((n) => n.startsWith("revenue 2025-12-31: Q4 filed as Revenues 1500000000")), tx.notes.find((n) => n.startsWith("revenue 2025-12-31")) ?? "(none)");
+  const pld = { cik: 1045609, facts: { "us-gaap": {
+    NetIncomeLoss: { units: { USD: [
+      r("2024-01-01", "2024-03-31", 585.7, "q1", "2024-04-25"), r("2024-01-01", "2024-06-30", 1447.0, "q2", "2024-07-26"),
+      r("2024-04-01", "2024-06-30", 861.3, "q2", "2024-07-26"), r("2024-01-01", "2024-09-30", 2452.7, "q3", "2024-10-25"),
+      r("2024-07-01", "2024-09-30", 1005.7, "q3", "2024-10-25"), r("2024-01-01", "2024-12-31", 3731.6, "k", "2025-02-14", "10-K"),
+    ] } },
+    ProfitLoss: { units: { USD: [r("2024-10-01", "2024-12-31", 1342.2, "k", "2025-02-14", "10-K"), r("2024-01-01", "2024-12-31", 3947.9, "k", "2025-02-14", "10-K")] } },
+  } } };
+  const pq = extractCompanyFacts("PLD", pld).quarters.find((q) => q.end === "2024-12-31")?.values[niI];
+  check("PLD: a ProfitLoss Q4 beside a NetIncomeLoss year reads 3,731.6 - 2,452.7 = 1,278.9 on NetIncomeLoss",
+    pq?.tag === "NetIncomeLoss" && Math.abs(pq.val - 1278.9e6) < 1, JSON.stringify(pq ?? null));
+  const mut = await liftMutated((src) => src.replace("if (!Q4_SAME_CONCEPT_FIELDS.has(field.key)) continue;", "continue;"));
+  check("MUTATION: with the rule off, TEVA's Q4 reads the 1,500 Revenues figure", mut.extractCompanyFacts("TEVA", teva).quarters.find((q) => q.end === "2025-12-31")?.values[revI]?.val === 1500e6);
+}
+
 console.log("\n7. the ASC 606 boundary");
 
 // Differencing two frames that resolved to DIFFERENT tags subtracts one concept
@@ -801,11 +838,109 @@ check("...and the refusal names both concepts in a note",
   tc.notes.some((n) => n.startsWith("operatingCashFlow ") && n.includes(OCF_A) && n.includes(OCF_B)),
   tc.notes.find((n) => n.startsWith("operatingCashFlow ")) ?? "(none)");
 
+// THE SAME BASIS (audit r5, BAC): its FY2026 10-Qs recast Q1 and Q2 FY2025
+// and the FY2025 10-K is on the recast basis, but the only nine months is the
+// original Q3 10-Q's. Rows as filed (BAC's own values, USD millions).
+{
+  const r = (s0, e, v, accn, filed, form = "10-Q") => ({ start: s0, end: e, val: v * 1e6, accn, filed, form });
+  const bac = { cik: 70858, facts: { "us-gaap": {
+    Revenues: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 27366, "q1-25", "2025-04-30"), r("2025-01-01", "2025-03-31", 28247, "q1-26", "2026-05-01"),
+      r("2025-01-01", "2025-06-30", 53829, "q2-25", "2025-07-31"), r("2025-01-01", "2025-06-30", 55690, "q2-26", "2026-07-31"),
+      r("2025-04-01", "2025-06-30", 26463, "q2-25", "2025-07-31"), r("2025-04-01", "2025-06-30", 27443, "q2-26", "2026-07-31"),
+      r("2025-01-01", "2025-09-30", 81917, "q3-25", "2025-10-31"), r("2025-07-01", "2025-09-30", 28088, "q3-25", "2025-10-31"),
+      r("2025-01-01", "2025-12-31", 113097, "k-25", "2026-02-25", "10-K"),
+    ] } },
+    // The same shape on a non-headline line (owner ruling: the pass judges
+    // revenue and net income only), so this Q4 must be kept.
+    InterestExpense: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 100, "q1-25", "2025-04-30"), r("2025-01-01", "2025-03-31", 110, "q1-26", "2026-05-01"),
+      r("2025-01-01", "2025-06-30", 200, "q2-25", "2025-07-31"), r("2025-01-01", "2025-06-30", 220, "q2-26", "2026-07-31"),
+      r("2025-04-01", "2025-06-30", 100, "q2-25", "2025-07-31"), r("2025-04-01", "2025-06-30", 110, "q2-26", "2026-07-31"),
+      r("2025-01-01", "2025-09-30", 300, "q3-25", "2025-10-31"), r("2025-07-01", "2025-09-30", 100, "q3-25", "2025-10-31"),
+      r("2025-01-01", "2025-12-31", 420, "k-25", "2026-02-25", "10-K"),
+    ] } },
+    NetIncomeLoss: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 7396, "q1-25", "2025-04-30"), r("2025-01-01", "2025-03-31", 7360, "q1-26", "2026-05-01"),
+      r("2025-01-01", "2025-06-30", 14512, "q2-25", "2025-07-31"), r("2025-01-01", "2025-06-30", 14530, "q2-26", "2026-07-31"),
+      r("2025-04-01", "2025-06-30", 7116, "q2-25", "2025-07-31"), r("2025-04-01", "2025-06-30", 7170, "q2-26", "2026-07-31"),
+      r("2025-01-01", "2025-09-30", 22981, "q3-25", "2025-10-31"), r("2025-07-01", "2025-09-30", 8469, "q3-25", "2025-10-31"),
+      r("2025-01-01", "2025-12-31", 30509, "k-25", "2026-02-25", "10-K"),
+    ] } },
+  } } };
+  const revI = SEC_FIELDS.findIndex((f) => f.key === "revenue"), niI = SEC_FIELDS.findIndex((f) => f.key === "netIncome");
+  const out = extractCompanyFacts("BAC", bac);
+  const q4 = out.quarters.find((q) => q.end === "2025-12-31");
+  check("BAC: a Q4 differenced from a nine months on the old basis is withheld (113,097 - 81,917 is not a quarter)",
+    q4?.values[revI]?.val == null && q4?.values[revI]?.derived === "withheld", JSON.stringify(q4?.values[revI] ?? null));
+  check("...with a note naming the operand and the quarters' sum",
+    out.notes.some((n) => n.startsWith("revenue 2025-12-31: derived quarter withheld") && n.includes("81917000000") && n.includes("83778000000")),
+    out.notes.find((n) => n.startsWith("revenue 2025-12-31")) ?? "(none)");
+  check("...while net income, whose nine months still matches its quarters (22,981 vs 22,999, 0.08%), keeps its Q4 of 7,528",
+    q4?.values[niI]?.val === 7528e6 && q4?.values[niI]?.derived === "differenced", JSON.stringify(q4?.values[niI] ?? null));
+  const ieI = SEC_FIELDS.findIndex((f) => f.key === "interestExpense");
+  check("...and a non-headline line in the same shape keeps its Q4 (the pass judges revenue and net income only)",
+    q4?.values[ieI]?.val === 120e6 && q4?.values[ieI]?.derived === "differenced", JSON.stringify(q4?.values[ieI] ?? null));
+  const mut = await liftMutated((src) => src.replace("if (n == null || shown.length !== n) continue;", "continue;"));
+  const bad = mut.extractCompanyFacts("BAC", bac).quarters.find((q) => q.end === "2025-12-31")?.values[revI]?.val;
+  check("MUTATION: with the same-basis pass off, BAC Q4 reads the mixed 31,180", bad === 31180e6, String(bad));
+}
+
+// THE COMMON CONCEPT (audit r4, FOXA): the later frame resolves to one concept
+// but also files the earlier frame's, so the quarter is differenced on that
+// one, both operands the same concept, and never across the two.
+const common = {
+  cik: 1,
+  facts: { "us-gaap": {
+    [OCF_A]: { units: { USD: [
+      { start: "2026-01-01", end: "2026-06-30", val: 900, accn: "b", filed: "2026-07-20" },
+    ] } },
+    [OCF_B]: { units: { USD: [
+      { start: "2026-01-01", end: "2026-03-31", val: 400, accn: "a", filed: "2026-04-20" },
+      { start: "2026-01-01", end: "2026-06-30", val: 880, accn: "b", filed: "2026-07-20" },
+    ] } },
+  } },
+};
+const cm = extractCompanyFacts("COMMON", common);
+const cmQ2 = cm.quarters.find((q) => q.end === "2026-06-30")?.values[ocfIdx];
+check("a later frame that also files the earlier frame's concept is differenced on that concept",
+  cmQ2?.val === 480 && cmQ2?.tag === OCF_B && cmQ2?.derived === "differenced",
+  `Q2 = ${JSON.stringify(cmQ2 ?? null)} — 880 - 400 under ${OCF_B}, never 900 - 400 across the two`);
+check("...and the note says which concept it used",
+  cm.notes.some((n) => n.startsWith("operatingCashFlow ") && n.includes(`differenced on us-gaap|${OCF_B}`)),
+  cm.notes.find((n) => n.startsWith("operatingCashFlow ")) ?? "(none)");
+
+// FCX (audit r5): its FY2025 resolves to the proxy's NetIncomeLoss while the
+// 9M carries only ProfitLoss; the 10-K files ProfitLoss for the year (4,152M),
+// so Q4 is differenced on it: 4,152 - 3,587 = 565M. Rows as filed (USD millions).
+{
+  const r = (s0, e, v, accn, filed, form = "10-Q") => ({ start: s0, end: e, val: v * 1e6, accn, filed, form });
+  const fcx = { cik: 831259, facts: { "us-gaap": {
+    ProfitLoss: { units: { USD: [
+      r("2025-01-01", "2025-03-31", 793, "q1", "2025-05-08"), r("2025-01-01", "2025-06-30", 2340, "q2", "2025-08-08"),
+      r("2025-04-01", "2025-06-30", 1547, "q2", "2025-08-08"), r("2025-01-01", "2025-09-30", 3587, "q3", "2025-11-06"),
+      r("2025-07-01", "2025-09-30", 1247, "q3", "2025-11-06"), r("2025-01-01", "2025-12-31", 4152, "k", "2026-02-13", "10-K"),
+    ] } },
+    NetIncomeLoss: { units: { USD: [
+      r("2025-01-01", "2025-06-30", 1124, "q2-26", "2026-08-06"), r("2025-04-01", "2025-06-30", 772, "q2-26", "2026-08-06"),
+      r("2025-01-01", "2025-12-31", 2204, "p", "2026-04-23", "DEF 14A"),
+    ] } },
+  } } };
+  const niI = SEC_FIELDS.findIndex((f) => f.key === "netIncome");
+  const q4 = extractCompanyFacts("FCX", fcx).quarters.find((q) => q.end === "2025-12-31")?.values[niI];
+  // Since audit r5's same-basis pass: the quarters shown for those nine
+  // months mix ProfitLoss (Q1 793, Q3 1,247) with NetIncomeLoss (Q2 772), so
+  // they sum to 2,812 against the ProfitLoss 9M of 3,587 and the 565 is a
+  // residual of two measures. Withheld until the quarters share one concept.
+  check("FCX: the 565 Q4 is withheld, because the quarters shown for its nine months mix ProfitLoss and NetIncomeLoss",
+    q4?.val == null && q4?.derived === "withheld" && q4?.operand?.val === 3587e6, JSON.stringify(q4 ?? null));
+}
+
 {
   // MUTATION: the same-concept test removed, so the differencing takes whatever
   // frame sits one length below regardless of which concept filed it.
   const mixMod = await liftMutated((src) =>
-    src.replace("if (conceptKey(prior.best) !== conceptKey(f.best)) {", "if (false) {")
+    src.replace("if (conceptKey(lo) !== conceptKey(hi)) {", "if (false) {")
   );
   const mixed = mixMod.extractCompanyFacts("TWOC", twoConcept);
   const mixedQ2 = mixed.quarters.find((q) => q.end === "2026-06-30");
@@ -881,8 +1016,8 @@ check("...and the refusal names both concepts in a note",
   // This is the defect as it shipped, not an invented one.
   const bareMod = await liftMutated((src) =>
     src.replace(
-      "if (conceptKey(prior.best) !== conceptKey(f.best)) {",
-      "if (prior.best.tag !== f.best.tag) {"
+      "if (conceptKey(lo) !== conceptKey(hi)) {",
+      "if (lo.tag !== hi.tag) {"
     )
   );
   const bare = bareMod.extractCompanyFacts("DUALNS", crossNs);
@@ -1135,11 +1270,11 @@ check("a period the chosen concept does not cover is NOT filled from the other",
   // 119-symbol run is why it did not stay.
   const rankAnywhere = await liftMutated((src) =>
     src.replace(
-      "      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(all)",
+      "      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(primaryFirst(all))",
       "      field.rankPerPeriod && !ignoreRankPerPeriod ? null : field.oneConceptPerFiler\n" +
       "        ? (() => { let b = null; for (const c of all) if (!b || c.rank < b.rank) b = c;\n" +
       "                   return b ? `${b.ns}|${b.tag}` : null; })()\n" +
-      "        : preferredTag(all)"
+      "        : preferredTag(primaryFirst(all))"
     )
   );
   const m2 = rankAnywhere.extractCompanyFacts("NVSHAPE", oldPrimaryNewBroad);
@@ -1216,9 +1351,19 @@ check("oneConceptPerFiler is fed into secChainsHash",
     check("FIGR shape: the annual keeps the TOTAL, and the differenced Q4 is filled back, not emptied",
       at(fy, "nonOperatingIncomeExpense")?.val === 12e6 && cell?.val === 4e6,
       `FY2024 ${at(fy, "nonOperatingIncomeExpense")?.val} · Q4 2024 ${cell?.val ?? "empty"}`);
+    // Since audit r4 the common-concept differencing fills this cell on the
+    // first reading too (10 - 6 under the component, which both frames file),
+    // so the fill-back alone removed changes nothing; both removed empty it.
     const noFill = await liftMutated((src) => src.replace("if (!ranked.length) return primary;", "return primary;"));
-    const bad = q4(noFill.extractCompanyFacts("FIGR", figr));
-    check("MUTATION: without the fill-back, Q4 2024 is emptied (the 37-cell cost on the census)",
+    const still = q4(noFill.extractCompanyFacts("FIGR", figr));
+    check("without the fill-back, the common-concept differencing gives the same Q4 2024",
+      still && at(still, "nonOperatingIncomeExpense")?.val === 4e6, still ? String(at(still, "nonOperatingIncomeExpense")?.val) : "no Q4 row");
+    const noBoth = await liftMutated((src) => src
+      .replace("if (!ranked.length) return primary;", "return primary;")
+      .replace("const altHi = sameAs(f.cands, conceptKey(lo));", "const altHi = null;")
+      .replace("const altLo = altHi ? null : sameAs(prior.cands, conceptKey(hi));", "const altLo = null;"));
+    const bad = q4(noBoth.extractCompanyFacts("FIGR", figr));
+    check("MUTATION: without the fill-back AND the common concept, Q4 2024 is emptied (the 37-cell cost on the census)",
       !bad || at(bad, "nonOperatingIncomeExpense") == null, bad ? String(at(bad, "nonOperatingIncomeExpense")?.val) : "no Q4 row");
     const jdAgain = nonOpBy(noFill.extractCompanyFacts("JD", jd));
     check("...and the fill-back never overrides a cell the per-period rule filled (JD FY2023 stays the total)",

@@ -446,6 +446,9 @@ const TASKS = {
   },
   // Read-only: every balance-sheet-total and non-operating concept a filer
   // publishes for its newest periods, with values (earnings page round 2).
+  // Read-only: a filer's latest 10-K text around the words asked for.
+  // SYMBOLS="NJR:356309,SRE:1032208|not within the scope|ASC 815"
+  "sec-filing-text": { script: "scripts/filing-text-probe.mjs", args: () => [] },
   "sec-concept-list": {
     script: "scripts/sec-concept-list-probe.mjs",
     args: () => [],
@@ -606,9 +609,18 @@ const TASKS = {
   "write-earnings-audit-r2-cells": { script: "scripts/earnings-audit-r2.mjs", args: (env) => ["cells", env.SYMBOLS ?? ""], writes: true, env: { MODE: "cells" } },
   // DRY RUN: every cell an extraction change moves, main against the branch. Read-only (manifest GET).
   "write-extraction-diff": { script: "scripts/extraction-diff.mjs", args: () => [], needsTypescript: true, writes: true },
+  // The earnings page's valuation-card price basis against its title's close.
+  // Two HGETALLs, nothing written; the write- prefix and `writes` are what
+  // route it to the credentialled job (as write-extraction-diff).
+  "write-price-basis-dry-run": { script: "scripts/price-basis-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
   // One field's cells beside every raw companyfacts row of the named concepts. Read-only.
   // SYMBOLS="SCHW,MET|netIncome|NetIncomeLoss,ProfitLoss|cover,qrows"
   "field-trace": { script: "scripts/field-trace-probe.mjs", args: () => [], needsTypescript: true },
+  // CENSUS (audit r3, NEE): filers whose RegulatedAndUnregulatedOperatingRevenue sits >3% above the contract line. Read-only (manifest GET).
+  "write-utility-revenue-census": { script: "scripts/utility-revenue-census.mjs", args: () => [], needsTypescript: true, writes: true },
+  // A filer's newest balance-sheet dates beside the raw rows of the named concepts. Read-only.
+  // SYMBOLS="CVX,TRV|shortTermDebt,longTermDebt|LongTermDebtAndCapitalLeaseObligations,ShortTermBorrowings"
+  "instant-trace": { script: "scripts/instant-trace-probe.mjs", args: () => [], needsTypescript: true },
   "write-earnings-audit-r1-scan": {
     script: "scripts/earnings-audit-r1-scan.mjs",
     args: () => [],
@@ -694,6 +706,8 @@ const TASKS = {
   },
   // READS ONLY: how many Pickers names a multi-class market-cap rule could
   // recover (#552 COWORK #26). SEC values only; ~30 commands.
+  // READS ONLY: stored sets whose newest filing came from its own XBRL (ff) or could not be read (lg).
+  "write-filing-fill-census": { script: "scripts/filing-fill-census.mjs", args: () => [], writes: true },
   "write-multiclass-cap-census": {
     script: "scripts/multiclass-cap-census.mjs",
     args: () => [],
@@ -1132,6 +1146,9 @@ const TASKS = {
   // records from measurement that companyfacts carries no class label. Both
   // cannot be acted on, and guessing produces a plausible wrong market cap.
   "multiclass-shares": { script: "scripts/multiclass-shares-probe.mjs", args: () => [] },
+  // Per-class cover counts from the newest 10-Q/10-K instance (contexts carry the
+  // class axis companyfacts drops). Read-only. SYMBOLS=AFRM,RDDT,CRCL
+  "multiclass-cover-instance": { script: "scripts/multiclass-cover-instance-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   "due-strip-universe": {
     script: "scripts/due-strip-universe.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],

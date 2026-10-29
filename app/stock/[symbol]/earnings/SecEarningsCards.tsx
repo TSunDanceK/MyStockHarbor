@@ -3,6 +3,7 @@
 // Presentational and server-rendered: every decision about which number is
 // which, and what is derived, is made in lib/server/secEarningsView.ts and
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
+import { PRICE_BASIS_NOTE, priceBasisLabel, priceBasisWords, type PriceBasis } from "@/lib/priceBasis";
 import Link from "next/link";
 import GrowthVisuals, { SeeAllTheNumbers } from "./GrowthVisuals";
 import { anyDerived, buildGrowthVisuals, introLine, marginMeans } from "@/lib/growthVisuals";
@@ -1089,7 +1090,10 @@ function ConversionChart({ view }: { view: SecEarningsView }) {
   );
 }
 
-export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
+/** The note that stands in for the lines a bank's or insurer's cards drop (audit r3). */
+export const FINANCIAL_FILER_NOTE = "For a bank or insurer, deposits and policy liabilities run through operating cash flow and the balance sheet, so cash-versus-profit and net-debt comparisons are not meaningful and are not shown.";
+
+export function SecCashQualityCard({ view, financial = false }: { view: SecEarningsView; financial?: boolean }) {
   const c = view.cashQuality;
   const w = periodWords(view.basis);
   // ── THE FALLBACK PARAGRAPH IS ABOUT A MISMATCH, so it needs one to exist ──
@@ -1106,8 +1110,8 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   const ocf = num(c.operatingCashFlow.val), ni = num(c.netIncome.val), capex = num(c.capex.val), sbc = num(c.shareBasedCompensation.val), fcf = num(c.freeCashFlow);
   // THE PERIOD IN THE LEAD LINE IS THE CARD'S OWN (see the heading below).
   const when = c.basis === "quarter" ? `this ${periodWords("quarter").one}` : c.basis === "year" ? `in ${c.period}` : `in the ${lcFirst(c.period)}`;
-  const lead = cashLead(ocf, ni);
-  const sOcf = shareOf(ocf, ni), sFcf = shareOf(fcf, ni), sCapex = shareOf(capex === null ? null : Math.abs(capex), ocf), sSbc = shareOf(sbc, fcf);
+  const lead = financial ? null : cashLead(ocf, ni);
+  const sOcf: ShareOf = financial ? { ok: false, why: "not-meaningful" } : shareOf(ocf, ni), sFcf = shareOf(fcf, ni), sCapex = shareOf(capex === null ? null : Math.abs(capex), ocf), sSbc = shareOf(sbc, fcf);
   const fcfDerived = c.freeCashFlowDerived ? (
     <CardDerivedWord note={`Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this ${w.one} is the difference between two cumulative figures.`} />
   ) : null;
@@ -1156,7 +1160,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           SITS ON A TILE. Never a percentage of a figure at or below zero. */}
       <div className="metricGrid qualityGrid">
         <RatioTile label="Operating cash flow" share={sOcf} tone={cashTileTone("ocf", sOcf)} of="of net income"
-          nm={ni !== null && ni <= 0 ? "net income was a loss" : "a figure is not on file"}
+          nm={financial ? "not meaningful for a bank or insurer" : ni !== null && ni <= 0 ? "net income was a loss" : "a figure is not on file"}
           // "vs net income", not a bare "vs": a "derived" word on the second
           // figure must never sit straight after the first (check-earnings-glance 4).
           dollars={<><CellValue cell={c.operatingCashFlow} compact /> vs net income <CellValue cell={c.netIncome} compact /></>}
@@ -1182,7 +1186,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           figure={sbc === null ? <CellValue cell={c.shareBasedCompensation} compact /> : shortMoney(sbc)} figureIsWord={sbc === null}
           rest={sbc === null ? null : <><DerivedMark cell={c.shareBasedCompensation} />share-based pay</>} />
       </div>
-      <ConversionChart view={view} />
+      {financial ? <p className="earningsDataNote" data-financial-note="">{FINANCIAL_FILER_NOTE}</p> : <ConversionChart view={view} />}
       {/* ONE "About these figures" (#552 COWORK #166/#169): the ratios, the
           n/m rule, the loss marker and the year-to-date derivation. */}
       <CardDetails>
@@ -1357,18 +1361,18 @@ function CurrentRatioMeter({ b }: { b: NonNullable<SecEarningsView["balance"]> }
   );
 }
 
-export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
+export function SecBalanceSheetCard({ view, financial = false }: { view: SecEarningsView; financial?: boolean }) {
   const b = view.balance;
   if (!b) return null;
   const spread = view.balanceSheetSpreadDays;
   const apart = spread !== null && Math.abs(spread) > BALANCE_SHEET_SPREAD_DAYS;
   const num = (v: number | null | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   const stiMissing = num(b.shortTermInvestments?.val) === null;
-  const pos = netPosition(b.netCash);
+  const pos = financial ? null : netPosition(b.netCash);
   // "CASH" WHEN SHORT-TERM INVESTMENTS ARE MISSING (#552 COWORK #169): the
   // lead names only what was added up.
   const liquidWords = stiMissing ? "cash" : "cash and short-term investments";
-  const chart = balanceBars(num(b.cash?.val), num(b.shortTermInvestments?.val), num(b.totalDebt)) !== null;
+  const chart = !financial && balanceBars(num(b.cash?.val), num(b.shortTermInvestments?.val), num(b.totalDebt)) !== null;
   const equityLabel = b.equityIncludesNci ? "total equity (incl. noncontrolling interests)" : "equity";
   return (
     <section className="card balanceCard">
@@ -1394,6 +1398,7 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
           )}
         </p>
       ) : null}
+      {financial ? <p className="earningsDataNote" data-financial-note="">{FINANCIAL_FILER_NOTE}</p> : null}
       {chart ? <CashDebtChart b={b} /> : <BalanceLegend b={b} />}
       <CurrentRatioMeter b={b} />
       {/* ONE TOTALS LINE, replacing the three rows (#552 COWORK #169). The
@@ -2222,17 +2227,17 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
  * end, and the price is today's close.
  */
 export function SecValuationCard({
-  view, inputs, price, priceAsOf, priceLabel = null, today,
+  view, inputs, price, priceAsOf, priceBasis = null, today,
 }: {
   view: SecEarningsView;
   inputs: ValuationInputs;
   price: number | null;
   priceAsOf: string | null;
   /**
-   * What the price IS, where the source says ("close, 29 Sep 2026" / "last IEX
-   * trade, 14:05 ET", tiingoSurfacePrice). Absent: "close, <priceAsOf>", as before.
+   * What the price IS (lib/priceBasis), labelled "Price: close, 20 Oct 2026" /
+   * "Price: last trade 14:05 ET". Absent: a close on priceAsOf, as before.
    */
-  priceLabel?: string | null;
+  priceBasis?: PriceBasis | null;
   /** The render date, passed in rather than read from the clock — see priceIsCurrent. */
   today: string;
 }) {
@@ -2255,13 +2260,15 @@ export function SecValuationCard({
   // 14px, and the price, the GAAP note and the source ran on underneath as one
   // paragraph — the layout the owner flagged as broken on AVAV.
   const sentence = (t: string) => `${t[0].toUpperCase()}${t.slice(1)}.`;
+  const basis: PriceBasis | null = priceBasis ?? (priceAsOf ? { kind: "close", date: priceAsOf, time: null } : null);
+  const basisWords = basis ? priceBasisWords(basis) : "close";
   const capValue = !current ? STALE_PRICE_WORDS : cap === null ? NOT_REPORTED : cap.ok ? shortMoney(cap.val) : "Not available";
   const capSub = !current
     ? readableIsoDates(stalePriceNote(price, priceAsOf ?? "an unknown date"))
     : cap !== null && !cap.ok
       ? sentence(REFUSAL_WORDS[cap.why])
       : inputs.shares
-        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} ${priceLabel ?? `close${priceAsOf ? `, ${readableDate(priceAsOf)}` : ""}`}`
+        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} ${basisWords}`
         : null;
   const peValue = !current ? STALE_PRICE_WORDS
     : pe === null ? NOT_REPORTED
@@ -2288,6 +2295,13 @@ export function SecValuationCard({
     <section className="card">
       <div className="eyebrow">Valuation</div>
       <h3>What the market is paying for these earnings</h3>
+      {/* WHICH PRICE THE TWO FIGURES BELOW ARE BUILT ON (lib/priceBasis). It can
+          differ from the title's, which is the last completed close. */}
+      {basis ? (
+        <p className="smallLabel" style={{ marginTop: 0 }}>
+          {priceBasisLabel(basis)} · ${price.toFixed(2)}
+        </p>
+      ) : null}
       <div className="metricGrid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
         {/* THE WORD OR THE FIGURE; ITS REASON OR ITS METHOD BEHIND A TAP
             (#552 COWORK #124). A refusal ("Not meaningful", "Not available")
@@ -2304,6 +2318,7 @@ export function SecValuationCard({
             dollars, so both sides of these figures are dollars.
           </p>
         ) : null}
+        <p>{PRICE_BASIS_NOTE}</p>
         <p data-fine-print="">Source: {SEC_ATTRIBUTION}; share price from market data.</p>
       </CardDetails>
     </section>
