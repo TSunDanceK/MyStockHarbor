@@ -159,7 +159,11 @@ const LHX25 = facts([
 
 console.log("\n5. mutation");
 {
-  const mutated = extractRaw.replace("const asRead = misdated.has(row) ? misdated.get(row) : row;", "const asRead = row;");
+  // The quarter/year guard (check-revenue-quarter-year-guard) would also
+  // withhold the year-valued Q4, so it is switched off here: this mutation
+  // proves THIS rule is needed, not that some rule catches the row.
+  const mutated = extractRaw.replace("const asRead = misdated.has(row) ? misdated.get(row) : row;", "const asRead = row;")
+    .replace("q.val >= QUARTER_OF_YEAR_MAX * (y.val as number) && others", "false && others");
   check("the mutation applied", mutated !== extractRaw);
   const XM = await load(mutated);
   const m = q(XM.extractCompanyFacts("LHX", LHX), "2025-01-03");

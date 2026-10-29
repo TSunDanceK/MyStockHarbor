@@ -1433,6 +1433,10 @@ export const LAST_RESORT_REVENUE_TAG = "RevenuesNetOfInterestExpense";
  * two measures into their series (relay scan, write-earnings-audit-r1-scan).
  */
 export const UTILITY_REVENUE_TAG = "RegulatedAndUnregulatedOperatingRevenue";
+/** A quarter at or above this share of its own fiscal year is a year read as a quarter (when corroborated). */
+export const QUARTER_OF_YEAR_MAX = 0.8;
+/** A year below this share of the sum of its quarters is a quarter read as a year. */
+export const YEAR_OF_QUARTERS_MIN = 0.4;
 /**
  * THE OWNER'S RULING ON A FILER'S HEADLINE TOTAL (earnings audit r2), by symbol:
  * the concept that is its revenue for every year and quarter, as filed.
@@ -2401,6 +2405,86 @@ function extractCompanyFactsWith(
             ? `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters while ${fb!.tag} gives ${fb!.val}; withheld (scope mismatch)`
             : `revenue ${end}: derived Q4 ${q4.val} is under ${DERIVED_Q4_FLOOR * 100}% of the year's other quarters and the nine months ${nine} differ from those quarters' sum ${siblings.reduce((a, b) => a + b, 0)}; withheld (scope mismatch)`
       );
+    }
+
+    // ── A QUARTER THAT IS A YEAR, A YEAR THAT IS A QUARTER (earnings audit r2) ──
+    // The yoy60 census found 44 filers whose revenue moved about 4x or 1/4
+    // year on year: a year's value read as a quarter (PLXS Q4 FY2024 3,957.9M
+    // of a 3,957.9M year) or a quarter's read as a year (FIX FY2025 1,831.3M
+    // against quarters summing past 7,000M). Last, so it judges what is stored:
+    //   - FIRST a year below YEAR_OF_QUARTERS_MIN of the sum of the quarters
+    //     inside it (at least two) is refused: judged the other way round, a
+    //     year that is a quarter makes every real quarter look like most of it;
+    //   - then a quarter at or above QUARTER_OF_YEAR_MAX of the (remaining)
+    //     fiscal year that contains it is refused, WHEN the year's other
+    //     quarters also carry at least 1 - QUARTER_OF_YEAR_MAX of it (the
+    //     quarters over-count the year). A lumpy quarter whose siblings are
+    //     near zero (a biotech's one milestone) is the filer's real number.
+    // A refused cell reads Not reported; its derived Q4 goes with a refused year.
+    {
+      const inside = (q: FieldValue, y: FieldValue) => Boolean(q.covers && y.covers && y.covers[0] <= q.covers[0] && q.covers[1] <= y.covers[1]);
+      const yearOf = (q: FieldValue) => {
+        for (const [, ym] of yearCells) {
+          const y = ym.get("revenue");
+          if (y?.val != null && y.val > 0 && inside(q, y)) return y;
+        }
+        return null;
+      };
+      // The newest filing of the cell's own frame, concept and unit; null
+      // for a cell no row files whole (a differenced quarter).
+      const frameRows = (c: FieldValue) => {
+        if (!c.tag || !c.covers) return [];
+        const rows = (facts.facts?.[c.ns ?? "us-gaap"]?.[c.tag]?.units?.[c.unit ?? ""] ?? []) as { start?: string; end: string; val: number; filed?: string }[];
+        return rows.filter((r) => r.start === c.covers![0] && r.end === c.covers![1] && r.filed);
+      };
+      const filedOf = (c: FieldValue): string | null => frameRows(c).map((r) => r.filed as string).sort().at(-1) ?? null;
+      // A RECAST year: refiled at a different value (a later 10-K's
+      // comparative, discontinued operations taken out). Every year is filed
+      // after its own 10-Qs, so "newer" alone would convict FIX's misread year.
+      const recast = (c: FieldValue) => new Set(frameRows(c).map((r) => r.val)).size > 1;
+      const quartersIn = (y: FieldValue) => {
+        const out: { end: string; c: FieldValue }[] = [];
+        for (const [end, qm] of quarterCells) {
+          const c = qm.get("revenue");
+          if (c?.val != null && inside(c, y)) out.push({ end, c });
+        }
+        return out;
+      };
+      for (const [end, m] of yearCells) {
+        const y = m.get("revenue");
+        if (y?.val == null || !(y.val > 0)) continue;
+        const qs = quartersIn(y);
+        if (qs.length < 2) continue;
+        const sum = qs.reduce((a, o) => a + (o.c.val as number), 0);
+        if (y.val < YEAR_OF_QUARTERS_MIN * sum) {
+          // WHICH SIDE IS STALE (owner ruling, #934 option 2): a RECAST year
+          // filed after every quarter inside it makes the quarters the stale
+          // side, so they go, the derived Q4 with them (recast year minus
+          // stale nine months). Otherwise the year is the older or unrecast
+          // filing: the year goes.
+          const yf = filedOf(y);
+          const qf = qs.map((o) => filedOf(o.c)).filter((f): f is string => f != null).sort().at(-1) ?? null;
+          if (yf && qf && yf > qf && recast(y)) {
+            for (const o of qs) quarterCells.get(o.end)?.set("revenue", { ...o.c, val: null, derived: "withheld" });
+            notes.push(`revenue ${end}: year ${y.val} (filed ${yf}) is under ${YEAR_OF_QUARTERS_MIN * 100}% of its ${qs.length} quarters' sum ${sum} (newest filed ${qf}); quarters withheld (stale against a recast year)`);
+            continue;
+          }
+          m.set("revenue", { ...y, val: null, derived: "withheld" });
+          for (const o of qs) if (o.c.derived === "differenced" && o.end === end) quarterCells.get(o.end)?.set("revenue", { ...o.c, val: null, derived: "withheld" });
+          notes.push(`revenue ${end}: year ${y.val} is under ${YEAR_OF_QUARTERS_MIN * 100}% of its ${qs.length} quarters' sum ${sum}; withheld (a quarter read as a year)`);
+        }
+      }
+      for (const [end, m] of quarterCells) {
+        const q = m.get("revenue");
+        if (q?.val == null || !(q.val > 0)) continue;
+        const y = yearOf(q);
+        if (!y) continue;
+        const others = quartersIn(y).filter((o) => o.end !== end).reduce((a, o) => a + (o.c.val as number), 0);
+        if (q.val >= QUARTER_OF_YEAR_MAX * (y.val as number) && others >= (1 - QUARTER_OF_YEAR_MAX) * (y.val as number)) {
+          m.set("revenue", { ...q, val: null, derived: "withheld" });
+          notes.push(`revenue ${end}: quarter ${q.val} is ${Math.round((q.val / (y.val as number)) * 100)}% of its fiscal year ${y.val} while the other quarters carry ${others}; withheld (a year read as a quarter)`);
+        }
+      }
     }
   }
 
