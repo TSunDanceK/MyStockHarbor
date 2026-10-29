@@ -724,6 +724,8 @@ const TASKS = {
   "write-pickers-universe-list": { script: "scripts/pickers-universe-list.mjs", args: () => [], writes: true },
   // READS ONLY: has the committed re-read queue drained (#552 COWORK #39). ~4 commands.
   "write-reread-drain-probe": { script: "scripts/reread-drain-probe.mjs", args: () => [], writes: true },
+  // READ-ONLY: named symbols' queue, position and run under the shipped re-read rule. SYMBOLS=KEY,NTRS
+  "write-reread-position-probe": { script: "scripts/reread-position-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY: first-filers' stored sets (#552 COWORK #37). 1 MGET.
   "write-new-listing-sets": { script: "scripts/new-listing-sets-probe.mjs", args: () => [], writes: true },
   // THE ADS MAP'S PREVIEW FIGURES (#552 COWORK #45): EPS and shares per the
