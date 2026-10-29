@@ -528,6 +528,13 @@ const BALANCE_SHEET: FieldDef[] = ([
       "MarketableSecuritiesCurrent",
       "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
       "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
+      // KO's "Short-term investments" line (audit r4): 509M at 2026-04-03,
+      // and 10,574M cash + 509M = its 11,083M CashCashEquivalentsAndShort-
+      // TermInvestments subtotal, so the figure is current by its own total.
+      // AFTER the primaries above, so a filer that resolves today keeps its
+      // concept (ranked above the AFS and HTM lines it displaced them at
+      // CLOV, PFE and EG); the gated fallback below stays last.
+      "OtherShortTermInvestments",
       // AUDIT R4 FALLBACKS, ranked last and gated like the debt ones (see
       // STI_FALLBACK_TAGS in secExtract). NVDA filed MarketableSecuritiesCurrent
       // up to 2025-10-26 (49.12B) and DebtSecuritiesCurrent since (34.14B at
