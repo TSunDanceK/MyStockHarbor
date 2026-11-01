@@ -835,6 +835,31 @@
    "symbol": "SHOP",
    "requestedAt": "2026-10-23T00:00:00Z",
    "reason": "audit r3: SHOP's multi-class cover (Class A + Class B + Founder share) is now cited in data/sec/share-classes.json, so the cover count, and with it market cap, can be read"
+  },
+  {
+   "symbol": "UPS",
+   "requestedAt": "2026-11-01T19:30:00Z",
+   "reason": "#966 (share classes batch 2, merged 2026-11-01 19:15 UTC): UPS's multi-class cover is now cited in data/sec/share-classes.json, so the cover count, and with it market cap, can be read; the stored set was re-read at 2026-10-31T16:22 UTC under the #951 chains hash, before the entry landed, so the chain queue will not reach it again"
+  },
+  {
+   "symbol": "CME",
+   "requestedAt": "2026-11-01T19:30:00Z",
+   "reason": "#966 (share classes batch 2, merged 2026-11-01 19:15 UTC): CME's multi-class cover is now cited in data/sec/share-classes.json, so the cover count, and with it market cap, can be read; the stored set was re-read at 2026-11-01T16:21 UTC under the #951 chains hash, before the entry landed, so the chain queue will not reach it again"
+  },
+  {
+   "symbol": "DASH",
+   "requestedAt": "2026-11-01T19:30:00Z",
+   "reason": "#966 (share classes batch 2, merged 2026-11-01 19:15 UTC): DASH's multi-class cover is now cited in data/sec/share-classes.json, so the cover count, and with it market cap, can be read; the stored set was re-read at 2026-10-31T16:20 UTC under the #951 chains hash, before the entry landed, so the chain queue will not reach it again"
+  },
+  {
+   "symbol": "DDOG",
+   "requestedAt": "2026-11-01T19:30:00Z",
+   "reason": "#966 (share classes batch 2, merged 2026-11-01 19:15 UTC): DDOG's multi-class cover is now cited in data/sec/share-classes.json, so the cover count, and with it market cap, can be read; the stored set was re-read at 2026-11-01T16:22 UTC under the #951 chains hash, before the entry landed, so the chain queue will not reach it again"
+  },
+  {
+   "symbol": "RKT",
+   "requestedAt": "2026-11-01T19:30:00Z",
+   "reason": "#966 (share classes batch 2, merged 2026-11-01 19:15 UTC): RKT's multi-class cover is now cited in data/sec/share-classes.json, so the cover count, and with it market cap, can be read; the stored set was re-read at 2026-10-31T16:20 UTC under the #951 chains hash, before the entry landed, so the chain queue will not reach it again"
   }
  ]
 }
