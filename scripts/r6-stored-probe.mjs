@@ -31,7 +31,7 @@ if (mode === "cells") {
     console.log(`\n=== ${s} c=${set?.c ?? "-"} verified ${e.verifiedAt ? new Date(e.verifiedAt).toISOString().slice(0, 16) : "never"} needsReverify=${Boolean(e.needsReverify)}`);
     if (!set) { console.log("  no stored set"); return; }
     console.log(`  ff: ${ref(set.ff)}\n  lg: ${ref(set.lg)}`);
-    for (const [kind, list, n] of [["Y", set.years, 3], ["Q", set.quarters, 10]]) {
+    for (const [kind, list, n] of [["Y", set.years, 3], ["Q", set.quarters, 14]]) {
       for (const p of list.slice(0, n)) {
         const cells = fields.map((k) => { const c = C.cell(p, k); return `${k}=${c.val ?? "—"}${c.val != null && c.derived ? `(${c.derived})` : ""}`; });
         let extra = "";
