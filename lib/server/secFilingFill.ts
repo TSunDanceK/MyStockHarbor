@@ -75,6 +75,79 @@ export function isLagging(set: Pick<StoredFactSet, "quarters" | "years">, filing
   return newest === null || filing.reportDate > newest;
 }
 
+// ── EVERY FILING THE FEED IS MISSING, NOT ONLY THE NEWEST (audit r6, NEE) ──
+//
+// Reading only the newest filing loses a quarter whenever the feed is two
+// filings behind. NEE's companyfacts stopped at Q1 2026; the job had filled Q2
+// from the Q2 10-Q, then rebuilt from companyfacts + the Q3 10-Q alone, and a
+// Q3 10-Q carries no Q2 three months, so Q2 went blank (CNP, D, DLR, PLD and 9
+// more the same). The feed can also skip a quarter it is not behind on: EIX's
+// companyfacts has Q3 2026 and no Q2.
+
+/** How many filings one check may read for one filer. */
+export const FILING_READS_PER_FILER = 4;
+/** A 10-Q older than this before the newest period is not looked for. */
+export const FILING_HOLE_WINDOW_DAYS = 400;
+
+/** Every original 10-Q/10-K/20-F/40-F, oldest period first; one per period (the latest filed). */
+export function periodicFilings(subs: Submissions | null | undefined): FilingRef[] {
+  const r = subs?.filings?.recent;
+  if (!r) return [];
+  const n = Array.isArray(r.accessionNumber) ? r.accessionNumber.length : 0;
+  const byPeriod = new Map<string, FilingRef>();
+  for (let i = 0; i < n; i++) {
+    const form = String(r.form?.[i] ?? "");
+    if (!FILL_FORMS.has(form)) continue;
+    const filed = String(r.filingDate?.[i] ?? "");
+    const reportDate = String(r.reportDate?.[i] ?? "");
+    const accn = String(r.accessionNumber?.[i] ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(filed) || !/^\d{4}-\d{2}-\d{2}$/.test(reportDate) || !accn) continue;
+    const had = byPeriod.get(reportDate);
+    if (!had || filed > had.filed) byPeriod.set(reportDate, { form, accn, filed, reportDate });
+  }
+  return [...byPeriod.values()].sort((a, b) => a.reportDate.localeCompare(b.reportDate));
+}
+
+/** A quarter end, and whether it carries revenue or net income. */
+export type QuarterEnd = { end: string; filled: boolean };
+
+const DAY_MS = 86_400_000;
+const near = (a: string, b: string, days: number) => Math.abs(Date.parse(a) - Date.parse(b)) <= days * DAY_MS;
+
+/**
+ * THE FILINGS A SET NEEDS READ, oldest first, at most FILING_READS_PER_FILER
+ * (the newest of them when there are more). PURE.
+ *   - every filing for a period after the set's newest one (the feed is behind);
+ *   - a 10-Q inside the window whose quarter the set does not carry with
+ *     revenue or net income (the feed skipped it, or an earlier fill lost it).
+ * 10-Ks are not hole-checked: a year's Q4 is derived, never filed as a quarter.
+ */
+export function filingsToRead(filings: FilingRef[], quarters: QuarterEnd[], newestEnd: string | null): FilingRef[] {
+  const out = filings.filter((f) => {
+    if (newestEnd === null || f.reportDate > newestEnd) return true;
+    if (f.form !== "10-Q") return false;
+    if (Date.parse(newestEnd) - Date.parse(f.reportDate) > FILING_HOLE_WINDOW_DAYS * DAY_MS) return false;
+    return !quarters.some((q) => q.filled && near(q.end, f.reportDate, 10));
+  });
+  return out.slice(-FILING_READS_PER_FILER);
+}
+
+/**
+ * DOES A FRESH READ DROP A QUARTER THE PRIOR SET CARRIES? PURE.
+ *
+ * sec-facts keeps a filled set while the feed is behind its filing period
+ * (keepFilled). A filled middle quarter needs the same protection: EIX's feed
+ * carries Q3 and not Q2, so a feed-only re-read is not "behind" and would blank
+ * the Q2 the filing job read from the Q2 10-Q. Only quarters inside the window
+ * before the prior's newest period, and only ones carrying revenue or net income.
+ */
+export function dropsFilledQuarter(prior: QuarterEnd[], fresh: QuarterEnd[], newestEnd: string | null): boolean {
+  if (newestEnd === null) return false;
+  return prior.some((p) => p.filled
+    && Date.parse(newestEnd) - Date.parse(p.end) <= FILING_HOLE_WINDOW_DAYS * DAY_MS
+    && !fresh.some((f) => f.filled && near(f.end, p.end, 10)));
+}
+
 /** The instance SEC extracts from an inline filing, from the folder listing. */
 export function pickInstanceName(names: string[]): string | null {
   return (

@@ -12,14 +12,14 @@ import { withInstanceEps } from "@/lib/server/secInstanceEps";
 import { withClassEps } from "@/lib/server/secClassEps";
 import { applyRereadRequests, SEC_REREAD_REQUESTS } from "@/lib/server/secRereadRequests";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
-import { keptWithNewer, mustWriteOver, priorStandsForFx, toStoredSet } from "@/lib/server/secFactBuild";
+import { keptWithNewer, mustWriteOver, priorStandsForFx, storedQuarterEnds, toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "@/lib/server/secWriteGate";
 import type { Submissions } from "@/lib/server/secReportDates";
-import { newestStoredEnd } from "@/lib/server/secFilingFill";
+import { dropsFilledQuarter, newestStoredEnd } from "@/lib/server/secFilingFill";
 import { buildAndWriteReportDates, carryEventQueued, reportDatesQueue, withPredecessorSubmissions } from "@/lib/server/secReportDatesWrite";
 import dueStripCut from "@/data/due-strip.json";
 import rewindowPriorityFile from "@/data/sec/rewindow-priority.json";
@@ -666,7 +666,10 @@ export async function GET(req: NextRequest) {
       // filing job keeps its own state (secFilingJob), and the set's `ff`/`lg`
       // stamp already names the filing and its period.
       const freshNewest = newestStoredEnd(fresh) ?? "";
-      const keepFilled = Boolean(prior?.ff && freshNewest < prior.ff.reportDate);
+      // ...AND NOT BLANKED IN THE MIDDLE EITHER (audit r6, EIX): a quarter the
+      // feed skipped and the filing job read is kept while the feed lacks it.
+      const keepFilled = Boolean(prior?.ff && (freshNewest < prior.ff.reportDate
+        || dropsFilledQuarter(storedQuarterEnds(prior), storedQuarterEnds(fresh), newestStoredEnd(prior))));
       // The "neither source has it" notice rides along the same way.
       const keepNotice = Boolean(prior?.lg && freshNewest < prior.lg.reportDate);
       // ── A RATE SERIES THAT FAILED TO LOAD NEVER BLANKS A STORED SET ───────
