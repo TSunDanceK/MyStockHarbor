@@ -4,6 +4,7 @@
 //     Q4 also prints secValuation.derivedQ4Eps and the operands it used.
 //   SYMBOLS="gaps"  every populated stored set whose two newest quarters are more
 //     than a quarter apart, with its ff/lg (the NEE shape).
+//   SYMBOLS="rows:ALL|NetIncomeLoss|2024-01-01|2025-12-31"  raw companyfacts duration rows in a window.
 //   relay task: write-r6-stored-probe   Redis cost: 1 GET + 1 MGET per 25 symbols.
 import "./lib/register-ts-here.mjs";
 import fs from "node:fs";
@@ -21,7 +22,29 @@ const ref = (f) => (f ? `${f.form ?? "?"} ${f.accn ?? "?"} period ${f.reportDate
 const day = 864e5;
 const label = (p) => `${p.fp ?? "?"}${p.fy ?? ""}`;
 
-if (mode === "cells") {
+if (mode === "rows") {
+  // SYMBOLS="rows:ALL|NetIncomeLoss,ProfitLoss|2024-01-01|2025-12-31": every duration row of
+  // the named concepts ending in the window, straight from companyfacts (SEC only).
+  const [sym, conceptArg, from, to] = rest.split("|");
+  const cik = manifest?.symbols?.[sym]?.cik;
+  const facts = await (await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${String(cik).padStart(10, "0")}.json`,
+    { headers: { "User-Agent": "MyStockHarbor/1.0 (+https://www.mystockharbor.com; audit r6 rows)" } })).json();
+  for (const k of conceptArg.split(",")) {
+    const ns = Object.keys(facts.facts ?? {}).find((n) => facts.facts[n][k]);
+    if (!ns) { console.log(`\n${k}: not filed`); continue; }
+    console.log(`\n${ns}:${k}`);
+    const seen = new Set();
+    for (const [u, rows] of Object.entries(facts.facts[ns][k].units)) {
+      for (const r of rows.filter((r) => r.end >= from && r.end <= to).sort((a, b) => a.end.localeCompare(b.end) || String(a.start).localeCompare(String(b.start)) || a.filed.localeCompare(b.filed))) {
+        const key = `${r.start}|${r.end}|${r.val}|${r.accn}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const days = r.start ? Math.round((Date.parse(r.end) - Date.parse(r.start)) / day) + 1 : 0;
+        console.log(`  [${u}] ${r.start ?? "-"}..${r.end} (${days}d) ${r.val} ${r.form} ${r.accn} fp=${r.fp}${r.fy} filed ${r.filed}${r.frame ? ` ${r.frame}` : ""}`);
+      }
+    }
+  }
+} else if (mode === "cells") {
   const [symArg, fieldArg = "netIncome,epsDiluted,sharesDiluted"] = rest.split("|");
   const syms = symArg.split(",").filter(Boolean);
   const fields = fieldArg.split(",").filter(Boolean);
