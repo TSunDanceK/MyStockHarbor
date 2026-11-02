@@ -45,6 +45,17 @@ const runD = (M) => {
   check("no EPS YoY moves (growth rows and the snapshot)", r.plain.growth.length > 0 && yoys(r.plain) === yoys(r.withD), yoys(r.withD).slice(0, 80));
   const filed = S.withDerivedQ4Eps({ val: 2.5, derived: "as-filed", derivedNote: null, key: "epsDiluted", label: "x" }, { fp: "Q4" }, () => 1);
   check("a filed Q4 EPS is never replaced", filed.val === 2.5);
+  // A YEAR THAT MIXES PROFIT AND LOSS (audit r6, VRTX): withheld, with its reason.
+  const blank = { val: null, derived: null, derivedNote: null, key: "epsDiluted", label: "x" };
+  const held = S.withDerivedQ4Eps(blank, { fp: "Q4" }, () => null, () => true);
+  check("a mixed-sign year: the cell is withheld with the plain note, no number",
+    held.val === null && held.derived === "withheld" && held.derivedNote === S.Q4_EPS_MIXED_SIGN_NOTE && /^Not available: /.test(S.Q4_EPS_MIXED_SIGN_NOTE));
+  check("...and an unmixed year with no derivation stays blank as before", S.withDerivedQ4Eps(blank, { fp: "Q4" }, () => null, () => false).derived === null);
+  check("...wired: the view passes the page's withheldQ4Eps, and the page passes secValuation.q4EpsSignsMixed",
+    /opts\.withheldQ4Eps \? \(q\) => opts\.withheldQ4Eps!\(adjusted, q\) : null/.test(fs.readFileSync("lib/server/secEarningsView.ts", "utf8"))
+      && /withheldQ4Eps: q4EpsSignsMixed/.test(fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8")));
+  check("...and the card reads a withheld EPS as \"Not available\", the note on tap",
+    /text=\{EPS_LINES\.has\(cell\.key\) \? NOT_AVAILABLE : NOT_REPORTED\} reason=\{cell\.derivedNote\}/.test(fs.readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8")));
   const M2 = await loadSnapshot(once("  if (cellIn.val !== null || !p || p.fp !== \"Q4\" || !derive) return cellIn;", "  return cellIn;"));
   check("mutant (helper disabled) is caught", runD(M2).after?.val == null);
   check("computed revenue has its own note", /^Computed: the sum of the revenue lines/.test(S.derivationNote("computed", { key: "revenue" }) ?? ""));

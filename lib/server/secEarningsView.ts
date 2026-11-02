@@ -751,6 +751,8 @@ export function withDerivedLiabilities(cellIn: ViewCell, at: StoredPeriod | null
 
 /** The derived Q4 EPS note (#552 COWORK #241 (d)), owner's wording. */
 export const Q4_EPS_DERIVED_NOTE = "Derived: fiscal year less Q1–Q3";
+/** A Q4 EPS withheld because the year mixes profit and loss (audit r6, VRTX). */
+export const Q4_EPS_MIXED_SIGN_NOTE = "Not available: the company does not file a fourth-quarter figure, and this year mixes profitable and loss-making periods, so the full-year figure minus the first three quarters would not give a reliable result.";
 
 /**
  * Q4 DILUTED EPS, DERIVED where the filing states none (#552 COWORK #241 (d)).
@@ -763,8 +765,11 @@ export function withDerivedQ4Eps(
   cellIn: ViewCell,
   p: StoredPeriod | null | undefined,
   derive: ((q4: StoredPeriod) => number | null) | null,
+  withheld: ((q4: StoredPeriod) => boolean) | null = null,
 ): ViewCell {
   if (cellIn.val !== null || !p || p.fp !== "Q4" || !derive) return cellIn;
+  // SAID, NOT BLANK: the reason is on tap under "Not available".
+  if (withheld?.(p)) return { ...cellIn, derived: "withheld", derivedNote: Q4_EPS_MIXED_SIGN_NOTE };
   const d = derive(p);
   if (d === null || !Number.isFinite(d)) return cellIn;
   return { ...cellIn, val: d, derived: "computed", derivedNote: Q4_EPS_DERIVED_NOTE };
@@ -1421,6 +1426,8 @@ export function buildSecEarningsView(
      * is never used for a YoY or the score.
      */
     deriveQ4Eps?: (set: StoredFactSet, q4: StoredPeriod) => number | null;
+    /** The Q4s derivation withholds for mixed signs (secValuation.q4EpsSignsMixed), so the cell says why. */
+    withheldQ4Eps?: (set: StoredFactSet, q4: StoredPeriod) => boolean;
   } = {},
 ): SecEarningsView | null {
   // PER-SHARE FIGURES ON TODAY'S SHARE BASIS (#552 COWORK #187 §1): a split the
@@ -1429,7 +1436,8 @@ export function buildSecEarningsView(
   const annualFiler = opts.annualForm ?? null;
   const adjusted = set;
   const q4EpsCell = (p: StoredPeriod | null | undefined, label: string): ViewCell =>
-    withDerivedQ4Eps(view(p, "epsDiluted", label), p, opts.deriveQ4Eps ? (q) => opts.deriveQ4Eps!(adjusted, q) : null);
+    withDerivedQ4Eps(view(p, "epsDiluted", label), p, opts.deriveQ4Eps ? (q) => opts.deriveQ4Eps!(adjusted, q) : null,
+      opts.withheldQ4Eps ? (q) => opts.withheldQ4Eps!(adjusted, q) : null);
   // ── A SET THAT IS NOT IN DOLLARS DOES NOT RENDER ─────────────────────────
   //
   // `cur` non-USD with `fx` absent means the filer reports in a currency the

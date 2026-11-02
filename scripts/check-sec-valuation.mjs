@@ -300,6 +300,35 @@ console.log("\n2b. FISCAL Q4 IS DERIVED; ANNUAL-ONLY FILERS KEEP THE YEAR (#552 
     "",
     (m) => m.valuationInputs(pinSet(converted), PIN_TODAY, { annualForm: "10-K" }).eps === null
   );
+
+  // A YEAR THAT MIXES PROFIT AND LOSS (audit r6). A loss period's EPS is on its
+  // basic count, a profitable one's on its diluted count, so they do not
+  // subtract. VRTX FY2024 and EIX FY2024 as filed; Q4 net income differenced.
+  const NI = mod.SEC_FIELD_INDEX.netIncome;
+  const fy24 = (rows, year, q4ni) => {
+    const qs = rows.map(([e, fp, eps, sh]) => q(2024, fp, e, eps, sh));
+    const q4 = q(2024, "Q4", "2024-12-31", null);
+    q4.v[NI] = q4ni;
+    return set({ symbol: "PIN", quarters: [q4, ...qs], years: [q(2024, "FY", "2024-12-31", year[0], year[1])] });
+  };
+  const VRTX = fy24([["2024-09-30", "Q3", 4.01, 261.0e6], ["2024-06-30", "Q2", -13.92, 258.1e6], ["2024-03-31", "Q1", 4.21, 261.1e6]], [-2.08, 257.9e6], 913.0e6);
+  const EIX = fy24([["2024-09-30", "Q3", 1.32, 390e6], ["2024-06-30", "Q2", 1.13, 388e6], ["2024-03-31", "Q1", -0.03, 385e6]], [3.31, 388e6], 340e6);
+  const q4Of = (s_) => s_.quarters[0];
+  check("VRTX FY2024 (a Q2 loss inside a loss year): the derived Q4 is withheld, not 3.62",
+    mod.q4EpsSignsMixed(VRTX, q4Of(VRTX)) && mod.derivedQ4Eps(VRTX, q4Of(VRTX)) === null);
+  check("EIX FY2024 (a -0.03 Q1 inside a profitable year): withheld, not 0.89",
+    mod.q4EpsSignsMixed(EIX, q4Of(EIX)) && mod.derivedQ4Eps(EIX, q4Of(EIX)) === null);
+  const allProfit = fy24([["2024-09-30", "Q3", 1.32, 390e6], ["2024-06-30", "Q2", 1.13, 388e6], ["2024-03-31", "Q1", 0.03, 385e6]], [3.31, 388e6], 340e6);
+  check("the same year with every period profitable still derives (3.31 − 2.48 = 0.83)",
+    !mod.q4EpsSignsMixed(allProfit, q4Of(allProfit)) && near(mod.derivedQ4Eps(allProfit, q4Of(allProfit)), 0.83, 1e-9));
+  const q4Loss = fy24([["2024-09-30", "Q3", 1.32, 390e6], ["2024-06-30", "Q2", 1.13, 388e6], ["2024-03-31", "Q1", 0.03, 385e6]], [2.1, 388e6], -10e6);
+  check("a Q4 net loss inside an otherwise profitable year is withheld too", mod.derivedQ4Eps(q4Loss, q4Of(q4Loss)) === null);
+  await underMutation(
+    "the mixed-sign guard removed",
+    "  if (q4EpsSignsMixed(set, q4)) return null;\n",
+    "",
+    (m) => m.derivedQ4Eps(VRTX, q4Of(VRTX)) === null
+  );
 }
 
 console.log("\n3. A MULTI-CLASS SHARE COUNT CANNOT BE PICKED");

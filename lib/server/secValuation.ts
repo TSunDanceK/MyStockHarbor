@@ -305,6 +305,29 @@ function fourConsecutiveQuarters(set: Pick<StoredFactSet, "quarters" | "years" |
 export const Q4_SHARE_BASIS_TOLERANCE = 0.2;
 
 /**
+ * THE YEAR AND ITS QUARTERS DO NOT SHARE A SIGN (audit r6, VRTX FY2024).
+ *
+ * A loss period's diluted EPS is on its BASIC share count (the dilutive shares
+ * would reduce the loss, so they are left out), and a profitable one's on its
+ * diluted count. Per-share figures on two share bases do not subtract: VRTX's
+ * FY2024 -2.08 less Q1-Q3 (4.21, -13.92, 4.01) gives 3.62, while Q4's 913.0M on
+ * Q3's 261.0M diluted shares is about 3.50. EIX FY2024 has a -0.03 Q1 inside a
+ * profitable year. So the derivation is withheld when the fiscal year, Q1-Q3 or
+ * Q4's own differenced net income (where stored) carry opposite signs.
+ */
+export function q4EpsSignsMixed(
+  set: Pick<StoredFactSet, "quarters" | "years">,
+  q4: StoredPeriod,
+): boolean {
+  if (q4.fp !== "Q4" || q4.fy == null) return false;
+  const year = set.years.find((y) => y.fy === q4.fy && y.e === q4.e);
+  const q = (fp: string) => set.quarters.find((p) => p.fy === q4.fy && p.fp === fp);
+  const vals = [valueOf(year, "epsDiluted"), ...["Q1", "Q2", "Q3"].map((fp) => valueOf(q(fp), "epsDiluted")), valueOf(q4, "netIncome")]
+    .filter((v): v is number => v !== null);
+  return vals.some((v) => v < 0) && vals.some((v) => v > 0);
+}
+
+/**
  * FISCAL Q4 DILUTED EPS, DERIVED: the fiscal year's diluted EPS minus Q1, Q2
  * and Q3's (#552 COWORK #8, method (a)).
  *
@@ -328,6 +351,7 @@ export const Q4_SHARE_BASIS_TOLERANCE = 0.2;
  *     only this test's input, never part of the EPS;
  *   - the set is in USD as filed: a converted set carries each period at its
  *     own rate, and a year minus three quarters would mix four rates.
+ *   - the year, Q1-Q3 and Q4's net income share a sign (q4EpsSignsMixed).
  */
 export function derivedQ4Eps(
   set: Pick<StoredFactSet, "quarters" | "years" | "cur">,
@@ -343,6 +367,7 @@ export function derivedQ4Eps(
   const q3 = q("Q3"), q2 = q("Q2"), q1 = q("Q1");
   if (!q1 || !q2 || !q3) return null;
   if (!isConsecutive(q4, q3) || !isConsecutive(q3, q2) || !isConsecutive(q2, q1)) return null;
+  if (q4EpsSignsMixed(set, q4)) return null;
   const periods = [year, q1, q2, q3];
   const shareKey = periods.every((p) => valueOf(p, "sharesDiluted") !== null) ? "sharesDiluted"
     : periods.every((p) => valueOf(p, "sharesDiluted") === null && valueOf(p, "sharesBasic") !== null) ? "sharesBasic"
