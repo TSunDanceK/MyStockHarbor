@@ -71,7 +71,7 @@ if (mode === "rows") {
 } else {
   const syms = Object.entries(manifest?.symbols ?? {}).filter(([, e]) => e.cik && e.contentHash !== null).map(([s]) => s).sort();
   let read = 0;
-  const hits = [];
+  const hits = [], holes = [];
   for (let i = 0; i < syms.length; i += 25) {
     const chunk = syms.slice(i, i + 25);
     const vals = await redis.mget(...chunk.map((s) => `${FACTS}:${s}`));
@@ -82,10 +82,18 @@ if (mode === "rows") {
       const [a, b] = v.quarters;
       const gap = b ? (Date.parse(a.e) - Date.parse(b.e)) / day : null;
       if (gap !== null && gap > 120) hits.push(`  ${s.padEnd(7)} newest ${label(a)} ${a.e} (filed ${a.f ?? "-"}), next ${label(b)} ${b.e}, gap ${Math.round(gap)}d | ff ${ref(v.ff)} | lg ${ref(v.lg)}`);
+      // AN EMPTY ROW BETWEEN TWO FILLED ONES (NEE): among the newest four quarters,
+      // one with neither revenue nor net income while a newer one has net income.
+      const four = v.quarters.slice(0, 4);
+      const empty = four.findIndex((q, k) => k > 0 && C.valueOf(q, "netIncome") === null && C.valueOf(q, "revenue") === null
+        && four.slice(0, k).some((n) => C.valueOf(n, "netIncome") !== null));
+      if (empty > 0) holes.push(`  ${s.padEnd(7)} empty ${label(four[empty])} ${four[empty].e} (row from ${four[empty].a ?? "-"}) under ${label(four[0])} ${four[0].e} | ff ${ref(v.ff)}`);
     });
   }
   console.log(`populated sets read: ${read} of ${syms.length}`);
   console.log(`two newest quarters more than 120 days apart: ${hits.length}`);
   for (const h of hits) console.log(h);
   console.log(`  of which carry ff: ${hits.filter((h) => !h.includes("| ff - |")).length}`);
+  console.log(`\nan empty quarter (no revenue, no net income) under a newer filled one, newest four: ${holes.length}`);
+  for (const h of holes) console.log(h);
 }
