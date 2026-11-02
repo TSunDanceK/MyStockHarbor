@@ -114,6 +114,24 @@ for (let i = 0; i < all.length; i += 25) {
       const cf = await withPredecessorFacts(cik, await fetchers.companyFacts(cik), fetchers.companyFacts);
       const feedOnly = byEnd(await Build.toStoredSet(extractForSymbol(symbol, cf), defaultSources(), new Map()));
       const a = byEnd(live), b = byEnd(next);
+      // THE WINNING TAG ON EACH SIDE, for a changed cell: both merges rebuilt from
+      // the cached responses (main: the newest filing; branch: every one it reads).
+      const baseX = extractForSymbol(symbol, cf);
+      const baseEnd = baseX.quarters.concat(baseX.years).map((p) => p.end).sort().at(-1) ?? null;
+      const mergedWith = async (refs) => {
+        let m = cf;
+        for (const r of [...refs].reverse()) {
+          const xml = await fetchers.instance(cik, r);
+          if (xml) m = Fill.mergeFillOnly(m, Fill.instanceToFacts(xml, r).facts, baseX.reportingCurrency).merged;
+        }
+        return extractForSymbol(symbol, m);
+      };
+      const toRead = Fill.filingsToRead(filings, baseX.quarters.map((p) => ({ end: p.end, filled: [SEC_FIELD_KEYS.indexOf("revenue"), SEC_FIELD_KEYS.indexOf("netIncome")].some((i) => (p.values[i]?.val ?? null) !== null) })), baseEnd);
+      let tagsOld = null, tagsNew = null;
+      const tagOf = (x, end, key) => {
+        const p = [...x.quarters, ...x.years].find((q) => q.end === end);
+        return p?.values[SEC_FIELD_KEYS.indexOf(key)]?.tag ?? "-";
+      };
       const counts = { filled: 0, changed: 0, blanked: 0, drift: 0 };
       const samples = [];
       for (const k of new Set([...a.keys(), ...b.keys()])) {
@@ -125,6 +143,12 @@ for (let i = 0; i < all.length; i += 25) {
           const kind = va === null ? "filled" : vb === null ? "blanked" : "changed";
           counts[kind]++;
           const how = (p) => `${Codec.cell(p, key).derived ?? "-"} ${p?.a ?? "-"}`;
+          if (kind === "changed") {
+            tagsOld ??= writes(o) && newest && baseEnd !== null && newest.reportDate > baseEnd ? await mergedWith([newest]) : baseX;
+            tagsNew ??= await mergedWith(toRead);
+            const end = (pb ?? pa).e;
+            samples.push(`changed-tag ${label(pb ?? pa)} ${key}: main ${tagOf(tagsOld, end, key)} → branch ${tagOf(tagsNew, end, key)}`);
+          }
           if (samples.length < 8 || kind !== "filled") samples.push(`${kind} ${label(pb ?? pa)} ${key} ${fmt(va)} [${how(pa)}] → ${fmt(vb)} [${how(pb)}]; feed alone ${fmt(Codec.valueOf(pf, key))}`);
         }
       }
