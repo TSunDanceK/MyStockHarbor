@@ -20,7 +20,7 @@
 // manifest at :20, and two jobs writing one key is a lost update.
 import { Redis } from "@upstash/redis";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
-import type { FilingRef, StoredFactSet, StoredPeriod } from "./secFactCodec";
+import { storedQuarterEnds, type FilingRef, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
 import type { Submissions } from "./secReportDates";
 import type { CompanyFacts, ExtractResult } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
@@ -28,7 +28,7 @@ import { withPredecessorFacts } from "./secSuccession";
 import { withClassCover } from "./secCoverClasses";
 import { withInstanceEps } from "./secInstanceEps";
 import { withClassEps } from "./secClassEps";
-import { priorStandsForFx, storedQuarterEnds, toStoredSet } from "./secFactBuild";
+import { priorStandsForFx, toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { sicChangeOf, type SicChange } from "./secSicChange";
 import { filingsToRead, instanceToFacts, isLagging, mergeFillOnly, newestPeriodicFiling, newestStoredEnd, periodicFilings, type QuarterEnd } from "./secFilingFill";

@@ -162,9 +162,9 @@ console.log("\n4. a companyfacts hole (EIX): the skipped quarter is read, and ke
   check("stamped with the 10-Q that supplied it", out.set.ff?.accn === Q2.accn && out.lag?.reportDate === "2026-06-30");
   const feedOnly = await storedFrom(FEED_HOLE);
   check("sec-facts keeps it: a feed-only read drops a filled quarter",
-    Fill.dropsFilledQuarter(Build.storedQuarterEnds(out.set), Build.storedQuarterEnds(feedOnly), Fill.newestStoredEnd(out.set)));
+    Fill.dropsFilledQuarter(Codec.storedQuarterEnds(out.set), Codec.storedQuarterEnds(feedOnly), Fill.newestStoredEnd(out.set)));
   check("...and lets go once the feed carries Q2",
-    !Fill.dropsFilledQuarter(Build.storedQuarterEnds(out.set), Build.storedQuarterEnds(out.set), Fill.newestStoredEnd(out.set)));
+    !Fill.dropsFilledQuarter(Codec.storedQuarterEnds(out.set), Codec.storedQuarterEnds(out.set), Fill.newestStoredEnd(out.set)));
   const FACTS = fs.readFileSync("app/api/jobs/sec-facts/route.ts", "utf8");
   check("wiring: keepFilled covers a dropped filled quarter as well as a feed behind the filing",
     /const keepFilled = Boolean\(prior\?\.ff && \(freshNewest < prior\.ff\.reportDate\s*\|\| dropsFilledQuarter\(storedQuarterEnds\(prior\), storedQuarterEnds\(fresh\), newestStoredEnd\(prior\)\)\)\);/.test(FACTS));
@@ -188,8 +188,8 @@ console.log("\n6. mutations");
   check("MUTATION: newest filing only (the old rule) → Q2 blank again, caught", ni(out.set, "2026-06-30") == null);
   const NoHole = await loadAt("filing-fill", once(FILL_SRC, `    if (f.form !== "10-Q") return false;`, `    return false;`));
   check("MUTATION: hole check removed → the NEE damage is not seen, caught",
-    NoHole.filingsToRead([K25, Q1, Q2, Q3], Build.storedQuarterEnds(damaged), Fill.newestStoredEnd(damaged)).length === 0
-      && Fill.filingsToRead([K25, Q1, Q2, Q3], Build.storedQuarterEnds(damaged), Fill.newestStoredEnd(damaged)).length === 1);
+    NoHole.filingsToRead([K25, Q1, Q2, Q3], Codec.storedQuarterEnds(damaged), Fill.newestStoredEnd(damaged)).length === 0
+      && Fill.filingsToRead([K25, Q1, Q2, Q3], Codec.storedQuarterEnds(damaged), Fill.newestStoredEnd(damaged)).length === 1);
 }
 
 if (failures) {

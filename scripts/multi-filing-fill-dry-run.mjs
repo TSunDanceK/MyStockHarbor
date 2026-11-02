@@ -102,7 +102,7 @@ for (let i = 0; i < all.length; i += 25) {
       const subs = await fetchers.submissions(cik);
       const filings = Fill.periodicFilings(subs);
       const newest = Fill.newestPeriodicFiling(subs);
-      const gate = Fill.isLagging(stored, newest) || Fill.filingsToRead(filings, Build.storedQuarterEnds(stored), Fill.newestStoredEnd(stored)).length > 0;
+      const gate = Fill.isLagging(stored, newest) || Fill.filingsToRead(filings, Codec.storedQuarterEnds(stored), Fill.newestStoredEnd(stored)).length > 0;
       if (!gate) { if (WATCH.has(symbol)) watched.push(`  ${symbol.padEnd(5)} not acted on: current and complete (ff ${stored.ff?.accn ?? "-"})`); continue; }
       totals.acted++;
       const prior = filingState[symbol] ?? undefined;
@@ -162,7 +162,7 @@ for (let i = 0; i < all.length; i += 25) {
         }
       }
       for (const k of ["filled", "changed", "blanked", "drift", "aged"]) totals[k] += counts[k];
-      const reads = Fill.filingsToRead(filings, Build.storedQuarterEnds(stored), Fill.newestStoredEnd(stored)).map((f) => `${f.form} ${f.reportDate}`);
+      const reads = Fill.filingsToRead(filings, Codec.storedQuarterEnds(stored), Fill.newestStoredEnd(stored)).map((f) => `${f.form} ${f.reportDate}`);
       const st = filingState[symbol];
       const pickup = st?.lag ? `lag recorded (${st.lag.kind}): re-checked daily` : "no lag recorded: checked when the daily index sees a new filing";
       const line = `  ${symbol.padEnd(6)} main ${o.kind} → branch ${n.kind} | filled ${counts.filled}, changed ${counts.changed}, blanked ${counts.blanked}, drift ${counts.drift}, aged out of the window ${counts.aged} | gate reads ${reads.join(", ") || "-"} | ${pickup}`;

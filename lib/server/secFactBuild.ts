@@ -17,8 +17,7 @@ import {
   type FxSeries,
   type FxSource,
 } from "./fxRates";
-import { contentHashOf, encodeFactSet, valueOf, type StoredFactSet } from "./secFactCodec";
-import type { QuarterEnd } from "./secFilingFill";
+import { contentHashOf, encodeFactSet, type StoredFactSet } from "./secFactCodec";
 import { needsReread } from "./secStaleness";
 import { coverIsUsable } from "./secCoverAuto";
 import { COVER_SHARES_MAX_AGE_DAYS } from "./secValuation";
@@ -255,9 +254,4 @@ export function conversionGained(
   const stillRefused = new Set(fresh.fx.refused);
   const present = new Set([...fresh.quarters, ...fresh.years, ...fresh.instants].map((p) => p.e));
   return before.some((end) => !stillRefused.has(end) && present.has(end));
-}
-
-/** A stored set's quarters for secFilingFill: each end, and whether it carries revenue or net income. */
-export function storedQuarterEnds(set: Pick<StoredFactSet, "quarters">): QuarterEnd[] {
-  return set.quarters.map((q) => ({ end: q.e, filled: valueOf(q, "revenue") !== null || valueOf(q, "netIncome") !== null }));
 }
