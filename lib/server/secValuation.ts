@@ -312,8 +312,13 @@ export const Q4_SHARE_BASIS_TOLERANCE = 0.2;
  * diluted count. Per-share figures on two share bases do not subtract: VRTX's
  * FY2024 -2.08 less Q1-Q3 (4.21, -13.92, 4.01) gives 3.62, while Q4's 913.0M on
  * Q3's 261.0M diluted shares is about 3.50. EIX FY2024 has a -0.03 Q1 inside a
- * profitable year. So the derivation is withheld when the fiscal year, Q1-Q3 or
- * Q4's own differenced net income (where stored) carry opposite signs.
+ * profitable year. So the earnings page withholds its derived Q4 cell when the
+ * fiscal year, Q1-Q3 or Q4's own differenced net income (where stored) carry
+ * opposite signs.
+ *
+ * THE CELL ONLY, NOT derivedQ4Eps. The trailing-twelve-month EPS also sums a
+ * derived Q4, and refusing it there takes the TTM EPS off several hundred
+ * filers (the audit r6 dry run); that is a separate decision, not this rule.
  */
 export function q4EpsSignsMixed(
   set: Pick<StoredFactSet, "quarters" | "years">,
@@ -351,7 +356,6 @@ export function q4EpsSignsMixed(
  *     only this test's input, never part of the EPS;
  *   - the set is in USD as filed: a converted set carries each period at its
  *     own rate, and a year minus three quarters would mix four rates.
- *   - the year, Q1-Q3 and Q4's net income share a sign (q4EpsSignsMixed).
  */
 export function derivedQ4Eps(
   set: Pick<StoredFactSet, "quarters" | "years" | "cur">,
@@ -367,7 +371,6 @@ export function derivedQ4Eps(
   const q3 = q("Q3"), q2 = q("Q2"), q1 = q("Q1");
   if (!q1 || !q2 || !q3) return null;
   if (!isConsecutive(q4, q3) || !isConsecutive(q3, q2) || !isConsecutive(q2, q1)) return null;
-  if (q4EpsSignsMixed(set, q4)) return null;
   const periods = [year, q1, q2, q3];
   const shareKey = periods.every((p) => valueOf(p, "sharesDiluted") !== null) ? "sharesDiluted"
     : periods.every((p) => valueOf(p, "sharesDiluted") === null && valueOf(p, "sharesBasic") !== null) ? "sharesBasic"

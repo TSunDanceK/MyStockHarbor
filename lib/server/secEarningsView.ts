@@ -768,10 +768,11 @@ export function withDerivedQ4Eps(
   withheld: ((q4: StoredPeriod) => boolean) | null = null,
 ): ViewCell {
   if (cellIn.val !== null || !p || p.fp !== "Q4" || !derive) return cellIn;
-  // SAID, NOT BLANK: the reason is on tap under "Not available".
-  if (withheld?.(p)) return { ...cellIn, derived: "withheld", derivedNote: Q4_EPS_MIXED_SIGN_NOTE };
   const d = derive(p);
   if (d === null || !Number.isFinite(d)) return cellIn;
+  // A YEAR THAT MIXES PROFIT AND LOSS (audit r6): said, not shown. Only a cell
+  // the derivation would fill; one it already refuses keeps its own wording.
+  if (withheld?.(p)) return { ...cellIn, derived: "withheld", derivedNote: Q4_EPS_MIXED_SIGN_NOTE };
   return { ...cellIn, val: d, derived: "computed", derivedNote: Q4_EPS_DERIVED_NOTE };
 }
 

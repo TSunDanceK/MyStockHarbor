@@ -1,6 +1,7 @@
 // DRY RUN (audit r6): every stored set's derived Q4 EPS, main's secValuation
-// beside this branch's. Lists each Q4 cell that goes blank (the year mixes
-// profit and loss) and each trailing-twelve-month EPS that moves with it.
+// beside this branch's. Lists each earnings-page Q4 cell that goes to "Not
+// available" (main derives it; the year mixes profit and loss), and each
+// trailing-twelve-month EPS that moves (expected: none, the TTM is untouched).
 // Reads only.   relay task: write-q4-eps-mixed-sign-dry-run
 //   Redis cost: 1 GET (manifest) + 1 MGET per 25 symbols.
 import "./lib/register-ts-here.mjs";
@@ -42,7 +43,7 @@ for (let i = 0; i < syms.length; i += 25) {
     for (const p of set.quarters) {
       if (p.fp !== "Q4" || valueOf(p, "epsDiluted") !== null) continue;
       q4s++;
-      const before = OLD.derivedQ4Eps(set, p), after = NEW.derivedQ4Eps(set, p);
+      const before = OLD.derivedQ4Eps(set, p), after = NEW.q4EpsSignsMixed(set, p) ? null : NEW.derivedQ4Eps(set, p);
       if (before !== null) derivedBefore++;
       if (before !== null && after === null) {
         const year = set.years.find((y) => y.fy === p.fy && y.e === p.e);
@@ -58,8 +59,11 @@ for (let i = 0; i < syms.length; i += 25) {
     }
   });
 }
-console.log(`stored sets read: ${read} of ${syms.length}; Q4 quarters with no filed EPS: ${q4s}; derived on main: ${derivedBefore}`);
+const summary = `stored sets read: ${read} of ${syms.length}; Q4 quarters with no filed EPS: ${q4s}; derived on main: ${derivedBefore}`;
+console.log(summary);
 console.log(`\nQ4 EPS cells that go blank ("Not available"): ${blanked.filter((l) => !l.includes("UNEXPECTED")).length}`);
 for (const l of blanked) console.log(l);
 console.log(`\ntrailing-twelve-month EPS (valuation inputs) that move: ${ttm.length}`);
 for (const l of ttm) console.log(l);
+const symbols = new Set(blanked.filter((l) => !l.includes("UNEXPECTED")).map((l) => l.trim().split(/\s+/)[0]));
+console.log(`\nSUMMARY: ${summary}; Q4 cells to "Not available": ${blanked.filter((l) => !l.includes("UNEXPECTED")).length} across ${symbols.size} symbols; unexpected: ${blanked.filter((l) => l.includes("UNEXPECTED")).length}; TTM EPS moved: ${ttm.length}`);

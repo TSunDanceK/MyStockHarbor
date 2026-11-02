@@ -47,13 +47,15 @@ const runD = (M) => {
   check("a filed Q4 EPS is never replaced", filed.val === 2.5);
   // A YEAR THAT MIXES PROFIT AND LOSS (audit r6, VRTX): withheld, with its reason.
   const blank = { val: null, derived: null, derivedNote: null, key: "epsDiluted", label: "x" };
-  const held = S.withDerivedQ4Eps(blank, { fp: "Q4" }, () => null, () => true);
+  const held = S.withDerivedQ4Eps(blank, { fp: "Q4" }, () => 3.62, () => true);
   check("a mixed-sign year: the cell is withheld with the plain note, no number",
     held.val === null && held.derived === "withheld" && held.derivedNote === S.Q4_EPS_MIXED_SIGN_NOTE && /^Not available: /.test(S.Q4_EPS_MIXED_SIGN_NOTE));
-  check("...and an unmixed year with no derivation stays blank as before", S.withDerivedQ4Eps(blank, { fp: "Q4" }, () => null, () => false).derived === null);
+  check("...and a Q4 the derivation already refuses keeps its wording (not relabelled)", S.withDerivedQ4Eps(blank, { fp: "Q4" }, () => null, () => true).derived === null);
   check("...wired: the view passes the page's withheldQ4Eps, and the page passes secValuation.q4EpsSignsMixed",
     /opts\.withheldQ4Eps \? \(q\) => opts\.withheldQ4Eps!\(adjusted, q\) : null/.test(fs.readFileSync("lib/server/secEarningsView.ts", "utf8"))
       && /withheldQ4Eps: q4EpsSignsMixed/.test(fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8")));
+  const M3 = await loadSnapshot(once("  if (withheld?.(p)) return { ...cellIn, derived: \"withheld\", derivedNote: Q4_EPS_MIXED_SIGN_NOTE };\n", "\n"));
+  check("mutant (mixed-sign withhold removed) is caught", M3.withDerivedQ4Eps(blank, { fp: "Q4" }, () => 3.62, () => true).val === 3.62);
   check("...and the card reads a withheld EPS as \"Not available\", the note on tap",
     /text=\{EPS_LINES\.has\(cell\.key\) \? NOT_AVAILABLE : NOT_REPORTED\} reason=\{cell\.derivedNote\}/.test(fs.readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8")));
   const M2 = await loadSnapshot(once("  if (cellIn.val !== null || !p || p.fp !== \"Q4\" || !derive) return cellIn;", "  return cellIn;"));
