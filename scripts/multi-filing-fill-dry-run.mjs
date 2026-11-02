@@ -124,7 +124,8 @@ for (let i = 0; i < all.length; i += 25) {
           if (vb === Codec.valueOf(pf, key)) { counts.drift++; continue; }
           const kind = va === null ? "filled" : vb === null ? "blanked" : "changed";
           counts[kind]++;
-          if (samples.length < 8 || kind !== "filled") samples.push(`${kind} ${label(pb ?? pa)} ${key} ${fmt(va)} → ${fmt(vb)}`);
+          const how = (p) => `${Codec.cell(p, key).derived ?? "-"} ${p?.a ?? "-"}`;
+          if (samples.length < 8 || kind !== "filled") samples.push(`${kind} ${label(pb ?? pa)} ${key} ${fmt(va)} [${how(pa)}] → ${fmt(vb)} [${how(pb)}]; feed alone ${fmt(Codec.valueOf(pf, key))}`);
         }
       }
       for (const k of ["filled", "changed", "blanked", "drift"]) totals[k] += counts[k];
