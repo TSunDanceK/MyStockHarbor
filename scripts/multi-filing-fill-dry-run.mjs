@@ -86,7 +86,7 @@ const writes = (o) => o && (o.kind === "caught-up" || o.kind === "filled" || o.k
 const byEnd = (set) => new Map([...set.quarters.map((p) => [`Q|${p.e}`, p]), ...set.years.map((p) => [`Y|${p.e}`, p])]);
 const fmt = (v) => (v === null || v === undefined ? "—" : Math.abs(v) >= 1e5 ? `${(v / 1e6).toFixed(1)}M` : String(v));
 
-const totals = { read: 0, acted: 0, filers: 0, filled: 0, changed: 0, blanked: 0, drift: 0, skippedFx: 0, failed: 0 };
+const totals = { read: 0, acted: 0, filers: 0, filled: 0, changed: 0, blanked: 0, drift: 0, aged: 0, skippedFx: 0, failed: 0 };
 const fillers = [];
 const WATCH = new Set(["NEE", "CNP", "D", "DLR", "FRT", "HIW", "LNT", "MAA", "OMF", "PLD", "UE", "CUBE", "TXNM", "C", "SO", "DUK", "EIX", "DOW", "URI", "IDA"]);
 const watched = [];
@@ -132,10 +132,19 @@ for (let i = 0; i < all.length; i += 25) {
         const p = [...x.quarters, ...x.years].find((q) => q.end === end);
         return p?.values[SEC_FIELD_KEYS.indexOf(key)]?.tag ?? "-";
       };
-      const counts = { filled: 0, changed: 0, blanked: 0, drift: 0 };
+      const counts = { filled: 0, changed: 0, blanked: 0, drift: 0, aged: 0 };
+      // A WINDOW, NOT A LOSS: a quarter older than the branch set's oldest one
+      // has aged out of the stored window because a newer quarter came in, as
+      // every filing does. Counted apart so a real blank cannot hide in it.
+      const oldestQ = next.quarters.map((p) => p.e).sort()[0] ?? "";
+      const oldestY = next.years.map((p) => p.e).sort()[0] ?? "";
       const samples = [];
       for (const k of new Set([...a.keys(), ...b.keys()])) {
         const pa = a.get(k), pb = b.get(k), pf = feedOnly.get(k);
+        if (pa && !pb && pa.e < (k.startsWith("Q|") ? oldestQ : oldestY)) {
+          counts.aged += SEC_FIELD_KEYS.filter((key) => Codec.valueOf(pa, key) !== null).length;
+          continue;
+        }
         for (const key of SEC_FIELD_KEYS) {
           const va = Codec.valueOf(pa, key), vb = Codec.valueOf(pb, key);
           if (va === vb) continue;
@@ -149,14 +158,14 @@ for (let i = 0; i < all.length; i += 25) {
             const end = (pb ?? pa).e;
             samples.push(`changed-tag ${label(pb ?? pa)} ${key}: main ${tagOf(tagsOld, end, key)} → branch ${tagOf(tagsNew, end, key)}`);
           }
-          if (samples.length < 8 || kind !== "filled") samples.push(`${kind} ${label(pb ?? pa)} ${key} ${fmt(va)} [${how(pa)}] → ${fmt(vb)} [${how(pb)}]; feed alone ${fmt(Codec.valueOf(pf, key))}`);
+          if ((kind === "filled" && samples.length < 3) || kind !== "filled") samples.push(`${kind} ${label(pb ?? pa)} ${key} ${fmt(va)} [${how(pa)}] → ${fmt(vb)} [${how(pb)}]; feed alone ${fmt(Codec.valueOf(pf, key))}`);
         }
       }
-      for (const k of ["filled", "changed", "blanked", "drift"]) totals[k] += counts[k];
+      for (const k of ["filled", "changed", "blanked", "drift", "aged"]) totals[k] += counts[k];
       const reads = Fill.filingsToRead(filings, Build.storedQuarterEnds(stored), Fill.newestStoredEnd(stored)).map((f) => `${f.form} ${f.reportDate}`);
       const st = filingState[symbol];
       const pickup = st?.lag ? `lag recorded (${st.lag.kind}): re-checked daily` : "no lag recorded: checked when the daily index sees a new filing";
-      const line = `  ${symbol.padEnd(6)} main ${o.kind} → branch ${n.kind} | filled ${counts.filled}, changed ${counts.changed}, blanked ${counts.blanked}, drift ${counts.drift} | gate reads ${reads.join(", ") || "-"} | ${pickup}`;
+      const line = `  ${symbol.padEnd(6)} main ${o.kind} → branch ${n.kind} | filled ${counts.filled}, changed ${counts.changed}, blanked ${counts.blanked}, drift ${counts.drift}, aged out of the window ${counts.aged} | gate reads ${reads.join(", ") || "-"} | ${pickup}`;
       if (counts.filled + counts.changed + counts.blanked) { totals.filers++; fillers.push([line, samples]); }
       if (WATCH.has(symbol)) {
         const q2 = next.quarters.find((q) => q.e.startsWith("2026-06")), q2live = live.quarters.find((q) => q.e.startsWith("2026-06"));
@@ -170,10 +179,11 @@ for (let i = 0; i < all.length; i += 25) {
 }
 
 console.log(`\n${arg}: ${all.length} symbols, ${totals.read} stored sets read, ${totals.skippedFx} non-USD skipped, ${totals.acted} acted on, ${totals.failed} failed, ${requests} SEC requests`);
-console.log(`cells the FILINGS move: filled ${totals.filled}, changed ${totals.changed}, blanked ${totals.blanked} (across ${totals.filers} filers); drift cells ${totals.drift}`);
+console.log(`cells the FILINGS move: filled ${totals.filled}, changed ${totals.changed}, blanked ${totals.blanked} (across ${totals.filers} filers); drift cells ${totals.drift}; aged out of the window ${totals.aged}`);
 for (const [line, samples] of fillers) {
   console.log(line);
   for (const s of samples) console.log(`         ${s}`);
 }
 console.log("\nwatched filers:");
 for (const w of watched) console.log(w);
+console.log(`\nSUMMARY ${arg}: acted ${totals.acted}, filers with filled/changed/blanked cells ${totals.filers}; filled ${totals.filled}, changed ${totals.changed}, blanked ${totals.blanked}, drift ${totals.drift}, aged out ${totals.aged}, failed ${totals.failed}`);
