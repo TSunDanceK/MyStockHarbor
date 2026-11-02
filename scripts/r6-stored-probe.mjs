@@ -44,6 +44,15 @@ if (mode === "rows") {
       }
     }
   }
+} else if (mode === "stamps") {
+  // SYMBOLS="stamps:UPS,CME": chains stamp, manifest verifiedAt and the set's newest period only.
+  const syms = rest.split(",").filter(Boolean);
+  const sets = await redis.mget(...syms.map((s) => `${FACTS}:${s}`));
+  syms.forEach((s, i) => {
+    const set = sets[i], e = manifest?.symbols?.[s] ?? {};
+    console.log(`  ${s.padEnd(6)} c=${set?.c ?? "-"} verified ${e.verifiedAt ? new Date(e.verifiedAt).toISOString().slice(0, 16) : "never"}`
+      + ` needsReverify=${Boolean(e.needsReverify)} reason=${e.reverifyReason ?? "-"} cover=${set?.cover?.val ?? "-"}${set?.cover?.derived ? ` (${set.cover.derived})` : ""} asOf ${set?.cover?.asOf ?? "-"}`);
+  });
 } else if (mode === "cells") {
   const [symArg, fieldArg = "netIncome,epsDiluted,sharesDiluted"] = rest.split("|");
   const syms = symArg.split(",").filter(Boolean);
