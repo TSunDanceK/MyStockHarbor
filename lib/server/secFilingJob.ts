@@ -20,7 +20,7 @@
 // manifest at :20, and two jobs writing one key is a lost update.
 import { Redis } from "@upstash/redis";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
-import type { FilingRef, StoredFactSet, StoredPeriod } from "./secFactCodec";
+import { storedQuarterEnds, type FilingRef, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
 import type { Submissions } from "./secReportDates";
 import type { CompanyFacts, ExtractResult } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
@@ -31,7 +31,8 @@ import { withClassEps } from "./secClassEps";
 import { priorStandsForFx, toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { sicChangeOf, type SicChange } from "./secSicChange";
-import { instanceToFacts, isLagging, mergeFillOnly, newestPeriodicFiling, newestStoredEnd } from "./secFilingFill";
+import { filingsToRead, instanceToFacts, isLagging, mergeFillOnly, newestPeriodicFiling, newestStoredEnd, periodicFilings, type QuarterEnd } from "./secFilingFill";
+import { SEC_FIELD_KEYS } from "./secFields";
 import { JOB_REDIS_OPTS } from "./redisCacheMode";
 
 const redis =
@@ -237,6 +238,16 @@ function keptFromFx(stored: StoredFactSet, extracted: ExtractResult, fresh: Stor
   return fresh;
 }
 
+/** An extraction's quarters for secFilingFill: each end, and whether it carries revenue or net income. */
+const REVENUE_AT = SEC_FIELD_KEYS.indexOf("revenue");
+const NET_INCOME_AT = SEC_FIELD_KEYS.indexOf("netIncome");
+function extractedQuarterEnds(x: ExtractResult): QuarterEnd[] {
+  return x.quarters.map((p) => ({
+    end: p.end,
+    filled: (p.values[REVENUE_AT]?.val ?? null) !== null || (p.values[NET_INCOME_AT]?.val ?? null) !== null,
+  }));
+}
+
 async function checkAndFillFrom(
   symbol: string,
   cik: string,
@@ -247,7 +258,11 @@ async function checkAndFillFrom(
   subs: Submissions,
 ): Promise<CheckOutcome> {
   const filing = newestPeriodicFiling(subs);
-  if (!isLagging(stored, filing)) {
+  const filings = periodicFilings(subs);
+  // BEHIND THE NEWEST FILING, OR MISSING A QUARTER ONE FILED (audit r6). The
+  // second is read from the stored set and the submissions already in hand:
+  // no request until there is something to read.
+  if (!isLagging(stored, filing) && !filingsToRead(filings, storedQuarterEnds(stored), newestStoredEnd(stored)).length) {
     // STILL READ FROM THE FILING is not "caught up": the lag stays recorded
     // until a companyfacts-only read carries the period.
     return { kind: "current", lag: stored.ff ? prior?.lag ?? null : null };
@@ -263,25 +278,43 @@ async function checkAndFillFrom(
     quarters: base.quarters.map((p) => ({ e: p.end })) as StoredPeriod[],
     years: base.years.map((p) => ({ e: p.end })) as StoredPeriod[],
   });
-  if (baseNewest !== null && baseNewest >= f.reportDate) {
+  // Every filing the feed is missing, against the FEED's read, oldest first.
+  const missing = filingsToRead(filings, extractedQuarterEnds(base), baseNewest);
+  if (!missing.length) {
     // TWELVE MONTHS OF EPS FROM THE 10-K AND 10-Q where the periods cannot give it. See secInstanceEps.
     await withClassEps(symbol, cik, base, fetch.get);
     base.ttmEps = await withInstanceEps(symbol, cik, base, fetch.get);
     return { kind: "caught-up", set: keptFromFx(stored, base, await toStoredSet(base, defaultSources(), fxSeries)), lag: null };
   }
-  if (stored.lg?.accn === f.accn) return { kind: "noted", lag: prior?.lag ?? { accn: f.accn, reportDate: f.reportDate, kind: "notice" } };
-  const xml = await fetch.instance(cik, f);
-  const { merged, added } = xml
-    ? mergeFillOnly(cf, instanceToFacts(xml, f).facts, base.reportingCurrency)
-    : { merged: cf, added: 0 };
+  // A filing neither source could read last time is not read again.
+  const toRead = missing.filter((m) => m.accn !== stored.lg?.accn);
+  if (!toRead.length) return { kind: "noted", lag: prior?.lag ?? { accn: f.accn, reportDate: f.reportDate, kind: "notice" } };
+  // NEWEST FIRST INTO THE MERGE, so where two filings state the same span the
+  // later one (a restated comparative) wins; companyfacts still wins over both.
+  let merged = cf;
+  let added = 0;
+  for (const m of [...toRead].reverse()) {
+    const xml = await fetch.instance(cik, m);
+    if (!xml) continue;
+    const step = mergeFillOnly(merged, instanceToFacts(xml, m).facts, base.reportingCurrency);
+    merged = step.merged;
+    added += step.added;
+  }
+  // A skipped quarter the filings could not supply either: nothing to write.
+  if (!added && baseNewest !== null && f.reportDate <= baseNewest) {
+    return { kind: "current", lag: stored.ff ? prior?.lag ?? null : null };
+  }
   const filled = added ? { ...extractForSymbol(symbol, merged), coverShares: base.coverShares } : base;
   // QUARTERLY EPS PER LISTED CLASS (#552 COWORK #244). See secClassEps.
   await withClassEps(symbol, cik, filled, fetch.get);
   filled.ttmEps = await withInstanceEps(symbol, cik, filled, fetch.get);
   const next = keptFromFx(stored, filled, await toStoredSet(filled, defaultSources(), fxSeries));
+  // The stamp names the newest filing read: the lag one when the feed is
+  // behind, else the 10-Q that supplied the skipped quarter.
+  const read = toRead.at(-1)!;
   const noticeOnly = isLagging(next, f);
-  const lag = { accn: f.accn, reportDate: f.reportDate, kind: noticeOnly ? "notice" as const : "filled" as const };
+  const lag = { accn: read.accn, reportDate: read.reportDate, kind: noticeOnly ? "notice" as const : "filled" as const };
   return noticeOnly
     ? { kind: "notice", set: { ...next, lg: f }, lag }
-    : { kind: "filled", set: { ...next, ff: f }, lag };
+    : { kind: "filled", set: { ...next, ff: read }, lag };
 }

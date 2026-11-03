@@ -117,7 +117,7 @@ check("the flush follows the write", ROUTE.indexOf("revalidatePath(`/stock/${sym
 const FACTS = readCodeOnly("app/api/jobs/sec-facts/route.ts");
 check("sec-facts no longer reads filings itself", !/fetchFilingInstance|const filingFill = \{/.test(FACTS));
 check("...and keeps a filled period by the set's own stamp until the feed carries it",
-  /const keepFilled = Boolean\(prior\?\.ff && freshNewest < prior\.ff\.reportDate\);/.test(FACTS) &&
+  /const keepFilled = Boolean\(prior\?\.ff && \(freshNewest < prior\.ff\.reportDate\s*\|\| dropsFilledQuarter\(/.test(FACTS) &&
     /const keepNotice = Boolean\(prior\?\.lg && freshNewest < prior\.lg\.reportDate\);/.test(FACTS));
 
 console.log("\n6. a companyfacts 404 is 'no XBRL facts', not a failure (#552 COWORK #69, IBN)");

@@ -409,6 +409,14 @@ export const valueOf = (period: StoredPeriod | null | undefined, key: string) =>
   cell(period, key).val;
 
 /**
+ * A stored set's quarters for secFilingFill (filingsToRead, dropsFilledQuarter):
+ * each end, and whether it carries revenue or net income.
+ */
+export function storedQuarterEnds(set: Pick<StoredFactSet, "quarters">): { end: string; filled: boolean }[] {
+  return set.quarters.map((q) => ({ end: q.e, filled: valueOf(q, "revenue") !== null || valueOf(q, "netIncome") !== null }));
+}
+
+/**
  * A trailing-twelve-month sum over the newest four quarters.
  *
  * ALL FOUR OR NULL. Three quarters summed and presented as a year understates
