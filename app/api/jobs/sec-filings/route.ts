@@ -35,6 +35,7 @@ import {
   type FilingState,
 } from "@/lib/server/secFilingJob";
 import { buildDueList } from "@/lib/server/secFilingDue";
+import { requestedFilingChecks, SEC_FILING_CHECK_REQUESTS } from "@/lib/server/secFilingCheckRequests";
 import { recordSicChanges, type SicChange } from "@/lib/server/secSicChange";
 import { readReportDatesChecked } from "@/lib/server/secReportDatesStore";
 import { buildAndWriteReportDates, reportDatesNeedRebuild, withPredecessorSubmissions } from "@/lib/server/secReportDatesWrite";
@@ -122,7 +123,10 @@ export async function GET(req: NextRequest) {
   }
 
   const state = await readFilingState();
-  const candidates = pickCandidates(mode, entries, state, new Set(due), started);
+  // COMMITTED ONE-SHOT CHECK REQUESTS (secFilingCheckRequests): on this run's
+  // due set only; the stored due list is left as built.
+  const requested = requestedFilingChecks(SEC_FILING_CHECK_REQUESTS, state, started);
+  const candidates = pickCandidates(mode, entries, state, new Set([...due, ...requested]), started);
   const updates = new Map<string, FilingState>();
   const fxSeries = new Map<string, FxSeries | null>();
   const tally = { checked: 0, current: 0, lagging: 0, filled: 0, notice: 0, caughtUp: 0, failed: 0, noSet: 0, noXbrlFacts: 0, datesRewritten: 0, datesFailed: 0 };
@@ -207,6 +211,7 @@ export async function GET(req: NextRequest) {
     acted: true,
     candidates: candidates.length,
     dueList: due.length,
+    requested: requested.join(",") || null,
     ...tally,
     stoppedBy,
     backlog: candidates.length - tally.checked - tally.noSet,

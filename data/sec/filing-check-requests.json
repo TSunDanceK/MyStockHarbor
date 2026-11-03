@@ -1,0 +1,50 @@
+{
+ "_comment": "One-off filing-job check requests: a filer whose filing-state last check (c) is BEFORE requestedAt is added to that run's due set (rank 1 in pickCandidates). The check stamps c whatever its outcome, so each request retires itself after one check; an entry left here is inert. Read by lib/server/secFilingCheckRequests.ts. No secret, no manual call: a code change, reviewed like any other.",
+ "requests": [
+  {
+   "symbol": "EIX",
+   "requestedAt": "2026-11-03T14:30:00Z",
+   "reason": "audit r6: #972 reads a 10-Q the companyfacts feed skipped, but this filer has no recorded lag and was last checked before #972 deployed, so the job would not look again until its next periodic filing. One check now fills the quarter."
+  },
+  {
+   "symbol": "DOW",
+   "requestedAt": "2026-11-03T14:30:00Z",
+   "reason": "audit r6: #972 reads a 10-Q the companyfacts feed skipped, but this filer has no recorded lag and was last checked before #972 deployed, so the job would not look again until its next periodic filing. One check now fills the quarter."
+  },
+  {
+   "symbol": "URI",
+   "requestedAt": "2026-11-03T14:30:00Z",
+   "reason": "audit r6: #972 reads a 10-Q the companyfacts feed skipped, but this filer has no recorded lag and was last checked before #972 deployed, so the job would not look again until its next periodic filing. One check now fills the quarter."
+  },
+  {
+   "symbol": "IDA",
+   "requestedAt": "2026-11-03T14:30:00Z",
+   "reason": "audit r6: #972 reads a 10-Q the companyfacts feed skipped, but this filer has no recorded lag and was last checked before #972 deployed, so the job would not look again until its next periodic filing. One check now fills the quarter."
+  },
+  {
+   "symbol": "CAH",
+   "requestedAt": "2026-11-03T14:30:00Z",
+   "reason": "audit r6: #972 reads a 10-Q the companyfacts feed skipped, but this filer has no recorded lag and was last checked before #972 deployed, so the job would not look again until its next periodic filing. One check now fills the quarter."
+  },
+  {
+   "symbol": "CMS-PB",
+   "requestedAt": "2026-11-03T14:30:00Z",
+   "reason": "audit r6: #972 reads a 10-Q the companyfacts feed skipped, but this filer has no recorded lag and was last checked before #972 deployed, so the job would not look again until its next periodic filing. One check now fills the quarter."
+  },
+  {
+   "symbol": "CNMD",
+   "requestedAt": "2026-11-03T14:30:00Z",
+   "reason": "audit r6: #972 reads a 10-Q the companyfacts feed skipped, but this filer has no recorded lag and was last checked before #972 deployed, so the job would not look again until its next periodic filing. One check now fills the quarter."
+  },
+  {
+   "symbol": "NNN",
+   "requestedAt": "2026-11-03T14:30:00Z",
+   "reason": "audit r6: #972 reads a 10-Q the companyfacts feed skipped, but this filer has no recorded lag and was last checked before #972 deployed, so the job would not look again until its next periodic filing. One check now fills the quarter."
+  },
+  {
+   "symbol": "TAP",
+   "requestedAt": "2026-11-03T14:30:00Z",
+   "reason": "audit r6: #972 reads a 10-Q the companyfacts feed skipped, but this filer has no recorded lag and was last checked before #972 deployed, so the job would not look again until its next periodic filing. One check now fills the quarter."
+  }
+ ]
+}
