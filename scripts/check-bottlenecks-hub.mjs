@@ -135,7 +135,7 @@ const RULES = {
     const fx = M.hub.buildHubCompanies(FIX);
     const census = M.hub.buildMergeCensus(posts).find((r) => r.key === "name:samsung electronics");
     return M.hub.NAME_ALIASES["samsung foundry"] === "samsung electronics" && co(fx, "name:samsung electronics").count === 2 && co(fx, "name:samsung sdi").count === 1 &&
-      ["Samsung Foundry", "Samsung Electronics (Foundry)", "Samsung Electronics"].every((nm) => census.from.some((f) => f.name === nm)) && co(companies, "name:samsung sdi")?.count === 1;
+      ["Samsung Foundry", "Samsung Electronics (Foundry)", "Samsung Electronics"].every((nm) => census.from.some((f) => f.name === nm)) && co(companies, "name:samsung sdi")?.count >= 1; // live data: present and apart, not a pinned count
   },
   "generic buckets ('Largest distributor') are keyed per page: never merged, never ranked": ({ M }) => {
     const fx = M.hub.buildHubCompanies(FIX);
@@ -147,13 +147,21 @@ const RULES = {
     return a.supplierPages === 3 && a.customerPages === 1 && co(M.hub.buildHubCompanies(FIX), "AAPL").customerPages === 1 && co(M.hub.buildHubCompanies(FIX), "AAPL").supplierPages === 1 &&
       meta.supplierPages === 0 && meta.customerPages === meta.count && companies.every((c) => c.supplierPages <= c.count && c.customerPages <= c.count && c.supplierPages + c.customerPages >= c.count);
   },
-  "the leaderboard: ten rows then 'See full leaderboard'; each row logo, name, 'named on N stock pages', split bar, ×N, opening to chips → /bottlenecks/[slug]": ({ board, boardSrc }) => {
+  // THE TOP ROW IS DERIVED FROM THE SAME POSTS, NOT PINNED (fix after #971).
+  // The daily bottleneck task adds pages, and a page naming the leader moves its
+  // count (AMZN 44 → 45 with V), so a pinned figure broke the suite the day it
+  // shipped. The counting itself is pinned on FIX above; this pins that the row
+  // renders the leader and its count, whatever they are today.
+  "the leaderboard: ten rows then 'See full leaderboard'; each row logo, name, 'named on N stock pages', split bar, ×N, opening to chips → /bottlenecks/[slug]": ({ board, boardSrc, companies }) => {
     const rows = board.match(/<details class="bnLbRow">/g) ?? [];
     const first = board.slice(board.indexOf('<details class="bnLbRow">'), board.indexOf("</details>") + 10);
+    const top = companies[0], n = top.count;
+    const logo = new RegExp(`<img [^>]*src="/logos/${String(top.ticker ?? "").replace(/[.]/g, "\\.")}\\.webp"|aria-hidden="true"[^>]*>${top.name.charAt(0)}<`);
     return rows.length === 10 && /<button[^>]*>See full leaderboard<\/button>/.test(board) && /const TOP = 10;/.test(boardSrc) && /full \? rows : rows\.slice\(0, TOP\)/.test(boardSrc) &&
-      /<summary class="bnLbSummary">/.test(first) && /named on 44 stock pages/.test(first) && /×44/.test(first) && /class="bnLbBar"/.test(first) &&
-      /supplier \d+/.test(first) && /customer \d+/.test(first) && (first.match(/<a (?=[^>]*class="bnLbChip")(?=[^>]*href="\/bottlenecks\/[a-z0-9.-]+")[^>]*>/g) ?? []).length === 44 &&
-      /<img [^>]*src="\/logos\/AMZN\.webp"|aria-hidden="true"[^>]*>A</.test(first) && /prefetch=\{false\} className="bnLbChip"/.test(boardSrc);
+      n >= 2 && companies.every((c) => c.count <= n) && first.includes(top.name.replace(/&/g, "&amp;")) &&
+      /<summary class="bnLbSummary">/.test(first) && first.includes(`named on ${n} stock pages`) && first.includes(`×${n}`) && /class="bnLbBar"/.test(first) &&
+      /supplier \d+/.test(first) && /customer \d+/.test(first) && (first.match(/<a (?=[^>]*class="bnLbChip")(?=[^>]*href="\/bottlenecks\/[a-z0-9.-]+")[^>]*>/g) ?? []).length === n &&
+      logo.test(first) && /prefetch=\{false\} className="bnLbChip"/.test(boardSrc);
   },
   "'Why it matters' sits behind a tap (<details>), at --fs-read when open": ({ board, boardSrc }) =>
     /<details class="bnLbWhy"><summary>Why it matters<\/summary><p>A company that keeps showing up here/.test(board) && /\.bnLbWhy p \{[^}]*font-size: var\(--fs-read\)/.test(boardSrc),
