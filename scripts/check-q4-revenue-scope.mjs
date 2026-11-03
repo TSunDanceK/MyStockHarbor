@@ -115,8 +115,9 @@ console.log("\n3. the page");
   const viewSrc = readCodeOnly("lib/server/secEarningsView.ts");
   const cards = readCodeOnly("app/stock/[symbol]/earnings/SecEarningsCards.tsx");
   check("derivationNote has a withheld sentence, hedged", /case "withheld":\s*return "Not shown:[^"]*suggest the annual and quarterly revenue lines cover different scopes/.test(viewSrc));
-  check("CellValue renders a withheld cell as Not reported with its note on tap",
-    /cell\.derived === "withheld"[\s\S]{0,80}ReasonedValue text=\{NOT_REPORTED\} reason=\{cell\.derivedNote\}/.test(cards));
+  // A withheld EPS reads "Not available" (audit r6); every other withheld line, revenue among them, "Not reported".
+  check("CellValue renders a withheld cell as Not reported (EPS: Not available) with its note on tap",
+    /cell\.derived === "withheld"[\s\S]{0,80}ReasonedValue text=\{EPS_LINES\.has\(cell\.key\) \? NOT_AVAILABLE : NOT_REPORTED\} reason=\{cell\.derivedNote\}/.test(cards));
 }
 
 console.log("\n4. the pure verdict, and mutations of it");
