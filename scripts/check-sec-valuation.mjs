@@ -300,6 +300,54 @@ console.log("\n2b. FISCAL Q4 IS DERIVED; ANNUAL-ONLY FILERS KEEP THE YEAR (#552 
     "",
     (m) => m.valuationInputs(pinSet(converted), PIN_TODAY, { annualForm: "10-K" }).eps === null
   );
+
+  // A YEAR THAT MIXES PROFIT AND LOSS (audit r6). A loss period's EPS is on its
+  // basic count, a profitable one's on its diluted count, so they do not
+  // subtract. VRTX FY2024 and EIX FY2024 as filed; Q4 net income differenced.
+  const NI = mod.SEC_FIELD_INDEX.netIncome;
+  const fy24 = (rows, year, q4ni) => {
+    const qs = rows.map(([e, fp, eps, sh]) => q(2024, fp, e, eps, sh));
+    const q4 = q(2024, "Q4", "2024-12-31", null);
+    q4.v[NI] = q4ni;
+    return set({ symbol: "PIN", quarters: [q4, ...qs], years: [q(2024, "FY", "2024-12-31", year[0], year[1])] });
+  };
+  const VRTX = fy24([["2024-09-30", "Q3", 4.01, 261.0e6], ["2024-06-30", "Q2", -13.92, 258.1e6], ["2024-03-31", "Q1", 4.21, 261.1e6]], [-2.08, 257.9e6], 913.0e6);
+  const EIX = fy24([["2024-09-30", "Q3", 1.32, 390e6], ["2024-06-30", "Q2", 1.13, 388e6], ["2024-03-31", "Q1", -0.03, 385e6]], [3.31, 388e6], 340e6);
+  const q4Of = (s_) => s_.quarters[0];
+  check("VRTX FY2024 (a Q2 loss inside a loss year) is mixed-sign", mod.q4EpsSignsMixed(VRTX, q4Of(VRTX)));
+  check("EIX FY2024 (a -0.03 Q1 inside a profitable year) is mixed-sign", mod.q4EpsSignsMixed(EIX, q4Of(EIX)));
+  const allProfit = fy24([["2024-09-30", "Q3", 1.32, 390e6], ["2024-06-30", "Q2", 1.13, 388e6], ["2024-03-31", "Q1", 0.03, 385e6]], [3.31, 388e6], 340e6);
+  check("the same year with every period profitable is not", !mod.q4EpsSignsMixed(allProfit, q4Of(allProfit)));
+  const q4Loss = fy24([["2024-09-30", "Q3", 1.32, 390e6], ["2024-06-30", "Q2", 1.13, 388e6], ["2024-03-31", "Q1", 0.03, 385e6]], [2.1, 388e6], -10e6);
+  check("a Q4 net loss inside an otherwise profitable year is", mod.q4EpsSignsMixed(q4Loss, q4Of(q4Loss)));
+  // THE NARROWED RULE: withheld only when the derivation sits more than both 3%
+  // and $0.05 off Q4 net income over Q3's diluted count.
+  check("VRTX FY2024 is withheld: 3.62 against 913.0M / 261.0M = 3.50 (off by 0.12, 3.5%)",
+    near(mod.q4EpsReference(VRTX, q4Of(VRTX)), 913.0 / 261.0, 1e-9) && mod.q4EpsWithheld(VRTX, q4Of(VRTX)));
+  check("EIX FY2024 stays: 0.89 against 340M / 390M = 0.87 (off by 0.02, inside $0.05)",
+    !mod.q4EpsWithheld(EIX, q4Of(EIX)) && near(mod.derivedQ4Eps(EIX, q4Of(EIX)), 0.89, 1e-9));
+  check("an unmixed year is never withheld, however far off its reference", !mod.q4EpsWithheld(allProfit, q4Of(allProfit)));
+  const noRef = fy24([["2024-09-30", "Q3", 4.01, null], ["2024-06-30", "Q2", -13.92, 258.1e6], ["2024-03-31", "Q1", 4.21, 261.1e6]], [-2.08, 257.9e6], 913.0e6);
+  check("a mixed-sign year with no reference to check against is withheld (when it derives at all)",
+    mod.q4EpsReference(noRef, q4Of(noRef)) === null && (mod.derivedQ4Eps(noRef, q4Of(noRef)) === null || mod.q4EpsWithheld(noRef, q4Of(noRef))));
+  // Both bounds bite: a 0.10 gap on a 10.00 reference (1%) stays; a 0.04 gap on a 0.50 one (8%) stays.
+  const gapOf = (derived, ref) => { const g = Math.abs(derived - ref); return g > mod.Q4_EPS_REFERENCE_TOLERANCE.abs && g > mod.Q4_EPS_REFERENCE_TOLERANCE.pct * Math.abs(ref); };
+  check("both bounds must be exceeded: 0.10 on 10.00 (1%) stays, 0.04 on 0.50 (8%) stays, 0.12 on 3.50 goes",
+    !gapOf(10.1, 10) && !gapOf(0.54, 0.5) && gapOf(3.62, 3.5) && mod.Q4_EPS_REFERENCE_TOLERANCE.pct === 0.03 && mod.Q4_EPS_REFERENCE_TOLERANCE.abs === 0.05);
+  await underMutation(
+    "the reference test removed (every mixed-sign year withheld again)",
+    "  return gap > Q4_EPS_REFERENCE_TOLERANCE.abs && gap > Q4_EPS_REFERENCE_TOLERANCE.pct * Math.abs(ref);",
+    "  return true;",
+    (m) => !m.q4EpsWithheld(EIX, q4Of(EIX))
+  );
+  check("the TTM path is untouched: derivedQ4Eps still gives VRTX's 3.62 (the cell rule is the page's)",
+    near(mod.derivedQ4Eps(VRTX, q4Of(VRTX)), 3.62, 1e-9));
+  await underMutation(
+    "the Q4 net income sign dropped from the test",
+    ', valueOf(q4, "netIncome")]',
+    "]",
+    (m) => m.q4EpsSignsMixed(q4Loss, q4Of(q4Loss))
+  );
 }
 
 console.log("\n3. A MULTI-CLASS SHARE COUNT CANNOT BE PICKED");

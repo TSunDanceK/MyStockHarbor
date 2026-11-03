@@ -431,8 +431,9 @@ export function CellValue(
   // in the cell, and never a dotted word that opens nothing.
   // A WITHHELD DERIVED Q4 (#552 COWORK #196/#200): "Not reported", and the
   // reason it was withheld on tap, whatever the caller's default empty text.
+  // A WITHHELD DERIVED Q4 EPS (audit r6) is "Not available": the figure exists, it cannot be worked out reliably.
   if (cell.val == null && cell.derived === "withheld" && cell.derivedNote) {
-    return <ReasonedValue text={NOT_REPORTED} reason={cell.derivedNote} style={MUTED_VALUE} />;
+    return <ReasonedValue text={EPS_LINES.has(cell.key) ? NOT_AVAILABLE : NOT_REPORTED} reason={cell.derivedNote} style={MUTED_VALUE} />;
   }
   if (cell.val == null) {
     // NO SENTENCE EVER PRINTS IN THE VALUE COLUMN (#552 COWORK #137 §1): one
