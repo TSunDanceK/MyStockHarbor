@@ -1,70 +1,70 @@
 {
-  "asOf": "2026-10-16",
-  "indexClose": 7659.44,
+  "asOf": "2026-10-30",
+  "indexClose": 7580.07,
   "ath": {
     "level": 7818.93,
     "date": "2026-10-06"
   },
-  "oneLiner": "Closed at 7,659.44 Friday, down 1.09% on the day and 1.95% on the week, about 2.0% below the record close of 7,818.93 set on October 6.",
-  "intro": "The S&P 500 closed at 7,659.44 on Friday, October 16, down 1.09% on the day and about 1.95% on the week, after the prior week's gain. That leaves the index roughly 2.0% below its record close of 7,818.93 from October 6. A slightly hotter-than-expected inflation report and a slide in AI-linked technology shares were among the themes of the pullback.",
+  "oneLiner": "Closed at 7,580.07 Friday, down 1.82% on the day and about 0.6% on the week, roughly 3.1% below the record close of 7,818.93 set on October 6.",
+  "intro": "The S&P 500 closed at 7,580.07 on Friday, October 30, down 1.82% on the day and about 0.6% on the week, its third straight weekly decline. That leaves the index roughly 3.1% below its record close of 7,818.93 from October 6. Worries about heavy AI spending, after disappointing results from Alphabet, Amazon and Intel, drove the late-week slide.",
   "sections": {
     "performance": {
       "heading": "How the index has done",
-      "body": "The strip above shows SPY giving back ground this week after last week's push toward records. The index itself lost about 1.95% over the five sessions, and more than half of that drop came on Friday, when AI-linked technology shares fell hard. The cards above track the same swings on SPY, so readings there may differ slightly from the index figures here."
+      "body": "The strip above shows SPY slipping again this week, with the biggest damage on Friday. The index itself lost about 0.6% over the five sessions, its third weekly decline in a row, as a technology-led slide on Thursday and Friday followed Wednesday's Fed hold. SPY's figures on the cards may differ slightly from the index numbers here."
     },
     "chart": {
       "heading": "The trend against its moving averages",
-      "body": "The index slid away from its record this week, a shift that may matter to chart watchers. The chart above plots SPY against its own moving-average lines over the same stretch, so the exact positions there may differ a little from the index figures quoted here."
+      "body": "The index has drifted away from its October 6 record over several weeks, a pattern chart watchers often track. The chart above plots SPY against its own moving-average lines over the same stretch, so the exact positions there may differ a little from the index figures quoted here. Friday's drop was the index's sharpest since June."
     },
     "levels": {
       "heading": "Where the nearby levels sit",
-      "body": "The October 6 record close of 7,818.93 is the nearest marker above, about 2.1% higher than Friday's close. Below, the index's recent trading range may be what watchers look at next. The Price zones and Key levels cards above show where those levels sit on SPY today."
+      "body": "The October 6 record close of 7,818.93 is the nearest marker above, the same roughly 3.1% gap noted at the top of the page. Below, the index's recent trading range may be what watchers look at next. The Price zones and Key levels cards above show where those levels sit on SPY today."
     },
     "signals": {
       "heading": "Momentum in plain words",
-      "body": "Momentum cooled during the week as the index slid from near its record. The weakness was concentrated in AI-linked technology, with chip stocks and the Nasdaq Composite hit hardest on Friday. The panel above shows today's RSI and MACD readings on SPY, which may help show how far that momentum has faded."
+      "body": "Momentum weakened as the index gave back ground late in the week, with chip stocks and other AI-linked shares leading the slide. Nvidia was the heaviest single drag on Friday. The panel above shows today's RSI and MACD readings on SPY, which may help show how far that momentum has faded."
     },
     "change": {
       "heading": "The weekly and monthly pattern",
-      "body": "Close to close, the index fell about 1.95% this week, after last week's gain, and now sits roughly 2.0% under its record. The index was almost flat on Tuesday, drifted lower through midweek and then dropped 1.09% on Friday as technology shares sank."
+      "body": "Close to close, the index fell about 0.6% this week, its third straight weekly loss, and it now sits roughly 3.1% under its record. Friday's 1.82% drop was the index's worst day since June."
     }
   },
   "marketRead": [
-    "The S&P 500 ended the week at 7,659.44, down 1.95% and about 2.0% below its October 6 record close of 7,818.93. It began the week near that high, closing at 7,805.45 on Tuesday, October 13. Inflation was the first test: on Wednesday, October 14, September consumer prices rose 3.7% from a year earlier, a little hotter than expected, with gasoline up 9.1% on the month, adding to worries that the Fed's September rate rise may not be the last.",
-    "Treasury yields were a focus after the CPI report, and the 10-year was near 5.1% on Friday. Market-implied odds of an October rate rise were about 16% on Friday, according to CME FedWatch, well below their midweek peak, after Kevin Warsh declined to hint at the coming decision in remarks at the IMF meetings in Bangkok on October 16.",
-    "Friday brought the week's sharpest damage. The Nasdaq Composite dropped 2.14% and chip stocks fell sharply as worries about AI spending and debt returned, with more than $50 billion of CoreWeave debt in focus. Energy shares rose as crude oil climbed, while the Dow slipped just 0.34% as investors leaned toward larger, more defensive names.",
-    "About 52% of S&P 500 members were above their 200-day average and 45% above their 50-day average at Friday's close, according to ChartRow. The optimistic case is that yields sit near 5.1% and October hike odds have fallen from their midweek peak. The cautious case is that the index has slid from its record, inflation is re-accelerating and AI-led leadership may stay fragile. The coming weeks may hinge on the Fed's October 27-28 meeting and company earnings."
+    "The S&P 500 ended the week at 7,580.07, down about 0.6% and roughly 3.1% below its October 6 record close of 7,818.93. The first half of the week was quieter. On Wednesday, October 28, the Federal Reserve left its policy rate at 3.75% to 4.00% in a 10-2 vote, with two officials preferring a quarter-point rise. The mood turned on Thursday, when Alphabet fell more than 12%, its worst day on record, after reporting heavy AI-related spending and cash burn.",
+    "Friday, October 30, brought the sharpest damage. The index fell 1.82%, its worst day since June, and the Nasdaq Composite dropped 2.86%. Intel plunged 28.6% after a weak revenue outlook and a cash-burn warning, Nvidia fell 4.2%, and Amazon's heavy cash outflow added to the worry, reviving doubts about whether huge AI spending will pay off. The Dow fell a smaller 1.09% and some sectors outside technology held up better.",
+    "Rates offered some relief. The 10-year Treasury yield eased to about 4.9% on Friday, after trading above 5.30% earlier in October. Even so, markets still leaned toward tightening: CME FedWatch put the odds of a quarter-point rise at the December 9 meeting above 80% on October 28, around the time of the decision. Oil stayed high, with WTI crude settling at about $104 a barrel, which may keep inflation worries alive.",
+    "About 59% of S&P 500 members were above their 200-day average and 61% above their 50-day average at Friday's close, according to ChartRow. The optimistic case is that yields have eased and some sectors outside technology held up. The cautious case is that three straight weekly losses, possible further rate rises and doubts over AI returns could keep leadership fragile. The coming weeks may hinge on remaining big-company earnings, inflation data and the Fed's December meeting."
   ],
   "points": [
     {
       "label": "Catalyst",
-      "text": "Hotter September CPI (3.7% a year) on Wednesday, then a Friday slide in AI-linked tech, weighed on the index."
+      "text": "AI-spending worries after Alphabet, Amazon and Intel results drove a Thursday-Friday slide; Friday was the worst day since June."
     },
     {
       "label": "Breadth",
-      "text": "About 52% of S&P 500 members were above their 200-day average at Friday's close, and 45% above their 50-day average."
+      "text": "About 59% of S&P 500 members were above their 200-day average at Friday's close, and 61% above their 50-day average."
     },
     {
       "label": "Rates",
-      "text": "The 10-year yield was near 5.1% on Friday; CME FedWatch put October rate-hike odds near 16%."
+      "text": "The 10-year yield was near 4.9% on Friday; the Fed held at 3.75%-4.00% in a 10-2 vote on October 28."
     }
   ],
   "breadth": {
-    "pct200": 52,
-    "pct50": 45,
+    "pct200": 59,
+    "pct50": 61,
     "source": "ChartRow",
-    "date": "2026-10-16"
+    "date": "2026-10-30"
   },
   "watchDown": [
-    "The index extends this week's retreat from the October 6 record close of 7,818.93.",
-    "AI-linked technology shares extend Friday's slide, with debt worries around CoreWeave spreading wider.",
-    "Hot inflation data revives rate-hike bets ahead of the Fed's October 27-28 meeting.",
-    "Oil prices climb further, keeping inflation and Treasury yields elevated."
+    "The index extends its three-week slide and moves further from the October 6 record close of 7,818.93.",
+    "AI-linked technology shares keep falling as investors question heavy spending by Alphabet, Amazon and others.",
+    "Rate-rise bets build again, pushing Treasury yields back toward the 5% area.",
+    "Oil prices climb further, keeping inflation worries and Treasury yields elevated."
   ],
   "watchUp": [
     "The index recovers this week's losses and heads back toward the October 6 record close of 7,818.93.",
-    "The 10-year Treasury yield eases from about 5.1% as October hike bets stay subdued.",
-    "Company earnings show AI spending paying off, calming this week's valuation worries.",
-    "Breadth holds near half of members above their 200-day average even as technology wobbles."
+    "The 10-year Treasury yield keeps easing from about 4.9% as rate-rise bets cool.",
+    "Upcoming company earnings show AI spending paying off, calming this week's valuation worries.",
+    "Breadth holds near 60% of members above their 200-day average even as technology wobbles."
   ]
 }
