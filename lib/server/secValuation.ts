@@ -312,9 +312,8 @@ export const Q4_SHARE_BASIS_TOLERANCE = 0.2;
  * diluted count. Per-share figures on two share bases do not subtract: VRTX's
  * FY2024 -2.08 less Q1-Q3 (4.21, -13.92, 4.01) gives 3.62, while Q4's 913.0M on
  * Q3's 261.0M diluted shares is about 3.50. EIX FY2024 has a -0.03 Q1 inside a
- * profitable year. So the earnings page withholds its derived Q4 cell when the
- * fiscal year, Q1-Q3 or Q4's own differenced net income (where stored) carry
- * opposite signs.
+ * profitable year. Opposite signs among the fiscal year, Q1-Q3 and Q4's own
+ * differenced net income (where stored) are the first test of q4EpsWithheld.
  *
  * THE CELL ONLY, NOT derivedQ4Eps. The trailing-twelve-month EPS also sums a
  * derived Q4, and refusing it there takes the TTM EPS off several hundred
@@ -330,6 +329,46 @@ export function q4EpsSignsMixed(
   const vals = [valueOf(year, "epsDiluted"), ...["Q1", "Q2", "Q3"].map((fp) => valueOf(q(fp), "epsDiluted")), valueOf(q4, "netIncome")]
     .filter((v): v is number => v !== null);
   return vals.some((v) => v < 0) && vals.some((v) => v > 0);
+}
+
+/** How far a mixed-sign year's derived Q4 EPS may sit from its reference: more than BOTH withholds it. */
+export const Q4_EPS_REFERENCE_TOLERANCE = { pct: 0.03, abs: 0.05 } as const;
+
+/**
+ * Q4 NET INCOME OVER Q3'S DILUTED SHARE COUNT (basic where no diluted count is
+ * stated), the reference a mixed-sign year's derived Q4 is held against. Q3's
+ * count is the nearest one on file to Q4's; it is not Q4's own, so this is a
+ * test, never a figure shown.
+ */
+export function q4EpsReference(
+  set: Pick<StoredFactSet, "quarters">,
+  q4: StoredPeriod,
+): number | null {
+  const q3 = set.quarters.find((p) => p.fy === q4.fy && p.fp === "Q3");
+  const ni = valueOf(q4, "netIncome");
+  const shares = valueOf(q3, "sharesDiluted") ?? valueOf(q3, "sharesBasic");
+  return ni === null || !shares || shares <= 0 ? null : ni / shares;
+}
+
+/**
+ * THE EARNINGS PAGE WITHHOLDS A DERIVED Q4 EPS (audit r6) when its year mixes
+ * profit and loss AND it is more than both 3% and $0.05 away from
+ * q4EpsReference: VRTX FY2024's 3.62 against 913.0M / 261.0M = 3.50 goes; EIX
+ * FY2024's 0.89 against 340M / 390M = 0.87 stays. A mixed-sign year with no
+ * reference to check against is withheld. A Q4 the derivation refuses anyway
+ * is not this rule's (false).
+ */
+export function q4EpsWithheld(
+  set: Pick<StoredFactSet, "quarters" | "years" | "cur">,
+  q4: StoredPeriod,
+): boolean {
+  if (!q4EpsSignsMixed(set, q4)) return false;
+  const d = derivedQ4Eps(set, q4);
+  if (d === null) return false;
+  const ref = q4EpsReference(set, q4);
+  if (ref === null) return true;
+  const gap = Math.abs(d - ref);
+  return gap > Q4_EPS_REFERENCE_TOLERANCE.abs && gap > Q4_EPS_REFERENCE_TOLERANCE.pct * Math.abs(ref);
 }
 
 /**

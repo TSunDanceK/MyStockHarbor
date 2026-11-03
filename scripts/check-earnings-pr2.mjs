@@ -51,11 +51,32 @@ const runD = (M) => {
   check("a mixed-sign year: the cell is withheld with the plain note, no number",
     held.val === null && held.derived === "withheld" && held.derivedNote === S.Q4_EPS_MIXED_SIGN_NOTE && /^Not available: /.test(S.Q4_EPS_MIXED_SIGN_NOTE));
   check("...and a Q4 the derivation already refuses keeps its wording (not relabelled)", S.withDerivedQ4Eps(blank, { fp: "Q4" }, () => null, () => true).derived === null);
-  check("...wired: the view passes the page's withheldQ4Eps, and the page passes secValuation.q4EpsSignsMixed",
+  check("...wired: the view passes the page's withheldQ4Eps, and the page passes secValuation.q4EpsWithheld",
     /opts\.withheldQ4Eps \? \(q\) => opts\.withheldQ4Eps!\(adjusted, q\) : null/.test(fs.readFileSync("lib/server/secEarningsView.ts", "utf8"))
-      && /withheldQ4Eps: q4EpsSignsMixed/.test(fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8")));
+      && /withheldQ4Eps: q4EpsWithheld/.test(fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8")));
   const M3 = await loadSnapshot(once("  if (withheld?.(p)) return { ...cellIn, derived: \"withheld\", derivedNote: Q4_EPS_MIXED_SIGN_NOTE };\n", "\n"));
   check("mutant (mixed-sign withhold removed) is caught", M3.withDerivedQ4Eps(blank, { fp: "Q4" }, () => 3.62, () => true).val === 3.62);
+  // WITHHOLDING A Q4 CELL CHANGES NOTHING ELSE (audit r6): every fixture, every
+  // Q4 withheld against every Q4 filled; the whole view (growth and snapshot EPS
+  // YoY, the next year's Q4 comparison, the trend bases) and the score must be
+  // identical once the Q4 EPS cells themselves are set aside.
+  {
+    const fixtures = fs.readdirSync("data/sec").filter((f) => /^factset-fixture-.*\.json$/.test(f));
+    const mask = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && x.key === "epsDiluted" && (x.derived === "withheld" || x.derivedNote === NOTE) ? "Q4 EPS" : x));
+    let touched = 0;
+    const diffs = [];
+    for (const f of fixtures) {
+      const set = JSON.parse(fs.readFileSync(`data/sec/${f}`, "utf8"));
+      const on = S.buildSecEarningsView(set, { deriveQ4Eps: () => 1.23, withheldQ4Eps: () => true });
+      const off = S.buildSecEarningsView(set, { deriveQ4Eps: () => 1.23, withheldQ4Eps: () => false });
+      if (!on || !off) continue;
+      touched += JSON.stringify(on).split(JSON.stringify(S.Q4_EPS_MIXED_SIGN_NOTE)).length - 1;
+      if (mask(on) !== mask(off)) diffs.push(`${f}: view`);
+      if (JSON.stringify(S.scoreFromSec(on, "X", { status: "ready" })) !== JSON.stringify(S.scoreFromSec(off, "X", { status: "ready" }))) diffs.push(`${f}: score`);
+    }
+    check(`withholding Q4 EPS moves nothing else: ${fixtures.length} fixtures, ${touched} withheld Q4 cells; view (EPS YoY, next year's Q4, trend) and score identical`,
+      touched > 0 && diffs.length === 0, diffs.join(", "));
+  }
   check("...and the card reads a withheld EPS as \"Not available\", the note on tap",
     /text=\{EPS_LINES\.has\(cell\.key\) \? NOT_AVAILABLE : NOT_REPORTED\} reason=\{cell\.derivedNote\}/.test(fs.readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8")));
   const M2 = await loadSnapshot(once("  if (cellIn.val !== null || !p || p.fp !== \"Q4\" || !derive) return cellIn;", "  return cellIn;"));

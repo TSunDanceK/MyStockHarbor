@@ -1427,7 +1427,7 @@ export function buildSecEarningsView(
      * is never used for a YoY or the score.
      */
     deriveQ4Eps?: (set: StoredFactSet, q4: StoredPeriod) => number | null;
-    /** The Q4s derivation withholds for mixed signs (secValuation.q4EpsSignsMixed), so the cell says why. */
+    /** The Q4s the page withholds (secValuation.q4EpsWithheld: a mixed-sign year off its reference), so the cell says why. */
     withheldQ4Eps?: (set: StoredFactSet, q4: StoredPeriod) => boolean;
   } = {},
 ): SecEarningsView | null {

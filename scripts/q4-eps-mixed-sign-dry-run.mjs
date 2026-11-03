@@ -1,6 +1,6 @@
 // DRY RUN (audit r6): every stored set's derived Q4 EPS, main's secValuation
 // beside this branch's. Lists each earnings-page Q4 cell that goes to "Not
-// available" (main derives it; the year mixes profit and loss), and each
+// available" (main derives it; secValuation.q4EpsWithheld), and each
 // trailing-twelve-month EPS that moves (expected: none, the TTM is untouched).
 // Reads only.   relay task: write-q4-eps-mixed-sign-dry-run
 //   Redis cost: 1 GET (manifest) + 1 MGET per 25 symbols.
@@ -29,7 +29,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 const syms = Object.entries(manifest.symbols).filter(([, e]) => e.cik && e.contentHash !== null).map(([s]) => s).sort();
 const r2 = (v) => (v === null || v === undefined ? "—" : (Math.round(v * 100) / 100).toFixed(2));
 
-let read = 0, q4s = 0, derivedBefore = 0;
+let read = 0, q4s = 0, derivedBefore = 0, mixed = 0;
 const blanked = [], ttm = [];
 for (let i = 0; i < syms.length; i += 25) {
   const chunk = syms.slice(i, i + 25);
@@ -43,12 +43,13 @@ for (let i = 0; i < syms.length; i += 25) {
     for (const p of set.quarters) {
       if (p.fp !== "Q4" || valueOf(p, "epsDiluted") !== null) continue;
       q4s++;
-      const before = OLD.derivedQ4Eps(set, p), after = NEW.q4EpsSignsMixed(set, p) ? null : NEW.derivedQ4Eps(set, p);
+      const before = OLD.derivedQ4Eps(set, p), after = NEW.q4EpsWithheld(set, p) ? null : NEW.derivedQ4Eps(set, p);
+      if (before !== null && NEW.q4EpsSignsMixed(set, p)) mixed++;
       if (before !== null) derivedBefore++;
       if (before !== null && after === null) {
         const year = set.years.find((y) => y.fy === p.fy && y.e === p.e);
         const qs = ["Q1", "Q2", "Q3"].map((fp) => valueOf(set.quarters.find((q) => q.fy === p.fy && q.fp === fp), "epsDiluted"));
-        blanked.push(`  ${s.padEnd(7)} Q4 FY${p.fy} (${p.e}): ${r2(before)} → Not available | FY ${r2(valueOf(year, "epsDiluted"))}, Q1–Q3 ${qs.map(r2).join(" / ")}, Q4 net income ${valueOf(p, "netIncome") === null ? "—" : `${(valueOf(p, "netIncome") / 1e6).toFixed(1)}M`}`);
+        blanked.push(`  ${s.padEnd(7)} Q4 FY${p.fy} (${p.e}): ${r2(before)} → Not available | FY ${r2(valueOf(year, "epsDiluted"))}, Q1–Q3 ${qs.map(r2).join(" / ")}, Q4 net income ${valueOf(p, "netIncome") === null ? "—" : `${(valueOf(p, "netIncome") / 1e6).toFixed(1)}M`}, reference ${NEW.q4EpsReference(set, p) === null ? "none (withheld unchecked)" : r2(NEW.q4EpsReference(set, p))}`);
       }
       if (before === null && after !== null) blanked.push(`  ${s.padEnd(7)} UNEXPECTED: Q4 FY${p.fy} gained a value ${r2(after)}`);
     }
@@ -59,7 +60,7 @@ for (let i = 0; i < syms.length; i += 25) {
     }
   });
 }
-const summary = `stored sets read: ${read} of ${syms.length}; Q4 quarters with no filed EPS: ${q4s}; derived on main: ${derivedBefore}`;
+const summary = `stored sets read: ${read} of ${syms.length}; Q4 quarters with no filed EPS: ${q4s}; derived on main: ${derivedBefore}; of those in a mixed-sign year: ${mixed}`;
 console.log(summary);
 console.log(`\nQ4 EPS cells that go blank ("Not available"): ${blanked.filter((l) => !l.includes("UNEXPECTED")).length}`);
 for (const l of blanked) console.log(l);
@@ -67,3 +68,5 @@ console.log(`\ntrailing-twelve-month EPS (valuation inputs) that move: ${ttm.len
 for (const l of ttm) console.log(l);
 const symbols = new Set(blanked.filter((l) => !l.includes("UNEXPECTED")).map((l) => l.trim().split(/\s+/)[0]));
 console.log(`\nSUMMARY: ${summary}; Q4 cells to "Not available": ${blanked.filter((l) => !l.includes("UNEXPECTED")).length} across ${symbols.size} symbols; unexpected: ${blanked.filter((l) => l.includes("UNEXPECTED")).length}; TTM EPS moved: ${ttm.length}`);
+for (const sym of ["VRTX", "EIX"]) console.log(`WATCH ${sym}: ${blanked.filter((l) => l.trim().startsWith(sym + " ")).join(" || ") || "no Q4 withheld"}`);
+console.log(`unchecked (no reference): ${blanked.filter((l) => l.includes("withheld unchecked")).length}`);
