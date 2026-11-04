@@ -727,6 +727,8 @@ const TASKS = {
   // READS ONLY: has the committed re-read queue drained (#552 COWORK #39). ~4 commands.
   "write-reread-drain-probe": { script: "scripts/reread-drain-probe.mjs", args: () => [], writes: true },
   // DRY RUN (audit r6): derived Q4 EPS withheld for a mixed-sign year, main beside the branch. Reads only.
+  // READS ONLY: why /earnings-calendar rows are blank (strip days, figures entries, records, sets).
+  "write-earnings-week-fill-probe": { script: "scripts/earnings-week-fill-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-q4-eps-mixed-sign-dry-run": { script: "scripts/q4-eps-mixed-sign-dry-run.mjs", args: () => [], needsTypescript: true, writes: true },
   // READS ONLY: first-filers' stored sets (#552 COWORK #37). 1 MGET.
   "write-new-listing-sets": { script: "scripts/new-listing-sets-probe.mjs", args: () => [], writes: true },
