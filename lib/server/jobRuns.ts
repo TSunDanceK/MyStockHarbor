@@ -124,6 +124,12 @@ export const JOBS = {
   // Fills symbols the cold fill queued (crawlers, capped visitors, timeouts),
   // around the clock, so "it may take a few minutes" holds at night too.
   "tiingo-cold-queue": { label: "Tiingo cold-fill queue (every 10 min from :03)", instrumented: true, cron: "3-59/10 * * * *" },
+  // /earnings-calendar's "Results filed" figures and closes (lib/server/
+  // earningsWeekStore). They used to fill only from the page's after(), 30
+  // rows a run and only when someone viewed the page, so a busy week sat blank
+  // for days. Reads stored sets, records and bars only; no upstream call.
+  // :25 is clear of sec-facts (:20) and sec-filings (:40).
+  "earnings-week-figures": { label: "Earnings calendar row figures (hourly :25)", instrumented: true, cron: "25 * * * *" },
 } as const;
 
 /**
