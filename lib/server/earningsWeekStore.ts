@@ -27,6 +27,7 @@ import { canWriteSecState } from "./secWriteGate";
 import { readFactSet } from "./secFactStore";
 import { readReportDates } from "./secReportDatesStore";
 import { NOT_MEANINGFUL_GROWTH_REASON, buildSecEarningsView } from "./secEarningsView";
+import { derivedQ4Eps, q4EpsWithheld } from "./secValuation";
 import { moneyIsUsd, unitOf } from "./pickersSecFundamentals";
 import { readTiingoHistory } from "./marketData/read";
 import { TIINGO_PREFIX } from "./marketData/keys";
@@ -43,11 +44,22 @@ export const weekFiguresKey = (date: string) => scoped(`msh:earnings-week:figure
 export const weekCloseKey = (date: string) => scoped(`${TIINGO_PREFIX}earnings-week:close-before:v1:${date}`);
 /** Ten days: the strip is seven, and a day leaves it before its keys lapse. */
 const WEEK_TTL_SECONDS = 10 * 24 * 60 * 60;
-/** A symbol whose figures were not there yet (the 10-Q comes after the press release) is retried after this. */
-export const RETRY_AFTER_MS = 6 * 60 * 60 * 1000;
+/**
+ * A symbol whose figures were not there yet (the 10-Q comes after the press
+ * release) is retried after this. ONE HOUR, matched to the hourly job
+ * (app/api/jobs/earnings-week-figures): a row fills within about an hour of
+ * the stored set carrying the announced quarter. A retry whose day has no
+ * matched event reads only the report-dates record, not the set.
+ */
+export const RETRY_AFTER_MS = 60 * 60 * 1000;
 
-/** Per symbol: the figures for the announced period, or null with when it was last tried. */
-export type FiguresEntry = { f: ReportedFigures | null; at: number };
+/**
+ * Per symbol: the figures for the announced period, or null with when it was
+ * last tried. `q4: 1` marks an entry written with the derived Q4 EPS the stock
+ * page shows (secValuation.derivedQ4Eps); a filled entry without it and with
+ * no EPS is read once more, so a Q4 written before the derivation fills.
+ */
+export type FiguresEntry = { f: ReportedFigures | null; at: number; q4?: 1 };
 export type CloseEntry = { d: string; c: number } | { d: null; at: number };
 export type DayFigures = Record<string, FiguresEntry>;
 export type DayCloses = Record<string, CloseEntry>;
@@ -78,7 +90,7 @@ export async function readWeekFigures(days: readonly string[]): Promise<{ figure
 /** What one symbol needs filled on one day. */
 export function needsFill(f: FiguresEntry | undefined, c: CloseEntry | undefined, nowMs: number): { figures: boolean; close: boolean } {
   return {
-    figures: !f || (f.f === null && nowMs - f.at >= RETRY_AFTER_MS),
+    figures: !f || (f.f === null && nowMs - f.at >= RETRY_AFTER_MS) || (f.f !== null && f.f.epsDiluted === null && !f.q4),
     close: !c || (c.d === null && nowMs - c.at >= RETRY_AFTER_MS),
   };
 }
@@ -88,45 +100,62 @@ export function needsFill(f: FiguresEntry | undefined, c: CloseEntry | undefined
  * `maxSymbols` symbols a run (three reads each). Called from the page's
  * after(), behind claimCalendarScan's once-per-five-minutes gate.
  */
+/**
+ * One row's figures for one day: the announcement on `date` in the source's
+ * report-dates record, and the stored set's latest quarter when it ends on
+ * that announcement's period. Null when either is not there yet. The view is
+ * built the way the stock earnings page builds it, derived Q4 EPS included.
+ */
+export async function figuresForRow(source: string, date: string, wantFigures = true): Promise<{
+  figures: ReportedFigures | null;
+  event: { periodEnd: string | null; timing: "before-open" | "during-market" | "after-close" | null } | null;
+}> {
+  const rec = await readReportDates(source).catch(() => null);
+  const event = rec?.events.find((e) => e.announcedOn === date) ?? null;
+  let got: ReportedFigures | null = null;
+  const set = wantFigures && event?.periodEnd ? await readFactSet(source, "earnings-week").catch(() => null) : null;
+  if (set && moneyIsUsd(unitOf(set))) {
+    const v = buildSecEarningsView(set, { deriveQ4Eps: derivedQ4Eps, withheldQ4Eps: q4EpsWithheld });
+    const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : null);
+    got = v && figuresForAnnouncement(event?.periodEnd ?? null, {
+      end: v.latestEnd ?? null,
+      revenue: num(v.snapshot.revenue.val),
+      revenueYoY: num(v.snapshot.revenueYoY),
+      revenueYoYNotMeaningful: v.snapshot.revenueYoYNotMeaningful
+        ? v.snapshot.revenueYoYNotMeaningfulReason ?? NOT_MEANINGFUL_GROWTH_REASON : undefined,
+      epsDiluted: num(v.snapshot.epsDiluted.val),
+    });
+  }
+  return { figures: got, event: event ? { periodEnd: event.periodEnd ?? null, timing: event.timing ?? null } : null };
+}
+
 export async function fillWeekFigures(
   /** Per day, each row's shown ticker and the ticker its announcement record is under (MKC and MKC-V, #552 COWORK #174). */
   daySymbols: ReadonlyMap<string, readonly { symbol: string; source: string }[]>,
-  opts: { maxSymbols?: number; nowMs?: number } = {},
+  /**
+   * `deadlineMs`: stop starting symbols after this clock time. A day's key is
+   * written after its loop, so a stop still writes what was done.
+   */
+  opts: { maxSymbols?: number; nowMs?: number; deadlineMs?: number } = {},
 ): Promise<{ symbols: number; days: number }> {
   if (!redis) return { symbols: 0, days: 0 };
   const max = opts.maxSymbols ?? 30;
+  const out = () => opts.deadlineMs !== undefined && Date.now() >= opts.deadlineMs;
   const now = opts.nowMs ?? Date.now();
   const days = [...daySymbols.keys()].sort().reverse();
   const { figures, closes } = await readWeekFigures(days);
   let done = 0, touched = 0;
   for (const date of days) {
-    if (done >= max) break;
+    if (done >= max || out()) break;
     const f = figures.get(date) ?? {}, c = closes.get(date) ?? {};
     let changed = false;
     for (const { symbol, source } of daySymbols.get(date) ?? []) {
-      if (done >= max) break;
+      if (done >= max || out()) break;
       const need = needsFill(f[symbol], c[symbol], now);
       if (!need.figures && !need.close) continue;
       done++; changed = true;
-      const rec = await readReportDates(source).catch(() => null);
-      const event = rec?.events.find((e) => e.announcedOn === date) ?? null;
-      if (need.figures) {
-        let got: ReportedFigures | null = null;
-        const set = event?.periodEnd ? await readFactSet(source, "earnings-week").catch(() => null) : null;
-        if (set && moneyIsUsd(unitOf(set))) {
-          const v = buildSecEarningsView(set);
-          const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : null);
-          got = v && figuresForAnnouncement(event?.periodEnd ?? null, {
-            end: v.latestEnd ?? null,
-            revenue: num(v.snapshot.revenue.val),
-            revenueYoY: num(v.snapshot.revenueYoY),
-            revenueYoYNotMeaningful: v.snapshot.revenueYoYNotMeaningful
-              ? v.snapshot.revenueYoYNotMeaningfulReason ?? NOT_MEANINGFUL_GROWTH_REASON : undefined,
-            epsDiluted: num(v.snapshot.epsDiluted.val),
-          });
-        }
-        f[symbol] = { f: got, at: now };
-      }
+      const { figures: got, event } = await figuresForRow(source, date, need.figures);
+      if (need.figures) f[symbol] = { f: got, at: now, q4: 1 };
       if (need.close) {
         const eod = await readTiingoHistory(symbol).catch(() => null);
         const before = eod ? closeBeforeFiling(eod.bars as unknown as [string, ...unknown[]][], date, event?.timing ?? null) : null;

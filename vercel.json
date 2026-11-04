@@ -87,6 +87,10 @@
     {
       "path": "/api/jobs/tiingo-cold-queue",
       "schedule": "3-59/10 * * * *"
+    },
+    {
+      "path": "/api/jobs/earnings-week-figures",
+      "schedule": "25 * * * *"
     }
   ],
   "ignoreCommand": "bash scripts/vercel-ignore-build.sh"

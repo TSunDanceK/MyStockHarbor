@@ -18,12 +18,13 @@ import { TiingoLink } from "@/app/components/TiingoCredit";
 import { scaledAmount } from "@/lib/server/secPresentation";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
 import {
-  baseTicker, byCapThenSymbol, countPill, dayEyebrow, dayLong, defaultDay, hasClassSuffix, primaryPerFiler, sharesSince, tileDate, tileWeekday, weekDays,
+  byCapThenSymbol, countPill, dayEyebrow, dayLong, defaultDay, sharesSince, tileDate, tileWeekday, weekDays,
 } from "@/lib/server/earningsWeek";
 import { registrantFor } from "@/lib/server/stockProfile";
 import { isProductionDeployment } from "@/lib/server/deployTarget";
-import { gridAdmits, gridCompanyName } from "@/lib/server/secTickerNames";
+import { gridCompanyName } from "@/lib/server/secTickerNames";
 import { fillWeekFigures, readWeekFigures } from "@/lib/server/earningsWeekStore";
+import { stripLists, stripSymbols } from "@/lib/server/earningsWeekStrip";
 import { NOT_MEANINGFUL_GROWTH_REASON } from "@/lib/server/secEarningsView";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsWeek, { type WeekDay, type WeekRow } from "./EarningsWeek";
@@ -215,14 +216,8 @@ export default async function EarningsCalendarPage({
     ...(forward.due.kind === "listed" ? forward.due.entries.map((e) => e.symbol) : []),
   ];
   // A CLASS TICKER'S BASE ON THE SAME CIK (MKC-V → MKC) is offered too, so the
-  // row can show the class readers know (#552 COWORK #174).
-  const siblingsOf = (s: string) => {
-    if (!hasClassSuffix(s)) return [];
-    const base = baseTicker(s);
-    const cik = registrantFor(s)?.cik;
-    return cik && registrantFor(base)?.cik === cik && gridAdmits(base) ? [base] : [];
-  };
-  const symbols = [...new Set(raw.flat().flatMap((c) => [c.symbol, ...siblingsOf(c.symbol)]))];
+  // row can show the class readers know (#552 COWORK #174). lib/server/earningsWeekStrip.
+  const symbols = stripSymbols(raw);
   const capSymbols = [...new Set([...symbols, ...comingUpSymbols])];
   const [pool, eodLast, week] = await Promise.all([
     // Market cap, for the sorts only (one HMGET): the strip's and "Coming up"'s.
@@ -237,12 +232,8 @@ export default async function EarningsCalendarPage({
 
   // ONE ROW PER FILER, under its most-traded class; the figures are filled
   // from the record the announcement is under (`source`).
-  const lists = raw.map((cands) =>
-    primaryPerFiler(cands, {
-      cikOf: (s) => registrantFor(s)?.cik ?? null,
-      siblingsOf,
-      volumeOf: (s) => pool.get(s)?.volume ?? null,
-    }).map(({ row, symbol }) => ({ ...row, source: row.symbol, symbol, company: symbol === row.symbol ? row.company : gridCompanyName(symbol) || row.company })));
+  // The same rows the hourly figures job fills (app/api/jobs/earnings-week-figures).
+  const lists = stripLists(raw, (s) => pool.get(s)?.volume ?? null);
   const counts = new Map(days.map((d, i) => [d, lists[i].length] as const));
   const weekDaysView: WeekDay[] = days.map((date, i) => {
     const cands = lists[i];

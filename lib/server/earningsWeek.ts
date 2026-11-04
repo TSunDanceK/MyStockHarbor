@@ -80,9 +80,15 @@ export function closeBeforeFiling(
   return null;
 }
 
-/** The move from the close before the filing to the latest close, %; null when either is missing or the latest predates it. */
+/**
+ * The move from the close before the filing to the latest close, %; null when
+ * either is missing, or when no close AFTER the filing exists yet. `before` is
+ * the last close before the filing, so the latest close is after the filing
+ * only when it is a LATER bar: on the filing day itself the two are the same
+ * close, and printing 0.0% would read as "the shares did not move".
+ */
 export function sharesSince(before: { date: string; close: number } | null, latest: { date: string; close: number } | null): number | null {
-  if (!before || !latest || !(before.close > 0) || !(latest.close > 0) || latest.date < before.date) return null;
+  if (!before || !latest || !(before.close > 0) || !(latest.close > 0) || latest.date <= before.date) return null;
   return ((latest.close - before.close) / before.close) * 100;
 }
 
