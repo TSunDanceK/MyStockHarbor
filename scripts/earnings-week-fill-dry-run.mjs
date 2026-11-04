@@ -5,13 +5,14 @@
 // on the filing-day bar, and the live trap-block keys (counts and when set,
 // no IP addresses).   relay task: write-earnings-week-fill-dry-run. Reads only.
 import "./lib/register-ts-here.mjs";
+import { register } from "node:module";
+register("./lib/next-cache-stub-hooks.mjs", import.meta.url);
 import { Redis } from "@upstash/redis";
 
 const { weekDays, sharesSince } = await import("../lib/server/earningsWeek.ts");
 const { easternDate } = await import("../lib/server/calendarDayState.ts");
 const { stripDaySymbols } = await import("../lib/server/earningsWeekStrip.ts");
 const { figuresForRow } = await import("../lib/server/earningsWeekStore.ts");
-const { readTiingoEodLast } = await import("../lib/server/marketData/read.ts");
 const { toDashed } = await import("../lib/symbolSpellings.mjs");
 
 const redis = Redis.fromEnv();
@@ -19,7 +20,8 @@ const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v) ?? {};
 const today = easternDate(new Date());
 const days = weekDays(today);
 const strip = await stripDaySymbols(days);
-const last = await readTiingoEodLast().catch(() => ({}));
+const lastRaw = (await redis.hgetall("msh:tiingo:eod-last:v1")) ?? {};
+const last = Object.fromEntries(Object.entries(lastRaw).map(([k, v]) => [k, typeof v === "string" ? JSON.parse(v) : v]));
 const WATCH = ["MSFT", "GOOGL", "NOW", "PSX", "PLTR", "AAPL"];
 console.log(`today ${today}`);
 const t0 = Date.now();
